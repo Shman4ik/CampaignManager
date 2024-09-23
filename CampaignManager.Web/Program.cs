@@ -7,6 +7,7 @@ using CampaignManager.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,9 +29,23 @@ builder.Services.AddAuthentication(options =>
     .AddGoogle(options =>
     {
         options.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];        
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.CorrelationCookie.SameSite = SameSiteMode.None;
+        options.Events = new OAuthEvents
+        {
+            OnRedirectToAuthorizationEndpoint = context =>
+            {
+                if (context.RedirectUri.StartsWith("http:"))
+                {
+                    context.RedirectUri = context.RedirectUri.Replace("http:", "https:");
+                }
+                context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            }
+        };
     });
-
+builder.Services.AddHttpsRedirection(options => { options.HttpsPort = 443; });
 builder.Services.AddOutputCache();
 builder.Services
     .AddBlazorise()
