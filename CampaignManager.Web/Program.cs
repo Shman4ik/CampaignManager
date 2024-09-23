@@ -45,7 +45,7 @@ builder.Services.AddAuthentication(options =>
             }
         };
     });
-builder.Services.AddHttpsRedirection(options => { options.HttpsPort = 443; });
+
 builder.Services.AddOutputCache();
 builder.Services
     .AddBlazorise()
