@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace CampaignManager.Web.Model
+﻿namespace CampaignManager.Web.Model
 {
     public class Campaign
     {
@@ -13,19 +10,14 @@ namespace CampaignManager.Web.Model
         public DateTime LastUpdated { get; set; }
     }
 
-    public class User
+ 
+
+    public class Keeper : ApplicationUser
     {
-        public Guid Id { get; set; }
-        public string Username { get; set; }
-        public string Email { get; set; }
+        public List<Campaign> Campaigns { get; set; } = [];
     }
 
-    public class Keeper : User
-    {
-        public List<Campaign> Campaigns { get; set; } = new List<Campaign>();
-    }
-
-    public class Player : User
+    public class Player : ApplicationUser
     {
         public Character Character { get; set; }
         public Campaign Campaign { get; set; }

@@ -1,0 +1,51 @@
+﻿@using CampaignManager.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject IHttpClientFactory HttpClientFactory
+@rendermode InteractiveServer
+
+<h3>RegisterUserComponent</h3>
+<Microsoft.AspNetCore.Components.Authorization.CascadingAuthenticationState>
+    <AuthorizeView>
+        <Authorized>
+            <h2>Welcome, @context.User.Identity?.Name!</h2>
+            <button class="btn btn-primary" @onclick="() => JoinAsUser(context.User)">Join as User</button>
+        </Authorized>
+        <NotAuthorized>
+            <h2>Welcome, guest!</h2>
+            <a href="api/account/login" class="btn btn-primary">Log in</a>
+        </NotAuthorized>
+    </AuthorizeView>
+</Microsoft.AspNetCore.Components.Authorization.CascadingAuthenticationState>
+<p>@_message</p>
+
+@code {
+    private string _message = "";
+
+    private async Task JoinAsUser(ClaimsPrincipal user)
+    {
+        var email = user.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            var response = await CallJoinAsUserApi(email);
+            _message = response;
+        }
+        else
+        {
+            _message = "Unable to join: Email is not available.";
+        }
+    }
+
+    private async Task<string> CallJoinAsUserApi(string email)
+    {
+        var client = HttpClientFactory.CreateClient();
+        var response = await client.PostAsync(NavigationManager.BaseUri + $"api/join-as-user?userEmail={Uri.EscapeDataString(email)}", null);
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadAsStringAsync();
+        }
+        return $"Error: {response.StatusCode}";
+    }
+}
