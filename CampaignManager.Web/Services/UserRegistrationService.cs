@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Authorozation;
+﻿using CampaignManager.Web.Authorization;
 using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 namespace CampaignManager.Web.Services;
@@ -35,14 +35,9 @@ public class UserRegistrationService
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
             {
-                user = new ApplicationUser { Email = email, UserName = email, Role = "Игрок" };
+                user = new ApplicationUser { Email = email, UserName = email, Role = PlayerRole.Player };
                 _dbContext.Users.Add(user);
                 _logger.LogInformation($"Created new user with email: {email}");
-            }
-            else if (string.IsNullOrEmpty(user.Role))
-            {
-                user.Role = "Игрок";
-                _logger.LogInformation($"Updated role for existing user with email: {email}");
             }
             else
             {

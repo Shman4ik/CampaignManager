@@ -1,7 +1,7 @@
 ﻿using CampaignManager.Web.Model;
 using Microsoft.AspNetCore.Identity;
 
-namespace CampaignManager.Web.Authorozation;
+namespace CampaignManager.Web.Authorization;
 
 public interface IRoleService
 {

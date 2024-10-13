@@ -2,7 +2,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Authorozation;
+namespace CampaignManager.Web.Authorization;
 
 public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 {

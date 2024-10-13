@@ -2,7 +2,7 @@
 using Blazorise.Icons.FontAwesome;
 using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
-using CampaignManager.Web.Authorozation;
+using CampaignManager.Web.Authorization;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Services;
@@ -69,6 +69,7 @@ builder.Services
     .AddFontAwesomeIcons();
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
+builder.Services.AddSingleton<CampaignService>();
 builder.Services.AddHttpClient();
 var app = builder.Build();
 
@@ -124,13 +125,9 @@ app.MapPost("api/join-as-user", async (string userEmail, [FromServices] Applicat
     var user = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
     if (user == null)
     {
-        user = new ApplicationUser { Email = userEmail, UserName = userEmail, Role = "Игрок" };
+        user = new ApplicationUser { Email = userEmail, UserName = userEmail, Role = PlayerRole.Player };
         dbContext.Users.Add(user);
-    }
-    else if (string.IsNullOrEmpty(user.Role))
-    {
-        user.Role = "Игрок";
-    }
+    }   
 
     await dbContext.SaveChangesAsync();
     return Results.Ok($"User {userEmail} joined as a player");

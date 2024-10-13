@@ -1,29 +1,26 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
 
 public class CampaignService
 {
-    private List<Campaign> campaigns = new List<Campaign>();
-    private List<User> users = new List<User>();
-    private User currentUser;
+    private List<Campaign> campaigns = [];
+    private List<ApplicationUser> users = [];
+    private ApplicationUser currentUser;
 
     public void RegisterUser(string username, string email, bool isKeeper)
     {
         if (isKeeper)
         {
-            users.Add(new Keeper { Id = Guid.NewGuid(), Username = username, Email = email });
+            users.Add(new Keeper { Id = Guid.NewGuid().ToString(), Email = email });
         }
         else
         {
-            users.Add(new Player { Id = Guid.NewGuid(), Username = username, Email = email });
+            users.Add(new Player { Id = Guid.NewGuid().ToString(), Email = email });
         }
     }
 
     public bool Login(string username)
     {
-        currentUser = users.FirstOrDefault(u => u.Username == username);
+        currentUser = users.FirstOrDefault(u => u.Email == username);
         return currentUser != null;
     }
 
@@ -59,7 +56,7 @@ public class CampaignService
         if (currentUser != campaign.Keeper)
             throw new UnauthorizedAccessException("Only the campaign Keeper can add players.");
 
-        var player = users.FirstOrDefault(u => u.Username == playerUsername) as Player;
+        var player = users.FirstOrDefault(u => u.Email == playerUsername) as Player;
         if (player == null) throw new ArgumentException("Player not found.");
 
         campaign.Players.Add(player);
