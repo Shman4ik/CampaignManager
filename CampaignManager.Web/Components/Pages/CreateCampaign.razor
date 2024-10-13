@@ -1,0 +1,43 @@
+﻿@page "/create-campaign"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Administrator")]
+@inject CampaignService CampaignService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Создать новую кампанию</PageTitle>
+
+<div class="max-w-2xl mx-auto mt-8">
+    <h1 class="text-3xl font-bold mb-6">Создать новую кампанию</h1>
+
+    <div class="bg-white shadow-md rounded-lg p-6">
+        <div class="mb-4">
+            <label for="campaignName" class="block text-sm font-medium text-gray-700">Название кампании</label>
+            <input type="text" id="campaignName" @bind="campaignName"
+                   class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+        </div>
+        <button @onclick="сreateCampaign"
+                class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            Создать кампанию
+        </button>
+    </div>
+</div>
+
+@code {
+    private string campaignName = "";
+
+    private async Task сreateCampaign()
+    {
+        if (!string.IsNullOrWhiteSpace(campaignName))
+        {
+            try
+            {
+                await CampaignService.CreateCampaignAsync(campaignName);
+                NavigationManager.NavigateTo("/");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Handle unauthorized access (e.g., show an error message)
+            }
+        }
+    }
+}

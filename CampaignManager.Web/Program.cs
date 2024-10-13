@@ -2,7 +2,6 @@
 using Blazorise.Icons.FontAwesome;
 using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
-using CampaignManager.Web.Authorization;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Services;
@@ -10,6 +9,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +24,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Singleton);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -55,7 +55,11 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+});
+builder.Services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
 // Add Swagger services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -71,6 +75,7 @@ builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddSingleton<CampaignService>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -127,7 +132,7 @@ app.MapPost("api/join-as-user", async (string userEmail, [FromServices] Applicat
     {
         user = new ApplicationUser { Email = userEmail, UserName = userEmail, Role = PlayerRole.Player };
         dbContext.Users.Add(user);
-    }   
+    }
 
     await dbContext.SaveChangesAsync();
     return Results.Ok($"User {userEmail} joined as a player");

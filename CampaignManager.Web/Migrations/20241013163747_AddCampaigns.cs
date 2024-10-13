@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Web.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddCampaigns : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -36,7 +36,7 @@ namespace CampaignManager.Web.Migrations
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
-                    Role = table.Column<string>(type: "text", nullable: false),
+                    Role = table.Column<int>(type: "integer", nullable: false),
                     UserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
@@ -174,6 +174,56 @@ namespace CampaignManager.Web.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "Campaigns",
+                schema: "Dev",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    KeeperId = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Campaigns", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Campaigns_AspNetUsers_KeeperId",
+                        column: x => x.KeeperId,
+                        principalSchema: "Dev",
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CampaignPlayers",
+                schema: "Dev",
+                columns: table => new
+                {
+                    CampaignId = table.Column<Guid>(type: "uuid", nullable: false),
+                    PlayersId = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CampaignPlayers", x => new { x.CampaignId, x.PlayersId });
+                    table.ForeignKey(
+                        name: "FK_CampaignPlayers_AspNetUsers_PlayersId",
+                        column: x => x.PlayersId,
+                        principalSchema: "Dev",
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CampaignPlayers_Campaigns_CampaignId",
+                        column: x => x.CampaignId,
+                        principalSchema: "Dev",
+                        principalTable: "Campaigns",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
                 schema: "Dev",
@@ -217,6 +267,18 @@ namespace CampaignManager.Web.Migrations
                 table: "AspNetUsers",
                 column: "NormalizedUserName",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CampaignPlayers_PlayersId",
+                schema: "Dev",
+                table: "CampaignPlayers",
+                column: "PlayersId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Campaigns_KeeperId",
+                schema: "Dev",
+                table: "Campaigns",
+                column: "KeeperId");
         }
 
         /// <inheritdoc />
@@ -243,7 +305,15 @@ namespace CampaignManager.Web.Migrations
                 schema: "Dev");
 
             migrationBuilder.DropTable(
+                name: "CampaignPlayers",
+                schema: "Dev");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles",
+                schema: "Dev");
+
+            migrationBuilder.DropTable(
+                name: "Campaigns",
                 schema: "Dev");
 
             migrationBuilder.DropTable(

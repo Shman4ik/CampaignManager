@@ -1,6 +1,10 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using CampaignManager.Web.Components.Layout
 
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,11 +21,42 @@
     <link href="_content/Blazorise.Tailwind/blazorise.tailwind.css" rel="stylesheet" />
     <HeadOutlet />
 </head>
-
 <body>
-    <Routes />
+    <CascadingAuthenticationState>
+        <Router AppAssembly="@typeof(Program).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                    <NotAuthorized>
+                        @if (context.User.Identity?.IsAuthenticated != true)
+                        {
+                            <RedirectToLogin />
+                        }
+                        else
+                        {
+                            <p>У вас нет прав доступа к этой странице.</p>
+                        }
+                    </NotAuthorized>
+                    <Authorizing>
+                        <p>Проверка авторизации...</p>
+                    </Authorizing>
+                </AuthorizeRouteView>
+            </Found>
+            <NotFound>
+                <LayoutView Layout="@typeof(MainLayout)">
+                    <p>Извините, по этому адресу ничего не найдено.</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </CascadingAuthenticationState>
+
     <script src="_framework/blazor.web.js"></script>
     <script src="https://unpkg.com/flowbite@1.5.4/dist/flowbite.js"></script>
 </body>
-
 </html>
+
+@code {
+    private void RedirectToLogin()
+    {
+        // TODO: Implement redirect to login page
+    }
+}

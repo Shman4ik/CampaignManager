@@ -1,96 +1,53 @@
 ﻿using CampaignManager.Web.Model;
+using Microsoft.EntityFrameworkCore;
 
 public class CampaignService
 {
-    private List<Campaign> campaigns = [];
-    private List<ApplicationUser> users = [];
-    private ApplicationUser currentUser;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public void RegisterUser(string username, string email, bool isKeeper)
+    public CampaignService(ApplicationDbContext dbContext, IHttpContextAccessor httpContextAccessor)
     {
-        if (isKeeper)
-        {
-            users.Add(new Keeper { Id = Guid.NewGuid().ToString(), Email = email });
-        }
-        else
-        {
-            users.Add(new Player { Id = Guid.NewGuid().ToString(), Email = email });
-        }
+        _dbContext = dbContext;
+        _httpContextAccessor = httpContextAccessor;
     }
 
-    public bool Login(string username)
+    public async Task<List<Campaign>> GetUserCampaignsAsync()
     {
-        currentUser = users.FirstOrDefault(u => u.Email == username);
-        return currentUser != null;
+        var user = await GetCurrentUserAsync();
+        if (user == null) return new List<Campaign>();
+
+        return await _dbContext.Campaigns
+            .Where(c => c.KeeperId == user.Id || c.Players.Any(p => p.Id == user.Id))
+            .ToListAsync();
     }
 
-    public void Logout()
+    public async Task<Campaign> CreateCampaignAsync(string name)
     {
-        currentUser = null;
+        var user = await GetCurrentUserAsync();
+        if (user == null || user.Role != PlayerRole.Administrator)
+            throw new UnauthorizedAccessException("Only administrators can create campaigns.");
+
+        var campaign = new Campaign
+        {
+            Name = name,
+            KeeperId = user.Id,
+            CreatedAt = DateTime.UtcNow,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        _dbContext.Campaigns.Add(campaign);
+        await _dbContext.SaveChangesAsync();
+
+        return campaign;
     }
 
-    public Campaign CreateCampaign(string name)
+    private async Task<ApplicationUser?> GetCurrentUserAsync()
     {
-        if (currentUser is Keeper keeper)
-        {
-            var campaign = new Campaign
-            {
-                Id = Guid.NewGuid(),
-                Name = name,
-                Keeper = keeper,
-                CreatedAt = DateTime.Now,
-                LastUpdated = DateTime.Now
-            };
-            campaigns.Add(campaign);
-            keeper.Campaigns.Add(campaign);
-            return campaign;
-        }
-        throw new UnauthorizedAccessException("Only Keepers can create campaigns.");
-    }
+        var email = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(email))
+            return null;
 
-    public void AddPlayerToCampaign(Guid campaignId, string playerUsername)
-    {
-        var campaign = campaigns.FirstOrDefault(c => c.Id == campaignId);
-        if (campaign == null) throw new ArgumentException("Campaign not found.");
-
-        if (currentUser != campaign.Keeper)
-            throw new UnauthorizedAccessException("Only the campaign Keeper can add players.");
-
-        var player = users.FirstOrDefault(u => u.Email == playerUsername) as Player;
-        if (player == null) throw new ArgumentException("Player not found.");
-
-        campaign.Players.Add(player);
-        player.Campaign = campaign;
-        player.Character = new CharacterGenerationService().GenerateRandomCharacter();
-        campaign.LastUpdated = DateTime.Now;
-    }
-
-    public List<Character> GetCampaignCharacters(Guid campaignId)
-    {
-        var campaign = campaigns.FirstOrDefault(c => c.Id == campaignId);
-        if (campaign == null) throw new ArgumentException("Campaign not found.");
-
-        if (currentUser == campaign.Keeper)
-        {
-            return campaign.Players.Select(p => p.Character).ToList();
-        }
-        else if (currentUser is Player player && player.Campaign == campaign)
-        {
-            return new List<Character> { player.Character };
-        }
-        throw new UnauthorizedAccessException("You don't have access to this campaign.");
-    }
-
-    public List<Campaign> GetUserCampaigns()
-    {
-        if (currentUser is Keeper keeper)
-        {
-            return keeper.Campaigns;
-        }
-        else if (currentUser is Player player)
-        {
-            return new List<Campaign> { player.Campaign };
-        }
-        throw new UnauthorizedAccessException("User not logged in.");
+        return await _dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
     }
 }
