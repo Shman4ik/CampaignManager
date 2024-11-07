@@ -1,0 +1,67 @@
+﻿@using CampaignManager.Web.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CampaignService CampaignService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveServer
+
+
+<h3 class="text-2xl font-bold mb-4">Доступные компании</h3>
+
+@if (Companies == null)
+{
+    <p>Loading...</p>
+}
+else if (Companies.Count == 0)
+{
+    <p>Нет доступных компаний.</p>
+}
+else
+{
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        @foreach (var company in Companies)
+        {
+            <div class="bg-white shadow-md rounded-lg p-4">
+                <h4 class="text-xl font-semibold mb-2">@company.Name</h4>
+                <p class="text-gray-600 mb-2">Создано: @company.CreatedAt.ToShortDateString()</p>
+                @if (IsUserAuthorized)
+                {
+                    <button @onclick="async () => await ApplyToCompany(company.Id)"
+                            class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        Apply
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public List<Campaign> Companies { get; set; }
+
+    private bool IsUserAuthorized;
+    private string UserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        IsUserAuthorized = authState.User.Identity?.IsAuthenticated ?? false;
+        UserId = authState.User?.FindFirst(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
+    }
+
+    private async Task ApplyToCompany(Guid companyId)
+    {
+        if (IsUserAuthorized && !string.IsNullOrEmpty(UserId))
+        {
+            try
+            {
+                await CampaignService.ApplyToCompanyAsync(campaignId: companyId, userEmail: UserId);
+                // Optionally notify user of success
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error applying to company: {ex.Message}");
+            }
+        }
+    }
+}
