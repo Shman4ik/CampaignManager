@@ -1,0 +1,88 @@
+﻿@page "/campaign/{CampaignId:guid}/player/{PlayerId}/character"
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Services
+@inject CharacterService CharacterService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <div class="px-4 py-6 sm:px-0">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-900">Персонажи игрока</h1>
+            <button @onclick="CreateNewCharacter"
+                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                Создать нового персонажа
+            </button>
+        </div>
+
+        @if (characters == null)
+        {
+            <div class="text-center py-4">
+                <p class="text-gray-500">Загрузка...</p>
+            </div>
+        }
+        else if (!characters.Any())
+        {
+            <div class="text-center py-4">
+                <p class="text-gray-500">У игрока пока нет персонажей.</p>
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                @foreach (var character in characters)
+                {
+                    <div class="bg-white overflow-hidden shadow rounded-lg">
+                        <div class="px-4 py-5 sm:p-6">
+                            <h3 class="text-lg font-medium text-gray-900 truncate">
+                                @character.PersonalInfo.Name
+                            </h3>
+                            <dl class="mt-2 space-y-1">
+                                <div class="text-sm font-normal text-gray-500">
+                                    <dt class="inline">Профессия:</dt>
+                                    <dd class="inline ml-1">@character.PersonalInfo.Occupation</dd>
+                                </div>
+                                <div class="text-sm font-normal text-gray-500">
+                                    <dt class="inline">Возраст:</dt>
+                                    <dd class="inline ml-1">@character.PersonalInfo.Age</dd>
+                                </div>
+                            </dl>
+                            <div class="mt-4">
+                                <button @onclick="() => EditCharacter(character.Id)"
+                                        class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                                    Редактировать
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid CampaignId { get; set; }
+
+    [Parameter]
+    public string PlayerId { get; set; }
+
+    private IEnumerable<Character> characters;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // In a real application, you would filter characters by PlayerId
+        characters = await CharacterService.GetAllCharactersAsync();
+    }
+
+    private void CreateNewCharacter()
+    {
+        NavigationManager.NavigateTo($"/character");
+    }
+
+    private void EditCharacter(Guid characterId)
+    {
+        NavigationManager.NavigateTo($"/character/{characterId}");
+    }
+}

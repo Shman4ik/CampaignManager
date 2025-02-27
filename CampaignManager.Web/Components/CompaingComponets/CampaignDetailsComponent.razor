@@ -1,0 +1,55 @@
+﻿@using CampaignManager.Web.Model
+@inject NavigationManager NavigationManager
+
+<div class="bg-white shadow-lg rounded-lg p-6">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">@Campaign.Name</h2>
+        <p class="text-sm text-gray-600">
+            Создано: @Campaign.CreatedAt.ToShortDateString()
+        </p>
+    </div>
+
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-2">Ведущий:</h3>
+        <p class="text-gray-700">@Campaign.Keeper.UserName</p>
+    </div>
+
+    <div class="mb-6">
+        <h3 class="text-lg font-semibold mb-2">Игроки:</h3>
+        <div class="space-y-2">
+            @foreach (var player in Campaign.Players)
+            {
+                <div class="flex items-center justify-between bg-gray-50 p-2 rounded">
+                    <span class="text-gray-700">@player.UserName</span>
+                    <button @onclick="() => NavigateToCharacter(Campaign.Id, player.Id)"
+                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded text-sm">
+                        Персонаж
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (Campaign.Players.Count < 5)
+    {
+        <div class="mt-4">
+            <button @onclick="() => InvitePlayer.InvokeAsync(Campaign.Id)"
+                    class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded">
+                Пригласить игрока
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Campaign Campaign { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> InvitePlayer { get; set; }
+
+    private void NavigateToCharacter(Guid campaignId, string playerId)
+    {
+        NavigationManager.NavigateTo($"/campaign/{campaignId}/player/{playerId}/character");
+    }
+}
