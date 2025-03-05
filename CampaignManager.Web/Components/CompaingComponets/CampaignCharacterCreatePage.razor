@@ -1,0 +1,94 @@
+﻿@page "/campaign/{CampaignId:guid}/character/create"
+@using CampaignManager.Web.Components.CharacterComponents
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@rendermode InteractiveServer
+@inject CharacterGenerationService CharacterGenerationService
+@inject CampaignCharacterService CampaignCharacterService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Создание персонажа</PageTitle>
+
+<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <div class="px-4 py-6 sm:px-0">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-900">Создание персонажа для кампании</h1>
+            <div>
+                <button @onclick="SaveCharacter" class="mr-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                    Сохранить
+                </button>
+                <button @onclick="GenerateRandom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                    Сгенерировать случайно
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <PersonalInfoComponent Character="@Character" />
+                <CharacteristicsComponent Character="@Character" OnUpdate="StateHasChanged" />
+            </div>
+
+            <div class="mt-4">
+                <SkillComponent Model="@Character.Skills" />
+            </div>
+
+            <div class="mt-4">
+                <WeaponsComponent Weapons="@Character.Weapons" />
+            </div>
+
+            <div class="mt-4">
+                <h3 class="text-xl font-bold mb-2">Предыстория</h3>
+                <textarea @bind="Character.Backstory" rows="4" class="w-full p-2 border rounded"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid CampaignId { get; set; }
+
+    private Character Character { get; set; } = new Character();
+    private string CurrentUserId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(CurrentUserId))
+        {
+            NavigationManager.NavigateTo($"/campaign/{CampaignId}");
+            return;
+        }
+
+        GenerateRandom();
+    }
+
+    private void GenerateRandom()
+    {
+        Character = CharacterGenerationService.GenerateRandomCharacter();
+    }
+
+    private async Task SaveCharacter()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return;
+            }
+
+            await CampaignCharacterService.CreateCharacterForPlayerInCampaignAsync(CampaignId, CurrentUserId, Character);
+            NavigationManager.NavigateTo($"/campaign/{CampaignId}");
+        }
+        catch (Exception ex)
+        {
+            // В реальном приложении здесь должна быть обработка ошибок
+            Console.WriteLine($"Error saving character: {ex.Message}");
+        }
+    }
+}

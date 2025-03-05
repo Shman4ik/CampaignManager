@@ -3,13 +3,16 @@ using Microsoft.EntityFrameworkCore;
 
 public class CampaignService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<CampaignService> _logger;
 
-    public CampaignService(ApplicationDbContext dbContext, IHttpContextAccessor httpContextAccessor, ILogger<CampaignService> logger)
+    public CampaignService(
+        IDbContextFactory<ApplicationDbContext> dbContextFactory,
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<CampaignService> logger)
     {
-        _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
@@ -19,7 +22,8 @@ public class CampaignService
         var user = await GetCurrentUserAsync();
         if (user == null) return new List<Campaign>();
 
-        return await _dbContext.Campaigns
+        using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        return await dbContext.Campaigns
             .Where(c => c.KeeperId == user.Id || c.Players.Any(p => p.Id == user.Id))
             .ToListAsync();
     }
@@ -38,19 +42,21 @@ public class CampaignService
             LastUpdated = DateTime.UtcNow
         };
 
-        _dbContext.Campaigns.Add(campaign);
-        await _dbContext.SaveChangesAsync();
+        using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        dbContext.Campaigns.Add(campaign);
+        await dbContext.SaveChangesAsync();
 
         return campaign;
     }
 
-    private async Task<ApplicationUser?> GetCurrentUserAsync()
+    private async Task<ApplicationUser> GetCurrentUserAsync()
     {
         var email = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
         if (string.IsNullOrEmpty(email))
             return null;
 
-        return await _dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
+        using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
     }
 
     // Method to get available companies (campaigns)
@@ -58,8 +64,9 @@ public class CampaignService
     {
         try
         {
+            using var dbContext = await _dbContextFactory.CreateDbContextAsync();
             // Assuming campaigns that are not yet full are considered available
-            return await _dbContext.Campaigns
+            return await dbContext.Campaigns
                 .Include(c => c.Players)
                 .Where(c => c.Players.Count < 5) // Assuming max 5 players per campaign
                 .ToListAsync();
@@ -76,7 +83,8 @@ public class CampaignService
     {
         try
         {
-            var campaign = await _dbContext.Campaigns
+            using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+            var campaign = await dbContext.Campaigns
                 .Include(c => c.Players)
                 .FirstOrDefaultAsync(c => c.Id == campaignId);
 
@@ -86,7 +94,7 @@ public class CampaignService
                 return false;
             }
 
-            var user = await _dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == userEmail);
+            var user = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == userEmail);
 
             if (user == null)
             {
@@ -99,7 +107,7 @@ public class CampaignService
             {
                 campaign.Players.Add(user);
                 campaign.LastUpdated = DateTime.UtcNow;
-                await _dbContext.SaveChangesAsync();
+                await dbContext.SaveChangesAsync();
                 _logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", userEmail, campaignId);
                 return true;
             }

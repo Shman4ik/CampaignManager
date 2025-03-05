@@ -23,8 +23,8 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")), ServiceLifetime.Singleton);
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddAuthentication(options =>
 {
@@ -71,9 +71,14 @@ builder.Services
     .AddBlazorise()
     .AddTailwindProviders()
     .AddFontAwesomeIcons();
+
+// Register services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
-builder.Services.AddSingleton<CampaignService>();
+builder.Services.AddScoped<CampaignService>();
+builder.Services.AddScoped<CampaignCharacterService>(); // Add new service
+builder.Services.AddScoped<UserRegistrationService>(); // Add user registration service
+
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 var app = builder.Build();

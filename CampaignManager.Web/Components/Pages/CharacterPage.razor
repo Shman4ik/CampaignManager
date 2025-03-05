@@ -1,35 +1,113 @@
 ﻿@page "/character"
+@page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.CharacterComponents
+@using CampaignManager.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
 @rendermode InteractiveServer
 @inject CharacterGenerationService CharacterGenerationService
-@inject NavigationManager Navigation
+@inject CharacterService CharacterService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
-<PageTitle>@Сharacter.PersonalInfo.Name</PageTitle>
+<PageTitle>@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</PageTitle>
+
 <div class="max-w-7xl mx-auto p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h1>
+        <div>
+            <button @onclick="SaveCharacter" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded mr-2">
+                Сохранить
+            </button>
+            @if (ReturnToCampaign)
+            {
+                <button @onclick="GoBackToCampaign" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                    Вернуться к кампании
+                </button>
+            }
+        </div>
+    </div>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <PersonalInfoComponent Character="@Сharacter" />
-        <CharacteristicsComponent Character="@Сharacter" OnUpdate="StateHasChanged" />
+        <PersonalInfoComponent Character="@Character" />
+        <CharacteristicsComponent Character="@Character" OnUpdate="StateHasChanged" />
     </div>
 
     <div class="mt-4">
-        <SkillComponent Model="@Сharacter.Skills" />
+        <SkillComponent Model="@Character.Skills" />
     </div>
 
     <div class="mt-4">
-        <WeaponsComponent Weapons="@Сharacter.Weapons" />
+        <WeaponsComponent Weapons="@Character.Weapons" />
     </div>
 
     <div class="mt-4">
         <h3 class="text-xl font-bold mb-2">Предыстория</h3>
-        <textarea @bind="Сharacter.Backstory" rows="4" class="w-full p-2 border rounded"></textarea>
+        <textarea @bind="Character.Backstory" rows="4" class="w-full p-2 border rounded"></textarea>
     </div>
 </div>
 @code {
-    private Character Сharacter;
+    [Parameter]
+    public Guid? CharacterId { get; set; }
 
-    protected override void OnInitialized()
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public Guid? CampaignId { get; set; }
+
+    private Character Character;
+    private string CurrentUserId;
+    private bool ReturnToCampaign => CampaignId.HasValue;
+
+    protected override async Task OnInitializedAsync()
     {
-        Сharacter = CharacterGenerationService.GenerateRandomCharacter();
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+        if (CharacterId.HasValue)
+        {
+            // Editing existing character
+            Character = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
+            if (Character == null)
+            {
+                Character = new Character();
+            }
+        }
+        else
+        {
+            // Creating new character
+            Character = CharacterGenerationService.GenerateRandomCharacter();
+
+            // If we have a user ID, set the player name
+            if (!string.IsNullOrEmpty(CurrentUserId))
+            {
+                var email = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                Character.PersonalInfo.PlayerName = email;
+            }
+        }
+    }
+
+    private async Task SaveCharacter()
+    {
+        if (CharacterId.HasValue)
+        {
+            await CharacterService.UpdateCharacterAsync(Character);
+        }
+        else
+        {
+            await CharacterService.CreateCharacterAsync(Character);
+        }
+
+        if (ReturnToCampaign)
+        {
+            GoBackToCampaign();
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+
+    private void GoBackToCampaign()
+    {
+        NavigationManager.NavigateTo($"/campaign/{CampaignId}");
     }
 }
