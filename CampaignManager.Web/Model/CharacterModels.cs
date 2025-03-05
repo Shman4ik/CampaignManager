@@ -32,12 +32,20 @@ public class Character
     /// <summary>
     /// Предыстория персонажа
     /// </summary>
-    public string Backstory { get; set; }
+    public string Backstory { get; set; } = "";
 
     /// <summary>
     /// Состояние персонажа
     /// </summary>
     public CharacterState State { get; set; } = new CharacterState();
+
+    /// <summary>
+    /// Создает новый экземпляр пустого персонажа с инициализированными полями
+    /// </summary>
+    public Character()
+    {
+        // Все поля уже инициализированы через свойства по умолчанию
+    }
 }
 
 public class PersonalInfo
@@ -45,57 +53,57 @@ public class PersonalInfo
     /// <summary>
     /// Имя игрока, управляющего персонажем
     /// </summary>
-    public string PlayerName { get; set; }
+    public string PlayerName { get; set; } = "";
 
     /// <summary>
     /// Имя персонажа
     /// </summary>
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
 
     /// <summary>
     /// Профессия или род занятий персонажа
     /// </summary>
-    public string Occupation { get; set; }
+    public string Occupation { get; set; } = "";
 
     /// <summary>
     /// Возраст персонажа
     /// </summary>
-    public int Age { get; set; }
+    public int Age { get; set; } = 0;
 
     /// <summary>
     /// Пол персонажа
     /// </summary>
-    public string Gender { get; set; }
+    public string Gender { get; set; } = "";
 
     /// <summary>
     /// Место рождения персонажа
     /// </summary>
-    public string Birthplace { get; set; }
+    public string Birthplace { get; set; } = "";
 
     /// <summary>
     /// Текущее место жительства персонажа
     /// </summary>
-    public string Residence { get; set; }
+    public string Residence { get; set; } = "";
 
     /// <summary>
     /// Бонус к урону персонажа
     /// </summary>
-    public string DamageBonus { get; set; }
+    public string DamageBonus { get; set; } = "0";
 
     /// <summary>
     /// Скорость передвижения персонажа
     /// </summary>
-    public int MoveSpeed { get; set; }
+    public int MoveSpeed { get; set; } = 0;
 
     /// <summary>
     /// Значение уклонения персонажа
     /// </summary>
-    public int Dodge { get; set; }
+    public int Dodge { get; set; } = 0;
 
     /// <summary>
     /// Телосложение персонажа
     /// </summary>
-    public string Build { get; set; }
+    public string Build { get; set; } = "0";
 }
 
 public class Characteristics
@@ -115,22 +123,34 @@ public class DerivedAttributes
     /// <summary>
     /// Очки здоровья персонажа
     /// </summary>
-    public AttributeWithMaxValue HitPoints { get; set; }
+    public AttributeWithMaxValue HitPoints { get; set; } = new AttributeWithMaxValue(0, 0);
 
     /// <summary>
     /// Очки магии персонажа
     /// </summary>
-    public AttributeWithMaxValue MagicPoints { get; set; }
+    public AttributeWithMaxValue MagicPoints { get; set; } = new AttributeWithMaxValue(0, 0);
 
     /// <summary>
     /// Уровень рассудка персонажа
     /// </summary>
-    public AttributeWithMaxValue Sanity { get; set; }
+    public AttributeWithMaxValue Sanity { get; set; } = new AttributeWithMaxValue(0, 99);
 
     /// <summary>
     /// Уровень удачи персонажа
     /// </summary>
-    public AttributeWithMaxValue Luck { get; set; }
+    public AttributeWithMaxValue Luck { get; set; } = new AttributeWithMaxValue(0, 99);
+}
+
+public class AttributeWithMaxValue
+{
+    public AttributeWithMaxValue(int value, int maxValue)
+    {
+        Value = value;
+        MaxValue = maxValue;
+    }
+
+    public int Value { get; set; }
+    public int MaxValue { get; set; }
 }
 
 public class CharacterState
@@ -159,18 +179,6 @@ public class CharacterState
     /// Страдает ли персонаж бессрочным безумием
     /// </summary>
     public bool HasIndefiniteInsanity { get; set; }
-}
-
-public class AttributeWithMaxValue
-{
-    public AttributeWithMaxValue(int value, int maxValue)
-    {
-        Value = value;
-        MaxValue = maxValue;
-    }
-
-    public int Value { get; set; }
-    public int MaxValue { get; set; }
 }
 
 public class AttributeValue

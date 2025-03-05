@@ -53,11 +53,15 @@
 
     private Character Character { get; set; } = new Character();
     private string CurrentUserId { get; set; }
+    private string UserEmail { get; set; }
+    private string UserName { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        UserEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        UserName = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? UserEmail;
 
         if (string.IsNullOrEmpty(CurrentUserId))
         {
@@ -65,12 +69,19 @@
             return;
         }
 
-        GenerateRandom();
+        // Инициализируем пустой персонаж
+        Character = new Character();
+
+        // Автоматически заполняем имя игрока
+        Character.PersonalInfo.PlayerName = UserName;
     }
 
     private void GenerateRandom()
     {
         Character = CharacterGenerationService.GenerateRandomCharacter();
+
+        // Сохраняем имя игрока даже в случайно сгенерированном персонаже
+        Character.PersonalInfo.PlayerName = UserName;
     }
 
     private async Task SaveCharacter()
@@ -80,6 +91,12 @@
             if (string.IsNullOrEmpty(CurrentUserId))
             {
                 return;
+            }
+
+            // Проверка на валидность персонажа перед сохранением
+            if (string.IsNullOrWhiteSpace(Character.PersonalInfo.Name))
+            {
+                Character.PersonalInfo.Name = "Безымянный";
             }
 
             await CampaignCharacterService.CreateCharacterForPlayerInCampaignAsync(CampaignId, CurrentUserId, Character);

@@ -55,38 +55,53 @@
 
     private Character Character;
     private string CurrentUserId;
+    private string UserEmail;
+    private string UserName;
     private bool ReturnToCampaign => CampaignId.HasValue;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        UserEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        UserName = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? UserEmail;
 
         if (CharacterId.HasValue)
         {
-            // Editing existing character
+            // Редактирование существующего персонажа
             Character = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
             if (Character == null)
             {
-                Character = new Character();
+                Character = new Character
+                {
+                    PersonalInfo = new PersonalInfo { PlayerName = UserName }
+                };
             }
         }
         else
         {
-            // Creating new character
-            Character = CharacterGenerationService.GenerateRandomCharacter();
-
-            // If we have a user ID, set the player name
-            if (!string.IsNullOrEmpty(CurrentUserId))
+            // Создание нового персонажа
+            Character = new Character
             {
-                var email = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-                Character.PersonalInfo.PlayerName = email;
-            }
+                PersonalInfo = new PersonalInfo { PlayerName = UserName }
+            };
         }
     }
 
     private async Task SaveCharacter()
     {
+        // Проверка на валидность персонажа перед сохранением
+        if (string.IsNullOrWhiteSpace(Character.PersonalInfo.Name))
+        {
+            Character.PersonalInfo.Name = "Безымянный";
+        }
+
+        // Убедимся, что имя игрока установлено
+        if (string.IsNullOrWhiteSpace(Character.PersonalInfo.PlayerName))
+        {
+            Character.PersonalInfo.PlayerName = UserName;
+        }
+
         if (CharacterId.HasValue)
         {
             await CharacterService.UpdateCharacterAsync(Character);

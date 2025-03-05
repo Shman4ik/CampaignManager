@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using CampaignManager.Web.Model;
 
 public class CharacterGenerationService
@@ -10,12 +7,12 @@ public class CharacterGenerationService
     public Character GenerateRandomCharacter()
     {
         var character = new Character();
-        
+
         GenerateCharacteristics(character);
         CalculateDerivedAttributes(character);
         GeneratePersonalInfo(character);
         GenerateSkills(character);
-        
+
         return character;
     }
 
@@ -60,6 +57,9 @@ public class CharacterGenerationService
 
         // Calculate Build and Damage Bonus
         CalculateBuildAndDamageBonus(character);
+
+        // Calculate Dodge value
+        character.PersonalInfo.Dodge = character.Characteristics.Dexterity.Regular / 2;
     }
 
     private int CalculateMoveRate(Character character)
@@ -108,13 +108,22 @@ public class CharacterGenerationService
 
     private void GeneratePersonalInfo(Character character)
     {
-        // This is a simplified version. You might want to expand this with more detailed random generation
+        // Сохраняем текущее имя игрока
+        string currentPlayerName = character.PersonalInfo.PlayerName;
+
+        // Генерируем случайные данные
         character.PersonalInfo.Name = GenerateRandomName();
         character.PersonalInfo.Occupation = GenerateRandomOccupation();
         character.PersonalInfo.Age = random.Next(15, 90);
         character.PersonalInfo.Gender = random.Next(2) == 0 ? "Мужской" : "Женский";
         character.PersonalInfo.Residence = "Аркхем"; // Default for simplicity
         character.PersonalInfo.Birthplace = "Аркхем"; // Default for simplicity
+
+        // Восстанавливаем имя игрока
+        if (!string.IsNullOrEmpty(currentPlayerName))
+        {
+            character.PersonalInfo.PlayerName = currentPlayerName;
+        }
     }
 
     private string GenerateRandomName()
