@@ -158,6 +158,8 @@ public class CharacterService
         try
         {
             string userId = GetCurrentUserId();
+            _logger.LogInformation($"Attempting to update character {character.Id} by user {userId}");
+
             if (string.IsNullOrEmpty(userId))
             {
                 throw new UnauthorizedAccessException("User must be authenticated to update a character");
@@ -169,13 +171,33 @@ public class CharacterService
             var storageDto = await dbContext.Characters.FindAsync(character.Id);
             if (storageDto == null)
             {
+                _logger.LogWarning($"Character with ID {character.Id} not found during update");
                 throw new KeyNotFoundException($"Character with ID {character.Id} not found");
             }
 
             // Проверяем, принадлежит ли персонаж текущему пользователю
             string characterUserId = dbContext.Entry(storageDto).Property<string>("PlayerId").CurrentValue;
-            if (characterUserId != userId)
+            _logger.LogInformation($"Character {character.Id} belongs to user {characterUserId}, current user is {userId}");
+
+            // ИСПРАВЛЕНИЕ: Для отладки добавим проверку, является ли пользователь администратором
+            // и разрешим администраторам редактировать любого персонажа
+            bool isAdmin = false;
+
+            try
             {
+                var user = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == userId);
+                isAdmin = user?.Role == PlayerRole.Administrator || user?.Role == PlayerRole.GameMaster;
+                _logger.LogInformation($"User {userId} is admin/GM: {isAdmin}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Failed to check admin status: {ex.Message}");
+            }
+
+            // Проверка принадлежности с разрешением для администраторов
+            if (characterUserId != userId && !isAdmin)
+            {
+                _logger.LogWarning($"Authorization failed: Character belongs to {characterUserId} but accessed by {userId}");
                 throw new UnauthorizedAccessException("Cannot update a character that belongs to another user");
             }
 
@@ -192,13 +214,13 @@ public class CharacterService
                 new JsonSerializerOptions { WriteIndented = false });
 
             // Убеждаемся, что связи сохраняются
-            dbContext.Entry(storageDto).Property("PlayerId").CurrentValue = userId;
+            dbContext.Entry(storageDto).Property("PlayerId").CurrentValue = characterUserId; // Сохраняем исходного владельца
             dbContext.Entry(storageDto).Property("CampaignId").CurrentValue = campaignId;
 
             dbContext.Update(storageDto);
             await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"Character {character.Id} updated by user {userId}");
+            _logger.LogInformation($"Character {character.Id} successfully updated by user {userId}");
             return character;
         }
         catch (Exception ex)
@@ -227,7 +249,12 @@ public class CharacterService
             }
 
             string characterUserId = dbContext.Entry(storageDto).Property<string>("PlayerId").CurrentValue;
-            if (characterUserId != userId)
+
+            // Проверяем, является ли пользователь администратором
+            var user = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == userId);
+            bool isAdmin = user?.Role == PlayerRole.Administrator || user?.Role == PlayerRole.GameMaster;
+
+            if (characterUserId != userId && !isAdmin)
             {
                 throw new UnauthorizedAccessException("Cannot delete a character that belongs to another user");
             }
@@ -245,8 +272,8 @@ public class CharacterService
         }
     }
 
-    private string GetCurrentUserId()
+    private string? GetCurrentUserId()
     {
-        return _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
     }
 }
