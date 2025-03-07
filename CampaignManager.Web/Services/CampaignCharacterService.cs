@@ -103,11 +103,11 @@ public class CampaignCharacterService
         }
     }
 
-    public async Task<Character> CreateCharacterForPlayerInCampaignAsync(Guid campaignId, string playerId, Character character)
+    public async Task<Character> CreateCharacterForPlayerInCampaignAsync(Guid campaignId, string playerEmail, Character character)
     {
         try
         {
-            _logger.LogInformation($"Starting to create character for player ID: {playerId} in campaign: {campaignId}");
+            _logger.LogInformation($"Starting to create character for player email: {playerEmail} in campaign: {campaignId}");
 
             using var dbContext = await _dbContextFactory.CreateDbContextAsync();
 
@@ -123,11 +123,11 @@ public class CampaignCharacterService
                 throw new Exception($"Campaign with ID {campaignId} not found");
             }
 
-            // Проверка пользователя - используем различные способы поиска
+            // Проверка пользователя - используем email для поиска
             ApplicationUser user = null;
 
-            // 1. Пробуем найти пользователя по ID
-            user = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == playerId);
+            // 1. Ищем пользователя по email
+            user = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == playerEmail);
 
             // 2. Если пользователь не найден, пробуем найти через HttpContext (текущий пользователь)
             if (user == null && _httpContextAccessor.HttpContext != null)
@@ -138,38 +138,27 @@ public class CampaignCharacterService
                     user = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == currentUserEmail);
                     _logger.LogInformation($"Found user by email: {currentUserEmail}");
                 }
-
-                // Если пользователь не найден, пробуем найти по имени
-                if (user == null)
-                {
-                    var currentUserName = _httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
-                    if (!string.IsNullOrEmpty(currentUserName))
-                    {
-                        user = await dbContext.Users.FirstOrDefaultAsync(u => u.UserName == currentUserName);
-                        _logger.LogInformation($"Found user by username: {currentUserName}");
-                    }
-                }
             }
 
             // 3. Если пользователь всё ещё не найден, создаем нового пользователя
             if (user == null)
             {
-                _logger.LogWarning($"User with ID {playerId} not found, creating new user");
+                _logger.LogWarning($"User with email {playerEmail} not found, creating new user");
 
-                // Получаем данные из текущего контекста
-                string email = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                // Получаем данные из текущего контекста или используем переданный email
+                string email = !string.IsNullOrEmpty(playerEmail) ?
+                    playerEmail :
+                    _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
                 string name = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? email;
 
                 if (string.IsNullOrEmpty(email))
                 {
-                    // Если нет информации из контекста, используем playerId
-                    email = $"{playerId}@example.com"; // Временный email
-                    name = $"User_{playerId.Substring(0, 8)}";
+                    throw new ArgumentException("Valid email is required to create a user");
                 }
 
                 user = new ApplicationUser
                 {
-                    Id = playerId,
                     UserName = name,
                     NormalizedUserName = name?.ToUpper(),
                     Email = email,
@@ -182,7 +171,7 @@ public class CampaignCharacterService
 
                 dbContext.Users.Add(user);
                 await dbContext.SaveChangesAsync();
-                _logger.LogInformation($"Created new user with ID: {user.Id}, Username: {user.UserName}");
+                _logger.LogInformation($"Created new user with Email: {user.Email}, Username: {user.UserName}");
             }
 
             // Проверка, является ли пользователь ведущим или игроком в кампании
@@ -350,9 +339,12 @@ public class CampaignCharacterService
     {
         var email = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
         if (string.IsNullOrEmpty(email))
+        {
+            _logger.LogWarning("User email not found in authentication context");
             return null;
+        }
 
         using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
+        return await dbContext.ApplicationUsers.FirstOrDefaultAsync(p => p.Email == email);
     }
 }

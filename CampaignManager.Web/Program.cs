@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire components.
@@ -51,6 +52,52 @@ builder.Services.AddAuthentication(options =>
             }
             context.Response.Redirect(context.RedirectUri);
             return Task.CompletedTask;
+        },
+        OnTicketReceived = async context =>
+        {
+            // Получаем email пользователя
+            var email = context.Principal.FindFirstValue(ClaimTypes.Email);
+            if (!string.IsNullOrEmpty(email))
+            {
+                // Создаем scope для доступа к сервисам
+                using var scope = context.HttpContext.RequestServices.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+                try
+                {
+                    // Ищем пользователя в базе данных
+                    var existingUser = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == email);
+
+                    // Если пользователя нет, регистрируем его
+                    if (existingUser == null)
+                    {
+                        var newUser = new ApplicationUser
+                        {
+                            Email = email,
+                            NormalizedEmail = email.ToUpper(),
+                            UserName = context.Principal.FindFirstValue(ClaimTypes.Name) ?? email,
+                            NormalizedUserName = (context.Principal.FindFirstValue(ClaimTypes.Name) ?? email).ToUpper(),
+                            EmailConfirmed = true,
+                            SecurityStamp = Guid.NewGuid().ToString(),
+                            Role = PlayerRole.Player // По умолчанию обычный игрок
+                        };
+
+                        dbContext.ApplicationUsers.Add(newUser);
+                        await dbContext.SaveChangesAsync();
+
+                        logger.LogInformation($"Автоматически зарегистрирован новый пользователь с email: {email}");
+                    }
+                    else
+                    {
+                        logger.LogInformation($"Пользователь с email {email} уже существует в системе");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, $"Ошибка при автоматической регистрации пользователя с email: {email}");
+                }
+            }
         }
     };
 });

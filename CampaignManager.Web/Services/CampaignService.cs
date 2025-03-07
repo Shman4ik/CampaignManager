@@ -31,8 +31,18 @@ public class CampaignService
     public async Task<Campaign> CreateCampaignAsync(string name)
     {
         var user = await GetCurrentUserAsync();
-        if (user == null || user.Role != PlayerRole.Administrator)
-            throw new UnauthorizedAccessException("Only administrators can create campaigns.");
+        if (user == null)
+            throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+        // Изменено: разрешить всем пользователям создавать кампании
+        // или разрешить пользователям с ролью GameMaster или Administrator
+        bool canCreateCampaign = true; // Разрешить всем пользователям
+                                       // Или можно использовать: bool canCreateCampaign = user.Role == PlayerRole.Administrator || user.Role == PlayerRole.GameMaster;
+
+        if (!canCreateCampaign)
+            throw new UnauthorizedAccessException("У вас нет прав для создания кампании");
+
+        _logger.LogInformation($"Пользователь {user.Email} создаёт кампанию '{name}'");
 
         var campaign = new Campaign
         {
@@ -43,20 +53,51 @@ public class CampaignService
         };
 
         using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        dbContext.Campaigns.Add(campaign);
-        await dbContext.SaveChangesAsync();
 
-        return campaign;
+        // Добавляем пользователя как игрока в свою кампанию
+        //campaign.Players.Add(user);
+
+        dbContext.Campaigns.Add(campaign);
+
+        try
+        {
+            await dbContext.SaveChangesAsync();
+            _logger.LogInformation($"Кампания '{name}' успешно создана пользователем {user.Email}");
+            return campaign;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Ошибка при создании кампании '{name}' пользователем {user.Email}");
+            throw;
+        }
     }
 
     private async Task<ApplicationUser> GetCurrentUserAsync()
     {
         var email = _httpContextAccessor.HttpContext?.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
         if (string.IsNullOrEmpty(email))
+        {
+            _logger.LogWarning("Email пользователя не найден в контексте аутентификации");
             return null;
+        }
 
-        using var dbContext = await _dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
+        try
+        {
+            using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+            var user = await dbContext.Users.SingleOrDefaultAsync(p => p.Email == email);
+
+            if (user == null)
+            {
+                _logger.LogWarning($"Пользователь с email {email} не найден в базе данных");
+            }
+
+            return user;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Ошибка при поиске пользователя с email {email}");
+            return null;
+        }
     }
 
     // Method to get available companies (campaigns)

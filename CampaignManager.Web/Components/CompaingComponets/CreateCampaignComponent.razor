@@ -1,31 +1,82 @@
 ﻿@inject CampaignService CampaignService
 @inject NavigationManager NavigationManager
+@inject ILogger<CreateCampaignComponent> Logger
+@rendermode InteractiveServer
 
 <div class="bg-white shadow-md rounded-lg p-4 mt-4">
     <h3 class="text-xl font-bold mb-4">Создать новую кампанию</h3>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            <span>@errorMessage</span>
+        </div>
+    }
+
     <div class="mb-4">
         <label for="campaignName" class="block text-sm font-medium text-gray-700">Название кампании</label>
-        <input type="text" id="campaignName" @bind="campaignName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+        <input type="text" id="campaignName" @bind="campaignName" @bind:event="oninput"
+               class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm" />
     </div>
-    <button @onclick="CreateCampaign" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-        Создать кампанию
+    <button @onclick="CreateCampaignAsync" disabled="@isCreating"
+            class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition">
+        @if (isCreating)
+        {
+            <span>Создание...</span>
+        }
+        else
+        {
+            <span>Создать кампанию</span>
+        }
     </button>
 </div>
 
-@code
-{
+@code {
     private string campaignName = "";
+    private string errorMessage = "";
+    private bool isCreating = false;
 
-    private async Task CreateCampaign()
+    private async Task CreateCampaignAsync()
     {
-        if (!string.IsNullOrWhiteSpace(campaignName))
+        Logger.LogInformation("Нажата кнопка 'Создать кампанию'");
+
+        if (string.IsNullOrWhiteSpace(campaignName))
         {
+            errorMessage = "Пожалуйста, введите название кампании";
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            isCreating = true;
+            StateHasChanged();
+
+            Logger.LogInformation($"Начало создания кампании с названием: {campaignName}");
             await CampaignService.CreateCampaignAsync(campaignName);
 
             campaignName = string.Empty;
+            errorMessage = "";
 
+            Logger.LogInformation("Кампания успешно создана, перенаправление на главную страницу");
             NavigationManager.NavigateTo("/", forceLoad: true);
         }
-    }   
-
+        catch (UnauthorizedAccessException ex)
+        {
+            Logger.LogWarning(ex, "Неавторизованная попытка создания кампании");
+            errorMessage = "У вас нет прав для создания кампании.";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Ошибка при создании кампании");
+            errorMessage = $"Ошибка при создании кампании: {ex.Message}";
+            StateHasChanged();
+        }
+        finally
+        {
+            isCreating = false;
+            StateHasChanged();
+        }
+    }
 }

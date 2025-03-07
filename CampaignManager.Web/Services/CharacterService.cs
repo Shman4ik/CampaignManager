@@ -157,15 +157,23 @@ public class CharacterService
     {
         try
         {
-            string userId = GetCurrentUserId();
-            _logger.LogInformation($"Attempting to update character {character.Id} by user {userId}");
+            string userEmail = GetCurrentUserId(); // Теперь возвращает email
+            _logger.LogInformation($"Attempting to update character {character.Id} by user email {userEmail}");
 
-            if (string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(userEmail))
             {
                 throw new UnauthorizedAccessException("User must be authenticated to update a character");
             }
 
             using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+
+            // Находим пользователя по email
+            var currentUser = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == userEmail);
+            if (currentUser == null)
+            {
+                _logger.LogWarning($"User with email {userEmail} not found in database");
+                throw new UnauthorizedAccessException("User not found in database");
+            }
 
             // Получаем существующую запись
             var storageDto = await dbContext.Characters.FindAsync(character.Id);
@@ -176,28 +184,22 @@ public class CharacterService
             }
 
             // Проверяем, принадлежит ли персонаж текущему пользователю
-            string characterUserId = dbContext.Entry(storageDto).Property<string>("PlayerId").CurrentValue;
-            _logger.LogInformation($"Character {character.Id} belongs to user {characterUserId}, current user is {userId}");
+            string characterPlayerId = dbContext.Entry(storageDto).Property<string>("PlayerId").CurrentValue;
 
-            // ИСПРАВЛЕНИЕ: Для отладки добавим проверку, является ли пользователь администратором
-            // и разрешим администраторам редактировать любого персонажа
-            bool isAdmin = false;
+            // Находим владельца персонажа по PlayerId
+            var characterOwner = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == characterPlayerId);
+            string characterOwnerEmail = characterOwner?.Email;
 
-            try
-            {
-                var user = await dbContext.ApplicationUsers.FirstOrDefaultAsync(u => u.Email == userId);
-                isAdmin = user?.Role == PlayerRole.Administrator || user?.Role == PlayerRole.GameMaster;
-                _logger.LogInformation($"User {userId} is admin/GM: {isAdmin}");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning($"Failed to check admin status: {ex.Message}");
-            }
+            _logger.LogInformation($"Character {character.Id} belongs to user email {characterOwnerEmail}, current user email is {userEmail}");
+
+            // Проверяем, является ли пользователь администратором или ведущим игры
+            bool isAdmin = currentUser.Role == PlayerRole.Administrator || currentUser.Role == PlayerRole.GameMaster;
+            _logger.LogInformation($"User {userEmail} is admin/GM: {isAdmin}");
 
             // Проверка принадлежности с разрешением для администраторов
-            if (characterUserId != userId && !isAdmin)
+            if (characterOwnerEmail != userEmail && !isAdmin)
             {
-                _logger.LogWarning($"Authorization failed: Character belongs to {characterUserId} but accessed by {userId}");
+                _logger.LogWarning($"Authorization failed: Character belongs to {characterOwnerEmail} but accessed by {userEmail}");
                 throw new UnauthorizedAccessException("Cannot update a character that belongs to another user");
             }
 
@@ -214,13 +216,13 @@ public class CharacterService
                 new JsonSerializerOptions { WriteIndented = false });
 
             // Убеждаемся, что связи сохраняются
-            dbContext.Entry(storageDto).Property("PlayerId").CurrentValue = characterUserId; // Сохраняем исходного владельца
+            dbContext.Entry(storageDto).Property("PlayerId").CurrentValue = characterOwnerEmail; // Сохраняем исходного владельца
             dbContext.Entry(storageDto).Property("CampaignId").CurrentValue = campaignId;
 
             dbContext.Update(storageDto);
             await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation($"Character {character.Id} successfully updated by user {userId}");
+            _logger.LogInformation($"Character {character.Id} successfully updated by user {characterOwnerEmail}");
             return character;
         }
         catch (Exception ex)

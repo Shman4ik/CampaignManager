@@ -29,16 +29,27 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .WithMany()
             .UsingEntity(j => j.ToTable("CampaignPlayers"));
 
+        // Индекс для email пользователя
+        modelBuilder.Entity<ApplicationUser>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
+
         // Настройка CharacterStorageDto
         modelBuilder.Entity<CharacterStorageDto>(entity =>
         {
             entity.ToTable("Characters");
 
-            // Настройка связи с игроком
-            entity.Property<string>("PlayerId");
+            // Настройка связи с игроком через email
+            entity.Property<string>("PlayerEmail");
+
+            // Создаем индекс для PlayerEmail для более быстрого поиска
+            entity.HasIndex("PlayerEmail");
+
+            // Настраиваем связь с пользователем через email
             entity.HasOne<ApplicationUser>()
                   .WithMany()
-                  .HasForeignKey("PlayerId")
+                  .HasForeignKey("PlayerEmail")
+                  .HasPrincipalKey(u => u.Email) // Используем email как внешний ключ
                   .OnDelete(DeleteBehavior.Cascade);
 
             // Настройка связи с кампанией
@@ -54,7 +65,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .HasComment("JSON-представление персонажа со всеми характеристиками");
 
             // Добавляем индекс для более быстрого поиска
-            entity.HasIndex("PlayerId", "CampaignId");
+            entity.HasIndex("PlayerEmail", "CampaignId");
+        });
+
+        // Настройка кампании с Keeper по email
+        modelBuilder.Entity<Campaign>(entity =>
+        {
+            // Добавляем свойство для email ведущего
+            entity.Property<string>("KeeperEmail");
+
+            // Создаем индекс для KeeperEmail для более быстрого поиска
+            entity.HasIndex("KeeperEmail");
+
+            // Переопределяем связь с ведущим через email
+            entity.HasOne(c => c.Keeper)
+                  .WithMany()
+                  .HasForeignKey("KeeperEmail")
+                  .HasPrincipalKey(u => u.Email)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
