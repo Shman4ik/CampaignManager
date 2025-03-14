@@ -4,20 +4,20 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace CampaignManager.Web.Migrations
+namespace CampaignManager.Web.Migrations.AppIdentityDb
 {
     /// <inheritdoc />
-    public partial class AddCampaigns : Migration
+    public partial class InitialMigration : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "Dev");
+                name: "identity");
 
             migrationBuilder.CreateTable(
                 name: "AspNetRoles",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
@@ -32,7 +32,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetUsers",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     Id = table.Column<string>(type: "text", nullable: false),
@@ -59,7 +59,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetRoleClaims",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -74,7 +74,7 @@ namespace CampaignManager.Web.Migrations
                     table.ForeignKey(
                         name: "FK_AspNetRoleClaims_AspNetRoles_RoleId",
                         column: x => x.RoleId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetRoles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -82,7 +82,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserClaims",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
@@ -97,7 +97,7 @@ namespace CampaignManager.Web.Migrations
                     table.ForeignKey(
                         name: "FK_AspNetUserClaims_AspNetUsers_UserId",
                         column: x => x.UserId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -105,7 +105,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserLogins",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     LoginProvider = table.Column<string>(type: "text", nullable: false),
@@ -119,7 +119,7 @@ namespace CampaignManager.Web.Migrations
                     table.ForeignKey(
                         name: "FK_AspNetUserLogins_AspNetUsers_UserId",
                         column: x => x.UserId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -127,7 +127,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserRoles",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "text", nullable: false),
@@ -139,14 +139,14 @@ namespace CampaignManager.Web.Migrations
                     table.ForeignKey(
                         name: "FK_AspNetUserRoles_AspNetRoles_RoleId",
                         column: x => x.RoleId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetRoles",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_AspNetUserRoles_AspNetUsers_UserId",
                         column: x => x.UserId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
@@ -154,7 +154,7 @@ namespace CampaignManager.Web.Migrations
 
             migrationBuilder.CreateTable(
                 name: "AspNetUserTokens",
-                schema: "Dev",
+                schema: "identity",
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "text", nullable: false),
@@ -168,117 +168,62 @@ namespace CampaignManager.Web.Migrations
                     table.ForeignKey(
                         name: "FK_AspNetUserTokens_AspNetUsers_UserId",
                         column: x => x.UserId,
-                        principalSchema: "Dev",
+                        principalSchema: "identity",
                         principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Campaigns",
-                schema: "Dev",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    KeeperId = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Campaigns", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Campaigns_AspNetUsers_KeeperId",
-                        column: x => x.KeeperId,
-                        principalSchema: "Dev",
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "CampaignPlayers",
-                schema: "Dev",
-                columns: table => new
-                {
-                    CampaignId = table.Column<Guid>(type: "uuid", nullable: false),
-                    PlayersId = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_CampaignPlayers", x => new { x.CampaignId, x.PlayersId });
-                    table.ForeignKey(
-                        name: "FK_CampaignPlayers_AspNetUsers_PlayersId",
-                        column: x => x.PlayersId,
-                        principalSchema: "Dev",
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_CampaignPlayers_Campaigns_CampaignId",
-                        column: x => x.CampaignId,
-                        principalSchema: "Dev",
-                        principalTable: "Campaigns",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetRoleClaims",
                 column: "RoleId");
 
             migrationBuilder.CreateIndex(
                 name: "RoleNameIndex",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetRoles",
                 column: "NormalizedName",
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserClaims_UserId",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetUserClaims",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserLogins_UserId",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetUserLogins",
                 column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetUserRoles_RoleId",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetUserRoles",
                 column: "RoleId");
 
             migrationBuilder.CreateIndex(
                 name: "EmailIndex",
-                schema: "Dev",
+                schema: "identity",
                 table: "AspNetUsers",
                 column: "NormalizedEmail");
 
             migrationBuilder.CreateIndex(
-                name: "UserNameIndex",
-                schema: "Dev",
+                name: "IX_AspNetUsers_Email",
+                schema: "identity",
                 table: "AspNetUsers",
-                column: "NormalizedUserName",
+                column: "Email",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_CampaignPlayers_PlayersId",
-                schema: "Dev",
-                table: "CampaignPlayers",
-                column: "PlayersId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Campaigns_KeeperId",
-                schema: "Dev",
-                table: "Campaigns",
-                column: "KeeperId");
+                name: "UserNameIndex",
+                schema: "identity",
+                table: "AspNetUsers",
+                column: "NormalizedUserName",
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -286,39 +231,31 @@ namespace CampaignManager.Web.Migrations
         {
             migrationBuilder.DropTable(
                 name: "AspNetRoleClaims",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserClaims",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserLogins",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserRoles",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens",
-                schema: "Dev");
-
-            migrationBuilder.DropTable(
-                name: "CampaignPlayers",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles",
-                schema: "Dev");
-
-            migrationBuilder.DropTable(
-                name: "Campaigns",
-                schema: "Dev");
+                schema: "identity");
 
             migrationBuilder.DropTable(
                 name: "AspNetUsers",
-                schema: "Dev");
+                schema: "identity");
         }
     }
 }

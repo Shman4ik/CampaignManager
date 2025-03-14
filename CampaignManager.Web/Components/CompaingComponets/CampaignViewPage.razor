@@ -1,4 +1,6 @@
 ﻿@page "/campaign/{CampaignId:guid}"
+@using System.Security.Claims
+@using CampaignManager.Web.Compain.Models
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Services
 @using Microsoft.AspNetCore.Components.Authorization
@@ -40,13 +42,14 @@
                                 @foreach (var player in Campaign.Players)
                                 {
                                     <div class="flex items-center justify-between bg-gray-50 p-2 rounded">
-                                        <span class="text-gray-700">@player.UserName</span>
-                                        @if (IsCurrentUser(player.Id))
+                                        <span class="text-gray-700">@player.PlayerEmail</span>
+                                        @if (IsCurrentUser(player.PlayerEmail))
                                         {
                                             <span class="ml-2 text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded-full">Вы</span>
                                         }
-                                        <button @onclick="() => NavigateToPlayerCharacters(Campaign.Id, player.Id)"
-                                                class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded text-sm">
+                                        <button
+                                            @onclick="() => NavigateToPlayerCharacters(Campaign.Id, player.PlayerEmail)"
+                                            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded text-sm">
                                             Персонажи
                                         </button>
                                     </div>
@@ -70,11 +73,8 @@
                     <div class="bg-white shadow-lg rounded-lg p-6">
                         <h3 class="text-xl font-bold mb-4">Ваши персонажи в этой кампании</h3>
 
-                        @if (UserCharacters == null)
-                        {
-                            <p>Загрузка персонажей...</p>
-                        }
-                        else if (!UserCharacters.Any())
+
+                        @if (UserCharacter == null)
                         {
                             <p>У вас пока нет персонажей в этой кампании.</p>
                             <div class="mt-4">
@@ -87,32 +87,31 @@
                         else
                         {
                             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                @foreach (var character in UserCharacters)
-                                {
-                                    <div class="bg-gray-50 overflow-hidden shadow rounded-lg">
-                                        <div class="px-4 py-5 sm:p-6">
-                                            <h4 class="text-lg font-medium text-gray-900 truncate">
-                                                @character.PersonalInfo.Name
-                                            </h4>
-                                            <dl class="mt-2 space-y-1">
-                                                <div class="text-sm font-normal text-gray-500">
-                                                    <dt class="inline">Профессия:</dt>
-                                                    <dd class="inline ml-1">@character.PersonalInfo.Occupation</dd>
-                                                </div>
-                                                <div class="text-sm font-normal text-gray-500">
-                                                    <dt class="inline">Возраст:</dt>
-                                                    <dd class="inline ml-1">@character.PersonalInfo.Age</dd>
-                                                </div>
-                                            </dl>
-                                            <div class="mt-4">
-                                                <button @onclick="() => EditCharacter(character.Id)"
-                                                        class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-                                                    Редактировать
-                                                </button>
+
+                                <div class="bg-gray-50 overflow-hidden shadow rounded-lg">
+                                    <div class="px-4 py-5 sm:p-6">
+                                        <h4 class="text-lg font-medium text-gray-900 truncate">
+                                            @UserCharacter.PersonalInfo.Name
+                                        </h4>
+                                        <dl class="mt-2 space-y-1">
+                                            <div class="text-sm font-normal text-gray-500">
+                                                <dt class="inline">Профессия:</dt>
+                                                <dd class="inline ml-1">@UserCharacter.PersonalInfo.Occupation</dd>
                                             </div>
+                                            <div class="text-sm font-normal text-gray-500">
+                                                <dt class="inline">Возраст:</dt>
+                                                <dd class="inline ml-1">@UserCharacter.PersonalInfo.Age</dd>
+                                            </div>
+                                        </dl>
+                                        <div class="mt-4">
+                                            <button @onclick="() => EditCharacter(UserCharacter.Id)"
+                                                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                                                Редактировать
+                                            </button>
                                         </div>
                                     </div>
-                                }
+                                </div>
+                               
                             </div>
                         }
                     </div>
@@ -123,18 +122,17 @@
 </div>
 
 @code {
-    [Parameter]
-    public Guid CampaignId { get; set; }
+    [Parameter] public Guid CampaignId { get; set; }
 
     private Campaign Campaign { get; set; }
-    private List<Character> UserCharacters { get; set; }
-    private string CurrentUserId { get; set; }
-    private bool IsGameMaster => Campaign?.KeeperId == CurrentUserId;
+    private Character UserCharacter { get; set; }
+    private string CurrentUserEmail { get; set; }
+    private bool IsGameMaster => Campaign?.KeeperEmail == CurrentUserEmail;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        CurrentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
 
         await LoadCampaignData();
     }
@@ -142,15 +140,15 @@
     private async Task LoadCampaignData()
     {
         Campaign = await CampaignCharacterService.GetCampaignAsync(CampaignId);
-        if (Campaign != null && CurrentUserId != null)
+        if (Campaign != null && CurrentUserEmail != null)
         {
-            UserCharacters = await CampaignCharacterService.GetPlayerCharactersInCampaignAsync(CampaignId, CurrentUserId);
+            UserCharacter = await CampaignCharacterService.GetPlayerCharactersInCampaignAsync(CampaignId);
         }
     }
 
     private bool IsCurrentUser(string userId)
     {
-        return userId == CurrentUserId;
+        return userId == CurrentUserEmail;
     }
 
     private void NavigateToPlayerCharacters(Guid campaignId, string playerId)
@@ -173,4 +171,5 @@
         // This would be implemented to show a dialog or navigate to an invite page
         NavigationManager.NavigateTo($"/campaign/{CampaignId}/invite");
     }
+
 }

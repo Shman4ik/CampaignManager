@@ -1,6 +1,8 @@
-var builder = DistributedApplication.CreateBuilder(args);
+using Projects;
 
-builder.AddProject<Projects.CampaignManager_Web>("webfrontend")
+IDistributedApplicationBuilder? builder = DistributedApplication.CreateBuilder(args);
+
+builder.AddProject<CampaignManager_Web>("webfrontend")
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();

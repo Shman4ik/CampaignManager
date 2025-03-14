@@ -1,14 +1,17 @@
-﻿using CampaignManager.Web.Authorization;
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Net.Mail;
+
 namespace CampaignManager.Web.Services;
 
 public class UserRegistrationService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly AppIdentityDbContext _dbContext;
     private readonly ILogger<UserRegistrationService> _logger;
 
-    public UserRegistrationService(ApplicationDbContext dbContext, ILogger<UserRegistrationService> logger)
+    public UserRegistrationService(AppIdentityDbContext dbContext, ILogger<UserRegistrationService> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -30,9 +33,9 @@ public class UserRegistrationService
 
         try
         {
-            using var transaction = await _dbContext.Database.BeginTransactionAsync();
+            using IDbContextTransaction transaction = await _dbContext.Database.BeginTransactionAsync();
 
-            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
+            ApplicationUser? user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
             {
                 user = new ApplicationUser { Email = email, UserName = email, Role = PlayerRole.Player };
@@ -62,7 +65,7 @@ public class UserRegistrationService
     {
         try
         {
-            var addr = new System.Net.Mail.MailAddress(email);
+            MailAddress addr = new(email);
             return addr.Address == email;
         }
         catch

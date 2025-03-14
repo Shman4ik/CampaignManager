@@ -1,24 +1,16 @@
-﻿namespace CampaignManager.Web.Model
+﻿using CampaignManager.Web.Compain.Models;
+
+namespace CampaignManager.Web.Model;
+
+public class CampaignPlayer : BaseDataBaseEntity
 {
-    public class Campaign
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; }
-        public string KeeperId { get; set; }
-        public ApplicationUser Keeper { get; set; }
-        public List<ApplicationUser> Players { get; set; } = new List<ApplicationUser>();
-        public DateTime CreatedAt { get; set; }
-        public DateTime LastUpdated { get; set; }
-    }
+    // Коллекция персонажей этого игрока в этой кампании
+    public ICollection<CharacterStorageDto> Characters { get; set; } = [];
 
-    public class Keeper : ApplicationUser
-    {
-        public List<Campaign> Campaigns { get; set; } = [];
-    }
+    // Навигационные свойства
+    public Guid CampaignId { get; set; }
+    public Campaign Campaign { get; set; }
 
-    public class Player : ApplicationUser
-    {
-        public Character Character { get; set; }
-        public Campaign Campaign { get; set; }
-    }
+    public string PlayerEmail { get; set; }
+    public ApplicationUser Player { get; set; }
 }

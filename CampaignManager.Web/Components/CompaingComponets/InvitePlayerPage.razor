@@ -1,5 +1,6 @@
 ﻿@page "/campaign/{CampaignId:guid}/invite"
-@using CampaignManager.Web.Model
+@using System.Security.Claims
+@using CampaignManager.Web.Compain.Models
 @using CampaignManager.Web.Services
 @using Microsoft.AspNetCore.Components.Authorization
 @inject CampaignCharacterService CampaignCharacterService
@@ -32,7 +33,7 @@
                     </label>
                     <input type="email" id="email" @bind="InviteEmail"
                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="email@example.com" />
+                           placeholder="email@example.com"/>
                 </div>
 
                 <div class="mb-4">
@@ -61,8 +62,7 @@
 </div>
 
 @code {
-    [Parameter]
-    public Guid CampaignId { get; set; }
+    [Parameter] public Guid CampaignId { get; set; }
 
     private Campaign Campaign;
     private string InviteEmail = "";
@@ -72,12 +72,12 @@
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var currentUserId = authState.User.FindFirst(ClaimTypes.Email)?.Value;
 
         Campaign = await CampaignCharacterService.GetCampaignAsync(CampaignId);
 
         // Check if current user is the keeper
-        if (Campaign != null && Campaign.KeeperId != currentUserId)
+        if (Campaign != null && Campaign.KeeperEmail != currentUserId)
         {
             NavigationManager.NavigateTo($"/campaign/{CampaignId}");
         }
@@ -131,4 +131,5 @@
         Message = message;
         MessageCssClass = "bg-red-50 text-red-800 border border-red-200";
     }
+
 }

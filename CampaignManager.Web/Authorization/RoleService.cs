@@ -20,7 +20,7 @@ public class RoleService : IRoleService
 
     public async Task AssignRoleToUser(string userId, PlayerRole role)
     {
-        var user = await _userManager.FindByIdAsync(userId);
+        ApplicationUser? user = await _userManager.FindByIdAsync(userId);
         if (user != null)
         {
             user.Role = role;
@@ -30,7 +30,7 @@ public class RoleService : IRoleService
 
     public async Task<PlayerRole?> GetUserRole(string userId)
     {
-        var user = await _userManager.FindByIdAsync(userId);
+        ApplicationUser? user = await _userManager.FindByIdAsync(userId);
         return user?.Role;
     }
 }

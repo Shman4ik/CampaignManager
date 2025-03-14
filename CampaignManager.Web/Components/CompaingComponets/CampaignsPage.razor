@@ -1,5 +1,6 @@
 ﻿@page "/campaign"
-@using CampaignManager.Web.Model
+@using System.Security.Claims
+@using CampaignManager.Web.Compain.Models
 @using CampaignManager.Web.Services
 @using Microsoft.AspNetCore.Components.Authorization
 @inject CampaignCharacterService CampaignCharacterService
@@ -58,7 +59,7 @@
                                 <p class="font-medium text-gray-700">Участников: @campaign.Players.Count</p>
                             </div>
 
-                            @if (campaign.KeeperId == CurrentUserId)
+                            @if (campaign.KeeperEmail == CurrentUserEmail)
                             {
                                 <div class="mb-4 bg-blue-50 p-2 rounded">
                                     <p class="text-blue-700 text-sm">
@@ -82,13 +83,13 @@
 @code {
     private List<Campaign> UserCampaigns;
     private bool IsUserAuthenticated;
-    private string CurrentUserId;
+    private string? CurrentUserEmail;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         IsUserAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
-        CurrentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        CurrentUserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
 
         if (IsUserAuthenticated)
         {
@@ -100,4 +101,5 @@
     {
         NavigationManager.NavigateTo($"/campaign/{campaignId}");
     }
+
 }

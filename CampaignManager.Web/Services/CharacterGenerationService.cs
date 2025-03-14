@@ -2,11 +2,11 @@ using CampaignManager.Web.Model;
 
 public class CharacterGenerationService
 {
-    private Random random = new Random();
+    private readonly Random random = new();
 
     public Character GenerateRandomCharacter()
     {
-        var character = new Character();
+        Character character = new();
 
         GenerateCharacteristics(character);
         CalculateDerivedAttributes(character);
@@ -68,8 +68,16 @@ public class CharacterGenerationService
         int dex = character.Characteristics.Dexterity.Regular;
         int siz = character.Characteristics.Size.Regular;
 
-        if (str < siz && dex < siz) return 7;
-        if (str > siz && dex > siz) return 9;
+        if (str < siz && dex < siz)
+        {
+            return 7;
+        }
+
+        if (str > siz && dex > siz)
+        {
+            return 9;
+        }
+
         return 8;
     }
 
@@ -142,9 +150,9 @@ public class CharacterGenerationService
 
     private void GenerateSkills(Character character)
     {
-        foreach (var skillGroup in character.Skills.SkillGroups)
+        foreach (SkillGroup? skillGroup in character.Skills.SkillGroups)
         {
-            foreach (var skill in skillGroup.Skills)
+            foreach (Skill? skill in skillGroup.Skills)
             {
                 if (skill.Name == "Уклонение")
                 {

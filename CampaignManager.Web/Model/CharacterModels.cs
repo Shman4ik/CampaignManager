@@ -5,140 +5,132 @@ public class Character
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Персональная информация о персонаже
+    ///     Персональная информация о персонаже
     /// </summary>
-    public PersonalInfo PersonalInfo { get; set; } = new PersonalInfo();
+    public PersonalInfo PersonalInfo { get; set; } = new();
 
     /// <summary>
-    /// Характеристики персонажа
+    ///     Характеристики персонажа
     /// </summary>
-    public Characteristics Characteristics { get; set; } = new Characteristics();
+    public Characteristics Characteristics { get; set; } = new();
 
     /// <summary>
-    /// Производные характеристики персонажа
+    ///     Производные характеристики персонажа
     /// </summary>
-    public DerivedAttributes DerivedAttributes { get; set; } = new DerivedAttributes();
+    public DerivedAttributes DerivedAttributes { get; set; } = new();
 
     /// <summary>
-    /// Навыки персонажа
+    ///     Навыки персонажа
     /// </summary>
-    public SkillsModel Skills { get; set; } = new SkillsModel();
+    public SkillsModel Skills { get; set; } = new();
 
     /// <summary>
-    /// Оружие персонажа
+    ///     Оружие персонажа
     /// </summary>
-    public List<Weapon> Weapons { get; set; } = new List<Weapon>();
+    public List<Weapon> Weapons { get; set; } = new();
 
     /// <summary>
-    /// Предыстория персонажа
+    ///     Предыстория персонажа
     /// </summary>
     public string Backstory { get; set; } = "";
 
     /// <summary>
-    /// Состояние персонажа
+    ///     Состояние персонажа
     /// </summary>
-    public CharacterState State { get; set; } = new CharacterState();
-
-    /// <summary>
-    /// Создает новый экземпляр пустого персонажа с инициализированными полями
-    /// </summary>
-    public Character()
-    {
-        // Все поля уже инициализированы через свойства по умолчанию
-    }
+    public CharacterState State { get; set; } = new();
 }
 
 public class PersonalInfo
 {
     /// <summary>
-    /// Имя игрока, управляющего персонажем
+    ///     Имя игрока, управляющего персонажем
     /// </summary>
     public string PlayerName { get; set; } = "";
 
     /// <summary>
-    /// Имя персонажа
+    ///     Имя персонажа
     /// </summary>
     public string Name { get; set; } = "";
 
     /// <summary>
-    /// Профессия или род занятий персонажа
+    ///     Профессия или род занятий персонажа
     /// </summary>
     public string Occupation { get; set; } = "";
 
     /// <summary>
-    /// Возраст персонажа
+    ///     Возраст персонажа
     /// </summary>
     public int Age { get; set; } = 0;
 
     /// <summary>
-    /// Пол персонажа
+    ///     Пол персонажа
     /// </summary>
     public string Gender { get; set; } = "";
 
     /// <summary>
-    /// Место рождения персонажа
+    ///     Место рождения персонажа
     /// </summary>
     public string Birthplace { get; set; } = "";
 
     /// <summary>
-    /// Текущее место жительства персонажа
+    ///     Текущее место жительства персонажа
     /// </summary>
     public string Residence { get; set; } = "";
 
     /// <summary>
-    /// Бонус к урону персонажа
+    ///     Бонус к урону персонажа
     /// </summary>
     public string DamageBonus { get; set; } = "0";
 
     /// <summary>
-    /// Скорость передвижения персонажа
+    ///     Скорость передвижения персонажа
     /// </summary>
     public int MoveSpeed { get; set; } = 0;
 
     /// <summary>
-    /// Значение уклонения персонажа
+    ///     Значение уклонения персонажа
     /// </summary>
     public int Dodge { get; set; } = 0;
 
     /// <summary>
-    /// Телосложение персонажа
+    ///     Телосложение персонажа
     /// </summary>
     public string Build { get; set; } = "0";
 }
 
 public class Characteristics
 {
-    public AttributeValue Strength { get; set; } = new AttributeValue(50);
-    public AttributeValue Dexterity { get; set; } = new AttributeValue(45);
-    public AttributeValue Intelligence { get; set; } = new AttributeValue(80);
-    public AttributeValue Constitution { get; set; } = new AttributeValue(80);
-    public AttributeValue Appearance { get; set; } = new AttributeValue(40);
-    public AttributeValue Power { get; set; } = new AttributeValue(70);
-    public AttributeValue Size { get; set; } = new AttributeValue(60);
-    public AttributeValue Education { get; set; } = new AttributeValue(75);
+    public AttributeValue Strength { get; set; } = new(50);
+    public AttributeValue Dexterity { get; set; } = new(45);
+    public AttributeValue Intelligence { get; set; } = new(80);
+    public AttributeValue Constitution { get; set; } = new(80);
+    public AttributeValue Appearance { get; set; } = new(40);
+    public AttributeValue Power { get; set; } = new(70);
+    public AttributeValue Size { get; set; } = new(60);
+    public AttributeValue Education { get; set; } = new(75);
 }
 
 public class DerivedAttributes
 {
     /// <summary>
-    /// Очки здоровья персонажа
+    ///     Очки здоровья персонажа
     /// </summary>
-    public AttributeWithMaxValue HitPoints { get; set; } = new AttributeWithMaxValue(0, 0);
+    public AttributeWithMaxValue HitPoints { get; set; } = new(0, 0);
 
     /// <summary>
-    /// Очки магии персонажа
+    ///     Очки магии персонажа
     /// </summary>
-    public AttributeWithMaxValue MagicPoints { get; set; } = new AttributeWithMaxValue(0, 0);
+    public AttributeWithMaxValue MagicPoints { get; set; } = new(0, 0);
 
     /// <summary>
-    /// Уровень рассудка персонажа
+    ///     Уровень рассудка персонажа
     /// </summary>
-    public AttributeWithMaxValue Sanity { get; set; } = new AttributeWithMaxValue(0, 99);
+    public AttributeWithMaxValue Sanity { get; set; } = new(0, 99);
 
     /// <summary>
-    /// Уровень удачи персонажа
+    ///     Уровень удачи персонажа
     /// </summary>
-    public AttributeWithMaxValue Luck { get; set; } = new AttributeWithMaxValue(0, 99);
+    public AttributeWithMaxValue Luck { get; set; } = new(0, 99);
 }
 
 public class AttributeWithMaxValue
@@ -156,27 +148,27 @@ public class AttributeWithMaxValue
 public class CharacterState
 {
     /// <summary>
-    /// Находится ли персонаж без сознания
+    ///     Находится ли персонаж без сознания
     /// </summary>
     public bool IsUnconscious { get; set; }
 
     /// <summary>
-    /// Имеет ли персонаж серьезную рану
+    ///     Имеет ли персонаж серьезную рану
     /// </summary>
     public bool HasSeriousInjury { get; set; }
 
     /// <summary>
-    /// Находится ли персонаж при смерти
+    ///     Находится ли персонаж при смерти
     /// </summary>
     public bool IsDying { get; set; }
 
     /// <summary>
-    /// Страдает ли персонаж временным безумием
+    ///     Страдает ли персонаж временным безумием
     /// </summary>
     public bool HasTemporaryInsanity { get; set; }
 
     /// <summary>
-    /// Страдает ли персонаж бессрочным безумием
+    ///     Страдает ли персонаж бессрочным безумием
     /// </summary>
     public bool HasIndefiniteInsanity { get; set; }
 }
@@ -189,15 +181,15 @@ public class AttributeValue
         UpdateDerived();
     }
 
+    public int Regular { get; set; }
+    public int Half { get; set; }
+    public int Fifth { get; set; }
+
     public void UpdateDerived()
     {
         Half = Regular / 2;
         Fifth = Regular / 5;
     }
-
-    public int Regular { get; set; }
-    public int Half { get; set; }
-    public int Fifth { get; set; }
 }
 
 public class Weapon
@@ -212,12 +204,12 @@ public class Weapon
 
 public class SkillsModel
 {
-    public List<SkillGroup> SkillGroups { get; private set; }
-
     public SkillsModel()
     {
         InitializeSkillGroups();
     }
+
+    public List<SkillGroup> SkillGroups { get; private set; }
 
     private void InitializeSkillGroups()
     {
@@ -340,16 +332,15 @@ public class SkillsModel
                     new Skill { Name = "Прыжки", Value = new AttributeValue(20), BaseValue = "20%" },
                     new Skill { Name = "Упр. тяж. машинами", Value = new AttributeValue(1), BaseValue = "01%" }
                 ]
-
             }
         ];
     }
 }
+
 public class SkillGroup
 {
-
     public string Name { get; set; }
-    public List<Skill> Skills { get; set; } = new List<Skill>();
+    public List<Skill> Skills { get; set; } = new();
 
     public string NewSkillName { get; set; } = "";
     public string NewSkillBaseValue { get; set; } = "";
