@@ -1,69 +1,102 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
+@implements IDisposable
 
-<header class="bg-white shadow-sm">
-    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center">
-            <div class="flex items-center">
-                <h1 class="text-2xl font-semibold text-gray-900 mr-8">Менеджер кампаний</h1>
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <Authorized>
+            <header class="bg-white shadow-sm">
+                <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                            <h1 class="text-2xl font-semibold text-gray-900 mr-8">Менеджер кампаний</h1>
 
-                @if (authState?.User?.Identity?.IsAuthenticated == true)
-                {
-                    <nav class="flex space-x-4">
-                        <a href="/" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                            Главная
-                        </a>
-                        <a href="/campaign"
-                           class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                            Мои кампании
-                        </a>
-                        <a href="/character"
-                           class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                            Создать персонажа
-                        </a>
-                    </nav>
-                }
-            </div>
+                            <nav class="flex space-x-4">
+                                <a href="/" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                                    Главная
+                                </a>
+                                <a href="/campaign"
+                                   class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                                    Мои кампании
+                                </a>
+                                <a href="/character"
+                                   class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                                    Создать персонажа
+                                </a>
+                            </nav>
+                        </div>
 
-            <div class="flex items-center">
-                @if (authState?.User?.Identity?.IsAuthenticated == true)
-                {
-                    <span class="text-gray-700 mr-4">@authState.User.Identity.Name</span>
-                    <button @onclick="LogoutAsync"
-                            class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
-                        Выйти
-                    </button>
-                }
-                else
-                {
-                    <button @onclick="LoginAsync"
-                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-                        Войти через Google
-                    </button>
-                }
-            </div>
-        </div>
-    </div>
-</header>
+                        <div class="flex items-center">
+                            <span class="text-gray-700 mr-4">@context.User.Identity?.Name</span>
+                            <button @onclick="LogoutAsync"
+                                    class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
+                                Выйти
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+        </Authorized>
+        <NotAuthorized>
+            <header class="bg-white shadow-sm">
+                <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                            <h1 class="text-2xl font-semibold text-gray-900 mr-8">Менеджер кампаний</h1>
+                        </div>
+
+                        <div class="flex items-center">
+                            <a href="/api/account/login" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                                Войти через Google
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+        </NotAuthorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
 
 @code {
-    private AuthenticationState authState;
+    private AuthenticationStateChangedHandler? authStateChangedHandler;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        // Подписываемся на изменения состояния аутентификации
+        authStateChangedHandler = async (Task<AuthenticationState> task) => 
+        {
+            var authState = await task;
+            var isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
+            Console.WriteLine($"Auth state changed: IsAuthenticated={isAuthenticated}, Name={authState?.User?.Identity?.Name ?? "null"}");
+            
+            // Выводим доступные claims для отладки
+            if (isAuthenticated)
+            {
+                foreach (var claim in authState.User.Claims)
+                {
+                    Console.WriteLine($"Claim: {claim.Type} = {claim.Value}");
+                }
+            }
+            
+            await InvokeAsync(StateHasChanged);
+        };
+        
+        AuthenticationStateProvider.AuthenticationStateChanged += authStateChangedHandler;
     }
 
-    private async Task LoginAsync()
+    public void Dispose()
     {
-        NavigationManager.NavigateTo("api/account/login", true);
+        if (authStateChangedHandler != null)
+        {
+            AuthenticationStateProvider.AuthenticationStateChanged -= authStateChangedHandler;
+        }
     }
 
-    private async Task LogoutAsync()
+    private void LogoutAsync()
     {
         NavigationManager.NavigateTo("api/account/logout", true);
     }
-
 }

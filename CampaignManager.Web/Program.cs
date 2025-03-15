@@ -3,6 +3,7 @@ using Blazorise.Icons.FontAwesome;
 using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Components;
+using CampaignManager.Web.Endpoints;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Services;
@@ -43,10 +44,18 @@ builder.Services.AddAuthentication(options =>
         options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
         options.ClaimActions.MapJsonKey("urn:google:profile", "link");
         options.ClaimActions.MapJsonKey("urn:google:image", "picture");
+        options.SaveTokens = true;
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.CorrelationCookie.SameSite = SameSiteMode.None;
         options.Events = new OAuthEvents
         {
+            //OnTicketReceived = context =>
+            //{
+            //    // Redirect to our processing endpoint after successful authentication
+            //    context.Response.Redirect("/api/account/process-login");
+            //    context.HandleResponse();
+            //    return Task.CompletedTask;
+            //},
             OnRedirectToAuthorizationEndpoint = context =>
             {
                 if (context.RedirectUri.StartsWith("http:"))
@@ -85,6 +94,7 @@ builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<CampaignCharacterService>(); // Add new service
 builder.Services.AddScoped<UserRegistrationService>(); // Add user registration service
 builder.Services.AddScoped<UserInformationService>(); // Add user information service
+builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
@@ -121,18 +131,8 @@ app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1");
 });
+app.MapAccountEndpoints();
 
-app.MapGet("api/account/login", async (string? returnUrl, HttpContext httpContext) =>
-{
-    AuthenticationProperties properties = new() { RedirectUri = returnUrl ?? "/" };
-    await httpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, properties);
-});
-app.MapGet("api/account/logout", async (HttpContext httpContext) =>
-{
-    AuthenticationProperties properties = new() { RedirectUri = "/" };
-    await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
-    return Results.Ok();
-});
 
 app.MapPost("api/join-as-user", async (string userEmail, [FromServices] AppIdentityDbContext dbContext) =>
 {
