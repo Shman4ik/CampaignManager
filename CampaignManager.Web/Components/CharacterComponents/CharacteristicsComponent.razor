@@ -1,195 +1,28 @@
 ﻿@using CampaignManager.Web.Model
+@using CampaignManager.Web.Components.Shared
+
 <div class="mb-1">
     <h3 class="text-xl font-bold mb-1">ХАРАКТЕРИСТИКИ</h3>
-    <div class="flex flex-col md:flex-row md:gap-4">
-        @for (var column = 0; column < 2; column++)
-        {
-            <div class="flex-1">
-                <table class="w-full text-xs mb-2">
-                    <thead>
-                    <tr>
-                        <th class="text-left font-semibold"></th>
-                        <th class="w-10 text-center font-semibold">О</th>
-                        <th class="w-10 text-center font-semibold">Т</th>
-                        <th class="w-10 text-center font-semibold">Ч</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var prop in typeof(Characteristics).GetProperties().Skip(column * 4).Take(4))
-                    {
-                        var value = (AttributeValue)prop.GetValue(Character.Characteristics);
-                        <tr>
-                            <td class="py-0.5">
-                                <span class="font-semibold">@GetShortName(prop.Name)</span>
-                            </td>
-                            <td class="py-0.5">
-                                <input type="number" @bind="value.Regular" @bind:event="oninput"
-                                       @onchange="() => UpdateCharacteristic(value)"
-                                       class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                            </td>
-                            <td class="py-0.5">
-                                <input type="number" value="@value.Half" disabled
-                                       class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                            </td>
-                            <td class="py-0.5">
-                                <input type="number" value="@value.Fifth" disabled
-                                       class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                            </td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
-
+    
+    <AttributeRowsTable Characteristics="@Character.Characteristics" OnUpdate="@UpdateCharacteristic" />
+    
     <div class="mt-4 flex flex-col md:flex-row md:gap-4">
         <div class="flex-1">
-            <table class="w-full text-xs mb-2">
-                <thead>
-                <tr>
-                    <th class="text-left font-semibold"></th>
-                    <th class="w-20 text-center font-semibold">Текущее</th>
-                    <th class="w-20 text-center font-semibold">Максимум</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Пункты Здоровья</span>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" @bind="Character.DerivedAttributes.HitPoints.Value"
-                               class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@Character.DerivedAttributes.HitPoints.MaxValue" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Пункты Маны</span>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" @bind="Character.DerivedAttributes.MagicPoints.Value"
-                               class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@Character.DerivedAttributes.MagicPoints.MaxValue" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Рассудок</span>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" @bind="Character.DerivedAttributes.Sanity.Value"
-                               class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@Character.DerivedAttributes.Sanity.MaxValue" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Удача</span>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" @bind="Character.DerivedAttributes.Luck.Value"
-                               class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@Character.DerivedAttributes.Luck.MaxValue" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                </tr>
-                </tbody>
-            </table>
+            <DerivedAttributesTable Attributes="@Character.DerivedAttributes" />
         </div>
         <div class="flex-1">
-            <table class="w-full text-xs mb-2">
-                <thead>
-                <tr>
-                    <th class="text-left font-semibold">Состояние сыщика</th>
-                    <th class="w-10 text-center font-semibold"></th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Без сознания</span>
-                    </td>
-                    <td class="py-0.5 text-center">
-                        <input type="checkbox" @bind="Character.State.IsUnconscious"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Серьезная рана</span>
-                    </td>
-                    <td class="py-0.5 text-center">
-                        <input type="checkbox" @bind="Character.State.HasSeriousInjury"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">При смерти</span>
-                    </td>
-                    <td class="py-0.5 text-center">
-                        <input type="checkbox" @bind="Character.State.IsDying"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Временное безумие</span>
-                    </td>
-                    <td class="py-0.5 text-center">
-                        <input type="checkbox" @bind="Character.State.HasTemporaryInsanity"/>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium">Бессрочное безумие</span>
-                    </td>
-                    <td class="py-0.5 text-center">
-                        <input type="checkbox" @bind="Character.State.HasIndefiniteInsanity"/>
-                    </td>
-                </tr>
-                </tbody>
-            </table>
+            <CharacterStateTable State="@Character.State" />
         </div>
     </div>
 </div>
 
 @code {
     [Parameter] public Character Character { get; set; }
-
     [Parameter] public EventCallback OnUpdate { get; set; }
-
-    private string GetShortName(string fullName)
-    {
-        var shortNames = new Dictionary<string, string>
-        {
-            { "Strength", "СИЛ" },
-            { "Constitution", "ВЫН" },
-            { "Size", "ТЕЛ" },
-            { "Dexterity", "ЛВК" },
-            { "Appearance", "НАР" },
-            { "Intelligence", "ИНТ" },
-            { "Power", "МОЩ" },
-            { "Education", "ОБР" }
-        };
-
-        return shortNames.TryGetValue(fullName, out var shortName) ? shortName : fullName;
-    }
 
     private async Task UpdateCharacteristic(AttributeValue value)
     {
         value.UpdateDerived();
         await OnUpdate.InvokeAsync();
     }
-
 }

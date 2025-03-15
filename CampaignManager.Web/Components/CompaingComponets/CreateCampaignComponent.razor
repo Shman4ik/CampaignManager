@@ -1,83 +1,87 @@
-﻿@inject CampaignService CampaignService
+﻿@page "/create-campaign"
+@using CampaignManager.Web.Compain.Models
+@inject CampaignService CampaignService
 @inject NavigationManager NavigationManager
-@inject ILogger<CreateCampaignComponent> Logger
-@rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
-<div class="bg-white shadow-md rounded-lg p-4 mt-4">
-    <h3 class="text-xl font-bold mb-4">Создать новую кампанию</h3>
+<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <h1 class="text-3xl font-bold mb-6">Создать кампанию</h1>
 
-    @if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-            <span>@errorMessage</span>
+    <EditForm Model="@campaignModel" OnValidSubmit="@CreateCampaign">
+        <DataAnnotationsValidator />
+        <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+
+        <div class="mb-4">
+            <label for="campaignName" class="block text-gray-700 text-sm font-bold mb-2">Название кампании:</label>
+            <InputText id="campaignName" @bind-Value:get="campaignModel.Name" @bind-Value:set="(v) => campaignModel.Name = v" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" />
+            <ValidationMessage For="@(() => campaignModel.Name)" class="text-red-500 text-xs" />
         </div>
-    }
 
-    <div class="mb-4">
-        <label for="campaignName" class="block text-sm font-medium text-gray-700">Название кампании</label>
-        <input type="text" id="campaignName" @bind="campaignName" @bind:event="oninput"
-               class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"/>
-    </div>
-    <button @onclick="CreateCampaignAsync" disabled="@isCreating"
-            class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition">
-        @if (isCreating)
+        <div class="mb-4">
+            <label for="campaignStatus" class="block text-gray-700 text-sm font-bold mb-2">Статус:</label>
+            <InputSelect id="campaignStatus" @bind-Value:get="campaignModel.Status" @bind-Value:set="(v) => campaignModel.Status = v" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                @foreach (var status in Enum.GetValues(typeof(CampaignStatus)))
+                {
+                    <option value="@status">@status</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" disabled="@isCreating">
+                @if (isCreating)
+                {
+                    <span>Создание...</span>
+                }
+                else
+                {
+                    <span>Создать кампанию</span>
+                }
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
         {
-            <span>Создание...</span>
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mt-4" role="alert">
+                <p>@errorMessage</p>
+            </div>
         }
-        else
-        {
-            <span>Создать кампанию</span>
-        }
-    </button>
+    </EditForm>
 </div>
 
 @code {
-    private string campaignName = "";
-    private string errorMessage = "";
-    private bool isCreating;
+    private CampaignCreateModel campaignModel = new();
+    private bool isCreating = false;
+    private string errorMessage = string.Empty;
 
-    private async Task CreateCampaignAsync()
+    private async Task CreateCampaign()
     {
-        Logger.LogInformation("Нажата кнопка 'Создать кампанию'");
-
-        if (string.IsNullOrWhiteSpace(campaignName))
-        {
-            errorMessage = "Пожалуйста, введите название кампании";
-            StateHasChanged();
-            return;
-        }
-
         try
         {
             isCreating = true;
-            StateHasChanged();
+            errorMessage = string.Empty;
 
-            Logger.LogInformation($"Начало создания кампании с названием: {campaignName}");
-            await CampaignService.CreateCampaignAsync(campaignName);
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated != true)
+            {
+                errorMessage = "Необходимо войти в систему для создания кампании";
+                return;
+            }
 
-            campaignName = string.Empty;
-            errorMessage = "";
-
-            Logger.LogInformation("Кампания успешно создана, перенаправление на главную страницу");
-            NavigationManager.NavigateTo("/", true);
+            Campaign campaign = await CampaignService.CreateCampaignAsync(campaignModel.Name);
+            NavigationManager.NavigateTo($"/campaign/{campaign.Id}");
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            Logger.LogWarning(ex, "Неавторизованная попытка создания кампании");
-            errorMessage = "У вас нет прав для создания кампании.";
-            StateHasChanged();
+            errorMessage = "У вас нет прав для создания кампании";
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Ошибка при создании кампании");
             errorMessage = $"Ошибка при создании кампании: {ex.Message}";
-            StateHasChanged();
         }
         finally
         {
             isCreating = false;
-            StateHasChanged();
         }
     }
-
 }

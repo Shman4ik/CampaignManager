@@ -1,0 +1,65 @@
+@using CampaignManager.Web.Model
+
+<div class="flex flex-col md:flex-row md:gap-4">
+    @for (var column = 0; column < 2; column++)
+    {
+        <div class="flex-1">
+            <table class="w-full text-xs mb-2">
+                <thead>
+                    <tr>
+                        <th class="text-left font-semibold"></th>
+                        <th class="w-10 text-center font-semibold">О</th>
+                        <th class="w-10 text-center font-semibold">Т</th>
+                        <th class="w-10 text-center font-semibold">Ч</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var prop in typeof(Characteristics).GetProperties().Skip(column * 4).Take(4))
+                    {
+                        var value = (AttributeValue)prop.GetValue(Characteristics);
+                        <tr>
+                            <td class="py-0.5">
+                                <span class="font-semibold">@GetShortName(prop.Name)</span>
+                            </td>
+                            <td class="py-0.5">
+                                <input type="number" @bind="value.Regular" @bind:event="oninput"
+                                       @onchange="() => OnUpdate.InvokeAsync(value)"
+                                       class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
+                            </td>
+                            <td class="py-0.5">
+                                <input type="number" value="@value.Half" disabled
+                                       class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
+                            </td>
+                            <td class="py-0.5">
+                                <input type="number" value="@value.Fifth" disabled
+                                       class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Characteristics Characteristics { get; set; }
+    [Parameter] public EventCallback<AttributeValue> OnUpdate { get; set; }
+
+    private string GetShortName(string fullName)
+    {
+        var shortNames = new Dictionary<string, string>
+        {
+            { "Strength", "СИЛ" },
+            { "Constitution", "ВЫН" },
+            { "Size", "ТЕЛ" },
+            { "Dexterity", "ЛВК" },
+            { "Appearance", "НАР" },
+            { "Intelligence", "ИНТ" },
+            { "Power", "МОЩ" },
+            { "Education", "ОБР" }
+        };
+
+        return shortNames.TryGetValue(fullName, out var shortName) ? shortName : fullName;
+    }
+}

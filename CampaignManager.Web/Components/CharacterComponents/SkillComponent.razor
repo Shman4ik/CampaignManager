@@ -3,115 +3,13 @@
 
 <div class="overflow-x-auto">
     <h3 class="text-xl font-bold mb-1">НАВЫКИ</h3>
-    <table class="w-full text-sm border-collapse">
-        <tbody>
-        @{
-            var firstColumn = Model.SkillGroups.Take(2).ToList();
-            var secondColumn = Model.SkillGroups.Skip(2).Take(3).ToList();
-            var thirdColumn = Model.SkillGroups.Skip(5).ToList();
-            var columns = new List<List<SkillGroup>> { firstColumn, secondColumn, thirdColumn };
-        }
-        <tr>
-            @foreach (var column in columns)
-            {
-                <td class="align-top border p-2">
-                    @foreach (var group in column)
-                    {
-                        <div class="mb-4 last:mb-0">
-                            <table class="w-full text-xs mb-2">
-                                <thead>
-                                <tr>
-                                    <th class="text-left font-semibold" colspan="2">@group.Name</th>
-                                    <th class="w-10 text-center font-semibold">Исп.</th>
-                                    <th class="w-10 text-center font-semibold">О</th>
-                                    <th class="w-10 text-center font-semibold">Т</th>
-                                    <th class="w-10 text-center font-semibold">Ч</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                @foreach (var skill in group.Skills)
-                                {
-                                    <tr>
-                                        <td class="py-0.5 pr-1 w-6">
-                                            <button @onclick="() => RemoveSkillFromGroup(group, skill)"
-                                                    class="text-red-500 hover:text-red-700 text-xs">
-                                                <i class="fas fa-times"></i>
-                                            </button>
-                                        </td>
-                                        <td class="py-0.5">
-                                            <span class="font-medium">@skill.Name</span>
-                                            <span class="text-xs text-gray-500">(@skill.BaseValue)</span>
-                                        </td>
-                                        <td class="py-0.5 text-center">
-                                            <input type="checkbox" @bind="skill.IsUsed"/>
-                                        </td>
-                                        <td class="py-0.5">
-                                            <input type="number" @bind="skill.Value.Regular" @bind:event="oninput"
-                                                   @onchange="() => UpdateSkillValue(skill)"
-                                                   class="w-full min-w-14 p-0.5 text-center border border-gray-300 rounded"/>
-                                        </td>
-                                        <td class="py-0.5">
-                                            <input type="number" value="@skill.Value.Half" disabled
-                                                   class="w-full min-w-14 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                                        </td>
-                                        <td class="py-0.5">
-                                            <input type="number" value="@skill.Value.Fifth" disabled
-                                                   class="w-full min-w-14 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                                        </td>
-                                    </tr>
-                                }
-                                </tbody>
-                            </table>
-                            <div class="flex gap-1 items-center">
-                                <input type="text" @bind="@group.NewSkillName" placeholder="Навык"
-                                       class="flex-grow min-w-14 p-0.5 text-xs border border-gray-300 rounded"/>
-                                <input type="text" @bind="@group.NewSkillBaseValue" placeholder="БЗ"
-                                       class="w-10 min-w-14 p-0.5 text-xs border border-gray-300 rounded"/>
-                                <button @onclick="() => AddSkillToGroup(group)"
-                                        class="bg-green-500 text-white px-2 py-0.5 rounded hover:bg-green-600 text-xs">
-                                    <i class="fas fa-plus"></i>
-                                </button>
-                            </div>
-                        </div>
-                    }
-                </td>
-            }
-        </tr>
-        </tbody>
-    </table>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <SkillGroupColumn Groups="@Model.SkillGroups.Take(2).ToList()" />
+        <SkillGroupColumn Groups="@Model.SkillGroups.Skip(2).Take(3).ToList()" />
+        <SkillGroupColumn Groups="@Model.SkillGroups.Skip(5).ToList()" />
+    </div>
 </div>
 
 @code {
     [Parameter] public SkillsModel Model { get; set; }
-
-    private void AddSkillToGroup(SkillGroup group)
-    {
-        if (!string.IsNullOrWhiteSpace(group.NewSkillName) && !string.IsNullOrWhiteSpace(group.NewSkillBaseValue))
-        {
-            var newSkill = new Skill
-            {
-                Name = group.NewSkillName,
-                BaseValue = group.NewSkillBaseValue,
-                Value = new AttributeValue(0)
-            };
-
-            group.Skills.Add(newSkill);
-            group.NewSkillName = "";
-            group.NewSkillBaseValue = "";
-            StateHasChanged();
-        }
-    }
-
-    private void RemoveSkillFromGroup(SkillGroup group, Skill skill)
-    {
-        group.RemoveSkill(skill);
-        StateHasChanged();
-    }
-
-    private void UpdateSkillValue(Skill skill)
-    {
-        skill.Value.UpdateDerived();
-        StateHasChanged();
-    }
-
 }
