@@ -71,7 +71,7 @@ public class CampaignService(
     }
 
     // Method for a user to apply to a campaign
-    public async Task<bool> ApplyToCompanyAsync(Guid campaignId, string userEmail)
+    public async Task<bool> JoinCampaignAsync(Guid campaignId, string userEmail)
     {
         try
         {
@@ -97,11 +97,9 @@ public class CampaignService(
             CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user.Email! };
             campaignPlayers.Init();
 
-            // Create an application record
             if (!campaign.Players.Any(p => p.PlayerEmail == userEmail))
             {
-                campaign.Players.Add(campaignPlayers);
-                campaign.LastUpdated = DateTime.UtcNow;
+                dbContext.CampaignPlayers.Add(campaignPlayers);
                 await dbContext.SaveChangesAsync();
                 logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", userEmail, campaignId);
                 return true;
@@ -116,4 +114,5 @@ public class CampaignService(
             return false;
         }
     }
+
 }
