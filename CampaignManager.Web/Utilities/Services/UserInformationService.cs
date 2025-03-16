@@ -13,11 +13,10 @@ public class UserInformationService(
         return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
     }
 
-
     public async Task<ApplicationUser?> GetUserAsync(string email)
     {
-        using AppIdentityDbContext? dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
-        return await dbContext.Users.SingleOrDefaultAsync(p =>
-            string.Equals(p.Email, email, StringComparison.OrdinalIgnoreCase));
+        await using AppIdentityDbContext dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
+        return await dbContext.Users
+            .SingleOrDefaultAsync(p => p.Email.ToLower() == email.ToLower());
     }
 }

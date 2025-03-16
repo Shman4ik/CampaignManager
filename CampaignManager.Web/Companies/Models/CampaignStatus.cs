@@ -1,4 +1,4 @@
-﻿namespace CampaignManager.Web.Compain.Models;
+﻿namespace CampaignManager.Web.Companies.Models;
 
 public enum CampaignStatus
 {

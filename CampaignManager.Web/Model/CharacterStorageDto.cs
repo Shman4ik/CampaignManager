@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using CampaignManager.Web.Companies.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace CampaignManager.Web.Model;
 

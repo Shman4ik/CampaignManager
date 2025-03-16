@@ -27,13 +27,21 @@ public class CharacterService(
             }
 
             // Создаем DTO для хранения с дублированием ключевых полей
-            CharacterStorageDto storageDto = new() { Id = character.Id, CharacterName = character.PersonalInfo.Name, CreatedAt = DateTime.UtcNow, Character = character };
+            CharacterStorageDto storageDto = new() 
+            { 
+                Id = character.Id, 
+                CharacterName = character.PersonalInfo.Name, 
+                CreatedAt = DateTime.UtcNow,
+                LastUpdated = DateTime.UtcNow,
+                Character = character 
+            };
+            
+            // Инициализируем базовые поля сущности
+            storageDto.Init();
 
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
-            // Устанавливаем связь с игроком
-            dbContext.Entry(storageDto).Property("PlayerId").CurrentValue = userId;
-
+            // Добавляем в базу данных
             dbContext.CharacterStorage.Add(storageDto);
             await dbContext.SaveChangesAsync();
 

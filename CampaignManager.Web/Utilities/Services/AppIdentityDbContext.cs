@@ -15,7 +15,6 @@ public class AppIdentityDbContext : IdentityDbContext<ApplicationUser>
         base.OnModelCreating(modelBuilder);
         modelBuilder.HasDefaultSchema("identity");
 
-        // Настройка ApplicationUser
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
             entity.HasIndex(u => u.Email)

@@ -1,4 +1,4 @@
-﻿@using CampaignManager.Web.Compain.Models
+﻿@using CampaignManager.Web.Companies.Models
 @using Microsoft.AspNetCore.Components.Authorization
 @inject CampaignService CampaignService
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -22,7 +22,7 @@ else
         {
             <div class="bg-white shadow-md rounded-lg p-4">
                 <h4 class="text-xl font-semibold mb-2">@company.Name</h4>
-                <p class="text-gray-600 mb-2">Создано: @company.CreatedAt.ToShortDateString()</p>
+                <p class="text-gray-600 mb-2">Создано: @company.CreatedAt</p>
                 @if (IsUserAuthorized)
                 {
                     <button @onclick="async () => await ApplyToCompany(company.Id)"
@@ -36,8 +36,7 @@ else
 }
 
 @code {
-    [Parameter] public List<Campaign> Companies { get; set; }
-
+    private List<Campaign> Companies { get; set; }
     private bool IsUserAuthorized;
     private string UserId;
 
@@ -46,6 +45,7 @@ else
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         IsUserAuthorized = authState.User.Identity?.IsAuthenticated ?? false;
         UserId = authState.User?.FindFirst(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
+        Companies = await CampaignService.GetAvailableCompaniesAsync();
     }
 
     private async Task ApplyToCompany(Guid companyId)
@@ -55,7 +55,6 @@ else
             try
             {
                 await CampaignService.ApplyToCompanyAsync(companyId, UserId);
-                // Optionally notify user of success
             }
             catch (Exception ex)
             {
@@ -63,5 +62,4 @@ else
             }
         }
     }
-
 }

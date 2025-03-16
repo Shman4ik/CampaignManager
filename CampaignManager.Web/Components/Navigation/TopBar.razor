@@ -1,9 +1,6 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
-@using System.Security.Claims
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
-@implements IDisposable
 
 <CascadingAuthenticationState>
     <AuthorizeView>
@@ -14,24 +11,12 @@
                         <div class="flex items-center">
                             <h1 class="text-2xl font-semibold text-gray-900 mr-8">Менеджер кампаний</h1>
 
-                            <nav class="flex space-x-4">
-                                <a href="/" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                                    Главная
-                                </a>
-                                <a href="/campaign"
-                                   class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                                    Мои кампании
-                                </a>
-                                <a href="/character"
-                                   class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                                    Создать персонажа
-                                </a>
-                            </nav>
+                            <NavMenu />
                         </div>
 
                         <div class="flex items-center">
                             <span class="text-gray-700 mr-4">@context.User.Identity?.Name</span>
-                            <button @onclick="LogoutAsync"
+                            <button @onclick="Logout"
                                     class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">
                                 Выйти
                             </button>
@@ -61,41 +46,7 @@
 </CascadingAuthenticationState>
 
 @code {
-    private AuthenticationStateChangedHandler? authStateChangedHandler;
-
-    protected override void OnInitialized()
-    {
-        // Подписываемся на изменения состояния аутентификации
-        authStateChangedHandler = async (Task<AuthenticationState> task) => 
-        {
-            var authState = await task;
-            var isAuthenticated = authState?.User?.Identity?.IsAuthenticated ?? false;
-            Console.WriteLine($"Auth state changed: IsAuthenticated={isAuthenticated}, Name={authState?.User?.Identity?.Name ?? "null"}");
-            
-            // Выводим доступные claims для отладки
-            if (isAuthenticated)
-            {
-                foreach (var claim in authState.User.Claims)
-                {
-                    Console.WriteLine($"Claim: {claim.Type} = {claim.Value}");
-                }
-            }
-            
-            await InvokeAsync(StateHasChanged);
-        };
-        
-        AuthenticationStateProvider.AuthenticationStateChanged += authStateChangedHandler;
-    }
-
-    public void Dispose()
-    {
-        if (authStateChangedHandler != null)
-        {
-            AuthenticationStateProvider.AuthenticationStateChanged -= authStateChangedHandler;
-        }
-    }
-
-    private void LogoutAsync()
+    private void Logout()
     {
         NavigationManager.NavigateTo("api/account/logout", true);
     }

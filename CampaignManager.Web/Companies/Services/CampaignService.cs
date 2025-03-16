@@ -1,7 +1,9 @@
-﻿using CampaignManager.Web.Compain.Models;
+﻿using CampaignManager.Web.Companies.Models;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
+
+namespace CampaignManager.Web.Companies.Services;
 
 public class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,
@@ -18,7 +20,7 @@ public class CampaignService(
 
         using AppDbContext? dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
-            .Where(c => c.KeeperEmail == userEmail || c.Players.Any(p => p.PlayerEmail == userEmail))
+            .Where(p => p.KeeperEmail == userEmail || p.Players.Any(p => p.PlayerEmail == userEmail))
             .ToListAsync();
     }
 
@@ -101,8 +103,7 @@ public class CampaignService(
                 campaign.Players.Add(campaignPlayers);
                 campaign.LastUpdated = DateTime.UtcNow;
                 await dbContext.SaveChangesAsync();
-                logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", userEmail,
-                    campaignId);
+                logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", userEmail, campaignId);
                 return true;
             }
 

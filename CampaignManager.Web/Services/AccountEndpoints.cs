@@ -1,11 +1,10 @@
 using CampaignManager.Web.Model;
-using CampaignManager.Web.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using System.Security.Claims;
 
-namespace CampaignManager.Web.Endpoints;
+namespace CampaignManager.Web.Services;
 
 public static class AccountEndpoints
 {
@@ -119,7 +118,7 @@ public static class AccountEndpoints
         string? userName = httpContext.User.Identity?.Name;
         string? email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
         
-        var claims = httpContext.User.Claims.Select(c => new { Type = c.Type, Value = c.Value }).ToList();
+        var claims = httpContext.User.Claims.Select(c => new { c.Type, c.Value }).ToList();
         
         return Results.Json(new
         {

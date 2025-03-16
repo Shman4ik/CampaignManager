@@ -1,11 +1,7 @@
-﻿using CampaignManager.Web.Compain.Models;
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using System.Security.Claims;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CampaignManager.Web.Services;
 
@@ -13,123 +9,114 @@ public class CampaignCharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IDbContextFactory<AppIdentityDbContext> identityDbContextFactory,
     IHttpContextAccessor httpContextAccessor,
-    ILogger<CampaignCharacterService> logger,
-    CharacterService characterService)
+    ILogger<CampaignCharacterService> logger)
 {
-    private readonly CharacterService _characterService = characterService;
 
-    public async Task<Campaign?> GetCampaignAsync(Guid campaignId)
+    public async Task<Companies.Models.Campaign?> GetCampaignAsync(Guid campaignId)
     {
         await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Campaigns
-            .Include(c => c.Keeper)
-            .Include(c => c.Players)
-            .FirstOrDefaultAsync(c => c.Id == campaignId);
+        return await dbContext.Campaigns.Include(c => c.Players).FirstOrDefaultAsync(c => c.Id == campaignId);
     }
 
-    public async Task<Character?> GetPlayerCharactersInCampaignAsync(Guid campaingPlayerId)
-    {
-        await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        var characterStorageDto = await dbContext.CharacterStorage.SingleOrDefaultAsync(p => p.CampaignPlayerId == campaingPlayerId);
-        return characterStorageDto?.Character;
-    }
-
-    public async Task<Character> CreateCharacterForPlayerInCampaignAsync(Guid campaignId, string playerEmail, Character character)
+    public async Task<Character?> GetPlayerCharactersInCampaignAsync(Guid campaignId)
     {
         try
         {
-            logger.LogInformation($"Starting to create character for player email: {playerEmail} in campaign: {campaignId}");
+            string? userEmail = httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+
+            if (string.IsNullOrEmpty(userEmail))
+            {
+                logger.LogWarning("Не удалось получить email пользователя");
+                return null;
+            }
 
             await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            await using AppIdentityDbContext appIdentityDbContext = await identityDbContextFactory.CreateDbContextAsync();
-            
 
-            // Проверка кампании
-            Campaign? campaign = await dbContext.Campaigns
-                .Include(c => c.Keeper)
-                .Include(c => c.Players)
-                .FirstOrDefaultAsync(c => c.Id == campaignId);
+            // Получаем запись игрока в кампании
+            var campaignPlayer = await dbContext.CampaignPlayers
+                .FirstOrDefaultAsync(cp => cp.CampaignId == campaignId && cp.PlayerEmail == userEmail);
 
-            if (campaign == null)
+            if (campaignPlayer == null)
             {
-                logger.LogError($"Campaign with ID {campaignId} not found");
-                throw new Exception($"Campaign with ID {campaignId} not found");
-            }
-            
-            ApplicationUser user = await appIdentityDbContext.Users.SingleOrDefaultAsync(u => u.Email == playerEmail);
-            if(user == null)
-                throw new ArgumentException($"User {playerEmail} not found");
-            // Проверка, является ли пользователь ведущим или игроком в кампании
-            bool isKeeper = campaign.KeeperEmail == user.Email;
-            bool isPlayer = campaign.Players.Any(p => p.PlayerEmail == user.Email);
-
-            logger.LogInformation($"User {user.UserName} (ID: {user.Id}) is keeper: {isKeeper}, is player: {isPlayer}");
-
-            // Если пользователь не является ни ведущим, ни игроком, добавляем его как игрока
-            if (!isKeeper && !isPlayer)
-            {
-                var campaignPlayer = new CampaignPlayer()
-                {
-                    CampaignId = campaignId,
-                    PlayerEmail = user.Email
-                };
-                campaignPlayer.Init();
-                campaign.Players.Add(campaignPlayer);
-                await dbContext.SaveChangesAsync();
-                logger.LogInformation($"User {user.UserName} added to campaign {campaignId} as a player");
+                logger.LogWarning("Игрок с email {Email} не найден в кампании {CampaignId}", userEmail, campaignId);
+                return null;
             }
 
-            // Если имя игрока не установлено, устанавливаем его
-            if (string.IsNullOrEmpty(character.PersonalInfo.PlayerName))
-            {
-                character.PersonalInfo.PlayerName = user.UserName ?? user.Email;
-                logger.LogInformation($"Set PlayerName to {character.PersonalInfo.PlayerName}");
-            }
+            // Получаем запись персонажа
+            var characterStorageDto = await dbContext.CharacterStorage
+                .FirstOrDefaultAsync(c => c.CampaignPlayerId == campaignPlayer.Id);
 
-            // Проверка и настройка необходимых атрибутов персонажа перед сохранением
-            EnsureCharacterDefaults(character);
-
-            // Создаем персонажа с ID
-            if (character.Id == Guid.Empty)
-            {
-                character.Id = Guid.NewGuid();
-            }
-
-            logger.LogInformation($"Character ID set to {character.Id}");
-
-           
-
-            // Создаем DTO для хранения с дополнительными полями
-            CharacterStorageDto storageDto = new()
-            {
-                Id = character.Id,
-                CharacterName = character.PersonalInfo?.Name ?? "Unnamed",
-                Character = character
-            };
-
-            logger.LogInformation($"Character storage DTO created with name: {storageDto.CharacterName}");
-
-            // Сохраняем персонажа с привязкой к кампании в отдельной транзакции
-            try
-            {
-                dbContext.CharacterStorage.Add(storageDto);
-                await dbContext.SaveChangesAsync();
-                logger.LogInformation($"Character {character.Id} successfully saved to database");
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, $"Error saving character to database: {ex.Message}");
-                throw new Exception($"Failed to save character to database: {ex.Message}", ex);
-            }
-
-            logger.LogInformation($"Character {character.Id} created for player {user.Id} in campaign {campaignId}");
-            return character;
+            return characterStorageDto?.Character;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Unhandled exception in CreateCharacterForPlayerInCampaignAsync: {ex.Message}");
-            throw;
+            logger.LogError(ex, "Ошибка при получении персонажа из базы данных");
+            return null;
         }
+    }
+
+    private async Task<string?> GetCurrentUserEmailAsync()
+    {
+        return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+    }
+
+    public async Task<bool> IsCurrentUserCampaignKeeper(Companies.Models.Campaign campaign)
+    {
+        var userEmail = await GetCurrentUserEmailAsync();
+        return campaign.KeeperEmail == userEmail;
+    }
+
+    public async Task<Companies.Models.Campaign?> CreateCharacterForPlayerInCampaignAsync(Guid campaignId, string playerEmail, Character character)
+    {
+        await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        var campaign = await dbContext.Campaigns
+            .Include(c => c.Players)
+            .FirstOrDefaultAsync(c => c.Id == campaignId);
+
+        if (campaign == null)
+        {
+            logger.LogWarning("Campaign {CampaignId} not found", campaignId);
+            return null;
+        }
+
+        // Проверяем, является ли игрок участником кампании
+        var campaignPlayer = campaign.Players.FirstOrDefault(p => p.PlayerEmail == playerEmail);
+        if (campaignPlayer == null)
+        {
+            logger.LogWarning("Player {PlayerEmail} is not a member of campaign {CampaignId}", playerEmail, campaignId);
+            return null;
+        }
+
+        // Проверяем и устанавливаем значения по умолчанию для персонажа
+        EnsureCharacterDefaults(character);
+
+        // Если ID не установлен, генерируем новый
+        if (character.Id == Guid.Empty)
+        {
+            character.Id = Guid.NewGuid();
+        }
+
+        // Создаем персонажа
+        var characterStorageDto = new CharacterStorageDto
+        {
+            Character = character,
+            CharacterName = character.PersonalInfo.Name,
+            CampaignPlayerId = campaignPlayer.Id,
+            CreatedAt = DateTime.UtcNow,
+            LastUpdated = DateTime.UtcNow
+        };
+
+        // Инициализируем базовые поля сущности
+        characterStorageDto.Init();
+
+        dbContext.CharacterStorage.Add(characterStorageDto);
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation("Created character {CharacterName} with ID {CharacterId} for player {PlayerEmail} in campaign {CampaignId}",
+            character.PersonalInfo.Name, character.Id, playerEmail, campaignId);
+
+        return campaign;
     }
 
     // Вспомогательный метод для установки значений по умолчанию
@@ -178,17 +165,16 @@ public class CampaignCharacterService(
         }
     }
 
-    public async Task<List<Campaign>> GetUserCampaignsAsync()
+    public async Task<List<Companies.Models.Campaign>> GetUserCampaignsAsync()
     {
         ApplicationUser user = await GetCurrentUserAsync();
         if (user == null)
         {
-            return new List<Campaign>();
+            return new List<Companies.Models.Campaign>();
         }
 
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
-            .Include(c => c.Keeper)
             .Include(c => c.Players)
             .Where(c => c.KeeperEmail == user.Email || c.Players.Any(p => p.PlayerEmail == user.Email))
             .ToListAsync();

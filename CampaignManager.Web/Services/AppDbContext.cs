@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Compain.Models;
+﻿using CampaignManager.Web.Companies.Models;
 using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,20 +13,10 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
         modelBuilder.HasDefaultSchema("games");
 
         modelBuilder.Entity<Campaign>(entity =>
         {
-            // Связь с ведущим (Keeper)
-            entity.HasOne(c => c.Keeper)
-                .WithMany()
-                .HasForeignKey(c => c.KeeperEmail)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Индекс для быстрого поиска кампаний по ведущему
-            entity.HasIndex(c => c.KeeperEmail);
-
             // Обязательные поля
             entity.Property(c => c.Name).IsRequired();
             entity.Property(c => c.CreatedAt).IsRequired();
@@ -34,6 +24,9 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Status)
                 .HasDefaultValue(CampaignStatus.Planning)
                 .HasConversion<string>();
+                
+            // Индекс для быстрого поиска кампаний по ведущему
+            entity.HasIndex(c => c.KeeperEmail);
         });
 
         modelBuilder.Entity<CampaignPlayer>(entity =>
@@ -45,12 +38,6 @@ public class AppDbContext : DbContext
                 .WithMany(c => c.Players)
                 .HasForeignKey(cp => cp.CampaignId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            // Связь с игроком
-            entity.HasOne(cp => cp.Player)
-                .WithMany()
-                .HasForeignKey(cp => cp.PlayerEmail)
-                .OnDelete(DeleteBehavior.Restrict);
 
             // Составной уникальный индекс - игрок может быть в кампании только один раз
             entity

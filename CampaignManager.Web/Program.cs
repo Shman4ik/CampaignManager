@@ -2,8 +2,8 @@
 using Blazorise.Icons.FontAwesome;
 using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
+using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
-using CampaignManager.Web.Endpoints;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Services;
@@ -65,7 +65,9 @@ builder.Services.AddAuthentication(options =>
 
                 context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
-            }
+            },
+
+
         };
     });
 

@@ -1,16 +1,16 @@
-﻿using CampaignManager.Web.Compain.Models;
+﻿using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Model;
+namespace CampaignManager.Web.Companies.Models;
 
 public class CampaignPlayer : BaseDataBaseEntity
 {
     // Коллекция персонажей этого игрока в этой кампании
     public ICollection<CharacterStorageDto> Characters { get; set; } = [];
 
-    // Навигационные свойства
+    // Ссылка на кампанию
     public Guid CampaignId { get; set; }
     public Campaign Campaign { get; set; }
 
-    public string PlayerEmail { get; set; }
-    public ApplicationUser Player { get; set; }
+    // Email игрока
+    public required string PlayerEmail { get; set; }
 }
