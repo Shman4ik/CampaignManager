@@ -1,65 +1,162 @@
 ﻿@using CampaignManager.Web.Companies.Models
 @using Microsoft.AspNetCore.Components.Authorization
-@inject CampaignService CampaignService
+@using System.Security.Claims
+@inject CampaignService CampaignService 
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
 @rendermode InteractiveServer
 
+<div class="mb-8">
+    <h3 class="text-2xl font-bold mb-4">Доступные компании</h3>
 
-<h3 class="text-2xl font-bold mb-4">Доступные компании</h3>
+    @if (!string.IsNullOrEmpty(NotificationMessage))
+    {
+        <div class="@NotificationCssClass p-4 mb-4 rounded-md flex justify-between items-center">
+            <span>@NotificationMessage</span>
+            <button @onclick="ClearNotification" class="text-xl">&times;</button>
+        </div>
+    }
 
-@if (Companies == null)
-{
-    <p>Loading...</p>
-}
-else if (Companies.Count == 0)
-{
-    <p>Нет доступных компаний.</p>
-}
-else
-{
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-        @foreach (var company in Companies)
-        {
-            <div class="bg-white shadow-md rounded-lg p-4">
-                <h4 class="text-xl font-semibold mb-2">@company.Name</h4>
-                <p class="text-gray-600 mb-2">Создано: @company.CreatedAt</p>
-                @if (IsUserAuthorized)
-                {
-                    <button @onclick="async () => await JoinCampaignAsync(company.Id)"
-                            class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                        Apply
-                    </button>
-                }
-            </div>
-        }
-    </div>
-}
+    @if (AvailableCampaigns == null)
+    {
+        <div class="flex justify-center items-center py-4">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <span class="ml-2">Загрузка...</span>
+        </div>
+    }
+    else if (AvailableCampaigns.Count == 0)
+    {
+        <p class="text-gray-500">Нет доступных компаний.</p>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            @foreach (var campaign in AvailableCampaigns)
+            {
+                <div class="bg-white shadow-md rounded-lg p-4">
+                    <h4 class="text-xl font-semibold mb-2">@campaign.Name</h4>
+                    <p class="text-gray-600 mb-2">Создано: @campaign.CreatedAt.ToString("dd.MM.yyyy")</p>
+                    <p class="text-gray-600 mb-3">Ведущий: @campaign.KeeperEmail</p>
+                    
+                    @if (IsUserAuthorized)
+                    {
+                        @if (IsUserInCampaign(campaign))
+                        {
+                            <div class="px-3 py-2 bg-gray-100 text-gray-600 rounded text-center">
+                                <span>Вы уже участвуете</span>
+                            </div>
+                        }
+                        else if (campaign.KeeperEmail == UserEmail)
+                        {
+                            <div class="px-3 py-2 bg-blue-100 text-blue-600 rounded text-center">
+                                <span>Вы ведущий</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <button @onclick="async () => await JoinCampaignAsync(campaign.Id)"
+                                    class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 rounded">
+                                Присоединиться
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <div class="px-3 py-2 bg-gray-100 text-gray-500 rounded text-center">
+                            <span>Войдите, чтобы присоединиться</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
 
 @code {
-    private List<Campaign>? Companies { get; set; }
+    private List<Campaign> AvailableCampaigns { get; set; }
+    private List<Campaign> UserCampaigns { get; set; }
     private bool IsUserAuthorized;
-    private string UserId;
+    private string UserEmail;
+    
+    // Notification properties
+    private string NotificationMessage { get; set; }
+    private string NotificationCssClass { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        // Get authentication state
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         IsUserAuthorized = authState.User.Identity?.IsAuthenticated ?? false;
-        UserId = authState.User?.FindFirst(c => c.Type == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")?.Value;
-        Companies = await CampaignService.GetAvailableCompaniesAsync();
+        UserEmail = authState.User?.FindFirst(ClaimTypes.Email)?.Value;
+        
+        // Load available and user campaigns in parallel
+        if (IsUserAuthorized)
+        {
+            var availableTask = CampaignService.GetAvailableCompaniesAsync();
+            var userTask = CampaignService.GetUserCampaignsAsync();
+            
+            await Task.WhenAll(availableTask, userTask);
+            
+            AvailableCampaigns = await availableTask;
+            UserCampaigns = await userTask;
+        }
+        else
+        {
+            AvailableCampaigns = await CampaignService.GetAvailableCompaniesAsync();
+            UserCampaigns = new List<Campaign>();
+        }
     }
 
-    private async Task JoinCampaignAsync(Guid companyId)
+    private bool IsUserInCampaign(Campaign campaign)
     {
-        if (IsUserAuthorized && !string.IsNullOrEmpty(UserId))
+        return UserCampaigns?.Any(c => c.Id == campaign.Id) ?? false;
+    }
+
+    private async Task JoinCampaignAsync(Guid campaignId)
+    {
+        if (IsUserAuthorized && !string.IsNullOrEmpty(UserEmail))
         {
             try
             {
-                await CampaignService.JoinCampaignAsync(companyId, UserId);
+                bool joinResult = await CampaignService.JoinCampaignAsync(campaignId, UserEmail);
+                
+                if (joinResult)
+                {
+                    ShowNotification("Вы успешно присоединились к кампании!", "success");
+                    // Refresh page after short delay to show notification
+                    await Task.Delay(1500);
+                    NavigationManager.NavigateTo("/", true);
+                }
+                else
+                {
+                    ShowNotification("Не удалось присоединиться к кампании. Возможно, вы уже являетесь участником.", "warning");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error applying to company: {ex.Message}");
+                ShowNotification($"Ошибка при присоединении: {ex.Message}", "error");
             }
         }
+    }
+    
+    private void ShowNotification(string message, string type)
+    {
+        NotificationMessage = message;
+        
+        NotificationCssClass = type switch
+        {
+            "success" => "bg-green-100 text-green-800 border border-green-200",
+            "warning" => "bg-yellow-100 text-yellow-800 border border-yellow-200",
+            "error" => "bg-red-100 text-red-800 border border-red-200",
+            _ => "bg-blue-100 text-blue-800 border border-blue-200"
+        };
+        
+        StateHasChanged();
+    }
+
+    private void ClearNotification()
+    {
+        NotificationMessage = null;
+        StateHasChanged();
     }
 }
