@@ -3,194 +3,233 @@
 @using System.Security.Claims
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Services
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @rendermode InteractiveServer
-@inject CharacterGenerationService CharacterGenerationService
+@attribute [Authorize]
+@implements IDisposable
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
-@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JSRuntime
 
 <PageTitle>@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</PageTitle>
 
-<div class="max-w-7xl mx-auto p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
-    @if (!string.IsNullOrEmpty(NotificationMessage))
-    {
-        <div class="@NotificationCssClass p-4 mb-4 rounded-md flex justify-between items-center">
-            <span>@NotificationMessage</span>
-            <button @onclick="ClearNotification" class="text-xl">&times;</button>
-        </div>
-    }
-
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h1>
-        <div>
-            <button @onclick="SaveCharacter" disabled="@IsSaving"
-                    class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded mr-2">
-                @if (IsSaving)
-                {
-                    <span>Сохранение...</span>
-                }
-                else
-                {
-                    <span>Сохранить</span>
-                }
-            </button>
-            @if (ReturnToCampaign)
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        <div class="max-w-7xl mx-auto p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
+            @if (!string.IsNullOrEmpty(_notification.Message))
             {
-                <button @onclick="GoBackToCampaign"
-                        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-                    Вернуться к кампании
-                </button>
+                <NotificationAlert Type="@_notification.Type" Message="@_notification.Message" OnClose="ClearNotification" />
+            }
+
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h1>
+                <div>
+                    <SaveButton IsLoading="@_isBusy" OnClick="SaveCharacterAsync">Сохранить</SaveButton>
+                    @if (ReturnToCampaign)
+                    {
+                        <button @onclick="GoBackToCampaign"
+                                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                            Вернуться к кампании
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (_isLoading)
+            {
+                <LoadingIndicator />
+            }
+            else if (Character != null)
+            {
+                <EditForm Model="@Character" OnValidSubmit="SaveCharacterAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <PersonalInfoComponent Character="@Character" />
+                        <CharacteristicsComponent Character="@Character" />
+                    </div>
+
+                    <div class="mt-4">
+                        <SkillComponent Model="@Character.Skills" />
+                    </div>
+
+                    <div class="mt-4">
+                        <WeaponsComponent Weapons="@Character.Weapons" />
+                    </div>
+
+                    <div class="mt-4">
+                        <h3 class="text-xl font-bold mb-2">Предыстория</h3>
+                        <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
+                    </div>
+                </EditForm>
             }
         </div>
-    </div>
-
-    @if (Character != null)
-    {
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <PersonalInfoComponent Character="@Character"/>
-            <CharacteristicsComponent Character="@Character" OnUpdate="StateHasChanged"/>
+    </ChildContent>
+    <ErrorContent>
+        <div class="alert alert-danger">
+            <p>Произошла ошибка при загрузке страницы. Пожалуйста, обновите страницу или попробуйте позже.</p>
         </div>
-
-        <div class="mt-4">
-            <SkillComponent Model="@Character.Skills"/>
-        </div>
-
-        <div class="mt-4">
-            <WeaponsComponent Weapons="@Character.Weapons"/>
-        </div>
-
-        <div class="mt-4">
-            <h3 class="text-xl font-bold mb-2">Предыстория</h3>
-            <textarea @bind="Character.Backstory" rows="4" class="w-full p-2 border rounded"></textarea>
-        </div>
-    }
-    else
-    {
-        <div class="flex justify-center items-center">
-            <div class="p-4 text-center">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="sr-only">Загрузка...</span>
-                </div>
-                <p class="mt-2">Загрузка персонажа...</p>
-            </div>
-        </div>
-    }
-</div>
+    </ErrorContent>
+</ErrorBoundary>
 
 @code {
     [Parameter] public Guid? CharacterId { get; set; }
-
     [Parameter] [SupplyParameterFromQuery] public Guid? CampaignId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; }
 
-    private Character Character;
-    private string CurrentUserId;
-    private string UserEmail;
-    private string UserName;
+    private Character Character { get; set; }
+    private string _userName;
     private bool ReturnToCampaign => CampaignId.HasValue;
-
-    // Состояния и уведомления
-    private bool IsSaving { get; set; }
-    private string NotificationMessage { get; set; }
-    private string NotificationCssClass { get; set; }
+    
+    private bool _isLoading = true;
+    private bool _isBusy = false;
+    
+    private ErrorBoundary _errorBoundary;
+    
+    // Структура для уведомлений
+    private class Notification
+    {
+        public string Message { get; set; }
+        public string Type { get; set; } = "info";
+    }
+    
+    private Notification _notification = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            CurrentUserId = authState.User.FindFirst(ClaimTypes.Email)?.Value;
-            UserEmail = authState.User.FindFirst(ClaimTypes.Email)?.Value;
-            UserName = authState.User.FindFirst(ClaimTypes.Name)?.Value ?? UserEmail;
+            await LoadUserDataAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка аутентификации: {ex.Message}", "error");
+        }
+    }
+    
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            await LoadCharacterDataAsync();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
 
-            if (CharacterId.HasValue)
+    private async Task LoadUserDataAsync()
+    {
+        var authState = await AuthState;
+        _userName = authState.User.FindFirst(ClaimTypes.Name)?.Value 
+                   ?? authState.User.FindFirst(ClaimTypes.Email)?.Value 
+                   ?? "Unknown User";
+    }
+
+    private async Task LoadCharacterDataAsync()
+    {
+        try
+        {
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
-                // Редактирование существующего персонажа
                 Character = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
-                if (Character == null)
-                {
-                    Character = new Character
-                    {
-                        PersonalInfo = new PersonalInfo { PlayerName = UserName }
-                    };
-                    ShowNotification("Персонаж не найден, создан новый шаблон", "warning");
-                }
             }
-            else
+            
+            // Если персонаж не найден или это новый персонаж
+            if (Character == null)
             {
-                // Создание нового персонажа
                 Character = new Character
                 {
-                    PersonalInfo = new PersonalInfo { PlayerName = UserName }
+                    PersonalInfo = new PersonalInfo { PlayerName = _userName }
                 };
+                
+                if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
+                {
+                    ShowNotification("Персонаж не найден, создан новый шаблон", "warning");
+                }
             }
         }
         catch (Exception ex)
         {
             Character = new Character
             {
-                PersonalInfo = new PersonalInfo { PlayerName = UserName ?? "Unknown" }
+                PersonalInfo = new PersonalInfo { PlayerName = _userName }
             };
-            ShowNotification($"Ошибка при загрузке: {ex.Message}", "error");
+            ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
         }
     }
 
-    private async Task SaveCharacter()
+    private async Task SaveCharacterAsync()
     {
-        if (IsSaving) return;
+        if (_isBusy || Character == null) return;
 
         try
         {
-            IsSaving = true;
-            StateHasChanged();
-
-            // Проверка на валидность персонажа перед сохранением
-            if (string.IsNullOrWhiteSpace(Character.PersonalInfo.Name))
+            _isBusy = true;
+            
+            // Валидация персонажа
+            if (string.IsNullOrWhiteSpace(Character.PersonalInfo?.Name))
             {
+                Character.PersonalInfo ??= new PersonalInfo();
                 Character.PersonalInfo.Name = "Безымянный";
             }
 
-            // Убедимся, что имя игрока установлено
-            if (string.IsNullOrWhiteSpace(Character.PersonalInfo.PlayerName))
+            // Сохранение персонажа
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
-                Character.PersonalInfo.PlayerName = UserName;
-            }
-
-            if (CharacterId.HasValue)
-            {
+                Character.Id = CharacterId.Value;
                 await CharacterService.UpdateCharacterAsync(Character);
                 ShowNotification("Персонаж успешно обновлен!", "success");
             }
             else
             {
                 var result = await CharacterService.CreateCharacterAsync(Character);
-                CharacterId = result.Id; // Обновляем ID после создания
-                ShowNotification("Персонаж успешно создан!", "success");
+                if (result?.Id != Guid.Empty)
+                {
+                    CharacterId = result.Id;
+                    Character.Id = result.Id;
+                    ShowNotification("Персонаж успешно создан!", "success");
+                }
+                else
+                {
+                    ShowNotification("Ошибка при создании персонажа", "error");
+                    return;
+                }
             }
 
-            // Если установлен параметр автоматического возврата к кампании, перенаправляем
-            if (ReturnToCampaign && await JSRuntime.InvokeAsync<bool>("confirm", "Вернуться к кампании?"))
-            {
-                GoBackToCampaign();
-            }
+            await HandlePostSaveRedirectAsync();
         }
         catch (Exception ex)
         {
             ShowNotification($"Ошибка при сохранении: {ex.Message}", "error");
+            _errorBoundary?.Recover();
         }
         finally
         {
-            IsSaving = false;
-            StateHasChanged();
+            _isBusy = false;
+        }
+    }
+
+    private async Task HandlePostSaveRedirectAsync()
+    {
+        if (ReturnToCampaign)
+        {
+            bool shouldRedirect = await JSRuntime.InvokeAsync<bool>("confirm", "Вернуться к кампании?");
+            if (shouldRedirect)
+            {
+                GoBackToCampaign();
+            }
         }
     }
 
     private void GoBackToCampaign()
     {
-        if (CampaignId.HasValue)
+        if (CampaignId.HasValue && CampaignId.Value != Guid.Empty)
         {
-            NavigationManager.NavigateTo($"/campaign/{CampaignId}");
+            NavigationManager.NavigateTo($"/campaign/{CampaignId.Value}", forceLoad: false);
         }
         else
         {
@@ -200,23 +239,19 @@
 
     private void ShowNotification(string message, string type)
     {
-        NotificationMessage = message;
-
-        NotificationCssClass = type switch
-        {
-            "success" => "bg-green-100 text-green-800 border border-green-200",
-            "warning" => "bg-yellow-100 text-yellow-800 border border-yellow-200",
-            "error" => "bg-red-100 text-red-800 border border-red-200",
-            _ => "bg-blue-100 text-blue-800 border border-blue-200"
-        };
-
-        StateHasChanged();
+        if (string.IsNullOrWhiteSpace(message)) return;
+            
+        _notification.Message = message;
+        _notification.Type = type;
     }
 
     private void ClearNotification()
     {
-        NotificationMessage = null;
-        StateHasChanged();
+        _notification.Message = null;
     }
 
+    public void Dispose()
+    {
+        // Освобождение ресурсов, если необходимо
+    }
 }
