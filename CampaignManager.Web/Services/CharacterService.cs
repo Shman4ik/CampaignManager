@@ -1,7 +1,6 @@
 ﻿using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace CampaignManager.Web.Services;
 
@@ -23,21 +22,21 @@ public class CharacterService(
             // Если ID не установлен, генерируем новый
             if (character.Id == Guid.Empty)
             {
-                character.Id = Guid.NewGuid();
+                character.Id = Guid.CreateVersion7();
             }
 
             // Создаем DTO для хранения с дублированием ключевых полей
-            CharacterStorageDto storageDto = new() 
-            { 
-                Id = character.Id, 
-                CharacterName = character.PersonalInfo.Name, 
+            CharacterStorageDto storageDto = new()
+            {
+                CharacterName = character.PersonalInfo.Name,
                 CreatedAt = DateTime.UtcNow,
                 LastUpdated = DateTime.UtcNow,
-                Character = character 
+                Character = character
             };
-            
+
             // Инициализируем базовые поля сущности
             storageDto.Init();
+            storageDto.Id = character.Id;
 
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 

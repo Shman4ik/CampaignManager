@@ -176,6 +176,8 @@ public class CampaignCharacterService(
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
             .Include(c => c.Players)
+            .ThenInclude(cp => cp.Characters)
+            .AsSplitQuery()
             .Where(c => c.KeeperEmail == user.Email || c.Players.Any(p => p.PlayerEmail == user.Email))
             .ToListAsync();
     }

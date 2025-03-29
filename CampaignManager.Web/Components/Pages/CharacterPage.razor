@@ -1,16 +1,22 @@
-﻿@page "/character"
+﻿@page "/character/create/{CampaignId:guid}"
 @page "/character/{CharacterId:guid}"
+
 @using System.Security.Claims
+@using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Services
+@using CampaignManager.Web.Utilities.Services
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@rendermode InteractiveServer
-@attribute [Authorize]
-@implements IDisposable
+@using Microsoft.AspNetCore.Components.Forms
+
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
+@inject UserInformationService UserInformationService
+@inject CharacterGenerationService CharacterGenerationService
 @inject IJSRuntime JSRuntime
+
+@rendermode InteractiveServer
 
 <PageTitle>@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</PageTitle>
 
@@ -24,16 +30,6 @@
 
             <div class="flex justify-between items-center mb-6">
                 <h1 class="text-3xl font-bold">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h1>
-                <div>
-                    <SaveButton IsLoading="@_isBusy" OnClick="SaveCharacterAsync">Сохранить</SaveButton>
-                    @if (ReturnToCampaign)
-                    {
-                        <button @onclick="GoBackToCampaign"
-                                class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
-                            Вернуться к кампании
-                        </button>
-                    }
-                </div>
             </div>
 
             @if (_isLoading)
@@ -42,12 +38,22 @@
             }
             else if (Character != null)
             {
-                <EditForm Model="@Character" OnValidSubmit="SaveCharacterAsync">
+                <EditForm Model="Character" OnSubmit="SaveCharacterAsync" FormName="CharacterForm">
                     <DataAnnotationsValidator />
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <PersonalInfoComponent Character="@Character" />
                         <CharacteristicsComponent Character="@Character" />
+                        <div class="mb-1">
+                            <button @onclick="SaveCharacterAsync"
+                                    class="mr-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">
+                                Сохранить
+                            </button>
+                            <button @onclick="GenerateRandom"
+                                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                                Сгенерировать случайно
+                            </button>
+                        </div>
                     </div>
 
                     <div class="mt-4">
@@ -61,8 +67,13 @@
                     <div class="mt-4">
                         <h3 class="text-xl font-bold mb-2">Предыстория</h3>
                         <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
+                        <ValidationMessage For="@(() => Character.Backstory)" />
                     </div>
                 </EditForm>
+            }
+            else
+            {
+                <p class="text-red-500">Не удалось загрузить или инициализировать данные персонажа.</p>
             }
         </div>
     </ChildContent>
@@ -75,58 +86,47 @@
 
 @code {
     [Parameter] public Guid? CharacterId { get; set; }
-    [Parameter] [SupplyParameterFromQuery] public Guid? CampaignId { get; set; }
-    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; }
+    [Parameter] public Guid? CampaignId { get; set; }
 
-    private Character Character { get; set; }
-    private string _userName;
-    private bool ReturnToCampaign => CampaignId.HasValue;
-    
+
+    private Character? Character { get; set; }
+    private ApplicationUser? _user;
     private bool _isLoading = true;
     private bool _isBusy = false;
-    
-    private ErrorBoundary _errorBoundary;
-    
-    // Структура для уведомлений
+    private ErrorBoundary? _errorBoundary;
+
+
+
     private class Notification
     {
-        public string Message { get; set; }
+        public string? Message { get; set; }
         public string Type { get; set; } = "info";
     }
-    
+
     private Notification _notification = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            await LoadUserDataAsync();
+            _user = await UserInformationService.GetUserAsync();
+            if (_user == null)
+            {
+                ShowNotification("Пользователь не аутентифицирован.", "warning");
+            }
+
+            await LoadCharacterDataAsync();
         }
         catch (Exception ex)
         {
-            ShowNotification($"Ошибка аутентификации: {ex.Message}", "error");
-        }
-    }
-    
-    protected override async Task OnParametersSetAsync()
-    {
-        try
-        {
-            _isLoading = true;
-            await LoadCharacterDataAsync();
+            ShowNotification($"Ошибка при загрузке: {ex.Message}", "error");
+            Character = CreateNewCharacterTemplate();
+            _errorBoundary?.Recover();
         }
         finally
         {
             _isLoading = false;
         }
-    }
-
-    private async Task LoadUserDataAsync()
-    {
-        var authState = await AuthState;
-        _userName = authState.User.FindFirst(ClaimTypes.Name)?.Value 
-                   ?? authState.User.FindFirst(ClaimTypes.Email)?.Value 
-                   ?? "Unknown User";
     }
 
     private async Task LoadCharacterDataAsync()
@@ -136,71 +136,94 @@
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
                 Character = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
-            }
-            
-            // Если персонаж не найден или это новый персонаж
-            if (Character == null)
-            {
-                Character = new Character
+
+                if (Character == null)
                 {
-                    PersonalInfo = new PersonalInfo { PlayerName = _userName }
-                };
-                
-                if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
-                {
-                    ShowNotification("Персонаж не найден, создан новый шаблон", "warning");
+                    ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
+                    Character = CreateNewCharacterTemplate();
+                    CharacterId = null;
                 }
+            }
+            else
+            {
+                Character = CreateNewCharacterTemplate();
             }
         }
         catch (Exception ex)
         {
-            Character = new Character
-            {
-                PersonalInfo = new PersonalInfo { PlayerName = _userName }
-            };
             ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
+            Character = CreateNewCharacterTemplate();
         }
+    }
+
+    private Character CreateNewCharacterTemplate()
+    {
+        return new Character
+        {
+            PersonalInfo = new PersonalInfo { PlayerName = _user?.UserName ?? "Unknown" },
+            Characteristics = new Characteristics(),
+            Skills = new SkillsModel(),
+            Weapons = new List<Weapon>(),
+            Backstory = string.Empty
+        };
     }
 
     private async Task SaveCharacterAsync()
     {
-        if (_isBusy || Character == null) return;
+        if (Character == null || _isBusy)
+            return;
+
+        _isBusy = true;
+        ClearNotification();
 
         try
         {
-            _isBusy = true;
-            
-            // Валидация персонажа
             if (string.IsNullOrWhiteSpace(Character.PersonalInfo?.Name))
             {
                 Character.PersonalInfo ??= new PersonalInfo();
                 Character.PersonalInfo.Name = "Безымянный";
+                ShowNotification("Имя персонажа не было указано, установлено 'Безымянный'.", "warning");
             }
 
-            // Сохранение персонажа
-            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
+            if (Character.PersonalInfo != null && string.IsNullOrEmpty(Character.PersonalInfo.PlayerName))
             {
-                Character.Id = CharacterId.Value;
+                Character.PersonalInfo.PlayerName = _user?.UserName ?? "Unknown";
+            }
+
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
+            {
                 await CharacterService.UpdateCharacterAsync(Character);
                 ShowNotification("Персонаж успешно обновлен!", "success");
             }
             else
             {
-                var result = await CharacterService.CreateCharacterAsync(Character);
-                if (result?.Id != Guid.Empty)
+                Character.Id = Guid.Empty;
+                var createdCharacter = await CharacterService.CreateCharacterAsync(Character);
+
+                if (createdCharacter?.Id != null && createdCharacter.Id != Guid.Empty)
                 {
-                    CharacterId = result.Id;
-                    Character.Id = result.Id;
+                    Character.Id = createdCharacter.Id;
+                    CharacterId = createdCharacter.Id;
                     ShowNotification("Персонаж успешно создан!", "success");
+                    NavigationManager.NavigateTo($"/character/{Character.Id}", replace: true);
                 }
                 else
                 {
-                    ShowNotification("Ошибка при создании персонажа", "error");
+                    ShowNotification("Ошибка: Не удалось получить ID созданного персонажа.", "error");
                     return;
                 }
             }
 
-            await HandlePostSaveRedirectAsync();
+            if (CampaignId.HasValue)
+            {
+                bool shouldRedirect = await JSRuntime.InvokeAsync<bool>(
+                    "confirm", $"Персонаж сохранен. Вернуться к кампании?");
+
+                if (shouldRedirect)
+                {
+                    GoBackToCampaign();
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -213,45 +236,43 @@
         }
     }
 
-    private async Task HandlePostSaveRedirectAsync()
-    {
-        if (ReturnToCampaign)
-        {
-            bool shouldRedirect = await JSRuntime.InvokeAsync<bool>("confirm", "Вернуться к кампании?");
-            if (shouldRedirect)
-            {
-                GoBackToCampaign();
-            }
-        }
-    }
-
     private void GoBackToCampaign()
     {
         if (CampaignId.HasValue && CampaignId.Value != Guid.Empty)
         {
-            NavigationManager.NavigateTo($"/campaign/{CampaignId.Value}", forceLoad: false);
+            NavigationManager.NavigateTo($"/campaign/{CampaignId.Value}");
         }
         else
         {
-            ShowNotification("Идентификатор кампании не найден", "error");
+            ShowNotification("Идентификатор кампании не найден для возврата.", "error");
         }
     }
 
     private void ShowNotification(string message, string type)
     {
         if (string.IsNullOrWhiteSpace(message)) return;
-            
+
         _notification.Message = message;
         _notification.Type = type;
+        StateHasChanged();
     }
 
     private void ClearNotification()
     {
         _notification.Message = null;
+        StateHasChanged();
     }
 
     public void Dispose()
     {
-        // Освобождение ресурсов, если необходимо
+        // Cleanup resources if needed
+    }
+
+    private void GenerateRandom()
+    {
+        Character = CharacterGenerationService.GenerateRandomCharacter();
+
+        // Сохраняем имя игрока даже в случайно сгенерированном персонаже
+        Character.PersonalInfo.PlayerName = _user.UserName;
     }
 }

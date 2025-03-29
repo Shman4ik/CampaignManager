@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire components.
@@ -24,6 +25,7 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -93,9 +95,9 @@ builder.Services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
-builder.Services.AddScoped<CampaignCharacterService>(); // Add new service
-builder.Services.AddScoped<UserRegistrationService>(); // Add user registration service
-builder.Services.AddScoped<UserInformationService>(); // Add user information service
+builder.Services.AddScoped<CampaignCharacterService>();
+builder.Services.AddScoped<UserRegistrationService>();
+builder.Services.AddScoped<UserInformationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddHttpClient();
