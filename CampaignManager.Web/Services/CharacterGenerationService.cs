@@ -1,5 +1,7 @@
 using CampaignManager.Web.Model;
 
+namespace CampaignManager.Web.Services;
+
 public class CharacterGenerationService
 {
     private readonly Random random = new();

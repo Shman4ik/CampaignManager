@@ -4,7 +4,7 @@ using System.Security.Claims;
 
 namespace CampaignManager.Web.Utilities.Services;
 
-public class UserInformationService(
+public class IdentityService(
     IHttpContextAccessor httpContextAccessor,
     IDbContextFactory<AppIdentityDbContext> appIdentityDbContextFactory)
 {

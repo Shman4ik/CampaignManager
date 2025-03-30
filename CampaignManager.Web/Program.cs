@@ -95,9 +95,8 @@ builder.Services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
-builder.Services.AddScoped<CampaignCharacterService>();
 builder.Services.AddScoped<UserRegistrationService>();
-builder.Services.AddScoped<UserInformationService>();
+builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<IUserService, UserService>();
 
 builder.Services.AddHttpClient();

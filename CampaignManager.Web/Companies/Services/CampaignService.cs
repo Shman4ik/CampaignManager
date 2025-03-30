@@ -7,40 +7,33 @@ namespace CampaignManager.Web.Companies.Services;
 
 public class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,
-    UserInformationService userInformationService,
+    IdentityService identityService,
     ILogger<CampaignService> logger)
 {
     public async Task<List<Campaign>> GetUserCampaignsAsync()
     {
-        string? userEmail = userInformationService.GetCurrentUserEmail();
-        if (userEmail == null)
-        {
+        ApplicationUser? user = await identityService.GetUserAsync();
+        if (user == null)
             return [];
-        }
 
-        using AppDbContext? dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
-            .Where(p => p.KeeperEmail == userEmail || p.Players.Any(p => p.PlayerEmail == userEmail))
+            .Include(c => c.Players)
+            .ThenInclude(cp => cp.Characters)
+            .AsSplitQuery()
+            .Where(c => c.KeeperEmail == user.Email || c.Players.Any(p => p.PlayerEmail == user.Email))
             .ToListAsync();
     }
 
     public async Task<Campaign> CreateCampaignAsync(string name)
     {
-        string? userEmail = userInformationService.GetCurrentUserEmail();
+        string? userEmail = identityService.GetCurrentUserEmail();
         if (userEmail == null)
         {
             throw new UnauthorizedAccessException("Пользователь не авторизован");
         }
 
-        // Изменено: разрешить всем пользователям создавать кампании
-        // или разрешить пользователям с ролью GameMaster или Administrator
-        bool canCreateCampaign = true; // Разрешить всем пользователям
-        // Или можно использовать: bool canCreateCampaign = user.Role == PlayerRole.Administrator || user.Role == PlayerRole.GameMaster;
-
-        if (!canCreateCampaign)
-        {
-            throw new UnauthorizedAccessException("У вас нет прав для создания кампании");
-        }
 
         logger.LogInformation("Пользователь {userEmail} создаёт кампанию '{name}'", userEmail, name);
 
@@ -63,15 +56,19 @@ public class CampaignService(
         }
     }
 
-    // Method to get available companies (campaigns)
+    /// <summary>
+    /// Method to get available companies (campaigns)
+    /// </summary>
     public async Task<List<Campaign>> GetAvailableCompaniesAsync()
     {
         using AppDbContext? dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns.Where(p => p.Status != CampaignStatus.Completed).ToListAsync();
     }
 
-    // Method for a user to apply to a campaign
-    public async Task<bool> JoinCampaignAsync(Guid campaignId, string userEmail)
+    /// <summary>
+    /// Method for a user to apply to a campaign
+    /// </summary>   
+    public async Task<bool> JoinCampaignAsync(Guid campaignId, string userName)
     {
         try
         {
@@ -86,26 +83,26 @@ public class CampaignService(
                 return false;
             }
 
-            ApplicationUser? user = await userInformationService.GetUserAsync(userEmail);
+            ApplicationUser? user = await identityService.GetUserAsync();
 
             if (user == null)
             {
-                logger.LogWarning("User with ID {UserId} not found.", userEmail);
+                logger.LogWarning("User not found.");
                 return false;
             }
 
-            CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user.Email! };
+            CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user.Email!, PlayerName = userName };
             campaignPlayers.Init();
 
-            if (!campaign.Players.Any(p => p.PlayerEmail == userEmail))
+            if (!campaign.Players.Any(p => p.PlayerEmail == user.Email))
             {
                 dbContext.CampaignPlayers.Add(campaignPlayers);
                 await dbContext.SaveChangesAsync();
-                logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", userEmail, campaignId);
+                logger.LogInformation("User {UserId} successfully applied to campaign {CampaignId}.", user.Email, campaignId);
                 return true;
             }
 
-            logger.LogWarning("User {UserId} has already applied to campaign {CampaignId}.", userEmail, campaignId);
+            logger.LogWarning("User {UserId} has already applied to campaign {CampaignId}.", user.Email, campaignId);
             return false;
         }
         catch (Exception ex)
@@ -114,5 +111,4 @@ public class CampaignService(
             return false;
         }
     }
-
 }
