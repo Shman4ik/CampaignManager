@@ -9,7 +9,7 @@ public class CharacterService(
     IHttpContextAccessor httpContextAccessor,
     ILogger<CharacterService> logger)
 {
-    public async Task<Character> CreateCharacterAsync(Character character)
+    public async Task<Character> CreateCharacterAsync(Character character, Guid campaignPlayerId)
     {
         try
         {
@@ -31,7 +31,8 @@ public class CharacterService(
                 CharacterName = character.PersonalInfo.Name,
                 CreatedAt = DateTime.UtcNow,
                 LastUpdated = DateTime.UtcNow,
-                Character = character
+                Character = character,
+                CampaignPlayerId = campaignPlayerId,
             };
 
             // Инициализируем базовые поля сущности
@@ -54,14 +55,13 @@ public class CharacterService(
         }
     }
 
-    public async Task<Character> GetCharacterByIdAsync(Guid id)
+    public async Task<CharacterStorageDto?> GetCharacterByIdAsync(Guid id)
     {
         await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        CharacterStorageDto? storageDto = await dbContext.CharacterStorage.FindAsync(id);
-        return storageDto.Character;
+        return await dbContext.CharacterStorage.FindAsync(id);
     }
 
-    public async Task<Character> UpdateCharacterAsync(Character character)
+    public async Task UpdateCharacterAsync(Character character)
     {
         try
         {
@@ -89,7 +89,6 @@ public class CharacterService(
             storageDto.CharacterName = character.PersonalInfo.Name;
             dbContext.Update(storageDto);
             await dbContext.SaveChangesAsync();
-            return character;
         }
         catch (Exception ex)
         {

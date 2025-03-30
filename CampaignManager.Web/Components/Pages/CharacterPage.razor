@@ -14,6 +14,7 @@
 @inject NavigationManager NavigationManager
 @inject IdentityService UserInformationService
 @inject CharacterGenerationService CharacterGenerationService
+@inject CampaignService CampaignService
 @inject IJSRuntime JSRuntime
 
 @rendermode InteractiveServer
@@ -90,6 +91,8 @@
 
 
     private Character? Character { get; set; }
+    private CharacterStorageDto? CharacterStorageDto { get; set; }
+    private CampaignPlayer? CampaignPlayer { get; set; }
     private ApplicationUser? _user;
     private bool _isLoading = true;
     private bool _isBusy = false;
@@ -113,8 +116,7 @@
             if (_user == null)
             {
                 ShowNotification("Пользователь не аутентифицирован.", "warning");
-            }
-
+            }            
             await LoadCharacterDataAsync();
         }
         catch (Exception ex)
@@ -135,8 +137,9 @@
         {
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
-                Character = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
-
+                CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
+                Character = CharacterStorageDto?.Character;
+                CampaignPlayer = CharacterStorageDto?.CampaignPlayer;
                 if (Character == null)
                 {
                     ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
@@ -147,6 +150,8 @@
             else
             {
                 Character = CreateNewCharacterTemplate();
+                if (CampaignId.HasValue)
+                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
             }
         }
         catch (Exception ex)
@@ -160,7 +165,7 @@
     {
         return new Character
         {
-            PersonalInfo = new PersonalInfo { PlayerName = _user?.UserName ?? "Unknown" },
+            PersonalInfo = new PersonalInfo { PlayerName = CampaignPlayer?.PlayerName ?? "Unknown" },
             Characteristics = new Characteristics(),
             Skills = new SkillsModel(),
             Weapons = new List<Weapon>(),
@@ -187,7 +192,7 @@
 
             if (Character.PersonalInfo != null && string.IsNullOrEmpty(Character.PersonalInfo.PlayerName))
             {
-                Character.PersonalInfo.PlayerName = _user?.UserName ?? "Unknown";
+                Character.PersonalInfo.PlayerName = CampaignPlayer?.PlayerName ?? "Unknown";
             }
 
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
@@ -198,30 +203,19 @@
             else
             {
                 Character.Id = Guid.Empty;
-                var createdCharacter = await CharacterService.CreateCharacterAsync(Character);
+                var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer.Id);
 
                 if (createdCharacter?.Id != null && createdCharacter.Id != Guid.Empty)
                 {
                     Character.Id = createdCharacter.Id;
                     CharacterId = createdCharacter.Id;
                     ShowNotification("Персонаж успешно создан!", "success");
-                    NavigationManager.NavigateTo($"/character/{Character.Id}", replace: true);
+                    NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
                 }
                 else
                 {
                     ShowNotification("Ошибка: Не удалось получить ID созданного персонажа.", "error");
                     return;
-                }
-            }
-
-            if (CampaignId.HasValue)
-            {
-                bool shouldRedirect = await JSRuntime.InvokeAsync<bool>(
-                    "confirm", $"Персонаж сохранен. Вернуться к кампании?");
-
-                if (shouldRedirect)
-                {
-                    GoBackToCampaign();
                 }
             }
         }
@@ -233,18 +227,6 @@
         finally
         {
             _isBusy = false;
-        }
-    }
-
-    private void GoBackToCampaign()
-    {
-        if (CampaignId.HasValue && CampaignId.Value != Guid.Empty)
-        {
-            NavigationManager.NavigateTo($"/campaign/{CampaignId.Value}");
-        }
-        else
-        {
-            ShowNotification("Идентификатор кампании не найден для возврата.", "error");
         }
     }
 
@@ -273,6 +255,6 @@
         Character = CharacterGenerationService.GenerateRandomCharacter();
 
         // Сохраняем имя игрока даже в случайно сгенерированном персонаже
-        Character.PersonalInfo.PlayerName = _user.UserName;
+        Character.PersonalInfo.PlayerName = CampaignPlayer?.PlayerName;
     }
 }
