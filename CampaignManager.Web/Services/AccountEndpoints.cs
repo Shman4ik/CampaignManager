@@ -1,4 +1,5 @@
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -24,10 +25,10 @@ public static class AccountEndpoints
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
         // Устанавливаем путь перенаправления после аутентификации
-        AuthenticationProperties properties = new() 
-        { 
+        AuthenticationProperties properties = new()
+        {
             RedirectUri = returnUrl ?? "/",
-            IsPersistent = true 
+            IsPersistent = true
         };
 
         // Вызываем аутентификацию Google
@@ -40,14 +41,12 @@ public static class AccountEndpoints
         {
             RedirectUri = returnUrl ?? "/"
         };
-        
+
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
         return Results.Redirect(returnUrl ?? "/");
     }
 
-    private static async Task<IResult> HandleProcessLogin(
-        HttpContext httpContext,
-        IUserService userService)
+    private static async Task<IResult> HandleProcessLogin(HttpContext httpContext, IdentityService userService)
     {
         try
         {
@@ -75,8 +74,8 @@ public static class AccountEndpoints
             }
 
             // Используем сервис для создания или обновления пользователя
-            ApplicationUser user = await userService.EnsureUserExistsAsync(email, name);
-            
+            ApplicationUser user = await userService.GetUserAsync(email);
+
             // Создаем identity с нужными клеймами
             var claims = new List<Claim>
             {
@@ -84,10 +83,10 @@ public static class AccountEndpoints
                 new Claim(ClaimTypes.Name, name ?? email),
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             };
-            
+
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var principal = new ClaimsPrincipal(identity);
-            
+
             // Выполняем вход пользователя с постоянным куки
             await httpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
@@ -99,7 +98,7 @@ public static class AccountEndpoints
                 });
 
             Console.WriteLine($"Process-login: User signed in, redirecting to /");
-            
+
             // Перенаправляем на начальную страницу
             return Results.Redirect("/");
         }
@@ -110,16 +109,16 @@ public static class AccountEndpoints
             return Results.Redirect("/Error");
         }
     }
-    
+
     // Эндпоинт для отладки состояния аутентификации
     private static IResult HandleAuthStatus(HttpContext httpContext)
     {
         bool isAuthenticated = httpContext.User.Identity?.IsAuthenticated ?? false;
         string? userName = httpContext.User.Identity?.Name;
         string? email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
-        
+
         var claims = httpContext.User.Claims.Select(c => new { c.Type, c.Value }).ToList();
-        
+
         return Results.Json(new
         {
             IsAuthenticated = isAuthenticated,
