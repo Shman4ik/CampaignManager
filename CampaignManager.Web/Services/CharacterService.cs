@@ -58,7 +58,10 @@ public class CharacterService(
     public async Task<CharacterStorageDto?> GetCharacterByIdAsync(Guid id)
     {
         await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.CharacterStorage.FindAsync(id);
+        var result = await dbContext.CharacterStorage
+                        .AsNoTracking()
+                        .SingleOrDefaultAsync(c => c.Id == id);
+        return result;
     }
 
     public async Task UpdateCharacterAsync(Character character)

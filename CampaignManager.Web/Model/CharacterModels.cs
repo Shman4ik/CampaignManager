@@ -204,18 +204,15 @@ public class Weapon
 
 public class SkillsModel
 {
-    public SkillsModel()
-    {
-        InitializeSkillGroups();
-    }
+    public List<SkillGroup> SkillGroups { get; set; } = [];
 
-    public List<SkillGroup> SkillGroups { get; private set; }
-
-    private void InitializeSkillGroups()
+    public static SkillsModel DefaultSkillsModel()
     {
-        SkillGroups =
-        [
-            new SkillGroup
+        return new SkillsModel()
+        {
+            SkillGroups =
+            [
+                new SkillGroup
             {
                 Name = "Решение Проблем",
                 Skills =
@@ -231,7 +228,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Социальные",
                 Skills =
@@ -248,7 +245,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Сбор Информации",
                 Skills =
@@ -259,7 +256,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Лечение",
                 Skills =
@@ -270,7 +267,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Знания",
                 Skills =
@@ -287,7 +284,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Специальные",
                 Skills =
@@ -297,7 +294,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Сражение (общее)",
                 Skills =
@@ -308,7 +305,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Сражение (Огнестрельное)",
                 Skills =
@@ -319,7 +316,7 @@ public class SkillsModel
                 ]
             },
 
-            new SkillGroup
+                new SkillGroup
             {
                 Name = "Действия",
                 Skills =
@@ -333,7 +330,8 @@ public class SkillsModel
                     new Skill { Name = "Упр. тяж. машинами", Value = new AttributeValue(1), BaseValue = "01%" }
                 ]
             }
-        ];
+            ]
+        };
     }
 }
 
