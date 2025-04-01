@@ -17,6 +17,7 @@ public class IdentityService(
         var userEmail = GetCurrentUserEmail();
         return await GetUserAsync(userEmail);
     }
+
     public async Task<ApplicationUser?> GetUserAsync(string? email)
     {
         if (email == null)
@@ -24,5 +25,13 @@ public class IdentityService(
 
         await using AppIdentityDbContext dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
         return await dbContext.Users.SingleOrDefaultAsync(p => p.Email.ToLower() == email.ToLower());
+    }
+
+    public async Task<ApplicationUser?> CreateUserAsync(ApplicationUser user)
+    {
+        await using AppIdentityDbContext dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync();
+        return user;
     }
 }

@@ -1,11 +1,10 @@
 using CampaignManager.Web.Model;
-using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using System.Security.Claims;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Utilities.Services;
 
 public static class AccountEndpoints
 {
@@ -16,7 +15,6 @@ public static class AccountEndpoints
         accountGroup.MapGet("/login", HandleLogin);
         accountGroup.MapGet("/logout", HandleLogout);
         accountGroup.MapGet("/process-login", HandleProcessLogin);
-        accountGroup.MapGet("/auth-status", HandleAuthStatus); // Эндпоинт для отладки
     }
 
     private static async Task<IResult> HandleLogin(string? returnUrl, HttpContext httpContext)
@@ -74,7 +72,20 @@ public static class AccountEndpoints
             }
 
             // Используем сервис для создания или обновления пользователя
-            ApplicationUser user = await userService.GetUserAsync(email);
+            ApplicationUser? user = await userService.GetUserAsync(email);
+            if (user == null)
+            {
+                // Create a new user with default role
+                user = new ApplicationUser
+                {
+                    Email = email,
+                    UserName = email,
+                    Role = PlayerRole.Player
+                };
+
+                // Save the new user (need to add method to IdentityService)
+                user = await userService.CreateUserAsync(user);
+            }
 
             // Создаем identity с нужными клеймами
             var claims = new List<Claim>
@@ -108,23 +119,5 @@ public static class AccountEndpoints
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
             return Results.Redirect("/Error");
         }
-    }
-
-    // Эндпоинт для отладки состояния аутентификации
-    private static IResult HandleAuthStatus(HttpContext httpContext)
-    {
-        bool isAuthenticated = httpContext.User.Identity?.IsAuthenticated ?? false;
-        string? userName = httpContext.User.Identity?.Name;
-        string? email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
-
-        var claims = httpContext.User.Claims.Select(c => new { c.Type, c.Value }).ToList();
-
-        return Results.Json(new
-        {
-            IsAuthenticated = isAuthenticated,
-            UserName = userName,
-            Email = email,
-            Claims = claims
-        });
     }
 }

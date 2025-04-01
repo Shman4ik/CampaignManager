@@ -4,16 +4,13 @@ using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
-using CampaignManager.Web.Model;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.OAuth;
-using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Npgsql;
@@ -80,11 +77,9 @@ builder.Services.AddAuthentication(options =>
         };
     });
 
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
-});
-builder.Services.AddScoped<AuthenticationStateProvider, RevalidatingIdentityAuthenticationStateProvider<ApplicationUser>>();
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+
 // Add Swagger services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -101,7 +96,6 @@ builder.Services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
-builder.Services.AddScoped<UserRegistrationService>();
 builder.Services.AddScoped<IdentityService>();
 
 builder.Services.AddHttpClient();
@@ -140,19 +134,4 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1");
 });
 app.MapAccountEndpoints();
-
-
-app.MapPost("api/join-as-user", async (string userEmail, [FromServices] AppIdentityDbContext dbContext) =>
-{
-    ApplicationUser? user = await dbContext.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
-    if (user == null)
-    {
-        user = new ApplicationUser { Email = userEmail, UserName = userEmail, Role = PlayerRole.Player };
-        dbContext.Users.Add(user);
-    }
-
-    await dbContext.SaveChangesAsync();
-    return Results.Ok($"User {userEmail} joined as a player");
-});
-
 app.Run();
