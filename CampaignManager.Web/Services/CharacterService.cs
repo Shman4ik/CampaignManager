@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Companies.Models;
+using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -35,11 +36,25 @@ public class CharacterService(
                 CampaignPlayerId = campaignPlayerId,
             };
 
+            // Находим и деактивируем все активные персонажи этого игрока в этой кампании
+            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            var existingActiveCharacters = await dbContext.CharacterStorage
+                .Where(c => c.CampaignPlayerId == campaignPlayerId && c.Status == CharacterStatus.Active)
+                .ToListAsync();
+
+            foreach (var existingChar in existingActiveCharacters)
+            {
+                existingChar.Status = CharacterStatus.Inactive;
+                existingChar.LastUpdated = DateTime.UtcNow;
+                dbContext.Update(existingChar);
+            }
+
+            // Устанавливаем новый персонаж как активный
+            storageDto.Status = CharacterStatus.Active;
+
             // Инициализируем базовые поля сущности
             storageDto.Init();
             storageDto.Id = character.Id;
-
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Добавляем в базу данных
             dbContext.CharacterStorage.Add(storageDto);
@@ -58,10 +73,13 @@ public class CharacterService(
     public async Task<CharacterStorageDto?> GetCharacterByIdAsync(Guid id)
     {
         await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        var result = await dbContext.CharacterStorage
-                        .AsNoTracking()
-                        .SingleOrDefaultAsync(c => c.Id == id);
-        return result;
+        return await dbContext.CharacterStorage.FindAsync(id);
+    }
+
+    public async Task<CampaignPlayer?> GetCampaignPlayerAsync(Guid id)
+    {
+        await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+        return await dbContext.CampaignPlayers.FindAsync(id);
     }
 
     public async Task UpdateCharacterAsync(Character character)
@@ -96,6 +114,60 @@ public class CharacterService(
         catch (Exception ex)
         {
             logger.LogError(ex, $"Error updating character: {ex.Message}");
+            throw;
+        }
+    }
+
+    public async Task SetCharacterStatusAsync(Guid characterId, CharacterStatus newStatus)
+    {
+        try
+        {
+            string userEmail = GetCurrentUserId();
+            if (string.IsNullOrEmpty(userEmail))
+            {
+                throw new UnauthorizedAccessException("User must be authenticated to change character status");
+            }
+
+            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            
+            // Получаем персонажа
+            var character = await dbContext.CharacterStorage
+                .Include(c => c.CampaignPlayer)
+                .FirstOrDefaultAsync(c => c.Id == characterId);
+                
+            if (character == null)
+            {
+                throw new KeyNotFoundException($"Character with ID {characterId} not found");
+            }
+
+            // Если устанавливаем статус Active, деактивируем остальных персонажей этого игрока в этой кампании
+            if (newStatus == CharacterStatus.Active)
+            {
+                var otherActiveCharacters = await dbContext.CharacterStorage
+                    .Where(c => c.CampaignPlayerId == character.CampaignPlayerId 
+                             && c.Status == CharacterStatus.Active
+                             && c.Id != characterId)
+                    .ToListAsync();
+
+                foreach (var otherChar in otherActiveCharacters)
+                {
+                    otherChar.Status = CharacterStatus.Inactive;
+                    otherChar.LastUpdated = DateTime.UtcNow;
+                    dbContext.Update(otherChar);
+                }
+            }
+
+            // Обновляем статус указанного персонажа
+            character.Status = newStatus;
+            character.LastUpdated = DateTime.UtcNow;
+            dbContext.Update(character);
+            
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation($"Character {characterId} status changed to {newStatus} by user {userEmail}");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error changing character status: {ex.Message}");
             throw;
         }
     }

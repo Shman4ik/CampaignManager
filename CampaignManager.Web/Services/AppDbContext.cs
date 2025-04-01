@@ -59,6 +59,11 @@ public class AppDbContext : DbContext
             // Индекс для быстрого поиска персонажей по игроку в кампании
             entity.HasIndex(c => c.CampaignPlayerId);
 
+            // Сохранение статуса в виде строки в базе данных
+            entity.Property(c => c.Status)
+                .HasDefaultValue(CharacterStatus.Active)
+                .HasConversion<string>();
+
             // Используем JSONB для хранения данных персонажа
             entity.Property(c => c.Character)
                 .HasColumnType("jsonb")

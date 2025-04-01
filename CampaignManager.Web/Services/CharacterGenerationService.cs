@@ -152,6 +152,7 @@ public class CharacterGenerationService
 
     private void GenerateSkills(Character character)
     {
+        character.Skills = SkillsModel.DefaultSkillsModel();
         foreach (SkillGroup? skillGroup in character.Skills.SkillGroups)
         {
             foreach (Skill? skill in skillGroup.Skills)
