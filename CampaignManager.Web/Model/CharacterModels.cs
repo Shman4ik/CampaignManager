@@ -1,4 +1,4 @@
-﻿namespace CampaignManager.Web.Model;
+namespace CampaignManager.Web.Model;
 
 public class Character
 {
@@ -25,11 +25,6 @@ public class Character
     public SkillsModel Skills { get; set; } = new();
 
     /// <summary>
-    ///     Оружие персонажа
-    /// </summary>
-    public List<Weapon> Weapons { get; set; } = new();
-
-    /// <summary>
     ///     Предыстория персонажа
     /// </summary>
     public string Backstory { get; set; } = "";
@@ -38,6 +33,31 @@ public class Character
     ///     Состояние персонажа
     /// </summary>
     public CharacterState State { get; set; } = new();
+
+    /// <summary>
+    ///     Биография персонажа
+    /// </summary>
+    public BiographyInfo Biography { get; set; } = new();
+
+    /// <summary>
+    ///     Снаряжение и имущество персонажа
+    /// </summary>
+    public Equipment Equipment { get; set; } = new();
+
+    /// <summary>
+    ///     Финансы персонажа
+    /// </summary>
+    public Finances Finances { get; set; } = new();
+
+    /// <summary>
+    ///     Детали боя ближнего действия
+    /// </summary>
+    public CloseCombatDetails CloseCombat { get; set; } = new();
+
+    /// <summary>
+    ///     Детали боя дальнего действия
+    /// </summary>
+    public RangedCombatDetails RangedCombat { get; set; } = new();
 }
 
 public class PersonalInfo
@@ -196,10 +216,10 @@ public class Weapon
 {
     public string Name { get; set; }
     public string Damage { get; set; }
-    public int Range { get; set; }
-    public int Attacks { get; set; }
-    public int Ammo { get; set; }
-    public int Malfunction { get; set; }
+    public string Range { get; set; }
+    public string Attacks { get; set; }
+    public string Ammo { get; set; }
+    public string Malfunction { get; set; }
 }
 
 public class SkillsModel
@@ -360,4 +380,158 @@ public class Skill
     public AttributeValue Value { get; set; }
     public string BaseValue { get; set; }
     public bool IsUsed { get; set; } = false;
+}
+
+public class BiographyInfo
+{
+    /// <summary>
+    ///     Описание внешности персонажа
+    /// </summary>
+    public string Appearance { get; set; } = "";
+
+    /// <summary>
+    ///     Черты характера персонажа
+    /// </summary>
+    public string Traits { get; set; } = "";
+
+    /// <summary>
+    ///     Идеалы и принципы персонажа
+    /// </summary>
+    public string IdealsAndPrinciples { get; set; } = "";
+
+    /// <summary>
+    ///     Значимые для персонажа люди
+    /// </summary>
+    public string SignificantPeople { get; set; } = "";
+
+    /// <summary>
+    ///     Важные для персонажа места
+    /// </summary>
+    public string ImportantPlaces { get; set; } = "";
+
+    /// <summary>
+    ///     Ценное имущество персонажа
+    /// </summary>
+    public string ValuablePossessions { get; set; } = "";
+
+    /// <summary>
+    ///     Встречи со сверхъестественным
+    /// </summary>
+    public string SupernaturalEncounters { get; set; } = "";
+}
+
+public class Equipment
+{
+    /// <summary>
+    ///     Список предметов снаряжения
+    /// </summary>
+    public List<EquipmentItem> Items { get; set; } = new();
+}
+
+public class EquipmentItem
+{
+    /// <summary>
+    ///     Название предмета
+    /// </summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>
+    ///     Описание или дополнительная информация о предмете
+    /// </summary>
+    public string Description { get; set; } = "";
+}
+
+public class Finances
+{
+    /// <summary>
+    ///     Наличные деньги персонажа
+    /// </summary>
+    public string Cash { get; set; }
+
+    /// <summary>
+    ///     Активы персонажа
+    /// </summary>
+    public List<string> Assets { get; set; } = [];
+
+    /// <summary>
+    ///     Ключевые точки персонажа
+    /// </summary>
+    public string PocketMoney { get; set; }
+}
+
+public class CloseCombatDetails
+{
+    /// <summary>
+    ///     Оружие ближнего боя
+    /// </summary>
+    public List<CloseCombatWeapon> Weapons { get; set; } = new();
+}
+
+public class CloseCombatWeapon
+{
+    /// <summary>
+    ///     Название оружия
+    /// </summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>
+    ///     Шанс попадания
+    /// </summary>
+    public string HitChance { get; set; } = "";
+
+    /// <summary>
+    ///     Урон
+    /// </summary>
+    public string Damage { get; set; } = "";
+
+    /// <summary>
+    ///     Количество атак
+    /// </summary>
+    public string Attacks { get; set; } = "";
+}
+
+public class RangedCombatDetails
+{
+    /// <summary>
+    ///     Оружие дальнего боя
+    /// </summary>
+    public List<RangedCombatWeapon> Weapons { get; set; } = new();
+}
+
+public class RangedCombatWeapon
+{
+    /// <summary>
+    ///     Название оружия
+    /// </summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>
+    ///     Шанс попадания
+    /// </summary>
+    public string HitChance { get; set; } = "";
+
+    /// <summary>
+    ///     Урон
+    /// </summary>
+    public string Damage { get; set; } = "";
+
+    /// <summary>
+    ///     Дальность
+    /// </summary>
+    public string Range { get; set; } = "";
+
+    /// <summary>
+    ///     Количество атак
+    /// </summary>
+    public string Attacks { get; set; } = "";
+
+    /// <summary>
+    ///     Патроны
+    /// </summary>
+    public string Ammo { get; set; } = "";
+
+    /// <summary>
+    ///     Неисправность
+    /// </summary>
+    public string Malfunction { get; set; } = "";
 }

@@ -63,25 +63,38 @@
                 <EditForm Model="Character" FormName="CharacterForm">
                     <DataAnnotationsValidator />
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <PersonalInfoComponent Character="@Character" />
-                    <CharacteristicsComponent Character="@Character" />
-                    <CharacterStateComponent Character="@Character" />
-                </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <PersonalInfoComponent Character="@Character" />
+                        <CharacteristicsComponent Character="@Character" />
+                        <CharacterStateComponent Character="@Character" />
+                    </div>
 
-                <div class="mt-4">
-                    <SkillComponent Model="@Character.Skills" />
-                </div>
+                    <div class="mt-4">
+                        <SkillComponent Model="@Character.Skills" />
+                    </div>
+                    <div class="mt-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <CloseCombatComponent Character="@Character" />
+                            <RangedCombatComponent Character="@Character" />
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <EquipmentComponent Character="@Character" />
+                    </div>
 
-                <div class="mt-4">
-                    <WeaponsComponent Weapons="@Character.Weapons" />
-                </div>
-
-                <div class="bg-white shadow rounded-lg p-4 mb-4">
-                    <h4 class="text-lg font-semibold mb-3">Предыстория</h4>
-                    <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
-                    <ValidationMessage For="@(() => Character.Backstory)" />
-                </div>
+                    <div class="mt-4">
+                        <FinancesComponent Character="@Character" />
+                    </div>
+                    
+                    <div class="mt-4">
+                        <BiographyComponent Character="@Character" />
+                    </div>
+                    <div class="bg-white shadow rounded-lg p-4 mb-4">
+                        <h4 class="text-lg font-semibold mb-3">Предыстория</h4>
+                        <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
+                        <ValidationMessage For="@(() => Character.Backstory)" />
+                    </div>
                 </EditForm>
             }
             else
@@ -101,39 +114,31 @@
     [Parameter] public Guid? CharacterId { get; set; }
     [Parameter] public Guid? CampaignId { get; set; }
 
-
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
-    private CampaignPlayer? CampaignPlayer { get; set; }
-    private ApplicationUser? _user;
+    private ErrorBoundary? _errorBoundary;
     private bool _isLoading = true;
     private bool _isBusy = false;
-    private ErrorBoundary? _errorBoundary;
+    private NotificationModel _notification = new();
+    private CampaignPlayer? CampaignPlayer { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private ClaimsPrincipal? User => AuthState?.Result?.User;
 
 
-
-    private class Notification
-    {
-        public string? Message { get; set; }
-        public string Type { get; set; } = "info";
-    }
-
-    private Notification _notification = new();
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            _user = await UserInformationService.GetUserAsync();
-            if (_user == null)
-            {
-                ShowNotification("Пользователь не аутентифицирован.", "warning");
-            }
+            _isLoading = true;
             await LoadCharacterDataAsync();
         }
         catch (Exception ex)
         {
-            ShowNotification($"Ошибка при загрузке: {ex.Message}", "error");
+            ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
             Character = CreateNewCharacterTemplate();
             _errorBoundary?.Recover();
         }
@@ -141,7 +146,7 @@
         {
             _isLoading = false;
         }
-    }
+    }   
 
     private async Task LoadCharacterDataAsync()
     {
@@ -180,8 +185,12 @@
             PersonalInfo = new PersonalInfo { PlayerName = CampaignPlayer?.PlayerName ?? "Unknown" },
             Characteristics = new Characteristics(),
             Skills = SkillsModel.DefaultSkillsModel(),
-            Weapons = new List<Weapon>(),
-            Backstory = string.Empty
+            Backstory = string.Empty,
+            Biography = new BiographyInfo(),
+            Equipment = new Equipment(),
+            Finances = new Finances(),
+            CloseCombat = new CloseCombatDetails(),
+            RangedCombat = new RangedCombatDetails()
         };
     }
 
@@ -244,22 +253,16 @@
 
     private void ShowNotification(string message, string type)
     {
-        if (string.IsNullOrWhiteSpace(message)) return;
+        if (string.IsNullOrWhiteSpace(message))
+            return;
 
         _notification.Message = message;
         _notification.Type = type;
-        StateHasChanged();
     }
 
     private void ClearNotification()
     {
         _notification.Message = null;
-        StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        // Cleanup resources if needed
     }
 
     private void GenerateRandom()
