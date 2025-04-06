@@ -3,7 +3,7 @@
 <div class="bg-white shadow rounded-lg p-4 mb-4">
     <h3 class="text-xl font-bold mb-4">Наличные и активы</h3>
     
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
             <label for="pocket-money" class="block text-sm font-medium text-gray-700 mb-1">Карманные деньги</label>
             <input type="text" id="pocket-money" @bind="Character.Finances.PocketMoney" class="w-full p-2 border border-gray-300 rounded" />
@@ -14,13 +14,50 @@
             <input type="text" id="cash" @bind="Character.Finances.Cash" class="w-full p-2 border border-gray-300 rounded" />
         </div>
         
-       @*  <div>
+        <div class="md:col-span-2">
             <label for="assets" class="block text-sm font-medium text-gray-700 mb-1">Активы</label>
-            <input type="text" id="assets" @bind="Character.Finances.Assets" class="w-full p-2 border border-gray-300 rounded" />
-        </div>      *@  
+            <div class="flex flex-col space-y-2">
+                @for (int i = 0; i < Character.Finances.Assets.Count; i++)
+                {
+                    var index = i;
+                    <div class="flex items-center">
+                        <input type="text" value="@Character.Finances.Assets[index]" 
+                               @onchange="@(e => UpdateAsset(index, e.Value.ToString()))" 
+                               class="flex-grow p-2 border border-gray-300 rounded mr-2" />
+                        <button @onclick="() => RemoveAssetAt(index)" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded">
+                            <span>×</span>
+                        </button>
+                    </div>
+                }
+                <button @onclick="AddNewAsset" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded self-start mt-2">
+                    + Добавить актив
+                </button>
+            </div>
+        </div>       
     </div>
 </div>
 
 @code {
     [Parameter] public Character Character { get; set; }
+    
+    private void AddNewAsset()
+    {
+        Character.Finances.Assets.Add(string.Empty);
+    }
+    
+    private void RemoveAssetAt(int index)
+    {
+        if (index >= 0 && index < Character.Finances.Assets.Count)
+        {
+            Character.Finances.Assets.RemoveAt(index);
+        }
+    }
+    
+    private void UpdateAsset(int index, string value)
+    {
+        if (index >= 0 && index < Character.Finances.Assets.Count)
+        {
+            Character.Finances.Assets[index] = value;
+        }
+    }
 }
