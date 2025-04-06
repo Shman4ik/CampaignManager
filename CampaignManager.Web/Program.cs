@@ -88,6 +88,7 @@ builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
+builder.Services.AddSingleton<WeaponService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();

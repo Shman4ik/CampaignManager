@@ -467,27 +467,45 @@ public class CloseCombatDetails
     public List<CloseCombatWeapon> Weapons { get; set; } = new();
 }
 
+/// <summary>
+/// Модель для оружия ближнего боя.
+/// </summary>
 public class CloseCombatWeapon
 {
     /// <summary>
-    ///     Название оружия
+    /// Название оружия.
     /// </summary>
     public string Name { get; set; } = "";
 
     /// <summary>
-    ///     Шанс попадания
+    /// Требуемый навык для использования оружия.
     /// </summary>
-    public string HitChance { get; set; } = "";
+    public string Skill { get; set; } = "";
 
     /// <summary>
-    ///     Урон
+    /// Урон, наносимый оружием.
     /// </summary>
     public string Damage { get; set; } = "";
 
     /// <summary>
-    ///     Количество атак
+    /// Базовая дальность (для метательного или оружия с досягаемостью).
+    /// </summary>
+    public string Range { get; set; } = "";
+
+    /// <summary>
+    /// Количество атак за раунд.
     /// </summary>
     public string Attacks { get; set; } = "";
+
+    /// <summary>
+    /// Стоимость оружия в 1920-х годах.
+    /// </summary>
+    public string Cost { get; set; } = "";
+
+    /// <summary>
+    /// Дополнительные примечания (например, +БП, пронзающее (пронз.), горение).
+    /// </summary>
+    public string Notes { get; set; } = "";
 }
 
 public class RangedCombatDetails
@@ -498,40 +516,53 @@ public class RangedCombatDetails
     public List<RangedCombatWeapon> Weapons { get; set; } = new();
 }
 
+/// <summary>
+/// Модель для оружия дальнего боя.
+/// </summary>
 public class RangedCombatWeapon
 {
     /// <summary>
-    ///     Название оружия
+    /// Название оружия.
     /// </summary>
     public string Name { get; set; } = "";
 
     /// <summary>
-    ///     Шанс попадания
+    /// Требуемый навык для использования оружия.
     /// </summary>
-    public string HitChance { get; set; } = "";
+    public string Skill { get; set; } = "";
 
     /// <summary>
-    ///     Урон
+    /// Урон, наносимый оружием.
     /// </summary>
     public string Damage { get; set; } = "";
 
     /// <summary>
-    ///     Дальность
+    /// Базовая дальность стрельбы.
     /// </summary>
     public string Range { get; set; } = "";
 
     /// <summary>
-    ///     Количество атак
+    /// Количество атак/выстрелов за раунд.
     /// </summary>
     public string Attacks { get; set; } = "";
 
     /// <summary>
-    ///     Патроны
+    /// Количество патронов в оружии (магазине).
     /// </summary>
     public string Ammo { get; set; } = "";
 
     /// <summary>
-    ///     Неисправность
+    /// Шанс неисправности оружия (осечки).
     /// </summary>
     public string Malfunction { get; set; } = "";
+
+    /// <summary>
+    /// Стоимость оружия в 1920-х годах.
+    /// </summary>
+    public string Cost { get; set; } = "";
+
+    /// <summary>
+    /// Дополнительные примечания (например, пронзающее (пронз.), 2 ствола (2ств.), автоматический огонь (авто)).
+    /// </summary>
+    public string Notes { get; set; } = "";
 }

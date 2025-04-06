@@ -1,4 +1,6 @@
 @using CampaignManager.Web.Model
+@using CampaignManager.Web.Services
+@inject WeaponService WeaponService
 
 <div class="bg-white shadow rounded-lg p-4 mb-4">
     <h3 class="text-xl font-bold mb-4">Оружие дальнего боя</h3>
@@ -9,12 +11,14 @@
                 <thead class="bg-gray-50">
                     <tr>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оружие</th>
-                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Шанс</th>
+                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Навык</th>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Урон</th>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дальн.</th>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Атаки</th>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Патроны</th>
                         <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Неиспр.</th>
+                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цена</th>
+                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Примечания</th>
                         <th scope="col" class="px-2 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Действия</th>
                     </tr>
                 </thead>
@@ -26,7 +30,7 @@
                                 <input type="text" @bind="weapon.Name" class="w-full p-1 border border-gray-300 rounded" />
                             </td>
                             <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
-                                <input type="text" @bind="weapon.HitChance" class="w-full p-1 border border-gray-300 rounded" />
+                                <input type="text" @bind="weapon.Skill" class="w-full p-1 border border-gray-300 rounded" />
                             </td>
                             <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
                                 <input type="text" @bind="weapon.Damage" class="w-full p-1 border border-gray-300 rounded" />
@@ -43,6 +47,12 @@
                             <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
                                 <input type="text" @bind="weapon.Malfunction" class="w-full p-1 border border-gray-300 rounded" />
                             </td>
+                            <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
+                                <input type="text" @bind="weapon.Cost" class="w-full p-1 border border-gray-300 rounded" />
+                            </td>
+                            <td class="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
+                                <input type="text" @bind="weapon.Notes" class="w-full p-1 border border-gray-300 rounded" />
+                            </td>
                             <td class="px-2 py-2 whitespace-nowrap text-right text-sm font-medium">
                                 <button @onclick="() => RemoveWeapon(weapon)" class="text-red-600 hover:text-red-900 p-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -57,14 +67,30 @@
         </div>
     </div>
     
-    <div class="grid grid-cols-1 md:grid-cols-7 gap-2 mb-2">
-        <input type="text" @bind="newWeaponName" placeholder="Оружие" class="p-1 border border-gray-300 rounded" />
-        <input type="text" @bind="newWeaponHitChance" placeholder="Шанс" class="p-1 border border-gray-300 rounded" />
+    <div class="grid grid-cols-1 md:grid-cols-9 gap-2 mb-2">
+        <div class="relative">
+            <input type="text" value="@newWeaponName" @oninput="OnWeaponNameInput" placeholder="Оружие" 
+                class="w-full p-1 border border-gray-300 rounded" />
+            @if (suggestedWeapons.Count > 0)
+            {
+                <div class="absolute z-10 w-full bg-white border border-gray-300 rounded-b shadow-lg">
+                    @foreach (var weapon in suggestedWeapons)
+                    {
+                        <div class="p-2 hover:bg-gray-100 cursor-pointer" @onclick="() => SelectWeapon(weapon)">
+                            @weapon.Name
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+        <input type="text" @bind="newWeaponSkill" placeholder="Навык" class="p-1 border border-gray-300 rounded" />
         <input type="text" @bind="newWeaponDamage" placeholder="Урон" class="p-1 border border-gray-300 rounded" />
         <input type="text" @bind="newWeaponRange" placeholder="Дальность" class="p-1 border border-gray-300 rounded" />
         <input type="text" @bind="newWeaponAttacks" placeholder="Атаки" class="p-1 border border-gray-300 rounded" />
         <input type="text" @bind="newWeaponAmmo" placeholder="Патроны" class="p-1 border border-gray-300 rounded" />
         <input type="text" @bind="newWeaponMalfunction" placeholder="Неисправность" class="p-1 border border-gray-300 rounded" />
+        <input type="text" @bind="newWeaponCost" placeholder="Цена" class="p-1 border border-gray-300 rounded" />
+        <input type="text" @bind="newWeaponNotes" placeholder="Примечания" class="p-1 border border-gray-300 rounded" />
     </div>
     
     <button @onclick="AddWeapon" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
@@ -76,12 +102,49 @@
     [Parameter] public Character Character { get; set; } = null!;
     
     private string newWeaponName = "";
-    private string newWeaponHitChance = "";
+    private string newWeaponSkill = "";
     private string newWeaponDamage = "";
     private string newWeaponRange = "";
     private string newWeaponAttacks = "";
     private string newWeaponAmmo = "";
     private string newWeaponMalfunction = "";
+    private string newWeaponCost = "";
+    private string newWeaponNotes = "";
+    
+    private List<RangedCombatWeapon> suggestedWeapons = new List<RangedCombatWeapon>();
+    
+    private void OnWeaponNameInput(ChangeEventArgs e)
+    {
+        string value = e.Value?.ToString() ?? "";
+        newWeaponName = value;
+        
+        if (string.IsNullOrEmpty(value) || value.Length < 2)
+        {
+            suggestedWeapons.Clear();
+            return;
+        }
+        
+        var allWeapons = WeaponService.GetAllRangedWeapons();
+        suggestedWeapons = allWeapons
+            .Where(w => w.Name.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(5)
+            .ToList();
+    }
+    
+    private void SelectWeapon(RangedCombatWeapon weapon)
+    {
+        newWeaponName = weapon.Name;
+        newWeaponSkill = weapon.Skill;
+        newWeaponDamage = weapon.Damage;
+        newWeaponRange = weapon.Range;
+        newWeaponAttacks = weapon.Attacks;
+        newWeaponAmmo = weapon.Ammo;
+        newWeaponMalfunction = weapon.Malfunction;
+        newWeaponCost = weapon.Cost;
+        newWeaponNotes = weapon.Notes;
+        
+        suggestedWeapons.Clear();
+    }
     
     private void AddWeapon()
     {
@@ -90,21 +153,25 @@
             Character.RangedCombat.Weapons.Add(new RangedCombatWeapon 
             { 
                 Name = newWeaponName,
-                HitChance = newWeaponHitChance,
+                Skill = newWeaponSkill,
                 Damage = newWeaponDamage,
                 Range = newWeaponRange,
                 Attacks = newWeaponAttacks,
                 Ammo = newWeaponAmmo,
-                Malfunction = newWeaponMalfunction
+                Malfunction = newWeaponMalfunction,
+                Cost = newWeaponCost,
+                Notes = newWeaponNotes
             });
             
             newWeaponName = "";
-            newWeaponHitChance = "";
+            newWeaponSkill = "";
             newWeaponDamage = "";
             newWeaponRange = "";
             newWeaponAttacks = "";
             newWeaponAmmo = "";
             newWeaponMalfunction = "";
+            newWeaponCost = "";
+            newWeaponNotes = "";
         }
     }
     
