@@ -55,13 +55,6 @@ builder.Services.AddAuthentication(options =>
         options.CorrelationCookie.SameSite = SameSiteMode.None;
         options.Events = new OAuthEvents
         {
-            //OnTicketReceived = context =>
-            //{
-            //    // Redirect to our processing endpoint after successful authentication
-            //    context.Response.Redirect("/api/account/process-login");
-            //    context.HandleResponse();
-            //    return Task.CompletedTask;
-            //},
             OnRedirectToAuthorizationEndpoint = context =>
             {
                 if (context.RedirectUri.StartsWith("http:"))
@@ -71,9 +64,7 @@ builder.Services.AddAuthentication(options =>
 
                 context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
-            },
-
-
+            }
         };
     });
 

@@ -2,12 +2,14 @@
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CampaignManager.Web.Companies.Services;
 
 public class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
+    IHttpContextAccessor httpContextAccessor,
     ILogger<CampaignService> logger)
 {
     /// <summary>
@@ -108,8 +110,16 @@ public class CampaignService(
 
             if (user == null)
             {
-                logger.LogWarning("User not found.");
-                return false;
+                var externalPrincipal = httpContextAccessor.HttpContext.User;
+                string? email = externalPrincipal.FindFirst(ClaimTypes.Email)?.Value;
+                string? name = externalPrincipal.FindFirst(ClaimTypes.Name)?.Value;
+                user = new ApplicationUser
+                {
+                    Email = email,
+                    UserName = name,
+                    Role = PlayerRole.Player
+                };
+                user = await identityService.CreateUserAsync(user);
             }
 
             CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user.Email!, PlayerName = userName };
