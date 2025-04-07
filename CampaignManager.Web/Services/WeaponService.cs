@@ -79,20 +79,10 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     /// </summary>
     /// <param name="name">Название оружия (регистронезависимо).</param>
     /// <returns>Найденное оружие или null, если не найдено.</returns>
-    public async Task<CloseCombatWeapon?> GetCloseCombatWeaponByNameAsync(string name)
+    public async Task<CloseCombatWeapon?> GetCloseCombatWeaponByNameAsync(Guid id)
     {
         var weapons = await GetAllCloseCombatWeaponsAsync();
-        return weapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Находит оружие ближнего боя по названию (синхронная версия).
-    /// </summary>
-    /// <param name="name">Название оружия (регистронезависимо).</param>
-    /// <returns>Найденное оружие или null, если не найдено.</returns>
-    public CloseCombatWeapon? GetCloseCombatWeaponByName(string name)
-    {
-        return GetCloseCombatWeaponByNameAsync(name).GetAwaiter().GetResult();
+        return weapons.FirstOrDefault(w => w.Id == id);
     }
 
     /// <summary>
@@ -100,20 +90,10 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     /// </summary>
     /// <param name="name">Название оружия (регистронезависимо).</param>
     /// <returns>Найденное оружие или null, если не найдено.</returns>
-    public async Task<RangedCombatWeapon?> GetRangedWeaponByNameAsync(string name)
+    public async Task<RangedCombatWeapon?> GetRangedWeaponByNameAsync(Guid id)
     {
         var weapons = await GetAllRangedWeaponsAsync();
-        return weapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Находит оружие дальнего боя по названию (синхронная версия).
-    /// </summary>
-    /// <param name="name">Название оружия (регистронезависимо).</param>
-    /// <returns>Найденное оружие или null, если не найдено.</returns>
-    public RangedCombatWeapon? GetRangedWeaponByName(string name)
-    {
-        return GetRangedWeaponByNameAsync(name).GetAwaiter().GetResult();
+        return weapons.FirstOrDefault(w => w.Id == id);
     }
 
     /// <summary>
