@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
     public DbSet<Campaign> Campaigns { get; set; }
     public DbSet<CharacterStorageDto> CharacterStorage { get; set; }
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; }
+    public DbSet<CloseCombatWeapon> CloseCombatWeapons { get; set; }
+    public DbSet<RangedCombatWeapon> RangedCombatWeapons { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -68,6 +70,25 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Character)
                 .HasColumnType("jsonb")
                 .HasComment("JSON-представление персонажа со всеми характеристиками");
+        });
+
+        // Настройка оружия
+        modelBuilder.Entity<CloseCombatWeapon>(entity =>
+        {
+            entity.ToTable("CloseCombatWeapons");
+            entity.Property(w => w.Type)
+                .HasDefaultValue(WeaponType.CloseCombat)
+                .HasConversion<string>();
+            entity.HasIndex(w => w.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<RangedCombatWeapon>(entity =>
+        {
+            entity.ToTable("RangedCombatWeapons");
+            entity.Property(w => w.Type)
+                .HasDefaultValue(WeaponType.RangedCombat)
+                .HasConversion<string>();
+            entity.HasIndex(w => w.Name).IsUnique();
         });
     }
 }

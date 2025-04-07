@@ -1,44 +1,98 @@
 ﻿using CampaignManager.Web.Model;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CampaignManager.Web.Services;
 
 /// <summary>
 /// Сервис для хранения и предоставления информации об оружии в игре "Зов Ктулху" 7-й редакции.
 /// </summary>
-public class WeaponService
+public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMemoryCache _cache)
 {
-    private readonly List<CloseCombatWeapon> _closeCombatWeapons;
-    private readonly List<RangedCombatWeapon> _rangedWeapons;
-
-    /// <summary>
-    /// Инициализирует новый экземпляр класса WeaponService и загружает данные об оружии.
-    /// </summary>
-    public WeaponService()
-    {
-        _closeCombatWeapons = InitializeCloseCombatWeapons();
-        _rangedWeapons = InitializeRangedWeapons();
-    }
+    // Ключи для кэша
+    private const string CloseCombatWeaponsKey = "CloseCombatWeapons";
+    private const string RangedWeaponsKey = "RangedWeapons";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
     /// <summary>
     /// Возвращает список всего доступного оружия ближнего боя.
     /// </summary>
     /// <returns>Список оружия ближнего боя.</returns>
-    public List<CloseCombatWeapon> GetAllCloseCombatWeapons() => new List<CloseCombatWeapon>(_closeCombatWeapons);
+    public async Task<List<CloseCombatWeapon>> GetAllCloseCombatWeaponsAsync()
+    {
+        // Пытаемся получить из кэша
+        if (_cache.TryGetValue(CloseCombatWeaponsKey, out List<CloseCombatWeapon> cachedWeapons))
+        {
+            return cachedWeapons;
+        }
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        // Если в кэше нет, получаем из базы данных
+        var weapons = await _dbContext.CloseCombatWeapons.OrderBy(w => w.Name).ToListAsync();
+
+        // Сохраняем в кэш
+        _cache.Set(CloseCombatWeaponsKey, weapons, CacheDuration);
+
+        return weapons;
+    }
+
+    /// <summary>
+    /// Возвращает список всего доступного оружия ближнего боя (синхронная версия).
+    /// </summary>
+    /// <returns>Список оружия ближнего боя.</returns>
+    public List<CloseCombatWeapon> GetAllCloseCombatWeapons()
+    {
+        return GetAllCloseCombatWeaponsAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>
     /// Возвращает список всего доступного оружия дальнего боя.
     /// </summary>
     /// <returns>Список оружия дальнего боя.</returns>
-    public List<RangedCombatWeapon> GetAllRangedWeapons() => new List<RangedCombatWeapon>(_rangedWeapons);
+    public async Task<List<RangedCombatWeapon>> GetAllRangedWeaponsAsync()
+    {
+        // Пытаемся получить из кэша
+        if (_cache.TryGetValue(RangedWeaponsKey, out List<RangedCombatWeapon> cachedWeapons))
+        {
+            return cachedWeapons;
+        }
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        // Если в кэше нет, получаем из базы данных
+        var weapons = await _dbContext.RangedCombatWeapons.OrderBy(w => w.Name).ToListAsync();
+
+        // Сохраняем в кэш
+        _cache.Set(RangedWeaponsKey, weapons, CacheDuration);
+
+        return weapons;
+    }
+
+    /// <summary>
+    /// Возвращает список всего доступного оружия дальнего боя (синхронная версия).
+    /// </summary>
+    /// <returns>Список оружия дальнего боя.</returns>
+    public List<RangedCombatWeapon> GetAllRangedWeapons()
+    {
+        return GetAllRangedWeaponsAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>
     /// Находит оружие ближнего боя по названию.
     /// </summary>
     /// <param name="name">Название оружия (регистронезависимо).</param>
     /// <returns>Найденное оружие или null, если не найдено.</returns>
+    public async Task<CloseCombatWeapon?> GetCloseCombatWeaponByNameAsync(string name)
+    {
+        var weapons = await GetAllCloseCombatWeaponsAsync();
+        return weapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Находит оружие ближнего боя по названию (синхронная версия).
+    /// </summary>
+    /// <param name="name">Название оружия (регистронезависимо).</param>
+    /// <returns>Найденное оружие или null, если не найдено.</returns>
     public CloseCombatWeapon? GetCloseCombatWeaponByName(string name)
     {
-        return _closeCombatWeapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return GetCloseCombatWeaponByNameAsync(name).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -46,11 +100,129 @@ public class WeaponService
     /// </summary>
     /// <param name="name">Название оружия (регистронезависимо).</param>
     /// <returns>Найденное оружие или null, если не найдено.</returns>
-    public RangedCombatWeapon? GetRangedWeaponByName(string name)
+    public async Task<RangedCombatWeapon?> GetRangedWeaponByNameAsync(string name)
     {
-        return _rangedWeapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var weapons = await GetAllRangedWeaponsAsync();
+        return weapons.FirstOrDefault(w => w.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Находит оружие дальнего боя по названию (синхронная версия).
+    /// </summary>
+    /// <param name="name">Название оружия (регистронезависимо).</param>
+    /// <returns>Найденное оружие или null, если не найдено.</returns>
+    public RangedCombatWeapon? GetRangedWeaponByName(string name)
+    {
+        return GetRangedWeaponByNameAsync(name).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Добавляет новое оружие ближнего боя.
+    /// </summary>
+    /// <param name="weapon">Оружие для добавления.</param>
+    public async Task AddCloseCombatWeaponAsync(CloseCombatWeapon weapon)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        await _dbContext.CloseCombatWeapons.AddAsync(weapon);
+        await _dbContext.SaveChangesAsync();
+
+        // Инвалидируем кэш
+        _cache.Remove(CloseCombatWeaponsKey);
+    }
+
+    /// <summary>
+    /// Добавляет новое оружие дальнего боя.
+    /// </summary>
+    /// <param name="weapon">Оружие для добавления.</param>
+    public async Task AddRangedWeaponAsync(RangedCombatWeapon weapon)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        await _dbContext.RangedCombatWeapons.AddAsync(weapon);
+        await _dbContext.SaveChangesAsync();
+
+        // Инвалидируем кэш
+        _cache.Remove(RangedWeaponsKey);
+    }
+
+    /// <summary>
+    /// Обновляет существующее оружие ближнего боя.
+    /// </summary>
+    /// <param name="weapon">Обновленное оружие.</param>
+    public async Task UpdateCloseCombatWeaponAsync(CloseCombatWeapon weapon)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        _dbContext.CloseCombatWeapons.Update(weapon);
+        await _dbContext.SaveChangesAsync();
+
+        // Инвалидируем кэш
+        _cache.Remove(CloseCombatWeaponsKey);
+    }
+
+    /// <summary>
+    /// Обновляет существующее оружие дальнего боя.
+    /// </summary>
+    /// <param name="weapon">Обновленное оружие.</param>
+    public async Task UpdateRangedWeaponAsync(RangedCombatWeapon weapon)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        _dbContext.RangedCombatWeapons.Update(weapon);
+        await _dbContext.SaveChangesAsync();
+
+        // Инвалидируем кэш
+        _cache.Remove(RangedWeaponsKey);
+    }
+
+    /// <summary>
+    /// Удаляет оружие ближнего боя.
+    /// </summary>
+    /// <param name="id">Идентификатор оружия для удаления.</param>
+    public async Task DeleteCloseCombatWeaponAsync(Guid id)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        var weapon = await _dbContext.CloseCombatWeapons.FindAsync(id);
+        if (weapon != null)
+        {
+            _dbContext.CloseCombatWeapons.Remove(weapon);
+            await _dbContext.SaveChangesAsync();
+
+            // Инвалидируем кэш
+            _cache.Remove(CloseCombatWeaponsKey);
+        }
+    }
+
+    /// <summary>
+    /// Удаляет оружие дальнего боя.
+    /// </summary>
+    /// <param name="id">Идентификатор оружия для удаления.</param>
+    public async Task DeleteRangedWeaponAsync(Guid id)
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        var weapon = await _dbContext.RangedCombatWeapons.FindAsync(id);
+        if (weapon != null)
+        {
+            _dbContext.RangedCombatWeapons.Remove(weapon);
+            await _dbContext.SaveChangesAsync();
+
+            // Инвалидируем кэш
+            _cache.Remove(RangedWeaponsKey);
+        }
+    }
+
+    /// <summary>
+    /// Заполняет базу данных начальными данными об оружии, если таблицы пусты.
+    /// </summary>
+    public async Task SeedDatabaseIfEmpty()
+    {
+        using var _dbContext = await dbContextFactory.CreateDbContextAsync();
+        // Проверяем, есть ли уже данные
+        if (!await _dbContext.CloseCombatWeapons.AnyAsync() && !await _dbContext.RangedCombatWeapons.AnyAsync())
+        {
+            // Добавляем начальные данные
+            await _dbContext.CloseCombatWeapons.AddRangeAsync(InitializeCloseCombatWeapons());
+            await _dbContext.RangedCombatWeapons.AddRangeAsync(InitializeRangedWeapons());
+            await _dbContext.SaveChangesAsync();
+        }
+    }
 
     /// <summary>
     /// Инициализирует и возвращает список оружия ближнего боя.
@@ -141,10 +313,7 @@ public class WeaponService
             new RangedCombatWeapon { Name = "Противопехотная мина", Skill = "Взрывчатка", Damage = "4d10 / 5 метров", Range = "На месте", Attacks = "На месте", Ammo = "Однораз.", Malfunction = "99", Cost = "Нет", Notes = "1920-е, Современное" },
             new RangedCombatWeapon { Name = "Мина «Клеймор»*", Skill = "Взрывчатка", Damage = "6d6 / 20 метров", Range = "На месте", Attacks = "На месте", Ammo = "Однораз.", Malfunction = "99", Cost = "Нет", Notes = "Современное" },
             new RangedCombatWeapon { Name = "Огнемёт", Skill = "Стрельба (Огнемёт)", Damage = "2d6 + горение", Range = "25 метров", Attacks = "1", Ammo = "Минимум 10", Malfunction = "93", Cost = "Нет", Notes = "1920-е, Современное" },
-            new RangedCombatWeapon { Name = "РПГ*", Skill = "Стрельба (ТВ)", Damage = "8d10 / 1 метр", Range = "150 метров", Attacks = "1", Ammo = "1", Malfunction = "98", Cost = "Нет", Notes = "Современное" } // Название "РПГ" может быть условным для 1920х
-
-            // Примечание: Нелегальное оружие перечислено отдельно в источнике и может потребовать особой обработки
-            // при включении (например, другая доступность, вариативность цены).
+            new RangedCombatWeapon { Name = "РПГ*", Skill = "Стрельба (ТВ)", Damage = "8d10 / 1 метр", Range = "150 метров", Attacks = "1", Ammo = "1", Malfunction = "98", Cost = "Нет", Notes = "Современное" }
         };
     }
 }

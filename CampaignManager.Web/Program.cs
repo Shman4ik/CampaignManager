@@ -88,10 +88,11 @@ builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
-builder.Services.AddSingleton<WeaponService>();
+builder.Services.AddScoped<WeaponService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
 WebApplication app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
