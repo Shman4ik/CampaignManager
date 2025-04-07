@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Model;
+using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -12,6 +12,16 @@ public class IdentityService(
     {
         return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
     }
+
+    public async Task<bool> IsKeeper() =>
+        await GetCurrentUserRole() is PlayerRole.GameMaster or PlayerRole.Administrator;
+
+    public async Task<PlayerRole> GetCurrentUserRole()
+    {
+        var user = await GetUserAsync();
+        return user?.Role ?? PlayerRole.Player;
+    }
+
     public async Task<ApplicationUser?> GetUserAsync()
     {
         var userEmail = GetCurrentUserEmail();

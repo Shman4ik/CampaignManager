@@ -1,0 +1,144 @@
+@using System.Security.Claims
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Utilities.Services
+@using CampaignManager.Web.Companies.Services
+
+@inject CampaignService CampaignService
+@inject IdentityService UserInformationService
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<div class="mb-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <h3 class="text-2xl font-bold mb-4">Персонажи в ваших кампаниях</h3>
+    @if (!IsUserAuthenticated)
+    {
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+            <p class="text-blue-700">Войдите в систему, чтобы увидеть персонажей в ваших кампаниях.</p>
+        </div>
+    }
+    else if (!IsUserKeeper)
+    {
+        <!-- This component is only visible for Keepers, but we'll hide it with CSS in Home.razor -->
+    }
+    else if (KeeperCampaigns == null)
+    {
+        <p>Загрузка кампаний...</p>
+    }
+    else if (KeeperCampaigns.Count == 0)
+    {
+        <p>У вас пока нет кампаний, где вы являетесь Хранителем.</p>
+    }
+    else
+    {
+        @foreach (var campaign in KeeperCampaigns)
+        {
+            <div class="bg-white shadow-md rounded-lg p-4 mb-6">
+                <h4 class="text-xl font-semibold mb-2">@campaign.Name</h4>
+                <p class="text-gray-600 mb-4">
+                    <span class="font-medium">Игроки:</span> @(campaign.Players?.Count ?? 0)
+                </p>
+
+                @if (campaign.Players == null || campaign.Players.Count == 0)
+                {
+                    <p>В этой кампании пока нет игроков.</p>
+                }
+                else
+                {
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="py-2 px-4 border-b text-left">Игрок</th>
+                                    <th class="py-2 px-4 border-b text-left">Персонаж</th>
+                                    <th class="py-2 px-4 border-b text-left">Профессия</th>
+                                    <th class="py-2 px-4 border-b text-left">Статус</th>
+                                    <th class="py-2 px-4 border-b text-left">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var player in campaign.Players)
+                                {
+                                    @if (player.Characters != null && player.Characters.Any())
+                                    {
+                                        @foreach (var character in player.Characters)
+                                        {
+                                            <tr class="hover:bg-gray-50">
+                                                <td class="py-2 px-4 border-b">@player.PlayerName</td>
+                                                <td class="py-2 px-4 border-b">@character.CharacterName</td>
+                                                <td class="py-2 px-4 border-b">@character.Character.PersonalInfo.Occupation</td>
+                                                <td class="py-2 px-4 border-b">
+                                                    <span class="@GetStatusBadgeClass(character.Status)">
+                                                        @GetStatusDisplayName(character.Status)
+                                                    </span>
+                                                </td>
+                                                <td class="py-2 px-4 border-b">
+                                                    <button @onclick="() => ViewCharacter(character.Id)"
+                                                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded text-sm transition-colors">
+                                                        Просмотр
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="py-2 px-4 border-b">@player.PlayerName</td>
+                                            <td class="py-2 px-4 border-b" colspan="4">У игрока нет персонажей</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+
+    private List<Campaign>? KeeperCampaigns;
+    private bool IsUserAuthenticated => CurrentUserId is not null;
+
+    private bool IsUserKeeper;
+    private string? CurrentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CurrentUserId = UserInformationService.GetCurrentUserEmail();
+        if (IsUserAuthenticated)
+        {
+            var allCampaigns = await CampaignService.GetUserCampaignsAsync();
+            KeeperCampaigns = allCampaigns
+                .Where(c => c.KeeperEmail == CurrentUserId)
+                .ToList();
+        }
+        IsUserKeeper = await UserInformationService.IsKeeper();
+    }
+
+    private string GetStatusBadgeClass(CharacterStatus status) => status switch
+    {
+        CharacterStatus.Active => "inline-block px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800",
+        CharacterStatus.Inactive => "inline-block px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800",
+        CharacterStatus.Retired => "inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800",
+        CharacterStatus.Archived => "inline-block px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800",
+        _ => "inline-block px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800"
+    };
+
+    private string GetStatusDisplayName(CharacterStatus status) => status switch
+    {
+        CharacterStatus.Active => "Активен",
+        CharacterStatus.Inactive => "Неактивен",
+        CharacterStatus.Retired => "Выведен из игры",
+        CharacterStatus.Archived => "Архивирован",
+        _ => status.ToString()
+    };
+
+    private void ViewCharacter(Guid characterId)
+    {
+        NavigationManager.NavigateTo($"/character/{characterId}");
+    }
+}
