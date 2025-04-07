@@ -418,6 +418,21 @@ public class BiographyInfo
     ///     Встречи со сверхъестественным
     /// </summary>
     public string SupernaturalEncounters { get; set; } = "";
+
+    /// <summary>
+    ///     Текущие травмы персонажа
+    /// </summary>
+    public string Injuries { get; set; } = "";
+    
+    /// <summary>
+    ///    Страхи и фобии персонажа
+    /// </summary>
+    public string Phobias { get; set; } = "";
+    
+    /// <summary>
+    ///    Магические книги, Заклинания и артефакты
+    /// </summary>
+    public string MagicalItems { get; set; } = "";
 }
 
 public class Equipment
