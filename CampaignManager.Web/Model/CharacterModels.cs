@@ -58,6 +58,11 @@ public class Character
     ///     Детали боя дальнего действия
     /// </summary>
     public RangedCombatDetails RangedCombat { get; set; } = new();
+
+    /// <summary>
+    ///  Заметки
+    /// </summary>
+    public string Notes { get; set; } = "";
 }
 
 public class PersonalInfo
