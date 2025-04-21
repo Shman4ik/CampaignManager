@@ -1,6 +1,7 @@
-﻿@using System.Security.Claims
+@using System.Security.Claims
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
+@using Blazorise
 
 @inject CampaignService CampaignService
 @inject IdentityService UserInformationService
@@ -8,81 +9,69 @@
 
 @rendermode InteractiveServer
 
-<div class="mb-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <h3 class="text-2xl font-bold mb-4">Ваши кампании</h3>
-    @if (!IsUserAuthenticated)
-    {
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-            <p class="text-blue-700">Войдите в систему, чтобы увидеть свои кампании и присоединиться к новым.</p>
-        </div>
-    }
-    else if (UserCampaigns == null)
-    {
-        <p>Загрузка кампаний...</p>
-    }
-    else if (UserCampaigns.Count == 0)
-    {
-        <p>У вас пока нет доступных кампаний.</p>
-    }
-    else
-    {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            @foreach (var campaign in UserCampaigns)
+<Container Class="mb-8">
+    <Row>
+            <h3 class="mb-4">Ваши кампании</h3>
+            @if (!IsUserAuthenticated)
             {
-                <div class="bg-white shadow-md rounded-lg p-4 max-w-md">
-                    <h4 class="text-xl font-semibold mb-2">@campaign.Name</h4>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Хранитель:</span> @campaign.KeeperEmail
-                        @if (CurrentUserId == campaign.KeeperEmail)
-                        {
-                            <span class="ml-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">Вы</span>
-                        }
-                    </div>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Игроки:</span> @campaign.Players?.Count
-                    </div>
-                    @{
-                        var userCharacter = GetUserCharacter(campaign);
-                    }
-                    @if (userCharacter != null)
-                    {
-                        <div class="space-y-4">
-                            <div class="bg-gray-50 overflow-hidden shadow rounded-lg">
-                                <div class="px-4 py-4">
-                                    <h4 class="text-lg font-medium text-gray-900 truncate">
-                                        @userCharacter!.CharacterName
-                                    </h4>
-                                    <dl class="mt-2 space-y-1">
-                                        <div class="flex flex-wrap text-sm font-normal text-gray-500">
-                                            <dt class="mr-1">Профессия:</dt>
-                                            <dd>@userCharacter!.Character.PersonalInfo.Occupation</dd>
-                                        </div>
-                                    </dl>
-                                    <div class="mt-3">
-                                        <button @onclick="() => EditCharacter(userCharacter.Id)"
-                                                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-colors">
-                                            Редактировать
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <p>У вас пока нет персонажей в этой кампании.</p>
-                        <div class="mt-4">
-                            <button @onclick="() => CreateNewCharacter(campaign.Id)"
-                                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-colors">
-                                Создать нового персонажа
-                            </button>
-                        </div>
-                    }
-                </div>
+                <Alert Color="Color.Info" Class="mb-4">
+                    Войдите в систему, чтобы увидеть свои кампании и присоединиться к новым.
+                </Alert>
             }
-        </div>
-    }
-</div>
+            else if (UserCampaigns == null)
+            {
+                <p>Загрузка кампаний...</p>
+            }
+            else if (UserCampaigns.Count == 0)
+            {
+                <Alert Color="Color.Warning">У вас пока нет доступных кампаний.</Alert>
+            }
+            else
+            {
+                <Row Class="g-4">
+                    @foreach (var campaign in UserCampaigns)
+                    {
+                        <Col md="6" lg="4">
+                            <Card Class="mb-4 shadow-sm">
+                                <CardHeader>
+                                    <strong>@campaign.Name</strong>
+                                </CardHeader>
+                                <CardBody>
+                                    <div class="mb-2 text-muted">
+                                        <span class="fw-bold">Хранитель:</span> @campaign.KeeperEmail
+                                        @if (CurrentUserId == campaign.KeeperEmail)
+                                        {
+                                            <Badge Color="Color.Primary" Class="ms-2">Вы</Badge>
+                                        }
+                                    </div>
+                                    <div class="mb-2 text-muted">
+                                        <span class="fw-bold">Игроки:</span> @campaign.Players?.Count
+                                    </div>
+                                    @{
+                                        var userCharacter = GetUserCharacter(campaign);
+                                    }
+                                    @if (userCharacter != null)
+                                    {
+                                        <Card Class="mb-2 bg-light">
+                                            <CardBody>
+                                                <div class="fw-bold">@userCharacter!.CharacterName</div>
+                                                <div class="small text-muted mb-2">Профессия: @userCharacter!.Character.PersonalInfo.Occupation</div>
+                                                <Button Color="Color.Primary" Class="w-100" Clicked="@(() => EditCharacter(userCharacter.Id))">Редактировать</Button>
+                                            </CardBody>
+                                        </Card>
+                                    }
+                                    else
+                                    {
+                                        <div class="mb-2">У вас пока нет персонажей в этой кампании.</div>
+                                        <Button Color="Color.Primary" Outline Class="w-100" Clicked="@(() => CreateNewCharacter(campaign.Id))">Создать нового персонажа</Button>
+                                    }
+                                </CardBody>
+                            </Card>
+                    }
+                </Row>
+            }
+    </Row>
+</Container>
 
 @code {
     private List<Campaign>? UserCampaigns;
