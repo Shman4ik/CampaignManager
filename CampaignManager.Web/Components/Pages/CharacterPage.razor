@@ -6,7 +6,6 @@
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Services
 @using CampaignManager.Web.Utilities.Services
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using CampaignManager.Web.Components.CharacterComponents
@@ -24,34 +23,82 @@
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
-        <div class="sticky top-0 z-10 w-full bg-gray-200 py-2 px-4 border-b-2 border-gray-800 shadow-md mb-4">
-            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                <h2 class="text-xl font-semibold mb-2 sm:mb-0">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h2>
-                <div class="flex space-x-2 w-full sm:w-auto">
-                    <button @onclick="SaveCharacterAsync"                       
-                        class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded w-full sm:w-auto">
-                        Сохранить
-                    </button>
-                    @if (CharacterId == null || CharacterId == Guid.Empty)
-                    {
-                        <button @onclick="GenerateRandom"             
-                            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded w-full sm:w-auto">
-                            Сгенерировать случайно
+        <!-- Фиксированный хедер -->
+        <div class="sticky top-0 z-10 w-full bg-gray-200 py-2 px-2 sm:px-4 border-b-2 border-gray-800 shadow-md mb-4">
+            <div class="max-w-7xl mx-auto flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center">
+                <!-- Первая строка (имя и кнопки действий) -->
+                <div class="flex justify-between items-center w-full">
+                    <h2 class="text-lg sm:text-xl font-semibold truncate max-w-[65%] sm:max-w-[40%]">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h2>
+
+                    <div class="flex gap-1 sm:gap-2">
+                        <button @onclick="SaveCharacterAsync" class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 sm:py-2 px-2 sm:px-3 rounded flex items-center">
+                            <span class="ml-1 sm:inline">Сохранить</span>
                         </button>
-                    }
+                        @if (CharacterId == null || CharacterId == Guid.Empty)
+                        {
+                            <button @onclick="GenerateRandom" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 sm:py-2 px-2 sm:px-3 rounded flex items-center">
+                                <span class="ml-1 sm:inline">Случайный</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Навигационные кнопки - для мобильных только иконки в одну строку -->
+                <div class="flex justify-between sm:hidden w-full">
+                    <button type="button" @onclick='(() => ScrollToSection("personal"))'
+                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
+                        <span>Перс.</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("skills")'
+                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
+                        <span>Навыки</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("combat")'
+                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
+                        <span>Бой</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("equipment")'
+                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
+                        <span>Сняряж.</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("biography")'
+                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
+                        <span>Био.</span>
+                    </button>
+                </div>
+
+                <!-- Навигационные кнопки - для планшетов и десктопов в строку с текстом -->
+                <div class="hidden sm:flex justify-center space-x-1 w-full sm:w-auto sm:ml-4">
+                    <button type="button" @onclick='(() => ScrollToSection("personal"))'
+                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
+                        <span>Персонаж</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("skills")'
+                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
+                        <span>Навыки</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("combat")'
+                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
+                        <span>Бой</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("equipment")'
+                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
+                        <span>Снаряжение</span>
+                    </button>
+                    <button type="button" @onclick='() => ScrollToSection("biography")'
+                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
+                        <span>Биография</span>
+                    </button>
                 </div>
             </div>
         </div>
 
-        <div class="max-w-7xl mx-auto p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
+        <!-- Основное содержимое -->
+        <div class="max-w-7xl mx-auto p-4 sm:p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
             @if (!string.IsNullOrEmpty(_notification.Message))
             {
                 <NotificationAlert Type="@_notification.Type" Message="@_notification.Message" OnClose="ClearNotification" />
             }
-
-            <div class="flex justify-between items-center mb-6">
-                <h1 class="text-3xl font-bold">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h1>
-            </div>
 
             @if (_isLoading)
             {
@@ -61,50 +108,86 @@
             {
                 <EditForm Model="Character" FormName="CharacterForm">
                     <DataAnnotationsValidator />
-
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <PersonalInfoComponent Character="@Character" />
-                        <CharacteristicsComponent Character="@Character" />
-                        <CharacterStateComponent Character="@Character" />
+                    <!-- Секция Персонаж -->
+                    <div id="personal" class="mb-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <PersonalInfoComponent Character="@Character" />
+                            <CharacteristicsComponent Character="@Character" OnUpdate="RecalculateAttributes" />
+                            <CharacterStateComponent Character="@Character" />
+                        </div>
                     </div>
 
-                    <div class="mt-4">
-                        <SkillComponent Model="@Character.Skills" />
-                    </div>
-                    <div class="mt-4">
-                        <CloseCombatComponent Character="@Character" />
-                    </div>
-                    <div class="mt-4">
-                        <RangedCombatComponent Character="@Character" />
+                    <!-- Секция Навыки -->
+                    <div id="skills" class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3">Навыки</h3>
+
+                        <!-- Трехколоночный макет (для lg экранов) -->
+                        <div class="hidden lg:grid lg:grid-cols-3 gap-4">
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(2).ToList()" />
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(2).Take(3).ToList()" />
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(5).ToList()" />
+                        </div>
+
+                        <!-- Двухколоночный макет (для экранов от 600px до lg) -->
+                        <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(4).ToList()" />
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(4).ToList()" />
+                        </div>
+
+                        <!-- Одноколоночный макет (для экранов меньше sm) -->
+                        <div class="grid grid-cols-1 sm:hidden gap-4">
+                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.ToList()" />
+                        </div>
                     </div>
 
-                    <div class="mt-4">
-                        <EquipmentComponent Character="@Character" />
+                    <!-- Секция Бой (группируем компоненты боя) -->
+                    <div id="combat" class="mb-6">
+                        <h3 class="text-xl font-bold mb-3 px-1">Боевые характеристики</h3>
+                        <div class="grid grid-cols-1 gap-4">
+                            <CloseCombatComponent Character="@Character" />
+                            <RangedCombatComponent Character="@Character" />
+                        </div>
                     </div>
 
-                    <div class="mt-4">
-                        <FinancesComponent Character="@Character" />
+                    <!-- Секция Снаряжение -->
+                    <div id="equipment" class="mb-6">
+                        <h3 class="text-xl font-bold mb-3 px-1">Снаряжение и финансы</h3>
+                        <div class="grid grid-cols-1 gap-4">
+                            <EquipmentComponent Character="@Character" />
+                            <FinancesComponent Character="@Character" />
+                        </div>
                     </div>
 
-                    <div class="mt-4">
+                    <!-- Секция Биография -->
+                    <div id="biography" class="mb-6">
                         <BiographyComponent Character="@Character" />
-                    </div> 
-                    
-                    <div class="bg-white shadow rounded-lg p-4 mb-4">
-                        <h4 class="text-lg font-semibold mb-3">Заметки</h4>
-                        <InputTextArea @bind-Value="Character.Notes" rows="4" class="w-full p-2 border rounded" />
+
+                        <div class="grid grid-cols-1 gap-4 mt-4">
+                            <div class="bg-white shadow rounded-lg p-4">
+                                <h4 class="text-lg font-semibold mb-3">Заметки</h4>
+                                <InputTextArea @bind-Value="Character.Notes" rows="4" class="w-full p-2 border rounded" />
+                            </div>
+
+                            <div class="bg-white shadow rounded-lg p-4">
+                                <h4 class="text-lg font-semibold mb-3">Предыстория</h4>
+                                <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div class="bg-white shadow rounded-lg p-4 mb-4">
-                        <h4 class="text-lg font-semibold mb-3">Предыстория</h4>
-                        <InputTextArea @bind-Value="Character.Backstory" rows="4" class="w-full p-2 border rounded" />
-                    </div>                   
                 </EditForm>
             }
             else
             {
                 <p class="text-red-500">Не удалось загрузить или инициализировать данные персонажа.</p>
             }
+        </div>
+
+        <!-- Плавающая кнопка сохранения на мобильных устройствах -->
+        <div class="md:hidden fixed bottom-4 right-4">
+            <button @onclick="SaveCharacterAsync"
+                    class="rounded-full w-12 h-12 bg-green-500 text-white shadow-lg flex items-center justify-center">
+                <i class="fas fa-save"></i>
+            </button>
         </div>
     </ChildContent>
     <ErrorContent>
@@ -130,8 +213,6 @@
     private Task<AuthenticationState>? AuthState { get; set; }
 
     private ClaimsPrincipal? User => AuthState?.Result?.User;
-
-
 
     protected override async Task OnInitializedAsync()
     {
@@ -276,5 +357,16 @@
 
         // Сохраняем имя игрока даже в случайно сгенерированном персонаже
         Character.PersonalInfo.PlayerName = CampaignPlayer?.PlayerName;
+    }
+
+    private async Task ScrollToSection(string sectionId)
+    {
+        await JSRuntime.InvokeVoidAsync("scrollToElement", sectionId);
+    }
+
+    private async Task RecalculateAttributes()
+    {
+        // Здесь можно добавить логику для пересчета атрибутов при изменении характеристик
+        StateHasChanged();
     }
 }
