@@ -63,4 +63,10 @@ public class Character
     ///     Заметки
     /// </summary>
     public string Notes { get; set; } = "";
+    
+    /// <summary>
+    ///     Тип персонажа (игровой персонаж или NPC)
+    /// </summary>
+    public CharacterType CharacterType { get; set; } = CharacterType.PlayerCharacter;  
+    
 }

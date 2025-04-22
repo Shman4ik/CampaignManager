@@ -1,4 +1,5 @@
 @page "/character/create/{CampaignId:guid}"
+@page "/character/create/{CampaignId:guid}/{npc}"
 @page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Model
@@ -6,14 +7,13 @@
 
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
-@inject IdentityService UserInformationService
 @inject CharacterGenerationService CharacterGenerationService
 @inject CampaignService CampaignService
 @inject IJSRuntime JSRuntime
 
 @rendermode InteractiveServer
 
-<PageTitle>@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</PageTitle>
+<PageTitle>@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
@@ -22,7 +22,13 @@
             <div class="max-w-7xl mx-auto flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center">
                 <!-- Первая строка (имя и кнопки действий) -->
                 <div class="flex justify-between items-center w-full">
-                    <h2 class="text-lg sm:text-xl font-semibold truncate max-w-[65%] sm:max-w-[40%]">@(Character?.PersonalInfo?.Name ?? "Новый персонаж")</h2>
+                    <div class="flex items-center">
+                        <h2 class="text-lg sm:text-xl font-semibold truncate max-w-[65%] sm:max-w-[40%]">@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</h2>
+                        @if (IsNpc)
+                        {
+                            <span class="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">NPC</span>
+                        }
+                    </div>
 
                     <div class="flex gap-1 sm:gap-2">
                         <button @onclick="SaveCharacterAsync"
@@ -206,6 +212,10 @@
     [Parameter] public Guid? CharacterId { get; set; }
     [Parameter] public Guid? CampaignId { get; set; }
 
+    // Determine if we're in NPC creation mode based on the URL segment after CampaignId
+    [Parameter] public string? npc { get; set; }
+    private bool IsNpc => npc == "npc" || (Character?.CharacterType == CharacterType.NonPlayerCharacter);
+
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
     private ErrorBoundary? _errorBoundary;
@@ -271,7 +281,10 @@
     {
         return new Character
         {
-            PersonalInfo = new PersonalInfo { PlayerName = CampaignPlayer?.PlayerName ?? "Unknown" },
+            PersonalInfo = new PersonalInfo 
+            { 
+                PlayerName = IsNpc ? "NPC" : (CampaignPlayer?.PlayerName ?? "Unknown") 
+            },
             Characteristics = new Characteristics(),
             Skills = SkillsModel.DefaultSkillsModel(),
             Backstory = string.Empty,
@@ -280,7 +293,8 @@
             Finances = new Finances(),
             CloseCombat = new CloseCombatDetails(),
             RangedCombat = new RangedCombatDetails(),
-            Notes = string.Empty
+            Notes = string.Empty,
+            CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter
         };
     }
 
@@ -297,35 +311,39 @@
             if (string.IsNullOrWhiteSpace(Character.PersonalInfo?.Name))
             {
                 Character.PersonalInfo ??= new PersonalInfo();
-                Character.PersonalInfo.Name = "Безымянный";
-                ShowNotification("Имя персонажа не было указано, установлено 'Безымянный'.", "warning");
+                Character.PersonalInfo.Name = IsNpc ? "Безымянный NPC" : "Безымянный";
+                ShowNotification($"Имя {(IsNpc ? "NPC" : "персонажа")} не было указано, установлено '{Character.PersonalInfo.Name}'.", "warning");
             }
-
-            if (Character.PersonalInfo != null && string.IsNullOrEmpty(Character.PersonalInfo.PlayerName))
+    
+            // Ensure character type is set correctly
+            Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
+    
+            // Set the player name - for NPCs it should be "NPC"
+            if (Character.PersonalInfo != null)
             {
-                Character.PersonalInfo.PlayerName = CampaignPlayer?.PlayerName ?? "Unknown";
+                Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : (CampaignPlayer?.PlayerName ?? "Unknown");
             }
-
+    
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
             {
                 await CharacterService.UpdateCharacterAsync(Character);
-                ShowNotification("Персонаж успешно обновлен!", "success");
+                ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно обновлен!", "success");
             }
             else
             {
                 Character.Id = Guid.Empty;
                 var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer.Id);
-
+    
                 if (createdCharacter?.Id != null && createdCharacter.Id != Guid.Empty)
                 {
                     Character.Id = createdCharacter.Id;
                     CharacterId = createdCharacter.Id;
-                    ShowNotification("Персонаж успешно создан!", "success");
+                    ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно создан!", "success");
                     NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
                 }
                 else
                 {
-                    ShowNotification("Ошибка: Не удалось получить ID созданного персонажа.", "error");
+                    ShowNotification($"Ошибка: Не удалось получить ID созданного {(IsNpc ? "NPC" : "персонажа")}.", "error");
                 }
             }
         }
@@ -359,7 +377,10 @@
         Character = CharacterGenerationService.GenerateRandomCharacter();
 
         // Сохраняем имя игрока даже в случайно сгенерированном персонаже
-        Character.PersonalInfo.PlayerName = CampaignPlayer?.PlayerName;
+        Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName;
+        
+        // Set the character type based on whether we're creating an NPC
+        Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
     }
 
     private async Task ScrollToSection(string sectionId)
