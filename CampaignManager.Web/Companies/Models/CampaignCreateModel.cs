@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+
 namespace CampaignManager.Web.Companies.Models;
 
 public class CampaignCreateModel

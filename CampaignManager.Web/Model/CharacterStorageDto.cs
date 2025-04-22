@@ -18,7 +18,7 @@ public class CharacterStorageDto : BaseDataBaseEntity
 
     public required Guid CampaignPlayerId { get; set; }
     public CampaignPlayer CampaignPlayer { get; set; }
-    
+
     /// <summary>
     ///     Статус персонажа в кампании. Только один персонаж может быть активным для игрока в кампании.
     /// </summary>

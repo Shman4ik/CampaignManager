@@ -2,6 +2,8 @@
 using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 
+namespace CampaignManager.Web.Services;
+
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
@@ -26,7 +28,7 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Status)
                 .HasDefaultValue(CampaignStatus.Planning)
                 .HasConversion<string>();
-                
+
             // Индекс для быстрого поиска кампаний по ведущему
             entity.HasIndex(c => c.KeeperEmail);
         });

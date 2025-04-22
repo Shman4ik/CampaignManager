@@ -13,25 +13,29 @@ public class IdentityService(
         return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
     }
 
-    public async Task<bool> IsKeeper() =>
-        await GetCurrentUserRole() is PlayerRole.GameMaster or PlayerRole.Administrator;
+    public async Task<bool> IsKeeper()
+    {
+        return await GetCurrentUserRole() is PlayerRole.GameMaster or PlayerRole.Administrator;
+    }
 
     public async Task<PlayerRole> GetCurrentUserRole()
     {
-        var user = await GetUserAsync();
+        ApplicationUser? user = await GetUserAsync();
         return user?.Role ?? PlayerRole.Player;
     }
 
     public async Task<ApplicationUser?> GetUserAsync()
     {
-        var userEmail = GetCurrentUserEmail();
+        string? userEmail = GetCurrentUserEmail();
         return await GetUserAsync(userEmail);
     }
 
     public async Task<ApplicationUser?> GetUserAsync(string? email)
     {
         if (email == null)
+        {
             return null;
+        }
 
         await using AppIdentityDbContext dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
         return await dbContext.Users.SingleOrDefaultAsync(p => p.Email.ToLower() == email.ToLower());

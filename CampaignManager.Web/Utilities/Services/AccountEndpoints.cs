@@ -20,11 +20,7 @@ public static class AccountEndpoints
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
         // Устанавливаем путь перенаправления после аутентификации
-        AuthenticationProperties properties = new()
-        {
-            RedirectUri = returnUrl ?? "/",
-            IsPersistent = true
-        };
+        AuthenticationProperties properties = new() { RedirectUri = returnUrl ?? "/", IsPersistent = true };
 
         // Вызываем аутентификацию Google
         return Results.Challenge(properties, new[] { GoogleDefaults.AuthenticationScheme });
@@ -32,10 +28,7 @@ public static class AccountEndpoints
 
     private static async Task<IResult> HandleLogout(string? returnUrl, HttpContext httpContext)
     {
-        AuthenticationProperties properties = new()
-        {
-            RedirectUri = returnUrl ?? "/"
-        };
+        AuthenticationProperties properties = new() { RedirectUri = returnUrl ?? "/" };
 
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
         return Results.Redirect(returnUrl ?? "/");

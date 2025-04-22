@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Companies.Models;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
@@ -13,14 +14,16 @@ public class CampaignService(
     ILogger<CampaignService> logger)
 {
     /// <summary>
-    /// Retrieves a list of campaigns associated with the current user, including related players and characters.
+    ///     Retrieves a list of campaigns associated with the current user, including related players and characters.
     /// </summary>
     /// <returns>Returns a list of Campaign objects or an empty list if no campaigns are found.</returns>
     public async Task<List<Campaign>> GetUserCampaignsAsync()
     {
         ApplicationUser? user = await identityService.GetUserAsync();
         if (user == null)
+        {
             return [];
+        }
 
 
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -33,7 +36,7 @@ public class CampaignService(
     }
 
     /// <summary>
-    /// Retrieves a campaign player associated with the current user if they are authenticated.
+    ///     Retrieves a campaign player associated with the current user if they are authenticated.
     /// </summary>
     /// <param name="campaignId">Identifies the specific campaign for which the player information is being retrieved.</param>
     /// <returns>Returns the campaign player details or null if the user is not authenticated.</returns>
@@ -41,7 +44,9 @@ public class CampaignService(
     {
         ApplicationUser? user = await identityService.GetUserAsync();
         if (user == null)
+        {
             return null;
+        }
 
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.CampaignPlayers
@@ -80,7 +85,7 @@ public class CampaignService(
     }
 
     /// <summary>
-    /// Method to get available companies (campaigns)
+    ///     Method to get available companies (campaigns)
     /// </summary>
     public async Task<List<Campaign>> GetAvailableCompaniesAsync()
     {
@@ -89,8 +94,8 @@ public class CampaignService(
     }
 
     /// <summary>
-    /// Method for a user to apply to a campaign
-    /// </summary>   
+    ///     Method for a user to apply to a campaign
+    /// </summary>
     public async Task<bool> JoinCampaignAsync(Guid campaignId, string userName)
     {
         try
@@ -110,15 +115,10 @@ public class CampaignService(
 
             if (user == null)
             {
-                var externalPrincipal = httpContextAccessor.HttpContext.User;
+                ClaimsPrincipal externalPrincipal = httpContextAccessor.HttpContext.User;
                 string? email = externalPrincipal.FindFirst(ClaimTypes.Email)?.Value;
                 string? name = externalPrincipal.FindFirst(ClaimTypes.Name)?.Value;
-                user = new ApplicationUser
-                {
-                    Email = email,
-                    UserName = name,
-                    Role = PlayerRole.Player
-                };
+                user = new ApplicationUser { Email = email, UserName = name, Role = PlayerRole.Player };
                 user = await identityService.CreateUserAsync(user);
             }
 

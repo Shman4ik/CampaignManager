@@ -33,16 +33,16 @@ public class CharacterService(
                 CreatedAt = DateTime.UtcNow,
                 LastUpdated = DateTime.UtcNow,
                 Character = character,
-                CampaignPlayerId = campaignPlayerId,
+                CampaignPlayerId = campaignPlayerId
             };
 
             // Находим и деактивируем все активные персонажи этого игрока в этой кампании
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            var existingActiveCharacters = await dbContext.CharacterStorage
+            List<CharacterStorageDto> existingActiveCharacters = await dbContext.CharacterStorage
                 .Where(c => c.CampaignPlayerId == campaignPlayerId && c.Status == CharacterStatus.Active)
                 .ToListAsync();
 
-            foreach (var existingChar in existingActiveCharacters)
+            foreach (CharacterStorageDto existingChar in existingActiveCharacters)
             {
                 existingChar.Status = CharacterStatus.Inactive;
                 existingChar.LastUpdated = DateTime.UtcNow;
@@ -129,12 +129,12 @@ public class CharacterService(
             }
 
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Получаем персонажа
-            var character = await dbContext.CharacterStorage
+            CharacterStorageDto? character = await dbContext.CharacterStorage
                 .Include(c => c.CampaignPlayer)
                 .FirstOrDefaultAsync(c => c.Id == characterId);
-                
+
             if (character == null)
             {
                 throw new KeyNotFoundException($"Character with ID {characterId} not found");
@@ -143,13 +143,13 @@ public class CharacterService(
             // Если устанавливаем статус Active, деактивируем остальных персонажей этого игрока в этой кампании
             if (newStatus == CharacterStatus.Active)
             {
-                var otherActiveCharacters = await dbContext.CharacterStorage
-                    .Where(c => c.CampaignPlayerId == character.CampaignPlayerId 
-                             && c.Status == CharacterStatus.Active
-                             && c.Id != characterId)
+                List<CharacterStorageDto> otherActiveCharacters = await dbContext.CharacterStorage
+                    .Where(c => c.CampaignPlayerId == character.CampaignPlayerId
+                                && c.Status == CharacterStatus.Active
+                                && c.Id != characterId)
                     .ToListAsync();
 
-                foreach (var otherChar in otherActiveCharacters)
+                foreach (CharacterStorageDto otherChar in otherActiveCharacters)
                 {
                     otherChar.Status = CharacterStatus.Inactive;
                     otherChar.LastUpdated = DateTime.UtcNow;
@@ -161,7 +161,7 @@ public class CharacterService(
             character.Status = newStatus;
             character.LastUpdated = DateTime.UtcNow;
             dbContext.Update(character);
-            
+
             await dbContext.SaveChangesAsync();
             logger.LogInformation($"Character {characterId} status changed to {newStatus} by user {userEmail}");
         }
