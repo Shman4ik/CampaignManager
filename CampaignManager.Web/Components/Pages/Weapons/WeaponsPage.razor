@@ -19,10 +19,17 @@
 <div class="max-w-7xl mx-auto px-4 py-6 font-sans"> 
     <h1 class="text-3xl font-bold text-gray-800 mb-6">Управление оружием</h1>
     
-    <!-- Улучшенная панель фильтров -->
-    <div class="bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-200">
+    <!-- Улучшенная панель фильтров - теперь фиксированная при скролле -->
+    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-200">
         <div class="mb-4">
-            <h2 class="text-lg font-semibold text-gray-700 mb-2">Фильтры</h2>
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-lg font-semibold text-gray-700">Фильтры</h2>
+                <button @onclick="ResetFilters" 
+                        class="text-blue-600 hover:text-blue-800 py-1 px-2 rounded-md border border-blue-300 hover:border-blue-500 text-sm flex items-center">
+                    <i class="fas fa-undo-alt mr-1"></i>
+                    <span>Сбросить фильтры</span>
+                </button>
+            </div>
             <div class="flex flex-col sm:flex-row gap-4">
                 <div class="flex-grow">
                     <label for="searchQuery" class="block text-sm font-medium text-gray-700 mb-1">Поиск</label>
@@ -53,7 +60,7 @@
             </div>
         </div>
         
-        <div class="flex flex-wrap gap-4 mb-3">
+        <div class="flex flex-wrap justify-between items-center gap-4 mb-3">
             <!-- Эпоха фильтры -->
             <div class="flex items-center space-x-6">
                 <div class="flex items-center">
@@ -72,91 +79,24 @@
                 </div>
             </div>
             
-            <!-- Дополнительные фильтры с переключателем видимости -->
-            <div class="flex items-center">
-                <button type="button" 
-                        @onclick="ToggleAdvancedFilters" 
-                        class="flex items-center text-sm text-blue-600 hover:text-blue-800">
-                    <span>@(showAdvancedFilters ? "Скрыть дополнительные фильтры" : "Показать дополнительные фильтры")</span>
-                    <i class="fas @(showAdvancedFilters ? "fa-chevron-up" : "fa-chevron-down") ml-1"></i>
-                </button>
-            </div>
-        </div>
-        
-        @if (showAdvancedFilters)
-        {
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-gray-200">
-                <div>
-                    <label for="damageFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по урону</label>
-                    <input type="text" id="damageFilter" 
-                           class="w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
-                           placeholder="Например: 1D10, 2D6+4" 
-                           @bind="damageFilter" 
-                           @bind:event="oninput" />
-                </div>
-                <div>
-                    <label for="skillFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по навыку</label>
-                    <input type="text" id="skillFilter" 
-                           class="w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
-                           placeholder="Например: Стрельба (П), Драка" 
-                           @bind="skillFilter" 
-                           @bind:event="oninput" />
-                </div>
-                <div>
-                    <label for="priceRangeFilter" class="block text-sm font-medium text-gray-700 mb-1">Ценовой диапазон</label>
-                    <select id="priceRangeFilter" 
-                            class="w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-                            @bind="priceRangeFilter">
-                        <option value="">Любая цена</option>
-                        <option value="low">Недорогое (до $20)</option>
-                        <option value="medium">Среднее ($20-$100)</option>
-                        <option value="high">Дорогое ($100+)</option>
-                    </select>
-                </div>
-            </div>
-        }
-        
-        <div class="flex flex-col sm:flex-row mt-4 justify-between items-center gap-3">
-            <div>
-                <span class="text-sm text-gray-600">Найдено оружия: <strong>@(filteredWeapons?.Count() ?? 0)</strong></span>
-            </div>
-            <button type="button" 
-                    @onclick="ResetFilters" 
-                    class="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition duration-150 ease-in-out">
-                <i class="fas fa-undo-alt mr-1"></i>
-                <span>Сбросить фильтры</span>
+            <!-- Кнопка добавления оружия перемещена в строку с эпохами -->
+            <button @onclick="ShowAddModal" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center">
+                <i class="fas fa-plus mr-2"></i>
+                <span>Добавить оружие</span>
             </button>
         </div>
     </div>
     
-    <!-- Кнопка добавления оружия -->
-    <div class="mb-6 flex justify-end">
-        <button @onclick="ShowAddModal" 
-                class="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-150 ease-in-out shadow-md">
-            <i class="fas fa-plus mr-2"></i>
-            <span>Добавить оружие</span>
-        </button>
-    </div>
-    
-    @if (isLoading)
+    @if (filteredWeapons.Count() == 0)
     {
-        <div class="flex justify-center items-center p-8">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-            <p class="ml-2 text-gray-600">Загрузка данных...</p>
-        </div>
-    }
-    else if (filteredWeapons.Count() == 0)
-    {
-        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
-            <div class="flex">
-                <div class="flex-shrink-0">
-                    <i class="fas fa-exclamation-circle text-yellow-400"></i>
-                </div>
-                <div class="ml-3">
-                    <p class="text-sm text-yellow-700">
-                        По заданным критериям поиска ничего не найдено. Попробуйте изменить параметры фильтрации.
-                    </p>
-                </div>
+        <div class="bg-white rounded-lg shadow-md p-6 text-center border border-gray-200">
+            <div class="flex flex-col items-center justify-center py-12">
+                <i class="fas fa-search text-gray-400 text-5xl mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-700 mb-2">Оружие не найдено</h3>
+                <p class="text-gray-500 mb-6">
+                    По вашему запросу не найдено ни одного оружия. Попробуйте изменить параметры поиска или добавьте новое оружие.
+                </p>
             </div>
         </div>
     }
@@ -457,21 +397,15 @@
     private List<Weapon>? weapons; // Nullable to indicate loading state
 
     // Filtered list based on search query and other filters
-    private IQueryable<Weapon> filteredWeapons => GetFilteredWeapons();
+    private IQueryable<Weapon> filteredWeapons => FilterWeapons();
 
     // Search query bound to the input field
     private string searchQuery = string.Empty;
 
     // Advanced filtering variables
     private WeaponType? selectedTypeFilter = null;
-    private bool is1920Filter = false;
+    private bool is1920Filter = true;
     private bool isModernFilter = false;
-    private string damageFilter = string.Empty;
-    private string skillFilter = string.Empty;
-    private string priceRangeFilter = string.Empty;
-    private bool showAdvancedFilters = false;
-
-    // Column header filter values
     private Dictionary<string, string> columnFilters = new Dictionary<string, string>();
 
     // Modal visibility flags
@@ -524,23 +458,13 @@
     {
         searchQuery = string.Empty;
         selectedTypeFilter = null;
-        is1920Filter = false;
+        is1920Filter = true;
         isModernFilter = false;
-        damageFilter = string.Empty;
-        skillFilter = string.Empty;
-        priceRangeFilter = string.Empty;
         columnFilters.Clear();
 
         // Apply filters to update the UI
         ApplyFilters();
     }
-
-    // Toggle visibility of advanced filters
-    private void ToggleAdvancedFilters()
-    {
-        showAdvancedFilters = !showAdvancedFilters;
-    }
-
     // Handle weapon type filter change
     private void OnWeaponTypeFilterChanged(ChangeEventArgs e)
     {
@@ -554,13 +478,6 @@
             selectedTypeFilter = typeValue;
         }
 
-        ApplyFilters();
-    }
-
-    // Handle price range filter change
-    private void OnPriceRangeFilterChanged(ChangeEventArgs e)
-    {
-        priceRangeFilter = e.Value?.ToString() ?? string.Empty;
         ApplyFilters();
     }
 
@@ -696,7 +613,7 @@
     }
 
     // Filter weapons based on all active filters
-    private IQueryable<Weapon> GetFilteredWeapons() // Return non-nullable IQueryable<Weapon>
+    private IQueryable<Weapon> FilterWeapons()
     {
         if (weapons == null)
         {
@@ -705,10 +622,10 @@
 
         var query = weapons.AsQueryable(); // Use AsQueryable for QuickGrid
 
-        // Apply text search filter
+        // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            query = query.Where(w =>
+            query = query.Where(w => 
                 (w.Name != null && w.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
                 (w.Skill != null && w.Skill.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
                 (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
@@ -735,30 +652,6 @@
         else if (is1920Filter && isModernFilter)
         {
             query = query.Where(w => w.Is1920 || w.IsModern);
-        }
-
-        // Apply damage filter
-        if (!string.IsNullOrWhiteSpace(damageFilter))
-        {
-            query = query.Where(w => w.Damage != null && w.Damage.Contains(damageFilter, StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Apply skill filter
-        if (!string.IsNullOrWhiteSpace(skillFilter))
-        {
-            query = query.Where(w => w.Skill != null && w.Skill.Contains(skillFilter, StringComparison.OrdinalIgnoreCase));
-        }
-
-        // Apply price range filter
-        if (!string.IsNullOrWhiteSpace(priceRangeFilter))
-        {
-            query = priceRangeFilter switch
-            {
-                "low" => query.Where(w => IsPriceLow(w.Cost)),
-                "medium" => query.Where(w => IsPriceMedium(w.Cost)),
-                "high" => query.Where(w => IsPriceHigh(w.Cost)),
-                _ => query
-            };
         }
 
         // Apply column header filters
