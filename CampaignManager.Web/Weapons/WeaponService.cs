@@ -1,20 +1,13 @@
-﻿using CampaignManager.Web.Services;
+using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace CampaignManager.Web.Weapons;
 
-public class WeaponService
+public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMemoryCache cache)
 {
-    private readonly AppDbContext _dbContext;
-    private readonly IMemoryCache _cache;
+    private readonly IMemoryCache _cache = cache;
     private const string WeaponsKey = "AllWeapons";
-
-    public WeaponService(AppDbContext dbContext, IMemoryCache cache)
-    {
-        _dbContext = dbContext;
-        _cache = cache;
-    }
 
     public async Task<List<Weapon>> GetAllRangeWeaponsAsync()
     {
@@ -43,8 +36,8 @@ public class WeaponService
         {
             return cachedWeapons;
         }
-
-        var query = _dbContext.Weapons.AsQueryable();
+        using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+        var query = dbContext.Weapons.AsQueryable();
 
         if (type.HasValue)
         {
@@ -57,54 +50,15 @@ public class WeaponService
     }
 
     /// <summary>
-    /// Синхронно получает список всех видов оружия с возможностью фильтрации по типу
-    /// </summary>
-    /// <param name="type">Опциональный параметр для фильтрации по типу оружия</param>
-    /// <returns>Список оружия, отфильтрованный по типу (если указан)</returns>
-    public List<Weapon> GetAllWeapons(WeaponType? type = null)
-    {
-        return GetAllWeaponsAsync(type).GetAwaiter().GetResult();
-    }
-
-
-
-    /// <summary>
-    /// Асинхронно получает оружие по его идентификатору
-    /// </summary>
-    /// <param name="id">Идентификатор оружия</param>
-    /// <returns>Оружие или null, если не найдено</returns>
-    public async Task<Weapon?> GetWeaponByIdAsync(Guid id)
-    {
-        return await _dbContext.Weapons.FindAsync(id);
-    }
-
-    /// <summary>
-    /// Асинхронно получает оружие по его названию
-    /// </summary>
-    /// <param name="name">Название оружия</param>
-    /// <param name="type">Опциональный параметр для фильтрации по типу оружия</param>
-    /// <returns>Оружие или null, если не найдено</returns>
-    public async Task<Weapon?> GetWeaponByNameAsync(string name, WeaponType? type = null)
-    {
-        var query = _dbContext.Weapons.AsQueryable();
-
-        if (type.HasValue)
-        {
-            query = query.Where(w => w.Type == type.Value);
-        }
-
-        return await query.FirstOrDefaultAsync(w => w.Name == name);
-    }
-
-    /// <summary>
     /// Асинхронно добавляет новое оружие в базу данных
     /// </summary>
     /// <param name="weapon">Оружие для добавления</param>
     public async Task AddWeaponAsync(Weapon weapon)
     {
+        using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
         weapon.Id = Guid.NewGuid();
-        _dbContext.Weapons.Add(weapon);
-        await _dbContext.SaveChangesAsync();
+        dbContext.Weapons.Add(weapon);
+        await dbContext.SaveChangesAsync();
         ClearCache();
     }
 
@@ -114,8 +68,16 @@ public class WeaponService
     /// <param name="weapon">Оружие для обновления</param>
     public async Task UpdateWeaponAsync(Weapon weapon)
     {
-        _dbContext.Weapons.Update(weapon);
-        await _dbContext.SaveChangesAsync();
+        using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+        var existingWeapon = await dbContext.Weapons.FindAsync(weapon.Id);
+        if (existingWeapon == null)
+        {
+            throw new InvalidOperationException($"Оружие с ID {weapon.Id} не найдено");
+        }
+
+        // Обновляем свойства существующего оружия
+        dbContext.Entry(existingWeapon).CurrentValues.SetValues(weapon);
+        await dbContext.SaveChangesAsync();
         ClearCache();
     }
 
@@ -125,23 +87,14 @@ public class WeaponService
     /// <param name="id">Идентификатор оружия для удаления</param>
     public async Task DeleteWeaponAsync(Guid id)
     {
-        Weapon? weapon = await _dbContext.Weapons.FindAsync(id);
+        using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+        Weapon? weapon = await dbContext.Weapons.FindAsync(id);
         if (weapon != null)
         {
-            _dbContext.Weapons.Remove(weapon);
-            await _dbContext.SaveChangesAsync();
+            dbContext.Weapons.Remove(weapon);
+            await dbContext.SaveChangesAsync();
             ClearCache();
         }
-    }
-
-    /// <summary>
-    /// Получает список оружия указанного типа
-    /// </summary>
-    /// <param name="type">Тип оружия для фильтрации</param>
-    /// <returns>Список оружия указанного типа</returns>
-    public async Task<List<Weapon>> GetWeaponsByTypeAsync(WeaponType type)
-    {
-        return await GetAllWeaponsAsync(type);
     }
 
     /// <summary>
