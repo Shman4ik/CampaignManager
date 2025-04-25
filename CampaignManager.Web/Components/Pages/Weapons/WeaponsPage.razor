@@ -1,380 +1,411 @@
 @page "/weapons"
 @using CampaignManager.Web.Model
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Forms 
+@using Microsoft.AspNetCore.Components
+@using Blazorise
+@using Blazorise.Icons.FontAwesome
+@using Microsoft.AspNetCore.Components.QuickGrid 
+@using CampaignManager.Web.Services
+@using CampaignManager.Web.Extensions
 
-@inject WeaponService WeaponService
-@inject NavigationManager NavigationManager
-
+@inject CampaignManager.Web.Services.WeaponService WeaponService 
+@inject IJSRuntime JSRuntime 
 @rendermode InteractiveServer
 
 <PageTitle>Управление оружием - Campaign Manager</PageTitle>
 
-<div class="container mx-auto px-4 py-6">
-    <div class="mb-8">
-        <h1 class="text-3xl font-semibold text-gray-800 mb-1">Управление оружием</h1>
-        <p class="text-gray-600">Здесь вы можете управлять списком доступного оружия в системе "Зов Ктулху" 7-й
-            редакции.</p>
+<div class="max-w-7xl mx-auto px-4 py-6 font-sans"> 
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">Управление оружием</h1>
+    <div class="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
+        <div class="w-full sm:w-auto">
+            <input type="text" 
+                   class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                   placeholder="Поиск..." 
+                   @bind="searchQuery" 
+                   @bind:event="oninput" />
+        </div>
+        <button class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-lg shadow transition duration-150 ease-in-out flex items-center justify-center" 
+                @onclick="ShowAddModal">
+            <i class="fas fa-plus mr-2"></i>
+            <span>Добавить оружие</span>
+        </button>
     </div>
 
-    <div class="flex flex-col md:flex-row gap-4 mb-6 md:items-center justify-between">
-        <div class="flex gap-4">
-            <button @onclick="() => ShowTab(0)" class="@GetTabClass(0)">
-                Оружие ближнего боя
-            </button>
-            <button @onclick="() => ShowTab(1)" class="@GetTabClass(1)">
-                Оружие дальнего боя
-            </button>
-        </div>
-        <div class="flex items-center">
-            <div class="relative">
-                <input type="text" placeholder="Поиск..." @bind-value="SearchQuery" @bind-value:event="oninput"
-                       @onkeyup="OnSearch"
-                       class="border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"/>
-                @if (!string.IsNullOrEmpty(SearchQuery))
-                {
-                    <button @onclick="ClearSearch" class="absolute right-3 top-2.5 text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times"></i>
-                    </button>
-                }
-            </div>
-        </div>
-    </div>
-
-    @if (IsLoading)
+    @if (weapons == null)
     {
-        <div class="flex justify-center items-center py-12">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Загрузка...</span>
-            </div>
+        <div class="flex justify-center items-center p-8">
+            <p class="text-gray-600 italic">Загрузка данных...</p>
         </div>
     }
     else
     {
-        <div class="bg-white rounded-lg shadow-md overflow-hidden">
-            @if (ActiveTab == 0)
-            {
-                @if (FilteredCloseCombatWeapons?.Count > 0)
-                {
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-100">
-                            <tr>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Название
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                                    Навык
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                                    Урон
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-                                    Дистанция
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-                                    Атаки
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Действия
-                                </th>
-                            </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                            @foreach (var weapon in FilteredCloseCombatWeapons)
-                            {
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">@weapon.Name</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">@weapon.Skill</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">@weapon.Damage</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">@weapon.Range</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">@weapon.Attacks</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        <div class="flex justify-center gap-2">
-                                            <button @onclick="() => EditCloseCombatWeapon(weapon)"
-                                                    class="text-blue-600 hover:text-blue-900 focus:outline-none">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button @onclick="() => DeleteCloseCombatWeapon(weapon)"
-                                                    class="text-red-600 hover:text-red-900 focus:outline-none">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
+        <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <QuickGrid Items="(IQueryable<Weapon>)filteredWeapons" TItem="Weapon" Class="w-full">
+                <PropertyColumn Property="@(w => w.Name)" Title="Название" Sortable="true" />
+                <TemplateColumn Title="Тип" SortBy="GridSort<Weapon>.ByAscending(w => w.Type)">
+                    @context.Type.ToRussianString()
+                </TemplateColumn>
+                <PropertyColumn Property="@(w => w.Skill)" Title="Навык" Sortable="true" />
+                <PropertyColumn Property="@(w => w.Damage)" Title="Урон" />
+                <PropertyColumn Property="@(w => w.Range)" Title="Дистанция" />
+                <PropertyColumn Property="@(w => w.Attacks)" Title="Атаки" />
+                <PropertyColumn Property="@(w => w.Cost)" Title="Стоимость" />
+                <PropertyColumn Property="@(w => w.Ammo)" Title="Боеприпасы" />
+                <PropertyColumn Property="@(w => w.Malfunction)" Title="Осечка" />
+                <PropertyColumn Property="@(w => w.Notes)" Title="Примечания" />
+                <TemplateColumn Title="Действия" Class="text-center" Context="weapon">
+                    <div class="flex justify-center space-x-2">
+                        <button class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out" 
+                                @onclick="() => ShowEditModal(weapon)" 
+                                title="Редактировать">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="text-red-600 hover:text-red-800 transition duration-150 ease-in-out" 
+                                @onclick="() => ShowDeleteModal(weapon)" 
+                                title="Удалить">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </div>
-                }
-                else
-                {
-                    <div class="py-8 text-center text-gray-500">
-                        <p>Нет данных об оружии ближнего боя или ничего не найдено по запросу.</p>
-                    </div>
-                }
-
-                <div class="py-4 px-6 bg-gray-50 flex justify-end">
-                    <button @onclick="AddCloseCombatWeapon"
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <i class="fas fa-plus"></i> Добавить оружие ближнего боя
-                    </button>
-                </div>
-            }
-            else
-            {
-                @if (FilteredRangedWeapons?.Count > 0)
-                {
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-100">
-                            <tr>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Название
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                                    Навык
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
-                                    Урон
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-                                    Дистанция
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
-                                    Атаки
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
-                                    Боеприпасы
-                                </th>
-                                <th scope="col"
-                                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Действия
-                                </th>
-                            </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-200">
-                            @foreach (var weapon in FilteredRangedWeapons)
-                            {
-                                <tr class="hover:bg-gray-50">
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">@weapon.Name</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">@weapon.Skill</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">@weapon.Damage</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">@weapon.Range</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">@weapon.Attacks</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden xl:table-cell">@weapon.Ammo</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
-                                        <div class="flex justify-center gap-2">
-                                            <button @onclick="() => EditRangedWeapon(weapon)"
-                                                    class="text-blue-600 hover:text-blue-900 focus:outline-none">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            <button @onclick="() => DeleteRangedWeapon(weapon)"
-                                                    class="text-red-600 hover:text-red-900 focus:outline-none">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-                else
-                {
-                    <div class="py-8 text-center text-gray-500">
-                        <p>Нет данных об оружии дальнего боя или ничего не найдено по запросу.</p>
-                    </div>
-                }
-
-                <div class="py-4 px-6 bg-gray-50 flex justify-end">
-                    <button @onclick="AddRangedWeapon"
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <i class="fas fa-plus"></i> Добавить оружие дальнего боя
-                    </button>
-                </div>
-            }
-        </div>
-    }
-
-    <!-- Модальное окно удаления -->
-    @if (ShowDeleteModal)
-    {
-        <div class="fixed inset-0 flex items-center justify-center z-50 backdrop-blur-sm bg-black/30">
-            <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Подтверждение удаления</h3>
-                <p>Вы уверены, что хотите удалить оружие "@DeleteItemName"?</p>
-                <div class="mt-6 flex justify-end gap-3">
-                    <button @onclick="CancelDelete"
-                            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-800">
-                        Отмена
-                    </button>
-                    <button @onclick="ConfirmDelete"
-                            class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white">
-                        Удалить
-                    </button>
-                </div>
-            </div>
+                </TemplateColumn>
+                <Paginator State="@pagination" />
+            </QuickGrid>
         </div>
     }
 </div>
 
+<Modal @bind-Visible="showModal" Size="ModalSize.Large">
+    <ModalContent Centered="true" Class="bg-white rounded-lg shadow-lg">
+        <ModalHeader Class="p-4 border-b border-gray-200">
+            <ModalTitle Class="font-bold text-xl text-gray-800">@(isEditMode ? "Редактировать оружие" : "Добавить оружие")</ModalTitle>
+            <CloseButton Clicked="@HideModal" />
+        </ModalHeader>
+        <ModalBody Class="p-6 bg-white"> 
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300">@errorMessage</div>
+            }
+            <EditForm Model="editWeapon" OnValidSubmit="HandleValidSubmit" Id="weapon-edit-form">
+                <DataAnnotationsValidator />
+                <Microsoft.AspNetCore.Components.Forms.ValidationSummary class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300" />
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="weaponName" class="block text-sm font-medium text-gray-700 mb-1">Название</label> 
+                        <InputText id="weaponName" @bind-Value="editWeapon.Name" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" /> 
+                        <ValidationMessage For="@(() => editWeapon.Name)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponType" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                        <InputSelect id="weaponType" @bind-Value="editWeapon.Type" 
+                                     class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500">
+                            @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
+                            {
+                                <option value="@typeValue">@typeValue.ToRussianString()</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => editWeapon.Type)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponSkill" class="block text-sm font-medium text-gray-700 mb-1">Навык</label>
+                        <InputText id="weaponSkill" @bind-Value="editWeapon.Skill" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Skill)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponDamage" class="block text-sm font-medium text-gray-700 mb-1">Урон</label>
+                        <InputText id="weaponDamage" @bind-Value="editWeapon.Damage" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Damage)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponRange" class="block text-sm font-medium text-gray-700 mb-1">Дистанция</label>
+                        <InputText id="weaponRange" @bind-Value="editWeapon.Range" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Range)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponAttacks" class="block text-sm font-medium text-gray-700 mb-1">Атаки</label>
+                        <InputText id="weaponAttacks" @bind-Value="editWeapon.Attacks" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Attacks)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponCost" class="block text-sm font-medium text-gray-700 mb-1">Стоимость</label>
+                        <InputText id="weaponCost" @bind-Value="editWeapon.Cost" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Cost)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponAmmo" class="block text-sm font-medium text-gray-700 mb-1">Боеприпасы</label>
+                        <InputText id="weaponAmmo" @bind-Value="editWeapon.Ammo" 
+                                   class="w-full p-1 border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-blue-500" />
+                        <ValidationMessage For="@(() => editWeapon.Ammo)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="weaponMalfunction" class="block text-sm font-medium text-gray-700 mb-1">Осечка</label>
+                        <InputText id="weaponMalfunction" @bind-Value="editWeapon.Malfunction" 
+                                   class="w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                        <ValidationMessage For="@(() => editWeapon.Malfunction)" class="text-red-600 text-sm mt-1" />
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                         <div class="flex items-center">
+                             <InputCheckbox id="weaponIs1920" @bind-Value="editWeapon.Is1920" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2" />
+                             <label for="weaponIs1920" class="text-sm font-medium text-gray-700">Эпоха 1920-х</label>
+                         </div>
+                         <div class="flex items-center">
+                            <InputCheckbox id="weaponIsModern" @bind-Value="editWeapon.IsModern" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-2" />
+                            <label for="weaponIsModern" class="text-sm font-medium text-gray-700">Современное</label>
+                        </div>
+                    </div>
+                    
+                    <div class="md:col-span-2"> 
+                        <label for="weaponNotes" class="block text-sm font-medium text-gray-700 mb-1">Примечания</label>
+                        <InputTextArea id="weaponNotes" @bind-Value="editWeapon.Notes" rows="3" 
+                                       class="w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                        <ValidationMessage For="@(() => editWeapon.Notes)" class="text-red-600 text-sm mt-1" />
+                    </div>
+                </div>
+            </EditForm>
+        </ModalBody>
+        <ModalFooter Class="p-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button type="button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition duration-150 ease-in-out" @onclick="HideModal">Отмена</button>
+            <button type="submit" form="weapon-edit-form" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150 ease-in-out">@(isEditMode ? "Сохранить изменения" : "Добавить оружие")</button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+<Modal @bind-Visible="showDeleteModal" Size="ModalSize.Small">
+    <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl">
+        <ModalHeader Class="bg-red-600 text-white px-6 py-4">
+            <ModalTitle Class="text-lg font-semibold">Подтверждение удаления</ModalTitle>
+            <CloseButton Clicked="@HideDeleteModal" />
+        </ModalHeader>
+        <ModalBody Class="p-6 text-gray-700">
+             @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300">@errorMessage</div>
+            }
+            @if (deleteWeapon != null)
+            {
+                <p>Вы уверены, что хотите удалить оружие "<strong>@deleteWeapon.Name</strong>"?</p>
+            }
+        </ModalBody>
+        <ModalFooter Class="bg-white px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button type="button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition duration-150 ease-in-out" @onclick="HideDeleteModal">Отмена</button>
+            <button type="button" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition duration-150 ease-in-out" @onclick="ConfirmDeleteAsync">Удалить</button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
 @code {
-    private bool IsLoading = true;
-    private int ActiveTab;
-    private string SearchQuery = "";
+    // List to hold all weapons fetched from the service
+    private List<Weapon>? weapons; // Nullable to indicate loading state
 
-    // Списки оружия
-    private List<CloseCombatWeapon> CloseCombatWeapons = new();
-    private List<RangedCombatWeapon> RangedWeapons = new();
-    private List<CloseCombatWeapon> FilteredCloseCombatWeapons = new();
-    private List<RangedCombatWeapon> FilteredRangedWeapons = new();
+    // Filtered list based on search query
+    private IQueryable<Weapon> filteredWeapons => GetFilteredWeapons(); // Return non-nullable IQueryable<Weapon>
 
-    // Данные для модального окна удаления
-    private bool ShowDeleteModal;
-    private string DeleteItemName = "";
-    private Guid? DeleteItemId;
-    private bool IsRangedWeapon;
+    // Search query bound to the input field
+    private string searchQuery = string.Empty;
 
+    // Modal visibility flags
+    private bool showModal = false;
+    private bool showDeleteModal = false;
+
+    // State for Add/Edit modal
+    private bool isEditMode = false;
+    private Weapon editWeapon = new(); // Model for the edit form
+
+    // Weapon object targeted for deletion
+    private Weapon? deleteWeapon;
+
+    // Pagination state for QuickGrid
+    private PaginationState pagination = new PaginationState { ItemsPerPage = 10 };
+
+    // Error message state
+    private string? errorMessage;
+
+    // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
     {
-        await WeaponService.SeedDatabaseIfEmpty();
-        await LoadWeapons();
+        await LoadWeaponsAsync();
     }
 
-    private async Task LoadWeapons()
+    // Method to load weapons data from the service
+    private async Task LoadWeaponsAsync()
     {
-        IsLoading = true;
-        CloseCombatWeapons = await WeaponService.GetAllCloseCombatWeaponsAsync();
-        RangedWeapons = await WeaponService.GetAllRangedWeaponsAsync();
-        ApplyFilter();
-        IsLoading = false;
-    }
-
-    private void ShowTab(int tabIndex)
-    {
-        ActiveTab = tabIndex;
-        StateHasChanged();
-    }
-
-    private string GetTabClass(int tabIndex)
-    {
-        return tabIndex == ActiveTab
-            ? "bg-blue-600 text-white px-4 py-2 rounded-lg"
-            : "bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded-lg";
-    }
-
-    private void OnSearch(KeyboardEventArgs e)
-    {
-        ApplyFilter();
-    }
-
-    private void ClearSearch()
-    {
-        SearchQuery = "";
-        ApplyFilter();
-    }
-
-    private void ApplyFilter()
-    {
-        if (string.IsNullOrWhiteSpace(SearchQuery))
+        errorMessage = null; // Clear previous errors
+        try
         {
-            FilteredCloseCombatWeapons = CloseCombatWeapons.ToList();
-            FilteredRangedWeapons = RangedWeapons.ToList();
+            weapons = await WeaponService.GetAllWeaponsAsync();
         }
-        else
+        catch (Exception ex)
         {
-            var query = SearchQuery.ToLower();
-            FilteredCloseCombatWeapons = CloseCombatWeapons
-                .Where(w => w.Name.ToLower().Contains(query) ||
-                            w.Skill.ToLower().Contains(query) ||
-                            w.Damage.ToLower().Contains(query) ||
-                            (!string.IsNullOrEmpty(w.Notes) && w.Notes.ToLower().Contains(query)))
-                .ToList();
-
-            FilteredRangedWeapons = RangedWeapons
-                .Where(w => w.Name.ToLower().Contains(query) ||
-                            w.Skill.ToLower().Contains(query) ||
-                            w.Damage.ToLower().Contains(query) ||
-                            (!string.IsNullOrEmpty(w.Notes) && w.Notes.ToLower().Contains(query)) ||
-                            (!string.IsNullOrEmpty(w.Ammo) && w.Ammo.ToLower().Contains(query)))
-                .ToList();
+            // Log the error (e.g., to console or a logging service)
+            Console.WriteLine($"Error loading weapons: {ex.Message}");
+            errorMessage = "Не удалось загрузить список оружия. Пожалуйста, попробуйте позже.";
+            weapons = new List<Weapon>(); // Ensure weapons is not null
         }
+        // No explicit StateHasChanged() needed here usually,
+        // as the component re-renders after an await.
+        // If QuickGrid doesn't update, uncomment the line below.
+        // StateHasChanged();
     }
 
-    private void AddCloseCombatWeapon()
+    // Helper method to check if a weapon matches the search query
+    private bool WeaponMatchesSearch(Weapon w)
     {
-        NavigationManager.NavigateTo("/weapons/closecombat/add");
+        // Case-insensitive search across multiple relevant fields
+        return (w.Name?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) // Search enum string representation
+            || (w.Skill?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (w.Damage?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (w.Notes?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (w.Ammo?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false);
     }
 
-    private void AddRangedWeapon()
+    // Show the modal for adding a new weapon
+    private void ShowAddModal()
     {
-        NavigationManager.NavigateTo("/weapons/ranged/add");
+        isEditMode = false;
+        editWeapon = new Weapon(); // Reset the edit model
+        errorMessage = null; // Clear errors
+        showModal = true;
     }
 
-    private void EditCloseCombatWeapon(CloseCombatWeapon weapon)
+    // Show the modal for editing an existing weapon
+    private void ShowEditModal(Weapon weapon)
     {
-        NavigationManager.NavigateTo($"/weapons/closecombat/edit/{weapon.Id}");
-    }
-
-    private void EditRangedWeapon(RangedCombatWeapon weapon)
-    {
-        NavigationManager.NavigateTo($"/weapons/ranged/edit/{weapon.Id}");
-    }
-
-    private void DeleteCloseCombatWeapon(CloseCombatWeapon weapon)
-    {
-        DeleteItemId = weapon.Id;
-        DeleteItemName = weapon.Name;
-        IsRangedWeapon = false;
-        ShowDeleteModal = true;
-    }
-
-    private void DeleteRangedWeapon(RangedCombatWeapon weapon)
-    {
-        DeleteItemId = weapon.Id;
-        DeleteItemName = weapon.Name;
-        IsRangedWeapon = true;
-        ShowDeleteModal = true;
-    }
-
-    private void CancelDelete()
-    {
-        ShowDeleteModal = false;
-        DeleteItemId = null;
-        DeleteItemName = "";
-    }
-
-    private async Task ConfirmDelete()
-    {
-        if (DeleteItemId.HasValue)
+        isEditMode = true;
+        // Clone the weapon object to avoid modifying the original list item directly
+        editWeapon = new Weapon
         {
-            if (IsRangedWeapon)
+            Id = weapon.Id,
+            Name = weapon.Name,
+            Type = weapon.Type,
+            Skill = weapon.Skill,
+            Is1920 = weapon.Is1920,
+            IsModern = weapon.IsModern,
+            Damage = weapon.Damage,
+            Range = weapon.Range,
+            Attacks = weapon.Attacks,
+            Cost = weapon.Cost,
+            Notes = weapon.Notes,
+            Ammo = weapon.Ammo,
+            Malfunction = weapon.Malfunction
+        };
+        errorMessage = null; // Clear errors
+        showModal = true;
+    }
+
+    // Hide the Add/Edit modal
+    private void HideModal()
+    {
+        showModal = false;
+    }
+
+    // Handle the valid submission of the Add/Edit form
+    private async Task HandleValidSubmit()
+    {
+        errorMessage = null; // Clear previous errors
+        try
+        {
+            if (isEditMode)
             {
-                await WeaponService.DeleteRangedWeaponAsync(DeleteItemId.Value);
+                await WeaponService.UpdateWeaponAsync(editWeapon);
             }
             else
             {
-                await WeaponService.DeleteCloseCombatWeaponAsync(DeleteItemId.Value);
+                await WeaponService.AddWeaponAsync(editWeapon);
             }
-
-            ShowDeleteModal = false;
-            DeleteItemId = null;
-            DeleteItemName = "";
-
-            await LoadWeapons();
+            showModal = false; // Close modal on success
+            await LoadWeaponsAsync(); // Refresh the list
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving weapon: {ex.Message}");
+            errorMessage = $"Не удалось сохранить оружие: {ex.Message}";
+            // Keep the modal open to show the error
+            // Consider displaying the error message within the modal itself
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка сохранения: {errorMessage}"); // Simple alert for now
+        }
+    }
+
+    // Show the delete confirmation modal
+    private void ShowDeleteModal(Weapon weapon)
+    {
+        deleteWeapon = weapon;
+        errorMessage = null; // Clear errors
+        showDeleteModal = true;
+    }
+
+    // Hide the delete confirmation modal
+    private void HideDeleteModal()
+    {
+        showDeleteModal = false;
+        deleteWeapon = null;
+    }
+
+    // Confirm and execute the weapon deletion
+    private async Task ConfirmDeleteAsync()
+    {
+        if (deleteWeapon == null) return; // Should not happen, but good practice
+
+        errorMessage = null; // Clear previous errors
+        try
+        {
+            await WeaponService.DeleteWeaponAsync(deleteWeapon.Id); // Use Guid Id
+            showDeleteModal = false;
+            await LoadWeaponsAsync(); // Refresh the list
+            deleteWeapon = null; // Clear the selected weapon
+        }
+        catch (Exception ex)
+        {
+             Console.WriteLine($"Error deleting weapon: {ex.Message}");
+             errorMessage = $"Не удалось удалить оружие: {ex.Message}";
+             // Optionally show the error to the user (e.g., using a toast notification or alert)
+             HideDeleteModal(); // Close modal even on error, but show message
+             await JSRuntime.InvokeVoidAsync("alert", $"Ошибка удаления: {errorMessage}"); // Simple alert
+        }
+    }
+
+    // Filter weapons based on search query (simple name and skill search for now)
+    private IQueryable<Weapon> GetFilteredWeapons() // Return non-nullable IQueryable<Weapon>
+    {
+        if (weapons == null) 
+        {
+             return Enumerable.Empty<Weapon>().AsQueryable(); // Return empty IQueryable if source is null
+        }
+
+        var query = weapons.AsQueryable(); // Use AsQueryable for QuickGrid
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            query = query.Where(w =>
+                (w.Name != null && w.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (w.Skill != null && w.Skill.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) // Search by type name
+            );
+        }
+
+        // Apply QuickGrid sorting, filtering, and pagination - REMOVED incorrect checks
+        // QuickGrid handles sorting internally if PropertyColumn Sortable="true" is used.
+        // QuickGrid handles filtering internally if ColumnOptions are provided.
+        // QuickGrid handles pagination based on the Items and Paginator state.
+        // We just need to provide the correctly filtered base queryable.
+
+        return query;
     }
 
 }

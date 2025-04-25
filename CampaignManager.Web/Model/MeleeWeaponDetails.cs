@@ -1,9 +1,9 @@
 ﻿namespace CampaignManager.Web.Model;
 
-public class CloseCombatDetails
+public class MeleeWeaponDetails
 {
     /// <summary>
     ///     Оружие ближнего боя
     /// </summary>
-    public List<CloseCombatWeapon> Weapons { get; set; } = new();
+    public List<Weapon> Weapons { get; set; } = new();
 }

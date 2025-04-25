@@ -52,7 +52,7 @@ public class Character
     /// <summary>
     ///     Детали боя ближнего действия
     /// </summary>
-    public CloseCombatDetails CloseCombat { get; set; } = new();
+    public MeleeWeaponDetails MeleeWeapon { get; set; } = new();
 
     /// <summary>
     ///     Детали боя дальнего действия

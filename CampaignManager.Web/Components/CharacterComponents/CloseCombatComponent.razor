@@ -6,7 +6,7 @@
 
     <!-- Мобильный вид (карточки) -->
     <div class="md:hidden">
-        @foreach (var weapon in Character.CloseCombat.Weapons)
+        @foreach (var weapon in Character.MeleeWeapon.Weapons)
         {
             <div class="bg-gray-50 rounded p-3 mb-3 shadow-sm">
                 <div class="flex justify-between mb-2">
@@ -97,7 +97,7 @@
                 </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                @foreach (var weapon in Character.CloseCombat.Weapons)
+                @foreach (var weapon in Character.MeleeWeapon.Weapons)
                 {
                     <tr>
                         <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900 w-1/4">
@@ -203,9 +203,9 @@
     private string newWeaponCost = "";
     private string newWeaponNotes = "";
 
-    private List<CloseCombatWeapon> suggestedWeapons = new();
+    private List<Weapon> suggestedWeapons = new();
 
-    private void OnWeaponNameInput(ChangeEventArgs e)
+    private async Task OnWeaponNameInput(ChangeEventArgs e)
     {
         var value = e.Value?.ToString() ?? "";
         newWeaponName = value;
@@ -216,14 +216,14 @@
             return;
         }
 
-        var allWeapons = WeaponService.GetAllCloseCombatWeapons();
+        var allWeapons = await WeaponService.GetAllWeaponsAsync(WeaponType.Melee);
         suggestedWeapons = allWeapons
             .Where(w => w.Name.Contains(value, StringComparison.OrdinalIgnoreCase))
             .Take(5)
             .ToList();
     }
 
-    private void SelectWeapon(CloseCombatWeapon weapon)
+    private void SelectWeapon(Weapon weapon)
     {
         newWeaponName = weapon.Name;
         newWeaponSkill = weapon.Skill;
@@ -240,7 +240,7 @@
     {
         if (!string.IsNullOrWhiteSpace(newWeaponName))
         {
-            Character.CloseCombat.Weapons.Add(new CloseCombatWeapon
+            Character.MeleeWeapon.Weapons.Add(new Weapon
             {
                 Name = newWeaponName,
                 Skill = newWeaponSkill,
@@ -261,9 +261,9 @@
         }
     }
 
-    private void RemoveWeapon(CloseCombatWeapon weapon)
+    private void RemoveWeapon(Weapon weapon)
     {
-        Character.CloseCombat.Weapons.Remove(weapon);
+        Character.MeleeWeapon.Weapons.Remove(weapon);
     }
 
 }

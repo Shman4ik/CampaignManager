@@ -5,5 +5,5 @@ public class RangedCombatDetails
     /// <summary>
     ///     Оружие дальнего боя
     /// </summary>
-    public List<RangedCombatWeapon> Weapons { get; set; } = new();
+    public List<Weapon> Weapons { get; set; } = new();
 }

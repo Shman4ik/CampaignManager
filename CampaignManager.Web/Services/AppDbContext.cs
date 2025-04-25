@@ -4,15 +4,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Services;
 
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
     public DbSet<Campaign> Campaigns { get; set; }
     public DbSet<CharacterStorageDto> CharacterStorage { get; set; }
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; }
-    public DbSet<CloseCombatWeapon> CloseCombatWeapons { get; set; }
-    public DbSet<RangedCombatWeapon> RangedCombatWeapons { get; set; }
+    public DbSet<Weapon> Weapons { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -75,20 +72,11 @@ public class AppDbContext : DbContext
         });
 
         // Настройка оружия
-        modelBuilder.Entity<CloseCombatWeapon>(entity =>
+        modelBuilder.Entity<Weapon>(entity =>
         {
-            entity.ToTable("CloseCombatWeapons");
+            entity.ToTable("Weapons");
             entity.Property(w => w.Type)
-                .HasDefaultValue(WeaponType.CloseCombat)
-                .HasConversion<string>();
-            entity.HasIndex(w => w.Name).IsUnique();
-        });
-
-        modelBuilder.Entity<RangedCombatWeapon>(entity =>
-        {
-            entity.ToTable("RangedCombatWeapons");
-            entity.Property(w => w.Type)
-                .HasDefaultValue(WeaponType.RangedCombat)
+                .HasDefaultValue(WeaponType.Melee)
                 .HasConversion<string>();
             entity.HasIndex(w => w.Name).IsUnique();
         });
