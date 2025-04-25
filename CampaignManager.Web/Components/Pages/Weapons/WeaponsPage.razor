@@ -17,15 +17,120 @@
 
 <div class="max-w-7xl mx-auto px-4 py-6 font-sans"> 
     <h1 class="text-3xl font-bold text-gray-800 mb-6">Управление оружием</h1>
-    <div class="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
-        <div class="w-full sm:w-auto">
-            <input type="text" 
-                   class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
-                   placeholder="Поиск..." 
-                   @bind="searchQuery" 
-                   @bind:event="oninput" />
+    
+    <!-- Улучшенная панель фильтров -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-6 border border-gray-200">
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Фильтры</h2>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <div class="flex-grow">
+                    <label for="searchQuery" class="block text-sm font-medium text-gray-700 mb-1">Поиск</label>
+                    <div class="relative">
+                        <input type="text" id="searchQuery"
+                               class="w-full border rounded-lg pl-10 pr-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                               placeholder="Поиск по названию, навыку..." 
+                               @bind="searchQuery" 
+                               @bind:event="oninput" />
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="w-full sm:w-56">
+                    <label for="typeFilter" class="block text-sm font-medium text-gray-700 mb-1">Тип оружия</label>
+                    <select id="typeFilter" 
+                            class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                            @onchange="OnWeaponTypeFilterChanged">
+                        <option value="">Все типы</option>
+                        @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
+                        {
+                            <option value="@typeValue">@typeValue.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+            </div>
         </div>
-        <button class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-lg shadow transition duration-150 ease-in-out flex items-center justify-center" 
+        
+        <div class="flex flex-wrap gap-4 mb-3">
+            <!-- Эпоха фильтры -->
+            <div class="flex items-center space-x-6">
+                <div class="flex items-center">
+                    <input type="checkbox" id="is1920Filter" 
+                           checked="@is1920Filter"
+                           @onchange="@(e => { is1920Filter = (bool)e.Value; ApplyFilters(); })"
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                    <label for="is1920Filter" class="ml-2 text-sm text-gray-700">1920-е</label>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="isModernFilter" 
+                           checked="@isModernFilter"
+                           @onchange="@(e => { isModernFilter = (bool)e.Value; ApplyFilters(); })"
+                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                    <label for="isModernFilter" class="ml-2 text-sm text-gray-700">Современное</label>
+                </div>
+            </div>
+            
+            <!-- Дополнительные фильтры с переключателем видимости -->
+            <div class="flex items-center">
+                <button type="button" 
+                        @onclick="ToggleAdvancedFilters" 
+                        class="flex items-center text-sm text-blue-600 hover:text-blue-800">
+                    <span>@(showAdvancedFilters ? "Скрыть дополнительные фильтры" : "Показать дополнительные фильтры")</span>
+                    <i class="fas @(showAdvancedFilters ? "fa-chevron-up" : "fa-chevron-down") ml-1"></i>
+                </button>
+            </div>
+        </div>
+        
+        @if (showAdvancedFilters)
+        {
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-gray-200">
+                <div>
+                    <label for="damageFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по урону</label>
+                    <input type="text" id="damageFilter"
+                           class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                           placeholder="Например: 1D6, 2D8, и т.д." 
+                           @bind="damageFilter" 
+                           @bind:event="oninput" />
+                </div>
+                <div>
+                    <label for="skillFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по навыку</label>
+                    <input type="text" id="skillFilter"
+                           class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" 
+                           placeholder="Например: Стрельба (П), Драка" 
+                           @bind="skillFilter" 
+                           @bind:event="oninput" />
+                </div>
+                <div>
+                    <label for="priceRangeFilter" class="block text-sm font-medium text-gray-700 mb-1">Ценовой диапазон</label>
+                    <select id="priceRangeFilter" 
+                            class="w-full border rounded-lg px-4 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                            @onchange="OnPriceRangeFilterChanged">
+                        <option value="">Любая цена</option>
+                        <option value="low">Недорогое (до $20)</option>
+                        <option value="medium">Среднее ($20-$100)</option>
+                        <option value="high">Дорогое ($100+)</option>
+                    </select>
+                </div>
+            </div>
+        }
+        
+        <div class="flex mt-4 justify-between items-center">
+            <div>
+                <span class="text-sm text-gray-600">Найдено оружия: <strong>@(filteredWeapons?.Count() ?? 0)</strong></span>
+            </div>
+            <button type="button" 
+                    @onclick="ResetFilters"
+                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition duration-150 ease-in-out">
+                <i class="fas fa-undo-alt mr-1"></i>
+                <span>Сбросить фильтры</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Кнопка добавления оружия -->
+    <div class="mb-6 flex justify-end">
+        <button class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded-lg shadow transition duration-150 ease-in-out flex items-center justify-center" 
                 @onclick="ShowAddModal">
             <i class="fas fa-plus mr-2"></i>
             <span>Добавить оружие</span>
@@ -35,38 +140,78 @@
     @if (weapons == null)
     {
         <div class="flex justify-center items-center p-8">
-            <p class="text-gray-600 italic">Загрузка данных...</p>
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-solid border-blue-500 border-r-transparent"></div>
+            <p class="ml-2 text-gray-600">Загрузка данных...</p>
+        </div>
+    }
+    else if (filteredWeapons.Count() == 0)
+    {
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-circle text-yellow-400"></i>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                        По заданным критериям поиска ничего не найдено. Попробуйте изменить параметры фильтрации.
+                    </p>
+                </div>
+            </div>
         </div>
     }
     else
     {
         <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
             <QuickGrid Items="(IQueryable<Weapon>)filteredWeapons" TItem="Weapon" Class="w-full">
-                <PropertyColumn Property="@(w => w.Name)" Title="Название" Sortable="true" />
+                <PropertyColumn Property="@(w => w.Name)" Title="Название" Sortable="true">
+                </PropertyColumn>
                 <TemplateColumn Title="Тип" SortBy="GridSort<Weapon>.ByAscending(w => w.Type)">
-                    @context.Type.ToRussianString()
+                    <ChildContent>
+                        <div class="flex items-center">
+                            <span class="ml-2">@context.Type.ToRussianString()</span>
+                        </div>
+                    </ChildContent>
+                    <ColumnOptions>
+                        <div class="p-2">
+                            <select @onchange='e => OnColumnHeaderFilterChanged(e, "Type")'
+                                    class="w-full border rounded px-2 py-1 text-sm">
+                                <option value="">Все типы</option>
+                                @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
+                                {
+                                    <option value="@typeValue">@typeValue.ToRussianString()</option>
+                                }
+                            </select>
+                        </div>
+                    </ColumnOptions>
                 </TemplateColumn>
                 <PropertyColumn Property="@(w => w.Skill)" Title="Навык" Sortable="true" />
                 <PropertyColumn Property="@(w => w.Damage)" Title="Урон" />
+                <TemplateColumn Title="Эпоха" SortBy="GridSort<Weapon>.ByAscending(w => w.Is1920)">
+                    <ChildContent>
+                        <div>
+                            @if (context.Is1920) { <span class="inline-block px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">1920-е</span> }
+                            @if (context.IsModern) { <span class="inline-block px-2 py-1 bg-slate-100 text-slate-800 text-xs rounded-full">Современное</span> }
+                        </div>
+                    </ChildContent>
+                </TemplateColumn>
                 <PropertyColumn Property="@(w => w.Range)" Title="Дистанция" />
                 <PropertyColumn Property="@(w => w.Attacks)" Title="Атаки" />
                 <PropertyColumn Property="@(w => w.Cost)" Title="Стоимость" />
-                <PropertyColumn Property="@(w => w.Ammo)" Title="Боеприпасы" />
-                <PropertyColumn Property="@(w => w.Malfunction)" Title="Осечка" />
-                <PropertyColumn Property="@(w => w.Notes)" Title="Примечания" />
-                <TemplateColumn Title="Действия" Class="text-center" Context="weapon">
-                    <div class="flex justify-center space-x-2">
-                        <button class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out" 
-                                @onclick="() => ShowEditModal(weapon)" 
-                                title="Редактировать">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="text-red-600 hover:text-red-800 transition duration-150 ease-in-out" 
-                                @onclick="() => ShowDeleteModal(weapon)" 
-                                title="Удалить">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
+                <TemplateColumn Title="Действия" Class="text-center">
+                    <ChildContent Context="weapon">
+                        <div class="flex justify-center space-x-2">
+                            <button class="text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out" 
+                                    @onclick="() => ShowEditModal(weapon)" 
+                                    title="Редактировать">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="text-red-600 hover:text-red-800 transition duration-150 ease-in-out" 
+                                    @onclick="() => ShowDeleteModal(weapon)" 
+                                    title="Удалить">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </ChildContent>
                 </TemplateColumn>
                 <Paginator State="@pagination" />
             </QuickGrid>
@@ -209,14 +354,27 @@
 </Modal>
 
 @code {
+
     // List to hold all weapons fetched from the service
     private List<Weapon>? weapons; // Nullable to indicate loading state
 
-    // Filtered list based on search query
-    private IQueryable<Weapon> filteredWeapons => GetFilteredWeapons(); // Return non-nullable IQueryable<Weapon>
+    // Filtered list based on search query and other filters
+    private IQueryable<Weapon> filteredWeapons => GetFilteredWeapons();
 
     // Search query bound to the input field
     private string searchQuery = string.Empty;
+
+    // Advanced filtering variables
+    private WeaponType? selectedTypeFilter = null;
+    private bool is1920Filter = false;
+    private bool isModernFilter = false;
+    private string damageFilter = string.Empty;
+    private string skillFilter = string.Empty;
+    private string priceRangeFilter = string.Empty;
+    private bool showAdvancedFilters = false;
+
+    // Column header filter values
+    private Dictionary<string, string> columnFilters = new Dictionary<string, string>();
 
     // Modal visibility flags
     private bool showModal = false;
@@ -256,22 +414,78 @@
             errorMessage = "Не удалось загрузить список оружия. Пожалуйста, попробуйте позже.";
             weapons = new List<Weapon>(); // Ensure weapons is not null
         }
-        // No explicit StateHasChanged() needed here usually,
-        // as the component re-renders after an await.
-        // If QuickGrid doesn't update, uncomment the line below.
-        // StateHasChanged();
     }
 
-    // Helper method to check if a weapon matches the search query
-    private bool WeaponMatchesSearch(Weapon w)
+    // Reset all filters to their default state
+    private void ResetFilters()
     {
-        // Case-insensitive search across multiple relevant fields
-        return (w.Name?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) // Search enum string representation
-            || (w.Skill?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (w.Damage?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (w.Notes?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (w.Ammo?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ?? false);
+        searchQuery = string.Empty;
+        selectedTypeFilter = null;
+        is1920Filter = false;
+        isModernFilter = false;
+        damageFilter = string.Empty;
+        skillFilter = string.Empty;
+        priceRangeFilter = string.Empty;
+        columnFilters.Clear();
+
+        // Apply filters to update the UI
+        ApplyFilters();
+    }
+
+    // Toggle visibility of advanced filters
+    private void ToggleAdvancedFilters()
+    {
+        showAdvancedFilters = !showAdvancedFilters;
+    }
+
+    // Handle weapon type filter change
+    private void OnWeaponTypeFilterChanged(ChangeEventArgs e)
+    {
+        string? value = e.Value?.ToString();
+        if (string.IsNullOrEmpty(value))
+        {
+            selectedTypeFilter = null;
+        }
+        else if (Enum.TryParse<WeaponType>(value, out var typeValue))
+        {
+            selectedTypeFilter = typeValue;
+        }
+
+        ApplyFilters();
+    }
+
+    // Handle price range filter change
+    private void OnPriceRangeFilterChanged(ChangeEventArgs e)
+    {
+        priceRangeFilter = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    // Handle column header filter change
+    private void OnColumnHeaderFilterChanged(ChangeEventArgs e, string columnName)
+    {
+        string value = e.Value?.ToString() ?? "";
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (columnFilters.ContainsKey(columnName))
+            {
+                columnFilters.Remove(columnName);
+            }
+        }
+        else
+        {
+            columnFilters[columnName] = value;
+        }
+
+        ApplyFilters();
+    }
+
+    // Apply all filters (this just calls StateHasChanged since the filteredWeapons property is computed)
+    private void ApplyFilters()
+    {
+        // This will trigger a re-render which will use our updated filter values
+        StateHasChanged();
     }
 
     // Show the modal for adding a new weapon
@@ -328,16 +542,16 @@
             {
                 await WeaponService.AddWeaponAsync(editWeapon);
             }
+
             showModal = false; // Close modal on success
             await LoadWeaponsAsync(); // Refresh the list
+            ApplyFilters(); // Reapply filters
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error saving weapon: {ex.Message}");
             errorMessage = $"Не удалось сохранить оружие: {ex.Message}";
             // Keep the modal open to show the error
-            // Consider displaying the error message within the modal itself
-            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка сохранения: {errorMessage}"); // Simple alert for now
         }
     }
 
@@ -368,44 +582,148 @@
             showDeleteModal = false;
             await LoadWeaponsAsync(); // Refresh the list
             deleteWeapon = null; // Clear the selected weapon
+            ApplyFilters(); // Reapply filters
         }
         catch (Exception ex)
         {
-             Console.WriteLine($"Error deleting weapon: {ex.Message}");
-             errorMessage = $"Не удалось удалить оружие: {ex.Message}";
-             // Optionally show the error to the user (e.g., using a toast notification or alert)
-             HideDeleteModal(); // Close modal even on error, but show message
-             await JSRuntime.InvokeVoidAsync("alert", $"Ошибка удаления: {errorMessage}"); // Simple alert
+            Console.WriteLine($"Error deleting weapon: {ex.Message}");
+            errorMessage = $"Не удалось удалить оружие: {ex.Message}";
+            // Keep the modal open to show the error
         }
     }
 
-    // Filter weapons based on search query (simple name and skill search for now)
+    // Filter weapons based on all active filters
     private IQueryable<Weapon> GetFilteredWeapons() // Return non-nullable IQueryable<Weapon>
     {
-        if (weapons == null) 
+        if (weapons == null)
         {
-             return Enumerable.Empty<Weapon>().AsQueryable(); // Return empty IQueryable if source is null
+            return Enumerable.Empty<Weapon>().AsQueryable(); // Return empty IQueryable if source is null
         }
 
         var query = weapons.AsQueryable(); // Use AsQueryable for QuickGrid
 
-        // Apply search filter
+        // Apply text search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             query = query.Where(w =>
                 (w.Name != null && w.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
                 (w.Skill != null && w.Skill.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) // Search by type name
+                (w.Type.ToString().Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (w.Damage != null && w.Damage.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (w.Notes != null && w.Notes.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
             );
         }
 
-        // Apply QuickGrid sorting, filtering, and pagination - REMOVED incorrect checks
-        // QuickGrid handles sorting internally if PropertyColumn Sortable="true" is used.
-        // QuickGrid handles filtering internally if ColumnOptions are provided.
-        // QuickGrid handles pagination based on the Items and Paginator state.
-        // We just need to provide the correctly filtered base queryable.
+        // Apply weapon type filter
+        if (selectedTypeFilter.HasValue)
+        {
+            query = query.Where(w => w.Type == selectedTypeFilter.Value);
+        }
+
+        // Apply era filters
+        if (is1920Filter && !isModernFilter)
+        {
+            query = query.Where(w => w.Is1920);
+        }
+        else if (!is1920Filter && isModernFilter)
+        {
+            query = query.Where(w => w.IsModern);
+        }
+        else if (is1920Filter && isModernFilter)
+        {
+            query = query.Where(w => w.Is1920 || w.IsModern);
+        }
+
+        // Apply damage filter
+        if (!string.IsNullOrWhiteSpace(damageFilter))
+        {
+            query = query.Where(w => w.Damage != null && w.Damage.Contains(damageFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Apply skill filter
+        if (!string.IsNullOrWhiteSpace(skillFilter))
+        {
+            query = query.Where(w => w.Skill != null && w.Skill.Contains(skillFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Apply price range filter
+        if (!string.IsNullOrWhiteSpace(priceRangeFilter))
+        {
+            query = priceRangeFilter switch
+            {
+                "low" => query.Where(w => IsPriceLow(w.Cost)),
+                "medium" => query.Where(w => IsPriceMedium(w.Cost)),
+                "high" => query.Where(w => IsPriceHigh(w.Cost)),
+                _ => query
+            };
+        }
+
+        // Apply column header filters
+        foreach (var filter in columnFilters)
+        {
+            if (filter.Key == "Name" && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                query = query.Where(w => w.Name != null && w.Name.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
+            }
+            else if (filter.Key == "Type" && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                if (Enum.TryParse<WeaponType>(filter.Value, out var typeValue))
+                {
+                    query = query.Where(w => w.Type == typeValue);
+                }
+            }
+        }
 
         return query;
+    }
+
+    // Helper methods to determine price range
+    private bool IsPriceLow(string? price)
+    {
+        if (string.IsNullOrWhiteSpace(price)) return false;
+
+        // Extract numeric parts from the price string
+        string numericPart = new string(price.Where(c => char.IsDigit(c) || c == '.').ToArray());
+        if (string.IsNullOrWhiteSpace(numericPart)) return false;
+
+        if (decimal.TryParse(numericPart, out decimal value))
+        {
+            return value < 20;
+        }
+
+        return false;
+    }
+
+    private bool IsPriceMedium(string? price)
+    {
+        if (string.IsNullOrWhiteSpace(price)) return false;
+
+        // Extract numeric parts from the price string
+        string numericPart = new string(price.Where(c => char.IsDigit(c) || c == '.').ToArray());
+        if (string.IsNullOrWhiteSpace(numericPart)) return false;
+
+        if (decimal.TryParse(numericPart, out decimal value))
+        {
+            return value >= 20 && value <= 100;
+        }
+
+        return false;
+    }
+
+    private bool IsPriceHigh(string? price)
+    {
+        if (string.IsNullOrWhiteSpace(price)) return false;
+
+        // Extract numeric parts from the price string
+        string numericPart = new string(price.Where(c => char.IsDigit(c) || c == '.').ToArray());
+        if (string.IsNullOrWhiteSpace(numericPart)) return false;
+
+        if (decimal.TryParse(numericPart, out decimal value))
+        {
+            return value > 100;
+        }
+
+        return false;
     }
 
 }
