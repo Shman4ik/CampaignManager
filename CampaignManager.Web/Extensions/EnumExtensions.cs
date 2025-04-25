@@ -1,4 +1,4 @@
-using CampaignManager.Web.Model;
+using CampaignManager.Web.Weapons;
 using System.ComponentModel.DataAnnotations;
 
 namespace CampaignManager.Web.Extensions;

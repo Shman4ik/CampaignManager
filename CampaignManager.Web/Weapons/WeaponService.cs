@@ -1,9 +1,8 @@
-﻿
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Weapons;
 
 public class WeaponService
 {
@@ -20,16 +19,16 @@ public class WeaponService
     public async Task<List<Weapon>> GetAllRangeWeaponsAsync()
     {
         return await GetAllWeaponsAsync(
-            WeaponType.Pistols | 
-            WeaponType.Rifles | 
-            WeaponType.Shotguns | 
-            WeaponType.AssaultRifles | 
-            WeaponType.SubmachineGuns | 
-            WeaponType.MachineGuns | 
-            WeaponType.ExplosivesAndHeavyWeapons | 
+            WeaponType.Pistols |
+            WeaponType.Rifles |
+            WeaponType.Shotguns |
+            WeaponType.AssaultRifles |
+            WeaponType.SubmachineGuns |
+            WeaponType.MachineGuns |
+            WeaponType.ExplosivesAndHeavyWeapons |
             WeaponType.Other);
     }
-    
+
 
     /// <summary>
     /// Асинхронно получает список всех видов оружия с возможностью фильтрации по типу
@@ -46,7 +45,7 @@ public class WeaponService
         }
 
         var query = _dbContext.Weapons.AsQueryable();
-        
+
         if (type.HasValue)
         {
             query = query.Where(w => w.Type == type.Value);
@@ -66,8 +65,8 @@ public class WeaponService
     {
         return GetAllWeaponsAsync(type).GetAwaiter().GetResult();
     }
-    
-    
+
+
 
     /// <summary>
     /// Асинхронно получает оружие по его идентификатору
@@ -88,12 +87,12 @@ public class WeaponService
     public async Task<Weapon?> GetWeaponByNameAsync(string name, WeaponType? type = null)
     {
         var query = _dbContext.Weapons.AsQueryable();
-        
+
         if (type.HasValue)
         {
             query = query.Where(w => w.Type == type.Value);
         }
-        
+
         return await query.FirstOrDefaultAsync(w => w.Name == name);
     }
 
@@ -144,14 +143,14 @@ public class WeaponService
     {
         return await GetAllWeaponsAsync(type);
     }
-    
+
     /// <summary>
     /// Очищает кэш оружия
     /// </summary>
     private void ClearCache()
     {
         _cache.Remove(WeaponsKey);
-        
+
         // Clear cache for each weapon type
         foreach (WeaponType type in Enum.GetValues(typeof(WeaponType)))
         {

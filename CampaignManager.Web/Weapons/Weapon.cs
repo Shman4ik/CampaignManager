@@ -1,6 +1,7 @@
+using CampaignManager.Web.Model;
 using System.ComponentModel.DataAnnotations;
 
-namespace CampaignManager.Web.Model;
+namespace CampaignManager.Web.Weapons;
 
 /// <summary>
 ///     Класс для всех видов оружия
@@ -29,17 +30,17 @@ public class Weapon : BaseDataBaseEntity
     [Required]
     [StringLength(50)]
     public string Skill { get; set; } = string.Empty;
-    
+
     /// <summary>
     ///     Признак оружия эпохи 1920-х годов
     /// </summary>
     public bool Is1920 { get; set; }
-    
+
     /// <summary>
     ///     Признак современного оружия
     /// </summary>
     public bool IsModern { get; set; }
-    
+
     /// <summary>
     ///     Урон, наносимый оружием
     /// </summary>
@@ -58,7 +59,7 @@ public class Weapon : BaseDataBaseEntity
     ///     Количество атак, совершаемых оружием
     /// </summary>
     [Required]
-    [StringLength(20)]
+    [StringLength(40)]
     public string Attacks { get; set; } = string.Empty;
 
     /// <summary>
@@ -73,7 +74,7 @@ public class Weapon : BaseDataBaseEntity
     [StringLength(500)]
     public string Notes { get; set; } = string.Empty;
 
-    
+
 
     /// <summary>
     ///     Тип боеприпасов (для оружия дальнего боя)

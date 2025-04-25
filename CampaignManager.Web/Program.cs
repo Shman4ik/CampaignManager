@@ -6,6 +6,7 @@ using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Services;
+using CampaignManager.Web.Weapons;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;

@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Companies.Models;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Weapons;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Services;

@@ -1,4 +1,6 @@
-﻿namespace CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Weapons;
+
+namespace CampaignManager.Web.Model;
 
 public class RangedCombatDetails
 {
