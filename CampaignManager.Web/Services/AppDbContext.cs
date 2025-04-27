@@ -1,5 +1,6 @@
-﻿using CampaignManager.Web.Companies.Models;
+using CampaignManager.Web.Companies.Models;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.SpellComponents;
 using CampaignManager.Web.Weapons;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CharacterStorageDto> CharacterStorage { get; set; }
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; }
     public DbSet<Weapon> Weapons { get; set; }
+    public DbSet<Spell> Spells { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -80,6 +82,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasDefaultValue(WeaponType.Melee)
                 .HasConversion<string>();
             entity.HasIndex(w => w.Name).IsUnique();
+        });
+        
+        // Настройка заклинаний
+        modelBuilder.Entity<Spell>(entity =>
+        {
+            entity.ToTable("Spells");
+            entity.Property(s => s.Name).IsRequired();
+            entity.HasIndex(s => s.Name).IsUnique();
+            
+            // Настройка для хранения списка альтернативных имен
+            entity.Property(s => s.AlternativeNames)
+                .HasColumnType("jsonb");
         });
     }
 }

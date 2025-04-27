@@ -1,0 +1,572 @@
+@page "/spells"
+@using CampaignManager.Web.SpellComponents
+@using Microsoft.AspNetCore.Components.QuickGrid
+
+@inject SpellService SpellService 
+@rendermode InteractiveServer
+
+<PageTitle>Заклинания - Campaign Manager</PageTitle>
+
+<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <!-- Улучшенная панель фильтров - более компактная -->
+    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-3 mb-4 border border-gray-200">
+        <div class="flex justify-between items-center mb-2">
+            <div class="flex items-center">
+                <h2 class="text-base font-semibold text-gray-700 mr-2">Фильтры</h2>
+                <button @onclick="ToggleSearchPanel" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas @(isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                </button>
+            </div>
+            <div class="flex space-x-2">
+                @if (isSearchPanelVisible)
+                {
+                    <button @onclick="ResetFilters"
+                            class="text-blue-600 hover:text-blue-800 py-1 px-2 rounded-md border border-blue-300 hover:border-blue-500 text-xs flex items-center">
+                        <i class="fas fa-undo-alt mr-1"></i>
+                        <span>Сбросить</span>
+                    </button>
+                }
+                <!-- Кнопка добавления заклинания (компактнее) -->
+                <button @onclick="ShowAddModal"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm flex items-center">
+                    <i class="fas fa-plus mr-1"></i>
+                    <span>Добавить</span>
+                </button>
+            </div>
+        </div>
+        
+        @if (isSearchPanelVisible)
+        {
+            <!-- Содержимое панели поиска -->
+            <div class="mb-3">
+                <!-- Более компактный макет фильтров -->
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <div class="flex-grow">
+                        <label for="searchQuery" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
+                        <div class="relative">
+                            <input type="text" id="searchQuery"
+                                   class="w-full border rounded-lg pl-8 pr-3 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                   placeholder="Поиск по названию, типу..."
+                                   @bind="searchQuery"
+                                   @bind:event="oninput" />
+                            <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                <i class="fas fa-search text-gray-400 text-xs"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full sm:w-48">
+                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип заклинания</label>
+                        <select id="typeFilter"
+                                class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                @onchange="OnSpellTypeFilterChanged">
+                            <option value="">Все типы</option>
+                            @foreach (var typeValue in GetSpellTypes())
+                            {
+                                <option value="@typeValue">@typeValue</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (filteredSpells.Count() == 0)
+    {
+        <div class="bg-white rounded-lg shadow-md p-4 text-center border border-gray-200">
+            <div class="flex flex-col items-center justify-center py-6">
+                <div class="rounded-full bg-gray-100 p-3 mb-4">
+                    <i class="fas fa-spell-check text-gray-400 text-3xl"></i>
+                </div>
+                <p class="text-gray-600 text-base">
+                    По вашему запросу не найдено ни одного заклинания. Попробуйте изменить параметры поиска.
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <!-- Таблица для средних и больших экранов с компактными ячейками -->
+            <div class="hidden md:block overflow-x-auto">
+                <QuickGrid Items="(IQueryable<Spell>)filteredSpells" TItem="Spell" Class="w-full text-sm">
+                    <PropertyColumn Property="@(s => s.Name)" Title="Название" Sortable="true" Class="px-2 py-2 border-b border-gray-200">
+                    </PropertyColumn>
+                    <PropertyColumn Property="@(s => s.SpellType)" Title="Тип" Sortable="true" Class="px-2 py-2 border-b border-gray-200">
+                        <ColumnOptions>
+                            <div class="p-2">
+                                <select class="w-full border rounded px-2 py-1"
+                                        @onchange="@(e => FilterColumn("SpellType", e.Value?.ToString() ?? ""))">
+                                    <option value="">Все</option>
+                                    @foreach (var type in GetSpellTypes())
+                                    {
+                                        <option value="@type">@type</option>
+                                    }
+                                </select>
+                            </div>
+                        </ColumnOptions>
+                    </PropertyColumn>
+                    <PropertyColumn Property="@(s => s.Cost)" Title="Стоимость" Sortable="true" Class="px-2 py-2 border-b border-gray-200" />
+                    <PropertyColumn Property="@(s => s.CastingTime)" Title="Время сотворения" Class="px-2 py-2 border-b border-gray-200" />
+                    <TemplateColumn Title="" Class="px-2 py-2 border-b border-gray-200 text-center">
+                        <ChildContent>
+                            <div class="flex justify-center space-x-1">
+                                <button @onclick="() => ShowViewModal(context)"
+                                        class="text-gray-500 hover:text-blue-600 p-1 rounded" title="Просмотр">
+                                    <i class="fas fa-eye text-xs"></i>
+                                </button>
+                                <button @onclick="() => ShowEditModal(context)"
+                                        class="text-gray-500 hover:text-yellow-600 p-1 rounded" title="Редактировать">
+                                    <i class="fas fa-edit text-xs"></i>
+                                </button>
+                                <button @onclick="() => ShowDeleteConfirmation(context)"
+                                        class="text-gray-500 hover:text-red-600 p-1 rounded" title="Удалить">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </ChildContent>
+                    </TemplateColumn>
+                    <Paginator State="@pagination" />
+                </QuickGrid>
+            </div>
+
+            <!-- Карточный вид для мобильных устройств -->
+            <div class="md:hidden">
+                <div class="divide-y divide-gray-200">
+                    @foreach (var spell in filteredSpells.Skip(pagination.CurrentPageIndex * pagination.ItemsPerPage).Take(pagination.ItemsPerPage))
+                    {
+                        <div class="p-3">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-medium text-gray-800">@spell.Name</div>
+                                <div class="text-xs text-white bg-blue-600 rounded-full px-2 py-0.5">@spell.SpellType</div>
+                            </div>
+                            <div class="text-xs text-gray-600 mb-1">
+                                <span class="font-medium">Стоимость:</span> @spell.Cost
+                            </div>
+                            <div class="text-xs text-gray-600 mb-2">
+                                <span class="font-medium">Время сотворения:</span> @spell.CastingTime
+                            </div>
+                            <div class="flex justify-end space-x-2 pt-1">
+                                <button @onclick="() => ShowViewModal(spell)"
+                                        class="text-blue-600 hover:text-blue-800 text-xs flex items-center">
+                                    <i class="fas fa-eye mr-1"></i>
+                                    <span>Просмотр</span>
+                                </button>
+                                <button @onclick="() => ShowEditModal(spell)"
+                                        class="text-yellow-600 hover:text-yellow-800 text-xs flex items-center">
+                                    <i class="fas fa-edit mr-1"></i>
+                                    <span>Правка</span>
+                                </button>
+                                <button @onclick="() => ShowDeleteConfirmation(spell)"
+                                        class="text-red-600 hover:text-red-800 text-xs flex items-center">
+                                    <i class="fas fa-trash mr-1"></i>
+                                    <span>Удалить</span>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <!-- Пагинация для мобильного вида -->
+                <div class="p-3 border-t border-gray-200">
+                    <Paginator State="@pagination" />
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Модальное окно просмотра заклинания -->
+    <Modal @bind-Visible="isViewModalVisible">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>@currentSpell?.Name</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500">Тип заклинания</h3>
+                        <p class="mt-1">@currentSpell?.SpellType</p>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500">Стоимость</h3>
+                        <p class="mt-1">@currentSpell?.Cost</p>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500">Время сотворения</h3>
+                        <p class="mt-1">@currentSpell?.CastingTime</p>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500">Описание</h3>
+                        <p class="mt-1">@currentSpell?.Description</p>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500">Альтернативные названия</h3>
+                        <ul class="mt-1 list-disc list-inside">
+                            @if (currentSpell?.AlternativeNames != null)
+                            {
+                                @foreach (var altName in currentSpell.AlternativeNames)
+                                {
+                                    <li>@altName</li>
+                                }
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="CloseViewModal">Закрыть</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+
+    <!-- Модальное окно добавления/редактирования заклинания -->
+    <Modal @bind-Visible="isEditModalVisible">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>@(isAdding ? "Добавить заклинание" : "Редактировать заклинание")</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody>
+                <EditForm Model="@editingSpell" OnValidSubmit="HandleValidSubmit">
+                    <DataAnnotationsValidator />
+                    <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+
+                    <div class="mb-3">
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                        <InputText id="name" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Name" disabled="@(!isAdding)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="spellType" class="block text-sm font-medium text-gray-700 mb-1">Тип заклинания</label>
+                        <InputText id="spellType" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.SpellType" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="cost" class="block text-sm font-medium text-gray-700 mb-1">Стоимость</label>
+                        <InputText id="cost" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Cost" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="castingTime" class="block text-sm font-medium text-gray-700 mb-1">Время сотворения</label>
+                        <InputText id="castingTime" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.CastingTime" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+                        <InputTextArea id="description" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Description" rows="4" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Альтернативные названия</label>
+                        <div class="space-y-2">
+                            @{
+                                // Use an indexed loop with local variables
+                                for (int i = 0; i < alternativeNames.Count; i++)
+                                {
+                                    string currentName = alternativeNames[i];
+                                    int currentIndex = i;
+                                    <div class="flex gap-2">
+                                        <input type="text" class="w-full border rounded px-3 py-2"
+                                               value="@currentName"
+                                               @onchange="@(e => UpdateAlternativeName(currentIndex, e.Value?.ToString()))" />
+                                        <button type="button" class="text-red-600 hover:text-red-800" 
+                                                @onclick="@(e => RemoveAlternativeName(currentIndex))">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            }
+                            <button type="button" class="text-blue-600 hover:text-blue-800 text-sm flex items-center" @onclick="AddAlternativeName">
+                                <i class="fas fa-plus mr-1"></i>
+                                <span>Добавить название</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end space-x-2 mt-4">
+                        <Button Color="Color.Secondary" Type="ButtonType.Button" Clicked="CloseEditModal">Отмена</Button>
+                        <Button Color="Color.Primary" Type="ButtonType.Submit">Сохранить</Button>
+                    </div>
+                </EditForm>
+            </ModalBody>
+        </ModalContent>
+    </Modal>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <Modal @bind-Visible="isDeleteModalVisible">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>Подтверждение удаления</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody>
+                <p>Вы уверены, что хотите удалить заклинание "@currentSpell?.Name"?</p>
+                <p class="text-gray-500 text-sm mt-2">Это действие нельзя будет отменить.</p>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="CloseDeleteModal">Отмена</Button>
+                <Button Color="Color.Danger" Clicked="DeleteSpell">Удалить</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+
+    <!-- Модальное окно с сообщением об ошибке -->
+    <Modal @bind-Visible="isErrorModalVisible">
+        <ModalContent Centered>
+            <ModalHeader>
+                <ModalTitle>Ошибка</ModalTitle>
+                <CloseButton />
+            </ModalHeader>
+            <ModalBody>
+                <p>@errorMessage</p>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="CloseErrorModal">Закрыть</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+</div>
+
+@code {
+    private List<Spell>? spells;
+    private IQueryable<Spell> filteredSpells => FilterSpells();
+    private Spell? currentSpell;
+    private Spell editingSpell = new();
+    private List<string> alternativeNames = [];
+    private Dictionary<string, string> columnFilters = new();
+    private bool isSearchPanelVisible = true;
+    private bool isViewModalVisible;
+    private bool isEditModalVisible;
+    private bool isDeleteModalVisible;
+    private bool isErrorModalVisible;
+    private bool isAdding;
+    private string searchQuery = "";
+    private string? selectedTypeFilter;
+    private string errorMessage = "";
+    private PaginationState pagination = new() { ItemsPerPage = 10 };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSpells();
+    }
+
+    private async Task LoadSpells()
+    {
+        spells = await SpellService.GetAllSpellsAsync();
+    }
+
+    private List<string> GetSpellTypes()
+    {
+        return spells?
+            .Select(s => s.SpellType)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToList() ?? [];
+    }
+
+    private void OnSpellTypeFilterChanged(ChangeEventArgs e)
+    {
+        selectedTypeFilter = e.Value?.ToString();
+    }
+
+    private void FilterColumn(string columnName, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            columnFilters.Remove(columnName);
+        }
+        else
+        {
+            columnFilters[columnName] = value;
+        }
+    }
+
+    private IQueryable<Spell> FilterSpells()
+    {
+        if (spells == null)
+        {
+            return Enumerable.Empty<Spell>().AsQueryable();
+        }
+
+        var query = spells.AsQueryable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            query = query.Where(s => 
+                (s.Name != null && s.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (s.SpellType != null && s.SpellType.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (s.Description != null && s.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (s.AlternativeNames != null && s.AlternativeNames.Any(name => 
+                    name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)))
+            );
+        }
+
+        // Apply spell type filter
+        if (!string.IsNullOrWhiteSpace(selectedTypeFilter))
+        {
+            query = query.Where(s => s.SpellType == selectedTypeFilter);
+        }
+
+        // Apply column header filters
+        foreach (var filter in columnFilters)
+        {
+            if (filter.Key == "SpellType" && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                query = query.Where(s => s.SpellType == filter.Value);
+            }
+        }
+
+        return query;
+    }
+
+    private void ToggleSearchPanel()
+    {
+        isSearchPanelVisible = !isSearchPanelVisible;
+    }
+
+    private void ResetFilters()
+    {
+        searchQuery = "";
+        selectedTypeFilter = null;
+        columnFilters.Clear();
+    }
+
+    private void ShowViewModal(Spell spell)
+    {
+        currentSpell = spell;
+        isViewModalVisible = true;
+    }
+
+    private void CloseViewModal()
+    {
+        isViewModalVisible = false;
+        currentSpell = null;
+    }
+
+    private void ShowAddModal()
+    {
+        isAdding = true;
+        editingSpell = new Spell
+        {
+            Name = "",
+            SpellType = "",
+            Cost = "",
+            CastingTime = "",
+            Description = "",
+            AlternativeNames = []
+        };
+        alternativeNames = [];
+        isEditModalVisible = true;
+    }
+
+    private void ShowEditModal(Spell spell)
+    {
+        isAdding = false;
+        editingSpell = new Spell
+        {
+            Id = spell.Id,
+            Name = spell.Name,
+            SpellType = spell.SpellType,
+            Cost = spell.Cost,
+            CastingTime = spell.CastingTime,
+            Description = spell.Description,
+            AlternativeNames = spell.AlternativeNames?.ToList() ?? []
+        };
+        alternativeNames = editingSpell.AlternativeNames.ToList();
+        isEditModalVisible = true;
+    }
+
+    private void CloseEditModal()
+    {
+        isEditModalVisible = false;
+        editingSpell = new Spell();
+        alternativeNames.Clear();
+    }
+
+    private void ShowDeleteConfirmation(Spell spell)
+    {
+        currentSpell = spell;
+        isDeleteModalVisible = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        isDeleteModalVisible = false;
+        currentSpell = null;
+    }
+
+    private void CloseErrorModal()
+    {
+        isErrorModalVisible = false;
+    }
+
+    private void AddAlternativeName()
+    {
+        alternativeNames.Add("");
+    }
+
+    private void RemoveAlternativeName(int index)
+    {
+        if (index >= 0 && index < alternativeNames.Count)
+        {
+            alternativeNames.RemoveAt(index);
+        }
+    }
+
+    private void UpdateAlternativeName(int index, string? value)
+    {
+        if (index >= 0 && index < alternativeNames.Count && value != null)
+        {
+            alternativeNames[index] = value;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        editingSpell.AlternativeNames = alternativeNames.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+
+        bool success;
+        if (isAdding)
+        {
+            success = await SpellService.AddSpellAsync(editingSpell);
+            if (!success)
+            {
+                errorMessage = "Не удалось добавить заклинание. Возможно, заклинание с таким названием уже существует.";
+                isErrorModalVisible = true;
+                return;
+            }
+        }
+        else
+        {
+            success = await SpellService.UpdateSpellAsync(editingSpell);
+            if (!success)
+            {
+                errorMessage = "Не удалось обновить заклинание.";
+                isErrorModalVisible = true;
+                return;
+            }
+        }
+
+        CloseEditModal();
+        await LoadSpells();
+    }
+
+    private async Task DeleteSpell()
+    {
+        if (currentSpell == null) return;
+
+        var success = await SpellService.DeleteSpellAsync(currentSpell.Id);
+        if (!success)
+        {
+            errorMessage = "Не удалось удалить заклинание.";
+            isErrorModalVisible = true;
+            CloseDeleteModal();
+            return;
+        }
+
+        CloseDeleteModal();
+        await LoadSpells();
+    }
+}

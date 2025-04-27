@@ -1,10 +1,11 @@
-﻿using Blazorise;
+using Blazorise;
 using Blazorise.Icons.FontAwesome;
 using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Services;
+using CampaignManager.Web.SpellComponents;
 using CampaignManager.Web.Utilities.Services;
 using CampaignManager.Web.Weapons;
 using Microsoft.AspNetCore.Authentication;
@@ -90,6 +91,7 @@ builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
+builder.Services.AddScoped<SpellService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
