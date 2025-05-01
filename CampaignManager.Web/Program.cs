@@ -72,6 +72,7 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+builder.Services.AddCascadingAuthenticationState();
 
 // Add Swagger services
 builder.Services.AddEndpointsApiExplorer();
