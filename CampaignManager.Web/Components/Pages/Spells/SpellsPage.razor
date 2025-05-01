@@ -1,8 +1,7 @@
 @page "/spells"
 @using CampaignManager.Web.SpellComponents
-@using Microsoft.AspNetCore.Components.QuickGrid
 
-@inject SpellService SpellService 
+@inject SpellService SpellService
 @rendermode InteractiveServer
 
 <PageTitle>Заклинания - Campaign Manager</PageTitle>
@@ -34,7 +33,7 @@
                 </button>
             </div>
         </div>
-        
+
         @if (isSearchPanelVisible)
         {
             <!-- Содержимое панели поиска -->
@@ -48,7 +47,7 @@
                                    class="w-full border rounded-lg pl-8 pr-3 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                                    placeholder="Поиск по названию, типу..."
                                    @bind="searchQuery"
-                                   @bind:event="oninput" />
+                                   @bind:event="oninput"/>
                             <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
                                 <i class="fas fa-search text-gray-400 text-xs"></i>
                             </div>
@@ -56,7 +55,8 @@
                     </div>
 
                     <div class="w-full sm:w-48">
-                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип заклинания</label>
+                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип
+                            заклинания</label>
                         <select id="typeFilter"
                                 class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                                 @onchange="OnSpellTypeFilterChanged">
@@ -90,239 +90,329 @@
         <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
             <!-- Таблица для средних и больших экранов с компактными ячейками -->
             <div class="hidden md:block overflow-x-auto">
-                <QuickGrid Items="(IQueryable<Spell>)filteredSpells" TItem="Spell" Class="w-full text-sm">
-                    <PropertyColumn Property="@(s => s.Name)" Title="Название" Sortable="true" Class="px-2 py-2 border-b border-gray-200">
-                    </PropertyColumn>
-                    <PropertyColumn Property="@(s => s.SpellType)" Title="Тип" Sortable="true" Class="px-2 py-2 border-b border-gray-200">
-                        <ColumnOptions>
-                            <div class="p-2">
-                                <select class="w-full border rounded px-2 py-1"
-                                        @onchange="@(e => FilterColumn("SpellType", e.Value?.ToString() ?? ""))">
-                                    <option value="">Все</option>
-                                    @foreach (var type in GetSpellTypes())
-                                    {
-                                        <option value="@type">@type</option>
-                                    }
-                                </select>
-                            </div>
-                        </ColumnOptions>
-                    </PropertyColumn>
-                    <PropertyColumn Property="@(s => s.Cost)" Title="Стоимость" Sortable="true" Class="px-2 py-2 border-b border-gray-200" />
-                    <PropertyColumn Property="@(s => s.CastingTime)" Title="Время сотворения" Class="px-2 py-2 border-b border-gray-200" />
-                    <TemplateColumn Title="" Class="px-2 py-2 border-b border-gray-200 text-center">
-                        <ChildContent>
-                            <div class="flex justify-center space-x-1">
-                                <button @onclick="() => ShowViewModal(context)"
-                                        class="text-gray-500 hover:text-blue-600 p-1 rounded" title="Просмотр">
-                                    <i class="fas fa-eye text-xs"></i>
-                                </button>
-                                <button @onclick="() => ShowEditModal(context)"
-                                        class="text-gray-500 hover:text-yellow-600 p-1 rounded" title="Редактировать">
-                                    <i class="fas fa-edit text-xs"></i>
-                                </button>
-                                <button @onclick="() => ShowDeleteConfirmation(context)"
-                                        class="text-gray-500 hover:text-red-600 p-1 rounded" title="Удалить">
-                                    <i class="fas fa-trash text-xs"></i>
-                                </button>
-                            </div>
-                        </ChildContent>
-                    </TemplateColumn>
-                    <Paginator State="@pagination" />
-                </QuickGrid>
+                <table class="w-full text-sm">
+                    <thead>
+                    <tr class="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-3 py-2">Название</th>
+                        <th class="px-3 py-2">Тип</th>
+                        <th class="px-3 py-2 text-center">Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                    @foreach (var spell in filteredSpells)
+                    {
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">@spell.Name</div>
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <div class="text-sm text-gray-700">@spell.SpellType</div>
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap text-center">
+                                <div class="flex justify-center space-x-2">
+                                    <button @onclick="() => ToggleSpellDetails(spell)"
+                                            class="text-blue-600 hover:text-blue-800 text-xs flex items-center">
+                                        <i class="fas @(expandedSpellId == spell.Id ? "fa-chevron-up" : "fa-chevron-down") mr-1"></i>
+                                        <span>@(expandedSpellId == spell.Id ? "Свернуть" : "Подробнее")</span>
+                                    </button>
+                                    <button @onclick="() => ShowEditModal(spell)"
+                                            class="text-yellow-600 hover:text-yellow-800 text-xs flex items-center">
+                                        <i class="fas fa-edit mr-1"></i>
+                                        <span>Правка</span>
+                                    </button>
+                                    <button @onclick="() => ShowDeleteConfirmation(spell)"
+                                            class="text-red-600 hover:text-red-800 text-xs flex items-center">
+                                        <i class="fas fa-trash mr-1"></i>
+                                        <span>Удалить</span>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        @if (expandedSpellId == spell.Id)
+                        {
+                            <tr>
+                                <td colspan="3" class="px-0 py-0 bg-gray-50">
+                                    <div class="p-4 space-y-5">
+                                        @if (spell.AlternativeNames != null && spell.AlternativeNames.Any())
+                                        {
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-500">Альтернативные названия</h3>
+                                                <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                                    @foreach (var altName in spell.AlternativeNames)
+                                                    {
+                                                        <div class="text-sm">@altName</div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-500">Стоимость</h3>
+                                                <p class="mt-1">@spell.Cost</p>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-500">Время сотворения</h3>
+                                                <p class="mt-1">@spell.CastingTime</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-500">Описание</h3>
+                                            <p class="mt-1">@spell.Description</p>
+                                        </div>
+                                        <div class="pt-2">
+                                            <button @onclick="() => ToggleSpellDetails(spell)"
+                                                    class="text-blue-600 hover:text-blue-800 text-xs flex items-center">
+                                                <i class="fas fa-chevron-up mr-1"></i>
+                                                <span>Свернуть</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
             </div>
 
             <!-- Карточный вид для мобильных устройств -->
             <div class="md:hidden">
                 <div class="divide-y divide-gray-200">
-                    @foreach (var spell in filteredSpells.Skip(pagination.CurrentPageIndex * pagination.ItemsPerPage).Take(pagination.ItemsPerPage))
+                    @foreach (var spell in filteredSpells)
                     {
                         <div class="p-3">
                             <div class="flex justify-between items-start mb-2">
                                 <div class="font-medium text-gray-800">@spell.Name</div>
-                                <div class="text-xs text-white bg-blue-600 rounded-full px-2 py-0.5">@spell.SpellType</div>
+                                <div
+                                    class="text-xs text-white bg-blue-600 rounded-full px-2 py-0.5">@spell.SpellType</div>
                             </div>
-                            <div class="text-xs text-gray-600 mb-1">
-                                <span class="font-medium">Стоимость:</span> @spell.Cost
-                            </div>
-                            <div class="text-xs text-gray-600 mb-2">
-                                <span class="font-medium">Время сотворения:</span> @spell.CastingTime
-                            </div>
-                            <div class="flex justify-end space-x-2 pt-1">
-                                <button @onclick="() => ShowViewModal(spell)"
+                            <div class="flex justify-between items-center pt-1">
+                                <button @onclick="() => ToggleSpellDetails(spell)"
                                         class="text-blue-600 hover:text-blue-800 text-xs flex items-center">
-                                    <i class="fas fa-eye mr-1"></i>
-                                    <span>Просмотр</span>
+                                    <i class="fas @(expandedSpellId == spell.Id ? "fa-chevron-up" : "fa-chevron-down") mr-1"></i>
+                                    <span>@(expandedSpellId == spell.Id ? "Свернуть" : "Подробнее")</span>
                                 </button>
-                                <button @onclick="() => ShowEditModal(spell)"
-                                        class="text-yellow-600 hover:text-yellow-800 text-xs flex items-center">
-                                    <i class="fas fa-edit mr-1"></i>
-                                    <span>Правка</span>
-                                </button>
-                                <button @onclick="() => ShowDeleteConfirmation(spell)"
-                                        class="text-red-600 hover:text-red-800 text-xs flex items-center">
-                                    <i class="fas fa-trash mr-1"></i>
-                                    <span>Удалить</span>
-                                </button>
+                                <div class="flex space-x-2">
+                                    <button @onclick="() => ShowEditModal(spell)"
+                                            class="text-yellow-600 hover:text-yellow-800 text-xs flex items-center">
+                                        <i class="fas fa-edit mr-1"></i>
+                                        <span>Правка</span>
+                                    </button>
+                                    <button @onclick="() => ShowDeleteConfirmation(spell)"
+                                            class="text-red-600 hover:text-red-800 text-xs flex items-center">
+                                        <i class="fas fa-trash mr-1"></i>
+                                        <span>Удалить</span>
+                                    </button>
+                                </div>
                             </div>
+                            @if (expandedSpellId == spell.Id)
+                            {
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <div class="space-y-4">
+                                        @if (spell.AlternativeNames != null && spell.AlternativeNames.Any())
+                                        {
+                                            <div>
+                                                <h3 class="text-xs font-medium text-gray-500">Альтернативные названия</h3>
+                                                <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    @foreach (var altName in spell.AlternativeNames)
+                                                    {
+                                                        <div class="text-sm">@altName</div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <h3 class="text-xs font-medium text-gray-500">Стоимость</h3>
+                                                <p class="mt-1 text-sm">@spell.Cost</p>
+                                            </div>
+                                            <div>
+                                                <h3 class="text-xs font-medium text-gray-500">Время сотворения</h3>
+                                                <p class="mt-1 text-sm">@spell.CastingTime</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-xs font-medium text-gray-500">Описание</h3>
+                                            <p class="mt-1 text-sm">@spell.Description</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     }
-                </div>
-                <!-- Пагинация для мобильного вида -->
-                <div class="p-3 border-t border-gray-200">
-                    <Paginator State="@pagination" />
                 </div>
             </div>
         </div>
     }
 
-    <!-- Модальное окно просмотра заклинания -->
-    <Modal @bind-Visible="isViewModalVisible">
-        <ModalContent Centered>
-            <ModalHeader>
-                <ModalTitle>@currentSpell?.Name</ModalTitle>
-                <CloseButton />
+    <!-- Модальное окно добавления/редактирования заклинания -->
+    <Modal @bind-Visible="isEditModalVisible" Size="ModalSize.Large">
+        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
+            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                <ModalTitle Class="font-bold text-xl">@(isAdding ? "Добавить заклинание" : "Редактировать заклинание")</ModalTitle>
+                <CloseButton Clicked="@CloseEditModal" Class="text-white hover:bg-blue-700 rounded-full" />
             </ModalHeader>
-            <ModalBody>
-                <div class="space-y-4">
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-500">Тип заклинания</h3>
-                        <p class="mt-1">@currentSpell?.SpellType</p>
+            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
+                        <i class="fas fa-exclamation-circle text-red-500 mr-2 mt-0.5"></i>
+                        <span>@errorMessage</span>
                     </div>
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-500">Стоимость</h3>
-                        <p class="mt-1">@currentSpell?.Cost</p>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-500">Время сотворения</h3>
-                        <p class="mt-1">@currentSpell?.CastingTime</p>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-500">Описание</h3>
-                        <p class="mt-1">@currentSpell?.Description</p>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-medium text-gray-500">Альтернативные названия</h3>
-                        <ul class="mt-1 list-disc list-inside">
-                            @if (currentSpell?.AlternativeNames != null)
-                            {
-                                @foreach (var altName in currentSpell.AlternativeNames)
-                                {
-                                    <li>@altName</li>
+                }
+                <EditForm Model="@editingSpell" OnValidSubmit="HandleValidSubmit" Id="spell-edit-form">
+                    <DataAnnotationsValidator/>
+                    <Microsoft.AspNetCore.Components.Forms.ValidationSummary class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300" />
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div class="space-y-1">
+                            <label for="name" class="block text-sm font-medium text-gray-700">Название</label>
+                            <InputText id="name" @bind-Value="editingSpell.Name" 
+                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                            <ValidationMessage For="@(() => editingSpell.Name)" class="text-red-600 text-sm" />
+                        </div>
+
+                        <div class="space-y-1">
+                            <label for="spellType" class="block text-sm font-medium text-gray-700">Тип заклинания</label>
+                            <InputText id="spellType" @bind-Value="editingSpell.SpellType"
+                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                            <ValidationMessage For="@(() => editingSpell.SpellType)" class="text-red-600 text-sm" />
+                        </div>
+
+                        <div class="space-y-1">
+                            <label for="cost" class="block text-sm font-medium text-gray-700">Стоимость</label>
+                            <InputText id="cost" @bind-Value="editingSpell.Cost"
+                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                            <ValidationMessage For="@(() => editingSpell.Cost)" class="text-red-600 text-sm" />
+                        </div>
+
+                        <div class="space-y-1">
+                            <label for="castingTime" class="block text-sm font-medium text-gray-700">Время сотворения</label>
+                            <InputText id="castingTime" @bind-Value="editingSpell.CastingTime"
+                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                            <ValidationMessage For="@(() => editingSpell.CastingTime)" class="text-red-600 text-sm" />
+                        </div>
+
+                        <div class="md:col-span-2 space-y-1 mt-2">
+                            <label for="description" class="block text-sm font-medium text-gray-700">Описание</label>
+                            <InputTextArea id="description" @bind-Value="editingSpell.Description" rows="4"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" />
+                            <ValidationMessage For="@(() => editingSpell.Description)" class="text-red-600 text-sm" />
+                        </div>
+
+                        <div class="md:col-span-2 space-y-1 mt-2">
+                            <label class="block text-sm font-medium text-gray-700">Альтернативные названия</label>
+                            <div class="space-y-2">
+                                @{
+                                    // Use an indexed loop with local variables
+                                    for (int i = 0; i < alternativeNames.Count; i++)
+                                    {
+                                        string currentName = alternativeNames[i];
+                                        int currentIndex = i;
+                                        <div class="flex gap-2">
+                                            <input type="text" 
+                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                                                   value="@currentName"
+                                                   @onchange="@(e => UpdateAlternativeName(currentIndex, e.Value?.ToString()))"/>
+                                            <button type="button" 
+                                                    class="px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
+                                                    @onclick="@(e => RemoveAlternativeName(currentIndex))">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    }
                                 }
-                            }
-                        </ul>
+                                <button type="button" 
+                                        class="text-blue-600 hover:text-blue-800 text-sm flex items-center py-1 px-2 hover:bg-blue-50 rounded transition-colors"
+                                        @onclick="AddAlternativeName">
+                                    <i class="fas fa-plus mr-1"></i>
+                                    <span>Добавить название</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </EditForm>
             </ModalBody>
-            <ModalFooter>
-                <Button Color="Color.Secondary" Clicked="CloseViewModal">Закрыть</Button>
+            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+                <button type="button" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm" 
+                        @onclick="CloseEditModal">
+                    Отмена
+                </button>
+                <button type="submit" 
+                        form="spell-edit-form" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out shadow-sm">
+                    @(isAdding ? "Добавить заклинание" : "Сохранить изменения")
+                </button>
             </ModalFooter>
         </ModalContent>
     </Modal>
 
-    <!-- Модальное окно добавления/редактирования заклинания -->
-    <Modal @bind-Visible="isEditModalVisible">
-        <ModalContent Centered>
-            <ModalHeader>
-                <ModalTitle>@(isAdding ? "Добавить заклинание" : "Редактировать заклинание")</ModalTitle>
-                <CloseButton />
+    <!-- Модальное окно подтверждения удаления -->
+    <Modal @bind-Visible="isDeleteModalVisible" Size="ModalSize.Small">
+        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
+            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 text-white">
+                <ModalTitle Class="font-bold text-xl">Подтверждение удаления</ModalTitle>
+                <CloseButton Clicked="@CloseDeleteModal" Class="text-white hover:bg-red-700 rounded-full" />
             </ModalHeader>
-            <ModalBody>
-                <EditForm Model="@editingSpell" OnValidSubmit="HandleValidSubmit">
-                    <DataAnnotationsValidator />
-                    <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
-
-                    <div class="mb-3">
-                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
-                        <InputText id="name" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Name" disabled="@(!isAdding)" />
+            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
+                        <i class="fas fa-exclamation-circle text-red-500 mr-2 mt-0.5"></i>
+                        <span>@errorMessage</span>
                     </div>
-
-                    <div class="mb-3">
-                        <label for="spellType" class="block text-sm font-medium text-gray-700 mb-1">Тип заклинания</label>
-                        <InputText id="spellType" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.SpellType" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="cost" class="block text-sm font-medium text-gray-700 mb-1">Стоимость</label>
-                        <InputText id="cost" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Cost" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="castingTime" class="block text-sm font-medium text-gray-700 mb-1">Время сотворения</label>
-                        <InputText id="castingTime" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.CastingTime" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
-                        <InputTextArea id="description" class="w-full border rounded px-3 py-2" @bind-Value="editingSpell.Description" rows="4" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Альтернативные названия</label>
-                        <div class="space-y-2">
-                            @{
-                                // Use an indexed loop with local variables
-                                for (int i = 0; i < alternativeNames.Count; i++)
-                                {
-                                    string currentName = alternativeNames[i];
-                                    int currentIndex = i;
-                                    <div class="flex gap-2">
-                                        <input type="text" class="w-full border rounded px-3 py-2"
-                                               value="@currentName"
-                                               @onchange="@(e => UpdateAlternativeName(currentIndex, e.Value?.ToString()))" />
-                                        <button type="button" class="text-red-600 hover:text-red-800" 
-                                                @onclick="@(e => RemoveAlternativeName(currentIndex))">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                }
-                            }
-                            <button type="button" class="text-blue-600 hover:text-blue-800 text-sm flex items-center" @onclick="AddAlternativeName">
-                                <i class="fas fa-plus mr-1"></i>
-                                <span>Добавить название</span>
-                            </button>
+                }
+                @if (currentSpell != null)
+                {
+                    <div class="flex items-center mb-4">
+                        <div class="mr-4 bg-red-100 text-red-500 rounded-full p-3">
+                            <i class="fas fa-trash text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-gray-700">Вы уверены, что хотите удалить заклинание "<strong>@currentSpell.Name</strong>"?</p>
+                            <p class="text-sm text-gray-500 mt-1">Это действие нельзя будет отменить.</p>
                         </div>
                     </div>
-
-                    <div class="flex justify-end space-x-2 mt-4">
-                        <Button Color="Color.Secondary" Type="ButtonType.Button" Clicked="CloseEditModal">Отмена</Button>
-                        <Button Color="Color.Primary" Type="ButtonType.Submit">Сохранить</Button>
-                    </div>
-                </EditForm>
+                }
             </ModalBody>
-        </ModalContent>
-    </Modal>
-
-    <!-- Модальное окно подтверждения удаления -->
-    <Modal @bind-Visible="isDeleteModalVisible">
-        <ModalContent Centered>
-            <ModalHeader>
-                <ModalTitle>Подтверждение удаления</ModalTitle>
-                <CloseButton />
-            </ModalHeader>
-            <ModalBody>
-                <p>Вы уверены, что хотите удалить заклинание "@currentSpell?.Name"?</p>
-                <p class="text-gray-500 text-sm mt-2">Это действие нельзя будет отменить.</p>
-            </ModalBody>
-            <ModalFooter>
-                <Button Color="Color.Secondary" Clicked="CloseDeleteModal">Отмена</Button>
-                <Button Color="Color.Danger" Clicked="DeleteSpell">Удалить</Button>
+            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+                <button type="button" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm" 
+                        @onclick="CloseDeleteModal">
+                    Отмена
+                </button>
+                <button type="button" 
+                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-150 ease-in-out shadow-sm" 
+                        @onclick="DeleteSpell">
+                    <i class="fas fa-trash mr-1"></i>
+                    Удалить
+                </button>
             </ModalFooter>
         </ModalContent>
     </Modal>
 
     <!-- Модальное окно с сообщением об ошибке -->
-    <Modal @bind-Visible="isErrorModalVisible">
-        <ModalContent Centered>
-            <ModalHeader>
-                <ModalTitle>Ошибка</ModalTitle>
-                <CloseButton />
+    <Modal @bind-Visible="isErrorModalVisible" Size="ModalSize.Small">
+        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
+            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
+                <ModalTitle Class="font-bold text-xl">Ошибка</ModalTitle>
+                <CloseButton Clicked="@CloseErrorModal" Class="text-white hover:bg-yellow-700 rounded-full" />
             </ModalHeader>
-            <ModalBody>
-                <p>@errorMessage</p>
+            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+                <div class="flex items-center">
+                    <div class="mr-4 bg-yellow-100 text-yellow-500 rounded-full p-3">
+                        <i class="fas fa-exclamation-triangle text-xl"></i>
+                    </div>
+                    <p class="text-gray-700">@errorMessage</p>
+                </div>
             </ModalBody>
-            <ModalFooter>
-                <Button Color="Color.Secondary" Clicked="CloseErrorModal">Закрыть</Button>
+            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+                <button type="button" 
+                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm" 
+                        @onclick="CloseErrorModal">
+                    Закрыть
+                </button>
             </ModalFooter>
         </ModalContent>
     </Modal>
@@ -336,7 +426,6 @@
     private List<string> alternativeNames = [];
     private Dictionary<string, string> columnFilters = new();
     private bool isSearchPanelVisible = true;
-    private bool isViewModalVisible;
     private bool isEditModalVisible;
     private bool isDeleteModalVisible;
     private bool isErrorModalVisible;
@@ -344,7 +433,7 @@
     private string searchQuery = "";
     private string? selectedTypeFilter;
     private string errorMessage = "";
-    private PaginationState pagination = new() { ItemsPerPage = 10 };
+    private Guid? expandedSpellId = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -394,11 +483,11 @@
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
-            query = query.Where(s => 
+            query = query.Where(s =>
                 (s.Name != null && s.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
                 (s.SpellType != null && s.SpellType.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
                 (s.Description != null && s.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                (s.AlternativeNames != null && s.AlternativeNames.Any(name => 
+                (s.AlternativeNames != null && s.AlternativeNames.Any(name =>
                     name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)))
             );
         }
@@ -431,18 +520,6 @@
         searchQuery = "";
         selectedTypeFilter = null;
         columnFilters.Clear();
-    }
-
-    private void ShowViewModal(Spell spell)
-    {
-        currentSpell = spell;
-        isViewModalVisible = true;
-    }
-
-    private void CloseViewModal()
-    {
-        isViewModalVisible = false;
-        currentSpell = null;
     }
 
     private void ShowAddModal()
@@ -569,4 +646,17 @@
         CloseDeleteModal();
         await LoadSpells();
     }
+
+    private void ToggleSpellDetails(Spell spell)
+    {
+        if (expandedSpellId == spell.Id)
+        {
+            expandedSpellId = null;
+        }
+        else
+        {
+            expandedSpellId = spell.Id;
+        }
+    }
+
 }
