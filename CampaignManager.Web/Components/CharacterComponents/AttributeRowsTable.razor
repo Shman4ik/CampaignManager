@@ -1,42 +1,39 @@
 @using CampaignManager.Web.Model
-<div class="flex flex-col md:flex-row md:gap-4">
-    <div class="flex-1">
-        <table class="w-full text-sm mb-2">
-            <thead>
+<div class="w-full">
+    <table class="w-full text-sm mb-2 table-fixed">
+        <thead>
+        <tr>
+            <th class="text-left w-12"></th>
+            <th class="w-14 text-center text-xs font-semibold">Обыч.</th>
+            <th class="w-14 text-center text-xs font-semibold">Труд.</th>
+            <th class="w-14 text-center text-xs font-semibold">Чрез.</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var prop in typeof(Characteristics).GetProperties())
+        {
+            var value = (AttributeValue)prop.GetValue(Characteristics);
             <tr>
-                <th class="text-left"></th>
-                <th class="w-10 text-center font-semibold whitespace-nowrap">Обычный</th>
-                <th class="w-10 text-center font-semibold whitespace-nowrap">Трудный</th>
-                <th class="w-10 text-center font-semibold whitespace-nowrap">Чрезвыч.</th>
+                <td class="py-0.5 pr-1 whitespace-nowrap">
+                    <span class="font-medium text-xs">@GetShortName(prop.Name)</span>
+                </td>
+                <td class="py-0.5 px-0.5">
+                    <input type="number" @bind="value.Regular" @bind:event="oninput"
+                           @onchange="() => OnUpdate.InvokeAsync(value)"
+                           class="w-full p-0.5 text-center text-sm border border-gray-300 rounded"/>
+                </td>
+                <td class="py-0.5 px-0.5">
+                    <input type="number" value="@value.Half" disabled
+                           class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
+                </td>
+                <td class="py-0.5 px-0.5">
+                    <input type="number" value="@value.Fifth" disabled
+                           class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
+                </td>
             </tr>
-            </thead>
-            <tbody>
-            @foreach (var prop in typeof(Characteristics).GetProperties())
-            {
-                var value = (AttributeValue)prop.GetValue(Characteristics);
-                <tr>
-                    <td class="py-0.5">
-                        <span class="font-medium hidden xl:block">@GetFullName(prop.Name)</span>
-                        <span class="font-medium xl:hidden">@GetShortName(prop.Name)</span>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" @bind="value.Regular" @bind:event="oninput"
-                               @onchange="() => OnUpdate.InvokeAsync(value)"
-                               class="w-full min-w-10 p-0.5 text-center border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@value.Half" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                    <td class="py-0.5">
-                        <input type="number" value="@value.Fifth" disabled
-                               class="w-full min-w-10 p-0.5 text-center bg-gray-100 border border-gray-300 rounded"/>
-                    </td>
-                </tr>
-            }
-            </tbody>
-        </table>
-    </div>
+        }
+        </tbody>
+    </table>
 </div>
 
 @code {
@@ -60,7 +57,6 @@
         return russianNames.TryGetValue(fullName, out var russianName) ? russianName : fullName;
     }
 
-    // Keep this method for backward compatibility
     private string GetShortName(string fullName)
     {
         var shortNames = new Dictionary<string, string>
@@ -77,5 +73,4 @@
 
         return shortNames.TryGetValue(fullName, out var shortName) ? shortName : fullName;
     }
-
 }
