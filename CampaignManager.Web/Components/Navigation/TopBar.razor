@@ -59,17 +59,22 @@
             transform: translateX(0);
         }
 
-    /* Стили для навигационных элементов в мобильном меню */
-    .mobile-nav-item {
-        display: block;
-        padding: 0.75rem 1rem;
-        border-radius: 0.375rem;
-        transition: all 0.15s;
+    /* Стили для ссылок в мобильном меню */
+    .mobile-nav-link {
+        @@apply block py-2 px-3 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md flex items-center;
     }
 
-        .mobile-nav-item:hover {
-            background-color: rgba(59, 130, 246, 0.1);
-        }
+    .mobile-nav-link.active {
+        @@apply text-blue-600 bg-blue-50;
+    }
+
+    .mobile-submenu-link {
+        @@apply w-full py-2 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md flex items-center;
+    }
+
+    .mobile-submenu-link.active {
+        @@apply text-blue-600 bg-blue-50;
+    }
 
     /* Стили для кнопки Google */
     .google-btn {
@@ -116,7 +121,7 @@
                 <div class="max-w-7xl mx-auto py-2 px-3 sm:px-4 lg:px-6">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center">
-                            <h1 class="text-xl font-semibold text-gray-900 mr-4">Менеджер кампаний</h1>
+                            <h1 class="text-xl font-semibold text-gray-900">Менеджер кампаний</h1>
 
                             <div class="hidden md:block">
                                 <NavMenu />
@@ -133,14 +138,17 @@
                                         </svg>
                                     </span>
                                 </div>
-                                <button @onclick="Logout"
-                                        class="ml-3 bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-1.5 px-3 rounded transition-all">
+
+                                <button @onclick="Logout" class="inline-flex items-center ml-3 px-3 py-1.5 bg-red-100 text-red-600 text-sm rounded-full hover:bg-red-200 transition-all">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
                                     Выйти
                                 </button>
                             </div>
 
                             <button class="md:hidden p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all" @onclick="ToggleMobileMenu">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                                 </svg>
                             </button>
@@ -154,8 +162,8 @@
             <div class="mobile-menu @(mobileMenuOpen ? "show" : "")">
                 <div class="p-4 border-b border-gray-100">
                     <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-gray-800">Меню</h2>
-                        <button @onclick="ToggleMobileMenu" class="p-1 rounded-full hover:bg-gray-100 text-gray-500">
+                        <h2 class="text-lg font-semibold text-gray-900">Меню</h2>
+                        <button @onclick="ToggleMobileMenu" class="p-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-all">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -172,38 +180,56 @@
                                 </svg>
                             </div>
                             <div>
-                                <div class="text-sm font-medium text-gray-800">@context.User.Identity?.Name</div>
+                                <div class="font-medium text-blue-900">@context.User.Identity?.Name</div>
                                 <div class="text-xs text-gray-500">Авторизован</div>
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <div class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 px-1">Навигация</div>
-                            <div class="space-y-1">
-                                <a href="/" class="mobile-nav-item text-gray-700">
-                                    <div class="flex items-center">
-                                        <i class="fas fa-home h-4 w-4 mr-3 text-gray-500"></i>
-                                        Главная
+                            <div class="mb-4 space-y-1">
+                                <NavLink href="/" Match="NavLinkMatch.All" class="mobile-nav-link" @onclick="ToggleMobileMenu">
+                                    <i class="fas fa-home mr-3 w-5 text-center"></i>
+                                    Главная
+                                </NavLink>
+
+                                <!-- Mobile Campaigns Menu -->
+                                <div>
+                                    <button @onclick="() => ToggleMobileSubmenu(1)" class="mobile-nav-link w-full text-left flex items-center justify-between">
+                                        <span class="flex items-center">
+                                            <i class="fas fa-dice-d20 mr-3 w-5 text-center"></i>
+                                            Кампании
+                                        </span>
+                                        <i class="fas fa-chevron-down text-xs transition-transform duration-200 @(IsMobileSubmenuOpen(1) ? "rotate-180" : "")"></i>
+                                    </button>
+                                    <div class="@(IsMobileSubmenuOpen(1) ? "block" : "hidden") pl-8 mt-1 space-y-1 flex flex-col">
+                                        <NavLink href="/create-campaign" class="mobile-submenu-link" @onclick="ToggleMobileMenu">
+                                            <i class="fas fa-plus mr-3 w-5 text-center"></i>
+                                            Создать кампанию
+                                        </NavLink>
                                     </div>
-                                </a>
-                                <a href="/create-campaign" class="mobile-nav-item text-gray-700">
-                                    <div class="flex items-center">
-                                        <i class="fas fa-plus h-4 w-4 mr-3 text-gray-500"></i>
-                                        Создать кампанию
+                                </div>
+
+                                <!-- Mobile Wiki Menu -->
+                                <div>
+                                    <button @onclick="() => ToggleMobileSubmenu(2)" class="mobile-nav-link w-full text-left flex items-center justify-between">
+                                        <span class="flex items-center">
+                                            <i class="fas fa-book mr-3 w-5 text-center"></i>
+                                            Вики
+                                        </span>
+                                        <i class="fas fa-chevron-down text-xs transition-transform duration-200 @(IsMobileSubmenuOpen(2) ? "rotate-180" : "")"></i>
+                                    </button>
+                                    <div class="@(IsMobileSubmenuOpen(2) ? "block" : "hidden") pl-8 mt-1 space-y-1 flex flex-col">
+                                        <NavLink href="/weapons" class="mobile-submenu-link" @onclick="ToggleMobileMenu">
+                                            <i class="fas fa-shield-alt mr-3 w-5 text-center"></i>
+                                            Оружие
+                                        </NavLink>
+                                        <NavLink href="/spells" class="mobile-submenu-link" @onclick="ToggleMobileMenu">
+                                            <i class="fas fa-magic mr-3 w-5 text-center"></i>
+                                            Заклинания
+                                        </NavLink>
                                     </div>
-                                </a>
-                                <a href="/weapons" class="mobile-nav-item text-gray-700">
-                                    <div class="flex items-center">
-                                        <i class="fas fa-shield-alt h-4 w-4 mr-3 text-gray-500"></i>
-                                        Оружие
-                                    </div>
-                                </a>
-                                <a href="/spells" class="mobile-nav-item text-gray-700">
-                                    <div class="flex items-center">
-                                        <i class="fas fa-magic h-4 w-4 mr-3 text-gray-500"></i>
-                                        Заклинания
-                                    </div>
-                                </a>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -252,6 +278,7 @@
 
 @code {
     private bool mobileMenuOpen;
+    private HashSet<int> openMobileSubmenus = new HashSet<int>();
 
     private void Logout()
     {
@@ -261,5 +288,26 @@
     private void ToggleMobileMenu()
     {
         mobileMenuOpen = !mobileMenuOpen;
+        if (!mobileMenuOpen)
+        {
+            openMobileSubmenus.Clear();
+        }
+    }
+
+    private void ToggleMobileSubmenu(int submenuId)
+    {
+        if (openMobileSubmenus.Contains(submenuId))
+        {
+            openMobileSubmenus.Remove(submenuId);
+        }
+        else
+        {
+            openMobileSubmenus.Add(submenuId);
+        }
+    }
+
+    private bool IsMobileSubmenuOpen(int submenuId)
+    {
+        return openMobileSubmenus.Contains(submenuId);
     }
 }
