@@ -74,8 +74,6 @@ public class Weapon : BaseDataBaseEntity
     [StringLength(500)]
     public string Notes { get; set; } = string.Empty;
 
-
-
     /// <summary>
     ///     Тип боеприпасов (для оружия дальнего боя)
     /// </summary>

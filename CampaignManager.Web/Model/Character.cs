@@ -1,3 +1,5 @@
+using CampaignManager.Web.Weapons;
+
 namespace CampaignManager.Web.Model;
 
 public class Character
@@ -50,23 +52,18 @@ public class Character
     public Finances Finances { get; set; } = new();
 
     /// <summary>
-    ///     Детали боя ближнего действия
+    /// Список оружия персонажа
     /// </summary>
-    public MeleeWeaponDetails MeleeWeapon { get; set; } = new();
-
-    /// <summary>
-    ///     Детали боя дальнего действия
-    /// </summary>
-    public RangedCombatDetails RangedCombat { get; set; } = new();
+    public List<Weapon> Weapons { get; set; } = new();
 
     /// <summary>
     ///     Заметки
     /// </summary>
     public string Notes { get; set; } = "";
-    
+
     /// <summary>
     ///     Тип персонажа (игровой персонаж или NPC)
     /// </summary>
-    public CharacterType CharacterType { get; set; } = CharacterType.PlayerCharacter;  
-    
+    public CharacterType CharacterType { get; set; } = CharacterType.PlayerCharacter;
+
 }

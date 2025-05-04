@@ -13,7 +13,7 @@ public class Finances
     public List<string> Assets { get; set; } = [];
 
     /// <summary>
-    ///     Ключевые точки персонажа
+    ///     Карманные деньги 
     /// </summary>
     public string PocketMoney { get; set; }
 }
