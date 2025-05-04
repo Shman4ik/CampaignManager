@@ -1,0 +1,85 @@
+@inherits InputBase<string?>
+
+<textarea @attributes="AdditionalAttributes"
+          id="@ElementId"
+          class="@CssClass"
+          value="@CurrentValue"
+          @oninput="OnInput"
+          rows="@CalculatedRows">
+</textarea>
+
+@code {
+    private const int DefaultMinRows = 3; // Default minimum rows if no content and no InitialRows param
+    private const int MaxRows = 15;      // Optional: Maximum number of rows
+
+    /// <summary>
+    /// Specifies a minimum number of rows for the textarea.
+    /// If the content requires more rows, it will expand up to MaxRows.
+    /// Defaults to DefaultMinRows if not set.
+    /// </summary>
+    [Parameter] public int InitialRows { get; set; } = 0;
+
+    private int CalculatedRows { get; set; } = DefaultMinRows;
+
+    // Generate a unique ID if not provided in AdditionalAttributes
+    private string ElementId => AdditionalAttributes?.ContainsKey("id") == true ? AdditionalAttributes["id"].ToString()! : $"initialsize-textarea-{UniqueID}";
+    private string UniqueID { get; } = Guid.NewGuid().ToString("N");
+
+    private string? _previousValue;
+
+    protected override void OnParametersSet()
+    {
+        // Calculate rows on initial parameter set
+        CalculatedRows = CalculateNeededRows(CurrentValue);
+        _previousValue = CurrentValue; // Store initial value
+        base.OnParametersSet();
+    }
+
+    // Recalculate if the bound value changes externally
+    protected override Task OnParametersSetAsync()
+    {
+        if (_previousValue != CurrentValue)
+        {
+            CalculatedRows = CalculateNeededRows(CurrentValue);
+            _previousValue = CurrentValue;
+        }
+        return base.OnParametersSetAsync();
+    }
+
+    protected override bool TryParseValueFromString(string? value, out string? result, out string validationErrorMessage)
+    {
+        result = value;
+        validationErrorMessage = null!; // Suppress null warning
+        return true;
+    }
+
+    // This method is called when the user types in the textarea
+    private Task OnInput(ChangeEventArgs e)
+    {
+        // Update the component's value. The rows won't change dynamically here.
+        CurrentValueAsString = e.Value?.ToString();
+        return Task.CompletedTask;
+    }
+
+    // Calculates the number of rows needed based on content and parameters
+    private int CalculateNeededRows(string? text)
+    {
+        int minRows = InitialRows > 0 ? InitialRows : DefaultMinRows;
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return minRows;
+        }
+
+        // Count line breaks to estimate lines
+        var lines = text.Split('\n').Length;
+
+        // Use the greater of calculated lines or minimum rows
+        var neededRows = Math.Max(minRows, lines);
+
+        // Apply the maximum rows constraint
+        neededRows = Math.Min(neededRows, MaxRows);
+
+        return neededRows;
+    }
+}
