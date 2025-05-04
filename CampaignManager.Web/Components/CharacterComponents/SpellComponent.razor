@@ -1,0 +1,266 @@
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.SpellComponents
+@inject SpellService SpellService
+
+<div class="bg-white shadow rounded-lg p-4 mb-4">
+    <h3 class="text-xl font-bold mb-4">Заклинания</h3>
+
+    <!-- Spells List with Accordion -->
+    <div class="overflow-x-auto mb-4">
+        @if (Character.Spells.Any())
+        {
+            <div class="bg-white rounded-lg overflow-hidden border border-gray-200">
+                <table class="w-full text-sm">
+                    <thead>
+                    <tr class="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th class="px-3 py-2"></th>
+                        <th class="px-3 py-2">Название</th>
+                        <th class="px-3 py-2">Стоимость</th>
+                        <th class="px-3 py-2">Время</th>
+                        <th class="px-3 py-2">Тип</th>
+                        <th class="px-3 py-2 text-center">Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                    @foreach (var spell in Character.Spells)
+                    {
+                        <tr class="hover:bg-gray-50 cursor-pointer" @onclick="() => ToggleSpellDetails(spell)">
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <button @onclick:stopPropagation="true" @onclick="() => ToggleSpellDetails(spell)"
+                                        class="text-blue-600 hover:text-blue-800 text-xs flex items-center mr-2">
+                                    <i class="fas @(expandedSpellId == spell.Id ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                                </button>
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap">                                   
+                                <input type="text" @bind="spell.Name" @onclick:stopPropagation
+                                       class="w-full p-1 border border-gray-300 rounded text-sm" />
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <input type="text" @bind="spell.Cost" @onclick:stopPropagation
+                                       class="w-full p-1 border border-gray-300 rounded text-sm" />
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <input type="text" @bind="spell.CastingTime" @onclick:stopPropagation
+                                       class="w-full p-1 border border-gray-300 rounded text-sm" />
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap">
+                                <input type="text" @bind="spell.SpellType" @onclick:stopPropagation
+                                       class="w-full p-1 border border-gray-300 rounded text-sm" />
+                            </td>
+                            <td class="px-3 py-2 whitespace-nowrap text-center">
+                                <div class="flex justify-center space-x-2">
+                                    <button @onclick:stopPropagation="true" @onclick="() => RemoveSpell(spell)" 
+                                            class="text-red-600 hover:text-red-900 p-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                             stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        @if (expandedSpellId == spell.Id)
+                        {
+                            <tr>
+                                <td colspan="6" class="px-3 py-2 bg-gray-50">
+                                    <div class="grid grid-cols-1 gap-3 p-2">
+                                        <div>
+                                            <label class="block text-xs text-gray-500 mb-1">Описание</label>
+                                            <textarea @bind="spell.Description" rows="6" class="w-full p-1 border border-gray-300 rounded text-sm"></textarea>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="text-gray-500 italic text-sm">Нет заклинаний</div>
+        }
+    </div>
+
+    <!-- Add New Spell -->
+    <div class="bg-gray-50 p-3 rounded-md mb-3">
+        <details class="group">
+            <summary class="flex justify-between items-center cursor-pointer">
+                <span class="text-sm font-medium text-gray-700"> Добавить новое заклинание</span>
+                <span class="transition group-open:rotate-180">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </span>
+            </summary>
+            <div class="mt-3 p-3 border border-gray-200 rounded-lg">
+                <div class="relative mb-3">
+                    <input type="text" @bind="newSpell.Name" @oninput="OnSpellNameInput" placeholder="Название заклинания"
+                           class="w-full p-2 border border-gray-300 rounded text-sm" />
+                
+                    @if (suggestedSpells.Any())
+                    {
+                        <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            @foreach (var spell in suggestedSpells)
+                            {
+                                <div @onclick="() => SelectSpell(spell)" class="p-2 hover:bg-gray-100 cursor-pointer">
+                                    <div class="font-medium">@spell.Name</div>
+                                    <div class="text-xs text-gray-500">@spell.SpellType</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <select @bind="selectedSpellType" @oninput="FilterSuggestedSpells" class="w-full p-2 border border-gray-300 rounded text-sm">
+                            <option value="">Все типы</option>
+                            <option value="Призыв">Призыв</option>
+                            <option value="Зачарование">Зачарование</option>
+                            <option value="Связь">Связь</option>
+                            <option value="Проклятие">Проклятие</option>
+                            <option value="Защита">Защита</option>
+                            <option value="Иллюзия">Иллюзия</option>
+                            <option value="Прорицание">Прорицание</option>
+                            <option value="Другое">Другое</option>
+                        </select>
+                    </div>
+                    <div>
+                        <input type="text" @bind="newSpell.Cost" placeholder="Стоимость"
+                               class="w-full p-1 border border-gray-300 rounded text-sm" />
+                    </div>
+                    <div>
+                        <input type="text" @bind="newSpell.CastingTime" placeholder="Время сотворения"
+                               class="w-full p-1 border border-gray-300 rounded text-sm" />
+                    </div>
+                    <div class="md:col-span-3">
+                        <textarea @bind="newSpell.Description" placeholder="Описание" rows="6" class="w-full p-1 border border-gray-300 rounded text-sm"></textarea>
+                    </div>
+                </div>
+            
+                <button @onclick="AddSpell"
+                        class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-4 rounded text-sm mt-3">
+                    Добавить
+                </button>
+            </div>
+        </details>
+    </div>
+</div>
+@code {
+    [Parameter] public Character Character { get; set; } = null!;
+
+    private Spell newSpell = new();
+    private Guid? expandedSpellId;
+    private string? selectedSpellType = "";
+    private string newAlternativeName = "";
+
+    private List<Spell> suggestedSpells = new();
+    private List<Spell> allSpells = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        allSpells = await SpellService.GetAllSpellsAsync();
+    }
+
+    private void ToggleSpellDetails(Spell spell)
+    {
+        if (expandedSpellId == spell.Id)
+        {
+            expandedSpellId = null;
+        }
+        else
+        {
+            expandedSpellId = spell.Id;
+        }
+    }
+
+    private async Task OnSpellNameInput(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        newSpell.Name = value;
+
+        if (string.IsNullOrEmpty(value))
+        {
+            suggestedSpells.Clear();
+            newSpell = new Spell();
+            return;
+        }
+
+        FilterSuggestedSpells();
+    }
+
+    private void FilterSuggestedSpells()
+    {
+        var query = allSpells.AsQueryable();
+        
+        // Фильтр по типу заклинания
+        if (!string.IsNullOrEmpty(selectedSpellType))
+        {
+            query = query.Where(s => s.SpellType == selectedSpellType);
+        }
+        
+        // Фильтр по названию
+        if (!string.IsNullOrWhiteSpace(newSpell.Name))
+        {
+            query = query.Where(s => s.Name.Contains(newSpell.Name, StringComparison.OrdinalIgnoreCase) || 
+                                     s.AlternativeNames.Any(an => an.Contains(newSpell.Name, StringComparison.OrdinalIgnoreCase)));
+        }
+        
+        suggestedSpells = query.Take(5).ToList();
+    }
+
+    private void SelectSpell(Spell spell)
+    {
+        newSpell = spell;
+        suggestedSpells.Clear();
+    }
+
+    private void AddSpell()
+    {
+        if (string.IsNullOrWhiteSpace(newSpell.Name)) 
+            return;
+            
+        // Create a new instance to avoid reference issues
+        var spellToAdd = new Spell
+        {
+            Id = Guid.NewGuid(),
+            Name = newSpell.Name,
+            Cost = newSpell.Cost,
+            CastingTime = newSpell.CastingTime,
+            Description = newSpell.Description,
+            SpellType = newSpell.SpellType,
+            AlternativeNames = new List<string>(newSpell.AlternativeNames)
+        };
+        
+        Character.Spells.Add(spellToAdd);
+        newSpell = new Spell();
+    }
+
+    private void RemoveSpell(Spell spell)
+    {
+        Character.Spells.Remove(spell);
+    }
+    
+    private void AddAlternativeName(Spell spell)
+    {
+        if (string.IsNullOrWhiteSpace(newAlternativeName))
+            return;
+            
+        if (!spell.AlternativeNames.Contains(newAlternativeName))
+        {
+            spell.AlternativeNames.Add(newAlternativeName);
+        }
+        
+        newAlternativeName = "";
+    }
+    
+    private void RemoveAlternativeName(Spell spell, string name)
+    {
+        spell.AlternativeNames.Remove(name);
+    }
+}

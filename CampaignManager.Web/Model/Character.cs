@@ -1,4 +1,5 @@
 using CampaignManager.Web.Weapons;
+using CampaignManager.Web.SpellComponents;
 
 namespace CampaignManager.Web.Model;
 
@@ -55,6 +56,11 @@ public class Character
     /// Список оружия персонажа
     /// </summary>
     public List<Weapon> Weapons { get; set; } = new();
+
+    /// <summary>
+    /// Список заклинаний персонажа
+    /// </summary>
+    public List<Spell> Spells { get; set; } = new();
 
     /// <summary>
     ///     Заметки
