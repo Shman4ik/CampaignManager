@@ -64,30 +64,7 @@
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-2">
                                             <div class="md:col-span-3">
                                                 <label class="block text-xs text-gray-500 mb-1">Описание</label>
-                                                <textarea @bind="spell.Description" rows="3" 
-                                                          class="w-full p-1 border border-gray-300 rounded text-sm"></textarea>
-                                            </div>
-                                            <div>
-                                                <label class="block text-xs text-gray-500 mb-1">Альтернативные названия</label>
-                                                <div class="flex flex-wrap gap-1 mb-1">
-                                                    @foreach (var altName in spell.AlternativeNames)
-                                                    {
-                                                        <div class="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded flex items-center">
-                                                            <span>@altName</span>
-                                                            <button @onclick="() => RemoveAlternativeName(spell, altName)" class="ml-1 text-gray-600 hover:text-gray-800">
-                                                                <i class="fas fa-times"></i>
-                                                            </button>
-                                                        </div>
-                                                    }
-                                                </div>
-                                                <div class="flex">
-                                                    <input type="text" @bind="newAlternativeName" placeholder="Добавить название" 
-                                                           class="flex-1 p-1 border border-gray-300 rounded-l text-sm" />
-                                                    <button @onclick="() => AddAlternativeName(spell)" 
-                                                            class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-r text-sm">
-                                                        <i class="fas fa-plus"></i>
-                                                    </button>
-                                                </div>
+                                                <textarea @bind="spell.Description" rows="6" class="w-full p-1 border border-gray-300 rounded text-sm"></textarea>
                                             </div>
                                         </div>
                                     </td>
@@ -152,31 +129,8 @@
                                 <div class="p-3 bg-gray-50">
                                     <div>
                                         <label class="block text-xs text-gray-500 mb-1">Описание</label>
-                                        <textarea @bind="spell.Description" rows="3" 
+                                        <textarea @bind="spell.Description" rows="6" 
                                                   class="w-full p-1 border border-gray-300 rounded text-sm mb-3"></textarea>
-                                    </div>
-                                    
-                                    <div>
-                                        <label class="block text-xs text-gray-500 mb-1">Альтернативные названия</label>
-                                        <div class="flex flex-wrap gap-1 mb-2">
-                                            @foreach (var altName in spell.AlternativeNames)
-                                            {
-                                                <div class="bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded flex items-center">
-                                                    <span>@altName</span>
-                                                    <button @onclick="() => RemoveAlternativeName(spell, altName)" class="ml-1 text-gray-600 hover:text-gray-800">
-                                                        <i class="fas fa-times"></i>
-                                                    </button>
-                                                </div>
-                                            }
-                                        </div>
-                                        <div class="flex">
-                                            <input type="text" @bind="newAlternativeName" placeholder="Добавить название" 
-                                                   class="flex-1 p-1 border border-gray-300 rounded-l text-sm" />
-                                            <button @onclick="() => AddAlternativeName(spell)" 
-                                                    class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-r text-sm">
-                                                <i class="fas fa-plus"></i>
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             }
@@ -216,7 +170,7 @@
                                 <div @onclick="() => SelectSpell(spell)" 
                                      class="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100">
                                     <div class="font-medium">@spell.Name</div>
-                                    <div class="text-xs text-gray-500">@spell.SpellType</div>
+                                    <div class="text-xs text-gray-500">@string.Join(", ", spell.AlternativeNames)</div>
                                 </div>
                             }
                         </div>
@@ -261,7 +215,6 @@
     private Spell newSpell = new();
     private Guid? expandedSpellId;
     private string? selectedSpellType = "";
-    private string newAlternativeName = "";
 
     private List<Spell> suggestedSpells = new();
     private List<Spell> allSpells = new();
@@ -333,7 +286,7 @@
         // Create a new instance to avoid reference issues
         var spellToAdd = new Spell
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = newSpell.Name,
             Cost = newSpell.Cost,
             CastingTime = newSpell.CastingTime,
@@ -349,23 +302,5 @@
     private void RemoveSpell(Spell spell)
     {
         Character.Spells.Remove(spell);
-    }
-    
-    private void AddAlternativeName(Spell spell)
-    {
-        if (string.IsNullOrWhiteSpace(newAlternativeName))
-            return;
-            
-        if (!spell.AlternativeNames.Contains(newAlternativeName))
-        {
-            spell.AlternativeNames.Add(newAlternativeName);
-        }
-        
-        newAlternativeName = "";
-    }
-    
-    private void RemoveAlternativeName(Spell spell, string name)
-    {
-        spell.AlternativeNames.Remove(name);
     }
 }
