@@ -18,194 +18,284 @@
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
-        <!-- Фиксированный хедер -->
-        <div class="sticky top-0 z-10 w-full bg-gray-200 py-2 px-2 sm:px-4 border-b-2 border-gray-800 shadow-md mb-4">
-            <div class="max-w-7xl mx-auto flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center">
-                <!-- Первая строка (имя и кнопки действий) -->
-                <div class="flex justify-between items-center w-full">
+        <!-- Modern header with navigation -->
+        <div class="sticky top-0 z-10 w-full bg-white shadow-md mb-6">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+                <!-- Character name and actions area -->
+                <div class="flex justify-between items-center w-full mb-2">
                     <div class="flex items-center">
-                        <h2 class="text-lg sm:text-xl font-semibold max-w-full">@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</h2>
+                        <h2 class="text-xl sm:text-2xl font-bold text-gray-800">
+                            @(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
+                        </h2>
                         @if (IsNpc)
                         {
-                            <span class="ml-2 text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">NPC</span>
+                            <span class="ml-2 text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full font-medium">NPC</span>
                         }
                     </div>
-
-                    <div class="flex gap-1 sm:gap-2">
-                        <button @onclick="SaveCharacterAsync"
-                                class="bg-green-500 hover:bg-green-600 text-white font-bold py-1 sm:py-2 px-2 sm:px-3 rounded flex items-center">
-                            <span class="ml-1 sm:inline">Сохранить</span>
-                        </button>
-                        @if (CharacterId == null || CharacterId == Guid.Empty)
-                        {
-                            <button @onclick="GenerateRandom"
-                                    class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 sm:py-2 px-2 sm:px-3 rounded flex items-center">
-                                <span class="ml-1 sm:inline">Случайный</span>
+                    <!-- Redesigned adaptive navigation menu -->
+                    <div class="ml-auto flex items-center gap-1 sm:gap-2">
+                        <!-- Mobile dropdown menu (visible on small screens) -->
+                        <div class="relative sm:hidden">
+                            <button @onclick="ToggleNavMenu" type="button" class="flex items-center justify-center p-2 text-gray-600 hover:text-blue-700 rounded-md transition-colors">
+                                <i class="fa-solid fa-bars"></i>
                             </button>
-                        }
+                            @if (_navMenuOpen)
+                            {
+                                <div class="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-md overflow-hidden z-20 w-36 py-1">
+                                    <button @onclick='() => { ScrollToSection("personal"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-user w-5 text-blue-500"></i>
+                                        <span class="ml-2">Персонаж</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("skills"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-graduation-cap w-5 text-blue-500"></i>
+                                        <span class="ml-2">Навыки</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("combat"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-gun w-5 text-blue-500"></i>
+                                        <span class="ml-2">Бой</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("equipment"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-suitcase w-5 text-blue-500"></i>
+                                        <span class="ml-2">Снаряжение</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("biography"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-book w-5 text-blue-500"></i>
+                                        <span class="ml-2">Биография</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                        
+                        <!-- Desktop navigation (visible on larger screens) -->
+                        <div class="hidden sm:flex space-x-1 bg-gray-100 rounded-lg p-1">
+                            <button type="button" @onclick='() => ScrollToSection("personal")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-user"></i>
+                                <span class="ml-1 hidden md:inline">Персонаж</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("skills")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-graduation-cap"></i>
+                                <span class="ml-1 hidden md:inline">Навыки</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("combat")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-gun"></i>
+                                <span class="ml-1 hidden md:inline">Бой</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("equipment")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-suitcase"></i>
+                                <span class="ml-1 hidden md:inline">Снаряжение</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("biography")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-book"></i>
+                                <span class="ml-1 hidden md:inline">Биография</span>
+                            </button>
+                        </div>
+                        
+                        <div class="flex gap-2 ml-2">
+                            <button @onclick="SaveCharacterAsync"
+                                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                <i class="fa-regular fa-floppy-disk"></i>
+                            </button>
+                            @if (CharacterId == null || CharacterId == Guid.Empty)
+                            {
+                                <button @onclick="GenerateRandom"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                    <span>Случайный</span>
+                                </button>
+                            }
+                        </div>
                     </div>
-                </div>
-
-                <!-- Навигационные кнопки - для мобильных только иконки в одну строку -->
-                <div class="flex justify-between sm:hidden w-full">
-                    <button type="button" @onclick='() => ScrollToSection("personal")'
-                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
-                        <span>Перс.</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("skills")'
-                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
-                        <span>Навыки</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("combat")'
-                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
-                        <span>Бой</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("equipment")'
-                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
-                        <span>Сняряж.</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("biography")'
-                            class="text-blue-500 hover:text-blue-700 p-2 text-xs border rounded flex-1 flex justify-center items-center mx-0.5">
-                        <span>Био.</span>
-                    </button>
-                </div>
-
-                <!-- Навигационные кнопки - для планшетов и десктопов в строку с текстом -->
-                <div class="hidden sm:flex justify-center space-x-1 w-full sm:w-auto sm:ml-4">
-                    <button type="button" @onclick='() => ScrollToSection("personal")'
-                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
-                        <span>Персонаж</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("skills")'
-                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
-                        <span>Навыки</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("combat")'
-                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
-                        <span>Бой</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("equipment")'
-                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
-                        <span>Снаряжение</span>
-                    </button>
-                    <button type="button" @onclick='() => ScrollToSection("biography")'
-                            class="text-blue-500 hover:text-blue-700 px-3 py-1 text-sm border rounded whitespace-nowrap flex-shrink-0">
-                        <span>Биография</span>
-                    </button>
                 </div>
             </div>
         </div>
 
-        <!-- Основное содержимое -->
-        <div class="max-w-7xl mx-auto p-4 sm:p-6 bg-gray-100 border-2 border-gray-800 rounded-lg">
+        <!-- Main content area -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6">
             @if (!string.IsNullOrEmpty(_notification.Message))
             {
                 <NotificationAlert Type="@_notification.Type" Message="@_notification.Message"
-                                   OnClose="ClearNotification"/>
+                               OnClose="ClearNotification"/>
             }
 
             @if (_isLoading)
             {
-                <LoadingIndicator/>
+                <div class="flex justify-center p-12">
+                    <LoadingIndicator/>
+                </div>
             }
             else if (Character != null)
             {
                 <EditForm Model="Character" FormName="CharacterForm">
                     <DataAnnotationsValidator/>
-                    <!-- Секция Персонаж -->
-                    <div id="personal" class="mb-6">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div class="md:col-span-1">
-                                <PersonalInfoComponent Character="@Character"/>
+                    
+                    <!-- Персональная информация -->
+                    <div id="personal" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h3 class="text-base font-semibold text-gray-800">Личные данные</h3>
+                                <button @onclick='() => ToggleSectionVisibility("personal")' class="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                                    <span>@(_sectionVisibility["personal"] ? "▲" : "▼")</span>
+                                </button>
                             </div>
-                            <div class="md:col-span-2">
-                                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    <CharacteristicsComponent Character="@Character" OnUpdate="RecalculateAttributes"/>
-                                    <CharacterStateComponent Character="@Character"/>
+                            @if (_sectionVisibility["personal"])
+                            {
+                                <div class="p-1">
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        <div class="md:col-span-1">
+                                            <PersonalInfoComponent Character="@Character"/>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                                                    <CharacteristicsComponent Character="@Character" OnUpdate="RecalculateAttributes"/>
+                                                    <CharacterStateComponent Character="@Character"/>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            }
                         </div>
                     </div>
 
                     <!-- Секция Навыки -->
-                    <div id="skills" class="mb-6">
-                        <div class="flex justify-between items-center mb-3">
-                            <h3 class="text-lg font-semibold">Навыки</h3>
-                            <button @onclick="ResetUsedSkills"
-                                    class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded">
-                                Сбросить использованные навыки
-                            </button>
-                        </div>
+                    <div id="skills" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-base font-semibold text-gray-800">Навыки</h3>
+                                    <button @onclick="ResetUsedSkills"
+                                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded-md transition-colors">
+                                        Сбросить
+                                    </button>
+                                </div>
+                                <button @onclick='() => ToggleSectionVisibility("skills")' class="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                                    <span>@(_sectionVisibility["skills"] ? "▲" : "▼")</span>
+                                </button>
+                            </div>
+                            @if (_sectionVisibility["skills"])
+                            {
+                                <div class="p-1">
+                                    <!-- Трехколоночный макет (для lg экранов) -->
+                                    <div class="hidden lg:grid lg:grid-cols-3 gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(2).ToList()"/>
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(2).Take(3).ToList()"/>
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(5).ToList()"/>
+                                    </div>
 
-                        <!-- Трехколоночный макет (для lg экранов) -->
-                        <div class="hidden lg:grid lg:grid-cols-3 gap-4">
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(2).ToList()"/>
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(2).Take(3).ToList()"/>
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(5).ToList()"/>
-                        </div>
+                                    <!-- Двухколоночный макет (для экранов от 600px до lg) -->
+                                    <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(4).ToList()"/>
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(4).ToList()"/>
+                                    </div>
 
-                        <!-- Двухколоночный макет (для экранов от 600px до lg) -->
-                        <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(4).ToList()"/>
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(4).ToList()"/>
-                        </div>
-
-                        <!-- Одноколоночный макет (для экранов меньше sm) -->
-                        <div class="grid grid-cols-1 sm:hidden gap-4">
-                            <SkillGroupColumn Groups="@Character.Skills.SkillGroups.ToList()"/>
+                                    <!-- Одноколоночный макет (для экранов меньше sm) -->
+                                    <div class="grid grid-cols-1 sm:hidden gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.ToList()"/>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </div>
 
-                    <!-- Секция Бой (группируем компоненты боя) -->
-                    <div id="combat" class="mb-6">
-                        <h3 class="text-xl font-bold mb-3 px-1">Боевые характеристики</h3>
-                        <div class="grid grid-cols-1 gap-4">
-                            <WeaponComponent Character="@Character"/>
-                        </div>
-                        <div class="grid grid-cols-1 gap-4">
-                            <SpellComponent Character="@Character"/>
+                    <!-- Секция Бой -->
+                    <div id="combat" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden mb-6">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h3 class="text-base font-semibold text-gray-800">Оружие и заклинания</h3>
+                                <button @onclick='() => ToggleSectionVisibility("combat")' class="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                                    <span>@(_sectionVisibility["combat"] ? "▲" : "▼")</span>
+                                </button>
+                            </div>
+                            @if (_sectionVisibility["combat"])
+                            {
+                                <div class="p-1">
+                                    <WeaponComponent Character="@Character"/>
+                                    <SpellComponent Character="@Character"/>
+                                </div>
+                            }
                         </div>
                     </div>
 
                     <!-- Секция Снаряжение -->
-                    <div id="equipment" class="mb-6">
-                        <h3 class="text-xl font-bold mb-3 px-1">Снаряжение и финансы</h3>
-                        <div class="grid grid-cols-1 gap-4">
-                            <EquipmentComponent Character="@Character"/>
-                            <FinancesComponent Character="@Character"/>
+                    <div id="equipment" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h3 class="text-base font-semibold text-gray-800">Снаряжение и финансы</h3>
+                                <button @onclick='() => ToggleSectionVisibility("equipment")' class="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                                    <span>@(_sectionVisibility["equipment"] ? "▲" : "▼")</span>
+                                </button>
+                            </div>
+                            @if (_sectionVisibility["equipment"])
+                            {
+                                <div class="p-1">
+                                    <EquipmentComponent Character="@Character"/>
+                                    <FinancesComponent Character="@Character"/>
+                                </div>
+                            }
                         </div>
                     </div>
 
                     <!-- Секция Биография -->
-                    <div id="biography" class="mb-6">
-                        <BiographyComponent Character="@Character"/>
-
-                        <div class="grid grid-cols-1 gap-4 mt-4">
-                            <div class="bg-white shadow rounded-lg p-4">
-                                <h4 class="text-lg font-semibold mb-3">Заметки</h4>
-                                <InputTextArea @bind-Value="Character.Notes" rows="4"
-                                               class="w-full p-2 border rounded"/>
+                    <div id="biography" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h3 class="text-base font-semibold text-gray-800">Биография и заметки</h3>
+                                <button @onclick='() => ToggleSectionVisibility("biography")' class="text-gray-500 hover:text-gray-700 focus:outline-none transition-colors">
+                                    <span>@(_sectionVisibility["biography"] ? "▲" : "▼")</span>
+                                </button>
                             </div>
+                            @if (_sectionVisibility["biography"])
+                            {
+                                <div class="p-1">
+                                    <BiographyComponent Character="@Character"/>
+                                
+                                    <div class="grid grid-cols-1">
+                                        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                                <h3 class="text-base font-semibold text-gray-800">Заметки</h3>
+                                            </div>
+                                            <div class="p-1">
+                                                <InputTextArea @bind-Value="Character.Notes" rows="4"
+                                                            class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"/>
+                                            </div>
+                                        </div>
 
-                            <div class="bg-white shadow rounded-lg p-4">
-                                <h4 class="text-lg font-semibold mb-3">Предыстория</h4>
-                                <InputTextArea @bind-Value="Character.Backstory" rows="4"
-                                               class="w-full p-2 border rounded"/>
-                            </div>
+                                        <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                                <h3 class="text-base font-semibold text-gray-800">Предыстория</h3>
+                                            </div>
+                                            <div class="p-1">
+                                                <InputTextArea @bind-Value="Character.Backstory" rows="4"
+                                                            class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </div>
                 </EditForm>
             }
             else
             {
-                <p class="text-red-500">Не удалось загрузить или инициализировать данные персонажа.</p>
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                    <p>Не удалось загрузить или инициализировать данные персонажа.</p>
+                </div>
             }
         </div>
 
         <!-- Плавающая кнопка сохранения на мобильных устройствах -->
         <div class="md:hidden fixed bottom-4 right-4">
             <button @onclick="SaveCharacterAsync"
-                    class="rounded-full w-12 h-12 bg-green-500 text-white shadow-lg flex items-center justify-center">
+                    class="rounded-full w-12 h-12 bg-green-600 text-white shadow-lg flex items-center justify-center">
                 <i class="fas fa-save"></i>
             </button>
         </div>
@@ -236,6 +326,25 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
 
     private ClaimsPrincipal? User => AuthState?.Result?.User;
+
+    // Section visibility state
+    private Dictionary<string, bool> _sectionVisibility = new()
+    {
+        { "personal", true },
+        { "skills", true },
+        { "combat", true },
+        { "equipment", true },
+        { "biography", true }
+    };
+
+    // Toggle section visibility
+    private void ToggleSectionVisibility(string section)
+    {
+        if (_sectionVisibility.ContainsKey(section))
+        {
+            _sectionVisibility[section] = !_sectionVisibility[section];
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -419,4 +528,10 @@
         StateHasChanged();
     }
 
+    private bool _navMenuOpen = false;
+    
+    private void ToggleNavMenu()
+    {
+        _navMenuOpen = !_navMenuOpen;
+    }
 }
