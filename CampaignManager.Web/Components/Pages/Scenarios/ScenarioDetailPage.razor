@@ -1,0 +1,395 @@
+﻿@page "/scenarios/{Id:guid}"
+@attribute [Authorize]
+@inject ScenarioService ScenarioService
+@inject ScenarioNpcService NpcService
+@inject NavigationManager NavigationManager
+@inject ILogger<ScenarioDetailPage> Logger
+@rendermode InteractiveServer
+<PageTitle>@(_scenario?.Name ?? "Scenario Details")</PageTitle>
+
+<div class="container mx-auto px-4 py-8">
+    @if (_loading)
+    {
+        <div class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+    }
+    else if (_scenario is null)
+    {
+        <div class="bg-white shadow-md rounded-lg p-6 text-center">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Scenario Not Found</h2>
+            <p class="text-gray-600 mb-4">The requested scenario could not be found.</p>
+            <button @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">
+                Back to Scenarios
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <button @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))" 
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded inline-flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Сценарии</span>
+                </button>
+            </div>
+            <div>
+                <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/edit"))" 
+                        class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded inline-flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                    <span>Редактировать</span>
+                </button>
+                @if (_scenario.IsTemplate)
+                {
+                    <button @onclick="ShowUseCampaignModal" 
+                            class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded inline-flex items-center ml-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M8 2a1 1 0 000 2h2a1 1 0 100-2H8z" />
+                            <path d="M3 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v6h-4.586l1.293-1.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L10.414 13H15v3a2 2 0 01-2 2H5a2 2 0 01-2-2V5zM15 11h2a1 1 0 110 2h-2v-2z" />
+                        </svg>
+                        <span>Добавить в кампанию</span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
+            <div class="p-6">
+                <h1 class="text-3xl font-bold mb-4">@_scenario.Name</h1>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        @if (!string.IsNullOrEmpty(_scenario.Era))
+                        {
+                            <div class="mb-2">
+                                <span class="font-semibold text-gray-700">Эпоха:</span>
+                                <span class="text-gray-600 ml-2">@_scenario.Era</span>
+                            </div>
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(_scenario.Location))
+                        {
+                            <div class="mb-2">
+                                <span class="font-semibold text-gray-700">Город:</span>
+                                <span class="text-gray-600 ml-2">@_scenario.Location</span>
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <div class="mb-2">
+                            <span class="font-semibold text-gray-700">Тип:</span>
+                            <span class="text-gray-600 ml-2">@(_scenario.IsTemplate ? "Template" : "Campaign Scenario")</span>
+                        </div>
+                        
+                        @if (_scenario.CampaignId.HasValue)
+                        {
+                            <div class="mb-2">
+                                <span class="font-semibold text-gray-700">Campaign:</span>
+                                <a href="/campaigns/@_scenario.CampaignId" class="text-blue-600 hover:underline ml-2">
+                                    @(_scenario.Campaign?.Name ?? "View Campaign")
+                                </a>
+                            </div>
+                        }
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h2 class="text-xl font-semibold mb-2">Description</h2>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-gray-700">
+                            @(_scenario.Description ?? "No description provided.")
+                        </p>
+                    </div>
+                </div>
+                
+                @if (!string.IsNullOrEmpty(_scenario.Journal))
+                {
+                    <div class="mb-6">
+                        <h2 class="text-xl font-semibold mb-2">Journal</h2>
+                        <div class="bg-gray-50 p-4 rounded-lg prose max-w-none">
+                            @((MarkupString)_markdownHtml)
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- NPCs Section -->
+            <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold">NPCs</h2>
+                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/npcs/new"))" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    @if (_scenario.Npcs.Count == 0)
+                    {
+                        <p class="text-gray-500 text-center py-4">No NPCs added to this scenario.</p>
+                    }
+                    else
+                    {
+                        <div class="divide-y divide-gray-200">
+                            @foreach (var npc in _scenario.Npcs)
+                            {
+                                <div class="py-3">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <h3 class="font-medium">@npc.Name</h3>
+                                            @if (!string.IsNullOrEmpty(npc.Role))
+                                            {
+                                                <p class="text-sm text-gray-600">@npc.Role</p>
+                                            }
+                                        </div>
+                                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/npcs/{npc.Id}/edit"))" 
+                                                class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Creatures Section -->
+            <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold">Creatures</h2>
+                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/creatures/add"))" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    @if (_scenario.ScenarioCreatures.Count == 0)
+                    {
+                        <p class="text-gray-500 text-center py-4">No creatures added to this scenario.</p>
+                    }
+                    else
+                    {
+                        <div class="divide-y divide-gray-200">
+                            @foreach (var sc in _scenario.ScenarioCreatures)
+                            {
+                                <div class="py-3">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <h3 class="font-medium">@sc.Creature.Name</h3>
+                                            @if (sc.Quantity > 1)
+                                            {
+                                                <p class="text-sm text-gray-600">Quantity: @sc.Quantity</p>
+                                            }
+                                        </div>
+                                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/creatures/{sc.Id}/edit"))" 
+                                                class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Items Section -->
+            <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold">Items</h2>
+                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/items/add"))" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            </svg>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    @if (_scenario.ScenarioItems.Count == 0)
+                    {
+                        <p class="text-gray-500 text-center py-4">No items added to this scenario.</p>
+                    }
+                    else
+                    {
+                        <div class="divide-y divide-gray-200">
+                            @foreach (var si in _scenario.ScenarioItems)
+                            {
+                                <div class="py-3">
+                                    <div class="flex justify-between items-center">
+                                        <div>
+                                            <h3 class="font-medium">@si.Item.Name</h3>
+                                            @if (si.Quantity > 1)
+                                            {
+                                                <p class="text-sm text-gray-600">Quantity: @si.Quantity</p>
+                                            }
+                                        </div>
+                                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/items/{si.Id}/edit"))" 
+                                                class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Use in Campaign Modal -->
+@if (_showUseCampaignModal)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Use in Campaign</h3>
+                <button @onclick="() => _showUseCampaignModal = false" class="text-gray-500 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="mb-6">
+                <p class="mb-4">Select a campaign to add this scenario to:</p>
+                
+                @if (_campaigns.Count == 0)
+                {
+                    <p class="text-gray-500">You don't have any campaigns. Create a campaign first.</p>
+                }
+                else
+                {
+                    <div class="w-full">
+                        <select @bind="_selectedCampaignId" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="@Guid.Empty">-- Select a Campaign --</option>
+                            @foreach (var campaign in _campaigns)
+                            {
+                                <option value="@campaign.Id">@campaign.Name</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button @onclick="() => _showUseCampaignModal = false" 
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
+                    Cancel
+                </button>
+                <button @onclick="AddToCampaign" 
+                        class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded @(_selectedCampaignId == Guid.Empty ? "opacity-50 cursor-not-allowed" : "")">
+                    Add to Campaign
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; } = default!;
+
+    private Scenario? _scenario;
+    private bool _loading = true;
+    private string _markdownHtml = "";
+    private bool _showUseCampaignModal = false;
+    private List<CampaignManager.Web.Companies.Models.Campaign> _campaigns = [];
+    private Guid _selectedCampaignId = Guid.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadScenario();
+    }
+
+    private async Task LoadScenario()
+    {
+        try
+        {
+            _loading = true;
+            
+            
+                _scenario = await ScenarioService.GetScenarioByIdAsync(Id);
+                
+                if (_scenario?.Journal is not null)
+                {
+                    // Convert markdown to HTML (in a real app, use Markdig or another library)
+                    _markdownHtml = _scenario.Journal;
+                }
+            
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading scenario {ScenarioId}", Id);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ShowUseCampaignModal()
+    {
+        // In a real implementation, load the user's campaigns here
+        _campaigns = []; // This would be loaded from CampaignService
+        _selectedCampaignId = Guid.Empty;
+        _showUseCampaignModal = true;
+    }
+
+    private async Task AddToCampaign()
+    {
+        if (_selectedCampaignId == Guid.Empty || _scenario is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Get the current user's email (in a real app, this would come from authentication)
+            string userEmail = "user@example.com";
+            
+            // Create a new scenario in the selected campaign based on this template
+            Scenario? newScenario = await ScenarioService.CreateScenarioFromTemplateAsync(Id, _selectedCampaignId, userEmail);
+                
+            if (newScenario is not null)
+            {
+                // Navigate to the new scenario
+                NavigationManager.NavigateTo($"/scenarios/{newScenario.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding scenario to campaign");
+        }
+        finally
+        {
+            _showUseCampaignModal = false;
+        }
+    }
+}

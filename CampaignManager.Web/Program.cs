@@ -4,6 +4,7 @@ using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
+using CampaignManager.Web.Scenarios.Services;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.SpellComponents;
 using CampaignManager.Web.Utilities.Services;
@@ -93,6 +94,12 @@ builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddScoped<SpellService>();
+
+// Register scenario management services
+builder.Services.AddScoped<ScenarioService>();
+builder.Services.AddScoped<CreatureService>();
+builder.Services.AddScoped<ItemService>();
+builder.Services.AddScoped<ScenarioNpcService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
