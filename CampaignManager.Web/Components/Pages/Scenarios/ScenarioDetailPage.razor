@@ -1,9 +1,13 @@
-﻿@page "/scenarios/{Id:guid}"
+@page "/scenarios/{Id:guid}"
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject ScenarioNpcService NpcService
 @inject NavigationManager NavigationManager
 @inject ILogger<ScenarioDetailPage> Logger
+@inject CampaignService CampaignService
+@inject MarkdownService MarkdownService
+@inject IdentityService IdentityService
 @rendermode InteractiveServer
 <PageTitle>@(_scenario?.Name ?? "Scenario Details")</PageTitle>
 
@@ -313,6 +317,7 @@
 }
 
 @code {
+
     [Parameter]
     public Guid Id { get; set; } = default!;
 
@@ -333,16 +338,14 @@
         try
         {
             _loading = true;
-            
-            
-                _scenario = await ScenarioService.GetScenarioByIdAsync(Id);
-                
-                if (_scenario?.Journal is not null)
-                {
-                    // Convert markdown to HTML (in a real app, use Markdig or another library)
-                    _markdownHtml = _scenario.Journal;
-                }
-            
+
+            _scenario = await ScenarioService.GetScenarioByIdAsync(Id);
+
+            if (_scenario?.Journal is not null)
+            {
+                // Convert markdown to HTML using our MarkdownService
+                _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
+            }
         }
         catch (Exception ex)
         {
@@ -354,12 +357,20 @@
         }
     }
 
-    private void ShowUseCampaignModal()
+    private async Task ShowUseCampaignModal()
     {
-        // In a real implementation, load the user's campaigns here
-        _campaigns = []; // This would be loaded from CampaignService
-        _selectedCampaignId = Guid.Empty;
-        _showUseCampaignModal = true;
+        try
+        {
+            _campaigns = await CampaignService.GetAvailableCompaniesAsync();            
+            _selectedCampaignId = Guid.Empty;
+            _showUseCampaignModal = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading campaigns for modal");
+            _campaigns = [];
+            _showUseCampaignModal = true;
+        }
     }
 
     private async Task AddToCampaign()
@@ -371,9 +382,8 @@
 
         try
         {
-            // Get the current user's email (in a real app, this would come from authentication)
-            string userEmail = "user@example.com";
-            
+            string userEmail = IdentityService.GetCurrentUserEmail();
+
             // Create a new scenario in the selected campaign based on this template
             Scenario? newScenario = await ScenarioService.CreateScenarioFromTemplateAsync(Id, _selectedCampaignId, userEmail);
                 

@@ -94,6 +94,7 @@ builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddScoped<SpellService>();
+builder.Services.AddScoped<MarkdownService>();
 
 // Register scenario management services
 builder.Services.AddScoped<ScenarioService>();
