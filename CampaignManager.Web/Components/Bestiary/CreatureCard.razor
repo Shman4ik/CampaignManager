@@ -12,38 +12,59 @@
         </div>
 
         <div class="flex flex-col md:flex-row gap-4">
-            @if (!string.IsNullOrEmpty(Creature.ImageUrl))
-            {
-                <div class="max-w-lg max-h-lg">
-                    <img src="@GetImageUrl(Creature.ImageUrl)" alt="@Creature.Name" class="w-full max-w-lg max-h-lg h-auto rounded object-cover" />
-                </div>
-            }
-            
             <div class="@(string.IsNullOrEmpty(Creature.ImageUrl) ? "w-full" : "md:w-2/3")">
                 <h3 class="font-medium mb-1">Характеристики:</h3>
-                <div class="grid grid-cols-4 gap-1 mb-3 text-sm">
-                    <div><span class="font-medium">СИЛ:</span> @Creature.CreatureCharacteristics?.Strength?.Value</div>
-                    <div><span class="font-medium">ЛОВ:</span> @Creature.CreatureCharacteristics?.Dexterity?.Value</div>
-                    <div><span class="font-medium">ИНТ:</span> @Creature.CreatureCharacteristics?.Intelligence?.Value</div>
-                    <div><span class="font-medium">ВЫН:</span> @Creature.CreatureCharacteristics?.Constitution?.Value</div>
-                    <div><span class="font-medium">НАР:</span> @Creature.CreatureCharacteristics?.Appearance?.Value</div>
-                    <div><span class="font-medium">МОЩ:</span> @Creature.CreatureCharacteristics?.Power?.Value</div>
-                    <div><span class="font-medium">ТЕЛ:</span> @Creature.CreatureCharacteristics?.Size?.Value</div>
-                    <div><span class="font-medium">ОБР:</span> @Creature.CreatureCharacteristics?.Education?.Value</div>
-                    <div><span class="font-medium">ИН.В:</span> @Creature.CreatureCharacteristics?.Initiative</div>
-                    <div><span class="font-medium">СР.БОНУС:</span> @Creature.CreatureCharacteristics?.AverageBonusToHit</div>
-                    <div><span class="font-medium">СР.КОМПЛ:</span> @Creature.CreatureCharacteristics?.AverageComplexity</div>
-                    <div><span class="font-medium">СКОР.:</span> @Creature.CreatureCharacteristics?.Speed</div>
-                    <div><span class="font-medium">ПЗ:</span> @Creature.CreatureCharacteristics?.HealPoint</div>
-                    <div><span class="font-medium">ПМ:</span> @Creature.CreatureCharacteristics?.ManaPoint</div>
-                    <div><span class="font-medium">КОМПЛ:</span> @Creature.CreatureCharacteristics?.Constitutions</div>
+                <div class="grid grid-cols-2 text-sm">
+                    @if (Creature.CreatureCharacteristics != null)
+                    {
+                        <div>
+                        <CharacteristicItem Label="СИЛ" Value="@Creature.CreatureCharacteristics.Strength?.Value" />
+                        <CharacteristicItem Label="ВЫН" Value="@Creature.CreatureCharacteristics.Constitution?.Value" />                        
+                        <CharacteristicItem Label="ТЕЛ" Value="@Creature.CreatureCharacteristics.Size?.Value" />
+                        <CharacteristicItem Label="ЛВК" Value="@Creature.CreatureCharacteristics.Dexterity?.Value" />
+                        <CharacteristicItem Label="ИНТ" Value="@Creature.CreatureCharacteristics.Intelligence?.Value" />
+                        <CharacteristicItem Label="МОЩ" Value="@Creature.CreatureCharacteristics.Power?.Value" />                       
+                        <CharacteristicItem Label="НАР" Value="@Creature.CreatureCharacteristics.Appearance?.Value" />
+                        <CharacteristicItem Label="ОБР" Value="@Creature.CreatureCharacteristics.Education?.Value" />
+                        </div>
+                        <div>
+                        <CharacteristicItem Label="Инициатива" Value="@Creature.CreatureCharacteristics.Initiative" />
+                        <CharacteristicItem Label="БкУ" Value="@Creature.CreatureCharacteristics.AverageBonusToHit" />
+                        <CharacteristicItem Label="Комплекция" Value="@Creature.CreatureCharacteristics.AverageComplexity" />
+                        <CharacteristicItem Label="Скорость" Value="@Creature.CreatureCharacteristics.Speed" />
+                        <CharacteristicItem Label="ПЗ" Value="@Creature.CreatureCharacteristics.HealPoint" />
+                        <CharacteristicItem Label="ПМ" Value="@Creature.CreatureCharacteristics.ManaPoint" />
+                        </div>
+                    }
                 </div>
-                
+                @if (!string.IsNullOrEmpty(Creature.ImageUrl))
+                {
+                    <div class="max-w-lg max-h-lg">
+                        <img src="@GetImageUrl(Creature.ImageUrl)" alt="@Creature.Name" class="w-full max-w-lg max-h-lg h-auto rounded object-cover" loading="lazy" />
+                    </div>
+                }
                 <div class="text-lg text-gray-600 h-24 overflow-y-auto pr-2">
                     @(string.IsNullOrEmpty(Creature.Description) 
                         ? "Описание отсутствует." 
                         : Creature.Description)
                 </div>
+
+                @if (Creature.SpecialAbilities?.Count > 0)
+                {
+                    <div class="mt-2">
+                        <h3 class="font-medium mb-1">Особые умения:</h3>
+                        <div class="text-sm text-gray-700">
+                            @foreach (var ability in Creature.SpecialAbilities.Take(2))
+                            {
+                                <div class="mb-1"><span class="font-medium">@ability.Key:</span> @ability.Value</div>
+                            }
+                            @if (Creature.SpecialAbilities.Count > 2)
+                            {
+                                <div class="text-blue-600 cursor-pointer" @onclick="() => OnView.InvokeAsync(Creature)">Показать все...</div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </div>
