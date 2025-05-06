@@ -1,0 +1,108 @@
+@using CampaignManager.Web.Components.Bestiary.Model
+@using CampaignManager.Web.Scenarios.Models
+@inject NavigationManager NavigationManager
+
+<div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
+    <div class="p-6">
+        <h2 class="text-xl font-semibold mb-2">@Creature.Name</h2>
+        <div class="text-sm text-gray-600 mb-3">
+            <span class="inline-block bg-blue-100 text-blue-800 rounded-full px-3 py-1 text-xs">
+                @Creature.Type
+            </span>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-4">
+            @if (!string.IsNullOrEmpty(Creature.ImageUrl))
+            {
+                <div class="md:w-1/3">
+                    <img src="@GetImageUrl(Creature.ImageUrl)" alt="@Creature.Name" 
+                         class="w-full h-auto rounded object-cover" />
+                </div>
+            }
+            
+            <div class="@(string.IsNullOrEmpty(Creature.ImageUrl) ? "w-full" : "md:w-2/3")">
+                <h3 class="font-medium mb-1">Характеристики:</h3>
+                <div class="grid grid-cols-4 gap-1 mb-3 text-sm">
+                    <div><span class="font-medium">СИЛ:</span> @Creature.CreatureCharacteristics?.Strength?.Value</div>
+                    <div><span class="font-medium">ЛОВ:</span> @Creature.CreatureCharacteristics?.Dexterity?.Value</div>
+                    <div><span class="font-medium">ИНТ:</span> @Creature.CreatureCharacteristics?.Intelligence?.Value</div>
+                    <div><span class="font-medium">ВЫН:</span> @Creature.CreatureCharacteristics?.Constitution?.Value</div>
+                    <div><span class="font-medium">НАР:</span> @Creature.CreatureCharacteristics?.Appearance?.Value</div>
+                    <div><span class="font-medium">МОЩ:</span> @Creature.CreatureCharacteristics?.Power?.Value</div>
+                    <div><span class="font-medium">ТЕЛ:</span> @Creature.CreatureCharacteristics?.Size?.Value</div>
+                    <div><span class="font-medium">ОБР:</span> @Creature.CreatureCharacteristics?.Education?.Value</div>
+                    <div><span class="font-medium">ИН.В:</span> @Creature.CreatureCharacteristics?.Initiative</div>
+                    <div><span class="font-medium">СР.БОНУС:</span> @Creature.CreatureCharacteristics?.AverageBonusToHit</div>
+                    <div><span class="font-medium">СР.КОМПЛ:</span> @Creature.CreatureCharacteristics?.AverageComplexity</div>
+                    <div><span class="font-medium">СКОР.:</span> @Creature.CreatureCharacteristics?.Speed</div>
+                    <div><span class="font-medium">ПЗ:</span> @Creature.CreatureCharacteristics?.HealPoint</div>
+                    <div><span class="font-medium">ПМ:</span> @Creature.CreatureCharacteristics?.ManaPoint</div>
+                    <div><span class="font-medium">КОМПЛ:</span> @Creature.CreatureCharacteristics?.Constitutions</div>
+                </div>
+                
+                <div class="text-lg text-gray-600 h-24 overflow-y-auto pr-2">
+                    @(string.IsNullOrEmpty(Creature.Description) 
+                        ? "Описание отсутствует." 
+                        : Creature.Description)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-gray-50 px-6 py-3 flex justify-between">
+        <button @onclick="() => OnView.InvokeAsync(Creature)"
+                class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-1 px-3 rounded text-sm inline-flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span>Просмотр</span>
+        </button>
+        <div>
+            <button @onclick="() => EditCreature(Creature)"
+                   class="text-gray-600 hover:text-gray-800 hover:bg-gray-50 py-1 px-3 rounded text-sm inline-flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Изменить</span>
+            </button>
+            <button @onclick="() => OnDelete.InvokeAsync(Creature)"
+                    class="text-red-600 hover:text-red-800 hover:bg-red-50 py-1 px-3 rounded text-sm inline-flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Удалить</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public required Creature Creature { get; set; }
+
+    [Parameter]
+    public EventCallback<Creature> OnView { get; set; }   
+
+    [Parameter]
+    public EventCallback<Creature> OnDelete { get; set; }
+
+    private string GetImageUrl(string? imageUrl)
+    {
+        if (string.IsNullOrEmpty(imageUrl))
+            return string.Empty;
+
+        // If the URL already starts with http:// or https://, return it as is
+        if (imageUrl.StartsWith("http://") || imageUrl.StartsWith("https://"))
+            return imageUrl;
+
+        // Otherwise, use our API endpoint to proxy the request to Minio
+        return $"/api/minio/image/{imageUrl}";
+    }
+
+    // Редактирование существа
+    private void EditCreature(Creature creature)
+    {
+        NavigationManager.NavigateTo($"/bestiary/creatures/edit/{creature.Id}");
+    }
+}

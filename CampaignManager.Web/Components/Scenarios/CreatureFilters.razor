@@ -1,0 +1,89 @@
+@using CampaignManager.Web.Components.Bestiary.Model
+@using CampaignManager.Web.Scenarios.Models
+
+<div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
+    <div class="p-4 bg-gray-50 border-b border-gray-200">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <input type="text" @bind="SearchTerm" @bind:event="oninput" @onkeyup="SearchKeyUp" 
+                       placeholder="Поиск существ..." 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            
+            <div>
+                <select @bind="SelectedType" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Все типы</option>
+                    @foreach (var type in Enum.GetValues(typeof(CreatureType)))
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+            </div>
+            
+            <div>
+                <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded w-full">
+                    Очистить фильтры
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _searchTerm = "";
+    private string _selectedType = "";
+    private System.Threading.Timer? _searchTimer;
+
+    [Parameter]
+    public string SearchTerm
+    {
+        get => _searchTerm;
+        set
+        {
+            if (_searchTerm == value) return;
+            _searchTerm = value;
+            SearchTermChanged.InvokeAsync(value);
+        }
+    }
+
+    [Parameter]
+    public string SelectedType 
+    {
+        get => _selectedType;
+        set
+        {
+            if (_selectedType == value) return;
+            _selectedType = value;
+            SelectedTypeChanged.InvokeAsync(value);
+        }
+    }
+    
+    [Parameter]
+    public EventCallback<string> SearchTermChanged { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> SelectedTypeChanged { get; set; }
+    
+    [Parameter]
+    public EventCallback FiltersCleared { get; set; }
+
+    private void SearchKeyUp(KeyboardEventArgs e)
+    {
+        // Debounce search input
+        _searchTimer?.Dispose();
+        _searchTimer = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                SearchTermChanged.InvokeAsync(_searchTerm);
+            });
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = "";
+        _selectedType = "";
+        FiltersCleared.InvokeAsync();
+    }
+}

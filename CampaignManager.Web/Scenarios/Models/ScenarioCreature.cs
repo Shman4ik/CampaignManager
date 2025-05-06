@@ -1,3 +1,4 @@
+using CampaignManager.Web.Components.Bestiary.Model;
 using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Scenarios.Models;

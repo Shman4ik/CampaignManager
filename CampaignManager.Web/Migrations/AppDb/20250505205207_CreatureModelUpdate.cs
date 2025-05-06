@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using CampaignManager.Web.Scenarios.Models;
+using CampaignManager.Web.Components.Bestiary.Model;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

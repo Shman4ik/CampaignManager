@@ -1,4 +1,5 @@
 using CampaignManager.Web.Companies.Models;
+using CampaignManager.Web.Components.Bestiary.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Scenarios.Models;
 using CampaignManager.Web.SpellComponents;

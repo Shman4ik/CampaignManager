@@ -4,6 +4,7 @@ using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
+using CampaignManager.Web.Components.Bestiary.Services;
 using CampaignManager.Web.Scenarios.Services;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.SpellComponents;

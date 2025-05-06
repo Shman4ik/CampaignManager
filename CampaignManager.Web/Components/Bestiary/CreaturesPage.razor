@@ -1,0 +1,221 @@
+@page "/bestiary"
+@using CampaignManager.Web.Components.Bestiary.Model
+@using CampaignManager.Web.Components.Bestiary.Services
+@using CampaignManager.Web.Components.Scenarios
+@using CampaignManager.Web.Scenarios.Models
+@attribute [Authorize]
+@inject CreatureService CreatureService
+@inject NavigationManager NavigationManager
+@inject ILogger<CreaturesPage> Logger
+@rendermode InteractiveServer
+<PageTitle>Существа</PageTitle>
+
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold">Существа</h1>
+        <button @onclick="CreateNewCreature" 
+                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded inline-flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+            </svg>
+            <span>Добавить существо</span>
+        </button>
+    </div>
+
+    <CreatureFilters 
+        SearchTerm="@_searchTerm"
+        SelectedType="@_selectedType"
+        SearchTermChanged="@OnSearchTermChanged"
+        SelectedTypeChanged="@OnSelectedTypeChanged"
+        FiltersCleared="@OnFiltersClear" />
+
+    @if (_loading)
+    {
+        <div class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+    }
+    else if (_filteredCreatures.Count == 0)
+    {
+        <div class="bg-white shadow-md rounded-lg p-6 text-center">
+            @if (!string.IsNullOrEmpty(_searchTerm) || _selectedType != "")
+            {
+                <p class="text-lg text-gray-600 mb-4">Нет существ, соответствующих критериям поиска.</p>
+                <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
+                    Очистить фильтры
+                </button>
+            }
+            else
+            {
+                <p class="text-lg text-gray-600 mb-4">В базе данных нет существ.</p>
+                <p class="text-gray-500">Добавьте первое существо, чтобы начать.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            @foreach (var creature in _filteredCreatures)
+            {
+                <CreatureCard 
+                    Creature="@creature"
+                    OnView="@(c => ViewCreature(c))"
+                   
+                    OnDelete="@(c => ConfirmDelete(c))" />
+            }
+        </div>
+    }
+</div>
+
+@if (_showDeleteModal)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 class="text-xl font-bold mb-4">Подтверждение удаления</h2>
+            <p class="mb-6">Вы уверены, что хотите удалить <strong>@_creatureToDelete?.Name</strong>? Это действие нельзя отменить.</p>
+            <div class="flex justify-end space-x-3">
+                <button @onclick="() => _showDeleteModal = false" 
+                        class="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded hover:bg-gray-100">
+                    Отмена
+                </button>
+                <button @onclick="DeleteCreature" 
+                        class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded">
+                    Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Creature> _creatures = [];
+    private List<Creature> _filteredCreatures = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _selectedType = "";
+    
+    // Модальное окно удаления
+    private bool _showDeleteModal = false;
+    private Creature? _creatureToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _loading = true;
+            
+            // Load creatures
+            _creatures = await CreatureService.GetAllCreaturesAsync();
+            
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading creatures data");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredCreatures = _creatures;
+        
+        // Apply search term filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            string searchLower = _searchTerm.ToLower();
+            _filteredCreatures = _filteredCreatures
+                .Where(c => (c.Name?.ToLower().Contains(searchLower) ?? false) || 
+                           (c.Description?.ToLower().Contains(searchLower) ?? false))
+                .ToList();
+        }
+        
+        // Apply type filter
+        if (!string.IsNullOrWhiteSpace(_selectedType) && Enum.TryParse<CreatureType>(_selectedType, out var creatureType))
+        {
+            _filteredCreatures = _filteredCreatures
+                .Where(c => c.Type == creatureType)
+                .ToList();
+        }
+    }
+
+    private void OnSearchTermChanged(string searchTerm)
+    {
+        _searchTerm = searchTerm;
+        ApplyFilters();
+    }
+
+    private void OnSelectedTypeChanged(string selectedType)
+    {
+        _selectedType = selectedType;
+        ApplyFilters();
+    }
+
+    private void OnFiltersClear()
+    {
+        _searchTerm = "";
+        _selectedType = "";
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = "";
+        _selectedType = "";
+        ApplyFilters();
+    }
+
+    // Просмотр существа
+    private void ViewCreature(Creature creature)
+    {
+        NavigationManager.NavigateTo($"/bestiary/creatures/edit/{creature.Id}");
+    }    
+
+    // Создание нового существа
+    private void CreateNewCreature()
+    {
+        NavigationManager.NavigateTo("/bestiary/creatures/edit");
+    }
+
+    // Удаление существа
+    private void ConfirmDelete(Creature creature)
+    {
+        _creatureToDelete = creature;
+        _showDeleteModal = true;
+    }
+
+    private async Task DeleteCreature()
+    {
+        if (_creatureToDelete is null)
+        {
+            return;
+        }
+
+        try
+        {
+            bool success = await CreatureService.DeleteCreatureAsync(_creatureToDelete.Id);
+            if (success)
+            {
+                _creatures.Remove(_creatureToDelete);
+                ApplyFilters();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting creature {CreatureId}", _creatureToDelete.Id);
+        }
+        finally
+        {
+            _showDeleteModal = false;
+            _creatureToDelete = null;
+        }
+    }
+}

@@ -1,10 +1,10 @@
-using CampaignManager.Web.Scenarios.Models;
+using CampaignManager.Web.Components.Bestiary.Model;
 using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 
-namespace CampaignManager.Web.Scenarios.Services;
+namespace CampaignManager.Web.Components.Bestiary.Services;
 
 /// <summary>
 /// Service for managing creatures in the system
@@ -101,7 +101,7 @@ public sealed class CreatureService(
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
                 .Where(c => c.Name.Contains(searchTerm) ||
-                           (c.Description != null && c.Description.Contains(searchTerm)))
+                           c.Description != null && c.Description.Contains(searchTerm))
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
