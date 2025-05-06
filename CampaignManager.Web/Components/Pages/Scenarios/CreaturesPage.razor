@@ -30,7 +30,7 @@
                 <div>
                     <select @bind="_selectedType" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                         <option value="">All Types</option>
-                        @foreach (var type in _creatureTypes)
+                        @foreach (var type in Enum.GetValues(typeof(CreatureType)))
                         {
                             <option value="@type">@type</option>
                         }
@@ -38,13 +38,9 @@
                 </div>
                 
                 <div>
-                    <select @bind="_selectedCategory" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">All Categories</option>
-                        @foreach (var category in _creatureCategories)
-                        {
-                            <option value="@category">@category</option>
-                        }
-                    </select>
+                    <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded w-full">
+                        Clear Filters
+                    </button>
                 </div>
             </div>
         </div>
@@ -59,7 +55,7 @@
     else if (_filteredCreatures.Count == 0)
     {
         <div class="bg-white shadow-md rounded-lg p-6 text-center">
-            @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedType) || !string.IsNullOrEmpty(_selectedCategory))
+            @if (!string.IsNullOrEmpty(_searchTerm) || _selectedType != CreatureType.Other.ToString())
             {
                 <p class="text-lg text-gray-600 mb-4">No creatures match your search criteria.</p>
                 <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
@@ -81,41 +77,61 @@
                 <div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
                     <div class="p-6">
                         <h2 class="text-xl font-semibold mb-2">@creature.Name</h2>
-                        
-                        @if (!string.IsNullOrEmpty(creature.Type))
+                        <div class="text-sm text-gray-600 mb-3">
+                            <span class="inline-block bg-blue-100 text-blue-800 rounded-full px-3 py-1 text-xs">
+                                @creature.Type
+                            </span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(creature.ImageUrl))
                         {
-                            <div class="text-sm text-gray-500 mb-1">
-                                <span class="font-medium">Type:</span> @creature.Type
+                            <div class="mb-4">
+                                <img src="@GetImageUrl(creature.ImageUrl)" alt="@creature.Name" class="w-full h-48 object-cover rounded" />
                             </div>
                         }
-                        
-                        <p class="text-gray-600 mt-3 line-clamp-3">
+
+                        <h3 class="font-medium mb-1">Characteristics:</h3>
+                        <div class="grid grid-cols-2 gap-2 mb-3 text-sm">
+                            <div><span class="font-medium">STR:</span> @creature.CreatureCharacteristics?.Strength?.Value</div>
+                            <div><span class="font-medium">DEX:</span> @creature.CreatureCharacteristics?.Dexterity?.Value</div>
+                            <div><span class="font-medium">INT:</span> @creature.CreatureCharacteristics?.Intelligence?.Value</div>
+                            <div><span class="font-medium">CON:</span> @creature.CreatureCharacteristics?.Constitution?.Value</div>
+                            <div><span class="font-medium">APP:</span> @creature.CreatureCharacteristics?.Appearance?.Value</div>
+                            <div><span class="font-medium">POW:</span> @creature.CreatureCharacteristics?.Power?.Value</div>
+                            <div><span class="font-medium">SIZ:</span> @creature.CreatureCharacteristics?.Size?.Value</div>
+                            <div><span class="font-medium">EDU:</span> @creature.CreatureCharacteristics?.Education?.Value</div>
+                            <div><span class="font-medium">HP:</span> @creature.CreatureCharacteristics?.HealPoint</div>
+                            <div><span class="font-medium">MP:</span> @creature.CreatureCharacteristics?.ManaPoint</div>
+                        </div>
+
+                        <p class="text-gray-600 line-clamp-3">
                             @(string.IsNullOrEmpty(creature.Description) 
                                 ? "No description provided." 
                                 : creature.Description)
                         </p>
                     </div>
+
                     <div class="bg-gray-50 px-6 py-3 flex justify-between">
                         <button @onclick="@(() => NavigationManager.NavigateTo($"/bestiary/creatures/{creature.Id}"))"
-                                class="text-gray-700 hover:text-gray-900 hover:bg-gray-100 py-1 px-3 rounded text-sm inline-flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                                class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-1 px-3 rounded text-sm inline-flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                             <span>View</span>
                         </button>
                         <div>
                             <button @onclick="@(() => NavigationManager.NavigateTo($"/bestiary/creatures/{creature.Id}/edit"))"
-                                    class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-1 px-3 rounded text-sm inline-flex items-center mr-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                    class="text-gray-600 hover:text-gray-800 hover:bg-gray-50 py-1 px-3 rounded text-sm inline-flex items-center mr-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
                                 <span>Edit</span>
                             </button>
                             <button @onclick="@(() => ConfirmDelete(creature))"
                                     class="text-red-600 hover:text-red-800 hover:bg-red-50 py-1 px-3 rounded text-sm inline-flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                                 <span>Delete</span>
                             </button>
@@ -131,22 +147,12 @@
 @if (_showDeleteModal)
 {
     <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">Confirm Deletion</h3>
-                <button @onclick="() => _showDeleteModal = false" class="text-gray-500 hover:text-gray-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="mb-6">
-                <p>Are you sure you want to delete the creature "<strong>@(_creatureToDelete?.Name)</strong>"?</p>
-                <p class="text-red-600 mt-2">This action cannot be undone.</p>
-            </div>
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 class="text-xl font-semibold mb-4">Confirm Deletion</h3>
+            <p class="mb-6">Are you sure you want to delete <strong>@_creatureToDelete?.Name</strong>? This action cannot be undone.</p>
             <div class="flex justify-end space-x-3">
                 <button @onclick="() => _showDeleteModal = false" 
-                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
+                        class="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded hover:bg-gray-100">
                     Cancel
                 </button>
                 <button @onclick="DeleteCreature" 
@@ -161,12 +167,9 @@
 @code {
     private List<Creature> _creatures = [];
     private List<Creature> _filteredCreatures = [];
-    private List<string> _creatureTypes = [];
-    private List<string> _creatureCategories = [];
     private bool _loading = true;
     private string _searchTerm = "";
     private string _selectedType = "";
-    private string _selectedCategory = "";
     private bool _showDeleteModal = false;
     private Creature? _creatureToDelete;
     private Timer? _searchTimer;
@@ -176,22 +179,27 @@
         await LoadData();
     }
 
+    private string GetImageUrl(string? imageUrl)
+    {
+        if (string.IsNullOrEmpty(imageUrl))
+            return string.Empty;
+
+        // If the URL already starts with http:// or https://, return it as is
+        if (imageUrl.StartsWith("http://") || imageUrl.StartsWith("https://"))
+            return imageUrl;
+
+        // Otherwise, use our API endpoint to proxy the request to Minio
+        return $"/api/minio/image/{imageUrl}";
+    }
+
     private async Task LoadData()
     {
         try
         {
             _loading = true;
             
-            // Load creatures and filter options
-            Task<List<Creature>> creaturesTask = CreatureService.GetAllCreaturesAsync();
-            Task<List<string>> typesTask = CreatureService.GetAllCreatureTypesAsync();
-            Task<List<string>> categoriesTask = CreatureService.GetAllCreatureCategoriesAsync();
-            
-            await Task.WhenAll(creaturesTask, typesTask, categoriesTask);
-            
-            _creatures = creaturesTask.Result;
-            _creatureTypes = typesTask.Result;
-            _creatureCategories = categoriesTask.Result;
+            // Load creatures
+            _creatures = await CreatureService.GetAllCreaturesAsync();
             
             ApplyFilters();
         }
@@ -220,18 +228,10 @@
         }
         
         // Apply type filter
-        if (!string.IsNullOrWhiteSpace(_selectedType))
+        if (!string.IsNullOrWhiteSpace(_selectedType) && Enum.TryParse<CreatureType>(_selectedType, out var creatureType))
         {
             _filteredCreatures = _filteredCreatures
-                .Where(c => c.Type == _selectedType)
-                .ToList();
-        }
-        
-        // Apply category filter
-        if (!string.IsNullOrWhiteSpace(_selectedCategory))
-        {
-            _filteredCreatures = _filteredCreatures
-                .Where(c => c.Categories != null && c.Categories.Contains(_selectedCategory))
+                .Where(c => c.Type == creatureType)
                 .ToList();
         }
     }
@@ -254,7 +254,6 @@
     {
         _searchTerm = "";
         _selectedType = "";
-        _selectedCategory = "";
         ApplyFilters();
     }
 

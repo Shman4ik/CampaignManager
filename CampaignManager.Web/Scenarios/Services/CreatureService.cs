@@ -2,6 +2,7 @@ using CampaignManager.Web.Scenarios.Models;
 using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 
 namespace CampaignManager.Web.Scenarios.Services;
 
@@ -11,7 +12,8 @@ namespace CampaignManager.Web.Scenarios.Services;
 public sealed class CreatureService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
-    ILogger<CreatureService> logger)
+    ILogger<CreatureService> logger,
+    IWebHostEnvironment env)
 {
     private const string CreaturesCacheKey = "AllCreatures";
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
@@ -28,15 +30,15 @@ public sealed class CreatureService(
             {
                 return creatures;
             }
-            
+
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
             creatures = await dbContext.Creatures.OrderBy(c => c.Name).ToListAsync();
-            
+
             var cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheExpiration);
-                
+
             cache.Set(CreaturesCacheKey, creatures, cacheOptions);
-            
+
             return creatures;
         }
         catch (Exception ex)
@@ -45,7 +47,7 @@ public sealed class CreatureService(
             return [];
         }
     }
-    
+
     /// <summary>
     /// Gets a creature by its ID
     /// </summary>
@@ -64,35 +66,13 @@ public sealed class CreatureService(
             return null;
         }
     }
-    
-    /// <summary>
-    /// Gets creatures by category
-    /// </summary>
-    /// <param name="category">The category to filter by</param>
-    /// <returns>A list of creatures in the specified category</returns>
-    public async Task<List<Creature>> GetCreaturesByCategoryAsync(string category)
-    {
-        try
-        {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Creatures
-                .Where(c => c.Categories != null && c.Categories.Contains(category))
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving creatures by category {Category}", category);
-            return [];
-        }
-    }
-    
+
     /// <summary>
     /// Gets creatures by type
     /// </summary>
     /// <param name="type">The type to filter by</param>
     /// <returns>A list of creatures of the specified type</returns>
-    public async Task<List<Creature>> GetCreaturesByTypeAsync(string type)
+    public async Task<List<Creature>> GetCreaturesByTypeAsync(CreatureType type)
     {
         try
         {
@@ -108,7 +88,7 @@ public sealed class CreatureService(
             return [];
         }
     }
-    
+
     /// <summary>
     /// Searches for creatures by name
     /// </summary>
@@ -120,8 +100,8 @@ public sealed class CreatureService(
         {
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
-                .Where(c => EF.Functions.ILike(c.Name, $"%{searchTerm}%") || 
-                            (c.Description != null && EF.Functions.ILike(c.Description, $"%{searchTerm}%")))
+                .Where(c => c.Name.Contains(searchTerm) ||
+                           (c.Description != null && c.Description.Contains(searchTerm)))
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
@@ -131,7 +111,7 @@ public sealed class CreatureService(
             return [];
         }
     }
-    
+
     /// <summary>
     /// Creates a new creature
     /// </summary>
@@ -142,23 +122,21 @@ public sealed class CreatureService(
         try
         {
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Check if a creature with the same name already exists
-            bool exists = await dbContext.Creatures
-                .AnyAsync(c => c.Name.Equals(creature.Name, StringComparison.OrdinalIgnoreCase));
-                
+            bool exists = await dbContext.Creatures.AnyAsync(c => c.Name == creature.Name);
             if (exists)
             {
                 logger.LogWarning("Creature with name {CreatureName} already exists", creature.Name);
                 return null;
             }
-            
+
             await dbContext.Creatures.AddAsync(creature);
             await dbContext.SaveChangesAsync();
-            
+
             // Invalidate cache
             cache.Remove(CreaturesCacheKey);
-            
+
             return creature;
         }
         catch (Exception ex)
@@ -167,7 +145,7 @@ public sealed class CreatureService(
             return null;
         }
     }
-    
+
     /// <summary>
     /// Updates an existing creature
     /// </summary>
@@ -178,34 +156,34 @@ public sealed class CreatureService(
         try
         {
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             Creature? existingCreature = await dbContext.Creatures.FindAsync(creature.Id);
             if (existingCreature is null)
             {
+                logger.LogWarning("Creature with ID {CreatureId} not found for update", creature.Id);
                 return false;
             }
-            
+
             // Check if the name is being changed and if the new name already exists
-            if (!string.Equals(existingCreature.Name, creature.Name, StringComparison.OrdinalIgnoreCase))
+            if (existingCreature.Name != creature.Name)
             {
                 bool nameExists = await dbContext.Creatures
-                    .AnyAsync(c => c.Id != creature.Id && 
-                                  c.Name.Equals(creature.Name, StringComparison.OrdinalIgnoreCase));
-                                  
+                    .AnyAsync(c => c.Name == creature.Name && c.Id != creature.Id);
+
                 if (nameExists)
                 {
-                    logger.LogWarning("Cannot update creature: name {CreatureName} already exists", creature.Name);
+                    logger.LogWarning("Cannot update creature {CreatureId}: another creature with name {CreatureName} already exists",
+                        creature.Id, creature.Name);
                     return false;
                 }
             }
-            
-            // Update the existing creature with the new values
+
             dbContext.Entry(existingCreature).CurrentValues.SetValues(creature);
             await dbContext.SaveChangesAsync();
-            
+
             // Invalidate cache
             cache.Remove(CreaturesCacheKey);
-            
+
             return true;
         }
         catch (Exception ex)
@@ -214,7 +192,7 @@ public sealed class CreatureService(
             return false;
         }
     }
-    
+
     /// <summary>
     /// Deletes a creature by its ID
     /// </summary>
@@ -225,13 +203,13 @@ public sealed class CreatureService(
         try
         {
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             Creature? creature = await dbContext.Creatures.FindAsync(id);
             if (creature is null)
             {
                 return false;
             }
-            
+
             // Check if the creature is used in any scenarios
             bool isUsed = await dbContext.ScenarioCreatures.AnyAsync(sc => sc.CreatureId == id);
             if (isUsed)
@@ -239,13 +217,13 @@ public sealed class CreatureService(
                 logger.LogWarning("Cannot delete creature {CreatureId}: it is used in one or more scenarios", id);
                 return false;
             }
-            
+
             dbContext.Creatures.Remove(creature);
             await dbContext.SaveChangesAsync();
-            
+
             // Invalidate cache
             cache.Remove(CreaturesCacheKey);
-            
+
             return true;
         }
         catch (Exception ex)
@@ -254,69 +232,84 @@ public sealed class CreatureService(
             return false;
         }
     }
-    
+
     /// <summary>
-    /// Gets all distinct creature types in the system
+    /// Imports creatures from JSON files in the Data directory
     /// </summary>
-    /// <returns>A list of distinct creature types</returns>
-    public async Task<List<string>> GetAllCreatureTypesAsync()
+    /// <returns>The number of creatures imported</returns>
+    public async Task<int> ImportCreaturesFromJsonFilesAsync()
     {
         try
         {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Creatures
-                .Where(c => c.Type != null)
-                .Select(c => c.Type!)
-                .Distinct()
-                .OrderBy(t => t)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving creature types");
-            return [];
-        }
-    }
-    
-    /// <summary>
-    /// Gets all distinct creature categories in the system
-    /// </summary>
-    /// <returns>A list of distinct creature categories</returns>
-    public async Task<List<string>> GetAllCreatureCategoriesAsync()
-    {
-        try
-        {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            
-            // Get all categories (comma-separated in the Categories field)
-            List<string?> allCategoriesRaw = await dbContext.Creatures
-                .Where(c => c.Categories != null)
-                .Select(c => c.Categories)
-                .ToListAsync();
-                
-            // Split and flatten the categories
-            HashSet<string> uniqueCategories = new(StringComparer.OrdinalIgnoreCase);
-            
-            foreach (string? categoriesString in allCategoriesRaw)
+            string dataDirectory = Path.Combine(env.ContentRootPath, "Data");
+            if (!Directory.Exists(dataDirectory))
             {
-                if (string.IsNullOrWhiteSpace(categoriesString))
+                logger.LogWarning("Data directory not found at {DataDirectory}", dataDirectory);
+                return 0;
+            }
+
+            string[] jsonFiles = Directory.GetFiles(dataDirectory, "*.json");
+            if (jsonFiles.Length == 0)
+            {
+                logger.LogInformation("No JSON files found in the Data directory");
+                return 0;
+            }
+
+            int totalImported = 0;
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            foreach (string jsonFile in jsonFiles)
+            {
+                logger.LogInformation("Processing file: {FileName}", Path.GetFileName(jsonFile));
+
+                try
                 {
-                    continue;
+                    string jsonContent = await File.ReadAllTextAsync(jsonFile);
+                    var importedCreatures = JsonSerializer.Deserialize<List<Creature>>(jsonContent, options);
+
+                    if (importedCreatures == null || importedCreatures.Count == 0)
+                    {
+                        logger.LogWarning("No creatures found in file {FileName}", Path.GetFileName(jsonFile));
+                        continue;
+                    }
+
+                    foreach (var importedCreature in importedCreatures)
+                    {
+
+
+                        await dbContext.Creatures.AddAsync(importedCreature);
+                        totalImported++;
+                    }
                 }
-                
-                string[] categories = categoriesString.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                foreach (string category in categories)
+                catch (JsonException ex)
                 {
-                    uniqueCategories.Add(category.Trim());
+                    logger.LogError(ex, "Error deserializing JSON from file {FileName}", Path.GetFileName(jsonFile));
                 }
             }
-            
-            return uniqueCategories.OrderBy(c => c).ToList();
+
+            // Save all changes to the database
+            if (totalImported > 0)
+            {
+                await dbContext.SaveChangesAsync();
+
+                // Clear cache
+                cache.Remove(CreaturesCacheKey);
+
+                logger.LogInformation("Successfully imported {TotalImported} creatures", totalImported);
+            }
+
+            return totalImported;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error retrieving creature categories");
-            return [];
+            logger.LogError(ex, "Error importing creatures from JSON files");
+            return 0;
         }
     }
 }
+

@@ -1,7 +1,7 @@
 using Markdig;
 using Microsoft.Extensions.Logging;
 
-namespace CampaignManager.Web.Services
+namespace CampaignManager.Web.Utilities.Services
 {
     public class MarkdownService
     {

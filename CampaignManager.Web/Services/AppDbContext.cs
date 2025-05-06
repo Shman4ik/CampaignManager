@@ -152,9 +152,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(c => c.Name).IsRequired();
             entity.HasIndex(c => c.Name).IsUnique();
             
-            // Store stats as JSON
-            entity.Property(c => c.Stats)
+            // Store CreatureCharacteristics as JSONB
+            entity.Property(c => c.CreatureCharacteristics)
                 .HasColumnType("jsonb");
+                
+            // Store CombatDescriptions as JSONB
+            entity.Property(c => c.CombatDescriptions)
+                .HasColumnType("jsonb");
+                
+            // Store SpecialAbilities as JSONB
+            entity.Property(c => c.SpecialAbilities)
+                .HasColumnType("jsonb");
+                
+            // Store Type as string
+            entity.Property(c => c.Type)
+                .HasDefaultValue(CreatureType.Other)
+                .HasConversion<string>();
         });
         
         // Item Configuration

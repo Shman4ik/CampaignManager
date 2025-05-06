@@ -7,6 +7,7 @@ using CampaignManager.Web.Components;
 using CampaignManager.Web.Scenarios.Services;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.SpellComponents;
+using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.Services;
 using CampaignManager.Web.Weapons;
 using Microsoft.AspNetCore.Authentication;
@@ -102,6 +103,9 @@ builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<ScenarioNpcService>();
 
+// Register Minio service
+builder.Services.AddScoped<MinioService>();
+
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
@@ -129,6 +133,11 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapDefaultEndpoints();
+
+app.MapAccountEndpoints();
+app.MapMinioEndpoints();
+
+
 // Enable middleware to serve generated Swagger as a JSON endpoint.
 app.UseSwagger();
 
@@ -138,5 +147,5 @@ app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1");
 });
-app.MapAccountEndpoints();
+
 app.Run();
