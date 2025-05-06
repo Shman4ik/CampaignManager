@@ -3,6 +3,7 @@ using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
+using System.Linq;
 
 namespace CampaignManager.Web.Components.Bestiary.Services;
 
@@ -17,34 +18,69 @@ public sealed class CreatureService(
 {
     private const string CreaturesCacheKey = "AllCreatures";
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
+    private const int DefaultPageSize = 6;
 
     /// <summary>
     /// Gets all creatures in the system
     /// </summary>
+    /// <param name="searchText">Optional search text to filter creatures</param>
+    /// <param name="page">Optional page number for pagination</param>
+    /// <param name="pageSize">Optional page size for pagination</param>
     /// <returns>A list of all creatures</returns>
-    public async Task<List<Creature>> GetAllCreaturesAsync()
+    public async Task<List<Creature>> GetAllCreaturesAsync(string searchText = "", int page = 1, int pageSize = DefaultPageSize)
     {
         try
         {
             if (cache.TryGetValue(CreaturesCacheKey, out List<Creature>? creatures) && creatures is not null)
             {
-                return creatures;
+                return creatures
+                    .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
             }
 
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            creatures = await dbContext.Creatures.OrderBy(c => c.Name).ToListAsync();
+            creatures = await dbContext.Creatures
+                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.Name)
+                .ToListAsync();
 
             var cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheExpiration);
 
             cache.Set(CreaturesCacheKey, creatures, cacheOptions);
 
-            return creatures;
+            return creatures
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving creatures");
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Gets the total count of creatures
+    /// </summary>
+    /// <param name="searchText">Optional search text to filter creatures</param>
+    /// <returns>The total count of creatures</returns>
+    public async Task<int> GetCreatureCountAsync(string searchText = "")
+    {
+        try
+        {
+            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.Creatures
+                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .CountAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving creature count");
+            return 0;
         }
     }
 
@@ -280,8 +316,6 @@ public sealed class CreatureService(
 
                     foreach (var importedCreature in importedCreatures)
                     {
-
-
                         await dbContext.Creatures.AddAsync(importedCreature);
                         totalImported++;
                     }
@@ -312,4 +346,3 @@ public sealed class CreatureService(
         }
     }
 }
-
