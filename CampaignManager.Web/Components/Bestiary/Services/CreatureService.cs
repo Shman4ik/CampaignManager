@@ -46,7 +46,7 @@ public sealed class CreatureService(
                 .OrderBy(c => c.Name)
                 .ToListAsync();
 
-            var cacheOptions = new MemoryCacheEntryOptions()
+            MemoryCacheEntryOptions cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(CacheExpiration);
 
             cache.Set(CreaturesCacheKey, creatures, cacheOptions);
@@ -137,7 +137,7 @@ public sealed class CreatureService(
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
                 .Where(c => c.Name.Contains(searchTerm) ||
-                           c.Description != null && c.Description.Contains(searchTerm))
+                            (c.Description != null && c.Description.Contains(searchTerm)))
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
@@ -292,10 +292,7 @@ public sealed class CreatureService(
             }
 
             int totalImported = 0;
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
+            JsonSerializerOptions options = new() { PropertyNameCaseInsensitive = true };
 
             using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -306,7 +303,7 @@ public sealed class CreatureService(
                 try
                 {
                     string jsonContent = await File.ReadAllTextAsync(jsonFile);
-                    var importedCreatures = JsonSerializer.Deserialize<List<Creature>>(jsonContent, options);
+                    List<Creature>? importedCreatures = JsonSerializer.Deserialize<List<Creature>>(jsonContent, options);
 
                     if (importedCreatures == null || importedCreatures.Count == 0)
                     {
@@ -314,7 +311,7 @@ public sealed class CreatureService(
                         continue;
                     }
 
-                    foreach (var importedCreature in importedCreatures)
+                    foreach (Creature importedCreature in importedCreatures)
                     {
                         await dbContext.Creatures.AddAsync(importedCreature);
                         totalImported++;
