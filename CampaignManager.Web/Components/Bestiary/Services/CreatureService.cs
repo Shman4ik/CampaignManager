@@ -34,7 +34,7 @@ public sealed class CreatureService(
             if (cache.TryGetValue(CreaturesCacheKey, out List<Creature>? creatures) && creatures is not null)
             {
                 return creatures
-                    .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                    .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .ToList();
