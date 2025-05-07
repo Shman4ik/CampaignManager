@@ -93,8 +93,19 @@ public sealed class CreatureService(
     {
         try
         {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Creatures.FindAsync(id);
+            await using  AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            var result = await dbContext.Creatures.FindAsync(id);
+            
+            result.CreatureCharacteristics.Appearance??= new();
+            result.CreatureCharacteristics.Constitution??= new();
+            result.CreatureCharacteristics.Intelligence??= new();    
+            result.CreatureCharacteristics.Strength??= new();    
+            result.CreatureCharacteristics.Dexterity??= new();
+            result.CreatureCharacteristics.Size??= new();
+            result.CreatureCharacteristics.Education??= new();
+            result.CreatureCharacteristics.Power??= new();
+            
+            return result;
         }
         catch (Exception ex)
         {

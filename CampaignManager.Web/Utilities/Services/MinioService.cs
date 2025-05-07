@@ -84,4 +84,77 @@ public class MinioService
             return false;
         }
     }
+    
+    /// <summary>
+    /// Uploads a stream to Minio storage
+    /// </summary>
+    /// <param name="stream">The stream to upload</param>
+    /// <param name="objectName">The name of the object in Minio (including path)</param>
+    /// <param name="folder">Optional folder path within the bucket</param>
+    /// <param name="contentType">The MIME type of the content</param>
+    /// <returns>The full object name (including folder if specified)</returns>
+    public async Task<string> UploadAsync(Stream stream, string objectName, string? folder = null, string contentType = "application/octet-stream")
+    {
+        try
+        {
+            // Combine folder and object name if folder is specified
+            var fullObjectName = string.IsNullOrEmpty(folder) 
+                ? objectName 
+                : $"{folder.TrimEnd('/')}/{objectName}";
+
+            // Ensure the bucket exists
+            await EnsureBucketExistsAsync();
+
+            // Create put object arguments
+            var putObjectArgs = new PutObjectArgs()
+                .WithBucket(_bucketName)
+                .WithObject(fullObjectName)
+                .WithStreamData(stream)
+                .WithObjectSize(stream.Length)
+                .WithContentType(contentType);
+
+            // Upload the file
+            await _minioClient.PutObjectAsync(putObjectArgs);
+            
+            _logger.LogInformation("Successfully uploaded {ObjectName} to Minio", fullObjectName);
+            
+            return fullObjectName;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading object {ObjectName} to Minio", objectName);
+            throw;
+        }
+    }
+    
+    /// <summary>
+    /// Ensures the configured bucket exists, creating it if it doesn't
+    /// </summary>
+    private async Task EnsureBucketExistsAsync()
+    {
+        try
+        {
+            // Check if bucket exists
+            var bucketExistsArgs = new BucketExistsArgs()
+                .WithBucket(_bucketName);
+                
+            bool bucketExists = await _minioClient.BucketExistsAsync(bucketExistsArgs);
+            
+            // Create the bucket if it doesn't exist
+            if (!bucketExists)
+            {
+                var makeBucketArgs = new MakeBucketArgs()
+                    .WithBucket(_bucketName);
+                    
+                await _minioClient.MakeBucketAsync(makeBucketArgs);
+                
+                _logger.LogInformation("Created bucket {BucketName}", _bucketName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error ensuring bucket {BucketName} exists", _bucketName);
+            throw;
+        }
+    }
 }
