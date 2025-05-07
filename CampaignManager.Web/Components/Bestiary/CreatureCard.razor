@@ -1,5 +1,4 @@
 @using CampaignManager.Web.Components.Bestiary.Model
-@using CampaignManager.Web.Scenarios.Models
 @inject NavigationManager NavigationManager
 
 <div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
@@ -41,18 +40,12 @@
                 <div class="grid grid-cols-2 text-sm gap-x-4">
                     @if (Creature.CreatureCharacteristics != null)
                     {
-                        <div>
-                            @foreach (var charItem in Column1Characteristics.Where(c => c.Value != null && !string.IsNullOrWhiteSpace(c.Value.ToString())))
-                            {
-                                <CharacteristicItem Label="@charItem.Label" Value="@charItem.Value"/>
-                            }
-                        </div>
-                        <div>
-                            @foreach (var charItem in Column2Characteristics.Where(c => c.Value != null && !string.IsNullOrWhiteSpace(c.Value.ToString())))
-                            {
-                                <CharacteristicItem Label="@charItem.Label" Value="@charItem.Value"/>
-                            }
-                        </div>
+                        @foreach (var charItem in Characteristics.Where(c => c.Value != null && !string.IsNullOrWhiteSpace(c.Value.ToString())))
+                        {
+                            <div>
+                                <CharacteristicItem Label="@charItem.Label" Value="@charItem.Value" DiceRoll="@charItem.DiceRoll" />
+                            </div>
+                        }
                     }
                 </div>
             </div>
@@ -114,41 +107,34 @@
 
     [Parameter] public EventCallback<Creature> OnDelete { get; set; }
 
-    private List<(string Label, int? Value)> Column1Characteristics { get; set; } = new();
-    private List<(string Label, object? Value)> Column2Characteristics { get; set; } = new();
+    private List<(string Label, object? Value, string? DiceRoll)> Characteristics { get; set; } = new();
 
     protected override void OnParametersSet()
     {
         if (Creature?.CreatureCharacteristics != null)
         {
             var c = Creature.CreatureCharacteristics;
-            Column1Characteristics = new List<(string Label, int? Value)>
+            Characteristics = new List<(string Label, object? Value, string? DiceRoll)>
             {
-                ("СИЛ", c.Strength?.Value),
-                ("ВЫН", c.Constitution?.Value),
-                ("ТЕЛ", c.Size?.Value),
-                ("ЛВК", c.Dexterity?.Value),
-                ("ИНТ", c.Intelligence?.Value),
-                ("МОЩ", c.Power?.Value),
-                ("НАР", c.Appearance?.Value),
-                ("ОБР", c.Education?.Value)
-            };
-
-            Column2Characteristics = new List<(string Label, object? Value)>
-            {
-                ("Инициатива", c.Initiative),
-                ("БкУ", c.AverageBonusToHit),
-                ("Комплекция", c.AverageComplexity),
-                ("Скорость", c.Speed),
-                ("ПЗ", c.HealPoint),
-                ("ПМ", c.ManaPoint)
-                // Consider adding Luck, Sanity, MaxSanity here if they exist in your model and you want to display them
+                ("СИЛ", c.Strength?.Value, c.Strength?.DiceRoll),
+                ("ВЫН", c.Constitution?.Value, c.Constitution?.DiceRoll),
+                ("ТЕЛ", c.Size?.Value, c.Size?.DiceRoll),
+                ("ЛВК", c.Dexterity?.Value, c.Dexterity?.DiceRoll),
+                ("ИНТ", c.Intelligence?.Value, c.Intelligence?.DiceRoll),
+                ("МОЩ", c.Power?.Value, c.Power?.DiceRoll),
+                ("НАР", c.Appearance?.Value, c.Appearance?.DiceRoll),
+                ("ОБР", c.Education?.Value, c.Education?.DiceRoll),
+                ("Инициатива", c.Initiative, null),
+                ("БкУ", c.AverageBonusToHit, null),
+                ("Комплекция", c.AverageComplexity, null),
+                ("Скорость", c.Speed, null),
+                ("ПЗ", c.HealPoint, null),
+                ("ПМ", c.ManaPoint, null)
             };
         }
         else
         {
-            Column1Characteristics.Clear();
-            Column2Characteristics.Clear();
+            Characteristics.Clear();
         }
 
         base.OnParametersSet(); // Ensure base method is called
