@@ -127,6 +127,37 @@ public class MinioService
         }
     }
     
+    public async Task<IEnumerable<string>> ListObjectsAsync(string? prefix = null)
+    {
+        var objectNames = new List<string>();
+        try
+        {
+            var listArgs = new ListObjectsArgs()
+                .WithBucket(_bucketName)
+                .WithRecursive(true);
+
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                listArgs = listArgs.WithPrefix(prefix);
+            }
+
+            await foreach (var item in _minioClient.ListObjectsEnumAsync(listArgs))
+            {
+                if (!item.IsDir) // We only want files, not directories
+                {
+                    objectNames.Add(item.Key);
+                }
+            }
+
+            return objectNames;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing objects from Minio bucket {BucketName} with prefix {Prefix}", _bucketName, prefix);
+            throw;
+        }
+    }
+
     /// <summary>
     /// Ensures the configured bucket exists, creating it if it doesn't
     /// </summary>
