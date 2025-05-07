@@ -62,7 +62,7 @@
                     <div class="md:col-span-4 space-y-3">
                         <div>
                             <label for="imageUrl" class="block text-xs font-medium text-gray-600 mb-1">URL изображения</label>
-                            <AutocompleteMinioImage @bind-Value="creature.ImageUrl" />
+                            <AutocompleteMinioImage @bind-Value="creature.ImageUrl" @bind-Value:after="RefreshDisplayImageUrlAsync" />
                         </div>
                         <div>
                             <label for="imageUpload" class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm cursor-pointer">
@@ -70,7 +70,11 @@
                                 <span>Выбрать файл...</span>
                             </label>
                             <InputFile id="imageUpload" OnChange="UploadImage" class="hidden" />
-                            @if (!string.IsNullOrEmpty(selectedFileName)) 
+                            @if (isUploadingImage)
+                            {
+                                <span class="ml-3 text-sm text-blue-500 align-middle">Загрузка...</span>
+                            }
+                            else if (!string.IsNullOrEmpty(selectedFileName))
                             {
                                 <span class="ml-3 text-sm text-gray-500 align-middle">@selectedFileName</span>
                             }
@@ -81,9 +85,15 @@
                         </div>
                     </div>
                     <div class="md:col-span-3 mt-3 md:mt-0">
-                        @if (!string.IsNullOrEmpty(creature.ImageUrl))
+                        @if (!string.IsNullOrEmpty(displayImageUrl))
                         {
-                            <img src="@GetImageUrl(creature.ImageUrl)" alt="Предпросмотр" class="max-h-48 w-full object-contain rounded-lg border border-gray-300 p-1 bg-gray-50" />
+                            <img src="@displayImageUrl" alt="Предпросмотр" class="max-h-48 w-full object-contain rounded-lg border border-gray-300 p-1 bg-gray-50" />
+                        }
+                        else if (!string.IsNullOrEmpty(creature.ImageUrl))
+                        {
+                            <div class="flex items-center justify-center h-48 border border-gray-300 rounded-lg bg-gray-50 text-gray-400 text-sm">
+                                Загрузка предпросмотра...
+                            </div>
                         }
                         else
                         {
@@ -241,36 +251,25 @@
     private string pageTitle = "Новое существо";
     private IBrowserFile? uploadedImage;
     private string? selectedFileName;
-    
+    private bool isUploadingImage = false;
+    private string? displayImageUrl;
+
     private class DictionaryEntry
     {
         public string KeyText { get; set; } = string.Empty;
         public string ValueText { get; set; } = string.Empty;
     }
     
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        isLoading = true;
         if (Id.HasValue)
         {
             pageTitle = "Редактирование существа";
-            await LoadCreature();
-        }
-        else
-        {
-            isLoading = false;
-        }
-    }
-    
-    private async Task LoadCreature()
-    {
-        try
-        {
-            var loadedCreature = await CreatureService.GetCreatureByIdAsync(Id!.Value);
-                
-            if (loadedCreature != null)
+            var existingCreature = await CreatureService.GetCreatureByIdAsync(Id.Value);
+            if (existingCreature != null)
             {
-                creature = loadedCreature;
-                
+                creature = existingCreature;
                 combatDescriptions = creature.CombatDescriptions?.Select(kv => 
                     new DictionaryEntry { KeyText = kv.Key, ValueText = kv.Value }).ToList() 
                     ?? new List<DictionaryEntry>();
@@ -278,19 +277,83 @@
                 specialAbilities = creature.SpecialAbilities?.Select(kv => 
                     new DictionaryEntry { KeyText = kv.Key, ValueText = kv.Value }).ToList() 
                     ?? new List<DictionaryEntry>();
+                
+                if (!string.IsNullOrEmpty(creature.ImageUrl))
+                {
+                    await RefreshDisplayImageUrlAsync();
+                }
             }
             else
             {
                 NavigationManager.NavigateTo("/bestiary");
+                return;
             }
         }
-        catch (Exception ex)
+        else
         {
-            Console.WriteLine($"Error loading creature: {ex.Message}");
+            pageTitle = "Создание существа";
+            creature = new Creature { Name = string.Empty }; 
+            AddCombatDescription(); 
+            AddSpecialAbility();
         }
-        finally
+        isLoading = false;
+    }
+    
+    private async Task RefreshDisplayImageUrlAsync()
+    {
+        if (!string.IsNullOrEmpty(creature.ImageUrl))
         {
-            isLoading = false;
+            try
+            {
+                displayImageUrl = await MinioService.GetPresignedUrlAsync(creature.ImageUrl);
+            }
+            catch (Exception ex)
+            {
+                // Log error or notify user
+                Console.WriteLine($"Error getting presigned URL: {ex.Message}");
+                displayImageUrl = null; // Or a placeholder error image URL
+            }
+        }
+        else
+        {
+            displayImageUrl = null;
+        }
+        StateHasChanged();
+    }
+    
+    private async Task UploadImage(InputFileChangeEventArgs e)
+    {
+        uploadedImage = e.File;
+        selectedFileName = e.File.Name;
+        
+        if (uploadedImage != null)
+        {
+            isUploadingImage = true;
+            StateHasChanged();
+            try
+            {
+                var tempImageName = $"temp-{Guid.NewGuid()}{Path.GetExtension(uploadedImage.Name)}";
+                
+                await using var stream = uploadedImage.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // 5MB limit
+                await MinioService.UploadAsync(stream, tempImageName, uploadedImage.ContentType);
+                
+                creature.ImageUrl = tempImageName;
+                selectedFileName = uploadedImage.Name; // Keep displaying selected file name until save
+                await RefreshDisplayImageUrlAsync();
+            }
+            catch (Exception ex)
+            {
+                // Handle upload error (e.g., display a message to the user)
+                selectedFileName = $"Ошибка загрузки: {ex.Message}";
+                Console.WriteLine($"File upload failed: {ex.Message}");
+                creature.ImageUrl = null; // Clear image URL on error
+                displayImageUrl = null;
+            }
+            finally
+            {
+                isUploadingImage = false;
+                StateHasChanged();
+            }
         }
     }
     
@@ -373,21 +436,6 @@
         NavigationManager.NavigateTo("/bestiary");
     }
     
-    private async Task UploadImage(InputFileChangeEventArgs e)
-    {
-        uploadedImage = e.File;
-        selectedFileName = e.File.Name;
-        
-        if (uploadedImage != null)
-        {
-            var imageStream = uploadedImage.OpenReadStream(maxAllowedSize: 10485760); // 10MB
-            var buffer = new byte[uploadedImage.Size];
-            await imageStream.ReadAsync(buffer);
-            
-            creature.ImageUrl = $"temp-{Guid.NewGuid()}.jpg";
-        }
-    }
-    
     private async Task UploadImageToServer()
     {
         if (uploadedImage == null) return;
@@ -395,12 +443,11 @@
         try
         {
             var fileName = $"images/beasts/{creature.Name.ToLower().Replace(" ", "-")}.jpg";
-            var stream = uploadedImage.OpenReadStream(maxAllowedSize: 10485760); // 10MB
+            var stream = uploadedImage.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // 5MB limit
             
             await MinioService.UploadAsync(
                 stream, 
                 fileName, 
-                "images", 
                 uploadedImage.ContentType);
             
             creature.ImageUrl = fileName;
@@ -408,18 +455,19 @@
         }
         catch (Exception ex)
         {
+            // Handle upload error (e.g., display a message to the user)
             Console.WriteLine($"Error uploading image: {ex.Message}");
         }
     }
     
-    private string GetImageUrl(string? imageUrl)
+    private string GetImageUrl(string? imageName)
     {
-        if (string.IsNullOrEmpty(imageUrl))
+        if (string.IsNullOrEmpty(imageName))
             return string.Empty;
 
-        if (imageUrl.StartsWith("http://") || imageUrl.StartsWith("https://"))
-            return imageUrl;
+        if (imageName.StartsWith("http://") || imageName.StartsWith("https://"))
+            return imageName;
 
-        return $"/api/minio/image/{imageUrl}";
+        return $"/api/minio/image/{imageName}";
     }
 }

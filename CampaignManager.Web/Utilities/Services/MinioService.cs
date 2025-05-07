@@ -93,22 +93,17 @@ public class MinioService
     /// <param name="folder">Optional folder path within the bucket</param>
     /// <param name="contentType">The MIME type of the content</param>
     /// <returns>The full object name (including folder if specified)</returns>
-    public async Task<string> UploadAsync(Stream stream, string objectName, string? folder = null, string contentType = "application/octet-stream")
+    public async Task<string> UploadAsync(Stream stream, string objectName,  string contentType = "application/octet-stream")
     {
         try
         {
-            // Combine folder and object name if folder is specified
-            var fullObjectName = string.IsNullOrEmpty(folder) 
-                ? objectName 
-                : $"{folder.TrimEnd('/')}/{objectName}";
-
             // Ensure the bucket exists
             await EnsureBucketExistsAsync();
 
             // Create put object arguments
             var putObjectArgs = new PutObjectArgs()
                 .WithBucket(_bucketName)
-                .WithObject(fullObjectName)
+                .WithObject(objectName)
                 .WithStreamData(stream)
                 .WithObjectSize(stream.Length)
                 .WithContentType(contentType);
@@ -116,9 +111,9 @@ public class MinioService
             // Upload the file
             await _minioClient.PutObjectAsync(putObjectArgs);
             
-            _logger.LogInformation("Successfully uploaded {ObjectName} to Minio", fullObjectName);
+            _logger.LogInformation("Successfully uploaded {ObjectName} to Minio", objectName);
             
-            return fullObjectName;
+            return objectName;
         }
         catch (Exception ex)
         {
