@@ -4,8 +4,11 @@ using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Companies.Services;
 using CampaignManager.Web.Components;
+using CampaignManager.Web.Components.Bestiary.Services;
+using CampaignManager.Web.Scenarios.Services;
 using CampaignManager.Web.Services;
 using CampaignManager.Web.SpellComponents;
+using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.Services;
 using CampaignManager.Web.Weapons;
 using Microsoft.AspNetCore.Authentication;
@@ -93,6 +96,16 @@ builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddScoped<SpellService>();
+builder.Services.AddScoped<MarkdownService>();
+
+// Register scenario management services
+builder.Services.AddScoped<ScenarioService>();
+builder.Services.AddScoped<CreatureService>();
+builder.Services.AddScoped<ItemService>();
+builder.Services.AddScoped<ScenarioNpcService>();
+
+// Register Minio service
+builder.Services.AddScoped<MinioService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
@@ -121,6 +134,11 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapDefaultEndpoints();
+
+app.MapAccountEndpoints();
+app.MapMinioEndpoints();
+
+
 // Enable middleware to serve generated Swagger as a JSON endpoint.
 app.UseSwagger();
 
@@ -130,5 +148,5 @@ app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1");
 });
-app.MapAccountEndpoints();
+
 app.Run();

@@ -1,0 +1,340 @@
+@page "/bestiary"
+@using CampaignManager.Web.Components.Bestiary.Model
+@using CampaignManager.Web.Components.Bestiary.Services
+@using CampaignManager.Web.Scenarios.Models
+@using System.Timers
+@using Microsoft.AspNetCore.Components.Web
+@attribute [Authorize]
+@inject CreatureService CreatureService
+@inject NavigationManager NavigationManager
+@inject ILogger<CreaturesPage> Logger
+@rendermode InteractiveServer
+<PageTitle>Существа</PageTitle>
+
+<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <!-- Улучшенная панель фильтров - более компактная -->
+    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-3 mb-4 border border-gray-200">
+        <div class="flex justify-between items-center mb-2">
+            <div class="flex items-center">
+                <h2 class="text-base font-semibold text-gray-700 mr-2">Фильтры</h2>
+                <button @onclick="ToggleSearchPanel" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas @(isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                </button>
+            </div>
+            <div class="flex space-x-2">
+                @if (isSearchPanelVisible)
+                {
+                    <button @onclick="ClearFilters"
+                            class="text-blue-600 hover:text-blue-800 py-1 px-2 rounded-md border border-blue-300 hover:border-blue-500 text-xs flex items-center">
+                        <i class="fas fa-undo-alt mr-1"></i>
+                        <span>Сбросить</span>
+                    </button>
+                }
+                <!-- Кнопка добавления существа (компактнее) -->
+                <button @onclick="CreateNewCreature"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm flex items-center">
+                    <i class="fas fa-plus mr-1"></i>
+                    <span>Добавить</span>
+                </button>
+            </div>
+        </div>
+
+        @if (isSearchPanelVisible)
+        {
+            <!-- Содержимое панели поиска -->
+            <div class="mb-3">
+                <!-- Более компактный макет фильтров -->
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <div class="flex-grow">
+                        <label for="searchQuery" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
+                        <div class="relative">
+                            <input type="text" id="searchQuery"
+                                   class="w-full border rounded-lg pl-8 pr-3 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                   placeholder="Поиск по названию..."
+                                   @bind="_searchTerm"
+                                   @bind:event="oninput"
+                                   @onkeyup="SearchKeyUp"/>
+                            <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                <i class="fas fa-search text-gray-400 text-xs"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full sm:w-48">
+                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип существа</label>
+                        <select id="typeFilter"
+                                class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                @bind="_selectedType"
+                                @bind:event="onchange">
+                            <option value="">Все типы</option>
+                            @foreach (var type in Enum.GetValues(typeof(CreatureType)))
+                            {
+                                <option value="@type">@type</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Пагинация в панели фильтров -->
+            <div class="flex flex-wrap justify-between items-center gap-2 mt-2">
+                <div class="flex items-center gap-2 text-sm">
+                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400" 
+                            @onclick="PreviousPage" 
+                            disabled="@(currentPage <= 1)">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <span class="px-2">Страница @currentPage из @totalPages</span>
+                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400" 
+                            @onclick="NextPage" 
+                            disabled="@(currentPage >= totalPages)">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+    }
+    else if (_filteredCreatures.Count == 0)
+    {
+        <div class="bg-white shadow-md rounded-lg p-6 text-center">
+            @if (!string.IsNullOrEmpty(_searchTerm) || _selectedType != "")
+            {
+                <p class="text-lg text-gray-600 mb-4">Нет существ, соответствующих критериям поиска.</p>
+                <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
+                    Очистить фильтры
+                </button>
+            }
+            else
+            {
+                <p class="text-lg text-gray-600 mb-4">В базе данных нет существ.</p>
+                <p class="text-gray-500">Добавьте первое существо, чтобы начать.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            @foreach (var creature in _filteredCreatures)
+            {
+                <CreatureCard Creature="@creature" OnDelete="@(c => ConfirmDelete(c))"/>
+            }
+        </div>
+    }
+</div>
+
+@if (_showDeleteModal)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+            <h2 class="text-xl font-bold mb-4">Подтверждение удаления</h2>
+            <p class="mb-6">Вы уверены, что хотите удалить <strong>@_creatureToDelete?.Name</strong>? Это действие
+                нельзя отменить.</p>
+            <div class="flex justify-end space-x-3">
+                <button @onclick="() => _showDeleteModal = false"
+                        class="border border-gray-300 bg-white text-gray-700 py-2 px-4 rounded hover:bg-gray-100">
+                    Отмена
+                </button>
+                <button @onclick="DeleteCreature"
+                        class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded">
+                    Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+
+
+@code {
+    private List<Creature> _creatures = [];
+    private List<Creature> _filteredCreatures = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _selectedType = "";
+    private bool isSearchPanelVisible = true;
+    
+    // Track previous values to detect changes
+    private string _previousSelectedType = "";
+
+    // Модальное окно удаления
+    private bool _showDeleteModal = false;
+    private Creature? _creatureToDelete;
+
+    private int currentPage = 1;
+    private int pageSize = 6;
+    private int totalItems = 0;
+    private int totalPages => (int)Math.Ceiling((double)totalItems / pageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Check if selectedType has changed
+        if (_selectedType != _previousSelectedType)
+        {
+            _previousSelectedType = _selectedType;
+            await ApplyFilters();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _loading = true;
+
+            // Get total count of creatures for pagination
+            totalItems = await CreatureService.GetCreatureCountAsync(_searchTerm);
+            
+            // Load creatures
+            _creatures = await CreatureService.GetAllCreaturesAsync(_searchTerm, currentPage, pageSize);
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading creatures data");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filteredCreatures = _creatures;
+
+        // Apply search term filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            _filteredCreatures = await CreatureService.GetAllCreaturesAsync(_searchTerm,currentPage, pageSize);
+        }
+
+        // Apply type filter
+        if (!string.IsNullOrWhiteSpace(_selectedType) && Enum.TryParse<CreatureType>(_selectedType, out var creatureType))
+        {
+            _filteredCreatures = _filteredCreatures
+                .Where(c => c.Type == creatureType)
+                .ToList();
+        }
+    }
+
+    private void OnSearchTermChanged(string searchTerm)
+    {
+        _searchTerm = searchTerm;
+        ApplyFilters();
+    }
+
+    private void OnSelectedTypeChanged(string selectedType)
+    {
+        _selectedType = selectedType;
+        ApplyFilters();
+    }
+
+    private void OnFiltersClear()
+    {
+        _searchTerm = "";
+        _selectedType = "";
+        ApplyFilters();
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = "";
+        _selectedType = "";
+        ApplyFilters();
+    }
+    
+    private void SearchKeyUp(KeyboardEventArgs e)
+    {
+        // Handle search input directly without timer for now, could add debounce later
+        OnSearchTermChanged(_searchTerm);
+    }
+
+    // Просмотр существа
+    private void ViewCreature(Creature creature)
+    {
+        NavigationManager.NavigateTo($"/bestiary/creatures/edit/{creature.Id}");
+    }
+
+    // Создание нового существа
+    private void CreateNewCreature()
+    {
+        NavigationManager.NavigateTo("/bestiary/creatures/edit");
+    }
+
+    // Удаление существа
+    private void ConfirmDelete(Creature creature)
+    {
+        _creatureToDelete = creature;
+        _showDeleteModal = true;
+    }
+
+    private async Task DeleteCreature()
+    {
+        if (_creatureToDelete is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var success = await CreatureService.DeleteCreatureAsync(_creatureToDelete.Id);
+            if (success)
+            {
+                _creatures.Remove(_creatureToDelete);
+                ApplyFilters();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting creature {CreatureId}", _creatureToDelete.Id);
+        }
+        finally
+        {
+            _showDeleteModal = false;
+            _creatureToDelete = null;
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            await LoadData();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            await LoadData();
+        }
+    }
+
+    private void AddNewCreature()
+    {
+        NavigationManager.NavigateTo("/bestiary/creatures/edit");
+    }
+    
+    private void ToggleSearchPanel()
+    {
+        isSearchPanelVisible = !isSearchPanelVisible;
+    }
+
+}

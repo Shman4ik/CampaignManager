@@ -1,0 +1,112 @@
+@inject MinioService MinioService
+@using CampaignManager.Web.Utilities.Services
+
+<div class="relative">
+    <input type="text"
+           class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+           @bind="CurrentValue"
+           @bind:event="oninput"
+           @onfocus="ShowSuggestions"
+           @onblur="HideSuggestionsDelayed"
+           placeholder="Начните вводить имя файла..." />
+
+    @if (showSuggestions && Suggestions.Any())
+    {
+        <ul class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow-lg max-h-60 overflow-auto">
+            @foreach (var suggestion in Suggestions)
+            {
+                <li @onclick="() => SelectSuggestion(suggestion)"
+                    class="px-3 py-2 cursor-pointer hover:bg-gray-100">
+                    @suggestion
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    private string? CurrentValue
+    {
+        get => Value;
+        set
+        {
+            if (Value != value)
+            {
+                Value = value;
+                ValueChanged.InvokeAsync(value);
+                LoadSuggestions(value);
+            }
+        }
+    }
+
+    private List<string> Suggestions { get; set; } = new List<string>();
+    private bool showSuggestions = false;
+    private Timer? _debounceTimer;
+
+    private void LoadSuggestions(string? searchTerm)
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(async _ =>
+        {
+            if (!string.IsNullOrWhiteSpace(searchTerm) && searchTerm.Length >= 2) // Start search after 2 characters
+            {
+                var allFiles = await MinioService.ListObjectsAsync();
+                Suggestions = allFiles.Where(f => f.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                                      .OrderBy(f => f)
+                                      .Take(10) // Limit suggestions
+                                      .ToList();
+            }
+            else
+            {
+                Suggestions.Clear();
+            }
+            showSuggestions = Suggestions.Any();
+            await InvokeAsync(StateHasChanged);
+        }, null, 300, Timeout.Infinite); // 300ms debounce
+    }
+
+    private void ShowSuggestions()
+    {
+        if (Suggestions.Any())
+        {
+            showSuggestions = true;
+        }
+    }
+
+    private async Task HideSuggestionsDelayed()
+    {
+        // Delay hiding to allow click event on suggestions to fire
+        await Task.Delay(200);
+        showSuggestions = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SelectSuggestion(string suggestion)
+    {
+        CurrentValue = suggestion;
+        Suggestions.Clear();
+        showSuggestions = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // If an initial value is set, we might want to load suggestions or validate it
+        // For now, just ensure CurrentValue is synced.
+        if (Value != CurrentValue)
+        {
+             CurrentValue = Value; // Sync if externally changed, though binding should handle this.
+        }
+    }
+    
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+}
