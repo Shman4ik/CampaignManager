@@ -8,7 +8,7 @@ public static class AccountEndpoints
 {
     public static void MapAccountEndpoints(this IEndpointRouteBuilder routes)
     {
-        RouteGroupBuilder accountGroup = routes.MapGroup("/api/account");
+        var accountGroup = routes.MapGroup("/api/account");
 
         accountGroup.MapGet("/login", HandleLogin);
         accountGroup.MapGet("/logout", HandleLogout);

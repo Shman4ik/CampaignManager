@@ -1,40 +1,39 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿#nullable disable
 
-#nullable disable
+using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace CampaignManager.Web.Migrations.AppDb
+namespace CampaignManager.Web.Migrations.AppDb;
+
+/// <inheritdoc />
+public partial class WeaponsCost : Migration
 {
     /// <inheritdoc />
-    public partial class WeaponsCost : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AlterColumn<string>(
-                name: "Attacks",
-                schema: "games",
-                table: "Weapons",
-                type: "character varying(40)",
-                maxLength: 40,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "character varying(20)",
-                oldMaxLength: 20);
-        }
+        migrationBuilder.AlterColumn<string>(
+            "Attacks",
+            schema: "games",
+            table: "Weapons",
+            type: "character varying(40)",
+            maxLength: 40,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "character varying(20)",
+            oldMaxLength: 20);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AlterColumn<string>(
-                name: "Attacks",
-                schema: "games",
-                table: "Weapons",
-                type: "character varying(20)",
-                maxLength: 20,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "character varying(40)",
-                oldMaxLength: 40);
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.AlterColumn<string>(
+            "Attacks",
+            schema: "games",
+            table: "Weapons",
+            type: "character varying(20)",
+            maxLength: 20,
+            nullable: false,
+            oldClrType: typeof(string),
+            oldType: "character varying(40)",
+            oldMaxLength: 40);
     }
 }

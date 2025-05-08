@@ -1,0 +1,601 @@
+@page "/character/create/{CampaignId:guid}"
+@page "/character/create/{CampaignId:guid}/{npc}"
+@page "/character/{CharacterId:guid}"
+@using CampaignManager.Web.Components.Features.Character.Components
+@using CampaignManager.Web.Weapons
+@attribute [Authorize]
+
+@inject CharacterService CharacterService
+@inject NavigationManager NavigationManager
+@inject CharacterGenerationService CharacterGenerationService
+@inject CampaignService CampaignService
+@inject IJSRuntime JSRuntime
+@inject PdfExportService PdfExportService
+@rendermode InteractiveServer
+
+<PageTitle>@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
+
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        <!-- Modern header with navigation -->
+        <div class="sticky top-0 z-10 w-full bg-white shadow-md mb-6">
+            <div class="max-w-7xl mx-auto px-4 py-3">
+                <!-- Character name and actions area -->
+                <div class="flex justify-between items-center w-full mb-2">
+                    <div class="flex items-center">
+                        <h2 class="text-xl sm:text-2xl font-bold text-gray-800">
+                            @(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
+                        </h2>
+                        @if (IsNpc)
+                        {
+                            <span
+                                class="ml-2 text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full font-medium">NPC</span>
+                        }
+                    </div>
+                    <!-- Redesigned adaptive navigation menu -->
+                    <div class="ml-auto flex items-center gap-1 sm:gap-2">
+                        <!-- Mobile dropdown menu (visible on small screens) -->
+                        <div class="relative sm:hidden">
+                            <button @onclick="ToggleNavMenu" type="button"
+                                    class="flex items-center justify-center p-2 text-gray-600 hover:text-blue-700 rounded-md transition-colors">
+                                <i class="fa-solid fa-bars"></i>
+                            </button>
+                            @if (_navMenuOpen)
+                            {
+                                <div
+                                    class="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-md overflow-hidden z-20 w-36 py-1">
+                                    <button @onclick='() => { ScrollToSection("personal"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-user w-5 text-blue-500"></i>
+                                        <span class="ml-2">Персонаж</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("skills"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-graduation-cap w-5 text-blue-500"></i>
+                                        <span class="ml-2">Навыки</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("combat"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-gun w-5 text-blue-500"></i>
+                                        <span class="ml-2">Бой</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("equipment"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-suitcase w-5 text-blue-500"></i>
+                                        <span class="ml-2">Снаряжение</span>
+                                    </button>
+                                    <button @onclick='() => { ScrollToSection("biography"); _navMenuOpen = false; }'
+                                            class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
+                                        <i class="fa-solid fa-book w-5 text-blue-500"></i>
+                                        <span class="ml-2">Биография</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Desktop navigation (visible on larger screens) -->
+                        <div class="hidden sm:flex space-x-1 bg-gray-100 rounded-lg p-1">
+                            <button type="button" @onclick='() => ScrollToSection("personal")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-user"></i>
+                                <span class="ml-1 hidden md:inline">Персонаж</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("skills")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-graduation-cap"></i>
+                                <span class="ml-1 hidden md:inline">Навыки</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("combat")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-gun"></i>
+                                <span class="ml-1 hidden md:inline">Бой</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("equipment")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-suitcase"></i>
+                                <span class="ml-1 hidden md:inline">Снаряжение</span>
+                            </button>
+                            <button type="button" @onclick='() => ScrollToSection("biography")'
+                                    class="text-gray-600 hover:text-blue-700 hover:bg-white py-1 px-2 text-sm font-medium rounded-md flex items-center transition-colors">
+                                <i class="fa-solid fa-book"></i>
+                                <span class="ml-1 hidden md:inline">Биография</span>
+                            </button>
+                        </div>
+
+                        <div class="flex gap-2 ml-2">
+                            <button @onclick="SaveCharacterAsync"
+                                    class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                <i class="fa-regular fa-floppy-disk"></i>
+                            </button>
+                            @if (CharacterId == null || CharacterId == Guid.Empty)
+                            {
+                                <button @onclick="GenerateRandom"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                    <span>Случайный</span>
+                                </button>
+                            }
+                            @if (Character != null && CharacterId != null && CharacterId != Guid.Empty)
+                            {
+                                <button @onclick="ExportToPdfAsync"
+                                        class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                    <i class="fa-solid fa-file-pdf mr-1"></i>
+                                    <span class="hidden md:inline">PDF</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content area -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6">
+            @if (!string.IsNullOrEmpty(_notification.Message))
+            {
+                <NotificationAlert Type="@_notification.Type" Message="@_notification.Message"
+                                   OnClose="ClearNotification"/>
+            }
+
+            @if (_isLoading)
+            {
+                <div class="flex justify-center p-12">
+                    <LoadingIndicator/>
+                </div>
+            }
+            else if (Character != null)
+            {
+                <EditForm Model="Character" FormName="CharacterForm">
+                    <DataAnnotationsValidator/>
+
+                    <!-- Персональная информация -->
+                    <div id="personal" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                                @onclick='() => ToggleSectionVisibility("personal")'>
+                                <h3 class="text-base font-semibold text-gray-800">Личные данные</h3>
+                                <span class="text-gray-500">@(_sectionVisibility["personal"] ? "▲" : "▼")</span>
+                            </div>
+                            @if (_sectionVisibility["personal"])
+                            {
+                                <div class="p-1">
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                        <div class="md:col-span-1">
+                                            <PersonalInfoComponent Character="@Character"/>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                                                <CharacteristicsComponent Character="@Character"
+                                                                          OnUpdate="RecalculateAttributes"/>
+                                                <CharacterStateComponent Character="@Character"/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Секция Навыки -->
+                    <div id="skills" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                                @onclick='() => ToggleSectionVisibility("skills")'>
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-base font-semibold text-gray-800">Навыки</h3>
+                                    <button @onclick:stopPropagation="true" @onclick="ResetUsedSkills"
+                                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded-md transition-colors">
+                                        Сбросить
+                                    </button>
+                                </div>
+                                <span class="text-gray-500">@(_sectionVisibility["skills"] ? "▲" : "▼")</span>
+                            </div>
+                            @if (_sectionVisibility["skills"])
+                            {
+                                <div class="p-1">
+                                    <!-- Трехколоночный макет (для lg экранов) -->
+                                    <div class="hidden lg:grid lg:grid-cols-3 gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(2).ToList()"/>
+                                        <SkillGroupColumn
+                                            Groups="@Character.Skills.SkillGroups.Skip(2).Take(3).ToList()"/>
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(5).ToList()"/>
+                                    </div>
+
+                                    <!-- Двухколоночный макет (для экранов от 600px до lg) -->
+                                    <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(4).ToList()"/>
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(4).ToList()"/>
+                                    </div>
+
+                                    <!-- Одноколоночный макет (для экранов меньше sm) -->
+                                    <div class="grid grid-cols-1 sm:hidden gap-4">
+                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.ToList()"/>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Секция Бой -->
+                    <div id="combat" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden mb-6">
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                                @onclick='() => ToggleSectionVisibility("combat")'>
+                                <h3 class="text-base font-semibold text-gray-800">Оружие и заклинания</h3>
+                                <span class="text-gray-500">@(_sectionVisibility["combat"] ? "▲" : "▼")</span>
+                            </div>
+                            @if (_sectionVisibility["combat"])
+                            {
+                                <div class="p-1">
+                                    <WeaponComponent Character="@Character"/>
+                                    <SpellComponent Character="@Character"/>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Секция Снаряжение -->
+                    <div id="equipment" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                                @onclick='() => ToggleSectionVisibility("equipment")'>
+                                <h3 class="text-base font-semibold text-gray-800">Снаряжение и финансы</h3>
+                                <span class="text-gray-500">@(_sectionVisibility["equipment"] ? "▲" : "▼")</span>
+                            </div>
+                            @if (_sectionVisibility["equipment"])
+                            {
+                                <div class="p-1">
+                                    <EquipmentComponent Character="@Character"/>
+                                    <FinancesComponent Character="@Character"/>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Секция Биография -->
+                    <div id="biography" class="mb-8">
+                        <div class="bg-white rounded-lg overflow-hidden">
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center cursor-pointer"
+                                @onclick='() => ToggleSectionVisibility("biography")'>
+                                <h3 class="text-base font-semibold text-gray-800">Биография и заметки</h3>
+                                <span class="text-gray-500">@(_sectionVisibility["biography"] ? "▲" : "▼")</span>
+                            </div>
+                            @if (_sectionVisibility["biography"])
+                            {
+                                <div class="p-1 space-y-4">
+                                    <BiographyComponent Character="@Character"/>
+
+                                    <!-- Заметки -->
+                                    <div>
+                                        <label for="char-notes" class="block text-sm font-medium text-gray-700 mb-1">Заметки</label>
+                                        <InitialSizeTextArea id="char-notes" InitialRows="4"
+                                                             @bind-Value="Character.Notes"
+                                                             class="w-full p-2 border border-gray-300 rounded"/>
+                                    </div>
+
+                                    <!-- Предыстория -->
+                                    <div>
+                                        <label for="char-backstory"
+                                               class="block text-sm font-medium text-gray-700 mb-1">Предыстория</label>
+                                        <InitialSizeTextArea id="char-backstory" InitialRows="4"
+                                                             @bind-Value="Character.Backstory"
+                                                             class="w-full p-2 border border-gray-300 rounded"/>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </EditForm>
+            }
+            else
+            {
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                    <p>Не удалось загрузить или инициализировать данные персонажа.</p>
+                </div>
+            }
+        </div>
+
+        <!-- Плавающая кнопка сохранения на мобильных устройствах -->
+        <div class="md:hidden fixed bottom-4 right-4">
+            <button @onclick="SaveCharacterAsync"
+                    class="rounded-full w-12 h-12 bg-green-600 text-white shadow-lg flex items-center justify-center">
+                <i class="fas fa-save"></i>
+            </button>
+        </div>
+    </ChildContent>
+    <ErrorContent>
+        <div class="alert alert-danger">
+            <p>Произошла ошибка при загрузке страницы. Пожалуйста, обновите страницу или попробуйте позже.</p>
+        </div>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    [Parameter] public Guid? CharacterId { get; set; }
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    // Determine if we're in NPC creation mode based on the URL segment after CampaignId
+    [Parameter] public string? npc { get; set; }
+    private bool IsNpc => npc == "npc" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
+
+    private Character? Character { get; set; }
+    private CharacterStorageDto? CharacterStorageDto { get; set; }
+    private ErrorBoundary? _errorBoundary;
+    private bool _isLoading = true;
+    private bool _isBusy;
+    private readonly NotificationModel _notification = new();
+    private CampaignPlayer? CampaignPlayer { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private ClaimsPrincipal? User => AuthState?.Result?.User;
+
+    // Section visibility state
+    private readonly Dictionary<string, bool> _sectionVisibility = new()
+    {
+        { "personal", true },
+        { "skills", true },
+        { "combat", true },
+        { "equipment", true },
+        { "biography", true }
+    };
+
+    // Toggle section visibility
+    private void ToggleSectionVisibility(string section)
+    {
+        if (_sectionVisibility.ContainsKey(section))
+        {
+            _sectionVisibility[section] = !_sectionVisibility[section];
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            await LoadCharacterDataAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
+            Character = CreateNewCharacterTemplate();
+            _errorBoundary?.Recover();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadCharacterDataAsync()
+    {
+        try
+        {
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
+            {
+                CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
+                Character = CharacterStorageDto?.Character;
+                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto!.CampaignPlayerId);
+                if (Character == null)
+                {
+                    ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
+                    Character = CreateNewCharacterTemplate();
+                    CharacterId = null;
+                }
+            }
+            else
+            {
+                Character = CreateNewCharacterTemplate();
+                if (CampaignId.HasValue)
+                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
+            Character = CreateNewCharacterTemplate();
+        }
+    }
+
+    private Character CreateNewCharacterTemplate()
+    {
+        return new Character
+        {
+            PersonalInfo = new PersonalInfo
+            {
+                PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown"
+            },
+            Characteristics = new Characteristics(),
+            Skills = SkillsModel.DefaultSkillsModel(),
+            Backstory = string.Empty,
+            Biography = new BiographyInfo(),
+            Equipment = new Equipment(),
+            Finances = new Finances(),
+            Weapons = new List<Weapon>(),
+            Notes = string.Empty,
+            CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter
+        };
+    }
+
+    private async Task SaveCharacterAsync()
+    {
+        if (Character == null || _isBusy)
+            return;
+
+        _isBusy = true;
+        ClearNotification();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(Character.PersonalInfo?.Name))
+            {
+                Character.PersonalInfo ??= new PersonalInfo();
+                Character.PersonalInfo.Name = IsNpc ? "Безымянный NPC" : "Безымянный";
+                ShowNotification($"Имя {(IsNpc ? "NPC" : "персонажа")} не было указано, установлено '{Character.PersonalInfo.Name}'.", "warning");
+            }
+
+            // Ensure character type is set correctly
+            Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
+
+            // Set the player name - for NPCs it should be "NPC"
+            if (Character.PersonalInfo != null)
+            {
+                Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown";
+            }
+
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
+            {
+                await CharacterService.UpdateCharacterAsync(Character);
+                ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно обновлен!", "success");
+            }
+            else
+            {
+                Character.Id = Guid.Empty;
+                var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer.Id);
+
+                if (createdCharacter?.Id != null && createdCharacter.Id != Guid.Empty)
+                {
+                    Character.Id = createdCharacter.Id;
+                    CharacterId = createdCharacter.Id;
+                    ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно создан!", "success");
+                    NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
+                }
+                else
+                {
+                    ShowNotification($"Ошибка: Не удалось получить ID созданного {(IsNpc ? "NPC" : "персонажа")}.", "error");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при сохранении: {ex.Message}", "error");
+            _errorBoundary?.Recover();
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        _notification.Message = message;
+        _notification.Type = type;
+    }
+
+    private void ClearNotification()
+    {
+        _notification.Message = null;
+    }
+
+    private void GenerateRandom()
+    {
+        Character = CharacterGenerationService.GenerateRandomCharacter();
+
+        // Сохраняем имя игрока даже в случайно сгенерированном персонаже
+        Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName;
+
+        // Set the character type based on whether we're creating an NPC
+        Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
+    }
+
+    private async Task ScrollToSection(string sectionId)
+    {
+        await JSRuntime.InvokeVoidAsync("scrollToElement", sectionId);
+    }
+
+    private async Task RecalculateAttributes()
+    {
+        // Здесь можно добавить логику для пересчета атрибутов при изменении характеристик
+        StateHasChanged();
+    }
+
+    private void ResetUsedSkills()
+    {
+        if (Character?.Skills?.SkillGroups == null)
+            return;
+
+        foreach (var group in Character.Skills.SkillGroups)
+        {
+            foreach (var skill in group.Skills)
+            {
+                skill.IsUsed = false;
+            }
+        }
+
+        ShowNotification("Все использованные навыки сброшены", "success");
+        StateHasChanged();
+    }
+
+    private bool _navMenuOpen;
+
+    private void ToggleNavMenu()
+    {
+        _navMenuOpen = !_navMenuOpen;
+    }
+
+    /// <summary>
+    ///     Exports the character sheet to PDF
+    /// </summary>
+    private async Task ExportToPdfAsync()
+    {
+        try
+        {
+            if (Character == null)
+                return;
+
+            _isBusy = true;
+            ShowNotification("Генерация PDF...", "info");
+
+            // Generate the PDF
+            var pdfData = await PdfExportService.GenerateCharacterPdfAsync(Character);
+
+            // Save the PDF
+            var fileName = $"{Character.PersonalInfo?.Name ?? "Character"}.pdf";
+            await JSRuntime.InvokeVoidAsync("downloadFileFromByteArray", pdfData, fileName, "application/pdf");
+
+            ShowNotification("PDF успешно создан", "success");
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при создании PDF: {ex.Message}", "error");
+        }
+        finally
+        {
+            _isBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                window.downloadFileFromByteArray = (data, fileName, contentType) => {
+                    const blob = new Blob([new Uint8Array(data)], { type: contentType });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                };
+            ");
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+}

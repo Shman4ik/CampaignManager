@@ -5,9 +5,9 @@ namespace CampaignManager.Web.Utilities.Services;
 
 public class MinioService
 {
-    private readonly IMinioClient _minioClient;
-    private readonly ILogger<MinioService> _logger;
     private readonly string _bucketName;
+    private readonly ILogger<MinioService> _logger;
+    private readonly IMinioClient _minioClient;
 
     public MinioService(IConfiguration configuration, ILogger<MinioService> logger)
     {
@@ -84,16 +84,16 @@ public class MinioService
             return false;
         }
     }
-    
+
     /// <summary>
-    /// Uploads a stream to Minio storage
+    ///     Uploads a stream to Minio storage
     /// </summary>
     /// <param name="stream">The stream to upload</param>
     /// <param name="objectName">The name of the object in Minio (including path)</param>
     /// <param name="folder">Optional folder path within the bucket</param>
     /// <param name="contentType">The MIME type of the content</param>
     /// <returns>The full object name (including folder if specified)</returns>
-    public async Task<string> UploadAsync(Stream stream, string objectName,  string contentType = "application/octet-stream")
+    public async Task<string> UploadAsync(Stream stream, string objectName, string contentType = "application/octet-stream")
     {
         try
         {
@@ -110,9 +110,9 @@ public class MinioService
 
             // Upload the file
             await _minioClient.PutObjectAsync(putObjectArgs);
-            
+
             _logger.LogInformation("Successfully uploaded {ObjectName} to Minio", objectName);
-            
+
             return objectName;
         }
         catch (Exception ex)
@@ -121,7 +121,7 @@ public class MinioService
             throw;
         }
     }
-    
+
     public async Task<IEnumerable<string>> ListObjectsAsync(string? prefix = null)
     {
         var objectNames = new List<string>();
@@ -131,18 +131,11 @@ public class MinioService
                 .WithBucket(_bucketName)
                 .WithRecursive(true);
 
-            if (!string.IsNullOrEmpty(prefix))
-            {
-                listArgs = listArgs.WithPrefix(prefix);
-            }
+            if (!string.IsNullOrEmpty(prefix)) listArgs = listArgs.WithPrefix(prefix);
 
             await foreach (var item in _minioClient.ListObjectsEnumAsync(listArgs))
-            {
                 if (!item.IsDir) // We only want files, not directories
-                {
                     objectNames.Add(item.Key);
-                }
-            }
 
             return objectNames;
         }
@@ -154,7 +147,7 @@ public class MinioService
     }
 
     /// <summary>
-    /// Ensures the configured bucket exists, creating it if it doesn't
+    ///     Ensures the configured bucket exists, creating it if it doesn't
     /// </summary>
     private async Task EnsureBucketExistsAsync()
     {
@@ -163,17 +156,17 @@ public class MinioService
             // Check if bucket exists
             var bucketExistsArgs = new BucketExistsArgs()
                 .WithBucket(_bucketName);
-                
-            bool bucketExists = await _minioClient.BucketExistsAsync(bucketExistsArgs);
-            
+
+            var bucketExists = await _minioClient.BucketExistsAsync(bucketExistsArgs);
+
             // Create the bucket if it doesn't exist
             if (!bucketExists)
             {
                 var makeBucketArgs = new MakeBucketArgs()
                     .WithBucket(_bucketName);
-                    
+
                 await _minioClient.MakeBucketAsync(makeBucketArgs);
-                
+
                 _logger.LogInformation("Created bucket {BucketName}", _bucketName);
             }
         }

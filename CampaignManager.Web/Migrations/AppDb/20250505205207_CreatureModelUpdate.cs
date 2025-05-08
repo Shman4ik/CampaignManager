@@ -1,113 +1,111 @@
-﻿using System.Collections.Generic;
+﻿#nullable disable
+
 using CampaignManager.Web.Components.Bestiary.Model;
 using Microsoft.EntityFrameworkCore.Migrations;
 
-#nullable disable
+namespace CampaignManager.Web.Migrations.AppDb;
 
-namespace CampaignManager.Web.Migrations.AppDb
+/// <inheritdoc />
+public partial class CreatureModelUpdate : Migration
 {
     /// <inheritdoc />
-    public partial class CreatureModelUpdate : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "Abilities",
-                schema: "games",
-                table: "Creatures");
+        migrationBuilder.DropColumn(
+            "Abilities",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.DropColumn(
-                name: "Categories",
-                schema: "games",
-                table: "Creatures");
+        migrationBuilder.DropColumn(
+            "Categories",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.DropColumn(
-                name: "Stats",
-                schema: "games",
-                table: "Creatures");
+        migrationBuilder.DropColumn(
+            "Stats",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.AlterColumn<string>(
-                name: "Type",
-                schema: "games",
-                table: "Creatures",
-                type: "text",
-                nullable: false,
-                defaultValue: "Other",
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
+        migrationBuilder.AlterColumn<string>(
+            "Type",
+            schema: "games",
+            table: "Creatures",
+            type: "text",
+            nullable: false,
+            defaultValue: "Other",
+            oldClrType: typeof(string),
+            oldType: "text",
+            oldNullable: true);
 
-            migrationBuilder.AddColumn<Dictionary<string, string>>(
-                name: "CombatDescriptions",
-                schema: "games",
-                table: "Creatures",
-                type: "jsonb",
-                nullable: false);
+        migrationBuilder.AddColumn<Dictionary<string, string>>(
+            "CombatDescriptions",
+            schema: "games",
+            table: "Creatures",
+            type: "jsonb",
+            nullable: false);
 
-            migrationBuilder.AddColumn<CreatureCharacteristics>(
-                name: "CreatureCharacteristics",
-                schema: "games",
-                table: "Creatures",
-                type: "jsonb",
-                nullable: false);
+        migrationBuilder.AddColumn<CreatureCharacteristics>(
+            "CreatureCharacteristics",
+            schema: "games",
+            table: "Creatures",
+            type: "jsonb",
+            nullable: false);
 
-            migrationBuilder.AddColumn<Dictionary<string, string>>(
-                name: "SpecialAbilities",
-                schema: "games",
-                table: "Creatures",
-                type: "jsonb",
-                nullable: false);
-        }
+        migrationBuilder.AddColumn<Dictionary<string, string>>(
+            "SpecialAbilities",
+            schema: "games",
+            table: "Creatures",
+            type: "jsonb",
+            nullable: false);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "CombatDescriptions",
-                schema: "games",
-                table: "Creatures");
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            "CombatDescriptions",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.DropColumn(
-                name: "CreatureCharacteristics",
-                schema: "games",
-                table: "Creatures");
+        migrationBuilder.DropColumn(
+            "CreatureCharacteristics",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.DropColumn(
-                name: "SpecialAbilities",
-                schema: "games",
-                table: "Creatures");
+        migrationBuilder.DropColumn(
+            "SpecialAbilities",
+            schema: "games",
+            table: "Creatures");
 
-            migrationBuilder.AlterColumn<string>(
-                name: "Type",
-                schema: "games",
-                table: "Creatures",
-                type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldDefaultValue: "Other");
+        migrationBuilder.AlterColumn<string>(
+            "Type",
+            schema: "games",
+            table: "Creatures",
+            type: "text",
+            nullable: true,
+            oldClrType: typeof(string),
+            oldType: "text",
+            oldDefaultValue: "Other");
 
-            migrationBuilder.AddColumn<string>(
-                name: "Abilities",
-                schema: "games",
-                table: "Creatures",
-                type: "text",
-                nullable: true);
+        migrationBuilder.AddColumn<string>(
+            "Abilities",
+            schema: "games",
+            table: "Creatures",
+            type: "text",
+            nullable: true);
 
-            migrationBuilder.AddColumn<string>(
-                name: "Categories",
-                schema: "games",
-                table: "Creatures",
-                type: "text",
-                nullable: true);
+        migrationBuilder.AddColumn<string>(
+            "Categories",
+            schema: "games",
+            table: "Creatures",
+            type: "text",
+            nullable: true);
 
-            migrationBuilder.AddColumn<string>(
-                name: "Stats",
-                schema: "games",
-                table: "Creatures",
-                type: "jsonb",
-                nullable: true);
-        }
+        migrationBuilder.AddColumn<string>(
+            "Stats",
+            schema: "games",
+            table: "Creatures",
+            type: "jsonb",
+            nullable: true);
     }
 }

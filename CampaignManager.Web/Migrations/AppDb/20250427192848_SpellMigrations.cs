@@ -1,51 +1,45 @@
-﻿using System;
-using System.Collections.Generic;
+﻿#nullable disable
+
 using Microsoft.EntityFrameworkCore.Migrations;
 
-#nullable disable
+namespace CampaignManager.Web.Migrations.AppDb;
 
-namespace CampaignManager.Web.Migrations.AppDb
+/// <inheritdoc />
+public partial class SpellMigrations : Migration
 {
     /// <inheritdoc />
-    public partial class SpellMigrations : Migration
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.CreateTable(
-                name: "Spells",
-                schema: "games",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Name = table.Column<string>(type: "text", nullable: false),
-                    Cost = table.Column<string>(type: "text", nullable: true),
-                    CastingTime = table.Column<string>(type: "text", nullable: true),
-                    Description = table.Column<string>(type: "text", nullable: false),
-                    AlternativeNames = table.Column<List<string>>(type: "jsonb", nullable: false),
-                    SpellType = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Spells", x => x.Id);
-                });
+        migrationBuilder.CreateTable(
+            "Spells",
+            schema: "games",
+            columns: table => new
+            {
+                Id = table.Column<Guid>("uuid", nullable: false),
+                Name = table.Column<string>("text", nullable: false),
+                Cost = table.Column<string>("text", nullable: true),
+                CastingTime = table.Column<string>("text", nullable: true),
+                Description = table.Column<string>("text", nullable: false),
+                AlternativeNames = table.Column<List<string>>("jsonb", nullable: false),
+                SpellType = table.Column<string>("text", nullable: false),
+                CreatedAt = table.Column<DateTimeOffset>("timestamp with time zone", nullable: false),
+                LastUpdated = table.Column<DateTimeOffset>("timestamp with time zone", nullable: false)
+            },
+            constraints: table => { table.PrimaryKey("PK_Spells", x => x.Id); });
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Spells_Name",
-                schema: "games",
-                table: "Spells",
-                column: "Name",
-                unique: true);
-        }
+        migrationBuilder.CreateIndex(
+            "IX_Spells_Name",
+            schema: "games",
+            table: "Spells",
+            column: "Name",
+            unique: true);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(
-                name: "Spells",
-                schema: "games");
-        }
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(
+            "Spells",
+            "games");
     }
 }

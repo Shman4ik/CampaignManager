@@ -20,7 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 
-WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire components.
 builder.AddServiceDefaults();
 
@@ -62,10 +62,7 @@ builder.Services.AddAuthentication(options =>
         {
             OnRedirectToAuthorizationEndpoint = context =>
             {
-                if (context.RedirectUri.StartsWith("http:"))
-                {
-                    context.RedirectUri = context.RedirectUri.Replace("http:", "https:");
-                }
+                if (context.RedirectUri.StartsWith("http:")) context.RedirectUri = context.RedirectUri.Replace("http:", "https:");
 
                 context.Response.Redirect(context.RedirectUri);
                 return Task.CompletedTask;
@@ -79,10 +76,7 @@ builder.Services.AddCascadingAuthenticationState();
 
 // Add Swagger services
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "CampaignManager API", Version = "v1" });
-});
+builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new OpenApiInfo { Title = "CampaignManager API", Version = "v1" }); });
 builder.Services.AddOutputCache();
 builder.Services
     .AddBlazorise()
@@ -111,7 +105,7 @@ builder.Services.AddScoped<MinioService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
-WebApplication app = builder.Build();
+var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -145,9 +139,6 @@ app.UseSwagger();
 
 // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.),
 // specifying the Swagger JSON endpoint.
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1");
-});
+app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1"); });
 
 app.Run();
