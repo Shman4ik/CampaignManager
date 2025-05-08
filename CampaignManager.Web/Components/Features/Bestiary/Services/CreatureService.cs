@@ -1,10 +1,10 @@
-using System.Text.Json;
-using CampaignManager.Web.Components.Bestiary.Model;
-using CampaignManager.Web.Services;
+﻿using System.Text.Json;
+using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CampaignManager.Web.Components.Bestiary.Services;
+namespace CampaignManager.Web.Components.Features.Bestiary.Services;
 
 /// <summary>
 ///     Service for managing creatures in the system

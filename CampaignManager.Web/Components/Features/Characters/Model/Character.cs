@@ -1,7 +1,7 @@
-using CampaignManager.Web.SpellComponents;
-using CampaignManager.Web.Weapons;
+﻿using CampaignManager.Web.Components.Features.Spells.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 
-namespace CampaignManager.Web.Model;
+namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 public class Character
 {

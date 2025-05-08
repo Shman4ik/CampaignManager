@@ -1,8 +1,9 @@
-using CampaignManager.Web.Services;
+﻿using CampaignManager.Web.Components.Features.Spells.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CampaignManager.Web.SpellComponents;
+namespace CampaignManager.Web.Components.Features.Spells.Services;
 
 /// <summary>
 ///     Service for managing spells data.

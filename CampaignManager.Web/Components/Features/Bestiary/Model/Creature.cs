@@ -1,7 +1,7 @@
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Model;
-using CampaignManager.Web.Scenarios.Models;
 
-namespace CampaignManager.Web.Components.Bestiary.Model;
+namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 
 /// <summary>
 ///     Model for monsters and supernatural entities

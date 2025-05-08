@@ -1,11 +1,12 @@
 ﻿using System.Security.Claims;
-using CampaignManager.Web.Companies.Models;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
-using CampaignManager.Web.Services;
+using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Companies.Services;
+namespace CampaignManager.Web.Components.Features.Campaigns.Services;
 
 public class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,

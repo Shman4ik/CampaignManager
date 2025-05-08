@@ -1,6 +1,7 @@
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Scenarios.Models;
+namespace CampaignManager.Web.Components.Features.Items.Model;
 
 /// <summary>
 ///     Model for significant items and artifacts in scenarios

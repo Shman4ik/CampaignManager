@@ -1,8 +1,8 @@
-using CampaignManager.Web.Scenarios.Models;
-using CampaignManager.Web.Services;
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Scenarios.Services;
+namespace CampaignManager.Web.Components.Features.Scenarios.Services;
 
 /// <summary>
 ///     Service for managing NPCs in scenarios

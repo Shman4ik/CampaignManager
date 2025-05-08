@@ -1,6 +1,6 @@
 ﻿#nullable disable
 
-using CampaignManager.Web.Components.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Bestiary.Model;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CampaignManager.Web.Migrations.AppDb;

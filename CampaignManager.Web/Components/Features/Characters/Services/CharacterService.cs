@@ -1,9 +1,10 @@
 ﻿using System.Security.Claims;
-using CampaignManager.Web.Companies.Models;
-using CampaignManager.Web.Model;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 public class CharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,

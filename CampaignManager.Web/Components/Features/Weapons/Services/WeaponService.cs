@@ -1,8 +1,9 @@
-using CampaignManager.Web.Services;
+﻿using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CampaignManager.Web.Weapons;
+namespace CampaignManager.Web.Components.Features.Weapons.Services;
 
 public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMemoryCache cache)
 {

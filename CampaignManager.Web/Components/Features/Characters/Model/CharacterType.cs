@@ -1,4 +1,4 @@
-﻿namespace CampaignManager.Web.Model;
+﻿namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 /// <summary>
 ///     Defines the type of character in the system

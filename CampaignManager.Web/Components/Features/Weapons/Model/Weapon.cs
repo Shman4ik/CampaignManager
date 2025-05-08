@@ -1,7 +1,7 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Weapons;
+namespace CampaignManager.Web.Components.Features.Weapons.Model;
 
 /// <summary>
 ///     Класс для всех видов оружия

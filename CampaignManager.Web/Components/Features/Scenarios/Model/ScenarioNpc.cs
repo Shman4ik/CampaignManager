@@ -1,6 +1,7 @@
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Scenarios.Models;
+namespace CampaignManager.Web.Components.Features.Scenarios.Model;
 
 /// <summary>
 ///     Simplified model for NPCs in scenarios

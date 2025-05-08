@@ -2,7 +2,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Utilities.Services;
+namespace CampaignManager.Web.Utilities.DataBase;
 
 public class AppIdentityDbContext : IdentityDbContext<ApplicationUser>
 {

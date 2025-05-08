@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Bestiary.Model;
+﻿namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 
 public class CreatureCharacteristics
 {

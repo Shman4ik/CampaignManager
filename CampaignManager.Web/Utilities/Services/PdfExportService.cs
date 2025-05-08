@@ -1,10 +1,10 @@
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Utilities.Services;
 
 public class PdfExportService
 {

@@ -1,6 +1,6 @@
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 public class CharacterGenerationService
 {

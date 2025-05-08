@@ -1,7 +1,7 @@
-using CampaignManager.Web.Companies.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Scenarios.Models;
+namespace CampaignManager.Web.Components.Features.Scenarios.Model;
 
 /// <summary>
 ///     Base model for adventure scenarios that can be used as templates or added to campaigns

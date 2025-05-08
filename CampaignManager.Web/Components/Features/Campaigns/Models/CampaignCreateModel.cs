@@ -1,6 +1,6 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
-namespace CampaignManager.Web.Companies.Models;
+namespace CampaignManager.Web.Components.Features.Campaigns.Models;
 
 public class CampaignCreateModel
 {

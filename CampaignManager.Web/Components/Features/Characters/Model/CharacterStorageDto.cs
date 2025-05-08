@@ -1,7 +1,8 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using CampaignManager.Web.Companies.Models;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Model;
+namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 /// <summary>
 ///     Класс для хранения данных персонажа в базе данных

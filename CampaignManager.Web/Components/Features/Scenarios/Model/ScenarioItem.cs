@@ -1,6 +1,7 @@
+﻿using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Scenarios.Models;
+namespace CampaignManager.Web.Components.Features.Scenarios.Model;
 
 /// <summary>
 ///     Junction entity for the many-to-many relationship between Scenarios and Items

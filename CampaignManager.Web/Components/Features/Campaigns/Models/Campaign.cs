@@ -1,6 +1,6 @@
 ﻿using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Companies.Models;
+namespace CampaignManager.Web.Components.Features.Campaigns.Models;
 
 public class Campaign : BaseDataBaseEntity
 {

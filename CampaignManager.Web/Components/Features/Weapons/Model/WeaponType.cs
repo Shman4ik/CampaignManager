@@ -1,4 +1,4 @@
-﻿namespace CampaignManager.Web.Weapons;
+﻿namespace CampaignManager.Web.Components.Features.Weapons.Model;
 
 /// <summary>
 ///     Перечисление типов оружия

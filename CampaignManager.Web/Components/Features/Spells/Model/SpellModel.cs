@@ -1,6 +1,6 @@
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.SpellComponents;
+namespace CampaignManager.Web.Components.Features.Spells.Model;
 
 /// <summary>
 ///     Represents a spell entity for database storage or general use.

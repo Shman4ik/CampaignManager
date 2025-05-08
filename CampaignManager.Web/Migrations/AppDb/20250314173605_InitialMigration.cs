@@ -1,6 +1,6 @@
 ﻿#nullable disable
 
-using CampaignManager.Web.Model;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace CampaignManager.Web.Migrations.AppDb;

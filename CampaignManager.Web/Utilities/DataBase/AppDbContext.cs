@@ -1,12 +1,13 @@
-using CampaignManager.Web.Companies.Models;
-using CampaignManager.Web.Components.Bestiary.Model;
-using CampaignManager.Web.Model;
-using CampaignManager.Web.Scenarios.Models;
-using CampaignManager.Web.SpellComponents;
-using CampaignManager.Web.Weapons;
+﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Items.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Components.Features.Spells.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 using Microsoft.EntityFrameworkCore;
 
-namespace CampaignManager.Web.Services;
+namespace CampaignManager.Web.Utilities.DataBase;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {

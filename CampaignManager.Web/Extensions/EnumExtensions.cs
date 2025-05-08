@@ -1,5 +1,5 @@
-using CampaignManager.Web.Components.Bestiary.Model;
-using CampaignManager.Web.Weapons;
+﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 
 namespace CampaignManager.Web.Extensions;
 

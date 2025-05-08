@@ -1,6 +1,7 @@
-﻿using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Model;
 
-namespace CampaignManager.Web.Companies.Models;
+namespace CampaignManager.Web.Components.Features.Campaigns.Models;
 
 public class CampaignPlayer : BaseDataBaseEntity
 {

@@ -1,9 +1,9 @@
-using CampaignManager.Web.Scenarios.Models;
-using CampaignManager.Web.Services;
+﻿using CampaignManager.Web.Components.Features.Items.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace CampaignManager.Web.Scenarios.Services;
+namespace CampaignManager.Web.Components.Features.Items.Services;
 
 /// <summary>
 ///     Service for managing items and artifacts in the system
