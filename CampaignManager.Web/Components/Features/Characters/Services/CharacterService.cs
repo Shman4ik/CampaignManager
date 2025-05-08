@@ -1,58 +1,58 @@
-﻿using System.Security.Claims;
-using CampaignManager.Web.Components.Features.Campaigns.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 public class CharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,
-    IHttpContextAccessor httpContextAccessor,
+    IdentityService identityService,
     ILogger<CharacterService> logger)
 {
-    public async Task<Character> CreateCharacterAsync(Character character, Guid campaignPlayerId)
+
+    public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId)
     {
         try
         {
-            var userId = GetCurrentUserId();
-            if (string.IsNullOrEmpty(userId)) throw new UnauthorizedAccessException("User must be authenticated to create a character");
-
+            var userId = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userId))
+                throw new UnauthorizedAccessException("User must be authenticated to create a character");
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             // Если ID не установлен, генерируем новый
-            if (character.Id == Guid.Empty) character.Id = Guid.CreateVersion7();
+            if (character.Id == Guid.Empty)
+                character.Id = Guid.CreateVersion7();
 
             // Создаем DTO для хранения с дублированием ключевых полей
             CharacterStorageDto storageDto = new()
             {
                 CharacterName = character.PersonalInfo.Name,
-                CreatedAt = DateTime.UtcNow,
-                LastUpdated = DateTime.UtcNow,
                 Character = character,
-                CampaignPlayerId = campaignPlayerId
+                CampaignPlayerId = campaignPlayerId,
+                Status = CharacterStatus.Active
             };
-
-            // Находим и деактивируем все активные персонажи этого игрока в этой кампании
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var existingActiveCharacters = await dbContext.CharacterStorage
-                .Where(c => c.CampaignPlayerId == campaignPlayerId && c.Status == CharacterStatus.Active)
-                .ToListAsync();
-
-            foreach (var existingChar in existingActiveCharacters)
-            {
-                existingChar.Status = CharacterStatus.Inactive;
-                existingChar.LastUpdated = DateTime.UtcNow;
-                dbContext.Update(existingChar);
-            }
-
-            // Устанавливаем новый персонаж как активный
-            storageDto.Status = CharacterStatus.Active;
-
             // Инициализируем базовые поля сущности
             storageDto.Init();
             storageDto.Id = character.Id;
-
-            // Добавляем в базу данных
             dbContext.CharacterStorage.Add(storageDto);
+
+            // Находим и деактивируем все активные персонажи этого игрока в этой кампании
+            if (campaignPlayerId.HasValue)
+            {
+                var existingActiveCharacters = await dbContext.CharacterStorage
+                    .Where(c => c.CampaignPlayerId == campaignPlayerId && c.Status == CharacterStatus.Active)
+                    .ToListAsync();
+
+                foreach (var existingChar in existingActiveCharacters)
+                {
+                    existingChar.Status = CharacterStatus.Inactive;
+                    existingChar.LastUpdated = DateTime.UtcNow;
+                    dbContext.Update(existingChar);
+                }
+            }
+
             await dbContext.SaveChangesAsync();
 
             logger.LogInformation($"Character {character.Id} created by user {userId}");
@@ -81,14 +81,13 @@ public class CharacterService(
     {
         try
         {
-            var userEmail = GetCurrentUserId(); // Теперь возвращает email
+            var userEmail = identityService.GetCurrentUserEmail();
             logger.LogInformation($"Attempting to update character {character.Id} by user email {userEmail}");
 
-            if (string.IsNullOrEmpty(userEmail)) throw new UnauthorizedAccessException("User must be authenticated to update a character");
+            if (string.IsNullOrEmpty(userEmail))
+                throw new UnauthorizedAccessException("User must be authenticated to update a character");
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
-
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             // Получаем существующую запись
             var storageDto = await dbContext.CharacterStorage.FindAsync(character.Id);
             if (storageDto == null)
@@ -114,10 +113,11 @@ public class CharacterService(
     {
         try
         {
-            var userEmail = GetCurrentUserId();
-            if (string.IsNullOrEmpty(userEmail)) throw new UnauthorizedAccessException("User must be authenticated to change character status");
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                throw new UnauthorizedAccessException("User must be authenticated to change character status");
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Получаем персонажа
             var character = await dbContext.CharacterStorage
@@ -156,10 +156,5 @@ public class CharacterService(
             logger.LogError(ex, $"Error changing character status: {ex.Message}");
             throw;
         }
-    }
-
-    private string? GetCurrentUserId()
-    {
-        return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
     }
 }

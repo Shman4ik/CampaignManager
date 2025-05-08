@@ -2,7 +2,6 @@
 @page "/character/create/{CampaignId:guid}/{npc}"
 @page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.Features.Campaigns.Models
-@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
@@ -13,12 +12,11 @@
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
 @inject CharacterGenerationService CharacterGenerationService
-@inject CampaignService CampaignService
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 @inject PdfExportService PdfExportService
 @rendermode InteractiveServer
 
-<PageTitle>@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
+<PageTitle>@(Character?.PersonalInfo.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
@@ -29,7 +27,7 @@
                 <div class="flex justify-between items-center w-full mb-2">
                     <div class="flex items-center">
                         <h2 class="text-xl sm:text-2xl font-bold text-gray-800">
-                            @(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
+                            @(Character?.PersonalInfo.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
                         </h2>
                         @if (IsNpc)
                         {
@@ -49,27 +47,27 @@
                             {
                                 <div
                                     class="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-md overflow-hidden z-20 w-36 py-1">
-                                    <button @onclick='() => { ScrollToSection("personal"); _navMenuOpen = false; }'
+                                    <button @onclick='()  =>  ScrollToSection("personal")'
                                             class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
                                         <i class="fa-solid fa-user w-5 text-blue-500"></i>
                                         <span class="ml-2">Персонаж</span>
                                     </button>
-                                    <button @onclick='() => { ScrollToSection("skills"); _navMenuOpen = false; }'
+                                    <button @onclick='() =>  ScrollToSection("skills") '
                                             class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
                                         <i class="fa-solid fa-graduation-cap w-5 text-blue-500"></i>
                                         <span class="ml-2">Навыки</span>
                                     </button>
-                                    <button @onclick='() => { ScrollToSection("combat"); _navMenuOpen = false; }'
+                                    <button @onclick='() =>  ScrollToSection("combat")'
                                             class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
                                         <i class="fa-solid fa-gun w-5 text-blue-500"></i>
                                         <span class="ml-2">Бой</span>
                                     </button>
-                                    <button @onclick='() => { ScrollToSection("equipment"); _navMenuOpen = false; }'
+                                    <button @onclick='() =>  ScrollToSection("equipment")'
                                             class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
                                         <i class="fa-solid fa-suitcase w-5 text-blue-500"></i>
                                         <span class="ml-2">Снаряжение</span>
                                     </button>
-                                    <button @onclick='() => { ScrollToSection("biography"); _navMenuOpen = false; }'
+                                    <button @onclick='() =>  ScrollToSection("biography")'
                                             class="w-full text-left px-3 py-2 hover:bg-blue-50 text-gray-700 flex items-center">
                                         <i class="fa-solid fa-book w-5 text-blue-500"></i>
                                         <span class="ml-2">Биография</span>
@@ -124,7 +122,6 @@
                                 <button @onclick="ExportToPdfAsync"
                                         class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
                                     <i class="fa-solid fa-file-pdf mr-1"></i>
-                                    <span class="hidden md:inline">PDF</span>
                                 </button>
                             }
                         </div>
@@ -303,14 +300,6 @@
                 </div>
             }
         </div>
-
-        <!-- Плавающая кнопка сохранения на мобильных устройствах -->
-        <div class="md:hidden fixed bottom-4 right-4">
-            <button @onclick="SaveCharacterAsync"
-                    class="rounded-full w-12 h-12 bg-green-600 text-white shadow-lg flex items-center justify-center">
-                <i class="fas fa-save"></i>
-            </button>
-        </div>
     </ChildContent>
     <ErrorContent>
         <div class="alert alert-danger">
@@ -324,8 +313,8 @@
     [Parameter] public Guid? CampaignId { get; set; }
 
     // Determine if we're in NPC creation mode based on the URL segment after CampaignId
-    [Parameter] public string? npc { get; set; }
-    private bool IsNpc => npc == "npc" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
+    [Parameter] public string? Npc { get; set; }
+    private bool IsNpc => Npc == "npc" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
 
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
@@ -334,11 +323,7 @@
     private bool _isBusy;
     private readonly NotificationModel _notification = new();
     private CampaignPlayer? CampaignPlayer { get; set; }
-
-    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
-
-    private ClaimsPrincipal? User => AuthState?.Result?.User;
-
+    
     // Section visibility state
     private readonly Dictionary<string, bool> _sectionVisibility = new()
     {
@@ -385,7 +370,6 @@
             {
                 CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
                 Character = CharacterStorageDto?.Character;
-                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto!.CampaignPlayerId);
                 if (Character == null)
                 {
                     ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
@@ -396,9 +380,10 @@
             else
             {
                 Character = CreateNewCharacterTemplate();
-                if (CampaignId.HasValue)
-                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
             }
+            
+            if(CharacterStorageDto?.CampaignPlayerId is not null)
+                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
         }
         catch (Exception ex)
         {
@@ -437,21 +422,15 @@
 
         try
         {
-            if (string.IsNullOrWhiteSpace(Character.PersonalInfo?.Name))
+            if (string.IsNullOrWhiteSpace(Character.PersonalInfo.Name))
             {
-                Character.PersonalInfo ??= new PersonalInfo();
                 Character.PersonalInfo.Name = IsNpc ? "Безымянный NPC" : "Безымянный";
                 ShowNotification($"Имя {(IsNpc ? "NPC" : "персонажа")} не было указано, установлено '{Character.PersonalInfo.Name}'.", "warning");
             }
 
             // Ensure character type is set correctly
-            Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
-
-            // Set the player name - for NPCs it should be "NPC"
-            if (Character.PersonalInfo != null)
-            {
-                Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown";
-            }
+            Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter; 
+            Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown";
 
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
             {
@@ -461,9 +440,9 @@
             else
             {
                 Character.Id = Guid.Empty;
-                var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer.Id);
+                var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer?.Id);
 
-                if (createdCharacter?.Id != null && createdCharacter.Id != Guid.Empty)
+                if (createdCharacter.Id != Guid.Empty)
                 {
                     Character.Id = createdCharacter.Id;
                     CharacterId = createdCharacter.Id;
@@ -506,18 +485,19 @@
         Character = CharacterGenerationService.GenerateRandomCharacter();
 
         // Сохраняем имя игрока даже в случайно сгенерированном персонаже
-        Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName;
+        Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "No name";
 
         // Set the character type based on whether we're creating an NPC
         Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
     }
 
-    private async Task ScrollToSection(string sectionId)
+    private async Task ScrollToSection(string sectionId, bool navMenuOpen =false)
     {
-        await JSRuntime.InvokeVoidAsync("scrollToElement", sectionId);
+        _navMenuOpen = navMenuOpen;
+        await JsRuntime.InvokeVoidAsync("scrollToElement", sectionId);
     }
 
-    private async Task RecalculateAttributes()
+    private void RecalculateAttributes()
     {
         // Здесь можно добавить логику для пересчета атрибутов при изменении характеристик
         StateHasChanged();
@@ -525,7 +505,7 @@
 
     private void ResetUsedSkills()
     {
-        if (Character?.Skills?.SkillGroups == null)
+        if (Character?.Skills.SkillGroups == null)
             return;
 
         foreach (var group in Character.Skills.SkillGroups)
@@ -564,8 +544,8 @@
             var pdfData = await PdfExportService.GenerateCharacterPdfAsync(Character);
 
             // Save the PDF
-            var fileName = $"{Character.PersonalInfo?.Name ?? "Character"}.pdf";
-            await JSRuntime.InvokeVoidAsync("downloadFileFromByteArray", pdfData, fileName, "application/pdf");
+            var fileName = $"{Character.PersonalInfo.Name}.pdf";
+            await JsRuntime.InvokeVoidAsync("downloadFileFromByteArray", pdfData, fileName, "application/pdf");
 
             ShowNotification("PDF успешно создан", "success");
         }
@@ -584,7 +564,7 @@
     {
         if (firstRender)
         {
-            await JSRuntime.InvokeVoidAsync("eval", @"
+            await JsRuntime.InvokeVoidAsync("eval", @"
                 window.downloadFileFromByteArray = (data, fileName, contentType) => {
                     const blob = new Blob([new Uint8Array(data)], { type: contentType });
                     const url = window.URL.createObjectURL(blob);

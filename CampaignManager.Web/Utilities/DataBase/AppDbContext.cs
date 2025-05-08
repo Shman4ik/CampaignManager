@@ -1,10 +1,10 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
-using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Utilities.DataBase;
@@ -76,7 +76,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             // Сохранение статуса в виде строки в базе данных
             entity.Property(c => c.Status)
-                .HasDefaultValue(CharacterStatus.Active)
                 .HasConversion<string>();
 
             // Используем JSONB для хранения данных персонажа
