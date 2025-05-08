@@ -6,12 +6,14 @@
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Weapons
 @using Microsoft.AspNetCore.Authorization
+@using CampaignManager.Web.Services
 
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
 @inject CharacterGenerationService CharacterGenerationService
 @inject CampaignService CampaignService
 @inject IJSRuntime JSRuntime
+@inject PdfExportService PdfExportService
 @rendermode InteractiveServer
 
 <PageTitle>@(Character?.PersonalInfo?.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
@@ -110,6 +112,14 @@
                                 <button @onclick="GenerateRandom"
                                         class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
                                     <span>Случайный</span>
+                                </button>
+                            }
+                            @if (Character != null && (CharacterId != null && CharacterId != Guid.Empty))
+                            {
+                                <button @onclick="ExportToPdfAsync"
+                                        class="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-3 rounded-md flex items-center transition-colors">
+                                    <i class="fa-solid fa-file-pdf mr-1"></i>
+                                    <span class="hidden md:inline">PDF</span>
                                 </button>
                             }
                         </div>
@@ -515,5 +525,61 @@
     private void ToggleNavMenu()
     {
         _navMenuOpen = !_navMenuOpen;
+    }
+
+    /// <summary>
+    /// Exports the character sheet to PDF
+    /// </summary>
+    private async Task ExportToPdfAsync()
+    {
+        try
+        {
+            if (Character == null)
+                return;
+
+            _isBusy = true;
+            ShowNotification("Генерация PDF...", "info");
+
+            // Generate the PDF
+            byte[] pdfData = await PdfExportService.GenerateCharacterPdfAsync(Character);
+
+            // Save the PDF
+            string fileName = $"{Character.PersonalInfo?.Name ?? "Character"}.pdf";
+            await JSRuntime.InvokeVoidAsync("downloadFileFromByteArray", pdfData, fileName, "application/pdf");
+
+            ShowNotification("PDF успешно создан", "success");
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при создании PDF: {ex.Message}", "error");
+        }
+        finally
+        {
+            _isBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("eval", @"
+                window.downloadFileFromByteArray = (data, fileName, contentType) => {
+                    const blob = new Blob([new Uint8Array(data)], { type: contentType });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                };
+            ");
+        }
+        
+        await base.OnAfterRenderAsync(firstRender);
     }
 }
