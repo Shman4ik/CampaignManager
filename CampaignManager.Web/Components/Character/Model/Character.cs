@@ -1,5 +1,5 @@
-using CampaignManager.Web.Weapons;
 using CampaignManager.Web.SpellComponents;
+using CampaignManager.Web.Weapons;
 
 namespace CampaignManager.Web.Model;
 
@@ -53,12 +53,12 @@ public class Character
     public Finances Finances { get; set; } = new();
 
     /// <summary>
-    /// Список оружия персонажа
+    ///     Список оружия персонажа
     /// </summary>
     public List<Weapon> Weapons { get; set; } = new();
 
     /// <summary>
-    /// Список заклинаний персонажа
+    ///     Список заклинаний персонажа
     /// </summary>
     public List<Spell> Spells { get; set; } = new();
 
@@ -71,5 +71,4 @@ public class Character
     ///     Тип персонажа (игровой персонаж или NPC)
     /// </summary>
     public CharacterType CharacterType { get; set; } = CharacterType.PlayerCharacter;
-
 }
