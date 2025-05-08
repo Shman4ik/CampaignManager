@@ -27,22 +27,18 @@ public sealed class CreatureService(
     /// <param name="page">Optional page number for pagination</param>
     /// <param name="pageSize">Optional page size for pagination</param>
     /// <returns>A list of all creatures</returns>
-    public async Task<List<Creature>> GetAllCreaturesAsync(string searchText = "", int page = 1, int pageSize = DefaultPageSize)
+    public async Task<List<Creature>> GetAllCreaturesAsync(string searchText = "", string? creatureTypeStr = null,  int page = 1, int pageSize = DefaultPageSize)
     {
         try
         {
+            
             if (cache.TryGetValue(CreaturesCacheKey, out List<Creature>? creatures) && creatures is not null)
             {
-                return creatures
-                    .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
+                return FilterAndPage(creatures);
             }
 
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
             creatures = await dbContext.Creatures
-                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(c => c.Name)
                 .ToListAsync();
 
@@ -51,15 +47,23 @@ public sealed class CreatureService(
 
             cache.Set(CreaturesCacheKey, creatures, cacheOptions);
 
-            return creatures
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            return FilterAndPage(creatures);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving creatures");
             return [];
+        }
+
+        List<Creature> FilterAndPage(List<Creature> creatures)
+        { 
+            var isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType); 
+            return creatures
+                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
+                .Where(p=>isTypeFilter == false || p.Type == creatureType)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
         }
     }
 
@@ -68,13 +72,15 @@ public sealed class CreatureService(
     /// </summary>
     /// <param name="searchText">Optional search text to filter creatures</param>
     /// <returns>The total count of creatures</returns>
-    public async Task<int> GetCreatureCountAsync(string searchText = "")
+    public async Task<int> GetCreatureCountAsync(string searchText = "", string? creatureTypeStr = null)
     {
         try
         {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            var isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType); 
             return await dbContext.Creatures
-                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
+                .Where(p=>isTypeFilter == false || p.Type == creatureType)
                 .CountAsync();
         }
         catch (Exception ex)
@@ -111,51 +117,6 @@ public sealed class CreatureService(
         {
             logger.LogError(ex, "Error retrieving creature with ID {CreatureId}", id);
             return null;
-        }
-    }
-
-    /// <summary>
-    /// Gets creatures by type
-    /// </summary>
-    /// <param name="type">The type to filter by</param>
-    /// <returns>A list of creatures of the specified type</returns>
-    public async Task<List<Creature>> GetCreaturesByTypeAsync(CreatureType type)
-    {
-        try
-        {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Creatures
-                .Where(c => c.Type == type)
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving creatures by type {Type}", type);
-            return [];
-        }
-    }
-
-    /// <summary>
-    /// Searches for creatures by name
-    /// </summary>
-    /// <param name="searchTerm">The search term to look for in creature names</param>
-    /// <returns>A list of creatures matching the search term</returns>
-    public async Task<List<Creature>> SearchCreaturesAsync(string searchTerm)
-    {
-        try
-        {
-            using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Creatures
-                .Where(c => c.Name.Contains(searchTerm) ||
-                            (c.Description != null && c.Description.Contains(searchTerm)))
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error searching creatures with term {SearchTerm}", searchTerm);
-            return [];
         }
     }
 
@@ -324,6 +285,7 @@ public sealed class CreatureService(
 
                     foreach (Creature importedCreature in importedCreatures)
                     {
+                        importedCreature.Init();
                         await dbContext.Creatures.AddAsync(importedCreature);
                         totalImported++;
                     }
