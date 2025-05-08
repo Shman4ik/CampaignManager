@@ -7,47 +7,47 @@
 public enum WeaponType
 {
     /// <summary>
-    /// Холодное оружие
+    ///     Холодное оружие
     /// </summary>
     Melee,
 
     /// <summary>
-    /// Пистолеты
+    ///     Пистолеты
     /// </summary>
     Pistols,
 
     /// <summary>
-    /// Винтовки
+    ///     Винтовки
     /// </summary>
     Rifles,
 
     /// <summary>
-    /// Дробовики
+    ///     Дробовики
     /// </summary>
     Shotguns,
 
     /// <summary>
-    /// Автоматические винтовки
+    ///     Автоматические винтовки
     /// </summary>
     AssaultRifles,
 
     /// <summary>
-    /// Пистолеты-пулемёты
+    ///     Пистолеты-пулемёты
     /// </summary>
     SubmachineGuns,
 
     /// <summary>
-    /// Пулемёты
+    ///     Пулемёты
     /// </summary>
     MachineGuns,
 
     /// <summary>
-    /// Взрывчатка, тяжёлое вооружение
+    ///     Взрывчатка, тяжёлое вооружение
     /// </summary>
     ExplosivesAndHeavyWeapons,
 
     /// <summary>
-    /// Оружие иного типа, не входящее в перечисленные категории
+    ///     Оружие иного типа, не входящее в перечисленные категории
     /// </summary>
     Other
 }

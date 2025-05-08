@@ -3,24 +3,24 @@ namespace CampaignManager.Web.Components.Bestiary.Model;
 public enum CreatureType
 {
     Other,
-    
+
     /// <summary>
-    /// Мифические монстры
+    ///     Мифические монстры
     /// </summary>
     MythicMonsters,
-    
+
     /// <summary>
-    /// Божества
+    ///     Божества
     /// </summary>
     MythicGods,
-    
+
     /// <summary>
-    /// Традиционные монстры
+    ///     Традиционные монстры
     /// </summary>
     Monsters,
-    
+
     /// <summary>
-    /// Животные
+    ///     Животные
     /// </summary>
     Beast
 }

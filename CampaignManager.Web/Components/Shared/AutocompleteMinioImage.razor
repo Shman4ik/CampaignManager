@@ -1,5 +1,5 @@
-@inject MinioService MinioService
 @using CampaignManager.Web.Utilities.Services
+@inject MinioService MinioService
 
 <div class="relative">
     <input type="text"
@@ -8,7 +8,7 @@
            @bind:event="oninput"
            @onfocus="ShowSuggestions"
            @onblur="HideSuggestionsDelayed"
-           placeholder="Начните вводить имя файла..." />
+           placeholder="Начните вводить имя файла..."/>
 
     @if (showSuggestions && Suggestions.Any())
     {
@@ -25,11 +25,9 @@
 </div>
 
 @code {
-    [Parameter]
-    public string? Value { get; set; }
+    [Parameter] public string? Value { get; set; }
 
-    [Parameter]
-    public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
 
     private string? CurrentValue
     {
@@ -45,8 +43,8 @@
         }
     }
 
-    private List<string> Suggestions { get; set; } = new List<string>();
-    private bool showSuggestions = false;
+    private List<string> Suggestions { get; set; } = new();
+    private bool showSuggestions;
     private Timer? _debounceTimer;
 
     private void LoadSuggestions(string? searchTerm)
@@ -58,14 +56,15 @@
             {
                 var allFiles = await MinioService.ListObjectsAsync();
                 Suggestions = allFiles.Where(f => f.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
-                                      .OrderBy(f => f)
-                                      .Take(10) // Limit suggestions
-                                      .ToList();
+                    .OrderBy(f => f)
+                    .Take(10) // Limit suggestions
+                    .ToList();
             }
             else
             {
                 Suggestions.Clear();
             }
+
             showSuggestions = Suggestions.Any();
             await InvokeAsync(StateHasChanged);
         }, null, 300, Timeout.Infinite); // 300ms debounce
@@ -101,12 +100,13 @@
         // For now, just ensure CurrentValue is synced.
         if (Value != CurrentValue)
         {
-             CurrentValue = Value; // Sync if externally changed, though binding should handle this.
+            CurrentValue = Value; // Sync if externally changed, though binding should handle this.
         }
     }
-    
+
     public void Dispose()
     {
         _debounceTimer?.Dispose();
     }
+
 }

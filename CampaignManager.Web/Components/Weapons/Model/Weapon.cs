@@ -12,11 +12,13 @@ public class Weapon : BaseDataBaseEntity
     {
         Type = WeaponType.Melee;
     }
+
     /// <summary>
     ///     Тип оружия (ближнего или дальнего боя)
     /// </summary>
     [Required]
     public WeaponType Type { get; set; }
+
     /// <summary>
     ///     Название оружия
     /// </summary>

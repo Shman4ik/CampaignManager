@@ -6,7 +6,6 @@ namespace CampaignManager.Web.Weapons;
 
 public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMemoryCache cache)
 {
-    private readonly IMemoryCache _cache = cache;
     private const string WeaponsKey = "AllWeapons";
 
     public async Task<List<Weapon>> GetAllRangeWeaponsAsync()
@@ -24,7 +23,7 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
 
 
     /// <summary>
-    /// Асинхронно получает список всех видов оружия с возможностью фильтрации по типу
+    ///     Асинхронно получает список всех видов оружия с возможностью фильтрации по типу
     /// </summary>
     /// <param name="type">Опциональный параметр для фильтрации по типу оружия</param>
     /// <returns>Список оружия, отфильтрованный по типу (если указан)</returns>
@@ -32,12 +31,13 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     {
         string cacheKey = type.HasValue ? $"{WeaponsKey}_{type}" : WeaponsKey;
 
-        if (_cache.TryGetValue(cacheKey, out List<Weapon> cachedWeapons))
+        if (cache.TryGetValue(cacheKey, out List<Weapon> cachedWeapons))
         {
             return cachedWeapons;
         }
+
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        var query = dbContext.Weapons.AsQueryable();
+        IQueryable<Weapon> query = dbContext.Weapons.AsQueryable();
 
         if (type.HasValue)
         {
@@ -45,12 +45,12 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
         }
 
         List<Weapon> weapons = await query.OrderBy(w => w.Name).ToListAsync();
-        _cache.Set(cacheKey, weapons, TimeSpan.FromMinutes(10));
+        cache.Set(cacheKey, weapons, TimeSpan.FromMinutes(10));
         return weapons;
     }
 
     /// <summary>
-    /// Асинхронно добавляет новое оружие в базу данных
+    ///     Асинхронно добавляет новое оружие в базу данных
     /// </summary>
     /// <param name="weapon">Оружие для добавления</param>
     public async Task AddWeaponAsync(Weapon weapon)
@@ -63,13 +63,13 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     }
 
     /// <summary>
-    /// Асинхронно обновляет существующее оружие в базе данных
+    ///     Асинхронно обновляет существующее оружие в базе данных
     /// </summary>
     /// <param name="weapon">Оружие для обновления</param>
     public async Task UpdateWeaponAsync(Weapon weapon)
     {
         using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-        var existingWeapon = await dbContext.Weapons.FindAsync(weapon.Id);
+        Weapon? existingWeapon = await dbContext.Weapons.FindAsync(weapon.Id);
         if (existingWeapon == null)
         {
             throw new InvalidOperationException($"Оружие с ID {weapon.Id} не найдено");
@@ -82,7 +82,7 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     }
 
     /// <summary>
-    /// Асинхронно удаляет оружие по его идентификатору
+    ///     Асинхронно удаляет оружие по его идентификатору
     /// </summary>
     /// <param name="id">Идентификатор оружия для удаления</param>
     public async Task DeleteWeaponAsync(Guid id)
@@ -98,16 +98,16 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     }
 
     /// <summary>
-    /// Очищает кэш оружия
+    ///     Очищает кэш оружия
     /// </summary>
     private void ClearCache()
     {
-        _cache.Remove(WeaponsKey);
+        cache.Remove(WeaponsKey);
 
         // Clear cache for each weapon type
         foreach (WeaponType type in Enum.GetValues(typeof(WeaponType)))
         {
-            _cache.Remove($"{WeaponsKey}_{type}");
+            cache.Remove($"{WeaponsKey}_{type}");
         }
     }
 }

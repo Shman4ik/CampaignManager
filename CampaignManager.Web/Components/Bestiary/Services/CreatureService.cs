@@ -3,12 +3,11 @@ using CampaignManager.Web.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
-using System.Linq;
 
 namespace CampaignManager.Web.Components.Bestiary.Services;
 
 /// <summary>
-/// Service for managing creatures in the system
+///     Service for managing creatures in the system
 /// </summary>
 public sealed class CreatureService(
     IDbContextFactory<AppDbContext> dbContextFactory,
@@ -17,21 +16,20 @@ public sealed class CreatureService(
     IWebHostEnvironment env)
 {
     private const string CreaturesCacheKey = "AllCreatures";
-    private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
     private const int DefaultPageSize = 6;
+    private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
 
     /// <summary>
-    /// Gets all creatures in the system
+    ///     Gets all creatures in the system
     /// </summary>
     /// <param name="searchText">Optional search text to filter creatures</param>
     /// <param name="page">Optional page number for pagination</param>
     /// <param name="pageSize">Optional page size for pagination</param>
     /// <returns>A list of all creatures</returns>
-    public async Task<List<Creature>> GetAllCreaturesAsync(string searchText = "", string? creatureTypeStr = null,  int page = 1, int pageSize = DefaultPageSize)
+    public async Task<List<Creature>> GetAllCreaturesAsync(string searchText = "", string? creatureTypeStr = null, int page = 1, int pageSize = DefaultPageSize)
     {
         try
         {
-            
             if (cache.TryGetValue(CreaturesCacheKey, out List<Creature>? creatures) && creatures is not null)
             {
                 return FilterAndPage(creatures);
@@ -56,11 +54,11 @@ public sealed class CreatureService(
         }
 
         List<Creature> FilterAndPage(List<Creature> creatures)
-        { 
-            var isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType); 
+        {
+            bool isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType);
             return creatures
                 .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
-                .Where(p=>isTypeFilter == false || p.Type == creatureType)
+                .Where(p => isTypeFilter == false || p.Type == creatureType)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
@@ -68,7 +66,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Gets the total count of creatures
+    ///     Gets the total count of creatures
     /// </summary>
     /// <param name="searchText">Optional search text to filter creatures</param>
     /// <returns>The total count of creatures</returns>
@@ -77,10 +75,10 @@ public sealed class CreatureService(
         try
         {
             await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            var isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType); 
+            bool isTypeFilter = Enum.TryParse(creatureTypeStr, out CreatureType creatureType);
             return await dbContext.Creatures
                 .Where(c => string.IsNullOrWhiteSpace(searchText) || c.Name.ToLower().Contains(searchText.ToLower()))
-                .Where(p=>isTypeFilter == false || p.Type == creatureType)
+                .Where(p => isTypeFilter == false || p.Type == creatureType)
                 .CountAsync();
         }
         catch (Exception ex)
@@ -91,7 +89,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Gets a creature by its ID
+    ///     Gets a creature by its ID
     /// </summary>
     /// <param name="id">The ID of the creature</param>
     /// <returns>The creature if found, null otherwise</returns>
@@ -99,18 +97,18 @@ public sealed class CreatureService(
     {
         try
         {
-            await using  AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
-            var result = await dbContext.Creatures.FindAsync(id);
-            
-            result.CreatureCharacteristics.Appearance??= new();
-            result.CreatureCharacteristics.Constitution??= new();
-            result.CreatureCharacteristics.Intelligence??= new();    
-            result.CreatureCharacteristics.Strength??= new();    
-            result.CreatureCharacteristics.Dexterity??= new();
-            result.CreatureCharacteristics.Size??= new();
-            result.CreatureCharacteristics.Education??= new();
-            result.CreatureCharacteristics.Power??= new();
-            
+            await using AppDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+            Creature? result = await dbContext.Creatures.FindAsync(id);
+
+            result.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Strength ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Power ??= new CreatureCharacteristicModel();
+
             return result;
         }
         catch (Exception ex)
@@ -121,7 +119,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Creates a new creature
+    ///     Creates a new creature
     /// </summary>
     /// <param name="creature">The creature to create</param>
     /// <returns>The created creature with its assigned ID</returns>
@@ -155,7 +153,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Updates an existing creature
+    ///     Updates an existing creature
     /// </summary>
     /// <param name="creature">The creature with updated values</param>
     /// <returns>True if the update was successful, false otherwise</returns>
@@ -202,7 +200,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Deletes a creature by its ID
+    ///     Deletes a creature by its ID
     /// </summary>
     /// <param name="id">The ID of the creature to delete</param>
     /// <returns>True if the deletion was successful, false otherwise</returns>
@@ -242,7 +240,7 @@ public sealed class CreatureService(
     }
 
     /// <summary>
-    /// Imports creatures from JSON files in the Data directory
+    ///     Imports creatures from JSON files in the Data directory
     /// </summary>
     /// <returns>The number of creatures imported</returns>
     public async Task<int> ImportCreaturesFromJsonFilesAsync()

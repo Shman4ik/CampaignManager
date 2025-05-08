@@ -1,10 +1,9 @@
 @page "/bestiary"
-@attribute [Authorize]
-
+@using CampaignManager.Web.Components.Bestiary.Components
 @using CampaignManager.Web.Components.Bestiary.Model
 @using CampaignManager.Web.Components.Bestiary.Services
-@using CampaignManager.Web.Components.Bestiary.Components
 @using CampaignManager.Web.Extensions
+@attribute [Authorize]
 
 @inject CreatureService CreatureService
 @inject NavigationManager NavigationManager
@@ -62,12 +61,13 @@
                     </div>
 
                     <div class="w-full sm:w-48">
-                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип существа</label>
+                        <label for="typeFilter" class="block text-xs font-medium text-gray-700 mb-1">Тип
+                            существа</label>
                         <select id="typeFilter"
                                 class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                                 @onchange="TypeSelectionChanged">
                             <option value="">Все типы</option>
-                            @foreach (var type in EnumExtensions.GetEnumTypes<CreatureType>() )
+                            @foreach (var type in EnumExtensions.GetEnumTypes<CreatureType>())
                             {
                                 <option value="@type">@type.ToRussianString()</option>
                             }
@@ -75,18 +75,18 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Пагинация в панели фильтров -->
             <div class="flex flex-wrap justify-between items-center gap-2 mt-2">
                 <div class="flex items-center gap-2 text-sm">
-                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400" 
-                            @onclick="PreviousPage" 
+                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400"
+                            @onclick="PreviousPage"
                             disabled="@(_currentPage <= 1)">
                         <i class="fas fa-chevron-left"></i>
                     </button>
                     <span class="px-2">Страница @_currentPage из @TotalPages</span>
-                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400" 
-                            @onclick="NextPage" 
+                    <button class="text-gray-700 hover:text-blue-600 disabled:text-gray-400"
+                            @onclick="NextPage"
                             disabled="@(_currentPage >= TotalPages)">
                         <i class="fas fa-chevron-right"></i>
                     </button>
@@ -178,10 +178,8 @@
         try
         {
             _loading = true;
-            _totalItems = await CreatureService.GetCreatureCountAsync(_searchTerm, _selectedType); 
-            _creatures = await CreatureService.GetAllCreaturesAsync(_searchTerm,_selectedType, _currentPage, _pageSize);
-
-          
+            _totalItems = await CreatureService.GetCreatureCountAsync(_searchTerm, _selectedType);
+            _creatures = await CreatureService.GetAllCreaturesAsync(_searchTerm, _selectedType, _currentPage, _pageSize);
         }
         catch (Exception ex)
         {
@@ -193,26 +191,28 @@
         }
     }
 
-   
 
     private async Task OnSearchTermChanged(string searchTerm)
     {
         _searchTerm = searchTerm;
         await LoadData();
     }
+
     private async Task TypeSelectionChanged(ChangeEventArgs e)
     {
         // Преобразование значения в enum
         if (string.IsNullOrEmpty(e.Value?.ToString()))
-        { 
+        {
             _selectedType = ""; // Для опции "Все типы"
         }
         else
         {
             _selectedType = e.Value.ToString() ?? "";
         }
+
         await LoadData();
     }
+
     private async Task ClearFilters()
     {
         _searchTerm = "";

@@ -3,78 +3,78 @@ namespace CampaignManager.Web.Components.Bestiary.Model;
 public class CreatureCharacteristics
 {
     /// <summary>
-    /// Сила
+    ///     Сила
     /// </summary>
     public CreatureCharacteristicModel? Strength { get; set; } = new();
 
     /// <summary>
-    /// Ловкость
+    ///     Ловкость
     /// </summary>
     public CreatureCharacteristicModel? Dexterity { get; set; } = new();
 
     /// <summary>
-    /// Интеллект
+    ///     Интеллект
     /// </summary>
     public CreatureCharacteristicModel? Intelligence { get; set; } = new();
 
     /// <summary>
-    /// Выносливость
+    ///     Выносливость
     /// </summary>
     public CreatureCharacteristicModel? Constitution { get; set; } = new();
 
     /// <summary>
-    /// Наружность
+    ///     Наружность
     /// </summary>
     public CreatureCharacteristicModel? Appearance { get; set; } = new();
 
     /// <summary>
-    /// Мощь
+    ///     Мощь
     /// </summary>
     public CreatureCharacteristicModel? Power { get; set; } = new();
 
     /// <summary>
-    /// Телосложение
+    ///     Телосложение
     /// </summary>
     public CreatureCharacteristicModel? Size { get; set; } = new();
 
     /// <summary>
-    /// Образование
+    ///     Образование
     /// </summary>
     public CreatureCharacteristicModel? Education { get; set; } = new();
 
 
     /// <summary>
-    /// Initiative value (ИН. В)
+    ///     Initiative value (ИН. В)
     /// </summary>
     public int Initiative { get; set; }
 
     /// <summary>
-    /// Average bonus to damage (Средний бонус к урону)
+    ///     Average bonus to damage (Средний бонус к урону)
     /// </summary>
     public string AverageBonusToHit { get; set; }
 
     /// <summary>
-    /// Average complexity/constitution rating (Средняя Комплекция)
+    ///     Average complexity/constitution rating (Средняя Комплекция)
     /// </summary>
     public int AverageComplexity { get; set; }
 
     /// <summary>
-    /// Movement speed (Скорость)
+    ///     Movement speed (Скорость)
     /// </summary>
     public int Speed { get; set; }
 
     /// <summary>
-    /// ПЗ пункты здоровья
+    ///     ПЗ пункты здоровья
     /// </summary>
     public int HealPoint { get; set; }
 
     /// <summary>
-    /// ПМ пункты магии
+    ///     ПМ пункты магии
     /// </summary>
     public int ManaPoint { get; set; }
 
     /// <summary>
-    /// Комплекция
+    ///     Комплекция
     /// </summary>
     public int Constitutions { get; set; }
 }
