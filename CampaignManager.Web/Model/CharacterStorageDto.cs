@@ -1,6 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
 
 namespace CampaignManager.Web.Model;
 
@@ -32,4 +33,14 @@ public class CharacterStorageDto : BaseDataBaseEntity
     ///     Навигационное свойство.
     /// </summary>
     public CampaignPlayer? CampaignPlayer { get; set; }
+    
+    /// <summary>
+    ///     Идентификатор сценария, к которому привязан шаблон персонажа.
+    /// </summary>
+    public Guid? ScenarioId { get; set; }
+    
+    /// <summary>
+    ///     Навигационное свойство к сценарию.
+    /// </summary>
+    public Scenario? Scenario { get; set; }
 }

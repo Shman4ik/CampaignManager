@@ -130,7 +130,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<ScenarioNpc>(entity =>
         {
             entity.ToTable("ScenarioNpcs");
-            entity.Property(n => n.Name).IsRequired();
+            entity.Property(n => n.Name)
+                .IsRequired();
 
             // Relationship with Scenario
             entity.HasOne(n => n.Scenario)
@@ -142,8 +143,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(n => n.Character)
                 .WithOne()
                 .HasForeignKey<ScenarioNpc>(n => n.CharacterId)
-                .IsRequired(false)
-                .OnDelete(DeleteBehavior.SetNull);
+                .IsRequired(true)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Creature Configuration

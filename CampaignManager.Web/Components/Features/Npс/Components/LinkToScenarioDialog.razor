@@ -1,0 +1,147 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Model
+@inject ScenarioService ScenarioService
+@inject NavigationManager NavigationManager
+@inject CharacterService CharacterService
+
+<div class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">Привязка персонажа к сценарию</h3>
+            <button @onclick="OnCancel" class="text-gray-400 hover:text-gray-600">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-6">
+            <p class="text-sm text-gray-500 mb-4">
+                Привязка персонажа к сценарию.
+            </p>
+
+            @if (_isLoading)
+            {
+                <div class="flex justify-center p-4">
+                    <div class="spinner-border text-blue-500" role="status">
+                        <span class="sr-only">Загрузка...</span>
+                    </div>
+                </div>
+            }
+            else if (_scenarios == null || !_scenarios.Any())
+            {
+                <div class="text-center text-gray-500 my-4">
+                    <p>Нет доступных сценариев.</p>
+                    <button @onclick="CreateNewScenario" class="mt-2 text-blue-600 hover:text-blue-800 underline">
+                        Создать новый сценарий
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="mb-4">
+                    <label for="scenarioSelect" class="block text-sm font-medium text-gray-700 mb-1">Выберите сценарий</label>
+                    <select @bind="_selectedScenarioId" id="scenarioSelect" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">-- Выберите сценарий --</option>
+                        @foreach (var scenario in _scenarios)
+                        {
+                            <option value="@scenario.Id">@scenario.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+
+        <div class="flex justify-end space-x-3">
+            <button @onclick="OnCancel" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                Отмена
+            </button>
+            @if (_scenarios != null && _scenarios.Any())
+            {
+                <button @onclick="SaveLink" disabled="@(!IsFormValid())" class="@(!IsFormValid() ? "opacity-50 cursor-not-allowed " : "")px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Сохранить
+                </button>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="mt-4 p-3 bg-red-50 text-red-600 rounded-md">
+                @_errorMessage
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required Guid CharacterTemplateId { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback<CharacterStorageDto> OnSave { get; set; }
+
+    private List<Scenario>? _scenarios;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    
+    private string? _selectedScenarioId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadScenariosAsync();
+    }
+
+    private async Task LoadScenariosAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            _scenarios = await ScenarioService.GetAllScenariosAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Ошибка при загрузке сценариев: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveLink()
+    {
+        if (!IsFormValid())
+            return;
+
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            await CharacterService.SaveCharacterTemplateWithScenarioAsync(CharacterTemplateId, Guid.Parse(_selectedScenarioId!));
+            // Notify the parent component
+            await OnSave.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Ошибка при сохранении: {ex.Message}";
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool IsFormValid()
+    {
+        return !string.IsNullOrEmpty(_selectedScenarioId) && 
+               Guid.TryParse(_selectedScenarioId, out _);
+    }
+
+    private void CreateNewScenario()
+    {
+        NavigationManager.NavigateTo("/scenarios/create");
+    }
+}

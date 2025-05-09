@@ -228,17 +228,8 @@ public sealed class ScenarioService(
             // Clone NPCs
             foreach (var npc in template.Npcs)
             {
-                ScenarioNpc newNpc = new()
-                {
-                    Name = npc.Name,
-                    Description = npc.Description,
-                    Role = npc.Role,
-                    Location = npc.Location,
-                    Notes = npc.Notes,
-                    ScenarioId = newScenario.Id
-                };
-
-                await dbContext.ScenarioNpcs.AddAsync(newNpc);
+                npc.Init();
+                await dbContext.ScenarioNpcs.AddAsync(npc);
             }
 
             // Clone creature relationships

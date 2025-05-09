@@ -3,53 +3,21 @@ using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Scenarios.Model;
 
-/// <summary>
-///     Simplified model for NPCs in scenarios
-/// </summary>
-public sealed class ScenarioNpc : BaseDataBaseEntity
+public class ScenarioNpc: BaseDataBaseEntity
 {
+    public string Name { get; set; } = string.Empty;
+    
+    public Guid CharacterId { get; set; }
+    
+    public CharacterStorageDto Character { get; set; } 
+    
     /// <summary>
-    ///     The name of the NPC
-    /// </summary>
-    public required string Name { get; set; }
-
-    /// <summary>
-    ///     Detailed description of the NPC
-    /// </summary>
-    public string? Description { get; set; }
-
-    /// <summary>
-    ///     The role of the NPC in the scenario (e.g., Ally, Villain, Informant)
-    /// </summary>
-    public string? Role { get; set; }
-
-    /// <summary>
-    ///     The location where the NPC is found within the scenario
-    /// </summary>
-    public string? Location { get; set; }
-
-    /// <summary>
-    ///     Additional notes about the NPC
-    /// </summary>
-    public string? Notes { get; set; }
-
-    /// <summary>
-    ///     Optional reference to a full Character if this NPC has been developed into one
-    /// </summary>
-    public Guid? CharacterId { get; set; }
-
-    /// <summary>
-    ///     Navigation property to the full Character (if any)
-    /// </summary>
-    public CharacterStorageDto? Character { get; set; }
-
-    /// <summary>
-    ///     The ID of the scenario this NPC belongs to
+    ///     The ID of the scenario
     /// </summary>
     public Guid ScenarioId { get; set; }
 
     /// <summary>
-    ///     Navigation property to the scenario this NPC belongs to
+    ///     Navigation property to the scenario
     /// </summary>
-    public Scenario Scenario { get; set; } = null!;
+    public Scenario Scenario { get; set; } 
 }

@@ -99,7 +99,6 @@ builder.Services.AddScoped<PdfExportService>();
 builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<ItemService>();
-builder.Services.AddScoped<ScenarioNpcService>();
 
 // Register Minio service
 builder.Services.AddScoped<MinioService>();

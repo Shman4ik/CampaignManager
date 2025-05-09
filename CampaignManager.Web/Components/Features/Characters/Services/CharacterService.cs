@@ -1,5 +1,6 @@
-﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -154,6 +155,71 @@ public class CharacterService(
         catch (Exception ex)
         {
             logger.LogError(ex, $"Error changing character status: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all character templates (CharacterStorageDto with Status = CharacterStatus.Template)
+    /// </summary>
+    /// <returns>A list of character templates</returns>
+    public async Task<List<CharacterStorageDto>> GetAllCharacterTemplatesAsync()
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.CharacterStorage
+                .Where(c => c.Status == CharacterStatus.Template)
+                .OrderBy(c => c.CharacterName)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving character templates");
+            return new List<CharacterStorageDto>();
+        }
+    }
+
+    /// <summary>
+    ///     Creates a copy of an existing character template and links it to a scenario
+    /// </summary>
+    /// <param name="characterId">ID of the character template to copy</param>
+    /// <param name="scenarioId">ID of the scenario to link the template to</param>
+    /// <returns>The newly created character template with scenario link</returns>
+    public async Task<CharacterStorageDto> SaveCharacterTemplateWithScenarioAsync(Guid characterId, Guid scenarioId)
+    {
+        try
+        {
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                throw new UnauthorizedAccessException("User must be authenticated to create a template with scenario link");
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            // Get the original template
+            var character = await dbContext.CharacterStorage
+                .FirstOrDefaultAsync(c => c.Id == characterId && c.Status == CharacterStatus.Template);
+
+            if (character == null)
+                throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+
+
+            // Initialize the new template with a new ID
+            character.Init();
+            character.Status = CharacterStatus.Active;
+
+            dbContext.CharacterStorage.Add(character);
+            var scenariosNpc = new ScenarioNpc { CharacterId = character.Id, ScenarioId = scenarioId, Name = character.CharacterName };
+            scenariosNpc.Init();
+            dbContext.ScenarioNpcs.Add(scenariosNpc);
+            await dbContext.SaveChangesAsync();
+
+            logger.LogInformation($"Character template {character.Id} created with scenario link {scenarioId} by user {userEmail}");
+            return character;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error creating character template with scenario link: {ex.Message}");
             throw;
         }
     }

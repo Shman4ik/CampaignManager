@@ -6,6 +6,7 @@ using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -14,9 +15,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Web.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250509173515_CharacterModelUpdate")]
+    partial class CharacterModelUpdate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -181,6 +184,50 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.ToTable("Items", "games");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.NpcModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CharacterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ScenarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId")
+                        .IsUnique();
+
+                    b.HasIndex("ScenarioId");
+
+                    b.ToTable("ScenarioNpcs", "games");
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", b =>
                 {
                     b.Property<Guid>("Id")
@@ -293,38 +340,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.HasIndex("ItemId");
 
                     b.ToTable("ScenarioItems", "games");
-                });
-
-            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.ScenarioNpc", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CharacterId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("LastUpdated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("ScenarioId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CharacterId")
-                        .IsUnique();
-
-                    b.HasIndex("ScenarioId");
-
-                    b.ToTable("ScenarioNpcs", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Spells.Model.Spell", b =>
@@ -471,9 +486,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Property<DateTimeOffset>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("ScenarioId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
@@ -481,8 +493,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.HasKey("Id");
 
                     b.HasIndex("CampaignPlayerId");
-
-                    b.HasIndex("ScenarioId");
 
                     b.ToTable("Characters", "games");
                 });
@@ -496,6 +506,23 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.NpcModel", b =>
+                {
+                    b.HasOne("CampaignManager.Web.Model.CharacterStorageDto", "Character")
+                        .WithOne()
+                        .HasForeignKey("CampaignManager.Web.Components.Features.Scenarios.Model.NpcModel", "CharacterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
+                        .WithMany("Npcs")
+                        .HasForeignKey("ScenarioId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Character");
+
+                    b.Navigation("Scenario");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", b =>
@@ -546,25 +573,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Navigation("Scenario");
                 });
 
-            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.ScenarioNpc", b =>
-                {
-                    b.HasOne("CampaignManager.Web.Model.CharacterStorageDto", "Character")
-                        .WithOne()
-                        .HasForeignKey("CampaignManager.Web.Components.Features.Scenarios.Model.ScenarioNpc", "CharacterId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
-                        .WithMany("Npcs")
-                        .HasForeignKey("ScenarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Character");
-
-                    b.Navigation("Scenario");
-                });
-
             modelBuilder.Entity("CampaignManager.Web.Model.CharacterStorageDto", b =>
                 {
                     b.HasOne("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignPlayer", "CampaignPlayer")
@@ -572,13 +580,7 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .HasForeignKey("CampaignPlayerId")
                         .OnDelete(DeleteBehavior.Cascade);
 
-                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
-                        .WithMany()
-                        .HasForeignKey("ScenarioId");
-
                     b.Navigation("CampaignPlayer");
-
-                    b.Navigation("Scenario");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Bestiary.Model.Creature", b =>

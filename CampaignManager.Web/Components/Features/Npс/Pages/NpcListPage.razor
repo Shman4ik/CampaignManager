@@ -1,0 +1,241 @@
+@page "/npcs"
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Components.Features.Npс.Components
+@attribute [Authorize]
+
+@inject CharacterService CharacterService
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<PageTitle>Управление шаблонами персонажей</PageTitle>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Шаблоны персонажей</h1>
+        <button @onclick="CreateNewTemplate" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md flex items-center transition-colors">
+            <i class="fa-solid fa-plus mr-2"></i> Добавить шаблон
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_notification.Message))
+    {
+        <div class="mb-4">
+            <NotificationAlert Type="@_notification.Type" Message="@_notification.Message" OnClose="ClearNotification" />
+        </div>
+    }
+
+    @if (_isLoading)
+    {
+        <div class="flex justify-center p-12">
+            <LoadingIndicator />
+        </div>
+    }
+    else if (_characterTemplates == null || !_characterTemplates.Any())
+    {
+        <div class="bg-gray-50 border border-gray-200 text-gray-700 px-6 py-8 rounded-lg text-center">
+            <div class="mb-3">
+                <i class="fa-solid fa-users-slash text-4xl text-gray-400"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-800 mb-2">Нет доступных шаблонов</h3>
+            <p class="text-gray-600 mb-4">Создайте свой первый шаблон персонажа</p>
+            <button @onclick="CreateNewTemplate" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors">
+                <i class="fa-solid fa-plus mr-2"></i> Добавить шаблон
+            </button>
+        </div>
+    }
+    else
+    {
+        <!-- Card Grid View -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            @foreach (var template in _characterTemplates)
+            {
+                <CharacterTemplateCard 
+                    Template="@template" 
+                    OnDelete="@(async (template) => await ConfirmDeleteTemplate(template))"
+                    OnLinkToScenario="@(async (template) => await ShowLinkToScenarioDialog(template))" />
+            }
+        </div>
+    }
+</div>
+
+@if (_showDeleteConfirmation)
+{
+    <div class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Подтверждение удаления</h3>
+            <p class="text-sm text-gray-500 mb-6">
+                Вы уверены, что хотите удалить шаблон "@_templateToDelete?.CharacterName"? Это действие нельзя отменить.
+            </p>
+            <div class="flex justify-end space-x-3">
+                <button @onclick="CancelDelete" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                    Отмена
+                </button>
+                <button @onclick="DeleteTemplate" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showLinkDialog && _templateToLink != null)
+{
+    <LinkToScenarioDialog 
+        CharacterTemplateId="@_templateToLink.Id" 
+        OnCancel="@CloseLinkDialog"
+        OnSave="@SaveCharacterTemplateWithScenario" />
+}
+
+@code {
+    private List<CharacterStorageDto>? _characterTemplates;
+    private bool _isLoading = true;
+    private bool _showDeleteConfirmation = false;
+    private CharacterStorageDto? _templateToDelete;
+    
+    // Link to scenario dialog
+    private bool _showLinkDialog = false;
+    private CharacterStorageDto? _templateToLink;
+    
+    private struct Notification
+    {
+        public string Type { get; set; }
+        public string Message { get; set; }
+    }
+
+    private Notification _notification;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTemplatesAsync();
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        _isLoading = true;
+        
+        try
+        {
+            // Load all character templates
+            _characterTemplates = await CharacterService.GetAllCharacterTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _notification = new Notification
+            {
+                Type = "error",
+                Message = $"Ошибка при загрузке шаблонов персонажей: {ex.Message}"
+            };
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CreateNewTemplate()
+    {
+        NavigationManager.NavigateTo("/character/create/template");
+    }
+
+    private void EditTemplate(Guid id)
+    {
+        NavigationManager.NavigateTo($"/character/{id}");
+    }
+
+    private async Task ConfirmDeleteTemplate(CharacterStorageDto template)
+    {
+        _templateToDelete = template;
+        _showDeleteConfirmation = true;
+        await Task.CompletedTask;
+    }
+
+    private void CancelDelete()
+    {
+        _templateToDelete = null;
+        _showDeleteConfirmation = false;
+    }
+
+    private async Task DeleteTemplate()
+    {
+        if (_templateToDelete == null)
+            return;
+
+        try
+        {
+            await CharacterService.SetCharacterStatusAsync(_templateToDelete.Id, CharacterStatus.Archived);
+            
+            _notification = new Notification
+            {
+                Type = "success",
+                Message = $"Шаблон \"{_templateToDelete.CharacterName}\" успешно удален"
+            };
+
+            await LoadTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _notification = new Notification
+            {
+                Type = "error",
+                Message = $"Ошибка при удалении шаблона: {ex.Message}"
+            };
+        }
+        finally
+        {
+            _showDeleteConfirmation = false;
+            _templateToDelete = null;
+        }
+    }
+
+    private void ClearNotification()
+    {
+        _notification = new Notification();
+        StateHasChanged();
+    }
+    
+    // Show dialog to link character to scenario
+    private async Task ShowLinkToScenarioDialog(CharacterStorageDto characterStorage)
+    {
+        _templateToLink = characterStorage;
+        _showLinkDialog = true;
+        await Task.CompletedTask;
+    }
+    
+    // Close the link dialog
+    private void CloseLinkDialog()
+    {
+        _showLinkDialog = false;
+        _templateToLink = null;
+    }
+    
+    // Save character template with scenario link
+    private async Task SaveCharacterTemplateWithScenario()
+    {
+        try
+        {
+            // Here you would update the database with the character template scenario link
+            // For now, we'll just show a notification
+            
+            _notification = new Notification
+            {
+                Type = "success",
+                Message = $"Персонаж успешно привязан к сценарию"
+            };
+            
+            CloseLinkDialog();
+            // In a real implementation, you might refresh the list of templates here
+            // await LoadTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            _notification = new Notification
+            {
+                Type = "error",
+                Message = $"Ошибка при привязке персонажа к сценарию: {ex.Message}"
+            };
+        }
+    }
+}
