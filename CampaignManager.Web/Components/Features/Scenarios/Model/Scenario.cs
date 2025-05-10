@@ -56,7 +56,7 @@ public sealed class Scenario : BaseDataBaseEntity
     /// <summary>
     ///     Collection of NPCs in this scenario
     /// </summary>
-    public ICollection<ScenarioNpc> Npcs { get; set; } = [];
+    public ICollection<CharacterStorageDto> Npcs { get; set; } = [];
 
     /// <summary>
     ///     Collection of creatures in this scenario

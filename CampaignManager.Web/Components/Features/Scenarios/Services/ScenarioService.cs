@@ -224,14 +224,7 @@ public sealed class ScenarioService(
             // Add the new scenario to the database
             await dbContext.Scenarios.AddAsync(newScenario);
             await dbContext.SaveChangesAsync();
-
-            // Clone NPCs
-            foreach (var npc in template.Npcs)
-            {
-                npc.Init();
-                await dbContext.ScenarioNpcs.AddAsync(npc);
-            }
-
+            
             // Clone creature relationships
             foreach (var sc in template.ScenarioCreatures)
             {

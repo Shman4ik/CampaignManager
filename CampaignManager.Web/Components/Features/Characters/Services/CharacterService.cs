@@ -207,11 +207,8 @@ public class CharacterService(
             // Initialize the new template with a new ID
             character.Init();
             character.Status = CharacterStatus.Active;
-
+            character.ScenarioId = scenarioId;
             dbContext.CharacterStorage.Add(character);
-            var scenariosNpc = new ScenarioNpc { CharacterId = character.Id, ScenarioId = scenarioId, Name = character.CharacterName };
-            scenariosNpc.Init();
-            dbContext.ScenarioNpcs.Add(scenariosNpc);
             await dbContext.SaveChangesAsync();
 
             logger.LogInformation($"Character template {character.Id} created with scenario link {scenarioId} by user {userEmail}");
@@ -221,6 +218,71 @@ public class CharacterService(
         {
             logger.LogError(ex, $"Error creating character template with scenario link: {ex.Message}");
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all character templates linked to a specific scenario
+    /// </summary>
+    /// <param name="scenarioId">ID of the scenario</param>
+    /// <returns>A list of character templates linked to the specified scenario</returns>
+    public async Task<List<CharacterStorageDto>> GetCharacterTemplatesByScenarioIdAsync(Guid scenarioId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            
+            // Get character templates that are linked to the specified scenario
+            return await dbContext.CharacterStorage
+                .Include(c => c.Scenario)
+                .Where(c => c.ScenarioId == scenarioId)
+                .OrderBy(c => c.CharacterName)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error retrieving character templates for scenario {scenarioId}: {ex.Message}");
+            return new List<CharacterStorageDto>();
+        }
+    }
+
+    /// <summary>
+    ///     Unlinks a character template from a scenario
+    /// </summary>
+    /// <param name="characterId">ID of the character template to unlink</param>
+    /// <returns>True if successful, false otherwise</returns>
+    public async Task<bool> UnlinkCharacterTemplateFromScenarioAsync(Guid characterId)
+    {
+        try
+        {
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                throw new UnauthorizedAccessException("User must be authenticated to unlink a character template from a scenario");
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            
+            // Get the character template
+            var character = await dbContext.CharacterStorage
+                .FirstOrDefaultAsync(c => c.Id == characterId);
+
+            if (character == null)
+                throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+
+            // Unlink the character template from the scenario
+            character.ScenarioId = null;
+            character.Scenario = null;
+            character.LastUpdated = DateTime.UtcNow;
+            
+            dbContext.Update(character);
+            await dbContext.SaveChangesAsync();
+            
+            logger.LogInformation($"Character template {characterId} unlinked from scenario by user {userEmail}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"Error unlinking character template from scenario: {ex.Message}");
+            return false;
         }
     }
 }

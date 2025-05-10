@@ -1,9 +1,12 @@
-﻿@page "/scenarios/{Id:guid}"
+@page "/scenarios/{Id:guid}"
 @using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Utilities.Services
+@using CampaignManager.Web.Components.Features.Npс.Components
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
@@ -11,6 +14,7 @@
 @inject CampaignService CampaignService
 @inject MarkdownService MarkdownService
 @inject IdentityService IdentityService
+@inject CharacterService CharacterService
 @rendermode InteractiveServer
 <PageTitle>@(_scenario?.Name ?? "Scenario Details")</PageTitle>
 
@@ -136,12 +140,12 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- NPCs Section -->
+            <!-- Character Templates Section -->
             <div class="bg-white shadow-md rounded-lg overflow-hidden">
                 <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
                     <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold">NPCs</h2>
-                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/npcs/new"))"
+                        <h2 class="text-lg font-semibold">Character Templates</h2>
+                        <button @onclick="@(() => NavigationManager.NavigateTo("/templates/characters"))"
                                 class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
                                  fill="currentColor">
@@ -149,36 +153,21 @@
                                       d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
                                       clip-rule="evenodd"/>
                             </svg>
-                            <span>Add</span>
+                            <span>Browse</span>
                         </button>
                     </div>
                 </div>
                 <div class="p-4">
-                    @if (_scenario.Npcs.Count == 0)
+                    @if (_characterTemplates.Count == 0)
                     {
-                        <p class="text-gray-500 text-center py-4">No NPCs added to this scenario.</p>
+                        <p class="text-gray-500 text-center py-4">No character templates linked to this scenario.</p>
                     }
                     else
                     {
-                        <div class="divide-y divide-gray-200">
-                            @foreach (var npc in _scenario.Npcs)
+                        <div class="space-y-4">
+                            @foreach (var template in _characterTemplates)
                             {
-                                <div class="py-3">
-                                    <div class="flex justify-between items-center">
-                                        <div>
-                                            <h3 class="font-medium">@npc.Name</h3>
-                                        </div>
-                                        <button
-                                            @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/npcs/{npc.Id}/edit"))"
-                                            class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1 rounded">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                                 fill="currentColor">
-                                                <path
-                                                    d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
+                                <CharacterTemplateCard Template="template" OnDelete="RemoveCharacterTemplate" />
                             }
                         </div>
                     }
@@ -353,6 +342,7 @@
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
+    private List<CharacterStorageDto> _characterTemplates = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -372,6 +362,9 @@
                 // Convert markdown to HTML using our MarkdownService
                 _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
             }
+            
+            // Load character templates linked to this scenario
+            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
         }
         catch (Exception ex)
         {
@@ -426,6 +419,22 @@
         finally
         {
             _showUseCampaignModal = false;
+        }
+    }
+
+    private async Task RemoveCharacterTemplate(CharacterStorageDto template)
+    {
+        try
+        {
+            // Unlink the character template from this scenario
+            await CharacterService.UnlinkCharacterTemplateFromScenarioAsync(template.Id);
+            
+            // Reload character templates
+            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing character template {TemplateId} from scenario {ScenarioId}", template.Id, Id);
         }
     }
 

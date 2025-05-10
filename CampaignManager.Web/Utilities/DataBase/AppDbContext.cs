@@ -19,7 +19,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Scenario Management DbSets
     public DbSet<Scenario> Scenarios { get; set; }
-    public DbSet<ScenarioNpc> ScenarioNpcs { get; set; }
     public DbSet<Creature> Creatures { get; set; }
     public DbSet<Item> Items { get; set; }
     public DbSet<ScenarioCreature> ScenarioCreatures { get; set; }
@@ -125,28 +124,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
         });
-
-        // ScenarioNpc Configuration
-        modelBuilder.Entity<ScenarioNpc>(entity =>
-        {
-            entity.ToTable("ScenarioNpcs");
-            entity.Property(n => n.Name)
-                .IsRequired();
-
-            // Relationship with Scenario
-            entity.HasOne(n => n.Scenario)
-                .WithMany(s => s.Npcs)
-                .HasForeignKey(n => n.ScenarioId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Optional relationship with Character
-            entity.HasOne(n => n.Character)
-                .WithOne()
-                .HasForeignKey<ScenarioNpc>(n => n.CharacterId)
-                .IsRequired(true)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         // Creature Configuration
         modelBuilder.Entity<Creature>(entity =>
         {
