@@ -107,15 +107,15 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            scenario.Init();
             await dbContext.Scenarios.AddAsync(scenario);
             await dbContext.SaveChangesAsync();
 
             // Invalidate cache
             cache.Remove(ScenariosCacheKey);
-            if (scenario.IsTemplate) cache.Remove(TemplatesCacheKey);
-
+            if (scenario.IsTemplate) 
+                cache.Remove(TemplatesCacheKey);
             return scenario;
         }
         catch (Exception ex)

@@ -6,15 +6,16 @@
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
+@inject IdentityService IdentityService
 @inject ILogger<ScenarioEditPage> Logger
-@inject MarkdownService MarkdownService 
+
 @rendermode InteractiveServer
-<PageTitle>@(_isNew ? "Create Scenario Template" : "Edit Scenario Template")</PageTitle>
+<PageTitle>@(IsNew ? "Create Scenario Template" : "Edit Scenario Template")</PageTitle>
 
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
         <div>
-            <button @onclick="@(() => NavigationManager.NavigateTo(_isNew ? "/scenarios" : $"/scenarios/{Id}"))"
+            <button @onclick="@(() => NavigationManager.NavigateTo(IsNew ? "/scenarios" : $"/scenarios/{Id}"))"
                     class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded inline-flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd"
@@ -24,7 +25,7 @@
                 <span>Back</span>
             </button>
         </div>
-        <h1 class="text-3xl font-bold">@(_isNew ? "Create Scenario Template" : "Edit Scenario Template")</h1>
+        <h1 class="text-3xl font-bold">@(IsNew ? "Create Scenario Template" : "Edit Scenario Template")</h1>
         <div></div> <!-- Empty div for flex spacing -->
     </div>
 
@@ -86,18 +87,17 @@
                     <div class="mb-6">
                         <label for="journal" class="block text-sm font-medium text-gray-700 mb-1">Journal (Markdown)</label>
                         <Markdown Value="@_model.Journal" ValueChanged="@OnMarkdownValueChanged" />
-                       
                     </div>
 
                     <div class="flex justify-end mt-6">
                         <button type="button"
-                                @onclick="@(() => NavigationManager.NavigateTo(_isNew ? "/scenarios" : $"/scenarios/{Id}"))"
+                                @onclick="@(() => NavigationManager.NavigateTo(IsNew ? "/scenarios" : $"/scenarios/{Id}"))"
                                 class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
                             Cancel
                         </button>
                         <button type="submit"
                                 class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded ml-2">
-                            @(_isNew ? "Create" : "Save")
+                            @(IsNew ? "Create" : "Save")
                         </button>
                     </div>
                 </EditForm>
@@ -109,93 +109,40 @@
 @code {
     [Parameter] public Guid? Id { get; set; }
 
-    private ScenarioEditModel _model = new();
+    private Scenario _model;
 
-    private bool _isNew => Id is null || Id.Value == Guid.Empty;
+    private bool IsNew => Id is null || Id.Value == Guid.Empty;
     private bool _loading = true;
 
-    private async Task OnMarkdownValueChanged(string value)
+    private void OnMarkdownValueChanged(string? value)
     {
         _model.Journal = value;
-        markdownHtml = MarkdownService.ConvertToHtml(value ?? string.Empty);
     }
 
     protected override async Task OnInitializedAsync()
     {
-        if (!_isNew)
-        {
-            await LoadScenario();
-        }
-        else
-        {
-            _model = new ScenarioEditModel
+        _model = !IsNew
+            ? await ScenarioService.GetScenarioByIdAsync(Id.Value)
+            : new Scenario
             {
+                Name = string.Empty,
+                Description = string.Empty,
+                Location = string.Empty,
+                Era = string.Empty,
+                Journal = string.Empty,
                 IsTemplate = true // Default to template for new scenarios
             };
-            _loading = false;
-        }
+        _loading = false;
     }
-
-    private async Task LoadScenario()
-    {
-        try
-        {
-            _loading = true;
-
-            if (Id.HasValue)
-            {
-                var scenario = await ScenarioService.GetScenarioByIdAsync(Id.Value);
-
-                if (scenario is not null)
-                {
-                    _model = new ScenarioEditModel
-
-                    {
-                        Name = scenario.Name,
-
-                        Description = scenario.Description,
-
-                        Location = scenario.Location,
-
-                        Era = scenario.Era,
-
-                        Journal = scenario.Journal ?? "Add story here...",
-
-                        IsTemplate = scenario.IsTemplate
-                    };
-                }
-
-                else
-
-                {
-                    // Scenario not found, redirect to scenarios page
-
-                    NavigationManager.NavigateTo("/scenarios");
-                }
-            }
-        }
-
-        catch (Exception ex)
-
-        {
-            Logger.LogError(ex, "Error loading scenario {ScenarioId}", Id);
-        }
-
-        finally
-
-        {
-            _loading = false;
-        }
-    }
-
+    
     private async Task HandleValidSubmit()
     {
         try
         {
             // Get the current user's email (in a real app, this would come from authentication)
-            var userEmail = "user@example.com";
+            var userEmail = IdentityService.GetCurrentUserEmail();
 
-            if (_isNew)
+            if (IsNew)
             {
                 // Create new scenario
                 Scenario newScenario = new()
@@ -247,25 +194,4 @@
             Logger.LogError(ex, "Error saving scenario");
         }
     }
-
-    private string markdownHtml;
-    
-    // Model for the edit form
-    private class ScenarioEditModel
-    {
-        [Required(ErrorMessage = "Name is required")]
-        [StringLength(100, ErrorMessage = "Name cannot be longer than 100 characters")]
-        public string Name { get; set; } = string.Empty;
-
-        public string? Description { get; set; }
-
-        public string? Location { get; set; }
-
-        public string? Era { get; set; }
-
-        public string? Journal { get; set; }
-
-        public bool IsTemplate { get; set; }
-    }
-
 }
