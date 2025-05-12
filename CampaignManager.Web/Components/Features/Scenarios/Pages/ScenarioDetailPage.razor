@@ -7,6 +7,7 @@
 @using CampaignManager.Web.Components.Features.Npс.Components
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Scenarios.Components
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
@@ -145,7 +146,7 @@
                 <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold">Character Templates</h2>
-                        <button @onclick="@(() => NavigationManager.NavigateTo("/templates/characters"))"
+                        <button @onclick="ShowAddNpcModal"
                                 class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
                                  fill="currentColor">
@@ -153,7 +154,7 @@
                                       d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
                                       clip-rule="evenodd"/>
                             </svg>
-                            <span>Browse</span>
+                            <span>Add</span>
                         </button>
                     </div>
                 </div>
@@ -179,7 +180,7 @@
                 <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold">Creatures</h2>
-                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/creatures/add"))"
+                        <button @onclick="ShowAddCreatureModal"
                                 class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
                                  fill="currentColor">
@@ -232,7 +233,7 @@
                 <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold">Items</h2>
-                        <button @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/items/add"))"
+                        <button @onclick="ShowAddItemModal"
                                 class="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-sm inline-flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
                                  fill="currentColor">
@@ -332,6 +333,21 @@
     </div>
 }
 
+<!-- Add NPC Modal -->
+<AddNpcModal @ref="_addNpcModal" 
+             ScenarioId="Id" 
+             OnNpcAdded="HandleNpcAdded" />
+
+<!-- Add Creature Modal -->
+<AddCreatureModal @ref="_addCreatureModal" 
+                 ScenarioId="Id" 
+                 OnCreatureAdded="HandleCreatureAdded" />
+
+<!-- Add Item Modal -->
+<AddItemModal @ref="_addItemModal" 
+             ScenarioId="Id" 
+             OnItemAdded="HandleItemAdded" />
+
 @code {
 
     [Parameter] public Guid Id { get; set; }
@@ -343,6 +359,11 @@
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
     private List<CharacterStorageDto> _characterTemplates = [];
+    
+    // Modal references
+    private AddNpcModal? _addNpcModal;
+    private AddCreatureModal? _addCreatureModal;
+    private AddItemModal? _addItemModal;
 
     protected override async Task OnInitializedAsync()
     {
@@ -438,4 +459,43 @@
         }
     }
 
+    private async Task ShowAddCreatureModal()
+    {
+        if (_addCreatureModal != null)
+        {
+            await _addCreatureModal.Show();
+        }
+    }
+    
+    private async Task HandleCreatureAdded()
+    {
+        await LoadScenario();
+    }
+    
+    private async Task ShowAddItemModal()
+    {
+        if (_addItemModal != null)
+        {
+            await _addItemModal.Show();
+        }
+    }
+    
+    private async Task HandleItemAdded()
+    {
+        await LoadScenario();
+    }
+    
+    private async Task HandleNpcAdded()
+    {
+        // Reload character templates linked to this scenario
+        _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+    }
+    
+    private async Task ShowAddNpcModal()
+    {
+        if (_addNpcModal != null)
+        {
+            await _addNpcModal.Show();
+        }
+    }
 }

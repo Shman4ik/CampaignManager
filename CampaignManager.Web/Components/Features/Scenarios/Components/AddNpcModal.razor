@@ -1,0 +1,145 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Model
+
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 @(_isVisible ? "" : "hidden")">
+    <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Add NPC to Scenario</h2>
+            <button @onclick="Hide" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <input type="text" 
+                   placeholder="Search NPCs..." 
+                   @bind-value="_searchTerm" 
+                   @bind-value:event="oninput"
+                   class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 max-h-[50vh] overflow-y-auto">
+            @if (_availableNpcs == null || !_availableNpcs.Any())
+            {
+                <div class="text-center p-4 text-gray-500">
+                    No NPCs available.
+                </div>
+            }
+            else
+            {
+                @foreach (var npc in FilteredNpcs)
+                {
+                    <div class="border p-3 rounded-md hover:bg-gray-50 cursor-pointer @(_selectedNpc?.Id == npc.Id ? "border-blue-500 bg-blue-50" : "border-gray-200")"
+                         @onclick="() => SelectNpc(npc)">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-medium">@npc.CharacterName</h3>
+                            <button @onclick="() => SelectNpc(npc)" class="text-blue-500 hover:text-blue-700 text-sm">
+                                Select
+                            </button>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-600">
+                            <div>Status: @npc.Status</div>
+                            <div>
+                                Character:
+                                @if (npc.Character != null)
+                                {
+                                    <span>@npc.Character.PersonalInfo.Name</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="flex justify-end mt-4 space-x-2">
+            <button @onclick="Hide" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Cancel
+            </button>
+            <button @onclick="AddNpcToScenario" 
+                   disabled="@(_selectedNpc == null)"
+                   class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                Add NPC
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid ScenarioId { get; set; }
+    [Parameter] public EventCallback<CharacterStorageDto> OnNpcAdded { get; set; }
+    
+    [Inject] private CharacterService CharacterService { get; set; } = null!;
+    
+    private bool _isVisible;
+    private string _searchTerm = string.Empty;
+    private List<CharacterStorageDto> _availableNpcs = [];
+    private CharacterStorageDto? _selectedNpc;
+    private bool _isLoading = false;
+    
+    private IEnumerable<CharacterStorageDto> FilteredNpcs => 
+        (string.IsNullOrWhiteSpace(_searchTerm) 
+            ? _availableNpcs 
+            : _availableNpcs.Where(n => n.CharacterName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)))
+            .Take(5);
+    
+    public async Task Show()
+    {
+        _selectedNpc = null;
+        _searchTerm = string.Empty;
+        
+        // Load data before showing the modal
+        _isLoading = true;
+        await LoadAvailableNpcs();
+        _isLoading = false;
+        
+        // Now show the modal with data loaded
+        _isVisible = true;
+    }
+    
+    public void Hide()
+    {
+        _isVisible = false;
+    }
+    
+    private void SelectNpc(CharacterStorageDto npc)
+    {
+        _selectedNpc = npc;
+    }
+    
+    private async Task LoadAvailableNpcs()
+    {
+        try
+        {
+            _availableNpcs = await CharacterService.GetAllCharacterTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            // Handle error (could add a message service for displaying errors)
+            Console.Error.WriteLine($"Error loading NPCs: {ex.Message}");
+            _availableNpcs = [];
+        }
+    }
+    
+    private async Task AddNpcToScenario()
+    {
+        if (_selectedNpc == null) return;
+        
+        try
+        {
+            var addedNpc = await CharacterService.SaveCharacterTemplateWithScenarioAsync(_selectedNpc.Id, ScenarioId);
+            await OnNpcAdded.InvokeAsync(addedNpc);
+            Hide();
+        }
+        catch (Exception ex)
+        {
+            // Handle error
+            Console.Error.WriteLine($"Error adding NPC to scenario: {ex.Message}");
+        }
+    }
+}

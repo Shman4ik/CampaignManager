@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -264,6 +264,108 @@ public sealed class ScenarioService(
             logger.LogError(ex, "Error creating scenario from template {TemplateId} for campaign {CampaignId}",
                 templateId, campaignId);
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all available creatures for adding to scenarios
+    /// </summary>
+    /// <returns>A list of all creatures</returns>
+    public async Task<List<CampaignManager.Web.Components.Features.Bestiary.Model.Creature>> GetAllCreaturesAsync()
+    {
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.Creatures
+                .OrderBy(c => c.Name)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving all creatures");
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Adds a creature to a scenario
+    /// </summary>
+    /// <param name="scenarioCreature">The scenario-creature relationship to add</param>
+    /// <returns>True if successful, false otherwise</returns>
+    public async Task<bool> AddCreatureToScenarioAsync(ScenarioCreature scenarioCreature)
+    {
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            
+            // Verify the scenario exists
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
+            if (scenario == null) return false;
+            
+            // Initialize the entity
+            scenarioCreature.Init();
+            
+            // Add the relationship
+            await dbContext.ScenarioCreatures.AddAsync(scenarioCreature);
+            await dbContext.SaveChangesAsync();
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding creature to scenario {ScenarioId}", scenarioCreature.ScenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all available items for adding to scenarios
+    /// </summary>
+    /// <returns>A list of all items</returns>
+    public async Task<List<CampaignManager.Web.Components.Features.Items.Model.Item>> GetAllItemsAsync()
+    {
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.Items
+                .OrderBy(i => i.Name)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving all items");
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Adds an item to a scenario
+    /// </summary>
+    /// <param name="scenarioItem">The scenario-item relationship to add</param>
+    /// <returns>True if successful, false otherwise</returns>
+    public async Task<bool> AddItemToScenarioAsync(ScenarioItem scenarioItem)
+    {
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            
+            // Verify the scenario exists
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);
+            if (scenario == null) return false;
+            
+            // Initialize the entity
+            scenarioItem.Init();
+            
+            // Add the relationship
+            await dbContext.ScenarioItems.AddAsync(scenarioItem);
+            await dbContext.SaveChangesAsync();
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding item to scenario {ScenarioId}", scenarioItem.ScenarioId);
+            return false;
         }
     }
 }

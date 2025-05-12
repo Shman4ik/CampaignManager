@@ -1,0 +1,182 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Items.Model
+
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 @(_isVisible ? "" : "hidden")">
+    <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Add Item to Scenario</h2>
+            <button @onclick="Hide" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="mb-4">
+            <input type="text" 
+                   placeholder="Search items..." 
+                   @bind-value="_searchTerm" 
+                   @bind-value:event="oninput"
+                   class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 max-h-[50vh] overflow-y-auto">
+            @if (_availableItems == null || !_availableItems.Any())
+            {
+                <div class="text-center p-4 text-gray-500">
+                    No items available.
+                </div>
+            }
+            else
+            {
+                @foreach (var item in FilteredItems)
+                {
+                    <div class="border p-3 rounded-md hover:bg-gray-50 cursor-pointer @(_selectedItem?.Id == item.Id ? "border-blue-500 bg-blue-50" : "border-gray-200")"
+                         @onclick="() => SelectItem(item)">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-medium">@item.Name</h3>
+                            <button @onclick="() => SelectItem(item)" class="text-blue-500 hover:text-blue-700 text-sm">
+                                Select
+                            </button>
+                        </div>
+                        <div class="mt-2 text-sm text-gray-600">
+                            @if (!string.IsNullOrEmpty(item.Description))
+                            {
+                                <div class="truncate">@item.Description</div>
+                            }
+                            <div class="flex gap-2 mt-1">
+                                <div>Type: @item.Type</div>
+                                <div>Rarity: @item.Rarity</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="mt-4">
+            <div class="mb-2">
+                <label for="quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input type="number" 
+                       id="quantity" 
+                       @bind="_quantity"
+                       min="1"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div class="mb-2">
+                <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
+                <input type="text" 
+                       id="location" 
+                       @bind="_location"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            
+            <div>
+                <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                <textarea id="notes" 
+                          @bind="_notes"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"></textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end mt-4 space-x-2">
+            <button @onclick="Hide" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Cancel
+            </button>
+            <button @onclick="AddItemToScenario" 
+                   disabled="@(_selectedItem == null)"
+                   class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                Add Item
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid ScenarioId { get; set; }
+    [Parameter] public EventCallback<ScenarioItem> OnItemAdded { get; set; }
+    
+    [Inject] private ScenarioService ScenarioService { get; set; } = null!;
+    
+    private bool _isVisible;
+    private string _searchTerm = string.Empty;
+    private List<Item> _availableItems = [];
+    private Item? _selectedItem;
+    private int _quantity = 1;
+    private string _location = string.Empty;
+    private string _notes = string.Empty;
+    private bool _isLoading = false;
+    
+    private IEnumerable<Item> FilteredItems => 
+        (string.IsNullOrWhiteSpace(_searchTerm) 
+            ? _availableItems 
+            : _availableItems.Where(i => i.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)))
+            .Take(5);
+    
+    public async Task Show()
+    {
+        _selectedItem = null;
+        _searchTerm = string.Empty;
+        _quantity = 1;
+        _location = string.Empty;
+        _notes = string.Empty;
+        
+        // Load data before showing the modal
+        _isLoading = true;
+        await LoadAvailableItems();
+        _isLoading = false;
+        
+        // Now show the modal with data loaded
+        _isVisible = true;
+    }
+    
+    public void Hide()
+    {
+        _isVisible = false;
+    }
+    
+    private void SelectItem(Item item)
+    {
+        _selectedItem = item;
+    }
+    
+    private async Task LoadAvailableItems()
+    {
+        try
+        {
+            _availableItems = await ScenarioService.GetAllItemsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error loading items: {ex.Message}");
+            _availableItems = [];
+        }
+    }
+    
+    private async Task AddItemToScenario()
+    {
+        if (_selectedItem == null) return;
+        
+        try
+        {
+            var scenarioItem = new ScenarioItem
+            {
+                ItemId = _selectedItem.Id,
+                ScenarioId = ScenarioId,
+                Quantity = _quantity,
+                Location = _location,
+                Notes = _notes
+            };
+            
+            await ScenarioService.AddItemToScenarioAsync(scenarioItem);
+            await OnItemAdded.InvokeAsync(scenarioItem);
+            Hide();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error adding item to scenario: {ex.Message}");
+        }
+    }
+}
