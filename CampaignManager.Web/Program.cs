@@ -1,6 +1,3 @@
-﻿using Blazorise;
-using Blazorise.Icons.FontAwesome;
-using Blazorise.Tailwind;
 using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
@@ -80,10 +77,6 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new OpenApiInfo { Title = "CampaignManager API", Version = "v1" }); });
 builder.Services.AddOutputCache();
-builder.Services
-    .AddBlazorise()
-    .AddTailwindProviders()
-    .AddFontAwesomeIcons();
 
 // Register services
 builder.Services.AddScoped<CharacterService>();

@@ -1,12 +1,9 @@
-﻿@page "/spells"
-@using Blazorise
+@page "/spells"
 @using CampaignManager.Web.Components.Features.Spells.Model
 @using CampaignManager.Web.Components.Features.Spells.Services
 @attribute [Authorize]
 @inject SpellService SpellService
 @rendermode InteractiveServer
-
-<PageTitle>Заклинания - Campaign Manager</PageTitle>
 
 <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
     <!-- Улучшенная панель фильтров - более компактная -->
@@ -179,15 +176,16 @@
         </div>
     }
 
-    <!-- Модальное окно добавления/редактирования заклинания -->
-    <Modal @bind-Visible="isEditModalVisible" Size="ModalSize.Large">
-        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
-            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-                <ModalTitle
-                    Class="font-bold text-xl">@(isAdding ? "Добавить заклинание" : "Редактировать заклинание")</ModalTitle>
-                <CloseButton Clicked="@CloseEditModal" Class="text-white hover:bg-blue-700 rounded-full"/>
-            </ModalHeader>
-            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+    <!-- Tailwind Modal for adding/editing spell -->
+    <div class="@(isEditModalVisible ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-4xl">
+            <div class="p-5 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600 text-white flex justify-between items-center">
+                <h3 class="font-bold text-xl">@(isAdding ? "Добавить заклинание" : "Редактировать заклинание")</h3>
+                <button @onclick="CloseEditModal" class="text-white hover:bg-blue-700 rounded-full p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
                     <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
@@ -209,10 +207,14 @@
                         </div>
 
                         <div class="space-y-1">
-                            <label for="spellType" class="block text-sm font-medium text-gray-700">Тип
-                                заклинания</label>
-                            <InputText id="spellType" @bind-Value="editingSpell.SpellType"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"/>
+                            <label for="spellType" class="block text-sm font-medium text-gray-700">Тип заклинания</label>
+                            <InputSelect id="spellType" @bind-Value="editingSpell.SpellType"
+                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
+                                @foreach (var spellType in GetSpellTypes())
+                                {
+                                    <option value="@spellType">@spellType</option>
+                                }
+                            </InputSelect>
                             <ValidationMessage For="@(() => editingSpell.SpellType)" class="text-red-600 text-sm"/>
                         </div>
 
@@ -224,20 +226,16 @@
                         </div>
 
                         <div class="space-y-1">
-                            <label for="castingTime" class="block text-sm font-medium text-gray-700">Время
-                                сотворения</label>
+                            <label for="castingTime" class="block text-sm font-medium text-gray-700">Время сотворения</label>
                             <InputText id="castingTime" @bind-Value="editingSpell.CastingTime"
                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"/>
                             <ValidationMessage For="@(() => editingSpell.CastingTime)" class="text-red-600 text-sm"/>
                         </div>
 
-                        <div class="md:col-span-2 space-y-1 mt-2">
+                        <div class="md:col-span-2 space-y-1">
                             <label for="description" class="block text-sm font-medium text-gray-700">Описание</label>
-                            <div class="mt-1">
-                                <InitialSizeTextArea InitialRows="4" id="description"
-                                                     @bind-Value="editingSpell.Description"
-                                                     class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"/>
-                            </div>
+                            <InputTextArea id="description" @bind-Value="editingSpell.Description" rows="4"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"/>
                             <ValidationMessage For="@(() => editingSpell.Description)" class="text-red-600 text-sm"/>
                         </div>
 
@@ -246,79 +244,76 @@
                             <div class="space-y-2">
                                 @{
                                     // Use an indexed loop with local variables
-                                    for (var i = 0; i < alternativeNames.Count; i++)
+                                    for (int i = 0; i < alternativeNames.Count; i++)
                                     {
-                                        var currentName = alternativeNames[i];
-                                        var currentIndex = i;
-                                        <div class="flex gap-2">
-                                            <input type="text"
-                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
-                                                   value="@currentName"
-                                                   @onchange="@(e => UpdateAlternativeName(currentIndex, e.Value?.ToString()))"/>
+                                        var index = i; // Capture the index
+                                        var value = alternativeNames[i];
+
+                                        <div class="flex space-x-2">
+                                            <input type="text" class="flex-grow px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                                                   placeholder="Альтернативное название"
+                                                   value="@value"
+                                                   @oninput="@(e => UpdateAlternativeName(index, e.Value?.ToString() ?? ""))" />
+
                                             <button type="button"
-                                                    class="px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
-                                                    @onclick="@(e => RemoveAlternativeName(currentIndex))">
-                                                <i class="fas fa-trash"></i>
+                                                    class="bg-red-100 text-red-500 p-2 rounded-lg hover:bg-red-200 transition duration-150 ease-in-out"
+                                                    @onclick="() => RemoveAlternativeName(index)">
+                                                <i class="fas fa-times"></i>
                                             </button>
                                         </div>
                                     }
                                 }
                                 <button type="button"
-                                        class="text-blue-600 hover:text-blue-800 text-sm flex items-center py-1 px-2 hover:bg-blue-50 rounded transition-colors"
+                                        class="mt-2 flex items-center text-blue-600 hover:text-blue-800 text-sm"
                                         @onclick="AddAlternativeName">
                                     <i class="fas fa-plus mr-1"></i>
-                                    <span>Добавить название</span>
+                                    <span>Добавить альтернативное название</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                 </EditForm>
-            </ModalBody>
-            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            </div>
+            <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
                 <button type="button"
                         class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm"
                         @onclick="CloseEditModal">
                     Отмена
                 </button>
-                <button type="submit"
-                        form="spell-edit-form"
+                <button type="submit" form="spell-edit-form"
                         class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out shadow-sm">
-                    @(isAdding ? "Добавить заклинание" : "Сохранить изменения")
+                    Сохранить
                 </button>
-            </ModalFooter>
-        </ModalContent>
-    </Modal>
+            </div>
+        </div>
+    </div>
 
-    <!-- Модальное окно подтверждения удаления -->
-    <Modal @bind-Visible="isDeleteModalVisible" Size="ModalSize.Small">
-        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
-            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 text-white">
-                <ModalTitle Class="font-bold text-xl">Подтверждение удаления</ModalTitle>
-                <CloseButton Clicked="@CloseDeleteModal" Class="text-white hover:bg-red-700 rounded-full"/>
-            </ModalHeader>
-            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
-                        <i class="fas fa-exclamation-circle text-red-500 mr-2 mt-0.5"></i>
-                        <span>@errorMessage</span>
+    <!-- Tailwind Modal for delete confirmation -->
+    <div class="@(isDeleteModalVisible ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md">
+            <div class="p-5 border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 text-white flex justify-between items-center">
+                <h3 class="font-bold text-xl">Подтверждение удаления</h3>
+                <button @onclick="CloseDeleteModal" class="text-white hover:bg-red-700 rounded-full p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+                <div class="flex items-start">
+                    <div class="mr-3 text-red-500">
+                        <i class="fas fa-exclamation-triangle text-2xl"></i>
                     </div>
-                }
-                @if (currentSpell != null)
-                {
-                    <div class="flex items-center mb-4">
-                        <div class="mr-4 bg-red-100 text-red-500 rounded-full p-3">
-                            <i class="fas fa-trash text-xl"></i>
-                        </div>
-                        <div>
-                            <p class="text-gray-700">Вы уверены, что хотите удалить заклинание
-                                "<strong>@currentSpell.Name</strong>"?</p>
-                            <p class="text-sm text-gray-500 mt-1">Это действие нельзя будет отменить.</p>
-                        </div>
+                    <div>
+                        <p class="text-gray-700 font-medium mb-2">Вы уверены, что хотите удалить это заклинание?</p>
+                        @if (currentSpell != null)
+                        {
+                            <p class="text-gray-600 text-sm mb-1"><span class="font-medium">Название:</span> @currentSpell.Name</p>
+                            <p class="text-gray-600 text-sm mb-1"><span class="font-medium">Тип:</span> @currentSpell.SpellType</p>
+                        }
+                        <p class="text-gray-500 text-xs mt-2">Это действие нельзя отменить.</p>
                     </div>
-                }
-            </ModalBody>
-            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+                </div>
+            </div>
+            <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
                 <button type="button"
                         class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm"
                         @onclick="CloseDeleteModal">
@@ -327,37 +322,40 @@
                 <button type="button"
                         class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-150 ease-in-out shadow-sm"
                         @onclick="DeleteSpell">
-                    <i class="fas fa-trash mr-1"></i>
                     Удалить
                 </button>
-            </ModalFooter>
-        </ModalContent>
-    </Modal>
+            </div>
+        </div>
+    </div>
 
-    <!-- Модальное окно с сообщением об ошибке -->
-    <Modal @bind-Visible="isErrorModalVisible" Size="ModalSize.Small">
-        <ModalContent Centered="true" Class="bg-white rounded-lg shadow-xl overflow-hidden">
-            <ModalHeader Class="p-5 border-b border-gray-200 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white">
-                <ModalTitle Class="font-bold text-xl">Ошибка</ModalTitle>
-                <CloseButton Clicked="@CloseErrorModal" Class="text-white hover:bg-yellow-700 rounded-full"/>
-            </ModalHeader>
-            <ModalBody Class="p-6 bg-white max-h-[70vh] overflow-y-auto">
-                <div class="flex items-center">
-                    <div class="mr-4 bg-yellow-100 text-yellow-500 rounded-full p-3">
-                        <i class="fas fa-exclamation-triangle text-xl"></i>
+    <!-- Tailwind Modal for error message -->
+    <div class="@(isErrorModalVisible ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+        <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md">
+            <div class="p-5 border-b border-gray-200 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white flex justify-between items-center">
+                <h3 class="font-bold text-xl">Ошибка</h3>
+                <button @onclick="CloseErrorModal" class="text-white hover:bg-yellow-700 rounded-full p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+                <div class="flex items-start">
+                    <div class="mr-3 text-yellow-500">
+                        <i class="fas fa-exclamation-circle text-2xl"></i>
                     </div>
-                    <p class="text-gray-700">@errorMessage</p>
+                    <div>
+                        <p class="text-gray-700">@errorMessage</p>
+                    </div>
                 </div>
-            </ModalBody>
-            <ModalFooter Class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            </div>
+            <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
                 <button type="button"
-                        class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm"
+                        class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition duration-150 ease-in-out shadow-sm"
                         @onclick="CloseErrorModal">
                     Закрыть
                 </button>
-            </ModalFooter>
-        </ModalContent>
-    </Modal>
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
@@ -577,5 +575,4 @@
             expandedSpellId = spell.Id;
         }
     }
-
 }
