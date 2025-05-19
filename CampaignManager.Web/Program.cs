@@ -26,13 +26,18 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+
+// Use data source mapping instead of global type mapper (fixing obsolete warning)
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.Configuration.GetConnectionString("DefaultConnection"));
+dataSourceBuilder.EnableDynamicJson();
+var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(dataSource));
 
 builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(dataSource));
 
 builder.Services.AddAuthentication(options =>
     {
@@ -50,8 +55,8 @@ builder.Services.AddAuthentication(options =>
     })
     .AddGoogle(options =>
     {
-        options.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
+        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? string.Empty;
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? string.Empty;
         options.ClaimActions.MapJsonKey("urn:google:profile", "link");
         options.ClaimActions.MapJsonKey("urn:google:image", "picture");
         options.SaveTokens = true;

@@ -17,7 +17,7 @@
         <h1 class="text-xl font-semibold text-gray-800">@pageTitle</h1>
         <div class="flex space-x-3">
             <button @onclick="Cancel"
-                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm">
+                    class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out shadow-sm cursor-pointer">
                 Отмена
             </button>
             <button @onclick="Save"
@@ -72,7 +72,7 @@
                         </div>
                         <div>
                             <label for="imageUpload"
-                                   class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm cursor-pointer">
+                                   class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out shadow-sm cursor-pointer">
                                 <i class="fas fa-upload mr-2"></i>
                                 <span>Выбрать файл...</span>
                             </label>
@@ -292,9 +292,17 @@
     private Creature creature = new()
     {
         Name = string.Empty,
-        CreatureCharacteristics = new CreatureCharacteristics(),
-        CombatDescriptions = new Dictionary<string, string>(),
-        SpecialAbilities = new Dictionary<string, string>()
+        CreatureCharacteristics = new CreatureCharacteristics
+        {
+            Strength = new CreatureCharacteristicModel(),
+            Dexterity = new CreatureCharacteristicModel(),
+            Intelligence = new CreatureCharacteristicModel(),
+            Constitution = new CreatureCharacteristicModel(),
+            Appearance = new CreatureCharacteristicModel(),
+            Power = new CreatureCharacteristicModel(),
+            Size = new CreatureCharacteristicModel(),
+            Education = new CreatureCharacteristicModel()
+        }
     };
 
     private List<DictionaryEntry> combatDescriptions = new();
@@ -312,16 +320,21 @@
         public string ValueText { get; set; } = string.Empty;
     }
 
-    protected override async Task OnParametersSetAsync()
+    protected override async Task OnInitializedAsync()
     {
+        pageTitle = Id.HasValue ? "Редактирование существа" : "Создание существа";
         isLoading = true;
-        if (Id.HasValue)
+        
+        // Always ensure our creature characteristics are initialized to prevent null references
+        EnsureCreatureCharacteristicsInitialized();
+        
+        if (Id.HasValue && Id != Guid.Empty)
         {
-            pageTitle = "Редактирование существа";
             var existingCreature = await CreatureService.GetCreatureByIdAsync(Id.Value);
             if (existingCreature != null)
             {
                 creature = existingCreature;
+                EnsureCreatureCharacteristicsInitialized();
                 combatDescriptions = creature.CombatDescriptions?.Select(kv =>
                                          new DictionaryEntry { KeyText = kv.Key, ValueText = kv.Value }).ToList()
                                      ?? new List<DictionaryEntry>();
@@ -344,12 +357,43 @@
         else
         {
             pageTitle = "Создание существа";
-            creature = new Creature { Name = string.Empty };
+            creature = new Creature 
+            { 
+                Name = string.Empty,
+                CreatureCharacteristics = new CreatureCharacteristics
+                {
+                    Strength = new CreatureCharacteristicModel(),
+                    Dexterity = new CreatureCharacteristicModel(),
+                    Intelligence = new CreatureCharacteristicModel(),
+                    Constitution = new CreatureCharacteristicModel(),
+                    Appearance = new CreatureCharacteristicModel(),
+                    Power = new CreatureCharacteristicModel(),
+                    Size = new CreatureCharacteristicModel(),
+                    Education = new CreatureCharacteristicModel()
+                }
+            };
+            EnsureCreatureCharacteristicsInitialized();
             AddCombatDescription();
             AddSpecialAbility();
         }
 
         isLoading = false;
+    }
+
+    private void EnsureCreatureCharacteristicsInitialized()
+    {
+        // Initialize CreatureCharacteristics if null
+        creature.CreatureCharacteristics ??= new CreatureCharacteristics();
+        
+        // Initialize individual characteristic models if they're null
+        creature.CreatureCharacteristics.Strength ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Power ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
+        creature.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
     }
 
     private async Task RefreshDisplayImageUrlAsync()
@@ -439,6 +483,7 @@
     {
         try
         {
+            EnsureCreatureCharacteristicsInitialized();
             creature.CombatDescriptions = combatDescriptions
                 .Where(entry => !string.IsNullOrWhiteSpace(entry.KeyText))
                 .ToDictionary(entry => entry.KeyText, entry => entry.ValueText);

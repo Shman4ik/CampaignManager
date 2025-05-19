@@ -1,4 +1,4 @@
-﻿@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Model
 <div class="w-full">
     <table class="w-full text-sm mb-2 table-fixed">
         <thead>
@@ -12,32 +12,36 @@
         <tbody>
         @foreach (var prop in typeof(Characteristics).GetProperties())
         {
-            var value = (AttributeValue)prop.GetValue(Characteristics);
-            <tr>
-                <td class="py-0.5 pr-1 whitespace-nowrap">
-                    <span class="font-medium text-xs">@GetShortName(prop.Name)</span>
-                </td>
-                <td class="py-0.5 px-0.5">
-                    <input type="number" @bind="value.Regular" @bind:event="oninput"
-                           @onchange="() => OnUpdate.InvokeAsync(value)"
-                           class="w-full p-0.5 text-center text-sm border border-gray-300 rounded"/>
-                </td>
-                <td class="py-0.5 px-0.5">
-                    <input type="number" value="@value.Half" disabled
-                           class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
-                </td>
-                <td class="py-0.5 px-0.5">
-                    <input type="number" value="@value.Fifth" disabled
-                           class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
-                </td>
-            </tr>
+            var value = prop.GetValue(Characteristics) as AttributeValue;
+            if (value != null)
+            {
+                <tr>
+                    <td class="py-0.5 pr-1 whitespace-nowrap">
+                        <span class="font-medium text-xs">@GetShortName(prop.Name)</span>
+                    </td>
+                    <td class="py-0.5 px-0.5">
+                        <input type="number" @bind="value.Regular" @bind:event="oninput"
+                               @onchange="() => OnUpdate.InvokeAsync(value)"
+                               class="w-full p-0.5 text-center text-sm border border-gray-300 rounded"/>
+                    </td>
+                    <td class="py-0.5 px-0.5">
+                        <input type="number" value="@value.Half" disabled
+                               class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
+                    </td>
+                    <td class="py-0.5 px-0.5">
+                        <input type="number" value="@value.Fifth" disabled
+                               class="w-full p-0.5 text-center text-sm bg-gray-100 border border-gray-300 rounded"/>
+                    </td>
+                </tr>
+            }
         }
         </tbody>
     </table>
 </div>
 
 @code {
-    [Parameter] public Characteristics Characteristics { get; set; }
+    [Parameter]
+    public required Characteristics Characteristics { get; set; }
     [Parameter] public EventCallback<AttributeValue> OnUpdate { get; set; }
 
     private string GetFullName(string fullName)

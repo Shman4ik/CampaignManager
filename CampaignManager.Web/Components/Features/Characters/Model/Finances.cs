@@ -1,11 +1,11 @@
-﻿namespace CampaignManager.Web.Components.Features.Characters.Model;
+namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 public class Finances
 {
     /// <summary>
-    ///     Наличные деньги персонажа
+    ///     Наличные средства (в валюте игрового мира).
     /// </summary>
-    public string Cash { get; set; }
+    public string Cash { get; set; } = string.Empty;
 
     /// <summary>
     ///     Активы персонажа
@@ -13,7 +13,7 @@ public class Finances
     public List<string> Assets { get; set; } = [];
 
     /// <summary>
-    ///     Карманные деньги
+    ///     Карманные деньги (в валюте игрового мира).
     /// </summary>
-    public string PocketMoney { get; set; }
+    public string PocketMoney { get; set; } = string.Empty;
 }

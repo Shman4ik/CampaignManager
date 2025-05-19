@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Bestiary.Model;
@@ -19,19 +19,19 @@ public sealed class Creature : BaseDataBaseEntity
     public string? Description { get; set; }
 
     /// <summary>
-    ///     Simplified statistics for the creature (stored as JSON)
+    ///     Характеристики существа
     /// </summary>
-    public CreatureCharacteristics CreatureCharacteristics { get; set; }
+    public required CreatureCharacteristics CreatureCharacteristics { get; set; }
 
     /// <summary>
-    ///     Бой
+    ///     Описание боевых действий
     /// </summary>
-    public Dictionary<string, string> CombatDescriptions { get; set; }
+    public Dictionary<string, string> CombatDescriptions { get; set; } = new();
 
     /// <summary>
     ///     Особые умения
     /// </summary>
-    public Dictionary<string, string> SpecialAbilities { get; set; }
+    public Dictionary<string, string> SpecialAbilities { get; set; } = new();
 
     /// <summary>
     ///     Optional URL to an image of the creature

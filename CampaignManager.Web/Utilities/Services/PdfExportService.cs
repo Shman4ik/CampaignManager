@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -106,10 +106,16 @@ public class PdfExportService
             column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
             column.Item().PaddingTop(5);
 
-            column.Item().Grid(grid =>
+            column.Item().Table(table =>
             {
-                grid.Columns(3);
-                grid.Item(2).Column(col =>
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.ConstantColumn(120);
+                    columns.RelativeColumn(2);
+                    columns.RelativeColumn(1);
+                });
+                
+                table.Cell().Row(1).Column(2).Column(col =>
                 {
                     col.Item().Text($"Имя: {character.PersonalInfo?.Name ?? "—"}");
                     col.Item().Text($"Происхождение: {character.PersonalInfo?.Birthplace ?? "—"}");
@@ -128,12 +134,17 @@ public class PdfExportService
             column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
             column.Item().PaddingTop(5);
 
-            column.Item().Grid(grid =>
+            column.Item().Table(table =>
             {
-                grid.Columns(3);
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.RelativeColumn(1);
+                    columns.RelativeColumn(1);
+                    columns.RelativeColumn(1);
+                });
 
                 // First column - main characteristics
-                grid.Item().Column(col =>
+                table.Cell().Row(1).Column(1).Column(col =>
                 {
                     col.Item().Text("Характеристики:").Bold();
                     if (character.Characteristics != null)
@@ -146,7 +157,7 @@ public class PdfExportService
                 });
 
                 // Second column - more characteristics
-                grid.Item().Column(col =>
+                table.Cell().Row(1).Column(2).Column(col =>
                 {
                     col.Item().Text("Дополнительно:").Bold();
                     if (character.Characteristics != null)
@@ -159,7 +170,7 @@ public class PdfExportService
                 });
 
                 // Third column - state
-                grid.Item().Column(col =>
+                table.Cell().Row(1).Column(3).Column(col =>
                 {
                     col.Item().Text("Состояние:").Bold();
                     if (character.State != null)
@@ -181,22 +192,41 @@ public class PdfExportService
             column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
             column.Item().PaddingTop(5);
 
-            // Create a grid layout for skills
-            column.Item().Grid(grid =>
+            // Create a table layout for skills
+            column.Item().Table(table =>
             {
-                grid.Columns(4);
-                grid.Spacing(5);
+                table.ColumnsDefinition(columns =>
+                {
+                    columns.RelativeColumn(1);
+                    columns.RelativeColumn(1);
+                    columns.RelativeColumn(1);
+                    columns.RelativeColumn(1);
+                });
 
                 // Distribute skill groups evenly across columns
                 var skillGroups = character.Skills?.SkillGroups ?? new List<SkillGroup>();
+                
+                // Create rows based on the number of skill groups
+                int rows = (skillGroups.Count + 3) / 4; // Ceiling division
+                
                 for (var i = 0; i < skillGroups.Count; i++)
                 {
                     var group = skillGroups[i];
-                    grid.Item().Column(col =>
+                    
+                    // Use Element instead of directly accessing Row/Column with numeric indices
+                    table.Cell().Element(cell =>
                     {
-                        col.Spacing(2);
-                        col.Item().Text(group.Name).Bold().FontSize(10);
-                        foreach (var skill in group.Skills) col.Item().Text($"{skill.Name}: {skill.Value.Regular}").FontSize(9);
+                        // Add the content
+                        cell.Element(container =>
+                        {
+                            container.Column(col =>
+                            {
+                                col.Spacing(2);
+                                col.Item().Text(group.Name).Bold().FontSize(10);
+                                foreach (var skill in group.Skills) 
+                                    col.Item().Text($"{skill.Name}: {skill.Value.Regular}").FontSize(9);
+                            });
+                        });
                     });
                 }
             });

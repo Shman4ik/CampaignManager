@@ -1,4 +1,4 @@
-﻿@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
 @inject CampaignService CampaignService
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -58,7 +58,7 @@
                                            value="@UserName"
                                            @oninput="@(e => UserName = e.Value?.ToString())"/>
                                 </div>
-                                <button @onclick="async () => await JoinCampaignAsync(campaign.Id, UserName)"
+                                <button @onclick="async () => await JoinCampaignAsync(campaign.Id, UserName ?? string.Empty)"
                                         class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-colors"
                                         disabled="@(string.IsNullOrWhiteSpace(UserName))">
                                     Присоединиться
@@ -79,23 +79,23 @@
 </div>
 
 @code {
-    private List<Campaign> AvailableCampaigns { get; set; }
-    private List<Campaign> UserCampaigns { get; set; }
+    private List<Campaign> AvailableCampaigns { get; set; } = new();
+    private List<Campaign> UserCampaigns { get; set; } = new();
     private bool IsUserAuthorized;
-    private string UserEmail;
+    private string UserEmail = string.Empty;
     private string? UserName;
 
     // Notification properties
-    private string NotificationMessage { get; set; }
-    private string NotificationCssClass { get; set; }
+    private string NotificationMessage { get; set; } = string.Empty;
+    private string NotificationCssClass { get; set; } = "hidden";
 
     protected override async Task OnInitializedAsync()
     {
         // Get authentication state
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         IsUserAuthorized = authState.User.Identity?.IsAuthenticated ?? false;
-        UserEmail = authState.User?.FindFirst(ClaimTypes.Email)?.Value;
-        UserName = authState.User?.FindFirstValue(ClaimTypes.Name);
+        UserEmail = authState.User?.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
+        UserName = authState.User?.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
 
         // Load available and user campaigns in parallel
         if (IsUserAuthorized)
@@ -168,7 +168,7 @@
 
     private void ClearNotification()
     {
-        NotificationMessage = null;
+        NotificationMessage = string.Empty;
         StateHasChanged();
     }
 

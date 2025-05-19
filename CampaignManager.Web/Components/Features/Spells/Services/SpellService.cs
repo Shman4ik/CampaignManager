@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Spells.Model;
+using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,7 +11,6 @@ namespace CampaignManager.Web.Components.Features.Spells.Services;
 public class SpellService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
-    IWebHostEnvironment environment,
     ILogger<SpellService> logger)
 {
     private const string SpellsKey = "AllSpells";
@@ -23,13 +22,21 @@ public class SpellService(
     /// <returns>List of all spells.</returns>
     public async Task<List<Spell>> GetAllSpellsAsync()
     {
-        if (cache.TryGetValue(SpellsKey, out List<Spell> cachedSpells)) return cachedSpells;
+        if (cache.TryGetValue(SpellsKey, out List<Spell>? cachedSpells) && cachedSpells != null) 
+            return cachedSpells;
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var spells = await dbContext.Spells.OrderBy(s => s.Name).ToListAsync();
-
-        cache.Set(SpellsKey, spells, TimeSpan.FromMinutes(10));
-        return spells;
+        
+        var result = spells ?? new List<Spell>();
+        
+        // Cache the result with a sliding expiration of 30 minutes
+        cache.Set(SpellsKey, result, new MemoryCacheEntryOptions
+        {
+            SlidingExpiration = TimeSpan.FromMinutes(30)
+        });
+        
+        return result;
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
@@ -97,14 +97,16 @@ public sealed class CreatureService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var result = await dbContext.Creatures.FindAsync(id);
 
-            result.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Strength ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Power ??= new CreatureCharacteristicModel();
+            if (result != null && result.CreatureCharacteristics != null)
+            {
+                result.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Strength ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
+                result.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
+            }
 
             return result;
         }

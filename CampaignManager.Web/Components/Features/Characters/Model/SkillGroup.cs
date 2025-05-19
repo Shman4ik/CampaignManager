@@ -1,8 +1,8 @@
-﻿namespace CampaignManager.Web.Components.Features.Characters.Model;
+namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 public class SkillGroup
 {
-    public string Name { get; set; }
+    public required string Name { get; set; }
     public List<Skill> Skills { get; set; } = new();
 
     public string NewSkillName { get; set; } = "";

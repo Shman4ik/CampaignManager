@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Model;
+using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Spells.Model;
 
@@ -10,7 +10,7 @@ public class Spell : BaseDataBaseEntity
     /// <summary>
     ///     Название заклинания.
     /// </summary>
-    public string Name { get; set; }
+    public required string Name { get; set; }
 
     /// <summary>
     ///     Стоимость сотворения заклинания (пункты магии, рассудка, МОЩ и т.д.).
@@ -35,5 +35,5 @@ public class Spell : BaseDataBaseEntity
     /// <summary>
     ///     Тип или категория заклинания (например, Призыв, Зачарование, Связь).
     /// </summary>
-    public string SpellType { get; set; }
+    public required string SpellType { get; set; }
 }

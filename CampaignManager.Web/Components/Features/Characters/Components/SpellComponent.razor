@@ -1,4 +1,4 @@
-﻿@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Spells.Model
 @using CampaignManager.Web.Components.Features.Spells.Services
 @inject SpellService SpellService
@@ -221,9 +221,9 @@
 </div>
 
 @code {
-    [Parameter] public Character Character { get; set; } = null!;
+    [Parameter] public required Character Character { get; set; }
 
-    private Spell newSpell = new();
+    private Spell newSpell = new() { Name = string.Empty, SpellType = string.Empty };
     private Guid? expandedSpellId;
     private string? selectedSpellType = "";
 
@@ -248,7 +248,7 @@
         }
     }
 
-    private async Task OnSpellNameInput(ChangeEventArgs e)
+    private void OnSpellNameInput(ChangeEventArgs e)
     {
         var value = e.Value?.ToString() ?? "";
         newSpell.Name = value;
@@ -256,7 +256,7 @@
         if (string.IsNullOrEmpty(value))
         {
             suggestedSpells.Clear();
-            newSpell = new Spell();
+            newSpell = new Spell() { Name = string.Empty, SpellType = string.Empty };
             return;
         }
 
@@ -297,17 +297,17 @@
         // Create a new instance to avoid reference issues
         var spellToAdd = new Spell
         {
-            Id = Guid.CreateVersion7(),
+            Id = Guid.NewGuid(),
             Name = newSpell.Name,
+            SpellType = newSpell.SpellType,
             Cost = newSpell.Cost,
             CastingTime = newSpell.CastingTime,
             Description = newSpell.Description,
-            SpellType = newSpell.SpellType,
             AlternativeNames = new List<string>(newSpell.AlternativeNames)
         };
 
         Character.Spells.Add(spellToAdd);
-        newSpell = new Spell();
+        newSpell = new Spell() { Name = string.Empty, SpellType = string.Empty };
     }
 
     private void RemoveSpell(Spell spell)

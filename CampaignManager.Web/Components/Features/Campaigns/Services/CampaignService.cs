@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
@@ -107,17 +107,17 @@ public class CampaignService(
 
             if (user == null)
             {
-                var externalPrincipal = httpContextAccessor.HttpContext.User;
-                var email = externalPrincipal.FindFirst(ClaimTypes.Email)?.Value;
-                var name = externalPrincipal.FindFirst(ClaimTypes.Name)?.Value;
-                user = new ApplicationUser { Email = email, UserName = name, Role = PlayerRole.Player };
+                var externalPrincipal = httpContextAccessor.HttpContext?.User;
+                var email = externalPrincipal?.FindFirst(ClaimTypes.Email)?.Value;
+                var name = externalPrincipal?.FindFirst(ClaimTypes.Name)?.Value;
+                user = new ApplicationUser { Email = email ?? string.Empty, UserName = name ?? string.Empty, Role = PlayerRole.Player };
                 user = await identityService.CreateUserAsync(user);
             }
 
-            CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user.Email!, PlayerName = userName };
+            CampaignPlayer campaignPlayers = new() { CampaignId = campaign.Id, PlayerEmail = user?.Email ?? string.Empty, PlayerName = userName };
             campaignPlayers.Init();
 
-            if (!campaign.Players.Any(p => p.PlayerEmail == user.Email))
+            if (user?.Email != null && !campaign.Players.Any(p => p.PlayerEmail == user.Email))
             {
                 dbContext.CampaignPlayers.Add(campaignPlayers);
                 await dbContext.SaveChangesAsync();
@@ -125,7 +125,7 @@ public class CampaignService(
                 return true;
             }
 
-            logger.LogWarning("User {UserId} has already applied to campaign {CampaignId}.", user.Email, campaignId);
+            logger.LogWarning("User {UserId} has already applied to campaign {CampaignId}.", user?.Email ?? "unknown", campaignId);
             return false;
         }
         catch (Exception ex)

@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
@@ -37,7 +37,7 @@ public class IdentityService(
         if (email == null) return null;
 
         await using var dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
-        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email.ToLower() == email.ToLower());
+        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email != null && p.Email.ToLower() == email.ToLower());
     }
 
     public async Task<ApplicationUser?> CreateUserAsync(ApplicationUser user)

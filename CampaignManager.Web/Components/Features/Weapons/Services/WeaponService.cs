@@ -1,4 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -32,7 +32,8 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     {
         var cacheKey = type.HasValue ? $"{WeaponsKey}_{type}" : WeaponsKey;
 
-        if (cache.TryGetValue(cacheKey, out List<Weapon> cachedWeapons)) return cachedWeapons;
+        if (cache.TryGetValue(cacheKey, out List<Weapon>? cachedWeapons) && cachedWeapons != null) 
+            return cachedWeapons;
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var query = dbContext.Weapons.AsQueryable();
@@ -40,8 +41,15 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
         if (type.HasValue) query = query.Where(w => w.Type == type.Value);
 
         var weapons = await query.OrderBy(w => w.Name).ToListAsync();
-        cache.Set(cacheKey, weapons, TimeSpan.FromMinutes(10));
-        return weapons;
+        var result = weapons ?? new List<Weapon>();
+        
+        // Cache the result with a sliding expiration of 30 minutes
+        cache.Set(cacheKey, result, new MemoryCacheEntryOptions
+        {
+            SlidingExpiration = TimeSpan.FromMinutes(30)
+        });
+        
+        return result;
     }
 
     /// <summary>
