@@ -27,6 +27,27 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Configure SignalR with increased message size limits
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 2 * 1024 * 1024; // 2MB instead of default 32KB
+    options.StreamBufferCapacity = 15; // Increase buffer capacity
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+});
+
+// Configure Blazor Server with optimized settings
+builder.Services.AddServerSideBlazor(options =>
+{
+    options.DetailedErrors = builder.Environment.IsDevelopment();
+    options.DisconnectedCircuitMaxRetained = 100;
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
+    options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(2);
+    options.MaxBufferedUnacknowledgedRenderBatches = 20; // Increase buffer for large updates
+});
+
 // Use data source mapping instead of global type mapper (fixing obsolete warning)
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.Configuration.GetConnectionString("DefaultConnection"));
@@ -104,6 +125,7 @@ builder.Services.AddScoped<MinioService>();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -131,7 +153,6 @@ app.MapDefaultEndpoints();
 
 app.MapAccountEndpoints();
 app.MapMinioEndpoints();
-
 
 // Enable middleware to serve generated Swagger as a JSON endpoint.
 app.UseSwagger();
