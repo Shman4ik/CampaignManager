@@ -1,8 +1,8 @@
-using System.Text.Json;
-using CampaignManager.Web.Components.Features.Bestiary.Model;
+﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 
 namespace CampaignManager.Web.Components.Features.Bestiary.Services;
 
@@ -212,13 +212,7 @@ public sealed class CreatureService(
             var creature = await dbContext.Creatures.FindAsync(id);
             if (creature is null) return false;
 
-            // Check if the creature is used in any scenarios
-            var isUsed = await dbContext.ScenarioCreatures.AnyAsync(sc => sc.CreatureId == id);
-            if (isUsed)
-            {
-                logger.LogWarning("Cannot delete creature {CreatureId}: it is used in one or more scenarios", id);
-                return false;
-            }
+
 
             dbContext.Creatures.Remove(creature);
             await dbContext.SaveChangesAsync();

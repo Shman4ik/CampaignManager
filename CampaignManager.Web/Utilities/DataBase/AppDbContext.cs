@@ -21,8 +21,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Scenario> Scenarios { get; set; }
     public DbSet<Creature> Creatures { get; set; }
     public DbSet<Item> Items { get; set; }
-    public DbSet<ScenarioCreature> ScenarioCreatures { get; set; }
-    public DbSet<ScenarioItem> ScenarioItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -117,6 +115,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Index for quick lookup by creator
             entity.HasIndex(s => s.CreatorEmail);
 
+            entity.Property(c => c.ScenarioCreatures).HasColumnType("jsonb").HasDefaultValue(new List<ScenarioCreature>());
+            entity.Property(c => c.ScenarioItems).HasColumnType("jsonb").HasDefaultValue(new List<ScenarioItem>());
+
             // Relationship with Campaign (optional)
             entity.HasOne(s => s.Campaign)
                 .WithMany()
@@ -155,48 +156,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable("Items");
             entity.Property(i => i.Name).IsRequired();
             entity.HasIndex(i => i.Name).IsUnique();
-        });
-
-        // ScenarioCreature Configuration (Junction Table)
-        modelBuilder.Entity<ScenarioCreature>(entity =>
-        {
-            entity.ToTable("ScenarioCreatures");
-
-            // Composite key for the junction table
-            entity.HasKey(sc => new { sc.ScenarioId, sc.CreatureId, sc.Id });
-
-            // Relationship with Scenario
-            entity.HasOne(sc => sc.Scenario)
-                .WithMany(s => s.ScenarioCreatures)
-                .HasForeignKey(sc => sc.ScenarioId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Relationship with Creature
-            entity.HasOne(sc => sc.Creature)
-                .WithMany(c => c.ScenarioCreatures)
-                .HasForeignKey(sc => sc.CreatureId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // ScenarioItem Configuration (Junction Table)
-        modelBuilder.Entity<ScenarioItem>(entity =>
-        {
-            entity.ToTable("ScenarioItems");
-
-            // Composite key for the junction table
-            entity.HasKey(si => new { si.ScenarioId, si.ItemId, si.Id });
-
-            // Relationship with Scenario
-            entity.HasOne(si => si.Scenario)
-                .WithMany(s => s.ScenarioItems)
-                .HasForeignKey(si => si.ScenarioId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // Relationship with Item
-            entity.HasOne(si => si.Item)
-                .WithMany(i => i.ScenarioItems)
-                .HasForeignKey(si => si.ItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(i => i.Era).HasConversion<string>();
         });
     }
 }

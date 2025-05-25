@@ -1,6 +1,7 @@
 ﻿@page "/bestiary/items"
 @using CampaignManager.Web.Components.Features.Items.Model
 @using CampaignManager.Web.Components.Features.Items.Services
+@using CampaignManager.Web.Components.Shared.Model
 @attribute [Authorize]
 @inject ItemService ItemService
 @inject NavigationManager NavigationManager
@@ -24,7 +25,7 @@
 
     <div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
         <div class="p-4 bg-gray-50 border-b border-gray-200">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                     <input type="text" @bind="@_searchTerm" @bind:event="oninput" @onkeyup="SearchKeyUp"
                            placeholder="Search items..."
@@ -42,26 +43,26 @@
                     </select>
                 </div>
 
-                <div>
-                    <select @bind="_selectedRarity"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">All Rarities</option>
-                        @foreach (var rarity in _itemRarities)
-                        {
-                            <option value="@rarity">@rarity</option>
-                        }
-                    </select>
-                </div>
+                <!-- Rarity filter removed as Rarity property no longer exists -->
 
+                <!-- Categories filter removed as Categories property no longer exists -->
+                
                 <div>
-                    <select @bind="_selectedCategory"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">All Categories</option>
-                        @foreach (var category in _itemCategories)
-                        {
-                            <option value="@category">@category</option>
-                        }
-                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Era</label>
+                    <div class="flex space-x-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" id="era1920s" @onchange="@(e => ToggleEra(Eras.Classic))" 
+                                   checked="@((_selectedEra & Eras.Classic) != 0)"
+                                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                            <label for="era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="eraModern" @onchange="@(e => ToggleEra(Eras.Modern))" 
+                                   checked="@((_selectedEra & Eras.Modern) != 0)"
+                                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                            <label for="eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -109,25 +110,15 @@
                                 </span>
                             }
 
-                            @if (!string.IsNullOrEmpty(item.Rarity))
-                            {
-                                <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
-                                    @item.Rarity
-                                </span>
-                            }
+                            <!-- Era badge -->
+                            <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                                @GetEraDisplay(item.Era)
+                            </span>
+
+                            <!-- Rarity display removed as Rarity property no longer exists -->
                         </div>
 
-                        @if (item.Categories != null && item.Categories.Any())
-                        {
-                            <div class="flex flex-wrap gap-1 mb-3">
-                                @foreach (var category in item.Categories)
-                                {
-                                    <span class="px-2 py-0.5 bg-gray-100 text-gray-800 text-xs rounded">
-                                        @category
-                                    </span>
-                                }
-                            </div>
-                        }
+                        <!-- Categories display removed as Categories property no longer exists -->
 
                         <p class="text-gray-600 mt-3 line-clamp-3">
                             @(string.IsNullOrEmpty(item.Description)
@@ -218,6 +209,7 @@
     private string _selectedType = "";
     private string _selectedRarity = "";
     private string _selectedCategory = "";
+    private Eras _selectedEra = Eras.Classic | Eras.Modern; // Default to show items from all eras
     private bool _showDeleteModal;
     private Item? _itemToDelete;
     private Timer? _searchTimer;
@@ -280,19 +272,15 @@
                 .ToList();
         }
 
-        // Apply rarity filter
-        if (!string.IsNullOrWhiteSpace(_selectedRarity))
-        {
-            _filteredItems = _filteredItems
-                .Where(i => i.Rarity == _selectedRarity)
-                .ToList();
-        }
+        // Rarity filter removed as Rarity property no longer exists
 
-        // Apply category filter
-        if (!string.IsNullOrWhiteSpace(_selectedCategory))
+        // Categories filter removed as Categories property no longer exists
+        
+        // Apply era filter if not all eras are selected
+        if (_selectedEra != (Eras.Classic | Eras.Modern))
         {
             _filteredItems = _filteredItems
-                .Where(i => i.Categories != null && i.Categories.Contains(_selectedCategory))
+                .Where(i => (i.Era & _selectedEra) != 0)
                 .ToList();
         }
     }
@@ -315,9 +303,34 @@
     {
         _searchTerm = "";
         _selectedType = "";
-        _selectedRarity = "";
-        _selectedCategory = "";
+        // _selectedRarity = "";
+        // _selectedCategory = "";
+        _selectedEra = Eras.Classic | Eras.Modern;
         ApplyFilters();
+    }
+    
+    private void ToggleEra(Eras era)
+    {
+        _selectedEra ^= era; // Toggle the specified era bit
+        
+        // Ensure at least one era is selected
+        if (_selectedEra == 0)
+        {
+            _selectedEra = era; // If nothing selected, select the era that was just toggled
+        }
+        
+        ApplyFilters();
+    }
+    
+    private string GetEraDisplay(Eras era)
+    {
+        if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
+            return "1920s & Modern";
+        if ((era & Eras.Classic) != 0)
+            return "1920s";
+        if ((era & Eras.Modern) != 0)
+            return "Modern";
+        return "Unknown";
     }
 
     private void ConfirmDelete(Item item)

@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Items.Model;
+using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -62,26 +63,17 @@ public sealed class ItemService(
         }
     }
 
+    // Categories property has been removed from Item model
+    // This method is kept as a stub for backward compatibility
     /// <summary>
-    ///     Gets items by category
+    ///     Gets items by category (deprecated)
     /// </summary>
     /// <param name="category">The category to filter by</param>
-    /// <returns>A list of items in the specified category</returns>
-    public async Task<List<Item>> GetItemsByCategoryAsync(string category)
+    /// <returns>An empty list as Categories are no longer supported</returns>
+    public Task<List<Item>> GetItemsByCategoryAsync(string category)
     {
-        try
-        {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Items
-                .Where(i => i.Categories != null && i.Categories.Contains(category))
-                .OrderBy(i => i.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving items by category {Category}", category);
-            return [];
-        }
+        logger.LogWarning("GetItemsByCategoryAsync called but Categories property has been removed from Item model");
+        return Task.FromResult<List<Item>>([]);
     }
 
     /// <summary>
@@ -107,25 +99,38 @@ public sealed class ItemService(
     }
 
     /// <summary>
-    ///     Gets items by rarity
+    ///     Gets items by era
     /// </summary>
-    /// <param name="rarity">The rarity to filter by</param>
-    /// <returns>A list of items of the specified rarity</returns>
-    public async Task<List<Item>> GetItemsByRarityAsync(string rarity)
+    /// <param name="era">The era to filter by</param>
+    /// <returns>A list of items of the specified era</returns>
+    public async Task<List<Item>> GetItemsByEraAsync(Eras era)
     {
         try
         {
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Items
-                .Where(i => i.Rarity == rarity)
+                .Where(i => (i.Era & era) != 0)
                 .OrderBy(i => i.Name)
                 .ToListAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error retrieving items by rarity {Rarity}", rarity);
+            logger.LogError(ex, "Error retrieving items by era {Era}", era);
             return [];
         }
+    }
+
+    // Rarity property has been removed from Item model
+    // This method is kept as a stub for backward compatibility
+    /// <summary>
+    ///     Gets items by rarity (deprecated)
+    /// </summary>
+    /// <param name="rarity">The rarity to filter by</param>
+    /// <returns>An empty list as Rarity is no longer supported</returns>
+    public Task<List<Item>> GetItemsByRarityAsync(string rarity)
+    {
+        logger.LogWarning("GetItemsByRarityAsync called but Rarity property has been removed from Item model");
+        return Task.FromResult<List<Item>>([]);
     }
 
     /// <summary>
@@ -245,13 +250,6 @@ public sealed class ItemService(
             var item = await dbContext.Items.FindAsync(id);
             if (item is null) return false;
 
-            // Check if the item is used in any scenarios
-            var isUsed = await dbContext.ScenarioItems.AnyAsync(si => si.ItemId == id);
-            if (isUsed)
-            {
-                logger.LogWarning("Cannot delete item {ItemId}: it is used in one or more scenarios", id);
-                return false;
-            }
 
             dbContext.Items.Remove(item);
             await dbContext.SaveChangesAsync();
@@ -291,62 +289,27 @@ public sealed class ItemService(
         }
     }
 
+    // Rarity property has been removed from Item model
+    // This method is kept as a stub for backward compatibility
     /// <summary>
-    ///     Gets all distinct item rarities in the system
+    ///     Gets all distinct item rarities in the system (deprecated)
     /// </summary>
-    /// <returns>A list of distinct item rarities</returns>
-    public async Task<List<string>> GetAllItemRaritiesAsync()
+    /// <returns>An empty list as Rarity is no longer supported</returns>
+    public Task<List<string>> GetAllItemRaritiesAsync()
     {
-        try
-        {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.Items
-                .Where(i => i.Rarity != null)
-                .Select(i => i.Rarity!)
-                .Distinct()
-                .OrderBy(r => r)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving item rarities");
-            return [];
-        }
+        logger.LogWarning("GetAllItemRaritiesAsync called but Rarity property has been removed from Item model");
+        return Task.FromResult<List<string>>([]);
     }
 
+    // Categories property has been removed from Item model
+    // This method is kept as a stub for backward compatibility
     /// <summary>
-    ///     Gets all distinct item categories in the system
+    ///     Gets all distinct item categories in the system (deprecated)
     /// </summary>
-    /// <returns>A list of distinct item categories</returns>
-    public async Task<List<string>> GetAllItemCategoriesAsync()
+    /// <returns>An empty list as Categories are no longer supported</returns>
+    public Task<List<string>> GetAllItemCategoriesAsync()
     {
-        try
-        {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
-            // Get all categories (comma-separated in the Categories field)
-            var allCategoriesRaw = await dbContext.Items
-                .Where(i => i.Categories != null)
-                .Select(i => i.Categories)
-                .ToListAsync();
-
-            // Split and flatten the categories
-            HashSet<string> uniqueCategories = new(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var categoriesString in allCategoriesRaw)
-            {
-                if (string.IsNullOrWhiteSpace(categoriesString)) continue;
-
-                var categories = categoriesString.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var category in categories) uniqueCategories.Add(category.Trim());
-            }
-
-            return uniqueCategories.OrderBy(c => c).ToList();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving item categories");
-            return [];
-        }
+        logger.LogWarning("GetAllItemCategoriesAsync called but Categories property has been removed from Item model");
+        return Task.FromResult<List<string>>([]);
     }
 }

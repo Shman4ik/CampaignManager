@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Scenarios.Model;
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Bestiary.Model;
@@ -6,7 +6,7 @@ namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 /// <summary>
 ///     Model for monsters and supernatural entities
 /// </summary>
-public sealed class Creature : BaseDataBaseEntity
+public class Creature : BaseDataBaseEntity
 {
     public required string Name { get; set; }
 
@@ -37,10 +37,4 @@ public sealed class Creature : BaseDataBaseEntity
     ///     Optional URL to an image of the creature
     /// </summary>
     public string? ImageUrl { get; set; }
-
-
-    /// <summary>
-    ///     Collection of scenario-creature relationships
-    /// </summary>
-    public ICollection<ScenarioCreature> ScenarioCreatures { get; set; } = [];
 }

@@ -86,9 +86,7 @@ public sealed class ScenarioService(
             return await dbContext.Scenarios
                 .Include(s => s.Npcs)
                 .Include(s => s.ScenarioCreatures)
-                .ThenInclude(sc => sc.Creature)
                 .Include(s => s.ScenarioItems)
-                .ThenInclude(si => si.Item)
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
         catch (Exception ex)
@@ -225,34 +223,40 @@ public sealed class ScenarioService(
             await dbContext.Scenarios.AddAsync(newScenario);
             await dbContext.SaveChangesAsync();
             
-            // Clone creature relationships
-            foreach (var sc in template.ScenarioCreatures)
+            // Copy creatures
+            if (template.ScenarioCreatures != null)
             {
-                ScenarioCreature newSc = new()
-                {
-                    ScenarioId = newScenario.Id,
-                    CreatureId = sc.CreatureId,
-                    Location = sc.Location,
-                    Notes = sc.Notes,
-                    Quantity = sc.Quantity
-                };
-
-                await dbContext.ScenarioCreatures.AddAsync(newSc);
+                newScenario.ScenarioCreatures = template.ScenarioCreatures
+                    .Select(sc => new ScenarioCreature
+                    {
+                        Id = Guid.NewGuid(),
+                        ScenarioId = newScenario.Id,
+                        Name = sc.Name,
+                        Type = sc.Type,
+                        CreatureCharacteristics = sc.CreatureCharacteristics,
+                        CombatDescriptions = sc.CombatDescriptions,
+                        SpecialAbilities = sc.SpecialAbilities,
+                        Notes = sc.Notes
+                    })
+                    .ToList();
             }
 
-            // Clone item relationships
-            foreach (var si in template.ScenarioItems)
+            // Copy items
+            if (template.ScenarioItems != null)
             {
-                ScenarioItem newSi = new()
-                {
-                    ScenarioId = newScenario.Id,
-                    ItemId = si.ItemId,
-                    Location = si.Location,
-                    Notes = si.Notes,
-                    Quantity = si.Quantity
-                };
-
-                await dbContext.ScenarioItems.AddAsync(newSi);
+                newScenario.ScenarioItems = template.ScenarioItems
+                    .Select(si => new ScenarioItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ScenarioId = newScenario.Id,
+                        Name = si.Name,
+                        Era = si.Era,
+                        Type = si.Type,
+                        Description = si.Description,
+                        ImageUrl = si.ImageUrl,
+                        Notes = si.Notes
+                    })
+                    .ToList();
             }
 
             await dbContext.SaveChangesAsync();
@@ -305,8 +309,14 @@ public sealed class ScenarioService(
             // Initialize the entity
             scenarioCreature.Init();
             
-            // Add the relationship
-            await dbContext.ScenarioCreatures.AddAsync(scenarioCreature);
+            // If the scenario doesn't have a ScenarioCreatures collection, create one
+            if (scenario.ScenarioCreatures == null)
+            {
+                scenario.ScenarioCreatures = new List<ScenarioCreature>();
+            }
+            
+            // Add the creature to the scenario's collection
+            scenario.ScenarioCreatures.Add(scenarioCreature);
             await dbContext.SaveChangesAsync();
             
             return true;
@@ -356,8 +366,14 @@ public sealed class ScenarioService(
             // Initialize the entity
             scenarioItem.Init();
             
-            // Add the relationship
-            await dbContext.ScenarioItems.AddAsync(scenarioItem);
+            // If the scenario doesn't have a ScenarioItems collection, create one
+            if (scenario.ScenarioItems == null)
+            {
+                scenario.ScenarioItems = new List<ScenarioItem>();
+            }
+            
+            // Add the item to the scenario's collection
+            scenario.ScenarioItems.Add(scenarioItem);
             await dbContext.SaveChangesAsync();
             
             return true;

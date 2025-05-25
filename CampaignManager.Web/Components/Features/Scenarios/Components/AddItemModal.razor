@@ -1,6 +1,7 @@
-@using CampaignManager.Web.Components.Features.Scenarios.Model
+﻿@using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Features.Items.Model
+@using CampaignManager.Web.Components.Shared.Model
 
 <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 @(_isVisible ? "" : "hidden")">
     <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
@@ -47,7 +48,8 @@
                             }
                             <div class="flex gap-2 mt-1">
                                 <div>Type: @item.Type</div>
-                                <div>Rarity: @item.Rarity</div>
+                                <div>Era: @GetEraDisplay(item.Era)</div>
+                                <!-- Rarity display removed as Rarity property no longer exists -->
                             </div>
                         </div>
                     </div>
@@ -85,7 +87,7 @@
             <button @onclick="Hide" class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 Cancel
             </button>
-            <button @onclick="AddItemToScenario" 
+            <button @onclick="AddItemToScenarioAsync" 
                    disabled="@(_selectedItem == null)"
                    class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
                 Add Item
@@ -152,17 +154,24 @@
         }
     }
     
-    private async Task AddItemToScenario()
+    private async Task AddItemToScenarioAsync()
     {
         if (_selectedItem == null) return;
         
         try
         {
+            // Create a new ScenarioItem inheriting all properties from the selected Item
             var scenarioItem = new ScenarioItem
             {
-                ItemId = _selectedItem.Id,
+                // Base Item properties
+                Name = _selectedItem.Name,
+                Era = _selectedItem.Era,
+                Type = _selectedItem.Type,
+                Description = _selectedItem.Description,
+                ImageUrl = _selectedItem.ImageUrl,
+                
+                // ScenarioItem specific properties
                 ScenarioId = ScenarioId,
-                Quantity = _quantity,
                 Location = _location,
                 Notes = _notes
             };
@@ -175,5 +184,16 @@
         {
             Console.Error.WriteLine($"Error adding item to scenario: {ex.Message}");
         }
+    }
+    
+    private string GetEraDisplay(Eras era)
+    {
+        if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
+            return "1920s & Modern";
+        if ((era & Eras.Classic) != 0)
+            return "1920s";
+        if ((era & Eras.Modern) != 0)
+            return "Modern";
+        return "Unknown";
     }
 }
