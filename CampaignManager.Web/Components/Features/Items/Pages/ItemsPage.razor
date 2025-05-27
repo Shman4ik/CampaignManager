@@ -3,162 +3,251 @@
 @using CampaignManager.Web.Components.Features.Items.Services
 @using CampaignManager.Web.Components.Shared.Model
 @attribute [Authorize]
+
 @inject ItemService ItemService
 @inject NavigationManager NavigationManager
 @inject ILogger<ItemsPage> Logger
 @rendermode InteractiveServer
-<PageTitle>Items</PageTitle>
 
-<div class="container mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-6">
-        <h1 class="text-3xl font-bold">Items</h1>
-        <button @onclick="@(() => NavigationManager.NavigateTo("/bestiary/items/new"))"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded inline-flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd"
-                      d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                      clip-rule="evenodd"/>
-            </svg>
-            <span>Add Item</span>
-        </button>
-    </div>
+<PageTitle>Предметы - Campaign Manager</PageTitle>
 
-    <div class="bg-white shadow-md rounded-lg overflow-hidden mb-8">
-        <div class="p-4 bg-gray-50 border-b border-gray-200">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div>
-                    <input type="text" @bind="@_searchTerm" @bind:event="oninput" @onkeyup="SearchKeyUp"
-                           placeholder="Search items..."
-                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"/>
-                </div>
+<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <!-- Улучшенная панель фильтров - более компактная -->
+    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-3 mb-4 border border-gray-200">
+        <div class="flex justify-between items-center mb-2">
+            <div class="flex items-center">
+                <h2 class="text-base font-semibold text-gray-700 mr-2">Фильтры</h2>
+                <button @onclick="ToggleSearchPanel" class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas @(isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                </button>
+            </div>
+            <div class="flex space-x-2">                @if (isSearchPanelVisible)
+                {
+                    <button @onclick="ResetFilters"
+                            class="text-blue-600 hover:text-blue-800 py-1 px-2 rounded-md border border-blue-300 hover:border-blue-500 text-xs flex items-center">
+                        <i class="fas fa-undo-alt mr-1"></i>
+                        <span>Сбросить</span>
+                    </button>
+                }
+                <!-- Кнопка добавления предмета (компактнее) -->
+                <button @onclick="ShowAddModal"
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm flex items-center">
+                    <i class="fas fa-plus mr-1"></i>
+                    <span>Добавить</span>
+                </button>
+            </div>
+        </div>
 
-                <div>
-                    <select @bind="_selectedType"
-                            class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">All Types</option>
-                        @foreach (var type in _itemTypes)
+        @if (isSearchPanelVisible)
+        {
+            <!-- Содержимое панели поиска -->
+            <div class="mb-3">
+                <!-- Более компактный макет фильтров -->
+                <div class="flex flex-col sm:flex-row gap-2">                    <input type="text" @bind="searchQuery" @bind:event="oninput" @onkeyup="@(async () => ApplyFilters())"
+                           placeholder="Поиск предметов..."
+                           class="flex-1 px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"/>
+
+                    <select @bind="selectedType" @bind:event="onchange"
+                            class="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500">
+                        <option value="">Все типы</option>
+                        @if (itemTypes != null)
                         {
-                            <option value="@type">@type</option>
+                            @foreach (var type in itemTypes)
+                            {
+                                <option value="@type">@type</option>
+                            }
                         }
                     </select>
                 </div>
+            </div>
 
-                <!-- Rarity filter removed as Rarity property no longer exists -->
-
-                <!-- Categories filter removed as Categories property no longer exists -->
-                
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Era</label>
-                    <div class="flex space-x-4">
-                        <div class="flex items-center">
-                            <input type="checkbox" id="era1920s" @onchange="@(e => ToggleEra(Eras.Classic))" 
-                                   checked="@((_selectedEra & Eras.Classic) != 0)"
-                                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-                            <label for="era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
-                        </div>
-                        <div class="flex items-center">
-                            <input type="checkbox" id="eraModern" @onchange="@(e => ToggleEra(Eras.Modern))" 
-                                   checked="@((_selectedEra & Eras.Modern) != 0)"
-                                   class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-                            <label for="eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
-                        </div>
+            <div class="flex flex-wrap justify-between items-center gap-2 mb-1">
+                <!-- Компактные эпоха фильтры -->
+                <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+                    <div class="flex items-center">                        <input type="checkbox" id="era1920s" @bind="is1920Filter" @bind:event="onchange"
+                               class="mr-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                        <label for="era1920s" class="text-sm text-gray-700">1920s</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="eraModern" @bind="isModernFilter" @bind:event="onchange"
+                               class="mr-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                        <label for="eraModern" class="text-sm text-gray-700">Modern</label>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+        }
 
-    @if (_loading)
+    </div>    @if (paginatedItems.Count() == 0)
     {
-        <div class="flex justify-center items-center h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-    }
-    else if (_filteredItems.Count == 0)
-    {
-        <div class="bg-white shadow-md rounded-lg p-6 text-center">
-            @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedType) ||
-                 !string.IsNullOrEmpty(_selectedRarity) || !string.IsNullOrEmpty(_selectedCategory))
-            {
-                <p class="text-lg text-gray-600 mb-4">No items match your search criteria.</p>
-                <button @onclick="ClearFilters" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
-                    Clear Filters
-                </button>
-            }
-            else
-            {
-                <p class="text-lg text-gray-600 mb-4">No items found in the database.</p>
-                <p class="text-gray-500">Add your first item to get started.</p>
-            }
+        <div class="bg-white rounded-lg shadow-md p-4 text-center border border-gray-200">
+            <div class="flex flex-col items-center justify-center py-6">
+                <div class="rounded-full bg-gray-100 p-3 mb-4">
+                    <i class="fas fa-search text-gray-400 text-2xl"></i>
+                </div>
+                <p class="text-gray-600 text-base">
+                    Предметы не найдены. Попробуйте изменить параметры фильтра.
+                </p>
+            </div>
         </div>
     }
     else
     {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach (var item in _filteredItems)
-            {
-                <div
-                    class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
-                    <div class="p-6">
-                        <h2 class="text-xl font-semibold mb-2">@item.Name</h2>
-
-                        <div class="flex flex-wrap gap-2 mb-2">
-                            @if (!string.IsNullOrEmpty(item.Type))
+        <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+            <!-- Таблица для средних и больших экранов с компактными ячейками -->
+            <div class="block overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
+                                @onclick="() => ToggleSort(nameof(Item.Name))">
+                                <div class="flex items-center justify-between">
+                                    <span>Название</span>
+                                    <i class="fas @GetSortIcon(nameof(Item.Name)) text-gray-400 ml-2"></i>
+                                </div>
+                            </th>
+                            <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
+                                @onclick="() => ToggleSort(nameof(Item.Type))">
+                                <div class="flex items-center justify-between">
+                                    <span>Тип</span>
+                                    <i class="fas @GetSortIcon(nameof(Item.Type)) text-gray-400 ml-2"></i>
+                                </div>
+                            </th>
+                            <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
+                                @onclick="() => ToggleSort(nameof(Item.Era))">
+                                <div class="flex items-center justify-between">
+                                    <span>Эпоха</span>
+                                    <i class="fas @GetSortIcon(nameof(Item.Era)) text-gray-400 ml-2"></i>
+                                </div>
+                            </th>
+                            <th class="px-4 py-3 text-left font-medium text-gray-700">Описание</th>
+                            <th class="px-4 py-3 text-center font-medium text-gray-700">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        @foreach (var item in paginatedItems)
+                        {
+                            <tr class="hover:bg-gray-50 transition-colors cursor-pointer" @onclick="() => ToggleItemDetails(item)">
+                                <td class="px-4 py-3 font-medium text-gray-900">@item.Name</td>
+                                <td class="px-4 py-3 text-gray-700">
+                                    @if (!string.IsNullOrEmpty(item.Type))
+                                    {
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
+                                            @item.Type
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-400 text-xs">Не указан</span>
+                                    }
+                                </td>
+                                <td class="px-4 py-3 text-gray-700">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary-100 text-secondary-800">
+                                        @GetEraDisplay(item.Era)
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-gray-600">
+                                    @if (!string.IsNullOrEmpty(item.Description))
+                                    {
+                                        <span class="line-clamp-2">@item.Description</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-400 text-xs">Нет описания</span>
+                                    }
+                                </td>
+                                <td class="px-4 py-3 text-center">
+                                    <div class="flex gap-1 justify-center">                                        <button @onclick="() => ShowEditModal(item)"
+                                                @onclick:stopPropagation="true"
+                                                class="text-primary-600 hover:text-primary-800 px-2 py-1 rounded text-xs transition-colors">
+                                            <i class="fas fa-edit mr-1"></i>Изменить
+                                        </button>
+                                        <button @onclick="() => ShowDeleteModal(item)"
+                                                @onclick:stopPropagation="true"
+                                                class="text-error-600 hover:text-error-800 px-2 py-1 rounded text-xs transition-colors">
+                                            <i class="fas fa-trash-alt mr-1"></i>Удалить
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            @if (expandedItemId == item.Id)
                             {
-                                <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                                    @item.Type
-                                </span>
+                                <tr class="bg-gray-50">
+                                    <td colspan="5" class="px-4 py-4">
+                                        <div class="bg-white rounded-lg p-4 border border-gray-200">
+                                            <h4 class="font-semibold text-gray-900 mb-2">Подробная информация</h4>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <h5 class="font-medium text-gray-700 mb-1">Название:</h5>
+                                                    <p class="text-gray-600">@item.Name</p>
+                                                </div>
+                                                <div>
+                                                    <h5 class="font-medium text-gray-700 mb-1">Тип:</h5>
+                                                    <p class="text-gray-600">@(item.Type ?? "Не указан")</p>
+                                                </div>
+                                                <div>
+                                                    <h5 class="font-medium text-gray-700 mb-1">Эпоха:</h5>
+                                                    <p class="text-gray-600">@GetEraDisplay(item.Era)</p>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(item.ImageUrl))
+                                                {
+                                                    <div>
+                                                        <h5 class="font-medium text-gray-700 mb-1">Изображение:</h5>
+                                                        <img src="@item.ImageUrl" alt="@item.Name" class="max-w-xs rounded border">
+                                                    </div>
+                                                }
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(item.Description))
+                                            {
+                                                <div class="mt-4">
+                                                    <h5 class="font-medium text-gray-700 mb-1">Описание:</h5>
+                                                    <p class="text-gray-600 whitespace-pre-wrap">@item.Description</p>
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
                             }
+                        }
+                    </tbody>
+                </table>
+            </div>
 
-                            <!-- Era badge -->
-                            <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                                @GetEraDisplay(item.Era)
-                            </span>
-
-                            <!-- Rarity display removed as Rarity property no longer exists -->
-                        </div>
-
-                        <!-- Categories display removed as Categories property no longer exists -->
-
-                        <p class="text-gray-600 mt-3 line-clamp-3">
-                            @(string.IsNullOrEmpty(item.Description)
-                                ? "No description provided."
-                                : item.Description)
-                        </p>
+            <!-- Pagination -->
+            @if (totalPages > 1)
+            {
+                <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200">
+                    <div class="flex items-center text-sm text-gray-700">
+                        <span>Показано @Math.Min((currentPage - 1) * itemsPerPage + 1, filteredItems.Count()) - @Math.Min(currentPage * itemsPerPage, filteredItems.Count()) из @filteredItems.Count() предметов</span>
                     </div>
-                    <div class="bg-gray-50 px-6 py-3 flex justify-between">
-                        <button @onclick="@(() => NavigationManager.NavigateTo($"/bestiary/items/{item.Id}"))"
-                                class="text-gray-700 hover:text-gray-900 hover:bg-gray-100 py-1 px-3 rounded text-sm inline-flex items-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
-                                 fill="currentColor">
-                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                                <path fill-rule="evenodd"
-                                      d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
-                                      clip-rule="evenodd"/>
-                            </svg>
-                            <span>View</span>
+                    <div class="flex items-center space-x-2">
+                        <button @onclick="() => GoToPage(1)" 
+                                disabled="@(currentPage == 1)"
+                                class="px-3 py-1 text-sm rounded border @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
+                            <i class="fas fa-angle-double-left"></i>
                         </button>
-                        <div>
-                            <button @onclick="@(() => NavigationManager.NavigateTo($"/bestiary/items/{item.Id}/edit"))"
-                                    class="text-blue-600 hover:text-blue-800 hover:bg-blue-50 py-1 px-3 rounded text-sm inline-flex items-center mr-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
-                                     fill="currentColor">
-                                    <path
-                                        d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                                </svg>
-                                <span>Edit</span>
+                        <button @onclick="() => GoToPage(currentPage - 1)" 
+                                disabled="@(currentPage == 1)"
+                                class="px-3 py-1 text-sm rounded border @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
+                            <i class="fas fa-angle-left"></i>
+                        </button>                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                        {
+                            var pageNumber = i;
+                            <button @onclick="() => GoToPage(pageNumber)"
+                                    class="px-3 py-1 text-sm rounded border @(currentPage == pageNumber ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300")">
+                                @pageNumber
                             </button>
-                            <button @onclick="@(() => ConfirmDelete(item))"
-                                    class="text-red-600 hover:text-red-800 hover:bg-red-50 py-1 px-3 rounded text-sm inline-flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" viewBox="0 0 20 20"
-                                     fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                          d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                          clip-rule="evenodd"/>
-                                </svg>
-                                <span>Delete</span>
-                            </button>
-                        </div>
+                        }
+                        
+                        <button @onclick="() => GoToPage(currentPage + 1)" 
+                                disabled="@(currentPage == totalPages)"
+                                class="px-3 py-1 text-sm rounded border @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
+                            <i class="fas fa-angle-right"></i>
+                        </button>
+                        <button @onclick="() => GoToPage(totalPages)" 
+                                disabled="@(currentPage == totalPages)"
+                                class="px-3 py-1 text-sm rounded border @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
+                            <i class="fas fa-angle-double-right"></i>
+                        </button>
                     </div>
                 </div>
             }
@@ -166,162 +255,485 @@
     }
 </div>
 
-<!-- Delete Confirmation Modal -->
-@if (_showDeleteModal)
-{
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold">Confirm Deletion</h3>
-                <button @onclick="() => _showDeleteModal = false" class="text-gray-500 hover:text-gray-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="mb-6">
-                <p>Are you sure you want to delete the item "<strong>@(_itemToDelete?.Name)</strong>"?</p>
-                <p class="text-red-600 mt-2">This action cannot be undone.</p>
-            </div>
-            <div class="flex justify-end space-x-3">
-                <button @onclick="() => _showDeleteModal = false"
-                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded">
-                    Cancel
-                </button>
-                <button @onclick="DeleteItem"
-                        class="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded">
-                    Delete
-                </button>
-            </div>
+<!-- Modal for adding/editing items -->
+<div class="@(showModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+    <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-4xl">        <div class="p-5 border-b border-gray-200 bg-gradient-to-r from-primary-500 to-primary-600 text-white flex justify-between items-center">
+            <h3 class="font-bold text-xl">@(isEditMode ? "Редактировать предмет" : "Добавить предмет")</h3>
+            <button @onclick="HideModal" class="text-white hover:bg-primary-700 rounded-full p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
+                    <i class="fas fa-exclamation-triangle text-red-500 mr-2 mt-0.5"></i>
+                    <span>@errorMessage</span>
+                </div>
+            }
+            <EditForm Model="editItem" OnValidSubmit="HandleValidSubmit" Id="item-edit-form">
+                <DataAnnotationsValidator/>
+                <ValidationSummary class="mb-4 text-red-600"/>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="item-name" class="block text-sm font-medium text-gray-700 mb-1">Название *</label>                        <InputText @bind-Value="editItem.Name" id="item-name"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"/>
+                        <ValidationMessage For="@(() => editItem.Name)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+
+                    <div>
+                        <label for="item-type" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                        <InputText @bind-Value="editItem.Type" id="item-type"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"/>
+                        <ValidationMessage For="@(() => editItem.Type)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Эпоха *</label>
+                        <div class="flex flex-wrap gap-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="edit-era1920s" @bind="editItem1920" 
+                                       class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                                <label for="edit-era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" id="edit-eraModern" @bind="editItemModern" 
+                                       class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                                <label for="edit-eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="item-description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>                        <InputTextArea @bind-Value="editItem.Description" id="item-description" rows="4"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"/>
+                        <ValidationMessage For="@(() => editItem.Description)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="item-imageurl" class="block text-sm font-medium text-gray-700 mb-1">URL изображения</label>
+                        <InputText @bind-Value="editItem.ImageUrl" id="item-imageurl"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"/>
+                        <ValidationMessage For="@(() => editItem.ImageUrl)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+                </div>
+            </EditForm>
+        </div>        <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button type="button" @onclick="HideModal"
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors">
+                Отмена
+            </button>            <button type="submit" form="item-edit-form"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors">
+                @(isEditMode ? "Сохранить" : "Добавить")
+            </button>
         </div>
     </div>
-}
+</div>
+
+<!-- Modal for delete confirmation -->
+<div class="@(showDeleteModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+    <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md">        <div class="p-5 border-b border-gray-200 bg-gradient-to-r from-error-500 to-error-600 text-white flex justify-between items-center">
+            <h3 class="font-bold text-xl">Подтверждение удаления</h3>
+            <button @onclick="HideDeleteModal" class="text-white hover:bg-error-700 rounded-full p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3 mt-1"></i>
+                <div>
+                    <p class="text-gray-800 mb-2">Вы уверены, что хотите удалить предмет "<strong>@(deleteItem?.Name)</strong>"?</p>
+                    <p class="text-red-600 text-sm">Это действие нельзя отменить.</p>
+                </div>
+            </div>
+        </div>        <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button type="button" @onclick="HideDeleteModal"
+                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors">
+                Отмена
+            </button>            <button type="button" @onclick="ConfirmDelete"
+                    class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded transition-colors">
+                Удалить
+            </button>
+        </div>
+    </div>
+</div>
 
 @code {
-    private List<Item> _items = [];
-    private List<Item> _filteredItems = [];
-    private List<string> _itemTypes = [];
-    private List<string> _itemRarities = [];
-    private List<string> _itemCategories = [];
-    private bool _loading = true;
-    private string _searchTerm = "";
-    private string _selectedType = "";
-    private string _selectedRarity = "";
-    private string _selectedCategory = "";
-    private Eras _selectedEra = Eras.Classic | Eras.Modern; // Default to show items from all eras
-    private bool _showDeleteModal;
-    private Item? _itemToDelete;
-    private Timer? _searchTimer;
-
-    protected override async Task OnInitializedAsync()
+    // Editable item class for form binding
+    public class EditableItem
     {
-        await LoadData();
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Type { get; set; }
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
     }
 
-    private async Task LoadData()
+    private bool isSearchPanelVisible = true;
+
+    // List to hold all items fetched from the service
+    private List<Item>? items; // Nullable to indicate loading state
+    private List<string>? itemTypes; // Available item types
+
+    // Filtered list based on search query and other filters
+    private IQueryable<Item> filteredItems => FilterItems();    // Pagination properties
+    private int currentPage = 1;
+    private int itemsPerPage = 20;
+    private int totalPages => (int)Math.Ceiling((double)filteredItems.Count() / itemsPerPage);
+    private IEnumerable<Item> paginatedItems => filteredItems.Skip((currentPage - 1) * itemsPerPage).Take(itemsPerPage);
+
+    // Sorting properties
+    private string? sortField;
+    private bool sortAscending = true;
+
+    // Search query bound to the input field
+    private string searchQuery = string.Empty;
+
+    // Advanced filtering variables
+    private string? selectedType;
+    private bool is1920Filter = true;
+    private bool isModernFilter = false;
+    private readonly Dictionary<string, string> columnFilters = new();
+
+    // Modal visibility flags
+    private bool showModal;
+    private bool showDeleteModal;    // State for Add/Edit modal
+    private bool isEditMode;
+    private EditableItem editItem = new(); // Model for the edit form
+    private bool editItem1920;
+    private bool editItemModern;
+
+    // Item object targeted for deletion
+    private Item? deleteItem;
+
+    // Error message state
+    private string? errorMessage;
+
+    // Expanded item details
+    private Guid? expandedItemId;
+
+    // Lifecycle method: Load data when the component is initialized
+    protected override async Task OnInitializedAsync()
     {
+        await LoadItemsAsync();
+    }
+
+    // Method to load items data from the service
+    private async Task LoadItemsAsync()
+    {
+        errorMessage = null; // Clear previous errors
         try
         {
-            _loading = true;
-
-            // Load items and filter options
             var itemsTask = ItemService.GetAllItemsAsync();
             var typesTask = ItemService.GetAllItemTypesAsync();
-            var raritiesTask = ItemService.GetAllItemRaritiesAsync();
-            var categoriesTask = ItemService.GetAllItemCategoriesAsync();
 
-            await Task.WhenAll(itemsTask, typesTask, raritiesTask, categoriesTask);
+            await Task.WhenAll(itemsTask, typesTask);
 
-            _items = itemsTask.Result;
-            _itemTypes = typesTask.Result;
-            _itemRarities = raritiesTask.Result;
-            _itemCategories = categoriesTask.Result;
-
-            ApplyFilters();
+            items = itemsTask.Result;
+            itemTypes = typesTask.Result;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading items data");
-        }
-        finally
-        {
-            _loading = false;
+            // Log the error (e.g., to console or a logging service)
+            Console.WriteLine($"Error loading items: {ex.Message}");
+            errorMessage = "Не удалось загрузить список предметов. Пожалуйста, попробуйте позже.";
+            items = new List<Item>(); // Ensure items is not null
+            itemTypes = new List<string>();
         }
     }
 
+    // Pagination methods
+    private void GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+        }
+    }
+
+    // Sorting methods
+    private void ToggleSort(string field)
+    {
+        if (sortField == field)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortField = field;
+            sortAscending = true;
+        }
+        currentPage = 1; // Reset to first page when sorting
+    }
+
+    private string GetSortIcon(string field)
+    {
+        if (sortField != field)
+            return "fa-sort";
+        
+        return sortAscending ? "fa-sort-up" : "fa-sort-down";
+    }
+
+    // Toggle item details
+    private void ToggleItemDetails(Item item)
+    {
+        if (expandedItemId == item.Id)
+        {
+            expandedItemId = null;
+        }
+        else
+        {
+            expandedItemId = item.Id;
+        }
+    }
+
+    // Reset all filters to their default state
+    private void ResetFilters()
+    {
+        searchQuery = string.Empty;
+        selectedType = null;
+        is1920Filter = true;
+        isModernFilter = true;
+        columnFilters.Clear();
+        currentPage = 1;
+
+        // Apply filters to update the UI
+        ApplyFilters();
+    }
+
+    // Handle column header filter change
+    private void OnColumnHeaderFilterChanged(ChangeEventArgs e, string columnName)
+    {
+        var value = e.Value?.ToString() ?? "";
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (columnFilters.ContainsKey(columnName))
+            {
+                columnFilters.Remove(columnName);
+            }
+        }
+        else
+        {
+            columnFilters[columnName] = value;
+        }
+
+        currentPage = 1; // Reset to first page when filtering
+        ApplyFilters();
+    }
+
+    // Apply all filters (this just calls StateHasChanged since the filteredItems property is computed)
     private void ApplyFilters()
     {
-        _filteredItems = _items;
-
-        // Apply search term filter
-        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        currentPage = 1; // Reset to first page when filtering
+        // This will trigger a re-render which will use our updated filter values
+        StateHasChanged();
+    }    // Show the modal for adding a new item
+    private void ShowAddModal()
+    {
+        isEditMode = false;
+        editItem = new EditableItem(); // Reset the edit model
+        editItem1920 = true;
+        editItemModern = false;
+        errorMessage = null; // Clear errors
+        showModal = true;
+    }    // Show the modal for editing an existing item
+    private void ShowEditModal(Item item)
+    {
+        isEditMode = true;
+        // Copy the item data to the editable model
+        editItem = new EditableItem
         {
-            var searchLower = _searchTerm.ToLower();
-            _filteredItems = _filteredItems
-                .Where(i => (i.Name?.ToLower().Contains(searchLower) ?? false) ||
-                            (i.Description?.ToLower().Contains(searchLower) ?? false))
-                .ToList();
+            Id = item.Id,
+            Name = item.Name,
+            Type = item.Type,
+            Description = item.Description,
+            ImageUrl = item.ImageUrl
+        };
+        editItem1920 = (item.Era & Eras.Classic) != 0;
+        editItemModern = (item.Era & Eras.Modern) != 0;
+        errorMessage = null; // Clear errors
+        showModal = true;
+    }
+
+    // Hide the Add/Edit modal
+    private void HideModal()
+    {
+        showModal = false;
+    }    // Handle the valid submission of the Add/Edit form
+    private async Task HandleValidSubmit()
+    {
+        errorMessage = null; // Clear previous errors
+        try
+        {
+            // Set the era based on checkboxes
+            var era = Eras.Classic; // Default value, but we'll override it
+            if (editItem1920 && editItemModern)
+                era = Eras.Classic | Eras.Modern;
+            else if (editItem1920)
+                era = Eras.Classic;
+            else if (editItemModern)
+                era = Eras.Modern;
+
+            var item = new Item
+            {
+                Id = editItem.Id,
+                Name = editItem.Name,
+                Type = editItem.Type,
+                Era = era,
+                Description = editItem.Description,
+                ImageUrl = editItem.ImageUrl
+            };
+
+            if (isEditMode)
+            {
+                var success = await ItemService.UpdateItemAsync(item);
+                if (!success)
+                {
+                    errorMessage = "Не удалось обновить предмет. Возможно, предмет с таким названием уже существует.";
+                    return;
+                }
+            }
+            else
+            {
+                var created = await ItemService.CreateItemAsync(item);
+                if (created == null)
+                {
+                    errorMessage = "Не удалось создать предмет. Возможно, предмет с таким названием уже существует.";
+                    return;
+                }
+            }
+
+            showModal = false; // Close modal on success
+            await LoadItemsAsync(); // Refresh the list
+            ApplyFilters(); // Reapply filters
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving item: {ex.Message}");
+            errorMessage = $"Не удалось сохранить предмет: {ex.Message}";
+            // Keep the modal open to show the error
+        }
+    }
+
+    // Show the delete confirmation modal
+    private void ShowDeleteModal(Item item)
+    {
+        deleteItem = item;
+        errorMessage = null; // Clear errors
+        showDeleteModal = true;
+    }
+
+    // Hide the delete confirmation modal
+    private void HideDeleteModal()
+    {
+        showDeleteModal = false;
+        deleteItem = null;
+    }
+
+    // Confirm and execute the item deletion
+    private async Task ConfirmDelete()
+    {
+        if (deleteItem == null) return; // Should not happen, but good practice
+
+        errorMessage = null; // Clear previous errors
+        try
+        {
+            await ItemService.DeleteItemAsync(deleteItem.Id); // Use Guid Id
+            showDeleteModal = false;
+            await LoadItemsAsync(); // Refresh the list
+            deleteItem = null; // Clear the selected item
+            ApplyFilters(); // Reapply filters
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting item: {ex.Message}");
+            errorMessage = $"Не удалось удалить предмет: {ex.Message}";
+            // Keep the modal open to show the error
+        }
+    }
+
+    // Filter items based on all active filters
+    private IQueryable<Item> FilterItems()
+    {
+        if (items == null)
+        {
+            return Enumerable.Empty<Item>().AsQueryable(); // Return empty IQueryable if source is null
+        }
+
+        var query = items.AsQueryable(); // Use AsQueryable for sorting
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            query = query.Where(i =>
+                (i.Name != null && i.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (i.Description != null && i.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                (i.Type != null && i.Type.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+            );
         }
 
         // Apply type filter
-        if (!string.IsNullOrWhiteSpace(_selectedType))
+        if (!string.IsNullOrWhiteSpace(selectedType))
         {
-            _filteredItems = _filteredItems
-                .Where(i => i.Type == _selectedType)
-                .ToList();
+            query = query.Where(i => i.Type == selectedType);
         }
 
-        // Rarity filter removed as Rarity property no longer exists
-
-        // Categories filter removed as Categories property no longer exists
-        
-        // Apply era filter if not all eras are selected
-        if (_selectedEra != (Eras.Classic | Eras.Modern))
+        // Apply era filters
+        if (is1920Filter && !isModernFilter)
         {
-            _filteredItems = _filteredItems
-                .Where(i => (i.Era & _selectedEra) != 0)
-                .ToList();
+            query = query.Where(i => (i.Era & Eras.Classic) != 0);
         }
-    }
-
-    private void SearchKeyUp(KeyboardEventArgs e)
-    {
-        // Debounce search input
-        _searchTimer?.Dispose();
-        _searchTimer = new Timer(_ =>
+        else if (!is1920Filter && isModernFilter)
         {
-            InvokeAsync(() =>
+            query = query.Where(i => (i.Era & Eras.Modern) != 0);
+        }
+        else if (is1920Filter && isModernFilter)
+        {
+            query = query.Where(i => (i.Era & Eras.Classic) != 0 || (i.Era & Eras.Modern) != 0);
+        }
+
+        // Apply column header filters
+        foreach (var filter in columnFilters)
+        {
+            if (filter.Key == "Name" && !string.IsNullOrWhiteSpace(filter.Value))
             {
-                ApplyFilters();
-                StateHasChanged();
-            });
-        }, null, 300, Timeout.Infinite);
+                query = query.Where(i => i.Name != null && i.Name.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
+            }
+            else if (filter.Key == "Type" && !string.IsNullOrWhiteSpace(filter.Value))
+            {
+                query = query.Where(i => i.Type != null && i.Type.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        // Apply sorting
+        if (!string.IsNullOrEmpty(sortField))
+        {
+            switch (sortField)
+            {
+                case nameof(Item.Name):
+                    query = sortAscending ? query.OrderBy(i => i.Name) : query.OrderByDescending(i => i.Name);
+                    break;
+                case nameof(Item.Type):
+                    query = sortAscending ? query.OrderBy(i => i.Type) : query.OrderByDescending(i => i.Type);
+                    break;
+                case nameof(Item.Era):
+                    query = sortAscending ? query.OrderBy(i => i.Era) : query.OrderByDescending(i => i.Era);
+                    break;
+                default:
+                    query = query.OrderBy(i => i.Name);
+                    break;
+            }
+        }
+        else
+        {
+            query = query.OrderBy(i => i.Name);
+        }
+
+        return query;
     }
 
-    private void ClearFilters()
-    {
-        _searchTerm = "";
-        _selectedType = "";
-        // _selectedRarity = "";
-        // _selectedCategory = "";
-        _selectedEra = Eras.Classic | Eras.Modern;
-        ApplyFilters();
-    }
-    
-    private void ToggleEra(Eras era)
-    {
-        _selectedEra ^= era; // Toggle the specified era bit
-        
-        // Ensure at least one era is selected
-        if (_selectedEra == 0)
-        {
-            _selectedEra = era; // If nothing selected, select the era that was just toggled
-        }
-        
-        ApplyFilters();
-    }
-    
     private string GetEraDisplay(Eras era)
     {
         if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
@@ -333,37 +745,8 @@
         return "Unknown";
     }
 
-    private void ConfirmDelete(Item item)
+    private void ToggleSearchPanel()
     {
-        _itemToDelete = item;
-        _showDeleteModal = true;
+        isSearchPanelVisible = !isSearchPanelVisible;
     }
-
-    private async Task DeleteItem()
-    {
-        if (_itemToDelete is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var success = await ItemService.DeleteItemAsync(_itemToDelete.Id);
-            if (success)
-            {
-                _items.Remove(_itemToDelete);
-                ApplyFilters();
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error deleting item {ItemId}", _itemToDelete.Id);
-        }
-        finally
-        {
-            _showDeleteModal = false;
-            _itemToDelete = null;
-        }
-    }
-
 }

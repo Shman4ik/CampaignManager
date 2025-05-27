@@ -25,7 +25,8 @@ public sealed class ItemService(
     {
         try
         {
-            if (cache.TryGetValue(ItemsCacheKey, out List<Item>? items) && items is not null) return items;
+            if (cache.TryGetValue(ItemsCacheKey, out List<Item>? items) && items is not null)
+                return items;
 
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
             items = await dbContext.Items.OrderBy(i => i.Name).ToListAsync();
