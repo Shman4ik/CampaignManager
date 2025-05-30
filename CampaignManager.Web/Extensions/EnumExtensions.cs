@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 
 namespace CampaignManager.Web.Extensions;
@@ -32,6 +33,23 @@ public static class EnumExtensions
             CreatureType.Beast => "Животные",
             CreatureType.Other => "Другое",
             _ => type.ToString()
+        };
+    }
+
+    public static string ToRussianString(this SkillCategory category)
+    {
+        return category switch
+        {
+            SkillCategory.ProblemSolving => "Решение проблем",
+            SkillCategory.InformationGathering => "Сбор информации",
+            SkillCategory.Special => "Специальные",
+            SkillCategory.Social => "Социальные",
+            SkillCategory.Healing => "Лечение",
+            SkillCategory.CombatGeneral => "Общее сражение",
+            SkillCategory.Knowledge => "Знания",
+            SkillCategory.CombatFirearms => "Огнестрельное",
+            SkillCategory.Actions => "Действия",
+            _ => category.ToString()
         };
     }
 

@@ -2,6 +2,7 @@
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Model;
@@ -16,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; }
     public DbSet<Weapon> Weapons { get; set; }
     public DbSet<Spell> Spells { get; set; }
+    public DbSet<SkillModel> Skills { get; set; }
 
     // Scenario Management DbSets
     public DbSet<Scenario> Scenarios { get; set; }
@@ -100,6 +102,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             // Настройка для хранения списка альтернативных имен
             entity.Property(s => s.AlternativeNames)
+                .HasColumnType("jsonb");
+        });
+
+        // Настройка навыков
+        modelBuilder.Entity<SkillModel>(entity =>
+        {
+            entity.ToTable("Skills");
+            entity.Property(s => s.Name).IsRequired();
+            entity.HasIndex(s => s.Name).IsUnique();
+
+            // Store Category as string
+            entity.Property(s => s.Category)
+                .HasConversion<string>();
+
+            // Store lists as JSONB
+            entity.Property(s => s.UsageExamples)
+                .HasColumnType("jsonb");
+
+            entity.Property(s => s.FailureConsequences)
+                .HasColumnType("jsonb");
+
+            entity.Property(s => s.OpposingSkills)
                 .HasColumnType("jsonb");
         });
 

@@ -1,0 +1,133 @@
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Extensions
+@inject NavigationManager NavigationManager
+
+<div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
+    <div class="p-6">
+        <div class="flex justify-between items-start mb-2">
+            <h2 class="text-xl font-semibold">@Skill.Name</h2>
+            <div class="flex space-x-1">
+                <button @onclick="() => EditSkill(Skill)" title="Изменить"
+                    class="text-gray-600 hover:text-gray-800 p-1 rounded hover:bg-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                </button>
+                <button @onclick="() => OnDelete.InvokeAsync(Skill)" title="Удалить"
+                    class="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="text-sm text-gray-600 mb-3 flex items-center space-x-4">
+            <span class="inline-block bg-blue-100 text-blue-800 rounded-full px-3 py-1 text-xs">
+                @Skill.Category.ToRussianString()
+            </span>
+            <span class="text-gray-700 font-medium">
+                Базовое значение: @Skill.BaseValue%
+            </span>
+            @if (Skill.IsUncommon)
+            {
+                <span class="inline-block bg-orange-100 text-orange-800 rounded-full px-2 py-1 text-xs">
+                    Необычный
+                </span>
+            }
+        </div>
+
+        <!-- Описание навыка -->
+        <div class="mb-4">
+            <h3 class="font-medium mb-1 text-sm font-semibold">Описание:</h3>
+            <div class="text-sm text-gray-700">
+                @(string.IsNullOrEmpty(Skill.Description)
+                                ? "Описание отсутствует."
+                                : Skill.Description)
+            </div>
+        </div>
+
+        <!-- Время выполнения и повтор -->
+        @if (!string.IsNullOrEmpty(Skill.TimeRequired) || Skill.CanRetry)
+        {
+            <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                @if (!string.IsNullOrEmpty(Skill.TimeRequired))
+                {
+                    <div>
+                        <span class="font-semibold text-gray-600">Время выполнения:</span>
+                        <span class="text-gray-700">@Skill.TimeRequired</span>
+                    </div>
+                }
+                <div>
+                    <span class="font-semibold text-gray-600">Повтор:</span>
+                    <span class="text-gray-700">@(Skill.CanRetry ? "Возможен" : "Невозможен")</span>
+                </div>
+            </div>
+        }
+
+        <!-- Примеры использования -->
+        @if (Skill.UsageExamples.Count > 0)
+        {
+            <div class="mb-4">
+                <h3 class="font-medium mb-1 text-sm font-semibold">Примеры использования:</h3>
+                <div class="text-sm text-gray-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        @foreach (var example in Skill.UsageExamples.Take(3))
+                        {
+                            <li>@example</li>
+                        }
+                        @if (Skill.UsageExamples.Count > 3)
+                        {
+                            <li class="text-gray-500">... и ещё @(Skill.UsageExamples.Count - 3)</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        <!-- Последствия провала -->
+        @if (Skill.FailureConsequences.Count > 0)
+        {
+            <div class="mb-4">
+                <h3 class="font-medium mb-1 text-sm font-semibold">Последствия провала:</h3>
+                <div class="text-sm text-gray-700">
+                    <ul class="list-disc list-inside space-y-1">
+                        @foreach (var consequence in Skill.FailureConsequences.Take(2))
+                        {
+                            <li>@consequence</li>
+                        }
+                        @if (Skill.FailureConsequences.Count > 2)
+                        {
+                            <li class="text-gray-500">... и ещё @(Skill.FailureConsequences.Count - 2)</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        <!-- Противоположные навыки -->
+        @if (Skill.OpposingSkills.Count > 0)
+        {
+            <div>
+                <h3 class="font-medium mb-1 text-sm font-semibold">Противоположные навыки:</h3>
+                <div class="text-sm text-gray-700">
+                    @string.Join(", ", Skill.OpposingSkills)
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required SkillModel Skill { get; set; }
+    [Parameter] public EventCallback<SkillModel> OnDelete { get; set; }
+
+    private void EditSkill(SkillModel skill)
+    {
+        NavigationManager.NavigateTo($"/skills/edit/{skill.Id}");
+    }
+}

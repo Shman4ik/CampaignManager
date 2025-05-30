@@ -1,0 +1,365 @@
+@page "/skills/edit"
+@page "/skills/edit/{Id:int}"
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
+@using CampaignManager.Web.Extensions
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+
+@inject SkillService SkillService
+@inject NavigationManager NavigationManager
+@inject ILogger<SkillEditPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>@(Id.HasValue ? "Редактировать навык" : "Создать навык")</PageTitle>
+
+<div class="max-w-4xl mx-auto px-4 py-6">
+    <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+        <!-- Header -->
+        <div class="bg-blue-600 text-white px-6 py-4">
+            <h1 class="text-2xl font-bold">
+                @(Id.HasValue ? "Редактировать навык" : "Создать новый навык")
+            </h1>
+        </div>
+
+        <!-- Form -->
+        <div class="p-6">
+            <EditForm Model="_skill" OnValidSubmit="SaveSkill" FormName="SkillForm">
+                <DataAnnotationsValidator />
+
+                <!-- Name and Base Value -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="md:col-span-2">
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">
+                            Название навыка *
+                        </label>
+                        <InputText id="name" @bind-Value="_skill.Name"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Введите название навыка" />
+                        <ValidationMessage For="() => _skill.Name" class="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    <div>
+                        <label for="baseValue" class="block text-sm font-medium text-gray-700 mb-1">
+                            Базовое значение (%) *
+                        </label>
+                        <InputNumber id="baseValue" @bind-Value="_skill.BaseValue"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            min="0" max="100" />
+                        <ValidationMessage For="() => _skill.BaseValue" class="text-red-500 text-xs mt-1" />
+                    </div>
+                </div>
+
+                <!-- Category and Flags -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label for="category" class="block text-sm font-medium text-gray-700 mb-1">
+                            Категория навыка *
+                        </label>
+                        <InputSelect id="category" @bind-Value="_skill.Category"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            @foreach (var category in EnumExtensions.GetEnumTypes<SkillCategory>())
+                            {
+                                <option value="@category">@category.ToRussianString()</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => _skill.Category" class="text-red-500 text-xs mt-1" />
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <InputCheckbox id="isUncommon" @bind-Value="_skill.IsUncommon"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                            <label for="isUncommon" class="ml-2 block text-sm text-gray-700">
+                                Необычный навык
+                            </label>
+                        </div>
+
+                        <div class="flex items-center">
+                            <InputCheckbox id="canRetry" @bind-Value="_skill.CanRetry"
+                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
+                            <label for="canRetry" class="ml-2 block text-sm text-gray-700">
+                                Можно повторить проверку
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="mb-6">
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">
+                        Описание
+                    </label>
+                    <InputTextArea id="description" @bind-Value="_skill.Description"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        rows="3" placeholder="Описание навыка..." />
+                    <ValidationMessage For="() => _skill.Description" class="text-red-500 text-xs mt-1" />
+                </div>
+
+                <!-- Time Required -->
+                <div class="mb-6">
+                    <label for="timeRequired" class="block text-sm font-medium text-gray-700 mb-1">
+                        Время выполнения
+                    </label>
+                    <InputText id="timeRequired" @bind-Value="_skill.TimeRequired"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Например: 1 раунд, 10 минут, 1 час..." />
+                </div>
+
+                <!-- Usage Examples -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Примеры использования
+                    </label>
+                    <div class="space-y-2">
+                        @for (int i = 0; i < _skill.UsageExamples.Count; i++)
+                        {
+                            var index = i;
+                            <div class="flex items-center space-x-2">
+                                <InputText @bind-Value="_skill.UsageExamples[index]"
+                                    class="flex-1 border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Пример использования навыка..." />
+                                <button type="button" @onclick="() => RemoveUsageExample(index)"
+                                    class="text-red-600 hover:text-red-800 p-1">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                            </div>
+                        }
+                        <button type="button" @onclick="AddUsageExample"
+                            class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                            <i class="fas fa-plus mr-1"></i>
+                            Добавить пример
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Failure Consequences -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Последствия провала
+                    </label>
+                    <div class="space-y-2">
+                        @for (int i = 0; i < _skill.FailureConsequences.Count; i++)
+                        {
+                            var index = i;
+                            <div class="flex items-center space-x-2">
+                                <InputText @bind-Value="_skill.FailureConsequences[index]"
+                                    class="flex-1 border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Последствие провала..." />
+                                <button type="button" @onclick="() => RemoveFailureConsequence(index)"
+                                    class="text-red-600 hover:text-red-800 p-1">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                            </div>
+                        }
+                        <button type="button" @onclick="AddFailureConsequence"
+                            class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                            <i class="fas fa-plus mr-1"></i>
+                            Добавить последствие
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Opposing Skills -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Противоположные навыки
+                    </label>
+                    <div class="space-y-2">
+                        @for (int i = 0; i < _skill.OpposingSkills.Count; i++)
+                        {
+                            var index = i;
+                            <div class="flex items-center space-x-2">
+                                <InputText @bind-Value="_skill.OpposingSkills[index]"
+                                    class="flex-1 border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    placeholder="Название противоположного навыка..." />
+                                <button type="button" @onclick="() => RemoveOpposingSkill(index)"
+                                    class="text-red-600 hover:text-red-800 p-1">
+                                    <i class="fas fa-trash text-sm"></i>
+                                </button>
+                            </div>
+                        }
+                        <button type="button" @onclick="AddOpposingSkill"
+                            class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                            <i class="fas fa-plus mr-1"></i>
+                            Добавить противоположный навык
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <button type="button" @onclick="Cancel"
+                        class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded">
+                        Отмена
+                    </button>
+
+                    <div class="space-x-2">
+                        <button type="submit" disabled="@_saving"
+                            class="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded flex items-center">
+                            @if (_saving)
+                            {
+                                <i class="fas fa-spinner fa-spin mr-2"></i>
+                                <span>Сохранение...</span>
+                            }
+                            else
+                            {
+                                <i class="fas fa-save mr-2"></i>
+                                <span>Сохранить</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                        @_errorMessage
+                    </div>
+                }
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private SkillModel _skill = new();
+    private bool _saving = false;
+    private string _errorMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Id.HasValue)
+        {
+            await LoadSkill();
+        }
+        else
+        {
+            // Initialize new skill with default values
+            _skill = new SkillModel
+            {
+                Category = SkillCategory.Actions,
+                BaseValue = 0,
+                UsageExamples = new List<string>(),
+                FailureConsequences = new List<string>(),
+                OpposingSkills = new List<string>()
+            };
+        }
+    }
+
+    private async Task LoadSkill()
+    {
+        if (!Id.HasValue) return;
+
+        try
+        {
+            var skill = await SkillService.GetSkillByIdAsync(Id.Value);
+            if (skill is not null)
+            {
+                _skill = skill;
+            }
+            else
+            {
+                _errorMessage = "Навык не найден.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading skill {SkillId}", Id.Value);
+            _errorMessage = "Ошибка при загрузке навыка.";
+        }
+    }
+
+    private async Task SaveSkill()
+    {
+        _saving = true;
+        _errorMessage = "";
+
+        try
+        {
+            // Clean up empty entries from lists
+            _skill.UsageExamples = _skill.UsageExamples.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+            _skill.FailureConsequences = _skill.FailureConsequences.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+            _skill.OpposingSkills = _skill.OpposingSkills.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+
+            bool success;
+            if (Id.HasValue)
+            {
+                success = await SkillService.UpdateSkillAsync(_skill);
+                if (!success)
+                {
+                    _errorMessage = "Не удалось обновить навык. Возможно, навык с таким названием уже существует.";
+                    return;
+                }
+            }
+            else
+            {
+                var result = await SkillService.CreateSkillAsync(_skill);
+                if (result is null)
+                {
+                    _errorMessage = "Не удалось создать навык. Возможно, навык с таким названием уже существует.";
+                    return;
+                }
+            }
+
+            NavigationManager.NavigateTo("/skills");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving skill");
+            _errorMessage = "Произошла ошибка при сохранении навыка.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        NavigationManager.NavigateTo("/skills");
+    }
+
+    // List management methods
+    private void AddUsageExample()
+    {
+        _skill.UsageExamples.Add("");
+    }
+
+    private void RemoveUsageExample(int index)
+    {
+        if (index >= 0 && index < _skill.UsageExamples.Count)
+        {
+            _skill.UsageExamples.RemoveAt(index);
+        }
+    }
+
+    private void AddFailureConsequence()
+    {
+        _skill.FailureConsequences.Add("");
+    }
+
+    private void RemoveFailureConsequence(int index)
+    {
+        if (index >= 0 && index < _skill.FailureConsequences.Count)
+        {
+            _skill.FailureConsequences.RemoveAt(index);
+        }
+    }
+
+    private void AddOpposingSkill()
+    {
+        _skill.OpposingSkills.Add("");
+    }
+
+    private void RemoveOpposingSkill(int index)
+    {
+        if (index >= 0 && index < _skill.OpposingSkills.Count)
+        {
+            _skill.OpposingSkills.RemoveAt(index);
+        }
+    }
+}

@@ -1,10 +1,11 @@
-using CampaignManager.ServiceDefaults;
+﻿using CampaignManager.ServiceDefaults;
 using CampaignManager.Web.Components;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
+using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Spells.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Utilities.Api;
@@ -119,12 +120,17 @@ builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<ItemService>();
 
+//Register skills service
+builder.Services.AddScoped<SkillService>();
+
 // Register Minio service
 builder.Services.AddScoped<MinioService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
+builder.Services.AddScoped<DbInitializer>();
 
 var app = builder.Build();
 
