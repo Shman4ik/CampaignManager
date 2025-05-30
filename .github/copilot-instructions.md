@@ -1,0 +1,1 @@
+Use dotnet run --project CampaignManager.Web when you want to run the web application.
