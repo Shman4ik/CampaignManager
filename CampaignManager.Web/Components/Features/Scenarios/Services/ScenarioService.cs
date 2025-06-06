@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Scenarios.Model;
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -85,8 +85,6 @@ public sealed class ScenarioService(
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
                 .Include(s => s.Npcs)
-                .Include(s => s.ScenarioCreatures)
-                .Include(s => s.ScenarioItems)
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
         catch (Exception ex)
@@ -112,7 +110,7 @@ public sealed class ScenarioService(
 
             // Invalidate cache
             cache.Remove(ScenariosCacheKey);
-            if (scenario.IsTemplate) 
+            if (scenario.IsTemplate)
                 cache.Remove(TemplatesCacheKey);
             return scenario;
         }
@@ -200,8 +198,6 @@ public sealed class ScenarioService(
             // Get the template scenario with all related entities
             var template = await dbContext.Scenarios
                 .Include(s => s.Npcs)
-                .Include(s => s.ScenarioCreatures)
-                .Include(s => s.ScenarioItems)
                 .FirstOrDefaultAsync(s => s.Id == templateId && s.IsTemplate);
 
             if (template is null) return null;
@@ -222,7 +218,7 @@ public sealed class ScenarioService(
             // Add the new scenario to the database
             await dbContext.Scenarios.AddAsync(newScenario);
             await dbContext.SaveChangesAsync();
-            
+
             // Copy creatures
             if (template.ScenarioCreatures != null)
             {
@@ -301,24 +297,24 @@ public sealed class ScenarioService(
         try
         {
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
             if (scenario == null) return false;
-            
+
             // Initialize the entity
             scenarioCreature.Init();
-            
+
             // If the scenario doesn't have a ScenarioCreatures collection, create one
             if (scenario.ScenarioCreatures == null)
             {
                 scenario.ScenarioCreatures = new List<ScenarioCreature>();
             }
-            
+
             // Add the creature to the scenario's collection
             scenario.ScenarioCreatures.Add(scenarioCreature);
             await dbContext.SaveChangesAsync();
-            
+
             return true;
         }
         catch (Exception ex)
@@ -358,24 +354,24 @@ public sealed class ScenarioService(
         try
         {
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);
             if (scenario == null) return false;
-            
+
             // Initialize the entity
             scenarioItem.Init();
-            
+
             // If the scenario doesn't have a ScenarioItems collection, create one
             if (scenario.ScenarioItems == null)
             {
                 scenario.ScenarioItems = new List<ScenarioItem>();
             }
-            
+
             // Add the item to the scenario's collection
             scenario.ScenarioItems.Add(scenarioItem);
             await dbContext.SaveChangesAsync();
-            
+
             return true;
         }
         catch (Exception ex)
