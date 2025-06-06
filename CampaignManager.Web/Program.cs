@@ -8,6 +8,7 @@ using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Spells.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
+using CampaignManager.Web.Services;
 using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -106,6 +107,7 @@ builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new OpenApiInfo { Title
 builder.Services.AddOutputCache();
 
 // Register services
+builder.Services.AddScoped<NavigationService>();
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<CampaignService>();

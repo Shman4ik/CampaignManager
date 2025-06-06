@@ -8,87 +8,457 @@
 
 @rendermode InteractiveServer
 
-<div class="mb-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <h3 class="text-2xl font-bold mb-4">Ваши кампании</h3>
-    @if (!IsUserAuthenticated)
-    {
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-            <p class="text-blue-700">Войдите в систему, чтобы увидеть свои кампании и присоединиться к новым.</p>
+@if (!IsUserAuthenticated)
+{
+    <div class="auth-notice">
+        <div class="auth-notice-content">
+            <i class="fas fa-info-circle"></i>
+            <p>Войдите в систему, чтобы увидеть свои кампании и присоединиться к новым.</p>
         </div>
-    }
-    else if (UserCampaigns == null)
-    {
-        <p>Загрузка кампаний...</p>
-    }
-    else if (UserCampaigns.Count == 0)
-    {
-        <p>У вас пока нет доступных кампаний.</p>
-    }
-    else
-    {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-            @foreach (var campaign in UserCampaigns)
-            {
-                <div class="bg-white shadow-md rounded-lg p-4 max-w-md">
-                    <h4 class="text-xl font-semibold mb-2">@campaign.Name</h4>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Хранитель:</span> @campaign.KeeperEmail
-                        @if (CurrentUserId == campaign.KeeperEmail)
-                        {
-                            <span class="ml-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">Вы</span>
-                            <div class="mt-3">
-                                <button @onclick="() => AddNpc(campaign.Id)"
-                                        class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition-colors">
-                                    Добавить NPC
-                                </button>
-                            </div>
-                        }
+    </div>
+}
+else if (UserCampaigns == null)
+{
+    <div class="loading-state">
+        <div class="loading-content">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Загрузка кампаний...</p>
+        </div>
+    </div>
+}
+else if (UserCampaigns.Count == 0)
+{
+    <div class="empty-state">
+        <i class="fas fa-dice-d20"></i>
+        <h4>У вас пока нет кампаний</h4>
+        <p>Создайте новую кампанию или присоединитесь к существующей</p>
+        <a href="/create-campaign" class="create-campaign-btn">
+            <i class="fas fa-plus"></i>
+            Создать кампанию
+        </a>
+    </div>
+}
+else
+{
+    <div class="campaigns-grid">
+        @foreach (var campaign in UserCampaigns)
+        {
+            <div class="campaign-card">
+                <!-- Campaign Header -->
+                <div class="campaign-header">
+                    <div class="campaign-info">
+                        <h4 class="campaign-name">@campaign.Name</h4>
+                        <div class="keeper-info">
+                            <i class="fas fa-crown"></i>
+                            <span>Хранитель: @campaign.KeeperEmail</span>
+                            @if (CurrentUserId == campaign.KeeperEmail)
+                            {
+                                <span class="keeper-badge">Вы</span>
+                            }
+                        </div>
                     </div>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Игроки:</span> @campaign.Players?.Count
+                    <div class="players-count">
+                        <i class="fas fa-users"></i>
+                        <span>@(campaign.Players?.Count ?? 0) игроков</span>
                     </div>
+                </div>
+
+                <!-- Character/Action Section -->
+                <div class="campaign-content">
                     @{
                         var userCharacter = GetUserCharacter(campaign);
                     }
                     @if (userCharacter != null)
                     {
-                        <div class="space-y-4">
-                            <div class="bg-gray-50 overflow-hidden shadow rounded-lg">
-                                <div class="px-4 py-4">
-                                    <h4 class="text-lg font-medium text-gray-900 truncate">
-                                        @userCharacter!.CharacterName
-                                    </h4>
-                                    <dl class="mt-2 space-y-1">
-                                        <div class="flex flex-wrap text-sm font-normal text-gray-500">
-                                            <dt class="mr-1">Профессия:</dt>
-                                            <dd>@userCharacter!.Character.PersonalInfo.Occupation</dd>
-                                        </div>
-                                    </dl>
-                                    <div class="mt-3">
-                                        <button @onclick="() => EditCharacter(userCharacter.Id)"
-                                                class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-colors">
-                                            Редактировать
-                                        </button>
-                                    </div>
-                                </div>
+                        <!-- User Character -->
+                        <div class="character-card">
+                            <div class="character-header">
+                                <h5 class="character-name">
+                                    <i class="fas fa-user-circle"></i>
+                                    @userCharacter!.CharacterName
+                                </h5>
+                                <span class="character-status">Активный</span>
                             </div>
+                            <div class="character-occupation">
+                                <i class="fas fa-briefcase"></i>
+                                <span>@userCharacter!.Character.PersonalInfo.Occupation</span>
+                            </div>
+                            <button @onclick="() => EditCharacter(userCharacter.Id)"
+                                    class="edit-character-btn">
+                                <i class="fas fa-edit"></i>
+                                Редактировать персонажа
+                            </button>
                         </div>
                     }
                     else
                     {
-                        <p>У вас пока нет персонажей в этой кампании.</p>
-                        <div class="mt-4">
+                        <!-- No Character -->
+                        <div class="no-character">
+                            <i class="fas fa-user-plus"></i>
+                            <p>У вас пока нет персонажей в этой кампании</p>
                             <button @onclick="() => CreateNewCharacter(campaign.Id)"
-                                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition-colors">
-                                Создать нового персонажа
+                                    class="create-character-btn">
+                                <i class="fas fa-plus"></i>
+                                Создать персонажа
+                            </button>
+                        </div>
+                    }
+
+                    <!-- Keeper Actions -->
+                    @if (CurrentUserId == campaign.KeeperEmail)
+                    {
+                        <div class="keeper-actions">
+                            <p class="keeper-actions-label">
+                                <i class="fas fa-crown"></i>
+                                Действия хранителя
+                            </p>
+                            <button @onclick="() => AddNpc(campaign.Id)"
+                                    class="add-npc-btn">
+                                <i class="fas fa-users"></i>
+                                Добавить NPC
                             </button>
                         </div>
                     }
                 </div>
-            }
-        </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    /* Auth Notice */
+    .auth-notice {
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        border: 1px solid #2563eb;
+        border-radius: 8px;
+        padding: 1rem;
     }
-</div>
+
+    .auth-notice-content {
+        display: flex;
+        align-items: center;
+        color: #dbeafe;
+    }
+
+    .auth-notice-content i {
+        margin-right: 0.5rem;
+        color: #93c5fd;
+    }
+
+    /* Loading State */
+    .loading-state {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .loading-content {
+        text-align: center;
+        color: #9ca3af;
+    }
+
+    .loading-content i {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+        color: #6b7280;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: #6b7280;
+    }
+
+    .empty-state h4 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+    }
+
+    .create-campaign-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        color: white;
+        font-weight: 500;
+        font-size: 0.875rem;
+        border-radius: 6px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+    }
+
+    .create-campaign-btn:hover {
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* Campaigns Grid */
+    .campaigns-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+
+    @@media (min-width: 1024px) {
+        .campaigns-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    /* Campaign Card */
+    .campaign-card {
+        background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+        border: 1px solid #374151;
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .campaign-card:hover {
+        border-color: #4b5563;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        transform: translateY(-2px);
+    }
+
+    /* Campaign Header */
+    .campaign-header {
+        background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+        padding: 1.5rem;
+        border-bottom: 1px solid #374151;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .campaign-info {
+        flex: 1;
+    }
+
+    .campaign-name {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #f3f4f6;
+        margin-bottom: 0.5rem;
+    }
+
+    .keeper-info {
+        display: flex;
+        align-items: center;
+        font-size: 0.875rem;
+        color: #9ca3af;
+        gap: 0.5rem;
+    }
+
+    .keeper-info i {
+        color: #fbbf24;
+    }
+
+    .keeper-badge {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: #1f2937;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .players-count {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.875rem;
+        color: #9ca3af;
+        text-align: right;
+    }
+
+    .players-count i {
+        color: #6b7280;
+    }
+
+    /* Campaign Content */
+    .campaign-content {
+        padding: 1.5rem;
+    }
+
+    /* Character Card */
+    .character-card {
+        background: linear-gradient(135deg, #1f2937, #374151);
+        border: 1px solid #4b5563;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .character-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+
+    .character-name {
+        font-weight: 500;
+        color: #f3f4f6;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .character-name i {
+        color: #3b82f6;
+    }
+
+    .character-status {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .character-occupation {
+        font-size: 0.875rem;
+        color: #9ca3af;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .character-occupation i {
+        color: #6b7280;
+    }
+
+    .edit-character-btn {
+        width: 100%;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        color: white;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .edit-character-btn:hover {
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+
+    /* No Character */
+    .no-character {
+        text-align: center;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        color: #9ca3af;
+    }
+
+    .no-character i {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        color: #6b7280;
+    }
+
+    .no-character p {
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .create-character-btn {
+        width: 100%;
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .create-character-btn:hover {
+        background: linear-gradient(135deg, #047857, #059669);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+    }
+
+    /* Keeper Actions */
+    .keeper-actions {
+        border-top: 1px solid #374151;
+        padding-top: 1rem;
+    }
+
+    .keeper-actions-label {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .keeper-actions-label i {
+        color: #fbbf24;
+    }
+
+    .add-npc-btn {
+        width: 100%;
+        background: linear-gradient(135deg, #ea580c, #f97316);
+        color: white;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .add-npc-btn:hover {
+        background: linear-gradient(135deg, #dc2626, #ea580c);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(234, 88, 12, 0.4);
+    }
+</style>
 
 @code {
     private List<Campaign>? UserCampaigns;

@@ -1,0 +1,286 @@
+@using CampaignManager.Web.Models.Navigation
+@using CampaignManager.Web.Services
+
+@inject NavigationService NavigationService
+@inject IJSRuntime JSRuntime
+
+@rendermode InteractiveServer
+
+<nav class="bg-white shadow-sm border-b border-gray-200" role="navigation" aria-label="Main navigation">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
+            <!-- Logo/Brand -->
+            <div class="flex-shrink-0">
+                <NavLink href="/" class="flex items-center text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
+                    <i class="fas fa-dice-d20 mr-2 text-blue-600"></i>
+                    Менеджер кампаний
+                </NavLink>
+            </div>
+
+            <!-- Desktop Navigation -->
+            <div class="hidden md:flex items-center space-x-1">
+                @foreach (var item in navigationItems)
+                {
+                    @if (item.Children?.Any() == true)
+                    {
+                        <!-- Dropdown Menu -->
+                        <div class="relative">
+                            <button @onclick="() => ToggleDropdown(item)"
+                                    @onblur="() => HandleDropdownBlur(item)"
+                                    class="nav-button flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-all duration-200"
+                                    aria-expanded="@item.IsExpanded"
+                                    aria-haspopup="true">
+                                <i class="@item.Icon mr-2"></i>
+                                @item.Title
+                                <i class="fas fa-chevron-down ml-2 text-xs transition-transform duration-200 @(item.IsExpanded ? "rotate-180" : "")"></i>
+                            </button>
+
+                            @if (item.IsExpanded)
+                            {
+                                <div class="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50"
+                                     @onclick:stopPropagation="true">
+                                    <div class="py-1" role="menu">
+                                        @foreach (var child in item.Children)
+                                        {
+                                            <NavLink href="@child.Href"
+                                                     class="dropdown-link flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                                                     @onclick="() => CloseAllDropdowns()"
+                                                     role="menuitem">
+                                                <i class="@child.Icon mr-3 w-4 text-center"></i>
+                                                @child.Title
+                                            </NavLink>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Simple Link -->
+                        <NavLink href="@item.Href"
+                                 Match="@(item.MatchMode == NavigationMatchMode.All ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                                 class="nav-link flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-all duration-200">
+                            <i class="@item.Icon mr-2"></i>
+                            @item.Title
+                        </NavLink>
+                    }
+                }
+            </div>
+
+            <!-- Mobile menu button -->
+            <div class="md:hidden">
+                <button @onclick="ToggleMobileMenu"
+                        class="mobile-menu-btn p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-all duration-200"
+                        aria-expanded="@isMobileMenuOpen"
+                        aria-controls="mobile-menu"
+                        aria-label="Toggle navigation menu">
+                    @if (isMobileMenuOpen)
+                    {
+                        <i class="fas fa-times text-lg"></i>
+                    }
+                    else
+                    {
+                        <i class="fas fa-bars text-lg"></i>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Navigation -->
+    @if (isMobileMenuOpen)
+    {
+        <div class="md:hidden border-t border-gray-200 bg-white" id="mobile-menu">
+            <div class="px-2 py-3 space-y-1">
+                @foreach (var item in navigationItems)
+                {
+                    @if (item.Children?.Any() == true)
+                    {
+                        <!-- Mobile Dropdown -->
+                        <div>
+                            <button @onclick="() => ToggleMobileSubmenu(item)"
+                                    class="mobile-dropdown-btn w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-all duration-200"
+                                    aria-expanded="@item.IsExpanded">
+                                <span class="flex items-center">
+                                    <i class="@item.Icon mr-3 w-5 text-center"></i>
+                                    @item.Title
+                                </span>
+                                <i class="fas fa-chevron-down text-sm transition-transform duration-200 @(item.IsExpanded ? "rotate-180" : "")"></i>
+                            </button>
+
+                            @if (item.IsExpanded)
+                            {
+                                <div class="ml-6 mt-1 space-y-1">
+                                    @foreach (var child in item.Children)
+                                    {
+                                        <NavLink href="@child.Href"
+                                                 class="mobile-submenu-link flex items-center px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-all duration-200"
+                                                 @onclick="CloseMobileMenu">
+                                            <i class="@child.Icon mr-3 w-4 text-center"></i>
+                                            @child.Title
+                                        </NavLink>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Mobile Simple Link -->
+                        <NavLink href="@item.Href"
+                                 Match="@(item.MatchMode == NavigationMatchMode.All ? NavLinkMatch.All : NavLinkMatch.Prefix)"
+                                 class="mobile-nav-link flex items-center px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-all duration-200"
+                                 @onclick="CloseMobileMenu">
+                            <i class="@item.Icon mr-3 w-5 text-center"></i>
+                            @item.Title
+                        </NavLink>
+                    }
+                }
+            </div>
+        </div>
+    }
+</nav>
+
+@code {
+    private List<NavigationItem> navigationItems = new();
+    private bool isMobileMenuOpen = false;
+
+    protected override void OnInitialized()
+    {
+        navigationItems = NavigationService.GetNavigationItems();
+    }
+
+    private void ToggleDropdown(NavigationItem item)
+    {
+        // Close all other dropdowns first
+        foreach (var navItem in navigationItems)
+        {
+            if (navItem != item)
+            {
+                navItem.IsExpanded = false;
+            }
+        }
+        
+        // Toggle current dropdown
+        item.IsExpanded = !item.IsExpanded;
+        StateHasChanged();
+    }
+
+    private async Task HandleDropdownBlur(NavigationItem item)
+    {
+        // Small delay to allow for click events to process
+        await Task.Delay(150);
+        item.IsExpanded = false;
+        StateHasChanged();
+    }
+
+    private void CloseAllDropdowns()
+    {
+        foreach (var item in navigationItems)
+        {
+            item.IsExpanded = false;
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleMobileMenu()
+    {
+        isMobileMenuOpen = !isMobileMenuOpen;
+        if (!isMobileMenuOpen)
+        {
+            CloseAllDropdowns();
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleMobileSubmenu(NavigationItem item)
+    {
+        item.IsExpanded = !item.IsExpanded;
+        StateHasChanged();
+    }
+
+    private void CloseMobileMenu()
+    {
+        isMobileMenuOpen = false;
+        CloseAllDropdowns();
+        StateHasChanged();
+    }
+}
+
+<style>
+    /* Navigation Links */
+    .nav-link.active {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .nav-link.active i {
+        color: #2563eb;
+    }
+
+    /* Dropdown Links */
+    .dropdown-link.active {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .dropdown-link.active i {
+        color: #2563eb;
+    }
+
+    /* Mobile Navigation */
+    .mobile-nav-link.active {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .mobile-nav-link.active i {
+        color: #2563eb;
+    }
+
+    .mobile-submenu-link.active {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .mobile-submenu-link.active i {
+        color: #2563eb;
+    }
+
+    /* Hover states */
+    .nav-button:hover,
+    .nav-link:hover {
+        background-color: #f9fafb;
+        color: #111827;
+    }
+
+    .dropdown-link:hover {
+        background-color: #f9fafb;
+        color: #111827;
+    }
+
+    /* Focus states for accessibility */
+    .nav-button:focus,
+    .nav-link:focus,
+    .mobile-menu-btn:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.1);
+    }
+
+    /* Mobile menu animation */
+    #mobile-menu {
+        animation: slideDown 0.2s ease-out;
+    }
+
+    @@keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>
