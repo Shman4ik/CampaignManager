@@ -35,6 +35,7 @@ public class SkillModel
     /// Категория навыка
     /// </summary>
     public SkillCategory Category { get; set; }
+
     /// <summary>
     /// Является ли навык необычным (требует особых условий)
     /// </summary>

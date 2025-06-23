@@ -56,10 +56,7 @@ namespace CampaignManager.Web.Migrations.AppDb
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     LastUpdated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Skills", x => x.Id);
-                });
+                constraints: table => { table.PrimaryKey("PK_Skills", x => x.Id); });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Skills_Name",

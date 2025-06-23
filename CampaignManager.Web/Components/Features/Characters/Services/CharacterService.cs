@@ -12,7 +12,6 @@ public class CharacterService(
     IdentityService identityService,
     ILogger<CharacterService> logger)
 {
-
     public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId)
     {
         try
@@ -230,7 +229,7 @@ public class CharacterService(
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Get character templates that are linked to the specified scenario
             return await dbContext.CharacterStorage
                 .Include(c => c.Scenario)
@@ -259,7 +258,7 @@ public class CharacterService(
                 throw new UnauthorizedAccessException("User must be authenticated to unlink a character template from a scenario");
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            
+
             // Get the character template
             var character = await dbContext.CharacterStorage
                 .FirstOrDefaultAsync(c => c.Id == characterId);
@@ -271,10 +270,10 @@ public class CharacterService(
             character.ScenarioId = null;
             character.Scenario = null;
             character.LastUpdated = DateTime.UtcNow;
-            
+
             dbContext.Update(character);
             await dbContext.SaveChangesAsync();
-            
+
             logger.LogInformation($"Character template {characterId} unlinked from scenario by user {userEmail}");
             return true;
         }

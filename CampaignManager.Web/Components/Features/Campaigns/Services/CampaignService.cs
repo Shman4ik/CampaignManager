@@ -45,6 +45,7 @@ public class CampaignService(
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.CampaignPlayers
+            .Include(p => p.Characters) // Include characters!
             .Where(p => p.PlayerEmail == user.Email && p.CampaignId == campaignId)
             .SingleOrDefaultAsync();
     }
@@ -131,6 +132,60 @@ public class CampaignService(
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while applying to the campaign.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Gets a campaign by ID with all players and their characters (for admins/keepers)
+    /// </summary>
+    /// <param name="campaignId">Campaign ID</param>
+    /// <returns>Campaign with full player and character data, or null if not found</returns>
+    public async Task<Campaign?> GetCampaignWithCharactersAsync(Guid campaignId)
+    {
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var campaign = await dbContext.Campaigns
+                .Include(c => c.Players)
+                .ThenInclude(p => p.Characters)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(c => c.Id == campaignId);
+
+            return campaign;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving campaign {CampaignId} with characters", campaignId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Checks if the current user is an admin or keeper of the specified campaign
+    /// </summary>
+    /// <param name="campaignId">Campaign ID</param>
+    /// <returns>True if user is admin or keeper, false otherwise</returns>
+    public async Task<bool> IsUserAdminOrKeeperAsync(Guid campaignId)
+    {
+        try
+        {
+            var user = await identityService.GetUserAsync();
+            if (user == null) return false;
+
+            // Check if user is global admin
+            if (user.Role == PlayerRole.Administrator) return true;
+
+            // Check if user is campaign keeper
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var campaign = await dbContext.Campaigns
+                .FirstOrDefaultAsync(c => c.Id == campaignId);
+
+            return campaign?.KeeperEmail?.Equals(user.Email, StringComparison.OrdinalIgnoreCase) == true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error checking if user is admin or keeper for campaign {CampaignId}", campaignId);
             return false;
         }
     }

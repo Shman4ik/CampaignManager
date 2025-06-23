@@ -32,7 +32,7 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
     {
         var cacheKey = type.HasValue ? $"{WeaponsKey}_{type}" : WeaponsKey;
 
-        if (cache.TryGetValue(cacheKey, out List<Weapon>? cachedWeapons) && cachedWeapons != null) 
+        if (cache.TryGetValue(cacheKey, out List<Weapon>? cachedWeapons) && cachedWeapons != null)
             return cachedWeapons;
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
@@ -42,13 +42,13 @@ public class WeaponService(IDbContextFactory<AppDbContext> dbContextFactory, IMe
 
         var weapons = await query.OrderBy(w => w.Name).ToListAsync();
         var result = weapons ?? new List<Weapon>();
-        
+
         // Cache the result with a sliding expiration of 30 minutes
         cache.Set(cacheKey, result, new MemoryCacheEntryOptions
         {
             SlidingExpiration = TimeSpan.FromMinutes(30)
         });
-        
+
         return result;
     }
 

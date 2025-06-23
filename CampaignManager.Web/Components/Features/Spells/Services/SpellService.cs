@@ -22,20 +22,20 @@ public class SpellService(
     /// <returns>List of all spells.</returns>
     public async Task<List<Spell>> GetAllSpellsAsync()
     {
-        if (cache.TryGetValue(SpellsKey, out List<Spell>? cachedSpells) && cachedSpells != null) 
+        if (cache.TryGetValue(SpellsKey, out List<Spell>? cachedSpells) && cachedSpells != null)
             return cachedSpells;
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var spells = await dbContext.Spells.OrderBy(s => s.Name).ToListAsync();
-        
+
         var result = spells ?? new List<Spell>();
-        
+
         // Cache the result with a sliding expiration of 30 minutes
         cache.Set(SpellsKey, result, new MemoryCacheEntryOptions
         {
             SlidingExpiration = TimeSpan.FromMinutes(30)
         });
-        
+
         return result;
     }
 

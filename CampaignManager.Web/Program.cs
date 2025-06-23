@@ -3,6 +3,7 @@ using CampaignManager.Web.Components;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
+using CampaignManager.Web.Components.Features.Combat.Services;
 using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
@@ -122,6 +123,12 @@ builder.Services.AddScoped<ItemService>();
 
 //Register skills service
 builder.Services.AddScoped<SkillService>();
+
+// Register combat system services
+builder.Services.AddScoped<CombatService>();
+builder.Services.AddScoped<CombatEngineService>();
+builder.Services.AddScoped<CombatCalculationService>();
+builder.Services.AddScoped<DiceRollerService>();
 
 // Register Minio service
 builder.Services.AddScoped<MinioService>();

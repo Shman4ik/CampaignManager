@@ -213,7 +213,6 @@ public sealed class CreatureService(
             if (creature is null) return false;
 
 
-
             dbContext.Creatures.Remove(creature);
             await dbContext.SaveChangesAsync();
 

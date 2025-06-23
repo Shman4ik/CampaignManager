@@ -1,0 +1,254 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+
+<div class="bg-white rounded-lg shadow-md p-4">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Журнал боя</h3>
+        <div class="flex gap-2">
+            <button @onclick="ToggleDetailedView"
+                    class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded">
+                @(showDetailed ? "Кратко" : "Подробно")
+            </button>
+            <button @onclick="ClearLog"
+                    class="text-sm bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded">
+                Очистить
+            </button>
+        </div>
+    </div>
+
+    <div class="max-h-96 overflow-y-auto space-y-2">
+        @if (!Encounter.CombatLog.Any())
+        {
+            <div class="text-center text-gray-500 py-8">
+                <p>Журнал боя пуст</p>
+                <p class="text-sm">Действия участников будут отображаться здесь</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var round in GetGroupedByRounds())
+            {
+                <div class="border-l-4 border-blue-400 pl-4 mb-4">
+                    <div class="font-semibold text-blue-700 mb-2">
+                        📍 Раунд @round.Key
+                    </div>
+
+                    @foreach (var action in round.Value.OrderBy(a => a.CreatedAt))
+                    {
+                        <div class="@GetActionLogClass(action) rounded-lg p-3 mb-2">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1">
+                                    <!-- Action Header -->
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="@GetActionIconClass(action)">@GetActionIcon(action)</span>
+                                        <span class="font-medium">@GetActorName(action)</span>
+                                        <span class="text-sm text-gray-600">@action.ActionType.GetDisplayName()</span>
+                                        @if (action.TargetId.HasValue)
+                                        {
+                                            <span class="text-sm text-gray-600">→ @GetTargetName(action)</span>
+                                        }
+                                    </div>
+
+                                    <!-- Action Description -->
+                                    <div class="text-sm text-gray-700 mb-2">
+                                        @action.Description
+                                    </div>
+
+                                    @if (showDetailed)
+                                    {
+                                        <!-- Detailed Results -->
+                                        @if (action.Roll != null)
+                                        {
+                                            <div class="bg-gray-50 rounded p-2 mb-2">
+                                                <div class="text-sm">
+                                                    <strong>Бросок:</strong> @action.Roll.Result/@action.Roll.TargetValue
+                                                    <span
+                                                        class="@GetSuccessLevelClass(action.Roll.SuccessLevel) font-medium ml-2">
+                                                        @action.Roll.SuccessLevel.GetDisplayName()
+                                                    </span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(action.Roll.Description))
+                                                {
+                                                    <div class="text-xs text-gray-600 mt-1">
+                                                        @action.Roll.Description
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+
+                                        @if (action.Damage != null)
+                                        {
+                                            <div class="bg-red-50 rounded p-2 mb-2">
+                                                <div class="text-sm">
+                                                    <strong>Урон:</strong> @action.Damage.TotalDamage
+                                                    @if (action.Damage.DiceResults.Any())
+                                                    {
+                                                        <span class="text-xs text-gray-600">
+                                                            ([@string.Join(", ", action.Damage.DiceResults)]
+                                                            @if (action.Damage.DamageBonus != 0)
+                                                            {
+                                                                @:+ @action.Damage.DamageBonus
+                                                            }
+                                                            )
+                                                        </span>
+                                                    }
+                                                </div>
+                                                @if (action.Damage.IsMaxDamage)
+                                                {
+                                                    <div class="text-xs text-red-600 font-medium">
+                                                        🎯 Максимальный урон (экстремальный успех)
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+
+                                        @if (action.InflictedConditions.Any())
+                                        {
+                                            <div class="bg-orange-50 rounded p-2 mb-2">
+                                                <div class="text-sm">
+                                                    <strong>Эффекты:</strong>
+                                                </div>
+                                                @foreach (var condition in action.InflictedConditions)
+                                                {
+                                                    <div class="text-xs text-orange-700">
+                                                        • @condition.Type.GetDisplayName(): @condition.Description
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <!-- Compact Results -->
+                                        @if (action.Roll != null)
+                                        {
+                                            <span
+                                                class="@GetSuccessLevelClass(action.Roll.SuccessLevel) text-sm font-medium">
+                                                @action.Roll.SuccessLevel.GetDisplayName() (@action.Roll.Result/@action.Roll.TargetValue)
+                                            </span>
+                                        }
+
+                                        @if (action.Damage != null)
+                                        {
+                                            <span class="text-red-600 text-sm font-medium ml-2">
+                                                💥 @action.Damage.TotalDamage урона
+                                            </span>
+                                        }
+                                    }
+                                </div>
+
+                                <!-- Timestamp -->
+                                <div class="text-xs text-gray-400 ml-4">
+                                    @action.CreatedAt.ToString("HH:mm:ss")
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    @if (Encounter.CombatLog.Any())
+    {
+        <div class="mt-4 pt-4 border-t border-gray-200 text-center">
+            <div class="text-sm text-gray-600">
+                Всего действий: @Encounter.CombatLog.Count |
+                Текущий раунд: @Encounter.CurrentRound
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public CombatEncounter Encounter { get; set; } = null!;
+
+    private bool showDetailed = false;
+
+    private void ToggleDetailedView()
+    {
+        showDetailed = !showDetailed;
+    }
+
+    private void ClearLog()
+    {
+        Encounter.CombatLog.Clear();
+    }
+
+    private Dictionary<int, List<CombatAction>> GetGroupedByRounds()
+    {
+        return Encounter.CombatLog
+            .GroupBy(a => a.Round)
+            .OrderByDescending(g => g.Key)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    private string GetActionLogClass(CombatAction action)
+    {
+        var baseClass = "border-l-4";
+
+        return action.ActionType switch
+        {
+            CombatActionType.Attack => $"{baseClass} border-red-400 bg-red-50",
+            CombatActionType.FightBack => $"{baseClass} border-orange-400 bg-orange-50",
+            CombatActionType.Dodge => $"{baseClass} border-blue-400 bg-blue-50",
+            CombatActionType.CastSpell => $"{baseClass} border-purple-400 bg-purple-50",
+            CombatActionType.Maneuver => $"{baseClass} border-yellow-400 bg-yellow-50",
+            CombatActionType.Move => $"{baseClass} border-green-400 bg-green-50",
+            CombatActionType.Ready => $"{baseClass} border-indigo-400 bg-indigo-50",
+            CombatActionType.Flee => $"{baseClass} border-gray-400 bg-gray-50",
+            CombatActionType.DoNothing => $"{baseClass} border-gray-300 bg-gray-25",
+            _ => $"{baseClass} border-gray-400 bg-white"
+        };
+    }
+
+    private string GetActionIcon(CombatAction action)
+    {
+        return action.ActionType switch
+        {
+            CombatActionType.Attack => "⚔️",
+            CombatActionType.FightBack => "🛡️",
+            CombatActionType.Dodge => "🏃",
+            CombatActionType.CastSpell => "🔮",
+            CombatActionType.Maneuver => "🤼",
+            CombatActionType.Move => "🚶",
+            CombatActionType.Ready => "⚡",
+            CombatActionType.Flee => "🏃‍💨",
+            CombatActionType.DoNothing => "⏸️",
+            _ => "❓"
+        };
+    }
+
+    private string GetActionIconClass(CombatAction action)
+    {
+        return action.Roll?.SuccessLevel.IsSuccess() == true ? "text-green-600" : "text-gray-600";
+    }
+
+    private string GetSuccessLevelClass(SuccessLevel level)
+    {
+        return level switch
+        {
+            SuccessLevel.CriticalSuccess => "text-green-700",
+            SuccessLevel.ExtremeSuccess => "text-green-600",
+            SuccessLevel.HardSuccess => "text-blue-600",
+            SuccessLevel.RegularSuccess => "text-blue-500",
+            SuccessLevel.Failure => "text-gray-600",
+            SuccessLevel.Fumble => "text-red-600",
+            _ => "text-gray-500"
+        };
+    }
+
+    private string GetActorName(CombatAction action)
+    {
+        var participant = Encounter.Participants.FirstOrDefault(p => p.Id == action.ActorId);
+        return participant?.Name ?? "Неизвестный";
+    }
+
+    private string GetTargetName(CombatAction action)
+    {
+        if (!action.TargetId.HasValue) return "";
+
+        var participant = Encounter.Participants.FirstOrDefault(p => p.Id == action.TargetId);
+        return participant?.Name ?? "Неизвестная цель";
+    }
+
+}

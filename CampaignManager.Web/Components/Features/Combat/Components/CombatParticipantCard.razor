@@ -1,0 +1,257 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+
+<div class="@GetCardClasses() rounded-lg p-4 transition-all duration-200">
+    <div class="flex justify-between items-start mb-3">
+        <div>
+            <h4 class="@GetNameClasses() font-semibold">
+                @Participant.Name
+            </h4>
+            <p class="text-sm text-gray-600">@Participant.Type</p>
+        </div>
+
+        @if (IsCurrentTurn)
+        {
+            <span class="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                Текущий ход
+            </span>
+        }
+    </div>
+
+    <!-- Health, Magic Points, Sanity -->
+    <div class="grid grid-cols-3 gap-3 mb-3">
+        <!-- Hit Points -->
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium">HP</span>
+                <span>@Participant.CurrentHitPoints/@Participant.MaxHitPoints</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="@GetHealthBarColor() h-2 rounded-full transition-all duration-300"
+                     style="width: @GetHealthPercentage()%"></div>
+            </div>
+        </div>
+
+        <!-- Magic Points -->
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium">MP</span>
+                <span>@Participant.CurrentMagicPoints/@Participant.MaxMagicPoints</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                     style="width: @GetMagicPercentage()%"></div>
+            </div>
+        </div>
+
+        <!-- Sanity -->
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-medium">SAN</span>
+                <span>@Participant.CurrentSanity/@Participant.MaxSanity</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                     style="width: @GetSanityPercentage()%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Combat Stats -->
+    <div class="grid grid-cols-2 gap-2 mb-3 text-xs">
+        <div class="bg-gray-50 rounded p-2">
+            <span class="font-medium">Инициатива:</span> @Participant.TotalInitiative
+        </div>
+        <div class="bg-gray-50 rounded p-2">
+            <span class="font-medium">Урон бонус:</span> @GetDamageBonusDisplay()
+        </div>
+        <div class="bg-gray-50 rounded p-2">
+            <span class="font-medium">Телосложение:</span> @Participant.CombatStats.Build
+        </div>
+        <div class="bg-gray-50 rounded p-2">
+            <span class="font-medium">Движение:</span> @Participant.CombatStats.MovementRate
+        </div>
+    </div>
+
+    <!-- Active Conditions -->
+    @if (Participant.Conditions.Any(c => !c.IsExpired))
+    {
+        <div class="mb-3">
+            <div class="text-xs font-medium text-gray-700 mb-2">Состояния:</div>
+            <div class="flex flex-wrap gap-1">
+                @foreach (var condition in Participant.Conditions.Where(c => !c.IsExpired))
+                {
+                    <span class="@GetConditionBadgeClass(condition.Type) text-xs px-2 py-1 rounded-full cursor-pointer"
+                          title="@condition.Description"
+                          @onclick="() => RemoveCondition(condition.Type)">
+                        @condition.Type.GetDisplayName()
+                        @if (!condition.IsPermanent && condition.Duration > 0)
+                        {
+                            <span class="ml-1 opacity-75">(@condition.RoundsRemaining)</span>
+                        }
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Quick Actions (if current turn) -->
+    @if (IsCurrentTurn && Participant.CanAct)
+    {
+        <div class="border-t pt-3">
+            <div class="text-xs font-medium text-gray-700 mb-2">Быстрые действия:</div>
+            <div class="grid grid-cols-2 gap-2">
+                <button @onclick="() => QuickAction(CombatActionType.Attack)"
+                        class="bg-red-600 hover:bg-red-700 text-white text-xs py-1 px-2 rounded">
+                    ⚔️ Атака
+                </button>
+                <button @onclick="() => QuickAction(CombatActionType.Dodge)"
+                        class="bg-blue-600 hover:bg-blue-700 text-white text-xs py-1 px-2 rounded">
+                    🛡️ Уклонение
+                </button>
+                <button @onclick="() => QuickAction(CombatActionType.Move)"
+                        class="bg-green-600 hover:bg-green-700 text-white text-xs py-1 px-2 rounded">
+                    🏃 Движение
+                </button>
+                <button @onclick="() => QuickAction(CombatActionType.DoNothing)"
+                        class="bg-gray-600 hover:bg-gray-700 text-white text-xs py-1 px-2 rounded">
+                    ⏸️ Пропуск
+                </button>
+            </div>
+        </div>
+    }
+
+    <!-- Round Actions Counter -->
+    @if (Participant.TimesUsedFightBack > 0 || Participant.TimesUsedDodge > 0)
+    {
+        <div class="mt-2 pt-2 border-t text-xs text-orange-600">
+            <div class="flex justify-between">
+                @if (Participant.TimesUsedFightBack > 0)
+                {
+                    <span>Отпор: @Participant.TimesUsedFightBack</span>
+                }
+                @if (Participant.TimesUsedDodge > 0)
+                {
+                    <span>Уклонение: @Participant.TimesUsedDodge</span>
+                }
+            </div>
+            <div class="text-orange-500 mt-1">
+                Следующие атакующие получают бонус
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public CombatParticipant Participant { get; set; } = null!;
+    [Parameter] public bool IsCurrentTurn { get; set; }
+    [Parameter] public EventCallback<CombatParticipant> OnConditionChanged { get; set; }
+    [Parameter] public EventCallback<CombatAction> OnQuickAction { get; set; }
+
+    private string GetCardClasses()
+    {
+        var baseClasses = "border";
+
+        if (Participant.HasCondition(CombatConditionType.Dead))
+            return $"{baseClasses} border-gray-300 bg-gray-100";
+
+        if (Participant.HasCondition(CombatConditionType.Unconscious))
+            return $"{baseClasses} border-red-300 bg-red-50";
+
+        if (IsCurrentTurn)
+            return $"{baseClasses} border-yellow-400 bg-yellow-50 shadow-lg";
+
+        return $"{baseClasses} border-gray-200 bg-white hover:shadow-md";
+    }
+
+    private string GetNameClasses()
+    {
+        if (Participant.HasCondition(CombatConditionType.Dead))
+            return "text-gray-500 line-through";
+
+        if (Participant.HasCondition(CombatConditionType.Unconscious))
+            return "text-red-600";
+
+        return Participant.Type switch
+        {
+            "Character" => "text-blue-700",
+            "Creature" => "text-red-700",
+            _ => "text-gray-700"
+        };
+    }
+
+    private string GetHealthBarColor()
+    {
+        var percentage = GetHealthPercentage();
+
+        return percentage switch
+        {
+            > 75 => "bg-green-500",
+            > 50 => "bg-yellow-500",
+            > 25 => "bg-orange-500",
+            > 0 => "bg-red-500",
+            _ => "bg-gray-400"
+        };
+    }
+
+    private int GetHealthPercentage()
+    {
+        if (Participant.MaxHitPoints == 0) return 0;
+        return (int)((double)Participant.CurrentHitPoints / Participant.MaxHitPoints * 100);
+    }
+
+    private int GetMagicPercentage()
+    {
+        if (Participant.MaxMagicPoints == 0) return 0;
+        return (int)((double)Participant.CurrentMagicPoints / Participant.MaxMagicPoints * 100);
+    }
+
+    private int GetSanityPercentage()
+    {
+        if (Participant.MaxSanity == 0) return 0;
+        return (int)((double)Participant.CurrentSanity / Participant.MaxSanity * 100);
+    }
+
+    private string GetDamageBonusDisplay()
+    {
+        var bonus = Participant.CombatStats.DamageBonus;
+        if (bonus == 0) return "0";
+        return bonus > 0 ? $"+{bonus}" : bonus.ToString();
+    }
+
+    private string GetConditionBadgeClass(CombatConditionType conditionType)
+    {
+        return conditionType switch
+        {
+            CombatConditionType.Dead => "bg-black text-white",
+            CombatConditionType.Dying => "bg-red-600 text-white",
+            CombatConditionType.Unconscious => "bg-red-500 text-white",
+            CombatConditionType.MajorWound => "bg-red-400 text-white",
+            CombatConditionType.Stunned => "bg-purple-500 text-white",
+            CombatConditionType.Prone => "bg-orange-500 text-white",
+            CombatConditionType.Grappled => "bg-yellow-600 text-white",
+            CombatConditionType.Pinned => "bg-gray-600 text-white",
+            CombatConditionType.Bleeding => "bg-red-300 text-gray-800",
+            CombatConditionType.TemporaryInsanity => "bg-purple-600 text-white",
+            _ => "bg-gray-400 text-gray-800"
+        };
+    }
+
+    private async Task RemoveCondition(CombatConditionType conditionType)
+    {
+        Participant.RemoveCondition(conditionType);
+        await OnConditionChanged.InvokeAsync(Participant);
+    }
+
+    private async Task QuickAction(CombatActionType actionType)
+    {
+        var action = new CombatAction
+        {
+            ActorId = Participant.Id,
+            ActionType = actionType,
+            Description = $"Быстрое действие: {actionType.GetDisplayName()}"
+        };
+
+        await OnQuickAction.InvokeAsync(action);
+    }
+
+}

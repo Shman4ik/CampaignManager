@@ -1,0 +1,244 @@
+@page "/combat"
+@page "/combat/{CampaignId:guid}"
+@page "/combat/{CampaignId:guid}/{ScenarioId:guid}"
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Features.Combat.Components
+@inject CombatEngineService CombatEngine
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Боевая система</PageTitle>
+
+<div class="container mx-auto p-4">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-3xl font-bold text-gray-900">Боевая система</h1>
+
+        @if (currentEncounter?.State == CombatState.Setup)
+        {
+            <button @onclick="StartCombat"
+                    class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium">
+                🎲 Начать бой
+            </button>
+        }
+        else if (currentEncounter?.State == CombatState.Active)
+        {
+            <div class="flex gap-2">
+                <button @onclick="NextTurn"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">
+                    ⏭️ Следующий ход
+                </button>
+                <button @onclick="EndCombat"
+                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium">
+                    ⏹️ Завершить бой
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (currentEncounter == null)
+    {
+        <div class="text-center py-12">
+            <h2 class="text-xl text-gray-600 mb-4">Выберите или создайте боевую сцену</h2>
+            <button @onclick="CreateNewCombat"
+                    class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium">
+                ⚔️ Создать новый бой
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Initiative Tracker -->
+            <div class="lg:col-span-1">
+                <InitiativeTracker Encounter="currentEncounter"
+                                   OnParticipantSelected="SelectParticipant"
+                                   OnNextTurn="NextTurn"/>
+            </div>
+
+            <!-- Main Combat Area -->
+            <div class="lg:col-span-2 space-y-6">
+                @if (currentEncounter.State == CombatState.Setup)
+                {
+                    <SetupCombatComponent Encounter="currentEncounter"
+                                          OnParticipantAdded="OnParticipantAdded"
+                                          CampaignId="CampaignId"
+                                          ScenarioId="ScenarioId"/>
+                }
+                else if (currentEncounter.State == CombatState.Active)
+                {
+                    <!-- Current Participant Action Panel -->
+                    @if (currentEncounter.CurrentParticipant != null)
+                    {
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            <h3 class="text-lg font-semibold text-yellow-800 mb-2">
+                                Ход: @currentEncounter.CurrentParticipant.Name
+                            </h3>
+                            <ActionSelector Participant="currentEncounter.CurrentParticipant"
+                                            AllParticipants="currentEncounter.Participants"
+                                            OnActionSelected="ExecuteAction"/>
+                        </div>
+                    }
+
+                    <!-- Participants Status -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        @foreach (var participant in currentEncounter.Participants.Where(p => !p.HasCondition(CombatConditionType.Dead)))
+                        {
+                            <CombatParticipantCard Participant="participant"
+                                                   IsCurrentTurn="currentEncounter.CurrentParticipant?.Id == participant.Id"
+                                                   OnConditionChanged="OnConditionChanged"
+                                                   OnQuickAction="ExecuteAction"/>
+                        }
+                    </div>
+                }
+
+                <!-- Combat Log -->
+                <CombatLog Encounter="currentEncounter"/>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Modals -->
+@if (showCreateCombatModal)
+{
+    <CreateCombatModal OnCombatCreated="OnCombatCreated"
+                       OnCancel="() => showCreateCombatModal = false"/>
+}
+
+@if (showActionResultModal && lastActionResult != null)
+{
+    <ActionResultModal Result="lastActionResult"
+                       OnClose="() => showActionResultModal = false"/>
+}
+
+@code {
+    [Parameter] public Guid? CampaignId { get; set; }
+    [Parameter] public Guid? ScenarioId { get; set; }
+
+    private CombatEncounter? currentEncounter;
+    private bool showCreateCombatModal = false;
+    private bool showActionResultModal = false;
+    private CombatActionResult? lastActionResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize new combat encounter
+        await LoadSampleCombat();
+    }
+
+    private Task LoadSampleCombat()
+    {
+        currentEncounter = new CombatEncounter
+        {
+            State = CombatState.Setup,
+            CampaignId = CampaignId,
+            ScenarioId = ScenarioId
+        };
+        return Task.CompletedTask;
+    }
+
+    private Task CreateNewCombat()
+    {
+        showCreateCombatModal = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnCombatCreated(CombatEncounter encounter)
+    {
+        currentEncounter = encounter;
+        showCreateCombatModal = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task StartCombat()
+    {
+        if (currentEncounter == null) return;
+
+        if (currentEncounter.Participants.Count < 2)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Для начала боя нужно минимум 2 участника");
+            return;
+        }
+
+        currentEncounter = await CombatEngine.StartCombat(currentEncounter);
+        StateHasChanged();
+    }
+
+    private async Task NextTurn()
+    {
+        if (currentEncounter?.State != CombatState.Active) return;
+
+        currentEncounter.NextTurn();
+
+        // Check if round ended
+        if (currentEncounter.CurrentTurnIndex == 0)
+        {
+            currentEncounter = await CombatEngine.ProcessRoundEnd(currentEncounter);
+        }
+
+        StateHasChanged();
+    }
+
+    private Task EndCombat()
+    {
+        if (currentEncounter == null) return Task.CompletedTask;
+
+        currentEncounter.EndCombat();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteAction(CombatAction action)
+    {
+        if (currentEncounter == null) return;
+
+        try
+        {
+            lastActionResult = await CombatEngine.ExecuteAction(currentEncounter, action);
+
+            if (lastActionResult.Success)
+            {
+                showActionResultModal = true;
+
+                // Auto advance turn after successful action
+                await Task.Delay(1000); // Brief delay to show result
+                await NextTurn();
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", lastActionResult.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка: {ex.Message}");
+        }
+
+        StateHasChanged();
+    }
+
+    private Task OnParticipantAdded(CombatParticipant participant)
+    {
+        currentEncounter?.AddParticipant(participant);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task SelectParticipant(Guid participantId)
+    {
+        // Handle participant selection if needed
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnConditionChanged(CombatParticipant participant)
+    {
+        // Handle condition changes
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+}

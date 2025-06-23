@@ -114,7 +114,7 @@ public class PdfExportService
                     columns.RelativeColumn(2);
                     columns.RelativeColumn(1);
                 });
-                
+
                 table.Cell().Row(1).Column(2).Column(col =>
                 {
                     col.Item().Text($"Имя: {character.PersonalInfo?.Name ?? "—"}");
@@ -205,14 +205,14 @@ public class PdfExportService
 
                 // Distribute skill groups evenly across columns
                 var skillGroups = character.Skills?.SkillGroups ?? new List<SkillGroup>();
-                
+
                 // Create rows based on the number of skill groups
                 int rows = (skillGroups.Count + 3) / 4; // Ceiling division
-                
+
                 for (var i = 0; i < skillGroups.Count; i++)
                 {
                     var group = skillGroups[i];
-                    
+
                     // Use Element instead of directly accessing Row/Column with numeric indices
                     table.Cell().Element(cell =>
                     {
@@ -223,7 +223,7 @@ public class PdfExportService
                             {
                                 col.Spacing(2);
                                 col.Item().Text(group.Name).Bold().FontSize(10);
-                                foreach (var skill in group.Skills) 
+                                foreach (var skill in group.Skills)
                                     col.Item().Text($"{skill.Name}: {skill.Value.Regular}").FontSize(9);
                             });
                         });

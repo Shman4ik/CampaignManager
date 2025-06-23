@@ -1,0 +1,210 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+
+<div class="bg-white rounded-lg shadow-md p-4">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Порядок инициативы</h3>
+        <div class="text-sm text-gray-600">
+            Раунд @Encounter.CurrentRound
+        </div>
+    </div>
+
+    @if (Encounter.State == CombatState.Setup)
+    {
+        <div class="text-center py-6 text-gray-500">
+            <p>Добавьте участников для начала боя</p>
+        </div>
+    }
+    else if (Encounter.InitiativeOrder.Count == 0)
+    {
+        <div class="text-center py-6">
+            <button @onclick="RollInitiative"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium">
+                🎲 Бросить инициативу
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-2">
+            @foreach (var participantId in Encounter.InitiativeOrder)
+            {
+                var participant = Encounter.Participants.FirstOrDefault(p => p.Id == participantId);
+                if (participant == null) continue;
+
+                var isCurrentTurn = Encounter.CurrentParticipant?.Id == participant.Id;
+                var isActive = participant.CanAct;
+
+                <div
+                    class="@GetParticipantCardClasses(isCurrentTurn, isActive, participant) rounded-lg p-3 cursor-pointer transition-colors"
+                    @onclick="() => OnParticipantSelected.InvokeAsync(participant.Id)">
+
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-3">
+                            @if (isCurrentTurn)
+                            {
+                                <span class="text-yellow-500">▶️</span>
+                            }
+                            else
+                            {
+                                <span class="w-6"></span>
+                            }
+
+                            <div>
+                                <div class="font-medium @GetNameColorClass(participant)">
+                                    @participant.Name
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    @participant.Type
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-right">
+                            <div class="font-bold text-sm">
+                                @participant.TotalInitiative
+                            </div>
+                            <div class="text-xs text-gray-500">
+                                (@participant.InitiativeRoll + @participant.InitiativeModifier)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Health Bar -->
+                    <div class="mt-2">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span>HP</span>
+                            <span>@participant.CurrentHitPoints/@participant.MaxHitPoints</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="@GetHealthBarColor(participant) h-2 rounded-full transition-all duration-300"
+                                 style="width: @GetHealthPercentage(participant)%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Conditions -->
+                    @if (participant.Conditions.Any(c => !c.IsExpired))
+                    {
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            @foreach (var condition in participant.Conditions.Where(c => !c.IsExpired))
+                            {
+                                <span class="@GetConditionBadgeClass(condition.Type) text-xs px-2 py-1 rounded-full">
+                                    @condition.Type.GetDisplayName()
+                                </span>
+                            }
+                        </div>
+                    }
+
+                    <!-- Action indicators -->
+                    @if (Encounter.State == CombatState.Active && participant.HasActedThisRound)
+                    {
+                        <div class="mt-1 text-xs text-green-600">
+                            ✓ Действие выполнено
+                        </div>
+                    }
+
+                    @if (participant.TimesUsedFightBack > 0 || participant.TimesUsedDodge > 0)
+                    {
+                        <div class="mt-1 text-xs text-orange-600">
+                            Защита: @(participant.TimesUsedFightBack + participant.TimesUsedDodge)
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (Encounter.State == CombatState.Active)
+        {
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <button @onclick="OnNextTurn"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium">
+                    Следующий ход
+                </button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public CombatEncounter Encounter { get; set; } = null!;
+    [Parameter] public EventCallback<Guid> OnParticipantSelected { get; set; }
+    [Parameter] public EventCallback OnNextTurn { get; set; }
+
+    private void RollInitiative()
+    {
+        Encounter.RollInitiative(new Random());
+    }
+
+    private string GetParticipantCardClasses(bool isCurrentTurn, bool isActive, CombatParticipant participant)
+    {
+        var baseClasses = "border";
+
+        if (participant.HasCondition(CombatConditionType.Dead))
+            return $"{baseClasses} border-gray-300 bg-gray-100";
+
+        if (participant.HasCondition(CombatConditionType.Unconscious))
+            return $"{baseClasses} border-red-300 bg-red-50";
+
+        if (isCurrentTurn)
+            return $"{baseClasses} border-yellow-400 bg-yellow-50";
+
+        if (!isActive)
+            return $"{baseClasses} border-gray-300 bg-gray-50";
+
+        return $"{baseClasses} border-gray-200 bg-white hover:bg-gray-50";
+    }
+
+    private string GetNameColorClass(CombatParticipant participant)
+    {
+        if (participant.HasCondition(CombatConditionType.Dead))
+            return "text-gray-500 line-through";
+
+        if (participant.HasCondition(CombatConditionType.Unconscious))
+            return "text-red-600";
+
+        return participant.Type switch
+        {
+            "Character" => "text-blue-700",
+            "Creature" => "text-red-700",
+            _ => "text-gray-700"
+        };
+    }
+
+    private string GetHealthBarColor(CombatParticipant participant)
+    {
+        var percentage = GetHealthPercentage(participant);
+
+        return percentage switch
+        {
+            > 75 => "bg-green-500",
+            > 50 => "bg-yellow-500",
+            > 25 => "bg-orange-500",
+            > 0 => "bg-red-500",
+            _ => "bg-gray-400"
+        };
+    }
+
+    private int GetHealthPercentage(CombatParticipant participant)
+    {
+        if (participant.MaxHitPoints == 0) return 0;
+        return (int)((double)participant.CurrentHitPoints / participant.MaxHitPoints * 100);
+    }
+
+    private string GetConditionBadgeClass(CombatConditionType conditionType)
+    {
+        return conditionType switch
+        {
+            CombatConditionType.Dead => "bg-black text-white",
+            CombatConditionType.Dying => "bg-red-600 text-white",
+            CombatConditionType.Unconscious => "bg-red-500 text-white",
+            CombatConditionType.MajorWound => "bg-red-400 text-white",
+            CombatConditionType.Stunned => "bg-purple-500 text-white",
+            CombatConditionType.Prone => "bg-orange-500 text-white",
+            CombatConditionType.Grappled => "bg-yellow-600 text-white",
+            CombatConditionType.Pinned => "bg-gray-600 text-white",
+            CombatConditionType.Bleeding => "bg-red-300 text-gray-800",
+            CombatConditionType.TemporaryInsanity => "bg-purple-600 text-white",
+            _ => "bg-gray-400 text-gray-800"
+        };
+    }
+
+}

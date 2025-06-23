@@ -9,7 +9,7 @@ public enum CharacterStatus
     /// Персонаж создан как шаблон для сюжетов
     /// </summary>
     Template,
-    
+
     /// <summary>
     ///     Активный персонаж, используемый в игре
     /// </summary>

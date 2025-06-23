@@ -27,6 +27,4 @@ public class DbInitializer(IDbContextFactory<AppDbContext> dbContextFactory, ILo
             throw;
         }
     }
-
-
 }
