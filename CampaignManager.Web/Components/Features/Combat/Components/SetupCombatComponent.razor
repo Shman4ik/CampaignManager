@@ -18,7 +18,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Кампания</label>
-                <select @bind="selectedCampaignId" @onchange="OnCampaignChanged" 
+                <select @bind="selectedCampaignId" @bind:after="OnCampaignChangedAsync" 
                         class="w-full border border-gray-300 rounded-md px-3 py-2">
                     <option value="">-- Без кампании --</option>
                     @foreach (var campaign in availableCampaigns)
@@ -30,7 +30,7 @@
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Сценарий</label>
-                <select @bind="selectedScenarioId" @onchange="OnScenarioChanged"
+                <select @bind="selectedScenarioId" @bind:after="OnScenarioChangedAsync"
                         class="w-full border border-gray-300 rounded-md px-3 py-2"
                         disabled="@(!selectedCampaignGuid.HasValue)">
                     <option value="">-- Без сценария --</option>
@@ -46,12 +46,12 @@
         {
             <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p class="text-sm text-blue-700">
-                    <strong>Выбрана кампания:</strong> @availableCampaigns.FirstOrDefault(c => c.Id == selectedCampaignGuid.Value)?.Name
+                    <strong>Выбрана кампания:</strong> @availableCampaigns.FirstOrDefault(c => c.Id == selectedCampaignGuid.Value.ToString())?.Name
                 </p>
                 @if (selectedScenarioGuid.HasValue)
                 {
                     <p class="text-sm text-blue-700 mt-1">
-                        <strong>Сценарий:</strong> @availableScenarios.FirstOrDefault(s => s.Id == selectedScenarioGuid.Value)?.Name
+                        <strong>Сценарий:</strong> @availableScenarios.FirstOrDefault(s => s.Id == selectedScenarioGuid.Value.ToString())?.Name
                     </p>
                 }
             </div>
@@ -792,7 +792,7 @@
     {
         try
         {
-            var campaigns = await CampaignService.GetAllCampaignsAsync();
+            var campaigns = await CampaignService.GetAvailableCompaniesAsync();
             availableCampaigns = campaigns
                 .Select(c => new SelectOption
                 {
@@ -828,9 +828,8 @@
         }
     }
 
-    private async Task OnCampaignChanged(ChangeEventArgs e)
+    private async Task OnCampaignChangedAsync()
     {
-        selectedCampaignId = e.Value?.ToString() ?? "";
         selectedScenarioId = ""; // Reset scenario when campaign changes
         availableScenarios.Clear();
         
@@ -839,15 +838,11 @@
             await LoadScenarios(selectedCampaignGuid.Value);
             await LoadAvailableOptions(); // Reload options for new campaign context
         }
-        
-        StateHasChanged();
     }
 
-    private async Task OnScenarioChanged(ChangeEventArgs e)
+    private async Task OnScenarioChangedAsync()
     {
-        selectedScenarioId = e.Value?.ToString() ?? "";
         await LoadAvailableOptions(); // Reload options for new scenario context
-        StateHasChanged();
     }
 
     private class SelectOption
