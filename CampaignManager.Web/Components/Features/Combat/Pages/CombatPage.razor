@@ -1,6 +1,5 @@
 @page "/combat"
-@page "/combat/{CampaignId:guid}"
-@page "/combat/{CampaignId:guid}/{ScenarioId:guid}"
+@attribute [Authorize]
 @using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Combat.Components
@@ -63,7 +62,9 @@
                     <SetupCombatComponent Encounter="currentEncounter"
                                           OnParticipantAdded="OnParticipantAdded"
                                           CampaignId="CampaignId"
-                                          ScenarioId="ScenarioId"/>
+                                          ScenarioId="ScenarioId"
+                                          OnCampaignChanged="OnCampaignChanged"
+                                          OnScenarioChanged="OnScenarioChanged"/>
                 }
                 else if (currentEncounter.State == CombatState.Active)
                 {
@@ -237,6 +238,28 @@
     private Task OnConditionChanged(CombatParticipant participant)
     {
         // Handle condition changes
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnCampaignChanged(Guid? campaignId)
+    {
+        CampaignId = campaignId;
+        if (currentEncounter != null)
+        {
+            currentEncounter.CampaignId = campaignId;
+        }
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnScenarioChanged(Guid? scenarioId)
+    {
+        ScenarioId = scenarioId;
+        if (currentEncounter != null)
+        {
+            currentEncounter.ScenarioId = scenarioId;
+        }
         StateHasChanged();
         return Task.CompletedTask;
     }

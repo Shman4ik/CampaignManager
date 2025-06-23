@@ -283,6 +283,8 @@
     [Parameter] public EventCallback<CombatParticipant> OnParticipantAdded { get; set; }
     [Parameter] public Guid? CampaignId { get; set; }
     [Parameter] public Guid? ScenarioId { get; set; }
+    [Parameter] public EventCallback<Guid?> OnCampaignChanged { get; set; }
+    [Parameter] public EventCallback<Guid?> OnScenarioChanged { get; set; }
 
     [Inject] private CharacterService CharacterService { get; set; } = null!;
     [Inject] private CreatureService CreatureService { get; set; } = null!;
@@ -838,11 +840,29 @@
             await LoadScenarios(selectedCampaignGuid.Value);
             await LoadAvailableOptions(); // Reload options for new campaign context
         }
+        
+        // Update the encounter with new campaign
+        if (Encounter != null)
+        {
+            Encounter.CampaignId = selectedCampaignGuid;
+        }
+        
+        // Notify parent component about campaign change
+        await OnCampaignChanged.InvokeAsync(selectedCampaignGuid);
     }
 
     private async Task OnScenarioChangedAsync()
     {
         await LoadAvailableOptions(); // Reload options for new scenario context
+        
+        // Update the encounter with new scenario
+        if (Encounter != null)
+        {
+            Encounter.ScenarioId = selectedScenarioGuid;
+        }
+        
+        // Notify parent component about scenario change
+        await OnScenarioChanged.InvokeAsync(selectedScenarioGuid);
     }
 
     private class SelectOption
