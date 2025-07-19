@@ -116,6 +116,11 @@ public class CharacterService(
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to change character status");
 
+            // Check if user has permission to change character status (Admin or GameMaster)
+            var isKeeper = await identityService.IsKeeper();
+            if (!isKeeper)
+                throw new UnauthorizedAccessException("Only administrators and game masters can change character status");
+
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Получаем персонажа

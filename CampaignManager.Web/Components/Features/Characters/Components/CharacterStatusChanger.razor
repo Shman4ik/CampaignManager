@@ -1,0 +1,69 @@
+﻿@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Utilities.Services
+@inject CharacterService CharacterService
+@inject IdentityService IdentityService
+@inject IJSRuntime JSRuntime
+
+@if (isKeeper)
+{
+    <div class="flex items-center gap-2">
+        <select @onchange="OnStatusChanged" id="status-select" 
+                class="border border-gray-300 rounded px-2 py-1 pr-8 cm-text-sm text-primary-900 
+                       focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+            <option value="@CharacterStatus.Template" selected="@(CurrentStatus == CharacterStatus.Template)">Шаблон</option>
+            <option value="@CharacterStatus.Active" selected="@(CurrentStatus == CharacterStatus.Active)">Активный</option>
+            <option value="@CharacterStatus.Inactive" selected="@(CurrentStatus == CharacterStatus.Inactive)">Неактивный</option>
+            <option value="@CharacterStatus.Retired" selected="@(CurrentStatus == CharacterStatus.Retired)">Выведен из игры</option>
+            <option value="@CharacterStatus.Archived" selected="@(CurrentStatus == CharacterStatus.Archived)">Архивный</option>
+        </select>
+        @if (isLoading)
+        {
+            <span class="cm-text-sm text-primary-600">Обновление...</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public required Guid CharacterId { get; set; }
+    [Parameter] public required CharacterStatus CurrentStatus { get; set; }
+    [Parameter] public EventCallback<CharacterStatus> OnStatusUpdated { get; set; }
+
+    private bool isKeeper = false;
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isKeeper = await IdentityService.IsKeeper();
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        if (e.Value != null && Enum.TryParse<CharacterStatus>(e.Value.ToString(), out var newStatus))
+        {
+            if (newStatus == CurrentStatus) return;
+
+            isLoading = true;
+            StateHasChanged();
+
+            try
+            {
+                await CharacterService.SetCharacterStatusAsync(CharacterId, newStatus);
+                await OnStatusUpdated.InvokeAsync(newStatus);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "У вас нет прав для изменения статуса персонажа");
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Ошибка при изменении статуса: {ex.Message}");
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+}
