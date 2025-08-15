@@ -115,6 +115,96 @@
                     <div class="text-xs text-gray-500 mt-1">
                         Сложный: @(GetSelectedSkillValue() / 2)% | Экстремальный: @(GetSelectedSkillValue() / 5)%
                     </div>
+                    <div class="text-xs text-gray-600 mt-2">
+                        Подсказка: Бросьте d100 против навыка (@GetSelectedSkillValue()%).
+                        В рукопашной цель может Уклониться или Дать отпор (противоборство по уровням успеха).
+                        При стрельбе учитывайте укрытие/дистанцию как штраф/бонус кости.
+                    </div>
+                </div>
+
+                <!-- Manual attacker success input -->
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Уровень успеха атакующего</label>
+                        <select @bind="attackerSuccessLevel" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <option value="">-- укажите уровень --</option>
+                            @foreach (var sl in successLevelOptions)
+                            {
+                                <option value="@sl">@GetSuccessLevelRu(sl)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">(Опц.) Выпавшее значение d100</label>
+                        <input type="number" min="1" max="100" class="w-full border border-gray-300 rounded-md px-3 py-2"
+                               @bind="attackerProvidedRoll" />
+                    </div>
+                </div>
+
+                <!-- Bonus/Penalty dice -->
+                <div class="mb-4 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Бонус-кости</label>
+                        <input type="number" min="0" max="2" class="w-full border border-gray-300 rounded-md px-3 py-2" @bind="bonusDice" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Штраф-кости</label>
+                        <input type="number" min="0" max="2" class="w-full border border-gray-300 rounded-md px-3 py-2" @bind="penaltyDice" />
+                    </div>
+                </div>
+
+                @if (selectedActionType.Value == CombatActionType.Attack)
+                {
+                    <!-- Defender reaction input -->
+                    <div class="mb-4 p-3 bg-orange-50 rounded-lg">
+                        <div class="text-sm font-medium text-orange-800 mb-2">Реакция цели (по желанию)</div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs text-orange-800 mb-1">Тип реакции</label>
+                                <select @bind="defenderReactionType" class="w-full border border-orange-200 rounded-md px-3 py-2">
+                                    <option value="">— без реакции —</option>
+                                    <option value="@CombatActionType.Dodge">Уклонение</option>
+                                    <option value="@CombatActionType.FightBack" disabled="@IsFightBackDisabled()">Отпор</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-orange-800 mb-1">Уровень успеха цели</label>
+                                <select @bind="defenderSuccessLevel" class="w-full border border-orange-200 rounded-md px-3 py-2" disabled="@(defenderReactionType == null)">
+                                    <option value="">-- укажите --</option>
+                                    @foreach (var sl in successLevelOptions)
+                                    {
+                                        <option value="@sl">@GetSuccessLevelRu(sl)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-orange-800 mb-1">(Опц.) d100 цели</label>
+                                <input type="number" min="1" max="100" class="w-full border border-orange-200 rounded-md px-3 py-2"
+                                       @bind="defenderProvidedRoll" disabled="@(defenderReactionType == null)" />
+                            </div>
+                        </div>
+                        <div class="text-xs text-orange-700 mt-2">
+                            Напоминание: против огнестрела нельзя давать отпор, только Уклонение (штрафные кости при множественных атаках).
+                        </div>
+                    </div>
+                }
+
+                <!-- Damage hint and manual input -->
+                <div class="mb-4 p-3 bg-red-50 rounded-lg">
+                    <div class="text-sm text-red-700 font-medium mb-2">Подсказка по урону</div>
+                    <div class="text-xs text-red-700">
+                        @GetDamageHint()
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                        <div>
+                            <label class="block text-xs text-red-800 mb-1">Суммарный урон (опц.)</label>
+                            <input type="number" min="0" class="w-full border border-red-200 rounded-md px-3 py-2" @bind="providedDamageTotal" />
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs text-red-800 mb-1">Броски (опц., например: 6,4,3)</label>
+                            <input type="text" class="w-full border border-red-200 rounded-md px-3 py-2" @bind="providedDamageDiceList" />
+                        </div>
+                    </div>
                 </div>
             }
 
@@ -137,6 +227,30 @@
                         }
                     </select>
                 </div>
+                <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div class="text-sm text-gray-700">
+                        <strong>Навык:</strong> Мистицизм (или указанное правилом)
+                    </div>
+                    <div class="text-xs text-gray-600 mt-1">
+                        Подсказка: Бросьте d100 против навыка заклинания. Учитывайте стоимость MP и время произнесения.
+                    </div>
+                </div>
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Уровень успеха</label>
+                        <select @bind="attackerSuccessLevel" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <option value="">-- укажите уровень --</option>
+                            @foreach (var sl in successLevelOptions)
+                            {
+                                <option value="@sl">@GetSuccessLevelRu(sl)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">(Опц.) Выпавшее d100</label>
+                        <input type="number" min="1" max="100" class="w-full border border-gray-300 rounded-md px-3 py-2" @bind="attackerProvidedRoll" />
+                    </div>
+                </div>
             }
 
             @if (selectedActionType.Value == CombatActionType.Maneuver)
@@ -154,6 +268,30 @@
                         <option value="@ManeuverType.Shove">Толкнуть</option>
                     </select>
                 </div>
+                <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div class="text-sm text-gray-700">
+                        <strong>Навык:</strong> Ближний бой (Драка) против сопротивления цели.
+                    </div>
+                    <div class="text-xs text-gray-600 mt-1">
+                        Подсказка: Противоборство по уровням успеха. Разница в Телосложении может дать штрафы/запрет.
+                    </div>
+                </div>
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Уровень успеха</label>
+                        <select @bind="attackerSuccessLevel" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <option value="">-- укажите уровень --</option>
+                            @foreach (var sl in successLevelOptions)
+                            {
+                                <option value="@sl">@GetSuccessLevelRu(sl)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">(Опц.) Выпавшее d100</label>
+                        <input type="number" min="1" max="100" class="w-full border border-gray-300 rounded-md px-3 py-2" @bind="attackerProvidedRoll" />
+                    </div>
+                </div>
             }
 
             @if (selectedActionType.Value == CombatActionType.Dodge)
@@ -168,6 +306,25 @@
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
                         Сложный: @(GetDodgeSkillValue() / 2)% | Экстремальный: @(GetDodgeSkillValue() / 5)%
+                    </div>
+                    <div class="text-xs text-gray-600 mt-2">
+                        Подсказка: Противоборство с атакующим. Нельзя давать отпор против огнестрела.
+                    </div>
+                </div>
+                <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Уровень успеха</label>
+                        <select @bind="attackerSuccessLevel" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <option value="">-- укажите уровень --</option>
+                            @foreach (var sl in successLevelOptions)
+                            {
+                                <option value="@sl">@GetSuccessLevelRu(sl)</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">(Опц.) Выпавшее d100</label>
+                        <input type="number" min="1" max="100" class="w-full border border-gray-300 rounded-md px-3 py-2" @bind="attackerProvidedRoll" />
                     </div>
                 </div>
             }
@@ -210,6 +367,26 @@
     private int selectedSpellIndex = -1;
     private ManeuverType? selectedManeuverType;
 
+    // Manual resolution state
+    private SuccessLevel? attackerSuccessLevel;
+    private int? attackerProvidedRoll;
+    private CombatActionType? defenderReactionType;
+    private SuccessLevel? defenderSuccessLevel;
+    private int? defenderProvidedRoll;
+    private int bonusDice = 0;
+    private int penaltyDice = 0;
+    private int? providedDamageTotal;
+    private string? providedDamageDiceList;
+    private readonly SuccessLevel[] successLevelOptions = new[]
+    {
+        SuccessLevel.Fumble,
+        SuccessLevel.Failure,
+        SuccessLevel.RegularSuccess,
+        SuccessLevel.HardSuccess,
+        SuccessLevel.ExtremeSuccess,
+        SuccessLevel.CriticalSuccess
+    };
+
     // These would be loaded from the participant's character data
     private List<Weapon>? availableWeapons;
     private List<Spell>? availableSpells;
@@ -239,6 +416,15 @@
         selectedWeaponIndex = -1;
         selectedSpellIndex = -1;
         selectedManeuverType = null;
+    attackerSuccessLevel = null;
+    attackerProvidedRoll = null;
+    defenderReactionType = null;
+    defenderSuccessLevel = null;
+    defenderProvidedRoll = null;
+    bonusDice = 0;
+    penaltyDice = 0;
+    providedDamageTotal = null;
+    providedDamageDiceList = null;
     }
 
     private void CancelAction()
@@ -248,6 +434,15 @@
         selectedWeaponIndex = -1;
         selectedSpellIndex = -1;
         selectedManeuverType = null;
+    attackerSuccessLevel = null;
+    attackerProvidedRoll = null;
+    defenderReactionType = null;
+    defenderSuccessLevel = null;
+    defenderProvidedRoll = null;
+    bonusDice = 0;
+    penaltyDice = 0;
+    providedDamageTotal = null;
+    providedDamageDiceList = null;
     }
 
     private async Task ExecuteAction()
@@ -261,7 +456,16 @@
             TargetId = selectedTargetId,
             ActionType = selectedActionType.Value,
             SkillName = GetSelectedSkillName(),
-            SkillValue = GetSelectedSkillValue()
+            SkillValue = GetSelectedSkillValue(),
+            AttackerProvidedSuccess = attackerSuccessLevel,
+            AttackerProvidedRoll = attackerProvidedRoll,
+            DefenderReactionType = defenderReactionType,
+            DefenderProvidedSuccess = defenderSuccessLevel,
+            DefenderProvidedRoll = defenderProvidedRoll,
+            BonusDice = bonusDice,
+            PenaltyDice = penaltyDice,
+            ProvidedDamageTotal = providedDamageTotal,
+            ProvidedDamageDiceList = providedDamageDiceList
         };
 
         // Set weapon if selected
@@ -367,13 +571,24 @@
         if (!selectedActionType.HasValue)
             return false;
 
-        return selectedActionType.Value switch
+        // For actions that require a skill roll, require at least a provided success level
+        var needsRoll = selectedActionType.Value.RequiresSkillRoll();
+
+        var baseOk = selectedActionType.Value switch
         {
             CombatActionType.Attack or CombatActionType.FightBack => selectedTargetId.HasValue,
             CombatActionType.CastSpell => selectedTargetId.HasValue && selectedSpellIndex >= 0,
             CombatActionType.Maneuver => selectedTargetId.HasValue && selectedManeuverType.HasValue,
             _ => true
         };
+
+        if (!baseOk) return false;
+        if (needsRoll)
+        {
+            // If it's an attack, we expect the attacker success level; defender is optional
+            return attackerSuccessLevel.HasValue;
+        }
+        return true;
     }
 
     private string GetExecuteButtonClass()
@@ -421,6 +636,51 @@
             CombatActionType.DoNothing => $"{Participant.Name} ничего не делает",
             _ => $"{Participant.Name} выполняет действие"
         };
+    }
+
+    private string GetSuccessLevelRu(SuccessLevel sl) => sl switch
+    {
+        SuccessLevel.Fumble => "Провал (фатальный)",
+        SuccessLevel.Failure => "Неудача",
+        SuccessLevel.RegularSuccess => "Обычный успех",
+        SuccessLevel.HardSuccess => "Сложный успех",
+        SuccessLevel.ExtremeSuccess => "Экстремальный успех",
+        SuccessLevel.CriticalSuccess => "Критический успех (01)",
+        _ => sl.ToString()
+    };
+
+    private bool IsFightBackDisabled()
+    {
+        if (selectedActionType != CombatActionType.Attack) return false;
+        if (selectedWeaponIndex < 0 || availableWeapons == null) return false; // рукопашная
+        var weapon = availableWeapons[selectedWeaponIndex];
+        // Считаем всё, что не Melee — огнестрел
+        return weapon.Type != WeaponType.Melee;
+    }
+
+    private string GetDamageHint()
+    {
+        var weaponName = selectedWeaponIndex >= 0 && availableWeapons != null && selectedWeaponIndex < availableWeapons.Count
+            ? availableWeapons[selectedWeaponIndex].Name
+            : "Рукопашная";
+        var damageFormula = selectedWeaponIndex >= 0 && availableWeapons != null && selectedWeaponIndex < availableWeapons.Count
+            ? availableWeapons[selectedWeaponIndex].Damage
+            : "1d3";
+        var isExtreme = attackerSuccessLevel == SuccessLevel.ExtremeSuccess;
+        var isMelee = !(selectedWeaponIndex >= 0 && availableWeapons != null && selectedWeaponIndex < availableWeapons.Count && availableWeapons[selectedWeaponIndex].Type != WeaponType.Melee);
+
+        if (isExtreme)
+        {
+            if (isMelee)
+            {
+                return $"Экстремальный успех: максимум по {damageFormula} + ещё один бросок {damageFormula} (+ бонус урона, если есть).";
+            }
+            else
+            {
+                return $"Экстремальный успех: максимальный урон оружия ({damageFormula}), затем примените броню цели.";
+            }
+        }
+        return $"Урон: бросьте {damageFormula} (+ бонус урона, если есть).";
     }
 
 }

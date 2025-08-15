@@ -33,6 +33,25 @@ public class CombatAction
     public List<CombatCondition> InflictedConditions { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int Round { get; set; }
+
+    // Manual resolution support (no auto-rolling):
+    // Attacker-provided outcome for this action (SuccessLevel and optional d100 result)
+    public SuccessLevel? AttackerProvidedSuccess { get; set; }
+    public int? AttackerProvidedRoll { get; set; }
+
+    // Optional defender reaction declaration and provided outcome for opposed rolls
+    // DefenderReactionType should be either Dodge or FightBack (or null/None if no reaction)
+    public CombatActionType? DefenderReactionType { get; set; }
+    public SuccessLevel? DefenderProvidedSuccess { get; set; }
+    public int? DefenderProvidedRoll { get; set; }
+
+    // Meta: number of bonus/penalty dice suggested by the situation (for GM notes)
+    public int BonusDice { get; set; } = 0;
+    public int PenaltyDice { get; set; } = 0;
+
+    // Manual damage input (attacker). If provided, engine will use this instead of auto-calculating.
+    public int? ProvidedDamageTotal { get; set; }
+    public string? ProvidedDamageDiceList { get; set; }
 }
 
 public enum ManeuverType

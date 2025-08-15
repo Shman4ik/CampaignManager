@@ -1,10 +1,10 @@
-using System.Security.Claims;
-using CampaignManager.Web.Components.Features.Campaigns.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CampaignManager.Web.Components.Features.Campaigns.Services;
 
@@ -84,6 +84,23 @@ public class CampaignService(
     {
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns.Where(p => p.Status != CampaignStatus.Completed).ToListAsync();
+    }
+
+    public async Task<List<Campaign>> GetAllCampaignsAsync()
+    {
+        var userEmail = identityService.GetCurrentUserEmail();
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return new List<Campaign>();
+        }
+
+        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        return await dbContext.Campaigns
+            .Include(c => c.Players)
+            .ThenInclude(p => p.Characters)
+            .AsSplitQuery()
+            .Where(c => c.KeeperEmail == userEmail || c.Players.Any(p => p.PlayerEmail == userEmail))
+            .ToListAsync();
     }
 
     /// <summary>

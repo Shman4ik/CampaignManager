@@ -1,0 +1,270 @@
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Extensions
+
+@inject CharacterService CharacterService
+@inject CreatureService CreatureService
+@inject CampaignService CampaignService
+
+<div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+    <h2 class="cm-h2 mb-4">Настройка боя</h2>
+
+    <!-- Фильтры -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+            <label for="campaignFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по кампании</label>
+            <select id="campaignFilter" @onchange="CampaignFilterChanged" class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm">
+                <option value="@Guid.Empty">Все кампании</option>
+                @foreach (var campaign in allCampaigns)
+                {
+                    <option value="@campaign.Id">@campaign.Name</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label for="creatureTypeFilter" class="block text-sm font-medium text-gray-700 mb-1">Фильтр по типу монстра</label>
+            <select id="creatureTypeFilter" @onchange="CreatureTypeFilterChanged" class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm">
+                <option value="">Все типы</option>
+                @foreach (var type in creatureTypes)
+                {
+                    <option value="@type">@type.ToRussianString()</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- Сыщики -->
+        <div>
+            <h3 class="cm-h3 mb-2">Сыщики</h3>
+            <div class="max-h-60 overflow-y-auto border rounded-lg p-2 bg-gray-50">
+                @if (filteredCharacters.Any())
+                {
+                    @foreach (var character in filteredCharacters)
+                    {
+                        <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded cursor-pointer" @onclick="() => ToggleParticipant(character)">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" class="form-checkbox h-4 w-4 text-primary-600" checked="@IsSelected(character)" readonly />
+                                <div>
+                                    <span class="font-medium text-gray-800">@character.PersonalInfo.Name</span>
+                                    <p class="text-xs text-gray-500">@character.PersonalInfo.Occupation</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-sm text-gray-500 p-2">Нет сыщиков, соответствующих фильтру.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Монстры и NPC -->
+        <div>
+            <h3 class="cm-h3 mb-2">Монстры и NPC</h3>
+            <div class="max-h-60 overflow-y-auto border rounded-lg p-2 bg-gray-50">
+                @if (filteredCreatures.Any())
+                {
+                    @foreach (var creature in filteredCreatures)
+                    {
+                        <div class="flex items-center justify-between p-2 hover:bg-gray-100 rounded cursor-pointer" @onclick="() => ToggleParticipant(creature)">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" class="form-checkbox h-4 w-4 text-primary-600" checked="@IsSelected(creature)" readonly />
+                                <div>
+                                    <span class="font-medium text-gray-800">@creature.Name</span>
+                                    <p class="text-xs text-gray-500">@creature.Type.ToRussianString()</p>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="text-sm text-gray-500 p-2">Нет монстров, соответствующих фильтру.</p>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Выбранные участники и кнопка старта -->
+    <div class="mt-6">
+        <h3 class="cm-h3 mb-2">Выбранные участники (@selectedParticipants.Count)</h3>
+        @if (selectedParticipants.Any())
+        {
+            <div class="flex flex-wrap gap-2 mb-4">
+                @foreach (var participant in selectedParticipants)
+                {
+                    <span class="bg-primary-100 text-primary-800 text-sm font-medium px-2.5 py-0.5 rounded-full flex items-center">
+                        @participant.Name
+                        <button @onclick="() => RemoveParticipant(participant)" class="ml-2 text-primary-600 hover:text-primary-800">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </span>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="text-sm text-gray-500 mb-4">Выберите как минимум двух участников для начала боя.</p>
+        }
+    </div>
+
+    <div class="flex justify-end">
+        <button @onclick="StartCombat" class="bg-error-600 hover:bg-error-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:bg-gray-400" disabled="@(selectedParticipants.Count < 2)">
+            <i class="fas fa-fist-raised mr-2"></i>
+            Начать бой
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<List<CombatParticipant>> OnCombatStarted { get; set; }
+
+    private List<Character> allCharacters = new();
+    private List<Creature> allCreatures = new();
+    private List<Campaign> allCampaigns = new();
+    private List<CreatureType> creatureTypes = new();
+
+    private List<Character> filteredCharacters = new();
+    private List<Creature> filteredCreatures = new();
+
+    private List<CombatParticipant> selectedParticipants = new();
+
+    private Guid? selectedCampaignId;
+    private string? selectedCreatureType;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allCharacters = await CharacterService.GetAllCharactersAsync();
+        allCreatures = await CreatureService.GetAllCreaturesAsync(pageSize: 1000);
+        allCampaigns = await CampaignService.GetAllCampaignsAsync() ?? new();
+        creatureTypes = Enum.GetValues(typeof(CreatureType)).Cast<CreatureType>().ToList();
+
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        // Filter characters
+        if (selectedCampaignId.HasValue && selectedCampaignId.Value != Guid.Empty)
+        {
+            // This is a simplification. We'd need a way to link characters to campaigns.
+            // Assuming CharacterService can filter by campaign. If not, this needs adjustment.
+            // For now, let's assume we have Character.CampaignId
+            // filteredCharacters = allCharacters.Where(c => c.CampaignId == selectedCampaignId).ToList();
+            // Since we don't have CampaignId on Character, I'll just show all for now.
+            // This will require a bigger change to the model.
+            // Let's get characters from the campaign players.
+            var campaign = allCampaigns.FirstOrDefault(c => c.Id == selectedCampaignId);
+            if (campaign != null)
+            {
+                var characterIdsInCampaign = campaign.Players
+                    .SelectMany(p => p.Characters)
+                    .Select(cs => cs.Character.Id)
+                    .ToHashSet();
+
+                filteredCharacters = allCharacters.Where(c => characterIdsInCampaign.Contains(c.Id)).ToList();
+            }
+            else
+            {
+                filteredCharacters = allCharacters;
+            }
+        }
+        else
+        {
+            filteredCharacters = allCharacters;
+        }
+
+        // Filter creatures
+        if (!string.IsNullOrEmpty(selectedCreatureType) && Enum.TryParse<CreatureType>(selectedCreatureType, out var type))
+        {
+            filteredCreatures = allCreatures.Where(c => c.Type == type).ToList();
+        }
+        else
+        {
+            filteredCreatures = allCreatures;
+        }
+
+        StateHasChanged();
+    }
+
+    private void CampaignFilterChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var campaignId))
+        {
+            selectedCampaignId = campaignId == Guid.Empty ? null : campaignId;
+        }
+        ApplyFilters();
+    }
+
+    private void CreatureTypeFilterChanged(ChangeEventArgs e)
+    {
+        selectedCreatureType = e.Value?.ToString();
+        ApplyFilters();
+    }
+
+    private void ToggleParticipant(object entity)
+    {
+        CombatParticipant? participant = null;
+        Guid entityId;
+
+        if (entity is Character character)
+        {
+            entityId = character.Id;
+            participant = selectedParticipants.FirstOrDefault(p => p.CharacterId == entityId);
+            if (participant == null)
+            {
+                selectedParticipants.Add(CombatParticipant.FromCharacter(character));
+            }
+            else
+            {
+                selectedParticipants.Remove(participant);
+            }
+        }
+        else if (entity is Creature creature)
+        {
+            entityId = creature.Id;
+            participant = selectedParticipants.FirstOrDefault(p => p.CreatureId == entityId);
+            if (participant == null)
+            {
+                selectedParticipants.Add(CombatParticipant.FromCreature(creature));
+            }
+            else
+            {
+                selectedParticipants.Remove(participant);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private void RemoveParticipant(CombatParticipant participant)
+    {
+        selectedParticipants.Remove(participant);
+        StateHasChanged();
+    }
+
+    private bool IsSelected(object entity)
+    {
+        return entity switch
+        {
+            Character character => selectedParticipants.Any(p => p.CharacterId == character.Id),
+            Creature creature => selectedParticipants.Any(p => p.CreatureId == creature.Id),
+            _ => false
+        };
+    }
+
+    private async Task StartCombat()
+    {
+        if (OnCombatStarted.HasDelegate)
+        {
+            await OnCombatStarted.InvokeAsync(new List<CombatParticipant>(selectedParticipants));
+        }
+    }
+}

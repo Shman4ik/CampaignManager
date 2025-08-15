@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Combat.Model;
+﻿using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Features.Spells.Model;
@@ -25,7 +25,7 @@ public class CombatEngineService
     {
         _logger.LogInformation("Starting combat encounter");
 
-        encounter.StartCombat(new Random());
+        encounter.StartCombat();
 
         _logger.LogInformation("Combat started with {ParticipantCount} participants",
             encounter.Participants.Count);
@@ -57,8 +57,9 @@ public class CombatEngineService
             result = action.ActionType switch
             {
                 CombatActionType.Attack => await ExecuteAttack(encounter, action),
-                CombatActionType.FightBack => await ExecuteFightBack(encounter, action),
-                CombatActionType.Dodge => await ExecuteDodge(encounter, action),
+                // NOTE: FightBack and Dodge are now handled within ExecuteAttack as reactions.
+                // CombatActionType.FightBack => await ExecuteFightBack(encounter, action),
+                // CombatActionType.Dodge => await ExecuteDodge(encounter, action),
                 CombatActionType.CastSpell => await ExecuteSpellCast(encounter, action),
                 CombatActionType.Maneuver => await ExecuteManeuver(encounter, action),
                 CombatActionType.Move => await ExecuteMove(encounter, action),
@@ -98,25 +99,95 @@ public class CombatEngineService
             return Task.FromResult(result);
         }
 
-        // Apply modifiers
+        // If UI specified a defender reaction, resolve opposed; otherwise do a single attack resolution
+        if (action.DefenderReactionType is CombatActionType.Dodge or CombatActionType.FightBack)
+        {
+            var defAction = new CombatAction
+            {
+                ActorId = defender.Id,
+                ActionType = action.DefenderReactionType!.Value,
+                SkillName = action.DefenderReactionType == CombatActionType.Dodge ? "Dodge" : "Fighting (Brawl)",
+                SkillValue = action.DefenderReactionType == CombatActionType.Dodge
+                    ? defender.CombatStats.GetSkillValue("Dodge")
+                    : defender.CombatStats.GetSkillValue("Fighting (Brawl)"),
+                AttackerProvidedSuccess = action.DefenderProvidedSuccess,
+                AttackerProvidedRoll = action.DefenderProvidedRoll
+            };
+
+            // Enforce: cannot Fight Back vs firearms
+            if (action.Weapon != null && action.Weapon.Type != WeaponType.Melee && defAction.ActionType == CombatActionType.FightBack)
+            {
+                defAction.ActionType = CombatActionType.Dodge;
+                defAction.SkillName = "Dodge";
+                defAction.SkillValue = defender.CombatStats.GetSkillValue("Dodge");
+            }
+
+            return ResolveOpposedRoll(encounter, action, defAction);
+        }
+
+
+        // Suggested modifiers (for log). We still let GM provide outcome.
         var attackSkill = action.SkillValue;
-        var rangeModifier = action.Weapon != null ? _calculator.CalculateRangeModifier(action.Weapon, 0) : 0; // Distance would be calculated from positioning
+        var rangeModifier = action.Weapon != null ? _calculator.CalculateRangeModifier(action.Weapon, 0) : 0;
         var outnumberedPenalty = _calculator.CalculateOutnumberedPenalty(defender);
+        var modifiedSkill = Math.Clamp(attackSkill + rangeModifier - outnumberedPenalty, 1, 100);
 
-        var modifiedSkill = attackSkill + rangeModifier - outnumberedPenalty;
-
-        // Roll attack
-        action.Roll = _diceRoller.RollPercentile(modifiedSkill,
-            $"Атака {attacker.Name} на {defender.Name}");
+        // Use manual success if provided; fallback to roll
+        action.Roll = action.AttackerProvidedSuccess.HasValue
+            ? new DiceRoll
+            {
+                Result = action.AttackerProvidedRoll ?? 0,
+                TargetValue = modifiedSkill,
+                SuccessLevel = action.AttackerProvidedSuccess.Value,
+                IsCritical = action.AttackerProvidedSuccess == SuccessLevel.CriticalSuccess,
+                IsFumble = action.AttackerProvidedSuccess == SuccessLevel.Fumble,
+                Description = $"Ввод мастера: атака {attacker.Name} по {defender.Name} (нав. {modifiedSkill}%)"
+            }
+            : _diceRoller.RollPercentile(modifiedSkill, $"Атака {attacker.Name} на {defender.Name}");
 
         if (action.Roll.SuccessLevel.IsSuccess())
         {
-            // Calculate damage
+            // Calculate damage with CoC 7e extreme rules
             var damageFormula = action.Weapon?.Damage ?? "1d3";
             var damageBonus = attacker.CombatStats.DamageBonus;
             var isExtremeSuccess = action.Roll.SuccessLevel == SuccessLevel.ExtremeSuccess;
 
-            action.Damage = _diceRoller.RollDamage(damageFormula, damageBonus, isExtremeSuccess);
+            // Manual override if GM provided damage
+            if (action.ProvidedDamageTotal.HasValue)
+            {
+                action.Damage = new DamageRoll
+                {
+                    TotalDamage = action.ProvidedDamageTotal.Value,
+                    DiceResults = ParseDiceList(action.ProvidedDamageDiceList),
+                    DamageBonus = 0,
+                    DamageFormula = damageFormula,
+                    IsMaxDamage = false
+                };
+            }
+            else
+            {
+                if (isExtremeSuccess && action.Weapon != null)
+                {
+                    var isFirearm = action.Weapon.Type != WeaponType.Melee;
+                    if (isFirearm)
+                    {
+                        var max = _diceRoller.GetMaximumDamage(damageFormula);
+                        var bonus = _diceRoller.RollDamage(damageBonus, "0");
+                        action.Damage = new DamageRoll { TotalDamage = max + bonus.TotalDamage, DamageBonus = bonus.TotalDamage, DamageFormula = damageFormula, IsMaxDamage = true };
+                    }
+                    else
+                    {
+                        var max = _diceRoller.GetMaximumDamage(damageFormula);
+                        var extra = _diceRoller.RollDamage(damageFormula, "0");
+                        var bonus = _diceRoller.RollDamage(damageBonus, "0");
+                        action.Damage = new DamageRoll { TotalDamage = max + extra.TotalDamage + bonus.TotalDamage, DiceResults = extra.DiceResults, DamageBonus = bonus.TotalDamage, DamageFormula = damageFormula, IsMaxDamage = true };
+                    }
+                }
+                else
+                {
+                    action.Damage = _diceRoller.RollDamage(damageFormula, damageBonus, false);
+                }
+            }
 
             // Apply armor reduction
             var armorReduction = _calculator.GetArmorReduction(defender);
@@ -135,9 +206,13 @@ public class CombatEngineService
             // Check for CON roll if Major Wound
             if (_calculator.RequiresConstitutionRoll(defender, finalDamage))
             {
-                // This would trigger a CON roll - for now just log it
-                _logger.LogInformation("Participant {Name} needs CON roll for Major Wound",
-                    defender.Name);
+                var conRoll = _diceRoller.RollConstitution(defender.CombatStats.Constitution, $"Проверка телосложения для {defender.Name}");
+                if (!conRoll.SuccessLevel.IsSuccess())
+                {
+                    var unconscious = new CombatCondition { Type = CombatConditionType.Unconscious, Description = "Потерял сознание от серьезной раны" };
+                    defender.AddCondition(unconscious);
+                    action.InflictedConditions.Add(unconscious);
+                }
             }
 
             result.DamageDealt = finalDamage;
@@ -151,6 +226,161 @@ public class CombatEngineService
         result.Success = true;
         return Task.FromResult(result);
     }
+
+
+    private Task<CombatActionResult> ResolveOpposedRoll(CombatEncounter encounter, CombatAction attackAction, CombatAction defenseAction)
+    {
+        var result = new CombatActionResult { Action = attackAction };
+        var attacker = encounter.Participants.First(p => p.Id == attackAction.ActorId);
+        var defender = encounter.Participants.First(p => p.Id == defenseAction.ActorId);
+        
+        // Use manual outcomes if provided; fallback to rolling
+        attackAction.Roll = attackAction.AttackerProvidedSuccess.HasValue
+            ? new DiceRoll
+            {
+                Result = attackAction.AttackerProvidedRoll ?? 0,
+                TargetValue = attackAction.SkillValue,
+                SuccessLevel = attackAction.AttackerProvidedSuccess.Value,
+                IsCritical = attackAction.AttackerProvidedSuccess == SuccessLevel.CriticalSuccess,
+                IsFumble = attackAction.AttackerProvidedSuccess == SuccessLevel.Fumble,
+                Description = $"Ввод мастера: атака {attacker.Name}"
+            }
+            : _diceRoller.RollPercentile(attackAction.SkillValue, $"Атака {attacker.Name}");
+
+        defenseAction.Roll = defenseAction.AttackerProvidedSuccess.HasValue
+            ? new DiceRoll
+            {
+                Result = defenseAction.AttackerProvidedRoll ?? 0,
+                TargetValue = defenseAction.SkillValue,
+                SuccessLevel = defenseAction.AttackerProvidedSuccess.Value,
+                IsCritical = defenseAction.AttackerProvidedSuccess == SuccessLevel.CriticalSuccess,
+                IsFumble = defenseAction.AttackerProvidedSuccess == SuccessLevel.Fumble,
+                Description = $"Ввод мастера: {defenseAction.ActionType} {defender.Name}"
+            }
+            : _diceRoller.RollPercentile(defenseAction.SkillValue, $"{defenseAction.ActionType} от {defender.Name}");
+
+        var aLvl = attackAction.Roll.SuccessLevel;
+        var dLvl = defenseAction.Roll.SuccessLevel;
+
+        if (aLvl > dLvl)
+        {
+            // Attacker wins -> attacker deals damage
+            var damageFormula = attackAction.Weapon?.Damage ?? "1d3";
+            var damageBonus = attacker.CombatStats.DamageBonus;
+            var isExtremeSuccess = attackAction.Roll.SuccessLevel == SuccessLevel.ExtremeSuccess;
+            if (attackAction.ProvidedDamageTotal.HasValue)
+            {
+                attackAction.Damage = new DamageRoll
+                {
+                    TotalDamage = attackAction.ProvidedDamageTotal.Value,
+                    DiceResults = ParseDiceList(attackAction.ProvidedDamageDiceList),
+                    DamageBonus = 0,
+                    DamageFormula = damageFormula,
+                    IsMaxDamage = false
+                };
+            }
+            else
+            {
+                if (isExtremeSuccess && attackAction.Weapon != null)
+                {
+                    var isFirearm = attackAction.Weapon.Type != WeaponType.Melee;
+                    if (isFirearm)
+                    {
+                        var max = _diceRoller.GetMaximumDamage(damageFormula);
+                        var bonus = _diceRoller.RollDamage(damageBonus, "0");
+                        attackAction.Damage = new DamageRoll { TotalDamage = max + bonus.TotalDamage, DamageBonus = bonus.TotalDamage, DamageFormula = damageFormula, IsMaxDamage = true };
+                    }
+                    else
+                    {
+                        var max = _diceRoller.GetMaximumDamage(damageFormula);
+                        var extra = _diceRoller.RollDamage(damageFormula, "0");
+                        var bonus = _diceRoller.RollDamage(damageBonus, "0");
+                        attackAction.Damage = new DamageRoll { TotalDamage = max + extra.TotalDamage + bonus.TotalDamage, DiceResults = extra.DiceResults, DamageBonus = bonus.TotalDamage, DamageFormula = damageFormula, IsMaxDamage = true };
+                    }
+                }
+                else
+                {
+                    attackAction.Damage = _diceRoller.RollDamage(damageFormula, damageBonus, false);
+                }
+            }
+            var armorReduction = _calculator.GetArmorReduction(defender);
+            var finalDamage = Math.Max(0, attackAction.Damage.TotalDamage - armorReduction);
+            defender.TakeDamage(finalDamage);
+            result.DamageDealt = finalDamage;
+            result.Description = $"{attacker.Name} побеждает в противоборстве и наносит {finalDamage} урона {defender.Name}.";
+        }
+        else if (dLvl > aLvl)
+        {
+            // Defender wins
+            if (defenseAction.ActionType == CombatActionType.FightBack)
+            {
+                // Defender deals damage on successful fight back
+                var damageFormula = defenseAction.Weapon?.Damage ?? "1d3";
+                var damageBonus = defender.CombatStats.DamageBonus;
+                defenseAction.Damage = _diceRoller.RollDamage(damageFormula, damageBonus, false);
+                var armorReduction = _calculator.GetArmorReduction(attacker);
+                var finalDamage = Math.Max(0, defenseAction.Damage.TotalDamage - armorReduction);
+                attacker.TakeDamage(finalDamage);
+                result.Description = $"{defender.Name} даёт отпор и наносит {finalDamage} урона {attacker.Name}.";
+            }
+            else
+            {
+                result.Description = $"{defender.Name} успешно уклоняется от атаки {attacker.Name}.";
+            }
+        }
+        else
+        {
+            // Tie
+            if (aLvl.IsSuccess() && dLvl.IsSuccess())
+            {
+                if (defenseAction.ActionType == CombatActionType.FightBack)
+                {
+                    // Tie vs Fight Back -> attacker wins
+                    var damageFormula = attackAction.Weapon?.Damage ?? "1d3";
+                    var damageBonus = attacker.CombatStats.DamageBonus;
+                    var isExtremeSuccess = attackAction.Roll.SuccessLevel == SuccessLevel.ExtremeSuccess;
+                    if (attackAction.ProvidedDamageTotal.HasValue)
+                    {
+                        attackAction.Damage = new DamageRoll
+                        {
+                            TotalDamage = attackAction.ProvidedDamageTotal.Value,
+                            DiceResults = ParseDiceList(attackAction.ProvidedDamageDiceList),
+                            DamageBonus = 0,
+                            DamageFormula = damageFormula,
+                            IsMaxDamage = false
+                        };
+                    }
+                    else
+                    {
+                        attackAction.Damage = _diceRoller.RollDamage(damageFormula, damageBonus, isExtremeSuccess);
+                    }
+                    var armorReduction = _calculator.GetArmorReduction(defender);
+                    var finalDamage = Math.Max(0, attackAction.Damage.TotalDamage - armorReduction);
+                    defender.TakeDamage(finalDamage);
+                    result.DamageDealt = finalDamage;
+                    result.Description = $"Ничья уровней успеха: преимущество у атакующего. {attacker.Name} наносит {finalDamage} урона.";
+                }
+                else
+                {
+                    // Tie vs Dodge -> defender avoids
+                    result.Description = $"Ничья уровней успеха: {defender.Name} избегает удара.";
+                }
+            }
+            else
+            {
+                // Both failed or both not success -> no effect
+                result.Description = $"{attacker.Name} атакует, но {defender.Name} избегает урона.";
+            }
+        }
+
+        // Increment defender's action counters
+        if (defenseAction.ActionType == CombatActionType.FightBack) defender.TimesUsedFightBack++;
+        if (defenseAction.ActionType == CombatActionType.Dodge) defender.TimesUsedDodge++;
+
+        result.Success = true;
+        return Task.FromResult(result);
+    }
+
 
     private Task<CombatActionResult> ExecuteFightBack(CombatEncounter encounter, CombatAction action)
     {
@@ -212,9 +442,18 @@ public class CombatEngineService
             return result;
         }
 
-        // Roll for spell casting (assuming we have a spell skill)
-        action.Roll = _diceRoller.RollPercentile(action.SkillValue,
-            $"Произнесение заклинания {action.Spell.Name}");
+        // Manual input preferred; fallback to rolling
+        action.Roll = action.AttackerProvidedSuccess.HasValue
+            ? new DiceRoll
+            {
+                Result = action.AttackerProvidedRoll ?? 0,
+                TargetValue = action.SkillValue,
+                SuccessLevel = action.AttackerProvidedSuccess.Value,
+                IsCritical = action.AttackerProvidedSuccess == SuccessLevel.CriticalSuccess,
+                IsFumble = action.AttackerProvidedSuccess == SuccessLevel.Fumble,
+                Description = $"Ввод мастера: произнесение заклинания {action.Spell.Name}"
+            }
+            : _diceRoller.RollPercentile(action.SkillValue, $"Произнесение заклинания {action.Spell.Name}");
 
         if (action.Roll.SuccessLevel.IsSuccess())
         {
@@ -266,8 +505,17 @@ public class CombatEngineService
         var penalty = _calculator.GetManeuverPenalty(attacker, defender, maneuver.ManeuverType);
         var modifiedSkill = action.SkillValue - penalty;
 
-        action.Roll = _diceRoller.RollPercentile(modifiedSkill,
-            $"Маневр {maneuver.ManeuverType} от {attacker.Name}");
+        action.Roll = action.AttackerProvidedSuccess.HasValue
+            ? new DiceRoll
+            {
+                Result = action.AttackerProvidedRoll ?? 0,
+                TargetValue = modifiedSkill,
+                SuccessLevel = action.AttackerProvidedSuccess.Value,
+                IsCritical = action.AttackerProvidedSuccess == SuccessLevel.CriticalSuccess,
+                IsFumble = action.AttackerProvidedSuccess == SuccessLevel.Fumble,
+                Description = $"Ввод мастера: маневр {maneuver.ManeuverType} от {attacker.Name}"
+            }
+            : _diceRoller.RollPercentile(modifiedSkill, $"Маневр {maneuver.ManeuverType} от {attacker.Name}");
 
         if (action.Roll.SuccessLevel.IsSuccess())
         {
@@ -396,7 +644,7 @@ public class CombatEngineService
             if (participant.HasCondition(CombatConditionType.Dying))
             {
                 // Roll CON to avoid death
-                var conRoll = _diceRoller.RollConstitution(60, // TODO: Get actual CON
+                var conRoll = _diceRoller.RollConstitution(participant.CombatStats.Constitution,
                     $"Проверка на смерть для {participant.Name}");
 
                 if (!conRoll.SuccessLevel.IsSuccess())
@@ -418,6 +666,18 @@ public class CombatEngineService
 
         encounter.NextRound();
         return Task.FromResult(encounter);
+    }
+
+    private static List<int> ParseDiceList(string? list)
+    {
+        var results = new List<int>();
+        if (string.IsNullOrWhiteSpace(list)) return results;
+        var parts = list.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            if (int.TryParse(part.Trim(), out var val)) results.Add(val);
+        }
+        return results;
     }
 }
 

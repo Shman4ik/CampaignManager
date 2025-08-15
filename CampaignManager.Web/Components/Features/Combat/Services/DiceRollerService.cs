@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Combat.Model;
+﻿using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Services;
@@ -72,22 +72,23 @@ public class DiceRollerService
         return result;
     }
 
-    public DamageRoll RollDamage(string damageFormula, int damageBonus = 0, bool isExtremeSuccess = false)
+    public DamageRoll RollDamage(string damageFormula, string damageBonus, bool isExtremeSuccess = false)
     {
         var damage = ParseAndRollDamage(damageFormula);
+        var bonusDamage = ParseAndRollDamage(damageBonus);
 
         if (isExtremeSuccess)
         {
             // Extreme success: maximum damage + damage bonus + additional roll
-            damage.TotalDamage = GetMaximumDamage(damageFormula) + damageBonus + ParseAndRollDamage(damageFormula).TotalDamage;
+            damage.TotalDamage = GetMaximumDamage(damageFormula) + bonusDamage.TotalDamage + ParseAndRollDamage(damageFormula).TotalDamage;
             damage.IsMaxDamage = true;
         }
         else
         {
-            damage.TotalDamage += damageBonus;
+            damage.TotalDamage += bonusDamage.TotalDamage;
         }
 
-        damage.DamageBonus = damageBonus;
+        damage.DamageBonus = bonusDamage.TotalDamage;
         damage.DamageFormula = damageFormula;
 
         return damage;
@@ -174,7 +175,7 @@ public class DiceRollerService
         return result;
     }
 
-    private int GetMaximumDamage(string formula)
+    public int GetMaximumDamage(string formula)
     {
         var cleanFormula = formula.Trim().ToLower().Replace(" ", "");
 

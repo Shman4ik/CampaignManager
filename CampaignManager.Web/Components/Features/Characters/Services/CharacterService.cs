@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Campaigns.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
@@ -61,6 +61,28 @@ public class CharacterService(
         {
             logger.LogError(ex, $"Error creating character: {ex.Message}");
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Gets all non-template characters.
+    /// </summary>
+    /// <returns>A list of all characters.</returns>
+    public async Task<List<Character>> GetAllCharactersAsync()
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var characterDtos = await dbContext.CharacterStorage
+                .Where(c => c.Status != CharacterStatus.Template)
+                .ToListAsync();
+            
+            return characterDtos.Select(dto => dto.Character).ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving all characters");
+            return new List<Character>();
         }
     }
 

@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Characters.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Model;
 
@@ -6,11 +6,17 @@ namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 public class CombatParticipant : BaseDataBaseEntity
 {
+    public CombatParticipant()
+    {
+        Init();
+    }
+
     public Guid CombatEncounterId { get; set; }
     public Guid? CharacterId { get; set; }
     public Guid? CreatureId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Type { get; set; } = "Character"; // Character, Creature, NPC
+    public string? SourceId { get; set; } // For tracking original source in UI
 
     // Combat Status
     public int CurrentHitPoints { get; set; }
@@ -26,9 +32,7 @@ public class CombatParticipant : BaseDataBaseEntity
     public List<CombatAction> Actions { get; set; } = new();
 
     // Initiative and Turn Order
-    public int InitiativeRoll { get; set; }
-    public int InitiativeModifier { get; set; }
-    public int TotalInitiative => InitiativeRoll + InitiativeModifier;
+    public int TotalInitiative => CombatStats.Initiative;
     public bool HasActedThisRound { get; set; }
 
     // Round tracking
@@ -147,19 +151,19 @@ public class CombatParticipant : BaseDataBaseEntity
 
     public static CombatParticipant FromCreature(Creature creature)
     {
+        var combatStats = CombatStats.CalculateFromCreatureCharacteristics(creature.CreatureCharacteristics);
         var participant = new CombatParticipant
         {
             CreatureId = creature.Id,
             Name = creature.Name,
             Type = "Creature",
-            // These would need to be calculated from creature characteristics
-            // For now using placeholder values
-            CurrentHitPoints = 10, // TODO: Calculate from creature data
-            MaxHitPoints = 10,
-            CurrentMagicPoints = 0,
-            MaxMagicPoints = 0,
-            CurrentSanity = 0,
-            MaxSanity = 0
+            CurrentHitPoints = combatStats.HitPoints,
+            MaxHitPoints = combatStats.HitPoints,
+            CurrentMagicPoints = creature.CreatureCharacteristics?.Power?.Value ?? 0,
+            MaxMagicPoints = creature.CreatureCharacteristics?.Power?.Value ?? 0,
+            CurrentSanity = 0, // Creatures typically don't have SAN
+            MaxSanity = 0,
+            CombatStats = combatStats
         };
 
         return participant;

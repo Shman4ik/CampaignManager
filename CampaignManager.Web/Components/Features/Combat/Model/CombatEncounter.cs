@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Features.Combat.Model;
+﻿namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 public enum CombatState
 {
@@ -85,12 +85,6 @@ public class CombatEncounter
 
     public void RollInitiative(Random random)
     {
-        foreach (var participant in Participants)
-        {
-            participant.InitiativeRoll = random.Next(1, 101); // 1d100
-            participant.InitiativeModifier = participant.CombatStats.GetInitiativeWithFirearm();
-        }
-
         RecalculateInitiativeOrder();
         State = CombatState.Active;
     }
@@ -104,20 +98,13 @@ public class CombatEncounter
             .ToList();
     }
 
-    public void StartCombat(Random random)
+    public void StartCombat()
     {
         if (State != CombatState.Setup)
             return;
 
-        if (AutoRollInitiative)
-        {
-            RollInitiative(random);
-        }
-        else
-        {
-            State = CombatState.RollingInitiative;
-        }
-
+        RecalculateInitiativeOrder();
+        State = CombatState.Active;
         CurrentRound = 1;
         CurrentTurnIndex = 0;
     }
