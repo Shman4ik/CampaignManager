@@ -8,368 +8,415 @@ namespace CampaignManager.Web.Utilities.Services;
 
 public class PdfExportService
 {
-    // Register QuestPDF license (using community edition)
     static PdfExportService()
     {
         Settings.License = LicenseType.Community;
     }
 
+    // Color palette (Lovecraftian green + sepia accents)
+    private const string BgPanel = "#F7F2E6"; // light parchment
+    private const string BorderDark = "#3A4A3C"; // deep green
+    private const string Accent = "#7A5C2E"; // sepia accent
+    private const string Muted = "#555555";
+
     /// <summary>
-    ///     Generates a PDF document from a character
+    /// Генерация PDF листа персонажа в стилистике CoC 7e
     /// </summary>
-    /// <param name="character">The character to export</param>
-    /// <returns>Byte array containing the PDF document</returns>
     public async Task<byte[]> GenerateCharacterPdfAsync(Character character)
     {
         return await Task.Run(() =>
         {
-            var document = Document.Create(container =>
+            var doc = Document.Create(pageContainer =>
             {
-                container.Page(page =>
+                pageContainer.Page(page =>
                 {
                     page.Size(PageSizes.A4);
-                    page.Margin(20);
-                    page.DefaultTextStyle(x => x.FontSize(10));
+                    page.Margin(25);
+                    page.DefaultTextStyle(t => t.FontSize(9));
 
-                    page.Header().Element(ComposeHeader);
-
-                    page.Content().Element(contentContainer => { ComposeContent(contentContainer, character); });
-
-                    page.Footer().AlignCenter().Text(text =>
+                    page.Header().Element(c => ComposeHeader(c, character));
+                    page.Content().Element(c => ComposeBody(c, character));
+                    page.Footer().AlignRight().Text(txt =>
                     {
-                        text.Span("Страница ").FontSize(10);
-                        text.CurrentPageNumber().FontSize(10);
-                        text.Span(" из ").FontSize(10);
-                        text.TotalPages().FontSize(10);
+                        txt.Span("Стр. ");
+                        txt.CurrentPageNumber();
+                        txt.Span(" / ");
+                        txt.TotalPages();
+                        txt.Span("  •  CampaignManager").FontColor(Muted).FontSize(8);
                     });
                 });
-
-                void ComposeHeader(IContainer container)
-                {
-                    container.Row(row =>
-                    {
-                        row.RelativeItem().Column(column =>
-                        {
-                            column.Item().Text($"{character.PersonalInfo?.Name ?? "Персонаж"}")
-                                .Bold().FontSize(16);
-                            column.Item().Text("Персонаж")
-                                .FontSize(12);
-                        });
-
-                        row.ConstantItem(80).Text(DateTime.Now.ToString("dd.MM.yyyy"))
-                            .FontSize(10).Italic();
-                    });
-                }
             });
 
-            return document.GeneratePdf();
+            return doc.GeneratePdf();
         });
     }
 
-    private void ComposeContent(IContainer container, Character character)
+    #region Layout Composition
+
+    private void ComposeHeader(IContainer container, Character c)
     {
-        container.Column(column =>
+        container.PaddingBottom(8).BorderBottom(1).BorderColor(BorderDark).Row(row =>
         {
-            // Personal section
-            column.Item().Element(e => ComposePersonalSection(e, character));
-            column.Item().Height(15);
-
-            // Characteristics section
-            column.Item().Element(e => ComposeCharacteristicsSection(e, character));
-            column.Item().Height(15);
-
-            // Skills section
-            column.Item().Element(e => ComposeSkillsSection(e, character));
-            column.Item().Height(15);
-
-            // Combat section
-            column.Item().Element(e => ComposeCombatSection(e, character));
-            column.Item().Height(15);
-
-            // Equipment section
-            column.Item().Element(e => ComposeEquipmentSection(e, character));
-            column.Item().Height(15);
-
-            // Biography section (if any)
-            if (!string.IsNullOrEmpty(character.Biography?.Appearance) ||
-                !string.IsNullOrEmpty(character.Biography?.Traits) ||
-                !string.IsNullOrEmpty(character.Biography?.IdealsAndPrinciples))
-                column.Item().Element(e => ComposeBiographySection(e, character));
-        });
-    }
-
-    private void ComposePersonalSection(IContainer container, Character character)
-    {
-        container.Column(column =>
-        {
-            column.Item().Text("Личные данные").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
-
-            column.Item().Table(table =>
+            row.RelativeItem().Column(col =>
             {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.ConstantColumn(120);
-                    columns.RelativeColumn(2);
-                    columns.RelativeColumn(1);
-                });
-
-                table.Cell().Row(1).Column(2).Column(col =>
-                {
-                    col.Item().Text($"Имя: {character.PersonalInfo?.Name ?? "—"}");
-                    col.Item().Text($"Происхождение: {character.PersonalInfo?.Birthplace ?? "—"}");
-                    col.Item().Text($"Возраст: {character.PersonalInfo?.Age ?? 0}");
-                    col.Item().Text($"Пол: {character.PersonalInfo?.Gender ?? "—"}");
-                });
+                col.Item().Text(c.PersonalInfo?.Name.OrDash()).FontSize(18).Bold().FontColor(BorderDark);
+                col.Item().Text(c.PersonalInfo?.Occupation.OrDash()).FontSize(11).FontColor(Accent);
+            });
+            row.RelativeItem().AlignRight().Column(col =>
+            {
+                col.Item().Text($"Игрок: {c.PersonalInfo?.PlayerName.OrDash()}").FontSize(9);
+                col.Item().Text($"Дата: {DateTime.Now:dd.MM.yyyy}").FontSize(9);
             });
         });
     }
 
-    private void ComposeCharacteristicsSection(IContainer container, Character character)
+    private void ComposeBody(IContainer container, Character c)
     {
-        container.Column(column =>
+        container.Column(col =>
         {
-            column.Item().Text("Характеристики").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
+            col.Spacing(10);
 
-            column.Item().Table(table =>
+            // Top info band
+            col.Item().Element(e => Panel(e, inner => inner.Row(r =>
             {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                });
+                r.RelativeItem().Element(x => ComposePersonalInfo(x, c));
+                r.ConstantItem(8);
+                r.RelativeItem().Element(x => ComposeDerivedAttributes(x, c));
+            }), title: "Основная информация"));
 
-                // First column - main characteristics
-                table.Cell().Row(1).Column(1).Column(col =>
-                {
-                    col.Item().Text("Характеристики:").Bold();
-                    if (character.Characteristics != null)
-                    {
-                        col.Item().Text($"Сила: {character.Characteristics.Strength.Regular}");
-                        col.Item().Text($"Ловкость: {character.Characteristics.Dexterity.Regular}");
-                        col.Item().Text($"Интеллект: {character.Characteristics.Intelligence.Regular}");
-                        col.Item().Text($"Телосложение: {character.Characteristics.Constitution.Regular}");
-                    }
-                });
+            // Characteristics grid
+            col.Item().Element(e => Panel(e, x => ComposeCharacteristicsGrid(x, c), title: "Характеристики"));
 
-                // Second column - more characteristics
-                table.Cell().Row(1).Column(2).Column(col =>
-                {
-                    col.Item().Text("Дополнительно:").Bold();
-                    if (character.Characteristics != null)
-                    {
-                        col.Item().Text($"Внешность: {character.Characteristics.Appearance.Regular}");
-                        col.Item().Text($"Сила воли: {character.Characteristics.Power.Regular}");
-                        col.Item().Text($"Размер: {character.Characteristics.Size.Regular}");
-                        col.Item().Text($"Образование: {character.Characteristics.Education.Regular}");
-                    }
-                });
+            // Skills (flowing columns)
+            col.Item().Element(e => Panel(e, x => ComposeSkills(x, c), title: "Навыки"));
 
-                // Third column - state
-                table.Cell().Row(1).Column(3).Column(col =>
-                {
-                    col.Item().Text("Состояние:").Bold();
-                    if (character.State != null)
-                    {
-                        col.Item().Text($"Без сознания: {(character.State.IsUnconscious ? "Да" : "Нет")}");
-                        col.Item().Text($"Серьезная рана: {(character.State.HasSeriousInjury ? "Да" : "Нет")}");
-                        col.Item().Text($"При смерти: {(character.State.IsDying ? "Да" : "Нет")}");
-                    }
-                });
-            });
+            // Weapons & Spells
+            if (c.Weapons.Any() || c.Spells.Any())
+                col.Item().Element(e => Panel(e, x => ComposeCombatMagicSection(x, c), title: "Сражение / Магия"));
+
+            // Equipment & Finances
+            if ((c.Equipment?.Items.Any() ?? false) || c.Finances is not null)
+                col.Item().Element(e => Panel(e, x => ComposeEquipmentFinances(x, c), title: "Снаряжение и Финансы"));
+
+            // Biography / Backstory / Notes
+            if (HasBiography(c))
+                col.Item().Element(e => Panel(e, x => ComposeBiography(x, c), title: "История и Заметки"));
         });
     }
 
-    private void ComposeSkillsSection(IContainer container, Character character)
+    #endregion
+
+    #region Section Implementations
+
+    private void ComposePersonalInfo(IContainer container, Character c)
     {
-        container.Column(column =>
+        container.Column(col =>
         {
-            column.Item().Text("Навыки").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
-
-            // Create a table layout for skills
-            column.Item().Table(table =>
-            {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                });
-
-                // Distribute skill groups evenly across columns
-                var skillGroups = character.Skills?.SkillGroups ?? new List<SkillGroup>();
-
-                // Create rows based on the number of skill groups
-                int rows = (skillGroups.Count + 3) / 4; // Ceiling division
-
-                for (var i = 0; i < skillGroups.Count; i++)
-                {
-                    var group = skillGroups[i];
-
-                    // Use Element instead of directly accessing Row/Column with numeric indices
-                    table.Cell().Element(cell =>
-                    {
-                        // Add the content
-                        cell.Element(container =>
-                        {
-                            container.Column(col =>
-                            {
-                                col.Spacing(2);
-                                col.Item().Text(group.Name).Bold().FontSize(10);
-                                foreach (var skill in group.Skills)
-                                    col.Item().Text($"{skill.Name}: {skill.Value.Regular}").FontSize(9);
-                            });
-                        });
-                    });
-                }
-            });
+            col.Item().Text($"Имя: {c.PersonalInfo?.Name.OrDash()}");
+            col.Item().Text($"Профессия: {c.PersonalInfo?.Occupation.OrDash()}");
+            col.Item().Text($"Возраст: {c.PersonalInfo?.Age}");
+            col.Item().Text($"Пол: {c.PersonalInfo?.Gender.OrDash()}");
+            col.Item().Text($"Место рождения: {c.PersonalInfo?.Birthplace.OrDash()}");
+            col.Item().Text($"Проживание: {c.PersonalInfo?.Residence.OrDash()}");
+            col.Item().Text($"Телосложение: {c.PersonalInfo?.Build.OrDash()}");
+            col.Item().Text($"Бонус урона: {c.PersonalInfo?.DamageBonus.OrDash()}");
+            col.Item().Text($"Скорость: {c.PersonalInfo?.MoveSpeed}");
+            col.Item().Text($"Уклонение: {c.PersonalInfo?.Dodge}");
         });
     }
 
-    private void ComposeCombatSection(IContainer container, Character character)
+    private void ComposeDerivedAttributes(IContainer container, Character c)
     {
-        container.Column(column =>
+        var d = c.DerivedAttributes;
+        container.Column(col =>
         {
-            column.Item().Text("Оружие и заклинания").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
+            Stat(col, "HP", d.HitPoints);
+            Stat(col, "MP", d.MagicPoints);
+            Stat(col, "SAN", d.Sanity);
+            Stat(col, "Удача", d.Luck);
+        });
 
-            // Weapons section
-            if (character.Weapons != null && character.Weapons.Any())
+        static void Stat(ColumnDescriptor col, string label, AttributeWithMaxValue v)
+        {
+            // AttributeWithMaxValue has properties Value and MaxValue (inferred from constructor signature new(0,0))
+            var valueProp = v?.GetType().GetProperty("Value");
+            var maxProp = v?.GetType().GetProperty("MaxValue");
+            var currentVal = valueProp?.GetValue(v) ?? 0;
+            var maxVal = maxProp?.GetValue(v) ?? 0;
+            col.Item().Row(r =>
             {
-                column.Item().Text("Оружие:").SemiBold();
-                column.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
-                    });
+                r.ConstantItem(40).Text(label + ":").SemiBold();
+                r.RelativeItem().Text($"{currentVal}/{maxVal}");
+            });
+        }
+    }
 
-                    table.Header(header =>
-                    {
-                        header.Cell().Text("Название").SemiBold();
-                        header.Cell().Text("Урон").SemiBold();
-                        header.Cell().Text("Скилл").SemiBold();
-                        header.Cell().Text("Вес").SemiBold();
-                    });
+    private void ComposeCharacteristicsGrid(IContainer container, Character c)
+    {
+        var ch = c.Characteristics;
+        var data = new (string Label, AttributeValue? Val)[]
+        {
+            ("Сила", ch.Strength), ("Телослож.", ch.Constitution), ("Размер", ch.Size),
+            ("Ловкость", ch.Dexterity), ("Внешность", ch.Appearance), ("Интеллект", ch.Intelligence),
+            ("Сила воли", ch.Power), ("Образован.", ch.Education)
+        };
 
-                    foreach (var weapon in character.Weapons)
-                    {
-                        table.Cell().Text(weapon.Name);
-                        table.Cell().Text(weapon.Damage);
-                        table.Cell().Text(weapon.Skill);
-                    }
-                });
-                column.Item().Height(10);
-            }
-
-            // Spells section
-            if (character.Spells != null && character.Spells.Any())
+        container.Table(table =>
+        {
+            const int cols = 4;
+            table.ColumnsDefinition(cd =>
             {
-                column.Item().Text("Заклинания:").SemiBold();
-                column.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn(3);
-                    });
+                for (int i = 0; i < cols; i++) cd.RelativeColumn();
+            });
 
-                    table.Header(header =>
-                    {
-                        header.Cell().Text("Название").SemiBold();
-                        header.Cell().Text("Описание").SemiBold();
-                    });
-
-                    foreach (var spell in character.Spells)
-                    {
-                        table.Cell().Text(spell.Name);
-                        table.Cell().Text(spell.Description);
-                    }
-                });
+            int cellIndex = 0;
+            foreach (var item in data)
+            {
+                table.Cell().Element(cell => AttributeCell(cell, item.Label, item.Val));
+                cellIndex++;
             }
         });
     }
 
-    private void ComposeEquipmentSection(IContainer container, Character character)
+    private void AttributeCell(IContainer container, string label, AttributeValue? v)
     {
-        container.Column(column =>
+        container.Padding(4).Border(1).BorderColor(BorderDark).Background("#FFFFFF").Column(col =>
         {
-            column.Item().Text("Снаряжение").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
-
-            // Equipment section
-            if (character.Equipment != null && character.Equipment.Items.Any())
-                column.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(3);
-                        columns.RelativeColumn(3);
-                    });
-
-                    table.Header(header =>
-                    {
-                        header.Cell().Text("Название").SemiBold();
-                        header.Cell().Text("Описание").SemiBold();
-                    });
-
-                    foreach (var item in character.Equipment.Items)
-                    {
-                        table.Cell().Text(item.Name);
-                        table.Cell().Text(item.Description);
-                    }
-                });
+            col.Item().Text(label).SemiBold().FontSize(9).FontColor(BorderDark);
+            if (v is null)
+            {
+                col.Item().Text("—").FontColor(Muted);
+            }
             else
-                column.Item().Text("Снаряжение отсутствует");
+            {
+                col.Item().Text($"{v.Regular} ({v.Half}/{v.Fifth})").FontSize(9);
+            }
         });
     }
 
-    private void ComposeBiographySection(IContainer container, Character character)
+    private void ComposeSkills(IContainer container, Character c)
     {
-        container.Column(column =>
+        var groups = c.Skills?.SkillGroups ?? new List<SkillGroup>();
+        if (!groups.Any())
         {
-            column.Item().Text("Биография").Bold().FontSize(14);
-            column.Item().BorderBottom(1).BorderColor(Colors.Grey.Medium).PaddingBottom(5);
-            column.Item().PaddingTop(5);
+            container.Text("Нет навыков").FontColor(Muted);
+            return;
+        }
 
-            if (!string.IsNullOrEmpty(character.Biography?.Appearance))
-            {
-                column.Item().Text("Внешность:").SemiBold();
-                column.Item().Text(character.Biography.Appearance);
-                column.Item().Height(5);
-            }
+        // Flow into two columns using a table for deterministic layout
+        container.Table(table =>
+        {
+            const int cols = 2;
+            table.ColumnsDefinition(cd => { for (int i = 0; i < cols; i++) cd.RelativeColumn(); });
 
-            if (!string.IsNullOrEmpty(character.Biography?.Traits))
+            int col = 0;
+            foreach (var g in groups)
             {
-                column.Item().Text("Черты характера:").SemiBold();
-                column.Item().Text(character.Biography.Traits);
-                column.Item().Height(5);
-            }
-
-            if (!string.IsNullOrEmpty(character.Biography?.IdealsAndPrinciples))
-            {
-                column.Item().Text("Идеалы и принципы:").SemiBold();
-                column.Item().Text(character.Biography.IdealsAndPrinciples);
-                column.Item().Height(5);
-            }
-
-            if (!string.IsNullOrEmpty(character.Backstory))
-            {
-                column.Item().Text("Предыстория:").SemiBold();
-                column.Item().Text(character.Backstory);
+                table.Cell().Element(cell =>
+                {
+                    cell.Padding(4).Border(1).BorderColor("#DDD").Background("#FFFFFF").Column(cc =>
+                    {
+                        cc.Item().Text(g.Name).Bold().FontColor(Accent).FontSize(10);
+                        foreach (var s in g.Skills)
+                        {
+                            var line = $"{s.Name}: {s.Value.Regular} ({s.Value.Half}/{s.Value.Fifth})";
+                            cc.Item().Text(line).FontSize(8);
+                        }
+                    });
+                });
+                col = (col + 1) % cols;
             }
         });
     }
+
+    private void ComposeCombatMagicSection(IContainer container, Character c)
+    {
+        container.Column(col =>
+        {
+            if (c.Weapons.Any())
+            {
+                col.Item().Column(section =>
+                {
+                    section.Item().Element(e => e.PaddingBottom(2).Text("Оружие").Bold().FontColor(Accent));
+                    section.Item().Element(e => e.Table(table =>
+                    {
+                        table.ColumnsDefinition(cd =>
+                        {
+                            cd.RelativeColumn(2);
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Название").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Навык").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Урон").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Дальность").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Атаки").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Боепр.").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Осечка").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                        });
+
+                        foreach (var w in c.Weapons)
+                        {
+                            BodyCell(table, w.Name);
+                            BodyCell(table, w.Skill);
+                            BodyCell(table, w.Damage);
+                            BodyCell(table, w.Range);
+                            BodyCell(table, w.Attacks);
+                            BodyCell(table, w.Ammo);
+                            BodyCell(table, w.Malfunction);
+                        }
+                    }));
+                });
+            }
+
+            if (c.Spells.Any())
+            {
+                col.Item().Element(_ => _.Height(6));
+                col.Item().Column(section =>
+                {
+                    section.Item().Element(e => e.PaddingBottom(2).Text("Заклинания").Bold().FontColor(Accent));
+                    section.Item().Element(e => e.Table(table =>
+                    {
+                        table.ColumnsDefinition(cd =>
+                        {
+                            cd.RelativeColumn(2);
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn();
+                            cd.RelativeColumn(3);
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Название").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Стоимость").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Время").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Тип").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                            header.Cell().Background(BorderDark).Padding(2).AlignCenter().Text("Описание").FontColor("#FFFFFF").SemiBold().FontSize(8);
+                        });
+
+                        foreach (var s in c.Spells)
+                        {
+                            BodyCell(table, s.Name);
+                            BodyCell(table, s.Cost.OrDash());
+                            BodyCell(table, s.CastingTime.OrDash());
+                            BodyCell(table, s.SpellType);
+                            BodyCell(table, Truncate(s.Description, 160));
+                        }
+                    }));
+                });
+            }
+        });
+    }
+
+    private void ComposeEquipmentFinances(IContainer container, Character c)
+    {
+        container.Row(row =>
+        {
+            row.RelativeItem().Element(e =>
+            {
+                e.Column(col =>
+                {
+                    col.Item().Text("Снаряжение").Bold().FontColor(Accent);
+                    if (!(c.Equipment?.Items.Any() ?? false))
+                        col.Item().Text("—").FontColor(Muted);
+                    else
+                        foreach (var item in c.Equipment!.Items)
+                            col.Item().Text($"• {item.Name}: {item.Description}").FontSize(8);
+                });
+            });
+            row.RelativeItem().Element(e =>
+            {
+                e.Column(col =>
+                {
+                    col.Item().Text("Финансы").Bold().FontColor(Accent);
+                    var f = c.Finances;
+                    if (f is null)
+                    {
+                        col.Item().Text("—").FontColor(Muted);
+                    }
+                    else
+                    {
+                        col.Item().Text($"Наличные: {f.Cash.OrDash()}");
+                        col.Item().Text($"Карманные: {f.PocketMoney.OrDash()}");
+                        if (f.Assets.Any())
+                        {
+                            col.Item().Text("Активы:").SemiBold();
+                            foreach (var a in f.Assets) col.Item().Text("• " + a).FontSize(8);
+                        }
+                    }
+                });
+            });
+        });
+    }
+
+    private void ComposeBiography(IContainer container, Character c)
+    {
+        container.Column(col =>
+        {
+            void AddBlock(string title, string? text)
+            {
+                if (string.IsNullOrWhiteSpace(text)) return;
+                col.Item().Element(e => e.PaddingTop(2).Text(title).SemiBold().FontColor(Accent));
+                col.Item().Text(text).FontSize(8);
+            }
+
+            AddBlock("Внешность", c.Biography?.Appearance);
+            AddBlock("Черты", c.Biography?.Traits);
+            AddBlock("Идеалы и Принципы", c.Biography?.IdealsAndPrinciples);
+            AddBlock("Предыстория", c.Backstory);
+            if (!string.IsNullOrWhiteSpace(c.Notes)) AddBlock("Заметки", c.Notes);
+        });
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private bool HasBiography(Character c) =>
+        !string.IsNullOrWhiteSpace(c.Biography?.Appearance) ||
+        !string.IsNullOrWhiteSpace(c.Biography?.Traits) ||
+        !string.IsNullOrWhiteSpace(c.Biography?.IdealsAndPrinciples) ||
+        !string.IsNullOrWhiteSpace(c.Backstory) ||
+        !string.IsNullOrWhiteSpace(c.Notes);
+
+    private void Panel(IContainer outer, Action<IContainer> content, string title)
+    {
+        outer.Element(o =>
+        {
+            o.Background(BgPanel).Border(1).BorderColor(BorderDark).Padding(6).Column(col =>
+            {
+                col.Spacing(4);
+                col.Item().Text(title).Bold().FontColor(BorderDark).FontSize(11);
+                col.Item().Element(content);
+            });
+        });
+    }
+
+    // Removed HeaderCell helper (inlined for simplicity)
+
+    private static void BodyCell(TableDescriptor table, string? text)
+    {
+        table.Cell().Padding(2).Text(text.OrDash()).FontSize(8);
+    }
+
+    private static string Truncate(string value, int len)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        return value.Length <= len ? value : value.Substring(0, len - 1) + "…";
+    }
+
+    #endregion
+}
+
+internal static class PdfExportExtensions
+{
+    public static string OrDash(this string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value!;
 }
