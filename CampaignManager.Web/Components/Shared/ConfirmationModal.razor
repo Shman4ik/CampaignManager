@@ -1,53 +1,155 @@
 ﻿@namespace CampaignManager.Web.Components.Shared
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
-<div class="@(IsVisible ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20 px-4" : "hidden")">
-    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-md animate-fadeIn">
-        <!-- Header -->
-        <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 text-white flex justify-between items-center">
-            <h3 class="font-bold text-xl sm:text-2xl">@Title</h3>
-            <button @onclick="OnCancel" 
-                    class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white hover:bg-red-700 rounded-lg transition-all duration-200 active:bg-red-800">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-
-        <!-- Body -->
-        <div class="p-6 sm:p-8 bg-white">
-            <div class="flex items-start gap-4">
-                <div class="flex-shrink-0 text-red-500 bg-red-50 p-3 rounded-full">
-                    <i class="fas fa-exclamation-triangle text-2xl"></i>
+<!-- Clean backdrop -->
+<div class="@(IsVisible ? "fixed inset-0 z-50 flex justify-center items-center p-4 bg-black/30 animate-fadeIn" : "hidden")"
+     @onclick="HandleBackdropClick"
+     @onkeydown="HandleKeyDown"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="modal-title"
+     aria-describedby="modal-description"
+     tabindex="-1">
+    
+    <!-- Modal Container - Wider and cleaner -->
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl @(IsVisible ? "animate-scaleIn" : "") transform transition-all duration-200"
+         @onclick:stopPropagation="true">
+        
+        <!-- Minimal Header with Icon -->
+        <div class="relative px-8 py-6 border-b border-gray-100">
+            <div class="flex items-center gap-4">
+                <!-- Icon in header -->
+                <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center @IconBgClass rounded-full">
+                    <i class="@IconClass @IconTextClass text-2xl"></i>
                 </div>
-                <div class="flex-1">
-                    <p class="text-gray-900 font-semibold text-lg mb-3">@Message</p>
-                    @if (DetailsContent != null)
-                    {
-                        <div class="space-y-2 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            @DetailsContent
-                        </div>
-                    }
-                    <p class="text-gray-500 text-sm mt-4 flex items-center gap-2">
-                        <i class="fas fa-info-circle"></i>
-                        <span>@WarningText</span>
-                    </p>
-                </div>
+                
+                <h3 id="modal-title" class="font-semibold text-xl text-gray-900 flex-1">@Title</h3>
+                
+                <button @onclick="OnCancel" 
+                        type="button"
+                        aria-label="Закрыть диалог"
+                        class="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150 active:scale-95 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
             </div>
         </div>
 
-        <!-- Footer -->
-        <div class="p-6 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3 bg-gray-50">
+        <!-- Clean Body -->
+        <div class="px-8 py-8">
+            <!-- Message -->
+            <p id="modal-description" class="text-gray-700 text-base leading-relaxed mb-4">@Message</p>
+            
+            <!-- Details section -->
+            @if (DetailsContent != null)
+            {
+                <div class="mt-5 p-5 bg-gray-50 rounded-lg border border-gray-200">
+                    @DetailsContent
+                </div>
+            }
+            
+            <!-- Confirmation text input -->
+            @if (RequireConfirmationText && IsVisible)
+            {
+                <div class="mt-6 space-y-3">
+                    <label for="confirmation-input" class="block text-sm font-medium text-gray-700">
+                        Для подтверждения введите: 
+                        <span class="inline-block ml-2 px-2.5 py-1 bg-gray-100 text-gray-900 font-mono font-semibold text-sm rounded border border-gray-300">
+                            @ConfirmationTextRequired
+                        </span>
+                    </label>
+                    <input 
+                        id="confirmation-input"
+                        type="text" 
+                        @bind="confirmationInput"
+                        @bind:event="oninput"
+                        class="w-full px-4 py-2.5 text-sm border @(IsConfirmationValid && confirmationInput.Length > 0 ? "border-green-500 bg-green-50" : "border-gray-300 bg-white") rounded-lg focus:outline-none focus:ring-2 @(IsConfirmationValid && confirmationInput.Length > 0 ? "focus:ring-green-500" : "focus:ring-gray-400") transition-all duration-150"
+                        placeholder="Введите текст для подтверждения"
+                        autocomplete="off" />
+                    @if (confirmationInput.Length > 0 && !IsConfirmationValid)
+                    {
+                        <p class="text-xs text-red-600 flex items-center gap-1.5">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span>Текст не совпадает</span>
+                        </p>
+                    }
+                    @if (IsConfirmationValid && confirmationInput.Length > 0)
+                    {
+                        <p class="text-xs text-green-600 flex items-center gap-1.5">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Подтверждение корректно</span>
+                        </p>
+                    }
+                </div>
+            }
+            
+            <!-- Warning text -->
+            @if (!string.IsNullOrEmpty(WarningText))
+            {
+                <div class="mt-5 flex items-start gap-2.5 text-sm text-gray-500">
+                    <i class="fas fa-info-circle mt-0.5 flex-shrink-0"></i>
+                    <span>@WarningText</span>
+                </div>
+            }
+        </div>
+
+        <!-- Clean Footer -->
+        <div class="px-8 py-6 border-t border-gray-100 flex flex-col-reverse sm:flex-row justify-end gap-3 bg-gray-50/50">
             <button type="button"
-                    class="min-h-[44px] px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 active:bg-gray-400 transition-all duration-200 shadow-sm font-semibold text-base"
-                    @onclick="OnCancel">
+                    @ref="cancelButtonRef"
+                    class="px-6 py-2.5 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-150 border border-gray-300 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+                    @onclick="OnCancel"
+                    disabled="@IsLoading">
                 @CancelText
             </button>
             <button type="button"
-                    class="min-h-[44px] px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 active:from-red-800 active:to-red-900 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-base"
-                    @onclick="OnConfirm">
-                @ConfirmText
+                    @ref="confirmButtonRef"
+                    class="px-6 py-2.5 @ConfirmButtonBg text-white rounded-lg @ConfirmButtonHover transition-all duration-150 font-medium text-sm focus:outline-none focus:ring-2 @ConfirmButtonRing disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
+                    @onclick="HandleConfirm"
+                    disabled="@(IsLoading || !IsConfirmationValid)">
+                @if (IsLoading)
+                {
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>@LoadingText</span>
+                }
+                else
+                {
+                    <span>@ConfirmText</span>
+                }
             </button>
         </div>
     </div>
 </div>
+
+<style>
+    @@keyframes scaleIn {
+        from {
+            opacity: 0;
+            transform: scale(0.96);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .animate-fadeIn {
+        animation: fadeIn 0.15s ease-out;
+    }
+
+    .animate-scaleIn {
+        animation: scaleIn 0.15s ease-out;
+    }
+</style>
 
 @code {
     [Parameter] public bool IsVisible { get; set; }
@@ -59,4 +161,162 @@
     [Parameter] public string WarningText { get; set; } = "Это действие нельзя отменить.";
     [Parameter] public string ConfirmText { get; set; } = "Подтвердить";
     [Parameter] public string CancelText { get; set; } = "Отмена";
+    [Parameter] public string LoadingText { get; set; } = "Обработка...";
+    
+    /// <summary>
+    /// Icon type: warning, error, info, question, success
+    /// </summary>
+    [Parameter] public string IconType { get; set; } = "warning";
+    
+    /// <summary>
+    /// Allow closing modal by clicking outside
+    /// </summary>
+    [Parameter] public bool CloseOnBackdropClick { get; set; } = true;
+    
+    /// <summary>
+    /// Require user to type a specific text to confirm (for dangerous actions)
+    /// </summary>
+    [Parameter] public bool RequireConfirmationText { get; set; } = false;
+    
+    /// <summary>
+    /// The text user must type to enable confirm button
+    /// </summary>
+    [Parameter] public string ConfirmationTextRequired { get; set; } = "УДАЛИТЬ";
+    
+    /// <summary>
+    /// Show loading state on confirm button
+    /// </summary>
+    [Parameter] public bool IsLoading { get; set; } = false;
+
+    private ElementReference cancelButtonRef;
+    private ElementReference confirmButtonRef;
+    private IJSObjectReference? jsModule;
+    private string confirmationInput = string.Empty;
+    private DotNetObjectReference<ConfirmationModal>? dotNetRef;
+
+    private bool IsConfirmationValid => !RequireConfirmationText || 
+        string.Equals(confirmationInput, ConfirmationTextRequired, StringComparison.OrdinalIgnoreCase);
+
+    private string IconClass => IconType.ToLower() switch
+    {
+        "error" => "fas fa-times-circle",
+        "warning" => "fas fa-exclamation-triangle",
+        "info" => "fas fa-info-circle",
+        "question" => "fas fa-question-circle",
+        "success" => "fas fa-check-circle",
+        _ => "fas fa-exclamation-triangle"
+    };
+
+    private string IconBgClass => IconType.ToLower() switch
+    {
+        "error" => "bg-red-100",
+        "warning" => "bg-orange-100",
+        "info" => "bg-blue-100",
+        "question" => "bg-purple-100",
+        "success" => "bg-green-100",
+        _ => "bg-orange-100"
+    };
+
+    private string IconTextClass => IconType.ToLower() switch
+    {
+        "error" => "text-red-600",
+        "warning" => "text-orange-600",
+        "info" => "text-blue-600",
+        "question" => "text-purple-600",
+        "success" => "text-green-600",
+        _ => "text-orange-600"
+    };
+
+    private string ConfirmButtonBg => IconType.ToLower() switch
+    {
+        "error" => "bg-red-600",
+        "warning" => "bg-orange-600",
+        "info" => "bg-blue-600",
+        "question" => "bg-purple-600",
+        "success" => "bg-green-600",
+        _ => "bg-red-600"
+    };
+
+    private string ConfirmButtonHover => IconType.ToLower() switch
+    {
+        "error" => "hover:bg-red-700 active:bg-red-800",
+        "warning" => "hover:bg-orange-700 active:bg-orange-800",
+        "info" => "hover:bg-blue-700 active:bg-blue-800",
+        "question" => "hover:bg-purple-700 active:bg-purple-800",
+        "success" => "hover:bg-green-700 active:bg-green-800",
+        _ => "hover:bg-red-700 active:bg-red-800"
+    };
+
+    private string ConfirmButtonRing => IconType.ToLower() switch
+    {
+        "error" => "focus:ring-red-500",
+        "warning" => "focus:ring-orange-500",
+        "info" => "focus:ring-blue-500",
+        "question" => "focus:ring-purple-500",
+        "success" => "focus:ring-green-500",
+        _ => "focus:ring-red-500"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            jsModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", 
+                "./Components/Shared/ConfirmationModal.razor.js");
+            dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (IsVisible && jsModule != null)
+        {
+            // Focus the confirm button when modal opens
+            await jsModule.InvokeVoidAsync("focusElement", confirmButtonRef);
+            // Prevent body scroll
+            await jsModule.InvokeVoidAsync("preventBodyScroll", true);
+        }
+        else if (!IsVisible && jsModule != null)
+        {
+            // Restore body scroll
+            await jsModule.InvokeVoidAsync("preventBodyScroll", false);
+            // Reset confirmation input
+            confirmationInput = string.Empty;
+        }
+    }
+
+    private async Task HandleConfirm()
+    {
+        if (IsConfirmationValid && !IsLoading)
+        {
+            await OnConfirm.InvokeAsync();
+        }
+    }
+
+    private void HandleBackdropClick()
+    {
+        if (CloseOnBackdropClick && !IsLoading)
+        {
+            OnCancel.InvokeAsync();
+        }
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && CloseOnBackdropClick && !IsLoading)
+        {
+            OnCancel.InvokeAsync();
+        }
+        else if (e.Key == "Enter" && IsConfirmationValid && !IsLoading)
+        {
+            HandleConfirm();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (jsModule != null)
+        {
+            await jsModule.InvokeVoidAsync("preventBodyScroll", false);
+            await jsModule.DisposeAsync();
+        }
+        dotNetRef?.Dispose();
+    }
 }
