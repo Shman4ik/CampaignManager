@@ -12,17 +12,17 @@ namespace CampaignManager.Web.Utilities.DataBase;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public DbSet<Campaign> Campaigns { get; set; }
-    public DbSet<CharacterStorageDto> CharacterStorage { get; set; }
-    public DbSet<CampaignPlayer> CampaignPlayers { get; set; }
-    public DbSet<Weapon> Weapons { get; set; }
-    public DbSet<Spell> Spells { get; set; }
-    public DbSet<SkillModel> Skills { get; set; }
+    public DbSet<Campaign> Campaigns { get; set; } = null!;
+    public DbSet<CharacterStorageDto> CharacterStorage { get; set; } = null!;
+    public DbSet<CampaignPlayer> CampaignPlayers { get; set; } = null!;
+    public DbSet<Weapon> Weapons { get; set; } = null!;
+    public DbSet<Spell> Spells { get; set; } = null!;
+    public DbSet<SkillModel> Skills { get; set; } = null!;
 
     // Scenario Management DbSets
-    public DbSet<Scenario> Scenarios { get; set; }
-    public DbSet<Creature> Creatures { get; set; }
-    public DbSet<Item> Items { get; set; }
+    public DbSet<Scenario> Scenarios { get; set; } = null!;
+    public DbSet<Creature> Creatures { get; set; } = null!;
+    public DbSet<Item> Items { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
