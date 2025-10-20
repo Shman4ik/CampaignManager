@@ -10,7 +10,7 @@ public class AppIdentityDbContext : IdentityDbContext<ApplicationUser>
     {
     }
 
-    public DbSet<ApplicationUser> ApplicationUsers { get; set; }
+    public DbSet<ApplicationUser> ApplicationUsers { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
