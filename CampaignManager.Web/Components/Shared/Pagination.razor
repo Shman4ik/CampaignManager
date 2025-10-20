@@ -1,0 +1,76 @@
+﻿@namespace CampaignManager.Web.Components.Shared
+
+@if (TotalPages > 1)
+{
+    <div class="bg-gradient-to-r from-gray-50 to-gray-100 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t-2 border-gray-200">
+        <div class="text-sm sm:text-base text-gray-700 font-medium">
+            <span>Показано <span class="font-bold text-primary-600">@StartItem</span> - <span class="font-bold text-primary-600">@EndItem</span> из <span class="font-bold text-primary-600">@TotalItems</span> @ItemsLabel</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button @onclick="() => GoToPage(1)"
+                    disabled="@(CurrentPage == 1)"
+                    class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @GetButtonClasses(CurrentPage == 1)">
+                <i class="fas fa-angle-double-left"></i>
+            </button>
+            <button @onclick="() => GoToPage(CurrentPage - 1)"
+                    disabled="@(CurrentPage == 1)"
+                    class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @GetButtonClasses(CurrentPage == 1)">
+                <i class="fas fa-angle-left"></i>
+            </button>
+            
+            @for (int i = Math.Max(1, CurrentPage - 2); i <= Math.Min(TotalPages, CurrentPage + 2); i++)
+            {
+                var pageNumber = i;
+                <button @onclick="() => GoToPage(pageNumber)"
+                        class="min-w-[44px] min-h-[44px] px-4 py-2 text-sm sm:text-base font-semibold rounded-lg border-2 transition-all duration-200 @GetPageButtonClasses(pageNumber)">
+                    @pageNumber
+                </button>
+            }
+
+            <button @onclick="() => GoToPage(CurrentPage + 1)"
+                    disabled="@(CurrentPage == TotalPages)"
+                    class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @GetButtonClasses(CurrentPage == TotalPages)">
+                <i class="fas fa-angle-right"></i>
+            </button>
+            <button @onclick="() => GoToPage(TotalPages)"
+                    disabled="@(CurrentPage == TotalPages)"
+                    class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @GetButtonClasses(CurrentPage == TotalPages)">
+                <i class="fas fa-angle-double-right"></i>
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int CurrentPage { get; set; } = 1;
+    [Parameter] public int TotalPages { get; set; } = 1;
+    [Parameter] public int TotalItems { get; set; } = 0;
+    [Parameter] public int ItemsPerPage { get; set; } = 20;
+    [Parameter] public EventCallback<int> OnPageChanged { get; set; }
+    [Parameter] public string ItemsLabel { get; set; } = "элементов";
+
+    private int StartItem => Math.Min((CurrentPage - 1) * ItemsPerPage + 1, TotalItems);
+    private int EndItem => Math.Min(CurrentPage * ItemsPerPage, TotalItems);
+
+    private async Task GoToPage(int page)
+    {
+        if (page >= 1 && page <= TotalPages && page != CurrentPage)
+        {
+            await OnPageChanged.InvokeAsync(page);
+        }
+    }
+
+    private string GetButtonClasses(bool isDisabled)
+    {
+        return isDisabled
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+            : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300";
+    }
+
+    private string GetPageButtonClasses(int pageNumber)
+    {
+        return CurrentPage == pageNumber
+            ? "bg-gradient-to-r from-primary-600 to-primary-700 text-white border-primary-600 shadow-md"
+            : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300";
+    }
+}

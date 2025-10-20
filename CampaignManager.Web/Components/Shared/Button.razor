@@ -1,0 +1,61 @@
+﻿@namespace CampaignManager.Web.Components.Shared
+
+<button @onclick="OnClick"
+        disabled="@IsDisabled"
+        type="@ButtonType"
+        class="@GetButtonClasses()">
+    @if (Icon != null)
+    {
+        <i class="fas @Icon"></i>
+    }
+    @if (ChildContent != null)
+    {
+        <span>@ChildContent</span>
+    }
+</button>
+
+@code {
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public bool IsDisabled { get; set; }
+    [Parameter] public string ButtonType { get; set; } = "button";
+    [Parameter] public string Variant { get; set; } = "primary"; // primary, secondary, success, error, warning, info
+    [Parameter] public string Size { get; set; } = "md"; // sm, md, lg
+    [Parameter] public bool FullWidth { get; set; } = false;
+    [Parameter] public string? AdditionalClasses { get; set; }
+
+    private string GetButtonClasses()
+    {
+        var baseClasses = "inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 shadow-sm";
+        
+        // Size classes
+        var sizeClasses = Size.ToLower() switch
+        {
+            "sm" => "min-h-[36px] px-3 py-1.5 text-sm",
+            "lg" => "min-h-[52px] px-8 py-4 text-lg",
+            _ => "min-h-[44px] px-4 sm:px-5 py-2 text-sm sm:text-base"
+        };
+
+        // Width classes
+        var widthClasses = FullWidth ? "w-full" : "";
+
+        // Variant classes
+        var variantClasses = IsDisabled 
+            ? "bg-gray-300 text-gray-500 cursor-not-allowed opacity-50"
+            : Variant.ToLower() switch
+            {
+                "primary" => "bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 text-white shadow-md hover:shadow-lg",
+                "secondary" => "bg-gray-200 text-gray-800 hover:bg-gray-300 active:bg-gray-400 border border-gray-300",
+                "success" => "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 active:from-green-800 active:to-green-900 text-white shadow-md hover:shadow-lg",
+                "error" => "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 active:from-red-800 active:to-red-900 text-white shadow-md hover:shadow-lg",
+                "warning" => "bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 active:from-yellow-700 active:to-yellow-800 text-white shadow-md hover:shadow-lg",
+                "info" => "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 text-white shadow-md hover:shadow-lg",
+                "outline-primary" => "bg-transparent text-primary-600 hover:text-primary-800 hover:bg-primary-50 border-2 border-primary-200 hover:border-primary-300",
+                "outline-error" => "bg-transparent text-error-600 hover:text-error-800 hover:bg-error-50 border-2 border-error-200 hover:border-error-300",
+                _ => "bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white shadow-md hover:shadow-lg"
+            };
+
+        return $"{baseClasses} {sizeClasses} {widthClasses} {variantClasses} {AdditionalClasses}".Trim();
+    }
+}

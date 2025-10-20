@@ -1,6 +1,8 @@
 ﻿@page "/weapons"
 @using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Components.Features.Weapons.Services
+@using CampaignManager.Web.Components.Features.Weapons.Components
+@using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
 @attribute [Authorize]
 
@@ -12,84 +14,73 @@
 <PageTitle>Оружие - Campaign Manager</PageTitle>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 font-sans">
-    <!-- Enhanced Filter Panel with better iPad support -->
-    <div class="sticky top-0 z-10 bg-white rounded-xl shadow-lg p-4 sm:p-5 mb-6 border border-gray-200 backdrop-blur-sm bg-white/95">
-        <div class="flex justify-between items-center mb-3">
-            <div class="flex items-center gap-3">
-                <h2 class="text-lg sm:text-xl font-bold text-gray-800">Фильтры</h2>
-                <button @onclick="ToggleSearchPanel" 
-                        class="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200">
-                    <i class="fas @(isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down") text-lg"></i>
+    <!-- Filter Panel -->
+    <FilterPanel Title="Фильтры" @bind-IsExpanded="isSearchPanelVisible">
+        <ActionButtons>
+            @if (isSearchPanelVisible)
+            {
+                <button @onclick="ResetFilters"
+                        class="min-h-[44px] px-4 py-2 text-primary-600 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 rounded-lg border border-primary-200 hover:border-primary-300 text-sm sm:text-base font-medium flex items-center gap-2 transition-all duration-200">
+                    <i class="fas fa-undo-alt"></i>
+                    <span class="hidden sm:inline">Сбросить</span>
                 </button>
+            }
+            <button @onclick="ShowAddModal"
+                    class="min-h-[44px] px-4 sm:px-5 py-2 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold rounded-lg text-sm sm:text-base flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200">
+                <i class="fas fa-plus"></i>
+                <span>Добавить</span>
+            </button>
+        </ActionButtons>
+        <ChildContent>
+            <!-- Search and Type Filter -->
+            <div class="flex flex-col lg:flex-row gap-3">
+                <input type="text" @bind="searchQuery" @bind:event="oninput"
+                       @onkeyup="@(() => ApplyFilters())"
+                       placeholder="Поиск оружия..."
+                       class="flex-1 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"/>
+
+                <select @onchange="OnWeaponTypeFilterChanged"
+                        class="lg:w-64 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all bg-white">
+                    <option value="">Все типы</option>
+                    @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
+                    {
+                        <option value="@typeValue">@typeValue.ToRussianString()</option>
+                    }
+                </select>
             </div>
-            <div class="flex gap-2 sm:gap-3">
-                @if (isSearchPanelVisible)
-                {
-                    <button @onclick="ResetFilters"
-                            class="min-h-[44px] px-4 py-2 text-primary-600 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 rounded-lg border border-primary-200 hover:border-primary-300 text-sm sm:text-base font-medium flex items-center gap-2 transition-all duration-200">
-                        <i class="fas fa-undo-alt"></i>
-                        <span class="hidden sm:inline">Сбросить</span>
-                    </button>
-                }
-                <button @onclick="ShowAddModal"
-                        class="min-h-[44px] px-4 sm:px-5 py-2 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-semibold rounded-lg text-sm sm:text-base flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200">
-                    <i class="fas fa-plus"></i>
-                    <span>Добавить</span>
-                </button>
+
+            <!-- Era Filters - Touch Optimized -->
+            <div class="flex flex-wrap items-center gap-4 sm:gap-6 p-3 bg-gray-50 rounded-lg">
+                <span class="text-sm font-semibold text-gray-700">Эпоха:</span>
+                <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
+                    <input type="checkbox" id="era1920s" @bind="is1920Filter" @bind:event="onchange"
+                           class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
+                    <span class="text-base font-medium text-gray-700 group-hover:text-primary-600 transition-colors">1920s</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
+                    <input type="checkbox" id="eraModern" @bind="isModernFilter" @bind:event="onchange"
+                           class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
+                    <span class="text-base font-medium text-gray-700 group-hover:text-primary-600 transition-colors">Modern</span>
+                </label>
             </div>
-        </div>
+        </ChildContent>
+    </FilterPanel>
 
-        @if (isSearchPanelVisible)
-        {
-            <div class="space-y-4">
-                <!-- Search and Type Filter -->
-                <div class="flex flex-col lg:flex-row gap-3">
-                    <input type="text" @bind="searchQuery" @bind:event="oninput"
-                           @onkeyup="@(() => ApplyFilters())"
-                           placeholder="Поиск оружия..."
-                           class="flex-1 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"/>
+    <!-- Error Message -->
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <Alert Type="error" Title="Ошибка">
+            @errorMessage
+        </Alert>
+    }
 
-                    <select @onchange="OnWeaponTypeFilterChanged"
-                            class="lg:w-64 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all bg-white">
-                        <option value="">Все типы</option>
-                        @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
-                        {
-                            <option value="@typeValue">@typeValue.ToRussianString()</option>
-                        }
-                    </select>
-                </div>
-
-                <!-- Era Filters - Touch Optimized -->
-                <div class="flex flex-wrap items-center gap-4 sm:gap-6 p-3 bg-gray-50 rounded-lg">
-                    <span class="text-sm font-semibold text-gray-700">Эпоха:</span>
-                    <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                        <input type="checkbox" id="era1920s" @bind="is1920Filter" @bind:event="onchange"
-                               class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                        <span class="text-base font-medium text-gray-700 group-hover:text-primary-600 transition-colors">1920s</span>
-                    </label>
-                    <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                        <input type="checkbox" id="eraModern" @bind="isModernFilter" @bind:event="onchange"
-                               class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                        <span class="text-base font-medium text-gray-700 group-hover:text-primary-600 transition-colors">Modern</span>
-                    </label>
-                </div>
-            </div>
-        }
-    </div>
-
+    <!-- Empty State -->
     @if (paginatedWeapons.Count() == 0)
     {
-        <div class="bg-white rounded-xl shadow-md p-8 text-center border border-gray-200">
-            <div class="flex flex-col items-center justify-center py-12">
-                <div class="rounded-full bg-gradient-to-br from-gray-100 to-gray-200 p-6 mb-6">
-                    <i class="fas fa-search text-gray-400 text-4xl"></i>
-                </div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">Оружие не найдено</h3>
-                <p class="text-gray-600 text-base">
-                    Попробуйте изменить параметры фильтра или добавить новое оружие.
-                </p>
-            </div>
-        </div>
+        <EmptyState 
+            Title="Оружие не найдено"
+            Message="Попробуйте изменить параметры фильтра или добавить новое оружие."
+            IconClass="fa-search" />
     }
     else
     {
@@ -99,41 +90,41 @@
                 <table class="w-full text-sm sm:text-base">
                     <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                     <tr>
-                        <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300"
-                            @onclick="() => ToggleSort(nameof(Weapon.Name))">
-                            <div class="flex items-center justify-between gap-2">
-                                <span>Название</span>
-                                <i class="fas @GetSortIcon(nameof(Weapon.Name)) text-gray-400"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300"
-                            @onclick="() => ToggleSort(nameof(Weapon.Type))">
-                            <div class="flex items-center justify-between gap-2">
-                                <span>Тип</span>
-                                <i class="fas @GetSortIcon(nameof(Weapon.Type)) text-gray-400"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300"
-                            @onclick="() => ToggleSort(nameof(Weapon.Skill))">
-                            <div class="flex items-center justify-between gap-2">
-                                <span>Навык</span>
-                                <i class="fas @GetSortIcon(nameof(Weapon.Skill)) text-gray-400"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300"
-                            @onclick="() => ToggleSort(nameof(Weapon.Damage))">
-                            <div class="flex items-center justify-between gap-2">
-                                <span>Урон</span>
-                                <i class="fas @GetSortIcon(nameof(Weapon.Damage)) text-gray-400"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors active:bg-gray-300"
-                            @onclick="() => ToggleSort(nameof(Weapon.Is1920))">
-                            <div class="flex items-center justify-between gap-2">
-                                <span>Эпоха</span>
-                                <i class="fas @GetSortIcon(nameof(Weapon.Is1920)) text-gray-400"></i>
-                            </div>
-                        </th>
+                        <SortableTableHeader 
+                            Title="Название" 
+                            FieldName="@nameof(Weapon.Name)"
+                            CurrentSortField="@sortField"
+                            SortAscending="@sortAscending"
+                            OnSortChanged="ToggleSort" />
+                        
+                        <SortableTableHeader 
+                            Title="Тип" 
+                            FieldName="@nameof(Weapon.Type)"
+                            CurrentSortField="@sortField"
+                            SortAscending="@sortAscending"
+                            OnSortChanged="ToggleSort" />
+                        
+                        <SortableTableHeader 
+                            Title="Навык" 
+                            FieldName="@nameof(Weapon.Skill)"
+                            CurrentSortField="@sortField"
+                            SortAscending="@sortAscending"
+                            OnSortChanged="ToggleSort" />
+                        
+                        <SortableTableHeader 
+                            Title="Урон" 
+                            FieldName="@nameof(Weapon.Damage)"
+                            CurrentSortField="@sortField"
+                            SortAscending="@sortAscending"
+                            OnSortChanged="ToggleSort" />
+                        
+                        <SortableTableHeader 
+                            Title="Эпоха" 
+                            FieldName="@nameof(Weapon.Is1920)"
+                            CurrentSortField="@sortField"
+                            SortAscending="@sortAscending"
+                            OnSortChanged="ToggleSort" />
+                        
                         <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700">Характеристики</th>
                         <th class="px-4 sm:px-6 py-4 text-center font-semibold text-gray-700">Действия</th>
                     </tr>
@@ -141,375 +132,81 @@
                     <tbody class="bg-white divide-y divide-gray-100">
                     @foreach (var weapon in paginatedWeapons)
                     {
-                        var isExpanded = expandedWeaponId == weapon.Id;
-                        <tr class="@(isExpanded ? "bg-primary-50" : "hover:bg-gray-50") transition-all duration-200 cursor-pointer active:bg-gray-100"
-                            @onclick="() => ToggleWeaponDetails(weapon)">
-                            <td class="px-4 sm:px-6 py-4 font-semibold text-gray-900">@weapon.Name</td>
-                            <td class="px-4 sm:px-6 py-4">
-                                <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-primary-100 text-primary-800 border border-primary-200">
-                                    @weapon.Type.ToRussianString()
-                                </span>
-                            </td>
-                            <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">@weapon.Skill</td>
-                            <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">@weapon.Damage</td>
-                            <td class="px-4 sm:px-6 py-4">
-                                <div class="flex flex-wrap gap-2">
-                                    @if (weapon.Is1920)
-                                    {
-                                        <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-secondary-100 text-secondary-800 border border-secondary-200">
-                                            1920s
-                                        </span>
-                                    }
-                                    @if (weapon.IsModern)
-                                    {
-                                        <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-secondary-100 text-secondary-800 border border-secondary-200">
-                                            Modern
-                                        </span>
-                                    }
-                                </div>
-                            </td>
-                            <td class="px-4 sm:px-6 py-4 text-gray-600">
-                                <div class="text-sm space-y-1.5">
-                                    <div class="flex gap-2">
-                                        <span class="font-semibold text-gray-700">Дист:</span> 
-                                        <span>@weapon.Range</span>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <span class="font-semibold text-gray-700">Атаки:</span> 
-                                        <span>@weapon.Attacks</span>
-                                    </div>
-                                    @if (!string.IsNullOrEmpty(weapon.Cost))
-                                    {
-                                        <div class="flex gap-2">
-                                            <span class="font-semibold text-gray-700">Цена:</span> 
-                                            <span>@weapon.Cost</span>
-                                        </div>
-                                    }
-                                </div>
-                            </td>
-                            <td class="px-4 sm:px-6 py-4 text-center">
-                                <div class="flex flex-col sm:flex-row gap-2 justify-center">
-                                    <button @onclick="() => ShowEditModal(weapon)"
-                                            @onclick:stopPropagation="true"
-                                            class="min-h-[44px] px-4 py-2 text-primary-600 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-primary-200">
-                                        <i class="fas fa-edit"></i>
-                                        <span>Изменить</span>
-                                    </button>
-                                    <button @onclick="() => ShowDeleteModal(weapon)"
-                                            @onclick:stopPropagation="true"
-                                            class="min-h-[44px] px-4 py-2 text-error-600 hover:text-error-800 bg-error-50 hover:bg-error-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-error-200">
-                                        <i class="fas fa-trash-alt"></i>
-                                        <span>Удалить</span>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        @if (expandedWeaponId == weapon.Id)
-                        {
-                            <tr class="bg-gradient-to-r from-gray-50 to-white border-t-2 border-primary-200">
-                                <td colspan="7" class="px-4 sm:px-6 py-6">
-                                    <div class="bg-white rounded-xl p-6 shadow-inner border-2 border-gray-100">
-                                        <h4 class="text-lg font-bold text-gray-900 mb-4 pb-2 border-b-2 border-primary-200">Подробная информация</h4>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Название</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Name</p>
-                                            </div>
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Тип</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Type.ToRussianString()</p>
-                                            </div>
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Навык</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Skill</p>
-                                            </div>
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Урон</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Damage</p>
-                                            </div>
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Дальность</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Range</p>
-                                            </div>
-                                            <div class="space-y-1">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Атаки</h5>
-                                                <p class="text-base font-medium text-gray-900">@weapon.Attacks</p>
-                                            </div>
-                                            @if (!string.IsNullOrEmpty(weapon.Cost))
-                                            {
-                                                <div class="space-y-1">
-                                                    <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Стоимость</h5>
-                                                    <p class="text-base font-medium text-gray-900">@weapon.Cost</p>
-                                                </div>
-                                            }
-                                            @if (!string.IsNullOrEmpty(weapon.Ammo))
-                                            {
-                                                <div class="space-y-1">
-                                                    <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Боеприпасы</h5>
-                                                    <p class="text-base font-medium text-gray-900">@weapon.Ammo</p>
-                                                </div>
-                                            }
-                                            @if (!string.IsNullOrEmpty(weapon.Malfunction))
-                                            {
-                                                <div class="space-y-1">
-                                                    <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Осечка</h5>
-                                                    <p class="text-base font-medium text-gray-900">@weapon.Malfunction</p>
-                                                </div>
-                                            }
-                                            <div class="space-y-2">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Эпоха</h5>
-                                                <div class="flex flex-wrap gap-2">
-                                                    @if (weapon.Is1920)
-                                                    {
-                                                        <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-secondary-100 text-secondary-800 border border-secondary-200">
-                                                            1920s
-                                                        </span>
-                                                    }
-                                                    @if (weapon.IsModern)
-                                                    {
-                                                        <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-secondary-100 text-secondary-800 border border-secondary-200">
-                                                            Modern
-                                                        </span>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(weapon.Notes))
-                                        {
-                                            <div class="mt-6 pt-4 border-t-2 border-gray-100">
-                                                <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Примечания</h5>
-                                                <p class="text-base text-gray-700 whitespace-pre-wrap leading-relaxed">@weapon.Notes</p>
-                                            </div>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
+                        <WeaponTableRow 
+                            Weapon="@weapon"
+                            IsExpanded="@(expandedWeaponId == weapon.Id)"
+                            OnEdit="ShowEditModal"
+                            OnDelete="ShowDeleteModal"
+                            OnToggleExpand="() => ToggleWeaponDetails(weapon)" />
                     }
                     </tbody>
                 </table>
             </div>
 
-            <!-- Enhanced Pagination -->
-            @if (totalPages > 1)
-            {
-                <div class="bg-gradient-to-r from-gray-50 to-gray-100 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t-2 border-gray-200">
-                    <div class="text-sm sm:text-base text-gray-700 font-medium">
-                        <span>Показано <span class="font-bold text-primary-600">@Math.Min((currentPage - 1) * weaponsPerPage + 1, filteredWeapons.Count())</span> - <span class="font-bold text-primary-600">@Math.Min(currentPage * weaponsPerPage, filteredWeapons.Count())</span> из <span class="font-bold text-primary-600">@filteredWeapons.Count()</span> оружий</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button @onclick="() => GoToPage(1)"
-                                disabled="@(currentPage == 1)"
-                                class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300")">
-                            <i class="fas fa-angle-double-left"></i>
-                        </button>
-                        <button @onclick="() => GoToPage(currentPage - 1)"
-                                disabled="@(currentPage == 1)"
-                                class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300")">
-                            <i class="fas fa-angle-left"></i>
-                        </button>
-                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
-                        {
-                            var pageNumber = i;
-                            <button @onclick="() => GoToPage(pageNumber)"
-                                    class="min-w-[44px] min-h-[44px] px-4 py-2 text-sm sm:text-base font-semibold rounded-lg border-2 transition-all duration-200 @(currentPage == pageNumber ? "bg-gradient-to-r from-primary-600 to-primary-700 text-white border-primary-600 shadow-md" : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300")">
-                                @pageNumber
-                            </button>
-                        }
-
-                        <button @onclick="() => GoToPage(currentPage + 1)"
-                                disabled="@(currentPage == totalPages)"
-                                class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300")">
-                            <i class="fas fa-angle-right"></i>
-                        </button>
-                        <button @onclick="() => GoToPage(totalPages)"
-                                disabled="@(currentPage == totalPages)"
-                                class="min-w-[44px] min-h-[44px] px-3 py-2 text-sm sm:text-base rounded-lg border-2 transition-all duration-200 @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200" : "bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 border-gray-300 hover:border-primary-300")">
-                            <i class="fas fa-angle-double-right"></i>
-                        </button>
-                    </div>
-                </div>
-            }
+            <!-- Pagination -->
+            <Pagination 
+                CurrentPage="@currentPage"
+                TotalPages="@totalPages"
+                TotalItems="@filteredWeapons.Count()"
+                ItemsPerPage="@weaponsPerPage"
+                ItemsLabel="оружий"
+                OnPageChanged="GoToPage" />
         </div>
     }
 
-    <!-- Enhanced Modal for adding/editing weapons -->
-    <div class="@(showModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-10 sm:pt-20 px-4" : "hidden")">
-        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl animate-fadeIn">
-            <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-primary-500 to-primary-600 text-white flex justify-between items-center">
-                <h3 class="font-bold text-xl sm:text-2xl">@(isEditMode ? "Редактировать оружие" : "Добавить оружие")</h3>
-                <button @onclick="HideModal" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white hover:bg-primary-700 rounded-lg transition-all duration-200 active:bg-primary-800">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-            <div class="p-6 sm:p-8 bg-white max-h-[70vh] overflow-y-auto">
-                @if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    <div class="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border-2 border-red-200 flex items-start gap-3 shadow-sm">
-                        <i class="fas fa-exclamation-circle text-red-500 text-xl mt-0.5"></i>
-                        <span class="text-base">@errorMessage</span>
-                    </div>
-                }
-                <EditForm Model="editWeapon" OnValidSubmit="HandleValidSubmit" Id="weapon-edit-form">
-                    <DataAnnotationsValidator/>
-                    <Microsoft.AspNetCore.Components.Forms.ValidationSummary
-                        class="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border-2 border-red-200"/>
+    <!-- Add/Edit Weapon Modal -->
+    <Modal IsVisible="@showModal"
+           OnClose="HideModal"
+           Title="@(isEditMode ? "Редактировать оружие" : "Добавить оружие")"
+           MaxWidth="4xl"
+           HeaderColorScheme="primary">
+        <ChildContent>
+            @if (!string.IsNullOrEmpty(modalErrorMessage))
+            {
+                <Alert Type="error" class="mb-6">
+                    @modalErrorMessage
+                </Alert>
+            }
+            <WeaponFormFields 
+                Weapon="@editWeapon"
+                OnValidSubmit="HandleValidSubmit"
+                FormId="weapon-edit-form" />
+        </ChildContent>
+        <FooterContent>
+            <button type="button"
+                    class="min-h-[44px] px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 active:bg-gray-400 transition-all duration-200 shadow-sm font-semibold text-base"
+                    @onclick="HideModal">
+                Отмена
+            </button>
+            <button type="submit" form="weapon-edit-form"
+                    class="min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-base">
+                Сохранить
+            </button>
+        </FooterContent>
+    </Modal>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="space-y-2">
-                            <label for="weaponName" class="block text-sm font-semibold text-gray-700">Название</label>
-                            <InputText id="weaponName" @bind-Value="editWeapon.Name"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Name)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponType" class="block text-sm font-semibold text-gray-700">Тип</label>
-                            <InputSelect id="weaponType" @bind-Value="editWeapon.Type"
-                                         class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base">
-                                @foreach (var typeValue in EnumExtensions.GetWeaponTypes())
-                                {
-                                    <option value="@typeValue">@typeValue.ToRussianString()</option>
-                                }
-                            </InputSelect>
-                            <ValidationMessage For="@(() => editWeapon.Type)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponSkill" class="block text-sm font-semibold text-gray-700">Навык</label>
-                            <InputText id="weaponSkill" @bind-Value="editWeapon.Skill"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Skill)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponDamage" class="block text-sm font-semibold text-gray-700">Урон</label>
-                            <InputText id="weaponDamage" @bind-Value="editWeapon.Damage"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Damage)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponRange" class="block text-sm font-semibold text-gray-700">Дистанция</label>
-                            <InputText id="weaponRange" @bind-Value="editWeapon.Range"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Range)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponAttacks" class="block text-sm font-semibold text-gray-700">Атаки</label>
-                            <InputText id="weaponAttacks" @bind-Value="editWeapon.Attacks"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Attacks)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponCost" class="block text-sm font-semibold text-gray-700">Стоимость</label>
-                            <InputText id="weaponCost" @bind-Value="editWeapon.Cost"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Cost)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponAmmo" class="block text-sm font-semibold text-gray-700">Боеприпасы</label>
-                            <InputText id="weaponAmmo" @bind-Value="editWeapon.Ammo"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Ammo)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="space-y-2">
-                            <label for="weaponMalfunction" class="block text-sm font-semibold text-gray-700">Осечка</label>
-                            <InputText id="weaponMalfunction" @bind-Value="editWeapon.Malfunction"
-                                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"/>
-                            <ValidationMessage For="@(() => editWeapon.Malfunction)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-
-                        <div class="flex flex-col sm:flex-row gap-4 sm:gap-8 p-4 bg-gray-50 rounded-lg">
-                            <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                                <InputCheckbox id="weaponIs1920" @bind-Value="editWeapon.Is1920"
-                                               class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                                <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Эпоха 1920-х</span>
-                            </label>
-                            <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                                <InputCheckbox id="weaponIsModern" @bind-Value="editWeapon.IsModern"
-                                               class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                                <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Современное</span>
-                            </label>
-                        </div>
-
-                        <div class="md:col-span-2 space-y-2">
-                            <label for="weaponNotes" class="block text-sm font-semibold text-gray-700">Примечания</label>
-                            <InputTextArea id="weaponNotes" @bind-Value="editWeapon.Notes" rows="4"
-                                           class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base resize-y"/>
-                            <ValidationMessage For="@(() => editWeapon.Notes)" class="text-red-600 text-sm font-medium"/>
-                        </div>
-                    </div>
-                </EditForm>
-            </div>
-            <div class="p-6 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3 bg-gray-50">
-                <button type="button"
-                        class="min-h-[44px] px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 active:bg-gray-400 transition-all duration-200 shadow-sm font-semibold text-base"
-                        @onclick="HideModal">
-                    Отмена
-                </button>
-                <button type="submit" form="weapon-edit-form"
-                        class="min-h-[44px] px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-base">
-                    Сохранить
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Enhanced Delete Confirmation Modal -->
-    <div class="@(showDeleteModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20 px-4" : "hidden")">
-        <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-md animate-fadeIn">
-            <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 text-white flex justify-between items-center">
-                <h3 class="font-bold text-xl sm:text-2xl">Подтверждение удаления</h3>
-                <button @onclick="HideDeleteModal" class="min-w-[44px] min-h-[44px] flex items-center justify-center text-white hover:bg-red-700 rounded-lg transition-all duration-200 active:bg-red-800">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-            <div class="p-6 sm:p-8 bg-white">
-                <div class="flex items-start gap-4">
-                    <div class="flex-shrink-0 text-red-500 bg-red-50 p-3 rounded-full">
-                        <i class="fas fa-exclamation-triangle text-2xl"></i>
-                    </div>
-                    <div class="flex-1">
-                        <p class="text-gray-900 font-semibold text-lg mb-3">Вы уверены, что хотите удалить это оружие?</p>
-                        <div class="space-y-2 bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <p class="text-gray-700 text-base">
-                                <span class="font-semibold text-gray-900">Название:</span> @(deleteWeapon?.Name)
-                            </p>
-                            <p class="text-gray-700 text-base">
-                                <span class="font-semibold text-gray-900">Тип:</span> @(deleteWeapon?.Type.ToRussianString())
-                            </p>
-                        </div>
-                        <p class="text-gray-500 text-sm mt-4 flex items-center gap-2">
-                            <i class="fas fa-info-circle"></i>
-                            <span>Это действие нельзя отменить.</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <div class="p-6 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3 bg-gray-50">
-                <button type="button"
-                        class="min-h-[44px] px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 active:bg-gray-400 transition-all duration-200 shadow-sm font-semibold text-base"
-                        @onclick="HideDeleteModal">
-                    Отмена
-                </button>
-                <button type="button"
-                        class="min-h-[44px] px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 active:from-red-800 active:to-red-900 transition-all duration-200 shadow-md hover:shadow-lg font-semibold text-base"
-                        @onclick="ConfirmDelete">
-                    Удалить
-                </button>
-            </div>
-        </div>
-    </div>
+    <!-- Delete Confirmation Modal -->
+    <ConfirmationModal 
+        IsVisible="@showDeleteModal"
+        OnConfirm="ConfirmDelete"
+        OnCancel="HideDeleteModal"
+        Title="Подтверждение удаления"
+        Message="Вы уверены, что хотите удалить это оружие?"
+        ConfirmText="Удалить"
+        CancelText="Отмена">
+        <DetailsContent>
+            <p class="text-gray-700 text-base">
+                <span class="font-semibold text-gray-900">Название:</span> @(deleteWeapon?.Name)
+            </p>
+            <p class="text-gray-700 text-base">
+                <span class="font-semibold text-gray-900">Тип:</span> @(deleteWeapon?.Type.ToRussianString())
+            </p>
+        </DetailsContent>
+    </ConfirmationModal>
 
 </div>
 
 @code {
-
     private bool isSearchPanelVisible = true;
 
     // List to hold all weapons fetched from the service
@@ -519,7 +216,9 @@
     private IQueryable<Weapon> filteredWeapons => FilterWeapons();
 
     // Search query bound to the input field
-    private string searchQuery = string.Empty; // Advanced filtering variables
+    private string searchQuery = string.Empty;
+    
+    // Advanced filtering variables
     private WeaponType? selectedTypeFilter;
     private bool is1920Filter = true;
     private bool isModernFilter;
@@ -530,7 +229,7 @@
 
     // State for Add/Edit modal
     private bool isEditMode;
-    private Weapon editWeapon = new(); // Model for the edit form
+    private Weapon editWeapon = new();
 
     // Weapon object targeted for deletion
     private Weapon? deleteWeapon;
@@ -550,6 +249,7 @@
 
     // Error message state
     private string? errorMessage;
+    private string? modalErrorMessage;
 
     // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
@@ -567,13 +267,13 @@
         }
         catch (Exception ex)
         {
-            // Log the error (e.g., to console or a logging service)
             Console.WriteLine($"Error loading weapons: {ex.Message}");
             errorMessage = "Не удалось загрузить список оружия. Пожалуйста, попробуйте позже.";
-            weapons = new List<Weapon>(); // Ensure weapons is not null
+            weapons = new List<Weapon>();
         }
-    } // Reset all filters to their default state
+    }
 
+    // Reset all filters to their default state
     private void ResetFilters()
     {
         searchQuery = string.Empty;
@@ -581,8 +281,6 @@
         is1920Filter = true;
         isModernFilter = false;
         currentPage = 1;
-
-        // Apply filters to update the UI
         ApplyFilters();
     }
 
@@ -602,7 +300,6 @@
         ApplyFilters();
     }
 
-   
     private void ApplyFilters()
     {
         currentPage = 1; 
@@ -613,8 +310,8 @@
     private void ShowAddModal()
     {
         isEditMode = false;
-        editWeapon = new Weapon(); // Reset the edit model
-        errorMessage = null; // Clear errors
+        editWeapon = new Weapon();
+        modalErrorMessage = null;
         showModal = true;
     }
 
@@ -639,7 +336,7 @@
             Ammo = weapon.Ammo,
             Malfunction = weapon.Malfunction
         };
-        errorMessage = null; // Clear errors
+        modalErrorMessage = null;
         showModal = true;
     }
 
@@ -652,7 +349,7 @@
     // Handle the valid submission of the Add/Edit form
     private async Task HandleValidSubmit()
     {
-        errorMessage = null; // Clear previous errors
+        modalErrorMessage = null;
         try
         {
             if (isEditMode)
@@ -664,15 +361,14 @@
                 await WeaponService.AddWeaponAsync(editWeapon);
             }
 
-            showModal = false; // Close modal on success
-            await LoadWeaponsAsync(); // Refresh the list
-            ApplyFilters(); // Reapply filters
+            showModal = false;
+            await LoadWeaponsAsync();
+            ApplyFilters();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error saving weapon: {ex.Message}");
-            errorMessage = $"Не удалось сохранить оружие: {ex.Message}";
-            // Keep the modal open to show the error
+            modalErrorMessage = $"Не удалось сохранить оружие: {ex.Message}";
         }
     }
 
@@ -680,7 +376,7 @@
     private void ShowDeleteModal(Weapon weapon)
     {
         deleteWeapon = weapon;
-        errorMessage = null; // Clear errors
+        errorMessage = null;
         showDeleteModal = true;
     }
 
@@ -694,22 +390,21 @@
     // Confirm and execute the weapon deletion
     private async Task ConfirmDelete()
     {
-        if (deleteWeapon == null) return; // Should not happen, but good practice
+        if (deleteWeapon == null) return;
 
-        errorMessage = null; // Clear previous errors
+        errorMessage = null;
         try
         {
-            await WeaponService.DeleteWeaponAsync(deleteWeapon.Id); // Use Guid Id
+            await WeaponService.DeleteWeaponAsync(deleteWeapon.Id);
             showDeleteModal = false;
-            await LoadWeaponsAsync(); // Refresh the list
-            deleteWeapon = null; // Clear the selected weapon
-            ApplyFilters(); // Reapply filters
+            await LoadWeaponsAsync();
+            deleteWeapon = null;
+            ApplyFilters();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error deleting weapon: {ex.Message}");
             errorMessage = $"Не удалось удалить оружие: {ex.Message}";
-            // Keep the modal open to show the error
         }
     }
 
@@ -718,10 +413,10 @@
     {
         if (weapons == null)
         {
-            return Enumerable.Empty<Weapon>().AsQueryable(); // Return empty IQueryable if source is null
+            return Enumerable.Empty<Weapon>().AsQueryable();
         }
 
-        var query = weapons.AsQueryable(); // Use AsQueryable for sorting
+        var query = weapons.AsQueryable();
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -739,8 +434,10 @@
         if (selectedTypeFilter.HasValue)
         {
             query = query.Where(w => w.Type == selectedTypeFilter.Value);
-        } // Apply era filters        if (is1920Filter || isModernFilter)
+        }
 
+        // Apply era filters
+        if (is1920Filter || isModernFilter)
         {
             query = query.Where(w => (is1920Filter && w.Is1920) || (isModernFilter && w.IsModern));
         }
@@ -778,7 +475,7 @@
         return query;
     }
 
-    // Pagination methods
+    // Pagination method
     private void GoToPage(int page)
     {
         if (page >= 1 && page <= totalPages)
@@ -787,7 +484,7 @@
         }
     }
 
-    // Sorting methods
+    // Sorting method
     private void ToggleSort(string field)
     {
         if (sortField == field)
@@ -800,17 +497,10 @@
             sortAscending = true;
         }
 
-        currentPage = 1; // Reset to first page when sorting
+        currentPage = 1;
     }
 
-    private string GetSortIcon(string field)
-    {
-        if (sortField != field)
-            return "fa-sort";
-
-        return sortAscending ? "fa-sort-up" : "fa-sort-down";
-    } // Toggle weapon details
-
+    // Toggle weapon details
     private void ToggleWeaponDetails(Weapon weapon)
     {
         if (expandedWeaponId == weapon.Id)
@@ -822,10 +512,4 @@
             expandedWeaponId = weapon.Id;
         }
     }
-
-    private void ToggleSearchPanel()
-    {
-        isSearchPanelVisible = !isSearchPanelVisible;
-    }
-
 }
