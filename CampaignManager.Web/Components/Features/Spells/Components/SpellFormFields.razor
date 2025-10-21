@@ -1,0 +1,157 @@
+@using CampaignManager.Web.Components.Features.Spells.Model
+@using Microsoft.AspNetCore.Components.Forms
+@namespace CampaignManager.Web.Components.Features.Spells.Components
+
+<EditForm Model="Spell" OnValidSubmit="HandleValidSubmit" Id="@FormId">
+    <DataAnnotationsValidator />
+    <Microsoft.AspNetCore.Components.Forms.ValidationSummary
+        class="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border-2 border-red-200" />
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-2">
+            <label for="spellName" class="block text-sm font-semibold text-gray-700">Название</label>
+            <InputText id="spellName" @bind-Value="Spell.Name"
+                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base" />
+            <ValidationMessage For="@(() => Spell.Name)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="spellType" class="block text-sm font-semibold text-gray-700">Тип заклинания</label>
+            <InputSelect id="spellType" @bind-Value="Spell.SpellType"
+                         class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base">
+                <option value="">Выберите тип</option>
+                @foreach (var typeValue in SpellTypeOptions)
+                {
+                    <option value="@typeValue">@typeValue</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => Spell.SpellType)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="spellCost" class="block text-sm font-semibold text-gray-700">Стоимость</label>
+            <InputText id="spellCost" @bind-Value="Spell.Cost"
+                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base" />
+            <ValidationMessage For="@(() => Spell.Cost)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="spellCastingTime" class="block text-sm font-semibold text-gray-700">Время сотворения</label>
+            <InputText id="spellCastingTime" @bind-Value="Spell.CastingTime"
+                       class="w-full min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base" />
+            <ValidationMessage For="@(() => Spell.CastingTime)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="md:col-span-2 space-y-2">
+            <label for="spellDescription" class="block text-sm font-semibold text-gray-700">Описание</label>
+            <InputTextArea id="spellDescription" @bind-Value="Spell.Description" rows="4"
+                           class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base resize-y" />
+            <ValidationMessage For="@(() => Spell.Description)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="md:col-span-2 space-y-2">
+            <label class="block text-sm font-semibold text-gray-700">Альтернативные названия</label>
+            <div class="space-y-3">
+                @if (Spell.AlternativeNames.Count == 0)
+                {
+                    <div class="text-sm text-gray-500">Добавьте альтернативные названия при необходимости.</div>
+                }
+
+                @for (var index = 0; index < Spell.AlternativeNames.Count; index++)
+                {
+                    var value = Spell.AlternativeNames[index];
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text"
+                               class="flex-1 min-h-[44px] px-4 py-3 border-2 border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm text-base"
+                               placeholder="Альтернативное название"
+                               value="@value"
+                               @oninput="(e) => UpdateAlternativeName(index, e.Value?.ToString() ?? string.Empty)" />
+                        <button type="button"
+                                class="min-h-[44px] px-4 py-3 bg-error-50 text-error-600 rounded-lg hover:bg-error-100 transition-all duration-200 border border-error-200 flex items-center justify-center gap-2 text-sm font-semibold"
+                                @onclick="() => RemoveAlternativeName(index)">
+                            <i class="fas fa-times"></i>
+                            <span class="hidden sm:inline">Удалить</span>
+                        </button>
+                    </div>
+                }
+
+                <button type="button"
+                        class="min-h-[44px] px-4 py-3 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-all duration-200 border border-primary-200 flex items-center justify-center gap-2 text-sm font-semibold"
+                        @onclick="AddAlternativeName">
+                    <i class="fas fa-plus"></i>
+                    <span>Добавить альтернативное название</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public Spell Spell { get; set; } = new() { Name = string.Empty, SpellType = string.Empty };
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public string FormId { get; set; } = "spell-form";
+    [Parameter] public IEnumerable<string> SpellTypes { get; set; } = Enumerable.Empty<string>();
+
+    private IEnumerable<string> SpellTypeOptions
+    {
+        get
+        {
+            var options = new HashSet<string>(SpellTypes
+                .Where(type => !string.IsNullOrWhiteSpace(type))
+                .Select(type => type.Trim()), StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(Spell.SpellType))
+            {
+                options.Add(Spell.SpellType.Trim());
+            }
+
+            return options
+                .Where(type => !string.IsNullOrWhiteSpace(type))
+                .OrderBy(type => type, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        Spell.AlternativeNames ??= new List<string>();
+        Spell.Description ??= string.Empty;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        NormalizeAlternativeNames();
+        await OnValidSubmit.InvokeAsync();
+    }
+
+    private void AddAlternativeName()
+    {
+        Spell.AlternativeNames.Add(string.Empty);
+        StateHasChanged();
+    }
+
+    private void RemoveAlternativeName(int index)
+    {
+        if (index >= 0 && index < Spell.AlternativeNames.Count)
+        {
+            Spell.AlternativeNames.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private void UpdateAlternativeName(int index, string value)
+    {
+        if (index >= 0 && index < Spell.AlternativeNames.Count)
+        {
+            Spell.AlternativeNames[index] = value;
+        }
+    }
+
+    private void NormalizeAlternativeNames()
+    {
+        Spell.AlternativeNames = Spell.AlternativeNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}

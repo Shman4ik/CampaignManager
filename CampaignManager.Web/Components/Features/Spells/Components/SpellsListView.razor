@@ -1,0 +1,153 @@
+@using CampaignManager.Web.Components.Features.Spells.Model
+@using CampaignManager.Web.Components.Features.Spells.Components
+@using CampaignManager.Web.Components.Shared
+@namespace CampaignManager.Web.Components.Features.Spells.Components
+
+<div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+    <!-- Desktop Table View -->
+    <div class="hidden xl:block overflow-x-auto">
+        <table class="w-full text-sm sm:text-base">
+            <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+            <tr>
+                <SortableTableHeader
+                    Title="Название"
+                    FieldName="@nameof(Spell.Name)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Тип"
+                    FieldName="@nameof(Spell.SpellType)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Стоимость"
+                    FieldName="@nameof(Spell.Cost)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Время сотворения"
+                    FieldName="@nameof(Spell.CastingTime)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <th class="px-4 sm:px-6 py-4 text-center font-semibold text-gray-700">Действия</th>
+            </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+            @foreach (var spell in Spells)
+            {
+                <SpellTableRow
+                    Spell="@spell"
+                    IsExpanded="@(ExpandedSpellId == spell.Id)"
+                    OnEdit="OnEdit"
+                    OnDelete="OnDelete"
+                    OnToggleExpand="() => OnToggleExpand.InvokeAsync(spell)" />
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Mobile & Tablet Card View -->
+    <div class="xl:hidden">
+        <div class="divide-y divide-gray-200">
+            @foreach (var spell in Spells)
+            {
+                <div class="bg-white">
+                    <div class="p-4 flex justify-between items-start gap-3 cursor-pointer active:bg-gray-50"
+                         @onclick="() => OnToggleExpand.InvokeAsync(spell)">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start gap-2 mb-2">
+                                <button @onclick:stopPropagation="true"
+                                        @onclick="() => OnToggleExpand.InvokeAsync(spell)"
+                                        class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded transition-colors">
+                                    <i class="fas @(ExpandedSpellId == spell.Id ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                                </button>
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-semibold text-gray-900 text-base truncate">@spell.Name</h3>
+                                    <div class="text-sm text-gray-600 mt-1">
+                                        @(string.IsNullOrWhiteSpace(spell.SpellType) ? "—" : spell.SpellType)
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ml-10 text-sm text-gray-700 flex flex-wrap gap-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-gray-500">Стоимость:</span>
+                                    <span>@(!string.IsNullOrWhiteSpace(spell.Cost) ? spell.Cost : "—")</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-gray-500">Время:</span>
+                                    <span>@(!string.IsNullOrWhiteSpace(spell.CastingTime) ? spell.CastingTime : "—")</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-4 pb-4 ml-10">
+                        <div class="flex gap-2">
+                            <button @onclick:stopPropagation="true"
+                                    @onclick="() => OnEdit.InvokeAsync(spell)"
+                                    class="flex-1 min-h-[44px] px-3 py-2 text-primary-600 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-primary-200 active:bg-primary-200">
+                                <i class="fas fa-edit"></i>
+                                <span>Изменить</span>
+                            </button>
+                            <button @onclick:stopPropagation="true"
+                                    @onclick="() => OnDelete.InvokeAsync(spell)"
+                                    class="flex-1 min-h-[44px] px-3 py-2 text-error-600 hover:text-error-800 bg-error-50 hover:bg-error-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-error-200 active:bg-error-200">
+                                <i class="fas fa-trash-alt"></i>
+                                <span>Удалить</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (ExpandedSpellId == spell.Id)
+                    {
+                        <div class="px-4 pb-4 ml-10 pt-2 border-t border-gray-200">
+                            <div class="bg-gray-50 rounded-lg p-4 space-y-4 text-sm">
+                                <div class="grid grid-cols-1 gap-3">
+                                    <div>
+                                        <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Описание</div>
+                                        <div class="text-gray-700 whitespace-pre-wrap leading-relaxed">@spell.Description</div>
+                                    </div>
+
+                                    @if (spell.AlternativeNames.Count > 0)
+                                    {
+                                        <div>
+                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Альтернативные названия</div>
+                                            <div class="flex flex-wrap gap-2">
+                                                @foreach (var altName in spell.AlternativeNames)
+                                                {
+                                                    <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-secondary-100 text-secondary-800 border border-secondary-200">@altName</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IEnumerable<Spell> Spells { get; set; } = Enumerable.Empty<Spell>();
+    [Parameter] public Guid? ExpandedSpellId { get; set; }
+
+    [Parameter] public string? CurrentSortField { get; set; }
+    [Parameter] public bool SortAscending { get; set; } = true;
+    [Parameter] public EventCallback<string> OnSortChanged { get; set; }
+
+    [Parameter] public EventCallback<Spell> OnEdit { get; set; }
+    [Parameter] public EventCallback<Spell> OnDelete { get; set; }
+    [Parameter] public EventCallback<Spell> OnToggleExpand { get; set; }
+}
