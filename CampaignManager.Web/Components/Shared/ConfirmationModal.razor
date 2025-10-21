@@ -310,13 +310,23 @@
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (jsModule != null)
-        {
-            await jsModule.InvokeVoidAsync("preventBodyScroll", false);
-            await jsModule.DisposeAsync();
-        }
-        dotNetRef?.Dispose();
-    }
+	public async ValueTask DisposeAsync()
+	{
+		try
+		{
+			if (jsModule is not null)
+			{
+				// Best-effort cleanup; safe when circuit is still connected
+				await jsModule.InvokeVoidAsync("preventBodyScroll", false);
+				await jsModule.DisposeAsync();
+			}
+		}
+		catch (JSDisconnectedException) { /* circuit is gone — ignore */ }
+		catch (ObjectDisposedException) { }
+		catch (TaskCanceledException) { }
+		finally
+		{
+			dotNetRef?.Dispose();
+		}
+	}
 }
