@@ -12,6 +12,8 @@ using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -89,9 +91,24 @@ builder.Services.AddAuthentication(options =>
         {
             OnRedirectToAuthorizationEndpoint = context =>
             {
-                if (context.RedirectUri.StartsWith("http:")) context.RedirectUri = context.RedirectUri.Replace("http:", "https:");
+                if (context.RedirectUri.StartsWith("http:", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.RedirectUri = context.RedirectUri.Replace("http:", "https:", StringComparison.OrdinalIgnoreCase);
+                }
 
                 context.Response.Redirect(context.RedirectUri);
+                return Task.CompletedTask;
+            },
+            OnRemoteFailure = context =>
+            {
+                if (context.Properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true &&
+                    string.Equals(mode, AccountEndpoints.SilentModeValue, StringComparison.Ordinal))
+                {
+                    var redirectTarget = ResolveFailureRedirect(context.Properties);
+                    context.Response.Redirect(redirectTarget);
+                    context.HandleResponse();
+                }
+
                 return Task.CompletedTask;
             }
         };
@@ -175,3 +192,50 @@ app.UseSwagger();
 app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1"); });
 
 app.Run();
+
+static string ResolveFailureRedirect(AuthenticationProperties properties)
+{
+    var fallback = properties.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var redirect)
+        ? redirect
+        : "/";
+
+    return AppendOrUpdateQueryParameter(fallback, "authStatus", "silentFailed");
+}
+
+static string AppendOrUpdateQueryParameter(string url, string key, string value)
+{
+    if (string.IsNullOrWhiteSpace(url))
+    {
+        url = "/";
+    }
+
+    var fragmentIndex = url.IndexOf('#', StringComparison.Ordinal);
+    var fragment = string.Empty;
+    if (fragmentIndex >= 0)
+    {
+        fragment = url[fragmentIndex..];
+        url = url[..fragmentIndex];
+    }
+
+    // Remove existing occurrences of the query parameter
+    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+    {
+        uri = new Uri("http://placeholder" + url, UriKind.Absolute);
+    }
+
+    var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+    var filtered = query
+        .Where(kvp => !string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+        .SelectMany(kvp => kvp.Value.Select(valueItem => new KeyValuePair<string, string?>(kvp.Key, valueItem)))
+        .ToList();
+
+    filtered.Add(new KeyValuePair<string, string?>(key, value));
+
+    var basePath = uri.GetLeftPart(UriPartial.Path)
+        .Replace("http://placeholder", string.Empty, StringComparison.Ordinal)
+        .Replace("https://placeholder", string.Empty, StringComparison.Ordinal);
+    var rebuilt = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(basePath, filtered);
+
+    return string.Concat(rebuilt, fragment);
+}
