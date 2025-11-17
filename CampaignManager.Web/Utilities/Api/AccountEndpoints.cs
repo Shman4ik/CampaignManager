@@ -1,9 +1,13 @@
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace CampaignManager.Web.Utilities.Api;
 
+/// <summary>
+/// API endpoints for authentication operations
+/// </summary>
 public static class AccountEndpoints
 {
     public static void MapAccountEndpoints(this IEndpointRouteBuilder routes)
@@ -19,9 +23,19 @@ public static class AccountEndpoints
     internal const string SilentModeValue = "silent";
     private const string InteractiveModeValue = "interactive";
 
-    private static async Task<IResult> HandleLogin(string? returnUrl, string? mode, HttpContext httpContext)
+    /// <summary>
+    /// Initiates Google OAuth login flow
+    /// </summary>
+    /// <param name="returnUrl">URL to redirect to after successful authentication</param>
+    /// <param name="mode">Authentication mode: 'silent' or 'interactive'</param>
+    /// <param name="httpContext">HTTP context</param>
+    /// <returns>Challenge result to initiate OAuth flow</returns>
+    private static async Task<ChallengeHttpResult> HandleLogin(
+        string? returnUrl,
+        string? mode,
+        HttpContext httpContext)
     {
-        // Очищаем существующие куки
+        // Clear existing cookies
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
         var normalizedReturnUrl = NormalizeReturnUrl(returnUrl, httpContext);
@@ -31,7 +45,7 @@ public static class AccountEndpoints
             : mode.Trim().ToLowerInvariant();
         var isSilent = string.Equals(selectedMode, SilentModeValue, StringComparison.Ordinal);
 
-        // Устанавливаем путь перенаправления после аутентификации
+        // Set redirect path after authentication
         var properties = new GoogleChallengeProperties
         {
             RedirectUri = normalizedReturnUrl,
@@ -46,16 +60,27 @@ public static class AccountEndpoints
             properties.SetParameter("prompt", "none");
         }
 
-        // Вызываем аутентификацию Google
-        return Results.Challenge(properties, new[] { GoogleDefaults.AuthenticationScheme });
+        // Initiate Google authentication
+        // Using TypedResults.Challenge marks this as an API endpoint for .NET 10
+        return TypedResults.Challenge(properties, new[] { GoogleDefaults.AuthenticationScheme });
     }
 
-    private static async Task<IResult> HandleLogout(string? returnUrl, HttpContext httpContext)
+    /// <summary>
+    /// Logs out the current user
+    /// </summary>
+    /// <param name="returnUrl">URL to redirect to after logout</param>
+    /// <param name="httpContext">HTTP context</param>
+    /// <returns>Redirect result</returns>
+    private static async Task<RedirectHttpResult> HandleLogout(
+        string? returnUrl,
+        HttpContext httpContext)
     {
         AuthenticationProperties properties = new() { RedirectUri = returnUrl ?? "/" };
 
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
-        return Results.Redirect(returnUrl ?? "/");
+
+        // Using TypedResults.Redirect for consistency
+        return TypedResults.Redirect(returnUrl ?? "/");
     }
 
     private static string NormalizeReturnUrl(string? returnUrl, HttpContext httpContext)

@@ -73,7 +73,7 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.None;
-        options.ExpireTimeSpan = TimeSpan.FromDays(30); // Set appropriate expiration
+        options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
     })
     .AddGoogle(options =>
@@ -85,31 +85,6 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.CorrelationCookie.SameSite = SameSiteMode.None;
-        options.Events = new OAuthEvents
-        {
-            OnRedirectToAuthorizationEndpoint = context =>
-            {
-                if (context.RedirectUri.StartsWith("http:", StringComparison.OrdinalIgnoreCase))
-                {
-                    context.RedirectUri = context.RedirectUri.Replace("http:", "https:", StringComparison.OrdinalIgnoreCase);
-                }
-
-                context.Response.Redirect(context.RedirectUri);
-                return Task.CompletedTask;
-            },
-            OnRemoteFailure = context =>
-            {
-                if (context.Properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true &&
-                    string.Equals(mode, AccountEndpoints.SilentModeValue, StringComparison.Ordinal))
-                {
-                    var redirectTarget = ResolveFailureRedirect(context.Properties);
-                    context.Response.Redirect(redirectTarget);
-                    context.HandleResponse();
-                }
-
-                return Task.CompletedTask;
-            }
-        };
     });
 
 builder.Services.AddAuthorizationBuilder()
