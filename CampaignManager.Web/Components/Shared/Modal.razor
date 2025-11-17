@@ -90,6 +90,7 @@
     private ElementReference closeButtonRef;
     private IJSObjectReference? jsModule;
     private DotNetObjectReference<Modal>? dotNetRef;
+    private bool wasVisible = false;
 
     private string MaxWidthClass => $"max-w-{MaxWidth}";
 
@@ -116,17 +117,20 @@
             dotNetRef = DotNetObjectReference.Create(this);
         }
 
-        if (IsVisible && jsModule != null)
+        // Only focus close button when modal is first opened (not on every re-render)
+        if (IsVisible && !wasVisible && jsModule != null)
         {
             // Focus the close button when modal opens
             await jsModule.InvokeVoidAsync("focusElement", closeButtonRef);
             // Prevent body scroll
             await jsModule.InvokeVoidAsync("preventBodyScroll", true);
+            wasVisible = true;
         }
-        else if (!IsVisible && jsModule != null)
+        else if (!IsVisible && wasVisible && jsModule != null)
         {
-            // Restore body scroll
+            // Restore body scroll when modal closes
             await jsModule.InvokeVoidAsync("preventBodyScroll", false);
+            wasVisible = false;
         }
     }
 

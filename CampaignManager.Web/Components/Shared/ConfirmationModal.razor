@@ -188,6 +188,7 @@
     private IJSObjectReference? jsModule;
     private string confirmationInput = string.Empty;
     private DotNetObjectReference<ConfirmationModal>? dotNetRef;
+    private bool wasVisible = false;
 
     private bool IsConfirmationValid => !RequireConfirmationText || 
         string.Equals(confirmationInput, ConfirmationTextRequired, StringComparison.OrdinalIgnoreCase);
@@ -241,19 +242,22 @@
             dotNetRef = DotNetObjectReference.Create(this);
         }
 
-        if (IsVisible && jsModule != null)
+        // Only focus confirm button when modal is first opened (not on every re-render)
+        if (IsVisible && !wasVisible && jsModule != null)
         {
             // Focus the confirm button when modal opens
             await jsModule.InvokeVoidAsync("focusElement", confirmButtonRef);
             // Prevent body scroll
             await jsModule.InvokeVoidAsync("preventBodyScroll", true);
+            wasVisible = true;
         }
-        else if (!IsVisible && jsModule != null)
+        else if (!IsVisible && wasVisible && jsModule != null)
         {
-            // Restore body scroll
+            // Restore body scroll when modal closes
             await jsModule.InvokeVoidAsync("preventBodyScroll", false);
             // Reset confirmation input
             confirmationInput = string.Empty;
+            wasVisible = false;
         }
     }
 
