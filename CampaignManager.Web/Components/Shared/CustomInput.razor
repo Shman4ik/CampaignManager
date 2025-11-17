@@ -1,7 +1,7 @@
-﻿<div class="flex items-center gap-2">
+﻿<div class="@ContainerClass">
     @if (!string.IsNullOrEmpty(Label))
     {
-        <label class="text-sm font-medium text-gray-700 whitespace-nowrap min-w-[80px]">@Label:</label>
+        <label class="text-xs font-medium text-gray-700 @LabelClass">@Label:</label>
     }
 
     @switch (Type)
@@ -9,18 +9,21 @@
         case "text":
             <input type="text"
                    value="@Value"
+                   disabled="@Disabled"
                    @onchange="@(e => OnValueChanged.InvokeAsync(e.Value?.ToString()))"
                    class="@GetInputClass()"/>
             break;
         case "number":
             <input type="number"
                    value="@Value"
+                   disabled="@Disabled"
                    @onchange="@(e => OnValueChanged.InvokeAsync(e.Value?.ToString()))"
                    class="@GetInputClass()"/>
             break;
         case "checkbox":
             <input type="checkbox"
                    checked="@(Value?.ToLower() == "true")"
+                   disabled="@Disabled"
                    @onchange="@(e => OnValueChanged.InvokeAsync(e.Value != null && (bool)e.Value ? "true" : "false"))"
                    class="@GetInputClass()"/>
             break;
@@ -33,16 +36,23 @@
     [Parameter] public string Type { get; set; } = "text";
     [Parameter] public bool FullWidth { get; set; } = true;
     [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string ContainerClass { get; set; } = "flex items-center gap-2";
+    [Parameter] public string LabelClass { get; set; } = "whitespace-nowrap min-w-[80px]";
     [Parameter] public EventCallback<string> OnValueChanged { get; set; }
 
     private string GetInputClass()
     {
-        var baseClass = "px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+        var baseClass = "px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent";
+        
+        if (Disabled)
+            baseClass += " bg-gray-100 cursor-not-allowed";
+        
         if (Type == "checkbox")
-            return $"{baseClass} text-center";
+            return $"{baseClass} w-4 h-4";
+        
         if (FullWidth)
             return $"{baseClass} flex-1 min-w-0";
-        return $"{baseClass} w-20 min-w-10";
+        
+        return $"{baseClass} w-20";
     }
-
 }
