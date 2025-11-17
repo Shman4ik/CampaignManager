@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using CampaignManager.Web.Components.Features.Scenarios.Model;
+﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

@@ -1,5 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
+using System.ComponentModel.DataAnnotations;
 
 namespace CampaignManager.Web.Components.Features.Weapons.Model;
 

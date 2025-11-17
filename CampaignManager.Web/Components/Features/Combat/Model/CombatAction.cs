@@ -1,5 +1,5 @@
+﻿using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
-using CampaignManager.Web.Components.Features.Spells.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Model;
 
