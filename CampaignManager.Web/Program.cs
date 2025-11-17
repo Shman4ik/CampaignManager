@@ -15,10 +15,8 @@ using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
-using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -63,11 +61,11 @@ builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
     options.UseNpgsql(dataSource));
 
 builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
-    })
+{
+    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+})
     .AddCookie(options =>
     {
         options.Cookie.HttpOnly = true;
@@ -91,9 +89,27 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
 builder.Services.AddCascadingAuthenticationState();
 
-// Add Swagger services
+// Add OpenAPI services with comprehensive documentation (.NET 10 - OpenAPI 3.1)
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new OpenApiInfo { Title = "CampaignManager API", Version = "v1" }); });
+
+// Configure OpenAPI 3.1 with enhanced features
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_1;
+
+    // Add document transformer for metadata using inline types
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        // OpenAPI document info is automatically populated from assembly attributes
+        // Additional customization can be done here if needed
+        if (document.Info != null)
+        {
+            document.Info.Description = "API for managing tabletop RPG campaigns, characters, scenarios, and game assets";
+        }
+
+        return Task.CompletedTask;
+    });
+});
 builder.Services.AddOutputCache();
 
 // Register services
@@ -157,12 +173,16 @@ app.MapDefaultEndpoints();
 app.MapAccountEndpoints();
 app.MapMinioEndpoints();
 
-// Enable middleware to serve generated Swagger as a JSON endpoint.
-app.UseSwagger();
+// Enable middleware to serve generated OpenAPI specification in both JSON and YAML formats
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
 
-// Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.),
-// specifying the Swagger JSON endpoint.
-app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "CampaignManager API v1"); });
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "v1");
+    });
+}
 
 app.Run();
 

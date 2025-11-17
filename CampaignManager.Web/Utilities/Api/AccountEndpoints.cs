@@ -10,12 +10,26 @@ namespace CampaignManager.Web.Utilities.Api;
 /// </summary>
 public static class AccountEndpoints
 {
+    /// <summary>
+    /// Maps account authentication endpoints to the application's routing
+    /// </summary>
+    /// <param name="routes">The endpoint route builder</param>
     public static void MapAccountEndpoints(this IEndpointRouteBuilder routes)
     {
-        var accountGroup = routes.MapGroup("/api/account");
+        var accountGroup = routes.MapGroup("/api/account")
+            .WithTags("Authentication");
 
-        accountGroup.MapGet("/login", HandleLogin);
-        accountGroup.MapGet("/logout", HandleLogout);
+        accountGroup.MapGet("/login", HandleLogin)
+            .WithName("Login")
+            .WithSummary("Initiate Google OAuth login flow")
+            .WithDescription("Starts the Google OAuth authentication process and redirects to Google's login page")
+            .AllowAnonymous();
+
+        accountGroup.MapGet("/logout", HandleLogout)
+            .WithName("Logout")
+            .WithSummary("Log out the current user")
+            .WithDescription("Signs out the authenticated user and clears authentication cookies")
+            .AllowAnonymous();
     }
 
     internal const string AuthModeItemKey = "campaignmanager:authMode";
@@ -26,10 +40,20 @@ public static class AccountEndpoints
     /// <summary>
     /// Initiates Google OAuth login flow
     /// </summary>
-    /// <param name="returnUrl">URL to redirect to after successful authentication</param>
-    /// <param name="mode">Authentication mode: 'silent' or 'interactive'</param>
-    /// <param name="httpContext">HTTP context</param>
-    /// <returns>Challenge result to initiate OAuth flow</returns>
+    /// <param name="returnUrl">URL to redirect to after successful authentication (default: "/")</param>
+    /// <param name="mode">Authentication mode: 'silent' (no user interaction) or 'interactive' (show login prompt)</param>
+    /// <param name="httpContext">HTTP context for the current request</param>
+    /// <returns>
+    /// <list type="bullet">
+    /// <item><description>302 Found - Redirect to Google OAuth login page</description></item>
+    /// </list>
+    /// </returns>
+    /// <response code="302">Redirects to Google OAuth authentication page</response>
+    /// <remarks>
+    /// The 'silent' mode uses the 'prompt=none' OAuth parameter which attempts to authenticate 
+    /// without showing the Google login page. This is useful for automatic re-authentication.
+    /// The 'interactive' mode (default) always shows the Google login page.
+    /// </remarks>
     private static async Task<ChallengeHttpResult> HandleLogin(
         string? returnUrl,
         string? mode,
@@ -68,9 +92,18 @@ public static class AccountEndpoints
     /// <summary>
     /// Logs out the current user
     /// </summary>
-    /// <param name="returnUrl">URL to redirect to after logout</param>
-    /// <param name="httpContext">HTTP context</param>
-    /// <returns>Redirect result</returns>
+    /// <param name="returnUrl">URL to redirect to after logout (default: "/")</param>
+    /// <param name="httpContext">HTTP context for the current request</param>
+    /// <returns>
+    /// <list type="bullet">
+    /// <item><description>302 Found - Redirect to specified return URL</description></item>
+    /// </list>
+    /// </returns>
+    /// <response code="302">Redirects to the specified return URL after successful logout</response>
+    /// <remarks>
+    /// This endpoint clears the authentication cookie and signs out the user from the application.
+    /// Note: This does not revoke the Google OAuth tokens or sign out from Google accounts.
+    /// </remarks>
     private static async Task<RedirectHttpResult> HandleLogout(
         string? returnUrl,
         HttpContext httpContext)
@@ -83,6 +116,20 @@ public static class AccountEndpoints
         return TypedResults.Redirect(returnUrl ?? "/");
     }
 
+    /// <summary>
+    /// Normalizes and validates a return URL to prevent open redirect vulnerabilities
+    /// </summary>
+    /// <param name="returnUrl">The URL to normalize</param>
+    /// <param name="httpContext">HTTP context for host validation</param>
+    /// <returns>A safe, normalized URL or "/" if validation fails</returns>
+    /// <remarks>
+    /// This method ensures that return URLs are either:
+    /// <list type="bullet">
+    /// <item><description>Relative URLs starting with "/"</description></item>
+    /// <item><description>Absolute URLs matching the current request host</description></item>
+    /// </list>
+    /// Any other URL format is rejected and replaced with "/" to prevent open redirect attacks.
+    /// </remarks>
     private static string NormalizeReturnUrl(string? returnUrl, HttpContext httpContext)
     {
         if (string.IsNullOrWhiteSpace(returnUrl))
