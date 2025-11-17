@@ -71,8 +71,12 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.None;
+        options.Cookie.IsEssential = true; // Mark as essential for GDPR compliance
+        options.Cookie.Name = ".CampaignManager.Auth"; // Explicit cookie name
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
+        options.LoginPath = "/"; // Redirect to home if not authenticated
+        options.AccessDeniedPath = "/"; // Redirect to home on access denied
     })
     .AddGoogle(options =>
     {
@@ -83,6 +87,53 @@ builder.Services.AddAuthentication(options =>
         options.SaveTokens = true;
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.CorrelationCookie.SameSite = SameSiteMode.None;
+        options.CorrelationCookie.IsEssential = true;
+        options.CorrelationCookie.Name = ".CampaignManager.Correlation";
+        
+        // Add OAuth scopes
+        options.Scope.Add("profile");
+        options.Scope.Add("email");
+        
+        // Handle authentication failures gracefully
+        options.Events.OnRemoteFailure = context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogWarning("Google OAuth authentication failed: {Error} - {ErrorDescription}", 
+                context.Failure?.Message, 
+                context.Request.Query["error_description"]);
+            
+            // Check if this is a silent auth attempt
+            var properties = context.Properties;
+            var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true 
+                           && mode == AccountEndpoints.SilentModeValue;
+            
+            if (isSilent)
+            {
+                // For silent failures, redirect back with error status
+                var returnUrl = properties?.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var url) == true 
+                    ? url 
+                    : "/";
+                context.Response.Redirect($"{returnUrl}?authStatus=silentFailed");
+                context.HandleResponse();
+            }
+            else
+            {
+                // For interactive failures, show error page or redirect
+                context.Response.Redirect("/?authStatus=failed");
+                context.HandleResponse();
+            }
+            
+            return Task.CompletedTask;
+        };
+        
+        // Optional: Log successful ticket creation
+        options.Events.OnCreatingTicket = context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation("Successfully created authentication ticket for user: {Email}", 
+                context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value);
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddAuthorizationBuilder()

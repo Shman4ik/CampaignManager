@@ -390,11 +390,13 @@
     private string? openDropdownId;
     private readonly HashSet<string> openMobileSubmenus = new();
     private bool silentLoginFailed;
+    private bool hasRendered;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await base.OnInitializedAsync();
+        base.OnInitialized();
 
+        // Parse query parameters without JS interop
         var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
         var queryParams = QueryHelpers.ParseQuery(uri.Query);
 
@@ -402,19 +404,6 @@
             authStatus.ToString() == "silentFailed")
         {
             silentLoginFailed = true;
-            try
-            {
-                var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-                await module.InvokeVoidAsync("noteSilentFailure");
-            }
-            catch
-            {
-                // Ignore JS interop errors during initialization
-            }
-
-            // Clean up URL by removing the authStatus query parameter
-            var cleanUrl = NavigationManager.Uri.Split('?')[0];
-            NavigationManager.NavigateTo(cleanUrl, replace: true);
         }
     }
 
@@ -424,20 +413,48 @@
 
         if (firstRender)
         {
+            hasRendered = true;
+
+            // Handle silent login failure notification
+            if (silentLoginFailed)
+            {
+                try
+                {
+                    var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
+                    await module.InvokeVoidAsync("noteSilentFailure");
+                }
+                catch
+                {
+                    // Ignore JS interop errors during initialization
+                }
+
+                // Clean up URL by removing the authStatus query parameter
+                var cleanUrl = NavigationManager.Uri.Split('?')[0];
+                NavigationManager.NavigateTo(cleanUrl, replace: true);
+            }
+
+            // Check authentication and handle silent login
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             var user = authState.User;
 
             if (!user.Identity?.IsAuthenticated ?? true)
             {
-                // Import the module and check if we should skip silent login
-                var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-                var shouldSkip = await module.InvokeAsync<bool>("shouldSkipSilentLogin");
-
-                if (!shouldSkip)
+                try
                 {
-                    await module.InvokeVoidAsync("markSilentAttempt");
-                    var returnUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-                    NavigationManager.NavigateTo($"/api/account/login?mode=silent&returnUrl={Uri.EscapeDataString(returnUrl)}", true);
+                    // Import the module and check if we should skip silent login
+                    var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
+                    var shouldSkip = await module.InvokeAsync<bool>("shouldSkipSilentLogin");
+
+                    if (!shouldSkip)
+                    {
+                        await module.InvokeVoidAsync("markSilentAttempt");
+                        var returnUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+                        NavigationManager.NavigateTo($"/api/account/login?mode=silent&returnUrl={Uri.EscapeDataString(returnUrl)}", true);
+                    }
+                }
+                catch
+                {
+                    // Ignore JS interop errors - user can manually login
                 }
             }
         }
@@ -445,28 +462,34 @@
 
     private async Task Logout()
     {
-        try
+        if (hasRendered)
         {
-            var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-            await module.InvokeVoidAsync("setSkipSilentLogin");
-        }
-        catch
-        {
-            // Ignore JS interop errors
+            try
+            {
+                var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
+                await module.InvokeVoidAsync("setSkipSilentLogin");
+            }
+            catch
+            {
+                // Ignore JS interop errors
+            }
         }
         NavigationManager.NavigateTo("api/account/logout", true);
     }
 
     private async Task ManualLogin()
     {
-        try
+        if (hasRendered)
         {
-            var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-            await module.InvokeVoidAsync("clearSilentFlags");
-        }
-        catch
-        {
-            // Ignore JS interop errors
+            try
+            {
+                var module = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
+                await module.InvokeVoidAsync("clearSilentFlags");
+            }
+            catch
+            {
+                // Ignore JS interop errors
+            }
         }
         var returnUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.NavigateTo($"/api/account/login?mode=interactive&returnUrl={Uri.EscapeDataString(returnUrl)}", true);
