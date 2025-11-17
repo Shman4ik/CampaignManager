@@ -22,30 +22,21 @@
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
         <!-- Modern header with navigation -->
-        <div class="sticky top-0 z-10 w-full bg-white shadow-md mb-6">
+        <div class="sticky top-0 z-50 w-full bg-white shadow-md mb-6">
             <div class="max-w-7xl mx-auto px-4 py-3">
                 <!-- Character name and actions area -->
                 <div class="flex justify-between items-center w-full mb-2">
-                    <div class="flex items-center">
-                        <h2 class="cm-h2">
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
+                        <h3 class="cm-h3 truncate">
                             @(Character?.PersonalInfo.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
-                        </h2>
+                        </h3>
                         @if (IsNpc)
                         {
-                            <span
-                                class="ml-2 text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full font-medium">NPC</span>
-                        }
-                        @if (CharacterStorageDto != null)
-                        {
-                            <div class="ml-4">
-                                <CharacterStatusChanger CharacterId="@CharacterStorageDto.Id" 
-                                                       CurrentStatus="@CharacterStorageDto.Status"
-                                                       OnStatusUpdated="@HandleStatusUpdate" />
-                            </div>
+                            <span class="ml-2 text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full font-medium flex-shrink-0">NPC</span>
                         }
                     </div>
                     <!-- Redesigned adaptive navigation menu -->
-                    <div class="ml-auto flex items-center gap-1 sm:gap-2">
+                    <div class="ml-2 flex items-center gap-1 sm:gap-2 flex-shrink-0">
                         <!-- Mobile dropdown menu (visible on small screens) -->
                         <div class="relative sm:hidden">
                             <button @onclick="ToggleNavMenu" type="button"
@@ -114,17 +105,14 @@
                             </button>
                         </div>
 
-                        <div class="flex gap-2 ml-2">
+                        <div class="flex gap-1 sm:gap-2 ml-2">
                             <Button Variant="success" OnClick="SaveCharacterAsync" Icon="fa-regular fa-floppy-disk" />
                             @if (CharacterId == null || CharacterId == Guid.Empty)
                             {
                                 <Button Variant="info" OnClick="GenerateRandom">
-                                    <span>Случайный</span>
+                                    <span class="hidden sm:inline">Случайный</span>
+                                    <i class="fa-solid fa-dice sm:hidden"></i>
                                 </Button>
-                            }
-                            @if (Character != null && CharacterId != null && CharacterId != Guid.Empty)
-                            {
-                                <Button Variant="warning" OnClick="ExportToPdfAsync" Icon="fa-solid fa-file-pdf" />
                             }
                         </div>
                     </div>
@@ -163,17 +151,19 @@
                             @if (_sectionVisibility["personal"])
                             {
                                 <div class="p-4">
-                                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                        <div class="lg:col-span-1">
-                                            <PersonalInfoComponent Character="@Character"/>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div class="md:col-span-1">
+                                            <PersonalInfoComponent Character="@Character" 
+                                                                 CharacterStorageDto="@CharacterStorageDto"
+                                                                 OnStatusUpdated="@HandleStatusUpdate" />
                                         </div>
-                                        <div class="lg:col-span-1">
+                                        <div class="md:col-span-1">
                                             <div class="bg-white shadow rounded-md p-4 mb-4 h-full">
                                                 <h4 class="cm-h4 mb-2">Характеристики</h4>
                                                 <AttributeRowsTable Characteristics="@Character.Characteristics" OnUpdate="@UpdateCharacteristic"/>
                                             </div>
                                         </div>
-                                        <div class="lg:col-span-1">
+                                        <div class="md:col-span-1">
                                             <div class="bg-white shadow rounded-lg p-4 mb-4 h-full flex flex-col">
                                                 <h4 class="cm-h4 mb-2">Состояние</h4>
                                                 <div class="flex flex-col gap-2 flex-1">
@@ -506,7 +496,31 @@
     private async Task ScrollToSection(string sectionId, bool navMenuOpen = false)
     {
         _navMenuOpen = navMenuOpen;
-        await JsRuntime.InvokeVoidAsync("scrollToElement", sectionId);
+        
+        try
+        {
+            await JsRuntime.InvokeVoidAsync("scrollToElement", sectionId);
+        }
+        catch (Exception ex)
+        {
+            // Fallback - если JavaScript не загрузился, попробуем альтернативный метод
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("eval", $@"
+                    const element = document.getElementById('{sectionId}');
+                    if (element) {{
+                        const headerOffset = 120;
+                        const elementPosition = element.getBoundingClientRect().top;
+                        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                        window.scrollTo({{ top: offsetPosition, behavior: 'smooth' }});
+                    }}
+                ");
+            }
+            catch
+            {
+                // Игнорируем - скрипт не загрузился
+            }
+        }
     }
 
     private void UpdateCharacteristic(AttributeValue value)
@@ -539,39 +553,6 @@
         _navMenuOpen = !_navMenuOpen;
     }
 
-    /// <summary>
-    ///     Exports the character sheet to PDF
-    /// </summary>
-    private async Task ExportToPdfAsync()
-    {
-        try
-        {
-            if (Character == null)
-                return;
-
-            _isBusy = true;
-            ShowNotification("Генерация PDF...", "info");
-
-            // Generate the PDF
-            var pdfData = await PdfExportService.GenerateCharacterPdfAsync(Character);
-
-            // Save the PDF
-            var fileName = $"{Character.PersonalInfo.Name}.pdf";
-            await JsRuntime.InvokeVoidAsync("downloadFileFromByteArray", pdfData, fileName, "application/pdf");
-
-            ShowNotification("PDF успешно создан", "success");
-        }
-        catch (Exception ex)
-        {
-            ShowNotification($"Ошибка при создании PDF: {ex.Message}", "error");
-        }
-        finally
-        {
-            _isBusy = false;
-            StateHasChanged();
-        }
-    }
-
     private void HandleStatusUpdate(CharacterStatus newStatus)
     {
         if (CharacterStorageDto != null)
@@ -586,23 +567,10 @@
     {
         if (firstRender)
         {
-            await JsRuntime.InvokeVoidAsync("eval", @"
-                window.downloadFileFromByteArray = (data, fileName, contentType) => {
-                    const blob = new Blob([new Uint8Array(data)], { type: contentType });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = fileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                };
-            ");
+            // Ждем, пока JavaScript функции загрузятся
+            await Task.Delay(100);
         }
 
         await base.OnAfterRenderAsync(firstRender);
     }
-
 }
