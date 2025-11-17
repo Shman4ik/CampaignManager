@@ -8,6 +8,15 @@ EXPOSE 8080
 
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
+
+# Install Node.js for Tailwind CSS compilation
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["CampaignManager.Web/CampaignManager.Web.csproj", "CampaignManager.Web/"]
