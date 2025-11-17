@@ -1,29 +1,24 @@
 ﻿@using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Features.Items.Model
+@using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Components.Shared.Model
 
-<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 @(_isVisible ? "" : "hidden")">
-    <div class="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold">Add Item to Scenario</h2>
-            <button @onclick="Hide" class="text-gray-500 hover:text-gray-700 focus:outline-none">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                     stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-            </button>
-        </div>
-
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Add Item to Scenario"
+       MaxWidth="lg"
+       HeaderColorScheme="primary">
+    <ChildContent>
         <div class="mb-4">
             <input type="text"
                    placeholder="Search items..."
                    @bind-value="_searchTerm"
                    @bind-value:event="oninput"
-                   class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"/>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 max-h-[50vh] overflow-y-auto">
+        <div class="grid grid-cols-1 gap-4 max-h-[40vh] overflow-y-auto mb-4">
             @if (_availableItems == null || !_availableItems.Any())
             {
                 <div class="text-center p-4 text-gray-500">
@@ -35,11 +30,13 @@
                 @foreach (var item in FilteredItems)
                 {
                     <div
-                        class="border p-3 rounded-md hover:bg-gray-50 cursor-pointer @(_selectedItem?.Id == item.Id ? "border-blue-500 bg-blue-50" : "border-gray-200")"
+                        class="border p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 @(_selectedItem?.Id == item.Id ? "border-primary-500 bg-primary-50" : "border-gray-200")"
                         @onclick="() => SelectItem(item)">
                         <div class="flex items-center justify-between">
-                            <h3 class="font-medium">@item.Name</h3>
-                            <button @onclick="() => SelectItem(item)" class="text-blue-500 hover:text-blue-700 text-sm">
+                            <h3 class="font-medium text-gray-900">@item.Name</h3>
+                            <button @onclick="() => SelectItem(item)"
+                                    type="button"
+                                    class="text-primary-600 hover:text-primary-700 text-sm font-semibold">
                                 Select
                             </button>
                         </div>
@@ -51,7 +48,6 @@
                             <div class="flex gap-2 mt-1">
                                 <div>Type: @item.Type</div>
                                 <div>Era: @GetEraDisplay(item.Era)</div>
-                                <!-- Rarity display removed as Rarity property no longer exists -->
                             </div>
                         </div>
                     </div>
@@ -59,45 +55,46 @@
             }
         </div>
 
-        <div class="mt-4">
-            <div class="mb-2">
+        <div class="space-y-3 border-t border-gray-200 pt-4">
+            <div>
                 <label for="quantity" class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
                 <input type="number"
                        id="quantity"
                        @bind="_quantity"
                        min="1"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"/>
             </div>
 
-            <div class="mb-2">
+            <div>
                 <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
                 <input type="text"
                        id="location"
                        @bind="_location"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"/>
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"/>
             </div>
 
             <div>
                 <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
                 <textarea id="notes"
                           @bind="_notes"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"></textarea>
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 min-h-[80px]"></textarea>
             </div>
         </div>
-
-        <div class="flex justify-end mt-4 space-x-2">
-            <button @onclick="Hide"
-                    class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                Cancel
-            </button>
-            <button @onclick="AddItemToScenarioAsync"
-                    disabled="@(_selectedItem == null)"
-                    class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                Add Item
-            </button>
-        </div>
-    </div>
-</div>
+    </ChildContent>
+    <FooterContent>
+        <button @onclick="Hide"
+                type="button"
+                class="min-h-[44px] px-6 py-2.5 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-150 border border-gray-300 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400">
+            Cancel
+        </button>
+        <button @onclick="AddItemToScenarioAsync"
+                type="button"
+                disabled="@(_selectedItem == null)"
+                class="min-h-[44px] px-6 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg hover:from-primary-700 hover:to-primary-800 transition-all duration-150 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed">
+            Add Item
+        </button>
+    </FooterContent>
+</Modal>
 
 @code {
     [Parameter] public Guid ScenarioId { get; set; }
