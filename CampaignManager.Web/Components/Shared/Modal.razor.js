@@ -9,6 +9,10 @@
 
 export function preventBodyScroll(prevent) {
     if (prevent) {
+        // Calculate scrollbar width to prevent layout shift
+        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        document.body.style.paddingRight = `${scrollbarWidth}px`;
+
         // Store current scroll position
         const scrollY = window.scrollY;
         document.body.style.position = 'fixed';
@@ -22,6 +26,7 @@ export function preventBodyScroll(prevent) {
         document.body.style.top = '';
         document.body.style.width = '';
         document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
         if (scrollY) {
             window.scrollTo(0, parseInt(scrollY || '0') * -1);
         }
