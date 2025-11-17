@@ -145,25 +145,25 @@ public class CharacterGenerationService
     {
         character.Skills = SkillsModel.DefaultSkillsModel();
         foreach (var skillGroup in character.Skills.SkillGroups)
-        foreach (var skill in skillGroup.Skills)
-        {
-            if (skill.Name == "Уклонение")
+            foreach (var skill in skillGroup.Skills)
             {
-                skill.Value.Regular = character.Characteristics.Dexterity.Regular / 2;
-                character.PersonalInfo.Dodge = skill.Value.Regular;
-            }
-            else if (skill.Name == "Языки (родной)")
-            {
-                skill.Value.Regular = character.Characteristics.Education.Regular;
-            }
-            else if (skill.BaseValue.EndsWith("%"))
-            {
-                var baseValue = int.Parse(skill.BaseValue.TrimEnd('%'));
-                skill.Value.Regular = baseValue + random.Next(0, 70); // Случайное увеличение до 70%
-            }
+                if (skill.Name == "Уклонение")
+                {
+                    skill.Value.Regular = character.Characteristics.Dexterity.Regular / 2;
+                    character.PersonalInfo.Dodge = skill.Value.Regular;
+                }
+                else if (skill.Name == "Языки (родной)")
+                {
+                    skill.Value.Regular = character.Characteristics.Education.Regular;
+                }
+                else if (skill.BaseValue.EndsWith("%"))
+                {
+                    var baseValue = int.Parse(skill.BaseValue.TrimEnd('%'));
+                    skill.Value.Regular = baseValue + random.Next(0, 70); // Случайное увеличение до 70%
+                }
 
-            // Для навыков с другими базовыми значениями (например, "00%") оставляем начальное значение
-            skill.Value.UpdateDerived();
-        }
+                // Для навыков с другими базовыми значениями (например, "00%") оставляем начальное значение
+                skill.Value.UpdateDerived();
+            }
     }
 }

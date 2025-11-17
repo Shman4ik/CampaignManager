@@ -1,7 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-using CampaignManager.Web.Components.Features.Campaigns.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
+using System.ComponentModel.DataAnnotations;
 
 namespace CampaignManager.Web.Model;
 

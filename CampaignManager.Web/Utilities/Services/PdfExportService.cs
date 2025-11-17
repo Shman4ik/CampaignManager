@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Characters.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -15,7 +15,7 @@ public class PdfExportService
     private const string BgPanel = "#F7F2E6"; // light parchment
     private const string BorderDark = "#3A4A3C"; // deep green
     private const string Accent = "#7A5C2E"; // sepia accent
-    private const string Muted = "#555555";   
+    private const string Muted = "#555555";
     private const string AccentDark = "#3A4A3C";       // darker variant for header bar
 
     /// <summary>

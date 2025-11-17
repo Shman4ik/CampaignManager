@@ -1,8 +1,8 @@
-using System.Security.Claims;
-using CampaignManager.Web.Components.Features.Characters.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CampaignManager.Web.Utilities.Services;
 

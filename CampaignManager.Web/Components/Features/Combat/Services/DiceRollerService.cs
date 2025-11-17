@@ -1,5 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Combat.Model;
-using CampaignManager.Web.Components.Features.Characters.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Combat.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Services;
 
