@@ -95,28 +95,23 @@
 
         <!-- Clean Footer -->
         <div class="px-8 py-6 border-t border-gray-100 flex flex-col-reverse sm:flex-row justify-end gap-3 bg-gray-50/50">
-            <button type="button"
-                    @ref="cancelButtonRef"
-                    class="px-6 py-2.5 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-150 border border-gray-300 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                    @onclick="OnCancel"
-                    disabled="@IsLoading">
-                @CancelText
-            </button>
-            <button type="button"
-                    @ref="confirmButtonRef"
-                    class="px-6 py-2.5 @ConfirmButtonBg text-white rounded-lg @ConfirmButtonHover transition-all duration-150 font-medium text-sm focus:outline-none focus:ring-2 @ConfirmButtonRing disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
-                    @onclick="HandleConfirm"
-                    disabled="@(IsLoading || !IsConfirmationValid)">
-                @if (IsLoading)
-                {
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>@LoadingText</span>
-                }
-                else
-                {
-                    <span>@ConfirmText</span>
-                }
-            </button>
+            <span @ref="cancelButtonRef">
+                <Button Variant="secondary"
+                        OnClick="OnCancel"
+                        IsDisabled="@IsLoading"
+                        Size="sm">
+                    @CancelText
+                </Button>
+            </span>
+            <span @ref="confirmButtonRef">
+                <Button Variant="@ConfirmButtonVariant"
+                        OnClick="HandleConfirm"
+                        IsDisabled="@(IsLoading || !IsConfirmationValid)"
+                        Icon="@(IsLoading ? "fa-spinner fa-spin" : null)"
+                        Size="sm">
+                    @(IsLoading ? LoadingText : ConfirmText)
+                </Button>
+            </span>
         </div>
     </div>
 </div>
@@ -227,34 +222,14 @@
         _ => "text-orange-600"
     };
 
-    private string ConfirmButtonBg => IconType.ToLower() switch
+    private string ConfirmButtonVariant => IconType.ToLower() switch
     {
-        "error" => "bg-red-600",
-        "warning" => "bg-orange-600",
-        "info" => "bg-blue-600",
-        "question" => "bg-purple-600",
-        "success" => "bg-green-600",
-        _ => "bg-red-600"
-    };
-
-    private string ConfirmButtonHover => IconType.ToLower() switch
-    {
-        "error" => "hover:bg-red-700 active:bg-red-800",
-        "warning" => "hover:bg-orange-700 active:bg-orange-800",
-        "info" => "hover:bg-blue-700 active:bg-blue-800",
-        "question" => "hover:bg-purple-700 active:bg-purple-800",
-        "success" => "hover:bg-green-700 active:bg-green-800",
-        _ => "hover:bg-red-700 active:bg-red-800"
-    };
-
-    private string ConfirmButtonRing => IconType.ToLower() switch
-    {
-        "error" => "focus:ring-red-500",
-        "warning" => "focus:ring-orange-500",
-        "info" => "focus:ring-blue-500",
-        "question" => "focus:ring-purple-500",
-        "success" => "focus:ring-green-500",
-        _ => "focus:ring-red-500"
+        "error" => "error",
+        "warning" => "warning",
+        "info" => "info",
+        "question" => "info", // Button component doesn't have purple/question variant, using info as closest match
+        "success" => "success",
+        _ => "error"
     };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

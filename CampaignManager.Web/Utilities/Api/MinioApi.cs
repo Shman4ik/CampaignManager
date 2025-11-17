@@ -1,6 +1,6 @@
-﻿using System.Security.Claims;
-using CampaignManager.Web.Utilities.Services;
+﻿using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
+using System.Security.Claims;
 
 namespace CampaignManager.Web.Utilities.Api;
 
@@ -49,18 +49,18 @@ public static class MinioApi
     /// <response code="404">Image not found in storage</response>
     /// <response code="500">Internal server error during image retrieval</response>
     private static async Task<Results<FileStreamHttpResult, BadRequest<string>, NotFound<string>, StatusCodeHttpResult>> GetImageAsync(
-        string objectPath, 
-        MinioService minioService, 
+        string objectPath,
+        MinioService minioService,
         ILogger<Program> logger)
     {
         try
         {
-            if (string.IsNullOrEmpty(objectPath)) 
+            if (string.IsNullOrEmpty(objectPath))
                 return TypedResults.BadRequest("Object path is required");
 
             // Check if the object exists
             var exists = await minioService.DoesObjectExistAsync(objectPath);
-            if (!exists) 
+            if (!exists)
                 return TypedResults.NotFound($"Image {objectPath} not found");
 
             // Get the object stream
@@ -101,24 +101,24 @@ public static class MinioApi
     /// <response code="404">Object not found in storage</response>
     /// <response code="500">Internal server error during URL generation</response>
     private static async Task<Results<Ok<PresignedUrlResponse>, UnauthorizedHttpResult, BadRequest<string>, NotFound<string>, StatusCodeHttpResult>> GetPresignedUrlAsync(
-        string objectPath, 
-        int? expirySeconds, 
-        MinioService minioService, 
-        ILogger<Program> logger, 
+        string objectPath,
+        int? expirySeconds,
+        MinioService minioService,
+        ILogger<Program> logger,
         ClaimsPrincipal user)
     {
         // Check if user is authenticated - .NET 10 will automatically return 401 for API endpoints
-        if (!user.Identity?.IsAuthenticated ?? true) 
+        if (!user.Identity?.IsAuthenticated ?? true)
             return TypedResults.Unauthorized();
 
         try
         {
-            if (string.IsNullOrEmpty(objectPath)) 
+            if (string.IsNullOrEmpty(objectPath))
                 return TypedResults.BadRequest("Object path is required");
 
             // Check if the object exists
             var exists = await minioService.DoesObjectExistAsync(objectPath);
-            if (!exists) 
+            if (!exists)
                 return TypedResults.NotFound($"Object {objectPath} not found");
 
             // Get presigned URL with specified or default expiry

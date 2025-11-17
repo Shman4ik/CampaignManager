@@ -76,7 +76,7 @@ public class CharacterService(
             var characterDtos = await dbContext.CharacterStorage
                 .Where(c => c.Status != CharacterStatus.Template)
                 .ToListAsync();
-            
+
             return characterDtos.Select(dto => dto.Character).ToList();
         }
         catch (Exception ex)

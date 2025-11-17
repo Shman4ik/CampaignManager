@@ -1,7 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Combat.Model;
-using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
-using CampaignManager.Web.Components.Features.Spells.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Services;
 
@@ -233,7 +231,7 @@ public class CombatEngineService
         var result = new CombatActionResult { Action = attackAction };
         var attacker = encounter.Participants.First(p => p.Id == attackAction.ActorId);
         var defender = encounter.Participants.First(p => p.Id == defenseAction.ActorId);
-        
+
         // Use manual outcomes if provided; fallback to rolling
         attackAction.Roll = attackAction.AttackerProvidedSuccess.HasValue
             ? new DiceRoll

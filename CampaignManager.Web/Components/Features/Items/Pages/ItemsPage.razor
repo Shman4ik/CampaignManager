@@ -7,6 +7,7 @@
 @inject ItemService ItemService
 @inject NavigationManager NavigationManager
 @inject ILogger<ItemsPage> Logger
+@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
 <PageTitle>Предметы - Campaign Manager</PageTitle>
@@ -23,18 +24,21 @@
             </div>
             <div class="flex space-x-2"> @if (isSearchPanelVisible)
                 {
-                    <button @onclick="ResetFilters"
-                            class="text-blue-600 hover:text-blue-800 py-1 px-2 rounded-md border border-blue-300 hover:border-blue-500 text-xs flex items-center">
-                        <i class="fas fa-undo-alt mr-1"></i>
-                        <span>Сбросить</span>
-                    </button>
+                    <Button OnClick="ResetFilters"
+                            Variant="outline-primary"
+                            Size="sm"
+                            Icon="fa-undo-alt"
+                            AdditionalClasses="text-xs">
+                        Сбросить
+                    </Button>
                 }
                 <!-- Кнопка добавления предмета (компактнее) -->
-                <button @onclick="ShowAddModal"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-3 rounded text-sm flex items-center">
-                    <i class="fas fa-plus mr-1"></i>
-                    <span>Добавить</span>
-                </button>
+                <Button OnClick="ShowAddModal"
+                        Variant="info"
+                        Size="sm"
+                        Icon="fa-plus">
+                    Добавить
+                </Button>
             </div>
         </div>
 
@@ -161,17 +165,21 @@
                                 }
                             </td>
                             <td class="px-4 py-3 text-center">
-                                <div class="flex gap-1 justify-center">
-                                    <button @onclick="() => ShowEditModal(item)"
-                                            @onclick:stopPropagation="true"
-                                            class="text-primary-600 hover:text-primary-800 px-2 py-1 rounded text-xs transition-colors">
-                                        <i class="fas fa-edit mr-1"></i>Изменить
-                                    </button>
-                                    <button @onclick="() => ShowDeleteModal(item)"
-                                            @onclick:stopPropagation="true"
-                                            class="text-error-600 hover:text-error-800 px-2 py-1 rounded text-xs transition-colors">
-                                        <i class="fas fa-trash-alt mr-1"></i>Удалить
-                                    </button>
+                                <div class="flex gap-1 justify-center" @onclick:stopPropagation="true">
+                                    <Button OnClick="() => ShowEditModal(item)"
+                                            Variant="outline-primary"
+                                            Size="sm"
+                                            Icon="fa-edit"
+                                            AdditionalClasses="text-xs shadow-none border-0">
+                                        Изменить
+                                    </Button>
+                                    <Button OnClick="() => ShowDeleteModal(item)"
+                                            Variant="outline-error"
+                                            Size="sm"
+                                            Icon="fa-trash-alt"
+                                            AdditionalClasses="text-xs shadow-none border-0">
+                                        Удалить
+                                    </Button>
                                 </div>
                             </td>
                         </tr>
@@ -227,35 +235,41 @@
                         <span>Показано @Math.Min((currentPage - 1) * itemsPerPage + 1, filteredItems.Count()) - @Math.Min(currentPage * itemsPerPage, filteredItems.Count()) из @filteredItems.Count() предметов</span>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button @onclick="() => GoToPage(1)"
-                                disabled="@(currentPage == 1)"
-                                class="px-3 py-1 text-sm rounded border @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
-                            <i class="fas fa-angle-double-left"></i>
-                        </button>
-                        <button @onclick="() => GoToPage(currentPage - 1)"
-                                disabled="@(currentPage == 1)"
-                                class="px-3 py-1 text-sm rounded border @(currentPage == 1 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
-                            <i class="fas fa-angle-left"></i>
-                        </button>
+                        <Button OnClick="() => GoToPage(1)"
+                                IsDisabled="@(currentPage == 1)"
+                                Variant="secondary"
+                                Size="sm"
+                                Icon="fa-angle-double-left"
+                                AdditionalClasses="min-h-0 px-3 py-1 text-sm" />
+                        <Button OnClick="() => GoToPage(currentPage - 1)"
+                                IsDisabled="@(currentPage == 1)"
+                                Variant="secondary"
+                                Size="sm"
+                                Icon="fa-angle-left"
+                                AdditionalClasses="min-h-0 px-3 py-1 text-sm" />
                         @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
                         {
                             var pageNumber = i;
-                            <button @onclick="() => GoToPage(pageNumber)"
-                                    class="px-3 py-1 text-sm rounded border @(currentPage == pageNumber ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300")">
+                            <Button OnClick="() => GoToPage(pageNumber)"
+                                    Variant="@(currentPage == pageNumber ? "info" : "secondary")"
+                                    Size="sm"
+                                    AdditionalClasses="min-h-0 px-3 py-1 text-sm">
                                 @pageNumber
-                            </button>
+                            </Button>
                         }
 
-                        <button @onclick="() => GoToPage(currentPage + 1)"
-                                disabled="@(currentPage == totalPages)"
-                                class="px-3 py-1 text-sm rounded border @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
-                            <i class="fas fa-angle-right"></i>
-                        </button>
-                        <button @onclick="() => GoToPage(totalPages)"
-                                disabled="@(currentPage == totalPages)"
-                                class="px-3 py-1 text-sm rounded border @(currentPage == totalPages ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white text-gray-700 hover:bg-gray-50")">
-                            <i class="fas fa-angle-double-right"></i>
-                        </button>
+                        <Button OnClick="() => GoToPage(currentPage + 1)"
+                                IsDisabled="@(currentPage == totalPages)"
+                                Variant="secondary"
+                                Size="sm"
+                                Icon="fa-angle-right"
+                                AdditionalClasses="min-h-0 px-3 py-1 text-sm" />
+                        <Button OnClick="() => GoToPage(totalPages)"
+                                IsDisabled="@(currentPage == totalPages)"
+                                Variant="secondary"
+                                Size="sm"
+                                Icon="fa-angle-double-right"
+                                AdditionalClasses="min-h-0 px-3 py-1 text-sm" />
                     </div>
                 </div>
             }
@@ -333,17 +347,21 @@
                         <ValidationMessage For="@(() => editItem.ImageUrl)" class="text-red-600 text-sm mt-1"/>
                     </div>
                 </div>
+                <!-- Hidden submit button for form submission -->
+                <button type="submit" @ref="itemFormSubmitButton" style="display:none;"></button>
             </EditForm>
         </div>
         <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
-            <button type="button" @onclick="HideModal"
-                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors">
+            <Button OnClick="HideModal"
+                    Variant="secondary"
+                    ButtonType="button">
                 Отмена
-            </button>
-            <button type="submit" form="item-edit-form"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors">
+            </Button>
+            <Button OnClick="SubmitItemForm"
+                    Variant="info"
+                    ButtonType="button">
                 @(isEditMode ? "Сохранить" : "Добавить")
-            </button>
+            </Button>
         </div>
     </div>
 </div>
@@ -370,14 +388,16 @@
             </div>
         </div>
         <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
-            <button type="button" @onclick="HideDeleteModal"
-                    class="bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded transition-colors">
+            <Button OnClick="HideDeleteModal"
+                    Variant="secondary"
+                    ButtonType="button">
                 Отмена
-            </button>
-            <button type="button" @onclick="ConfirmDelete"
-                    class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded transition-colors">
+            </Button>
+            <Button OnClick="ConfirmDelete"
+                    Variant="error"
+                    ButtonType="button">
                 Удалить
-            </button>
+            </Button>
         </div>
     </div>
 </div>
@@ -436,6 +456,9 @@
 
     // Expanded item details
     private Guid? expandedItemId;
+
+    // Form submission reference
+    private ElementReference itemFormSubmitButton;
 
     // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
@@ -588,7 +611,15 @@
     private void HideModal()
     {
         showModal = false;
-    } // Handle the valid submission of the Add/Edit form
+    }
+
+    // Submit the item form programmatically
+    private async Task SubmitItemForm()
+    {
+        await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('#item-edit-form button[type=submit]').click()");
+    }
+
+    // Handle the valid submission of the Add/Edit form
 
     private async Task HandleValidSubmit()
     {

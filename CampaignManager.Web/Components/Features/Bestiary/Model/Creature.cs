@@ -1,5 +1,4 @@
-﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
-using CampaignManager.Web.Model;
+﻿using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 
