@@ -187,25 +187,58 @@
                             </div>
                             @if (_sectionVisibility["skills"])
                             {
-                                <div class="p-1">
-                                    <!-- Трехколоночный макет (для lg экранов) -->
-                                    <div class="hidden lg:grid lg:grid-cols-3 gap-4">
-                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(2).ToList()"/>
-                                        <SkillGroupColumn
-                                            Groups="@Character.Skills.SkillGroups.Skip(2).Take(3).ToList()"/>
-                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(5).ToList()"/>
+                                <div class="p-4">
+                                    <!-- Поле поиска навыков -->
+                                    <div class="mb-4">
+                                        <div class="relative">
+                                            <input type="text"
+                                                   @bind="_skillSearchQuery"
+                                                   @bind:event="oninput"
+                                                   placeholder="Поиск навыков..."
+                                                   class="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                            <i class="fa-solid fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                            @if (!string.IsNullOrWhiteSpace(_skillSearchQuery))
+                                            {
+                                                <button @onclick="ClearSkillSearch"
+                                                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                                    <i class="fa-solid fa-times"></i>
+                                                </button>
+                                            }
+                                        </div>
                                     </div>
 
-                                    <!-- Двухколоночный макет (для экранов от 600px до lg) -->
-                                    <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
-                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Take(4).ToList()"/>
-                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.Skip(4).ToList()"/>
-                                    </div>
+                                    @{
+                                        var filteredGroups = GetFilteredSkillGroups();
+                                    }
 
-                                    <!-- Одноколоночный макет (для экранов меньше sm) -->
-                                    <div class="grid grid-cols-1 sm:hidden gap-4">
-                                        <SkillGroupColumn Groups="@Character.Skills.SkillGroups.ToList()"/>
-                                    </div>
+                                    @if (!filteredGroups.Any())
+                                    {
+                                        <div class="text-center py-8 text-gray-500">
+                                            <i class="fa-solid fa-search text-3xl mb-2"></i>
+                                            <p>Навыки не найдены</p>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <!-- Трехколоночный макет (для lg экранов) -->
+                                        <div class="hidden lg:grid lg:grid-cols-3 gap-4">
+                                            <SkillGroupColumn Groups="@filteredGroups.Take(2).ToList()"/>
+                                            <SkillGroupColumn
+                                                Groups="@filteredGroups.Skip(2).Take(3).ToList()"/>
+                                            <SkillGroupColumn Groups="@filteredGroups.Skip(5).ToList()"/>
+                                        </div>
+
+                                        <!-- Двухколоночный макет (для экранов от 600px до lg) -->
+                                        <div class="hidden sm:grid sm:grid-cols-2 lg:hidden gap-4">
+                                            <SkillGroupColumn Groups="@filteredGroups.Take(4).ToList()"/>
+                                            <SkillGroupColumn Groups="@filteredGroups.Skip(4).ToList()"/>
+                                        </div>
+
+                                        <!-- Одноколоночный макет (для экранов меньше sm) -->
+                                        <div class="grid grid-cols-1 sm:hidden gap-4">
+                                            <SkillGroupColumn Groups="@filteredGroups.ToList()"/>
+                                        </div>
+                                    }
                                 </div>
                             }
                         </div>
@@ -538,10 +571,57 @@
     }
 
     private bool _navMenuOpen;
+    private string _skillSearchQuery = string.Empty;
 
     private void ToggleNavMenu()
     {
         _navMenuOpen = !_navMenuOpen;
+    }
+
+    private void ClearSkillSearch()
+    {
+        _skillSearchQuery = string.Empty;
+    }
+
+    private List<SkillGroup> GetFilteredSkillGroups()
+    {
+        if (Character?.Skills.SkillGroups == null)
+            return new List<SkillGroup>();
+
+        if (string.IsNullOrWhiteSpace(_skillSearchQuery))
+            return Character.Skills.SkillGroups;
+
+        var searchTerm = _skillSearchQuery.Trim().ToLowerInvariant();
+        var filteredGroups = new List<SkillGroup>();
+
+        foreach (var group in Character.Skills.SkillGroups)
+        {
+            // Проверяем, соответствует ли название группы поисковому запросу
+            var groupNameMatches = group.Name.ToLowerInvariant().Contains(searchTerm);
+
+            // Фильтруем навыки в группе
+            var matchingSkills = group.Skills
+                .Where(s => s.Name.ToLowerInvariant().Contains(searchTerm))
+                .ToList();
+
+            // Если название группы совпадает, включаем все навыки из этой группы
+            if (groupNameMatches)
+            {
+                filteredGroups.Add(group);
+            }
+            // Иначе, если есть совпадающие навыки, создаем новую группу только с этими навыками
+            else if (matchingSkills.Any())
+            {
+                var filteredGroup = new SkillGroup
+                {
+                    Name = group.Name,
+                    Skills = matchingSkills
+                };
+                filteredGroups.Add(filteredGroup);
+            }
+        }
+
+        return filteredGroups;
     }
 
     private void HandleStatusUpdate(CharacterStatus newStatus)
