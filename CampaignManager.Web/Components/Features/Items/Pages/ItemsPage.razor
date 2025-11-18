@@ -13,66 +13,55 @@
 <PageTitle>Предметы - Campaign Manager</PageTitle>
 
 <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-    <!-- Улучшенная панель фильтров - более компактная -->
-    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-3 mb-4 border border-gray-200">
-        <div class="flex justify-between items-center mb-2">
-            <div class="flex items-center">
-                <h2 class="text-base font-semibold text-gray-700 mr-2">Фильтры</h2>
-                <button @onclick="ToggleSearchPanel" class="text-gray-500 hover:text-gray-700 transition-colors">
-                    <i class="fas @(isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down")"></i>
-                </button>
-            </div>
-            <div class="flex space-x-2"> @if (isSearchPanelVisible)
-                {
-                    <Button OnClick="ResetFilters"
-                            Variant="outline-primary"
-                            Size="sm"
-                            Icon="fa-undo-alt"
-                            AdditionalClasses="text-xs">
-                        Сбросить
-                    </Button>
-                }
-                <!-- Кнопка добавления предмета (компактнее) -->
-                <Button OnClick="ShowAddModal"
-                        Variant="info"
+    <FilterPanel Title="Фильтры" 
+                 @bind-IsExpanded="isSearchPanelVisible">
+        <ActionButtons>
+            @if (isSearchPanelVisible)
+            {
+                <Button OnClick="ResetFilters"
+                        Variant="outline-primary"
                         Size="sm"
-                        Icon="fa-plus">
-                    Добавить
+                        Icon="fa-undo-alt"
+                        AdditionalClasses="text-xs">
+                    Сбросить
                 </Button>
-            </div>
-        </div>
+            }
+            <Button OnClick="ShowAddModal"
+                    Variant="info"
+                    Size="sm"
+                    Icon="fa-plus">
+                Добавить
+            </Button>
+        </ActionButtons>
+        <ChildContent>
+            <!-- Более компактный макет фильтров -->
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="text" @bind="searchQuery"
+                       @bind:event="oninput"
+                       @onkeyup="@(() => ApplyFilters())"
+                       placeholder="Поиск предметов..."
+                       class="flex-1 px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"/>
 
-        @if (isSearchPanelVisible)
-        {
-            <!-- Содержимое панели поиска -->
-            <div class="mb-3">
-                <!-- Более компактный макет фильтров -->
-                <div class="flex flex-col sm:flex-row gap-2"><input type="text" @bind="searchQuery"
-                                                                    @bind:event="oninput"
-                                                                    @onkeyup="@(() => ApplyFilters())"
-                                                                    placeholder="Поиск предметов..."
-                                                                    class="flex-1 px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"/>
-
-                    <select @bind="selectedType" @bind:event="onchange"
-                            class="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500">
-                        <option value="">Все типы</option>
-                        @if (itemTypes != null)
+                <select @bind="selectedType" @bind:event="onchange"
+                        class="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500">
+                    <option value="">Все типы</option>
+                    @if (itemTypes != null)
+                    {
+                        @foreach (var type in itemTypes)
                         {
-                            @foreach (var type in itemTypes)
-                            {
-                                <option value="@type">@type</option>
-                            }
+                            <option value="@type">@type</option>
                         }
-                    </select>
-                </div>
+                    }
+                </select>
             </div>
 
-            <div class="flex flex-wrap justify-between items-center gap-2 mb-1">
+            <div class="flex flex-wrap justify-between items-center gap-2 mt-2">
                 <!-- Компактные эпоха фильтры -->
                 <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-                    <div class="flex items-center"><input type="checkbox" id="era1920s" @bind="is1920Filter"
-                                                          @bind:event="onchange"
-                                                          class="mr-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="era1920s" @bind="is1920Filter"
+                               @bind:event="onchange"
+                               class="mr-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
                         <label for="era1920s" class="text-sm text-gray-700">1920s</label>
                     </div>
                     <div class="flex items-center">
@@ -82,9 +71,9 @@
                     </div>
                 </div>
             </div>
-        }
+        </ChildContent>
+    </FilterPanel>
 
-    </div>
     @if (paginatedItems.Count() == 0)
     {
         <div class="bg-white rounded-lg shadow-md p-4 text-center border border-gray-200">
