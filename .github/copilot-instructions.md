@@ -5,7 +5,7 @@ This file provides GitHub Copilot with context and coding standards for the Camp
 ## Project Overview
 
 CampaignManager is a tabletop RPG management system built with:
-- **.NET 10** - Latest .NET framework with C# 12 features
+- **.NET 10** - Latest .NET framework with C# 14 features
 - **Blazor Server** - Interactive server-side rendering with SignalR
 - **PostgreSQL** - Database with extensive JSONB usage for complex data
 - **Entity Framework Core 10** - ORM with factory pattern for thread safety
