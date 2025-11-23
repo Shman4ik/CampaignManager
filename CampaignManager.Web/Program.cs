@@ -3,7 +3,6 @@ using CampaignManager.Web.Components;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
-using CampaignManager.Web.Components.Features.Combat.Services;
 using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
@@ -89,29 +88,29 @@ builder.Services.AddAuthentication(options =>
         options.CorrelationCookie.SameSite = SameSiteMode.None;
         options.CorrelationCookie.IsEssential = true;
         options.CorrelationCookie.Name = ".CampaignManager.Correlation";
-        
+
         // Add OAuth scopes
         options.Scope.Add("profile");
         options.Scope.Add("email");
-        
+
         // Handle authentication failures gracefully
         options.Events.OnRemoteFailure = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogWarning("Google OAuth authentication failed: {Error} - {ErrorDescription}", 
-                context.Failure?.Message, 
+            logger.LogWarning("Google OAuth authentication failed: {Error} - {ErrorDescription}",
+                context.Failure?.Message,
                 context.Request.Query["error_description"]);
-            
+
             // Check if this is a silent auth attempt
             var properties = context.Properties;
-            var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true 
+            var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true
                            && mode == AccountEndpoints.SilentModeValue;
-            
+
             if (isSilent)
             {
                 // For silent failures, redirect back with error status
-                var returnUrl = properties?.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var url) == true 
-                    ? url 
+                var returnUrl = properties?.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var url) == true
+                    ? url
                     : "/";
                 context.Response.Redirect($"{returnUrl}?authStatus=silentFailed");
                 context.HandleResponse();
@@ -122,15 +121,15 @@ builder.Services.AddAuthentication(options =>
                 context.Response.Redirect("/?authStatus=failed");
                 context.HandleResponse();
             }
-            
+
             return Task.CompletedTask;
         };
-        
+
         // Optional: Log successful ticket creation
         options.Events.OnCreatingTicket = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogInformation("Successfully created authentication ticket for user: {Email}", 
+            logger.LogInformation("Successfully created authentication ticket for user: {Email}",
                 context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value);
             return Task.CompletedTask;
         };
@@ -181,12 +180,6 @@ builder.Services.AddScoped<ItemService>();
 //Register skills service
 builder.Services.AddScoped<SkillService>();
 
-// Register combat system services
-builder.Services.AddScoped<CombatService>();
-builder.Services.AddScoped<CombatEngineService>();
-builder.Services.AddScoped<CombatCalculationService>();
-builder.Services.AddScoped<DiceRollerService>();
-
 // Register Minio service
 builder.Services.AddScoped<MinioService>();
 
@@ -236,50 +229,3 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
-
-static string ResolveFailureRedirect(AuthenticationProperties properties)
-{
-    var fallback = properties.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var redirect)
-        ? redirect
-        : "/";
-
-    return AppendOrUpdateQueryParameter(fallback, "authStatus", "silentFailed");
-}
-
-static string AppendOrUpdateQueryParameter(string url, string key, string value)
-{
-    if (string.IsNullOrWhiteSpace(url))
-    {
-        url = "/";
-    }
-
-    var fragmentIndex = url.IndexOf('#', StringComparison.Ordinal);
-    var fragment = string.Empty;
-    if (fragmentIndex >= 0)
-    {
-        fragment = url[fragmentIndex..];
-        url = url[..fragmentIndex];
-    }
-
-    // Remove existing occurrences of the query parameter
-    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-    {
-        uri = new Uri("http://placeholder" + url, UriKind.Absolute);
-    }
-
-    var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
-
-    var filtered = query
-        .Where(kvp => !string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
-        .SelectMany(kvp => kvp.Value.Select(valueItem => new KeyValuePair<string, string?>(kvp.Key, valueItem)))
-        .ToList();
-
-    filtered.Add(new KeyValuePair<string, string?>(key, value));
-
-    var basePath = uri.GetLeftPart(UriPartial.Path)
-        .Replace("http://placeholder", string.Empty, StringComparison.Ordinal)
-        .Replace("https://placeholder", string.Empty, StringComparison.Ordinal);
-    var rebuilt = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(basePath, filtered);
-
-    return string.Concat(rebuilt, fragment);
-}
