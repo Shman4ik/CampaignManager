@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions for CampaignManager
+﻿# GitHub Copilot Instructions for CampaignManager
 
 This file provides GitHub Copilot with context and coding standards for the CampaignManager project, following .NET 10 and modern Blazor best practices.
 
@@ -309,6 +309,86 @@ return await dbContext.Skills
     }
 }
 ```
+
+### CSS Isolation and Component Styling
+
+**Always use `*.razor.css` files for component-scoped styles, NOT inline `<style>` blocks:**
+
+**✅ Correct - Create separate `.razor.css` file:**
+
+`MyComponent.razor`:
+```razor
+@namespace CampaignManager.Web.Components.Shared
+
+<div class="custom-container">
+    <h1 class="custom-heading">@Title</h1>
+    <p>@Message</p>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Message { get; set; } = string.Empty;
+}
+```
+
+`MyComponent.razor.css`:
+```css
+/* MyComponent component scoped styles */
+/* CSS isolation automatically applies [b-{component-id}] scope to these styles */
+
+.custom-container {
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background-color: white;
+}
+
+.custom-heading {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #333;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.15s ease-out;
+}
+```
+
+**❌ Incorrect - Don't use inline `<style>` blocks:**
+```razor
+@namespace CampaignManager.Web.Components.Shared
+
+<style>
+    .custom-container {
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background-color: white;
+    }
+</style>
+
+<div class="custom-container">
+    <!-- content -->
+</div>
+
+@code {
+    // code
+}
+```
+
+**Benefits:**
+- Automatic CSS isolation - styles are scoped to component only
+- Better code organization - separation of concerns
+- Improved maintainability - easier to locate and modify styles
+- Performance - cleaner component files
+- Consistency - follows Blazor best practices
 
 ### Render Modes
 
