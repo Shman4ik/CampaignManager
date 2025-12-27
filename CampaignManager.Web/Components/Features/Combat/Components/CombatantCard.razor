@@ -1,0 +1,120 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+<div class="bg-gray-800 rounded-lg shadow-md p-4 mb-4 border-l-4 @(IsActive ? "border-yellow-500" : "border-gray-600")">
+    <div class="flex justify-between items-start mb-4">
+        <div>
+            <h3 class="text-xl font-bold text-white">@Combatant.Name</h3>
+            <div class="text-sm text-gray-400">
+                Init: @Combatant.Initiative | DEX: @Combatant.Dexterity
+                @if (Combatant.IsPlayer)
+                {
+                    <span class="ml-2 bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded">Player</span>
+                }
+                else
+                {
+                    <span class="ml-2 bg-red-900 text-red-200 text-xs px-2 py-1 rounded">Monster</span>
+                }
+            </div>
+        </div>
+        <button @onclick="OnRemove" class="text-red-400 hover:text-red-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+        <!-- HP -->
+        <div class="bg-gray-700 p-2 rounded">
+            <div class="text-xs text-gray-400 mb-1">Hit Points</div>
+            <div class="flex items-center justify-between">
+                <input type="number" @bind="Combatant.CurrentHitPoints" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-white">@Combatant.MaxHitPoints</span>
+            </div>
+        </div>
+
+        <!-- MP -->
+        <div class="bg-gray-700 p-2 rounded">
+            <div class="text-xs text-gray-400 mb-1">Magic Points</div>
+            <div class="flex items-center justify-between">
+                <input type="number" @bind="Combatant.CurrentMagicPoints" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-white">@Combatant.MaxMagicPoints</span>
+            </div>
+        </div>
+
+        <!-- Sanity -->
+        <div class="bg-gray-700 p-2 rounded">
+            <div class="text-xs text-gray-400 mb-1">Sanity</div>
+            <div class="flex items-center justify-between">
+                <input type="number" @bind="Combatant.CurrentSanity" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
+                <span class="text-gray-400 mx-1">/</span>
+                <span class="text-white">@Combatant.MaxSanity</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="space-y-2">
+        <h4 class="text-sm font-bold text-gray-300 border-b border-gray-600 pb-1">Actions</h4>
+        
+        @if (Combatant.CharacterSource != null)
+        {
+            @foreach (var weapon in Combatant.CharacterSource.Weapons)
+            {
+                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
+                    <div>
+                        <div class="font-bold text-white">@weapon.Name</div>
+                        <div class="text-gray-400 text-xs">@weapon.Damage | @weapon.Attacks attacks</div>
+                    </div>
+                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Roll</button>
+                </div>
+            }
+            @foreach (var spell in Combatant.CharacterSource.Spells)
+            {
+                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
+                    <div>
+                        <div class="font-bold text-purple-300">@spell.Name</div>
+                        <div class="text-gray-400 text-xs">@spell.Cost | @spell.CastingTime</div>
+                    </div>
+                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Cast</button>
+                </div>
+            }
+        }
+        else if (Combatant.CreatureSource != null)
+        {
+            @foreach (var attack in Combatant.CreatureSource.CombatDescriptions)
+            {
+                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
+                    <div>
+                        <div class="font-bold text-white">@attack.Key</div>
+                        <div class="text-gray-400 text-xs">@attack.Value</div>
+                    </div>
+                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Roll</button>
+                </div>
+            }
+             @foreach (var ability in Combatant.CreatureSource.SpecialAbilities)
+            {
+                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
+                    <div>
+                        <div class="font-bold text-yellow-300">@ability.Key</div>
+                        <div class="text-gray-400 text-xs">@ability.Value</div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required Combatant Combatant { get; set; }
+    [Parameter] public bool IsActive { get; set; }
+    [Parameter] public EventCallback<Combatant> OnRemoveCallback { get; set; }
+
+    private async Task OnRemove()
+    {
+        await OnRemoveCallback.InvokeAsync(Combatant);
+    }
+}

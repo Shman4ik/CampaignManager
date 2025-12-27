@@ -1,0 +1,166 @@
+﻿@page "/combat"
+@rendermode InteractiveServer
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Components
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@inject CombatService CombatService
+@inject CharacterService CharacterService
+@inject CreatureService CreatureService
+@implements IDisposable
+
+<div class="container mx-auto p-4 flex gap-4 h-screen overflow-hidden">
+    <!-- Left Column: Combatants List -->
+    <div class="w-2/3 flex flex-col h-full">
+        <div class="flex justify-between items-center mb-4 bg-gray-800 p-4 rounded-lg">
+            <div>
+                <h1 class="text-2xl font-bold text-white">Combat Helper</h1>
+                <div class="text-gray-400">Round: @CombatService.CurrentRound | Turn: @(CombatService.CurrentTurnIndex + 1)</div>
+            </div>
+            <div class="flex gap-2">
+                <button @onclick="NextTurn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Next Turn
+                </button>
+                <button @onclick="NextRound" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
+                    Next Round
+                </button>
+                <button @onclick="SortInitiative" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">
+                    Sort Initiative
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto pr-2">
+            @if (CombatService.Combatants.Any())
+            {
+                @foreach (var combatant in CombatService.Combatants)
+                {
+                    <CombatantCard Combatant="combatant" 
+                                   IsActive="@(combatant == CombatService.GetActiveCombatant())" 
+                                   OnRemoveCallback="RemoveCombatant" />
+                }
+            }
+            else
+            {
+                <div class="text-center text-gray-500 mt-10">
+                    No combatants added. Use the panel on the right to add characters or monsters.
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Right Column: Tools & Add -->
+    <div class="w-1/3 flex flex-col gap-4 h-full overflow-y-auto">
+        <!-- Dice Roller -->
+        <DiceRoller />
+
+        <!-- Add Participants -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md">
+            <h3 class="text-lg font-bold mb-4 text-white">Add Participants</h3>
+            
+            <div class="flex gap-2 mb-4">
+                <button @onclick='() => ShowAddMode = "Characters"' class="@(ShowAddMode == "Characters" ? "bg-blue-600" : "bg-gray-600") text-white px-3 py-1 rounded">Characters</button>
+                <button @onclick='() => ShowAddMode = "Monsters"' class="@(ShowAddMode == "Monsters" ? "bg-blue-600" : "bg-gray-600") text-white px-3 py-1 rounded">Monsters</button>
+            </div>
+
+            <div class="h-64 overflow-y-auto border border-gray-700 rounded p-2">
+                @if (ShowAddMode == "Characters")
+                {
+                    @if (AvailableCharacters == null)
+                    {
+                        <div class="text-gray-400">Loading characters...</div>
+                    }
+                    else
+                    {
+                        @foreach (var chara in AvailableCharacters)
+                        {
+                            <div class="flex justify-between items-center p-2 hover:bg-gray-700 rounded cursor-pointer" @onclick="() => AddCharacter(chara)">
+                                <span class="text-white">@chara.PersonalInfo.Name</span>
+                                <span class="text-xs text-gray-400">DEX: @chara.Characteristics.Dexterity.Regular</span>
+                            </div>
+                        }
+                    }
+                }
+                else
+                {
+                    @if (AvailableCreatures == null)
+                    {
+                        <div class="text-gray-400">Loading monsters...</div>
+                    }
+                    else
+                    {
+                        @foreach (var monster in AvailableCreatures)
+                        {
+                            <div class="flex justify-between items-center p-2 hover:bg-gray-700 rounded cursor-pointer" @onclick="() => AddMonster(monster)">
+                                <span class="text-white">@monster.Name</span>
+                                <span class="text-xs text-gray-400">DEX: @monster.CreatureCharacteristics.Dexterity.Value</span>
+                            </div>
+                        }
+                    }
+                }
+            </div>
+        </div>
+        
+        <div class="bg-gray-800 p-4 rounded-lg shadow-md mt-auto">
+             <button @onclick="ResetCombat" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded">
+                Reset Combat
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string ShowAddMode { get; set; } = "Characters";
+    private List<Character>? AvailableCharacters;
+    private List<Creature>? AvailableCreatures;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CombatService.OnChange += StateHasChanged;
+        AvailableCharacters = await CharacterService.GetAllCharactersAsync();
+        AvailableCreatures = await CreatureService.GetAllCreaturesAsync(searchText: "", creatureTypeStr: null, page: 1, pageSize: 100);
+    }
+
+    private void AddCharacter(Character character)
+    {
+        CombatService.AddCombatant(new Combatant(character));
+    }
+
+    private void AddMonster(Creature creature)
+    {
+        CombatService.AddCombatant(new Combatant(creature));
+    }
+
+    private void RemoveCombatant(Combatant combatant)
+    {
+        CombatService.RemoveCombatant(combatant);
+    }
+
+    private void NextTurn()
+    {
+        CombatService.NextTurn();
+    }
+
+    private void NextRound()
+    {
+        CombatService.NextRound();
+    }
+
+    private void SortInitiative()
+    {
+        CombatService.SortByInitiative();
+    }
+    
+    private void ResetCombat()
+    {
+        CombatService.ResetCombat();
+    }
+
+    public void Dispose()
+    {
+        CombatService.OnChange -= StateHasChanged;
+    }
+}

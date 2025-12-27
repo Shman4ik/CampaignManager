@@ -1,0 +1,96 @@
+@using System.Security.Cryptography
+
+<div class="bg-gray-800 p-4 rounded-lg shadow-md">
+    <h3 class="text-lg font-bold mb-4 text-white">Dice Roller</h3>
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+        <button @onclick="() => RollDice(100)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Roll d100
+        </button>
+        <button @onclick="() => RollDice(10)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Roll d10
+        </button>
+        <button @onclick="() => RollDice(6)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Roll d6
+        </button>
+        <button @onclick="() => RollDice(4)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Roll d4
+        </button>
+    </div>
+
+    <div class="mb-4">
+        <label class="block text-gray-300 text-sm font-bold mb-2">Manual Input / Custom Roll</label>
+        <div class="flex gap-2">
+            <input @bind="ManualInput" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Value" />
+            <button @onclick="SetManualValue" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                Set
+            </button>
+        </div>
+    </div>
+
+    @if (LastRollResult > 0)
+    {
+        <div class="bg-gray-700 p-4 rounded text-center">
+            <div class="text-4xl font-bold text-yellow-400 mb-2">@LastRollResult</div>
+            <div class="text-sm text-gray-300">Last Result</div>
+            
+            @if (TargetValue > 0)
+            {
+                <div class="mt-2 text-lg font-semibold @GetSuccessColor()">
+                    @GetSuccessLevel()
+                </div>
+            }
+        </div>
+    }
+    
+    <div class="mt-4">
+         <label class="block text-gray-300 text-sm font-bold mb-2">Target Skill Level (Optional)</label>
+         <input @bind="TargetValue" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Skill Value (e.g. 50)" />
+    </div>
+</div>
+
+@code {
+    private int LastRollResult { get; set; }
+    private int ManualInput { get; set; }
+    private int TargetValue { get; set; }
+
+    private void RollDice(int sides)
+    {
+        LastRollResult = RandomNumberGenerator.GetInt32(1, sides + 1);
+    }
+
+    private void SetManualValue()
+    {
+        LastRollResult = ManualInput;
+    }
+
+    private string GetSuccessLevel()
+    {
+        if (TargetValue <= 0) return "";
+        
+        if (LastRollResult == 1) return "Critical Success!";
+        if (LastRollResult == 100) return "Fumble!";
+        if (LastRollResult >= 96 && TargetValue < 50) return "Fumble!";
+        
+        if (LastRollResult <= TargetValue / 5) return "Extreme Success";
+        if (LastRollResult <= TargetValue / 2) return "Hard Success";
+        if (LastRollResult <= TargetValue) return "Regular Success";
+        
+        return "Failure";
+    }
+
+    private string GetSuccessColor()
+    {
+        var level = GetSuccessLevel();
+        return level switch
+        {
+            "Critical Success!" => "text-yellow-400",
+            "Extreme Success" => "text-green-400",
+            "Hard Success" => "text-green-500",
+            "Regular Success" => "text-green-600",
+            "Failure" => "text-red-500",
+            "Fumble!" => "text-red-600",
+            _ => "text-white"
+        };
+    }
+}
