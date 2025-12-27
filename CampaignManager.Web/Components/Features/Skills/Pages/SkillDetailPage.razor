@@ -1,0 +1,203 @@
+@page "/skills/detail/{Id:int}"
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
+@using CampaignManager.Web.Utilities.Services
+@using CampaignManager.Web.Extensions
+@attribute [Authorize]
+
+@inject SkillService SkillService
+@inject NavigationManager NavigationManager
+@inject IdentityService IdentityService
+@inject ILogger<SkillDetailPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>@(_skill?.Name ?? "Навык")</PageTitle>
+
+<div class="max-w-4xl mx-auto px-4 py-6">
+    @if (_loading)
+    {
+        <div class="flex justify-center items-center h-64">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+    }
+    else if (_skill == null)
+    {
+        <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h2 class="text-xl font-bold text-red-700 mb-2">Навык не найден</h2>
+            <p class="text-red-600 mb-4">Навык с указанным ID не существует или был удален.</p>
+            <Button OnClick="GoBack" Variant="secondary">
+                Назад
+            </Button>
+        </div>
+    }
+    else
+    {
+        <div class="bg-white shadow-lg rounded-lg overflow-hidden">
+            <!-- Header -->
+            <div class="bg-blue-600 text-white px-6 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold">@_skill.Name</h1>
+                <div class="flex gap-2">
+                    @if (_isGameMaster)
+                    {
+                        <Button OnClick="EditSkill"
+                                Variant="warning"
+                                Size="sm"
+                                Icon="fa-edit">
+                            Редактировать
+                        </Button>
+                    }
+                    <Button OnClick="GoBack"
+                            Variant="secondary"
+                            Size="sm"
+                            Icon="fa-arrow-left">
+                        Назад
+                    </Button>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="p-6">
+                <!-- Basic Info -->
+                <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="font-semibold text-gray-700">Категория: </span>
+                        <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">
+                            @_skill.Category.ToRussianString()
+                        </Badge>
+                    </div>
+                    <div>
+                        <span class="font-semibold text-gray-700">Базовое значение:</span>
+                        <span class="text-gray-600 ml-2">@_skill.BaseValue%</span>
+                    </div>
+                    @if (_skill.IsUncommon)
+                    {
+                        <div>
+                            <Badge Variant="warning" Size="sm" Rounded="full" WithBorder="false">
+                                Необычный навык
+                            </Badge>
+                        </div>
+                    }
+                    <div>
+                        <span class="font-semibold text-gray-700">Повтор проверки:</span>
+                        <span class="text-gray-600 ml-2">@(_skill.CanRetry ? "Возможен" : "Невозможен")</span>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                @if (!string.IsNullOrEmpty(_skill.Description))
+                {
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Описание</h3>
+                        <p class="text-gray-700">@_skill.Description</p>
+                    </div>
+                }
+
+                <!-- Time Required -->
+                @if (!string.IsNullOrEmpty(_skill.TimeRequired))
+                {
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Время выполнения</h3>
+                        <p class="text-gray-700">@_skill.TimeRequired</p>
+                    </div>
+                }
+
+                <!-- Usage Examples -->
+                @if (_skill.UsageExamples.Count > 0)
+                {
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Примеры использования</h3>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700">
+                            @foreach (var example in _skill.UsageExamples)
+                            {
+                                <li>@example</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <!-- Failure Consequences -->
+                @if (_skill.FailureConsequences.Count > 0)
+                {
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Последствия провала</h3>
+                        <ul class="list-disc list-inside space-y-2 text-gray-700">
+                            @foreach (var consequence in _skill.FailureConsequences)
+                            {
+                                <li>@consequence</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <!-- Opposing Skills -->
+                @if (_skill.OpposingSkills.Count > 0)
+                {
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Противоположные навыки</h3>
+                        <div class="flex flex-wrap gap-2">
+                            @foreach (var opposingSkill in _skill.OpposingSkills)
+                            {
+                                <Badge Variant="secondary" Size="sm">@opposingSkill</Badge>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Metadata -->
+                <div class="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-500">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                            <span class="font-semibold">Создано:</span>
+                            <span class="ml-2">@_skill.CreatedAt.ToString("dd.MM.yyyy HH:mm")</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold">Обновлено:</span>
+                            <span class="ml-2">@_skill.LastUpdated.ToString("dd.MM.yyyy HH:mm")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SkillModel? _skill;
+    private bool _loading = true;
+    private bool _isGameMaster;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _loading = true;
+            _skill = await SkillService.GetSkillByIdAsync(Id);
+            _isGameMaster = await IdentityService.IsKeeper();
+
+            if (_skill == null)
+            {
+                Logger.LogWarning("Skill with ID {SkillId} not found", Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading skill {SkillId}", Id);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void EditSkill()
+    {
+        NavigationManager.NavigateTo($"/skills/edit/{Id}");
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/skills");
+    }
+}

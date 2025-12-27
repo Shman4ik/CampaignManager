@@ -6,4 +6,9 @@ public class Skill
     public required AttributeValue Value { get; set; } = new AttributeValue(0);
     public required string BaseValue { get; set; } = "0";
     public bool IsUsed { get; set; } = false;
+
+    /// <summary>
+    /// Optional reference to SkillModel entity for wiki functionality
+    /// </summary>
+    public int? SkillModelId { get; set; }
 }
