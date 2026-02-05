@@ -10,5 +10,5 @@ public class Skill
     /// <summary>
     /// Optional reference to SkillModel entity for wiki functionality
     /// </summary>
-    public int? SkillModelId { get; set; }
+    public Guid? SkillModelId { get; set; }
 }

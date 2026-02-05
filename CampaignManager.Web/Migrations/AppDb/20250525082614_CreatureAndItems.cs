@@ -11,52 +11,48 @@ namespace CampaignManager.Web.Migrations.AppDb
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ScenarioCreatures",
-                schema: "games");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS games.\"ScenarioCreatures\" CASCADE;");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS games.\"ScenarioItems\" CASCADE;");
 
-            migrationBuilder.DropTable(
-                name: "ScenarioItems",
-                schema: "games");
+            migrationBuilder.Sql("ALTER TABLE games.\"Items\" DROP COLUMN IF EXISTS \"Categories\";");
+            migrationBuilder.Sql("ALTER TABLE games.\"Items\" DROP COLUMN IF EXISTS \"Effects\";");
+            migrationBuilder.Sql("ALTER TABLE games.\"Items\" DROP COLUMN IF EXISTS \"Rarity\";");
 
-            migrationBuilder.DropColumn(
-                name: "Categories",
-                schema: "games",
-                table: "Items");
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_schema = 'games'
+                                   AND table_name = 'Scenarios'
+                                   AND column_name = 'ScenarioCreatures') THEN
+                        ALTER TABLE games.""Scenarios"" ADD ""ScenarioCreatures"" jsonb NOT NULL DEFAULT '[]';
+                    END IF;
+                END $$;
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "Effects",
-                schema: "games",
-                table: "Items");
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_schema = 'games'
+                                   AND table_name = 'Scenarios'
+                                   AND column_name = 'ScenarioItems') THEN
+                        ALTER TABLE games.""Scenarios"" ADD ""ScenarioItems"" jsonb NOT NULL DEFAULT '[]';
+                    END IF;
+                END $$;
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "Rarity",
-                schema: "games",
-                table: "Items");
-
-            migrationBuilder.AddColumn<ICollection<ScenarioCreature>>(
-                name: "ScenarioCreatures",
-                schema: "games",
-                table: "Scenarios",
-                type: "jsonb",
-                nullable: false,
-                defaultValue: new List<ScenarioCreature>());
-
-            migrationBuilder.AddColumn<ICollection<ScenarioItem>>(
-                name: "ScenarioItems",
-                schema: "games",
-                table: "Scenarios",
-                type: "jsonb",
-                nullable: false,
-                defaultValue: new List<ScenarioItem>());
-
-            migrationBuilder.AddColumn<int>(
-                name: "Era",
-                schema: "games",
-                table: "Items",
-                type: "integer",
-                nullable: false,
-                defaultValue: 0);
+            migrationBuilder.Sql(@"
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_schema = 'games'
+                                   AND table_name = 'Items'
+                                   AND column_name = 'Era') THEN
+                        ALTER TABLE games.""Items"" ADD ""Era"" integer NOT NULL DEFAULT 0;
+                    END IF;
+                END $$;
+            ");
         }
 
         /// <inheritdoc />

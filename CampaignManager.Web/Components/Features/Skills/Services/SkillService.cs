@@ -91,7 +91,7 @@ public sealed class SkillService(
     /// </summary>
     /// <param name="id">The ID of the skill</param>
     /// <returns>The skill if found, null otherwise</returns>
-    public async Task<SkillModel?> GetSkillByIdAsync(int id)
+    public async Task<SkillModel?> GetSkillByIdAsync(Guid id)
     {
         try
         {
@@ -191,7 +191,7 @@ public sealed class SkillService(
     /// </summary>
     /// <param name="id">The ID of the skill to delete</param>
     /// <returns>True if the deletion was successful, false otherwise</returns>
-    public async Task<bool> DeleteSkillAsync(int id)
+    public async Task<bool> DeleteSkillAsync(Guid id)
     {
         try
         {

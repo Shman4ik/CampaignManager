@@ -10,7 +10,7 @@ public class SkillModel
     /// <summary>
     /// Уникальный идентификатор навыка
     /// </summary>
-    public int Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>
     /// Название навыка

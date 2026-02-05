@@ -218,6 +218,7 @@ app.MapDefaultEndpoints();
 
 app.MapAccountEndpoints();
 app.MapMinioEndpoints();
+app.MapCharacterMigrationEndpoints();
 
 // Enable middleware to serve generated OpenAPI specification in both JSON and YAML formats
 if (app.Environment.IsDevelopment())

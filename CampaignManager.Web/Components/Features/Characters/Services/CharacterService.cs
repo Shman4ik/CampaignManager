@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -10,7 +11,8 @@ namespace CampaignManager.Web.Components.Features.Characters.Services;
 public class CharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
-    ILogger<CharacterService> logger)
+    ILogger<CharacterService> logger,
+    SkillService skillService)
 {
     public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId)
     {
@@ -310,4 +312,166 @@ public class CharacterService(
             return false;
         }
     }
+
+    /// <summary>
+    /// Migrates character skills to link them with SkillModel entities by matching skill names.
+    /// This is a one-time migration utility to establish links between existing character skills and the skill wiki.
+    /// </summary>
+    /// <returns>Migration result with statistics</returns>
+    public async Task<SkillMigrationResult> MigrateCharacterSkillsToSkillModelAsync()
+    {
+        var result = new SkillMigrationResult();
+
+        try
+        {
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                throw new UnauthorizedAccessException("User must be authenticated to perform migration");
+
+            // Check if user is GameMaster or Admin
+            var isKeeper = await identityService.IsKeeper();
+            if (!isKeeper)
+                throw new UnauthorizedAccessException("Only administrators and game masters can perform skill migration");
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            // Get all characters
+            var allCharacters = await dbContext.CharacterStorage.ToListAsync();
+            result.TotalCharacters = allCharacters.Count;
+
+            // Get all skills from wiki
+            var allSkills = await skillService.GetAllSkillsAsync(string.Empty, pageSize: int.MaxValue);
+
+            // Create multiple lookup strategies for flexible matching
+            var exactMatchDict = allSkills.ToDictionary(s => s.Name.Trim().ToLowerInvariant(), s => s.Id);
+            var baseNameDict = new Dictionary<string, List<(Guid Id, string FullName)>>();
+
+            // Build base name dictionary for skills with specializations (e.g., "выживание" → ["выживание (море)", ...])
+            foreach (var skill in allSkills)
+            {
+                var normalizedName = skill.Name.Trim().ToLowerInvariant();
+
+                // Extract base name if skill has parentheses (specialization)
+                var parenIndex = normalizedName.IndexOf('(');
+                if (parenIndex > 0)
+                {
+                    var baseName = normalizedName.Substring(0, parenIndex).Trim();
+                    if (!baseNameDict.ContainsKey(baseName))
+                        baseNameDict[baseName] = new List<(Guid, string)>();
+                    baseNameDict[baseName].Add((skill.Id, skill.Name));
+                }
+            }
+
+            logger.LogInformation($"Starting skill migration for {allCharacters.Count} characters with {allSkills.Count} wiki skills");
+
+            foreach (var characterStorage in allCharacters)
+            {
+                var character = characterStorage.Character;
+                if (character?.Skills?.SkillGroups == null)
+                    continue;
+
+                bool characterModified = false;
+
+                foreach (var skillGroup in character.Skills.SkillGroups)
+                {
+                    foreach (var skill in skillGroup.Skills)
+                    {
+                        result.TotalSkills++;
+
+                        // Skip if already linked
+                        if (skill.SkillModelId.HasValue)
+                        {
+                            result.SkillsAlreadyLinked++;
+                            continue;
+                        }
+
+                        var normalizedSkillName = skill.Name.Trim().ToLowerInvariant();
+                        Guid? matchedSkillId = null;
+
+                        // Strategy 1: Exact match
+                        if (exactMatchDict.TryGetValue(normalizedSkillName, out var exactId))
+                        {
+                            matchedSkillId = exactId;
+                            result.MatchStrategies["exact"] = result.MatchStrategies.GetValueOrDefault("exact") + 1;
+                        }
+                        // Strategy 2: Character skill might be a base name, find first matching specialized skill
+                        else if (baseNameDict.TryGetValue(normalizedSkillName, out var specializedSkills))
+                        {
+                            // Pick the first available specialized skill
+                            matchedSkillId = specializedSkills[0].Id;
+                            result.MatchStrategies["base-to-specialized"] = result.MatchStrategies.GetValueOrDefault("base-to-specialized") + 1;
+                            result.SpecializationMatches.Add($"{skill.Name} → {specializedSkills[0].FullName}");
+                        }
+                        // Strategy 3: Check if character skill has specialization and base exists in DB
+                        else
+                        {
+                            var parenIndex = normalizedSkillName.IndexOf('(');
+                            if (parenIndex > 0)
+                            {
+                                var baseName = normalizedSkillName.Substring(0, parenIndex).Trim();
+
+                                // Try to find exact match for base name
+                                if (exactMatchDict.TryGetValue(baseName, out var baseId))
+                                {
+                                    matchedSkillId = baseId;
+                                    result.MatchStrategies["specialized-to-base"] = result.MatchStrategies.GetValueOrDefault("specialized-to-base") + 1;
+                                }
+                            }
+                        }
+
+                        if (matchedSkillId.HasValue)
+                        {
+                            skill.SkillModelId = matchedSkillId;
+                            result.SkillsLinked++;
+                            characterModified = true;
+                        }
+                        else
+                        {
+                            result.SkillsNotFound++;
+                            result.UnmatchedSkills.Add(skill.Name);
+                        }
+                    }
+                }
+
+                if (characterModified)
+                {
+                    characterStorage.Character = character;
+                    characterStorage.LastUpdated = DateTime.UtcNow;
+                    dbContext.Update(characterStorage);
+                    result.CharactersUpdated++;
+                }
+            }
+
+            await dbContext.SaveChangesAsync();
+
+            logger.LogInformation($"Skill migration completed: {result.SkillsLinked} skills linked, {result.SkillsNotFound} not found, {result.CharactersUpdated} characters updated");
+            result.Success = true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during skill migration");
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+        }
+
+        return result;
+    }
+}
+
+/// <summary>
+/// Result of skill migration operation
+/// </summary>
+public class SkillMigrationResult
+{
+    public bool Success { get; set; }
+    public int TotalCharacters { get; set; }
+    public int CharactersUpdated { get; set; }
+    public int TotalSkills { get; set; }
+    public int SkillsLinked { get; set; }
+    public int SkillsAlreadyLinked { get; set; }
+    public int SkillsNotFound { get; set; }
+    public List<string> UnmatchedSkills { get; set; } = new();
+    public Dictionary<string, int> MatchStrategies { get; set; } = new();
+    public List<string> SpecializationMatches { get; set; } = new();
+    public string? ErrorMessage { get; set; }
 }

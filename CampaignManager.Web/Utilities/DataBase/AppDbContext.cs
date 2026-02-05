@@ -139,8 +139,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Index for quick lookup by creator
             entity.HasIndex(s => s.CreatorEmail);
 
-            entity.Property(c => c.ScenarioCreatures).HasColumnType("jsonb").HasDefaultValue(new List<ScenarioCreature>());
-            entity.Property(c => c.ScenarioItems).HasColumnType("jsonb").HasDefaultValue(new List<ScenarioItem>());
+            entity.Property(c => c.ScenarioCreatures).HasColumnType("jsonb");
+            entity.Property(c => c.ScenarioItems).HasColumnType("jsonb");
 
             // Relationship with Campaign (optional)
             entity.HasOne(s => s.Campaign)
