@@ -1,59 +1,77 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
-<div class="bg-white shadow rounded-md p-4">
-    <h4 class="text-lg font-semibold mb-3">@Group.Name</h4>
-    <div class="space-y-2 xl:space-y-3">
-        @foreach (var skill in Group.Skills)
-        {
-            <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3">
-                <div class="flex items-center gap-2 flex-grow min-w-0">
-                    <button @onclick="@(() => RemoveSkill(skill))"
-                            class="text-red-500 hover:text-red-700 flex-shrink-0">
-                        <i class="fas fa-times"></i>
-                    </button>
-                    <div class="min-w-0 flex-grow">
-                        <div>
-                            @if (skill.SkillModelId.HasValue)
-                            {
-                                <a href="/skills/detail/@skill.SkillModelId.Value"
-                                   class="font-medium break-all hyphens-auto mr-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
-                                   style="word-break: break-word;"
-                                   title="Открыть информацию о навыке"
-                                   @onclick:stopPropagation="true">@skill.Name</a>
-                            }
-                            else
-                            {
-                                <span class="font-medium break-all hyphens-auto mr-1 text-sm"
-                                      style="word-break: break-word;">@skill.Name</span>
-                            }
-                            <span class="text-xs text-gray-500 flex-shrink-0">(@skill.BaseValue)</span>
+<div class="bg-white shadow rounded-md overflow-hidden">
+    <div class="bg-primary-50 border-l-4 border-primary-500 px-4 py-2">
+        <h4 class="text-base font-semibold text-primary-800">@Group.Name</h4>
+    </div>
+    <div class="p-4">
+        <!-- Column headers -->
+        <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 mb-2 pb-1 border-b border-gray-200">
+            <div class="flex items-center gap-2 flex-grow min-w-0">
+                <span class="w-4 flex-shrink-0"></span>
+                <span class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Навык</span>
+            </div>
+            <div class="hidden xl:flex items-center gap-2 flex-shrink-0 ml-auto xl:ml-0 w-full xl:w-auto justify-between xl:justify-start">
+                <span class="w-4 text-center text-[10px] uppercase tracking-wider text-gray-400 font-semibold">☑</span>
+                <span class="w-16 text-center text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Обыч.</span>
+                <span class="w-16 text-center text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Труд.</span>
+                <span class="w-16 text-center text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Чрез.</span>
+            </div>
+        </div>
+
+        <div class="space-y-1 xl:space-y-1.5">
+            @foreach (var skill in Group.Skills)
+            {
+                <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
+                    <div class="flex items-center gap-2 flex-grow min-w-0">
+                        <button @onclick="@(() => RemoveSkill(skill))"
+                                class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
+                            <i class="fas fa-times text-xs"></i>
+                        </button>
+                        <div class="min-w-0 flex-grow">
+                            <div>
+                                @if (skill.SkillModelId.HasValue)
+                                {
+                                    <a href="/skills/detail/@skill.SkillModelId.Value"
+                                       class="font-medium break-all hyphens-auto mr-1 text-sm text-primary-600 hover:text-primary-800 hover:underline"
+                                       style="word-break: break-word;"
+                                       title="Открыть информацию о навыке"
+                                       @onclick:stopPropagation="true">@skill.Name</a>
+                                }
+                                else
+                                {
+                                    <span class="font-medium break-all hyphens-auto mr-1 text-sm"
+                                          style="word-break: break-word;">@skill.Name</span>
+                                }
+                                <span class="text-xs text-gray-400 flex-shrink-0">(@skill.BaseValue)</span>
+                            </div>
                         </div>
                     </div>
+                    <div
+                        class="flex items-center gap-2 flex-shrink-0 ml-auto xl:ml-0 w-full xl:w-auto justify-between xl:justify-start">
+                        <input type="checkbox" checked="@skill.IsUsed" @onchange="@(e => OnSkillUsedChanged(skill, e))"
+                               class="text-center"/>
+                        <input type="number" value="@skill.Value.Regular"
+                               @onchange="@(e => OnSkillValueChanged(skill, e))"
+                               class="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500"/>
+                        <input type="number" value="@skill.Value.Half" disabled
+                               class="w-16 px-2 py-1 text-sm text-center bg-gray-100 border border-gray-200 rounded text-gray-500"/>
+                        <input type="number" value="@skill.Value.Fifth" disabled
+                               class="w-16 px-2 py-1 text-sm text-center bg-gray-100 border border-gray-200 rounded text-gray-500"/>
+                    </div>
                 </div>
-                <div
-                    class="flex items-center gap-2 flex-shrink-0 ml-auto xl:ml-0 w-full xl:w-auto justify-between xl:justify-start">
-                    <input type="checkbox" checked="@skill.IsUsed" @onchange="@(e => OnSkillUsedChanged(skill, e))"
-                           class="text-center"/>
-                    <input type="number" value="@skill.Value.Regular"
-                           @onchange="@(e => OnSkillValueChanged(skill, e))"
-                           class="w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded"/>
-                    <input type="number" value="@skill.Value.Half" disabled
-                           class="w-16 px-2 py-1 text-sm text-center bg-gray-100 border border-gray-300 rounded"/>
-                    <input type="number" value="@skill.Value.Fifth" disabled
-                           class="w-16 px-2 py-1 text-sm text-center bg-gray-100 border border-gray-300 rounded"/>
-                </div>
-            </div>
-        }
-    </div>
-
-    <!-- Единый блок добавления навыка для всех размеров экрана -->
-    <div class="mt-3 flex flex-wrap items-center gap-2">
-        <div class="flex flex-1 min-w-0 gap-2 items-center">
-            <input type="text" @bind="Group.NewSkillName" placeholder="Навык"
-                   class="flex-grow min-w-0 px-2 py-1 text-sm border border-gray-300 rounded"/>
-            <input type="text" @bind="Group.NewSkillBaseValue" placeholder="БЗ"
-                   class="w-14 xl:w-16 px-2 py-1 text-sm border border-gray-300 rounded"/>
+            }
         </div>
-        <Button Variant="success" Size="sm" OnClick="AddSkill" Icon="fas fa-plus" AdditionalClasses="h-8 w-8 !rounded-full !p-0 flex-shrink-0" />
+
+        <!-- Add skill form -->
+        <div class="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-2">
+            <div class="flex flex-1 min-w-0 gap-2 items-center">
+                <input type="text" @bind="Group.NewSkillName" placeholder="Навык"
+                       class="flex-grow min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500"/>
+                <input type="text" @bind="Group.NewSkillBaseValue" placeholder="БЗ"
+                       class="w-14 xl:w-16 px-2 py-1 text-sm border border-gray-300 rounded"/>
+            </div>
+            <Button Variant="success" Size="sm" OnClick="AddSkill" Icon="fas fa-plus" AdditionalClasses="h-8 w-8 !rounded-full !p-0 flex-shrink-0" />
+        </div>
     </div>
 </div>
 

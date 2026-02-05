@@ -1,50 +1,51 @@
 ﻿@using CampaignManager.Web.Components.Features.Characters.Model
-<table class="w-full text-xs">
-    <thead>
-    <tr class="border-b border-gray-300">
-        <th class="text-left font-semibold text-xs text-gray-600 pb-1">Состояние сыщика</th>
-        <th class="w-8 text-center font-semibold text-xs text-gray-600 pb-1"></th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr class="border-b border-gray-100">
-        <td class="py-1"><span class="text-xs text-gray-700">Без сознания</span></td>
-        <td class="py-1 text-center">
-            <input type="checkbox" @bind="State.IsUnconscious"
-                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
-        </td>
-    </tr>
-    <tr class="border-b border-gray-100">
-        <td class="py-1"><span class="text-xs text-gray-700">Серьезная рана</span></td>
-        <td class="py-1 text-center">
-            <input type="checkbox" @bind="State.HasSeriousInjury"
-                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
-        </td>
-    </tr>
-    <tr class="border-b border-gray-100">
-        <td class="py-1"><span class="text-xs text-gray-700">При смерти</span></td>
-        <td class="py-1 text-center">
-            <input type="checkbox" @bind="State.IsDying"
-                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
-        </td>
-    </tr>
-    <tr class="border-b border-gray-100">
-        <td class="py-1"><span class="text-xs text-gray-700">Врем. безумие</span></td>
-        <td class="py-1 text-center">
-            <input type="checkbox" @bind="State.HasTemporaryInsanity"
-                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
-        </td>
-    </tr>
-    <tr class="border-b border-gray-100">
-        <td class="py-1"><span class="text-xs text-gray-700">Бесcр. безумие</span></td>
-        <td class="py-1 text-center">
-            <input type="checkbox" @bind="State.HasIndefiniteInsanity"
-                   class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
-        </td>
-    </tr>
-    </tbody>
-</table>
+<div>
+    <h6 class="text-xs font-semibold text-gray-500 pb-1 mb-1.5 border-b border-gray-300">Состояние сыщика</h6>
+    <div class="space-y-1.5">
+        @foreach (var condition in _conditions)
+        {
+            var isActive = condition.Getter();
+            <label class="flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 @(isActive ? condition.ActiveBg : "hover:bg-gray-50")">
+                <input type="checkbox" checked="@isActive"
+                       @onchange="@(e => { condition.Setter(e.Value is true); StateHasChanged(); })"
+                       class="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-1"/>
+                @if (isActive)
+                {
+                    <span class="inline-flex items-center gap-1 text-xs font-semibold @condition.ActiveText">
+                        <i class="@condition.Icon text-[10px]"></i>
+                        @condition.Label
+                    </span>
+                }
+                else
+                {
+                    <span class="text-xs text-gray-700">@condition.Label</span>
+                }
+            </label>
+        }
+    </div>
+</div>
 
 @code {
     [Parameter] public required CharacterState State { get; set; }
+
+    private record ConditionRow(string Label, string Icon, string ActiveBg, string ActiveText, Func<bool> Getter, Action<bool> Setter);
+
+    private List<ConditionRow> _conditions = [];
+
+    protected override void OnParametersSet()
+    {
+        _conditions =
+        [
+            new("Без сознания", "fa-solid fa-moon", "bg-yellow-50", "text-yellow-700",
+                () => State.IsUnconscious, v => State.IsUnconscious = v),
+            new("Серьезная рана", "fa-solid fa-heart-crack", "bg-orange-50", "text-orange-700",
+                () => State.HasSeriousInjury, v => State.HasSeriousInjury = v),
+            new("При смерти", "fa-solid fa-skull", "bg-red-50", "text-red-700",
+                () => State.IsDying, v => State.IsDying = v),
+            new("Врем. безумие", "fa-solid fa-brain", "bg-purple-50", "text-purple-700",
+                () => State.HasTemporaryInsanity, v => State.HasTemporaryInsanity = v),
+            new("Бессроч. безумие", "fa-solid fa-brain", "bg-purple-100", "text-purple-800",
+                () => State.HasIndefiniteInsanity, v => State.HasIndefiniteInsanity = v)
+        ];
+    }
 }
