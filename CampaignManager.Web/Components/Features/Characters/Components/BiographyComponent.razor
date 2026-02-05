@@ -1,76 +1,286 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <!-- Left Column -->
-    <div class="space-y-4">
-        <div>
-            <label for="bio-appearance" class="cm-text-subtle block mb-1">Описание</label>
-            <textarea id="bio-appearance" rows="2" @bind="Character.Biography.Appearance"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
-        </div>
+@using CampaignManager.Web.Components.Shared
+@inject Utilities.Services.MarkdownService MarkdownService
 
-        <div>
-            <label for="bio-ideals" class="cm-text-subtle block mb-1">Идеалы и принципы</label>
-            <textarea id="bio-ideals" rows="2" @bind="Character.Biography.IdealsAndPrinciples"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
-        </div>
+<!-- Биография — подсекции с иконками, авторесайз и Markdown -->
+<div class="space-y-5">
 
-        <div>
-            <label for="bio-people" class="cm-text-subtle block mb-1">Значимые люди</label>
-            <textarea id="bio-people" rows="2" @bind="Character.Biography.SignificantPeople"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Подсекция: Внешность и характер -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("appearance")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-user-pen text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Внешность и характер</span>
+            </div>
+            <i class="fa-solid @(_subsections["appearance"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
-
-        <div>
-            <label for="bio-places" class="cm-text-subtle block mb-1">Важные места</label>
-            <textarea id="bio-places" rows="2" @bind="Character.Biography.ImportantPlaces"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
-        </div>
-
-        <div>
-            <label for="bio-possessions" class="cm-text-subtle block mb-1">Ценное имущество</label>
-            <textarea id="bio-possessions" rows="2"
-                      @bind="Character.Biography.ValuablePossessions"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
-        </div>
+        @if (_subsections["appearance"])
+        {
+            <div class="bio-subsection-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="bio-appearance" class="bio-label">
+                            <i class="fa-solid fa-eye text-xs"></i> Описание
+                        </label>
+                        <InitialSizeTextArea id="bio-appearance"
+                                             @bind-Value="Character.Biography.Appearance"
+                                             InitialRows="2"
+                                             placeholder="Худощавый, немного заросший, неплохо одевается..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-traits" class="bio-label">
+                            <i class="fa-solid fa-masks-theater text-xs"></i> Черты
+                        </label>
+                        <InitialSizeTextArea id="bio-traits"
+                                             @bind-Value="Character.Biography.Traits"
+                                             InitialRows="2"
+                                             placeholder="Любит рептилий, осторожный, вежливый..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 
-    <!-- Right Column -->
-    <div class="space-y-4">
-        <div>
-            <label for="bio-traits" class="cm-text-subtle block mb-1">Черты</label>
-            <textarea id="bio-traits" rows="2" @bind="Character.Biography.Traits"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Подсекция: Мировоззрение и состояние -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("ideals")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-scale-balanced text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Мировоззрение и состояние</span>
+            </div>
+            <i class="fa-solid @(_subsections["ideals"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
+        @if (_subsections["ideals"])
+        {
+            <div class="bio-subsection-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="bio-ideals" class="bio-label">
+                            <i class="fa-solid fa-star text-xs"></i> Идеалы и принципы
+                        </label>
+                        <InitialSizeTextArea id="bio-ideals"
+                                             @bind-Value="Character.Biography.IdealsAndPrinciples"
+                                             InitialRows="2"
+                                             placeholder="Оккультизм, поиск истины, защита невинных..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-injuries" class="bio-label">
+                            <i class="fa-solid fa-bandage text-xs"></i> Травмы и шрамы
+                        </label>
+                        <InitialSizeTextArea id="bio-injuries"
+                                             @bind-Value="Character.Biography.Injuries"
+                                             InitialRows="2"
+                                             placeholder="Рана от пули на левом плече, шрам на лице..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-phobias" class="bio-label">
+                            <i class="fa-solid fa-ghost text-xs"></i> Фобии и мании
+                        </label>
+                        <InitialSizeTextArea id="bio-phobias"
+                                             @bind-Value="Character.Biography.Phobias"
+                                             InitialRows="2"
+                                             placeholder="Боязнь замкнутых пространств, навязчивые мысли..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 
-        <div>
-            <label for="bio-injuries" class="cm-text-subtle block mb-1">Травмы и Шрамы</label>
-            <textarea id="bio-injuries" rows="2" @bind="Character.Biography.Injuries"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Подсекция: Связи и окружение -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("connections")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-people-group text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Связи и окружение</span>
+            </div>
+            <i class="fa-solid @(_subsections["connections"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
+        @if (_subsections["connections"])
+        {
+            <div class="bio-subsection-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="bio-people" class="bio-label">
+                            <i class="fa-solid fa-users text-xs"></i> Значимые люди
+                        </label>
+                        <InitialSizeTextArea id="bio-people"
+                                             @bind-Value="Character.Biography.SignificantPeople"
+                                             InitialRows="2"
+                                             placeholder="Гвен — подруга по клубу египтологов..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-places" class="bio-label">
+                            <i class="fa-solid fa-map-location-dot text-xs"></i> Важные места
+                        </label>
+                        <InitialSizeTextArea id="bio-places"
+                                             @bind-Value="Character.Biography.ImportantPlaces"
+                                             InitialRows="2"
+                                             placeholder="Рабочий кабинет в Аркхэме, книжная лавка..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 
-        <div>
-            <label for="bio-phobias" class="cm-text-subtle block mb-1">Фобии и Мании</label>
-            <textarea id="bio-phobias" rows="2" @bind="Character.Biography.Phobias"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Подсекция: Имущество и мистика -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("possessions")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-wand-sparkles text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Имущество и мистика</span>
+            </div>
+            <i class="fa-solid @(_subsections["possessions"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
+        @if (_subsections["possessions"])
+        {
+            <div class="bio-subsection-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="bio-possessions" class="bio-label">
+                            <i class="fa-solid fa-gem text-xs"></i> Ценное имущество
+                        </label>
+                        <InitialSizeTextArea id="bio-possessions"
+                                             @bind-Value="Character.Biography.ValuablePossessions"
+                                             InitialRows="2"
+                                             placeholder="Осколок метеора, найденный во Франции..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-magic" class="bio-label">
+                            <i class="fa-solid fa-book-skull text-xs"></i> Магические книги, заклинания и артефакты
+                        </label>
+                        <InitialSizeTextArea id="bio-magic"
+                                             @bind-Value="Character.Biography.MagicalItems"
+                                             InitialRows="2"
+                                             placeholder="Затуманить память (1d6 ПМ, 1d2 Рассудок)..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                    <div>
+                        <label for="bio-supernatural" class="bio-label">
+                            <i class="fa-solid fa-skull text-xs"></i> Встречи со сверхъестественным
+                        </label>
+                        <InitialSizeTextArea id="bio-supernatural"
+                                             @bind-Value="Character.Biography.SupernaturalEncounters"
+                                             InitialRows="2"
+                                             placeholder="Сражался с зомби, встреча с крысиной тварью..."
+                                             class="w-full bio-textarea"/>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
 
-        <div>
-            <label for="bio-magic" class="cm-text-subtle block mb-1">Магические книги, Заклинания и
-                Aртефакты</label>
-            <textarea id="bio-magic" rows="2" @bind="Character.Biography.MagicalItems"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Заметки — с Markdown-превью -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("notes")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-sticky-note text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Заметки</span>
+            </div>
+            <i class="fa-solid @(_subsections["notes"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
+        @if (_subsections["notes"])
+        {
+            <div class="bio-subsection-body">
+                <div class="flex items-center justify-end mb-2 gap-2">
+                    <button type="button"
+                            class="bio-mode-btn @(!_notesPreview ? "bio-mode-btn-active" : "")"
+                            @onclick="() => _notesPreview = false">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i> Редактор
+                    </button>
+                    <button type="button"
+                            class="bio-mode-btn @(_notesPreview ? "bio-mode-btn-active" : "")"
+                            @onclick="() => _notesPreview = true">
+                        <i class="fa-solid fa-eye text-xs"></i> Просмотр
+                    </button>
+                </div>
+                @if (_notesPreview)
+                {
+                    <div class="markdown-content bio-preview">
+                        @((MarkupString)MarkdownService.ConvertToHtml(Character.Notes))
+                    </div>
+                }
+                else
+                {
+                    <InitialSizeTextArea id="char-notes"
+                                         @bind-Value="Character.Notes"
+                                         InitialRows="4"
+                                         placeholder="Заметки по ходу игры. Поддерживается **Markdown**: заголовки, списки, *курсив*..."
+                                         class="w-full bio-textarea bio-textarea-large"/>
+                }
+            </div>
+        }
+    </div>
 
-        <div>
-            <label for="bio-supernatural" class="cm-text-subtle block mb-1">Встречи со
-                сверхъестественным</label>
-            <textarea id="bio-supernatural" rows="2"
-                      @bind="Character.Biography.SupernaturalEncounters"
-                      class="w-full px-2 py-1 border border-gray-300 rounded-md"></textarea>
+    <!-- Предыстория — с Markdown-превью -->
+    <div class="bio-subsection">
+        <div class="bio-subsection-header" @onclick='() => ToggleSubsection("backstory")'>
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-scroll text-primary-500 text-sm"></i>
+                <span class="text-sm font-semibold text-gray-700">Предыстория</span>
+            </div>
+            <i class="fa-solid @(_subsections["backstory"] ? "fa-chevron-up" : "fa-chevron-down") text-xs text-gray-400 transition-transform duration-200"></i>
         </div>
+        @if (_subsections["backstory"])
+        {
+            <div class="bio-subsection-body">
+                <div class="flex items-center justify-end mb-2 gap-2">
+                    <button type="button"
+                            class="bio-mode-btn @(!_backstoryPreview ? "bio-mode-btn-active" : "")"
+                            @onclick="() => _backstoryPreview = false">
+                        <i class="fa-solid fa-pen-to-square text-xs"></i> Редактор
+                    </button>
+                    <button type="button"
+                            class="bio-mode-btn @(_backstoryPreview ? "bio-mode-btn-active" : "")"
+                            @onclick="() => _backstoryPreview = true">
+                        <i class="fa-solid fa-eye text-xs"></i> Просмотр
+                    </button>
+                </div>
+                @if (_backstoryPreview)
+                {
+                    <div class="markdown-content bio-preview">
+                        @((MarkupString)MarkdownService.ConvertToHtml(Character.Backstory))
+                    </div>
+                }
+                else
+                {
+                    <InitialSizeTextArea id="char-backstory"
+                                         @bind-Value="Character.Backstory"
+                                         InitialRows="6"
+                                         placeholder="История жизни персонажа до начала приключений. Поддерживается **Markdown**..."
+                                         class="w-full bio-textarea bio-textarea-large"/>
+                }
+            </div>
+        }
     </div>
 </div>
 
 @code {
     [Parameter] public required Character Character { get; set; }
+
+    private bool _notesPreview = true;
+    private bool _backstoryPreview = true;
+
+    private readonly Dictionary<string, bool> _subsections = new()
+    {
+        { "appearance", true },
+        { "ideals", true },
+        { "connections", true },
+        { "possessions", true },
+        { "notes", true },
+        { "backstory", true }
+    };
+
+    private void ToggleSubsection(string key)
+    {
+        if (_subsections.ContainsKey(key))
+            _subsections[key] = !_subsections[key];
+    }
 }
