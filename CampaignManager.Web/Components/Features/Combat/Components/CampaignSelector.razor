@@ -1,0 +1,55 @@
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Utilities.Services
+
+@inject CampaignService CampaignService
+@inject IdentityService IdentityService
+
+<div class="flex items-center gap-3">
+    <label class="text-sm font-medium text-gray-600 whitespace-nowrap">Кампания:</label>
+    <select class="border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[200px]"
+            value="@_selectedCampaignId"
+            @onchange="OnCampaignChanged">
+        <option value="">— Выберите кампанию —</option>
+        @if (_campaigns != null)
+        {
+            @foreach (var campaign in _campaigns)
+            {
+                <option value="@campaign.Id">@campaign.Name</option>
+            }
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public EventCallback<Campaign?> OnCampaignSelected { get; set; }
+
+    private List<Campaign>? _campaigns;
+    private string _selectedCampaignId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userEmail = IdentityService.GetCurrentUserEmail();
+        if (string.IsNullOrEmpty(userEmail)) return;
+
+        var allCampaigns = await CampaignService.GetAllCampaignsAsync();
+        _campaigns = allCampaigns
+            .Where(c => c.KeeperEmail != null && c.KeeperEmail.Equals(userEmail, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task OnCampaignChanged(ChangeEventArgs e)
+    {
+        _selectedCampaignId = e.Value?.ToString() ?? "";
+
+        if (Guid.TryParse(_selectedCampaignId, out var campaignId))
+        {
+            var campaign = await CampaignService.GetCampaignWithCharactersAsync(campaignId);
+            await OnCampaignSelected.InvokeAsync(campaign);
+        }
+        else
+        {
+            await OnCampaignSelected.InvokeAsync(null);
+        }
+    }
+}

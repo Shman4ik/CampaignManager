@@ -1,0 +1,139 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Shared
+
+<div class="bg-white rounded-md shadow-md border-2 border-blue-200 p-4">
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Результат атаки</h4>
+
+    <!-- Бросок атакующего -->
+    <div class="bg-gray-50 rounded-md p-3 mb-2">
+        <div class="text-sm">
+            <span class="font-semibold text-gray-900">@Result.AttackerName</span>
+            <span class="text-gray-500"> бросает </span>
+            <span class="font-bold text-lg text-gray-900">@Result.AttackerRoll</span>
+            <span class="text-gray-500"> против </span>
+            <span class="font-semibold text-gray-700">@Result.AttackerSkillValue</span>
+            <span class="text-gray-500"> — </span>
+            <span class="font-semibold @GetLevelColor(Result.AttackerSuccessLevel)">
+                @CombatService.GetSuccessLevelText(Result.AttackerSuccessLevel)
+            </span>
+        </div>
+    </div>
+
+    <!-- Бросок защитника (если ближний бой) -->
+    @if (Result.ActionType == CombatActionType.MeleeAttack && Result.DefenderId.HasValue)
+    {
+        <div class="bg-gray-50 rounded-md p-3 mb-2">
+            <div class="text-sm">
+                <span class="font-semibold text-gray-900">@Result.DefenderName</span>
+                <span class="text-gray-500">
+                    (@(Result.DefenderReaction == CombatActionType.FightBack ? "ответный удар" : "уклонение"))
+                    бросает
+                </span>
+                <span class="font-bold text-lg text-gray-900">@Result.DefenderRoll</span>
+                <span class="text-gray-500"> против </span>
+                <span class="font-semibold text-gray-700">@Result.DefenderSkillValue</span>
+                <span class="text-gray-500"> — </span>
+                <span class="font-semibold @GetLevelColor(Result.DefenderSuccessLevel)">
+                    @CombatService.GetSuccessLevelText(Result.DefenderSuccessLevel)
+                </span>
+            </div>
+        </div>
+    }
+
+    <!-- Итог -->
+    <div class="rounded-md p-3 mb-3 @(Result.AttackerWins ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200")">
+        @if (Result.AttackerWins)
+        {
+            <div class="text-sm font-semibold text-green-800 mb-1">Попадание!</div>
+
+            @if (Result.TotalDamage > 0)
+            {
+                <div class="text-sm text-gray-700">
+                    Урон: <span class="font-semibold">@Result.DamageFormula = @Result.DamageRolled</span>
+                    @if (Result.BonusDamage != 0)
+                    {
+                        <span> + бонус @Result.BonusDamage</span>
+                    }
+                    @if (Result.ExtraDamage > 0)
+                    {
+                        <span> + доп. @Result.ExtraDamage</span>
+                    }
+                    <span class="font-bold"> = @Result.TotalDamage</span>
+                </div>
+
+                @if (Result.IsCritical)
+                {
+                    <div class="text-sm font-bold text-yellow-700 mt-1">Критический удар!</div>
+                }
+                @if (Result.IsExtreme && Result.IsImpalingWeapon)
+                {
+                    <div class="text-sm font-bold text-red-700 mt-1">Пронзание!</div>
+                }
+            }
+
+            <div class="text-sm text-gray-600 mt-1">
+                ОЗ: @Result.DefenderHpBefore → <span class="font-semibold @(Result.DefenderHpAfter <= 0 ? "text-red-700" : "text-gray-900")">@Result.DefenderHpAfter</span>
+            </div>
+        }
+        else
+        {
+            <div class="text-sm font-semibold text-red-800">Промах!</div>
+        }
+    </div>
+
+    <!-- Тяжёлая рана -->
+    @if (Result.TriggeredMajorWound)
+    {
+        <div class="bg-orange-50 border border-orange-200 rounded-md p-3 mb-3">
+            <div class="text-sm font-semibold text-orange-800">Тяжёлая рана!</div>
+            <div class="text-sm text-gray-700">
+                Проверка ТЕЛ: бросок <span class="font-bold">@Result.MajorWoundConRoll</span>
+                — <span class="font-semibold @(Result.MajorWoundConRollSuccess ? "text-green-700" : "text-red-700")">
+                    @(Result.MajorWoundConRollSuccess ? "успех" : "провал")
+                </span>
+            </div>
+            @if (Result.DefenderKnockedUnconscious)
+            {
+                <div class="text-sm font-bold text-red-700 mt-1">@Result.DefenderName теряет сознание!</div>
+            }
+        </div>
+    }
+
+    <!-- Смерть / При смерти -->
+    @if (Result.DefenderDead)
+    {
+        <div class="bg-gray-800 text-white rounded-md p-3 mb-3 text-sm font-bold text-center">
+            @Result.DefenderName мёртв!
+        </div>
+    }
+    else if (Result.DefenderDying)
+    {
+        <div class="bg-red-700 text-white rounded-md p-3 mb-3 text-sm font-bold text-center">
+            @Result.DefenderName при смерти!
+        </div>
+    }
+
+    <!-- Кнопки -->
+    <div class="flex gap-2">
+        <Button Variant="primary" OnClick="OnApply" FullWidth="true">Применить</Button>
+        <Button Variant="secondary" OnClick="OnCancel" FullWidth="true">Отменить</Button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public required CombatActionResult Result { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private static string GetLevelColor(SuccessLevel level) => level switch
+    {
+        SuccessLevel.CriticalSuccess => "text-yellow-600",
+        SuccessLevel.ExtremeSuccess => "text-green-600",
+        SuccessLevel.HardSuccess => "text-green-500",
+        SuccessLevel.RegularSuccess => "text-blue-600",
+        SuccessLevel.Failure => "text-red-500",
+        SuccessLevel.Fumble => "text-red-700",
+        _ => "text-gray-700"
+    };
+}

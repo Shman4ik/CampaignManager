@@ -1,0 +1,127 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Shared
+
+@inject CombatService CombatService
+
+<div>
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Проверка рассудка</h4>
+
+    <!-- Выбор цели -->
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Цель</label>
+        <select class="border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value="@_selectedTargetId"
+                @onchange="OnTargetChanged">
+            <option value="">— Выберите —</option>
+            @foreach (var c in AvailableTargets)
+            {
+                <option value="@c.Id">@c.Name (Рас. @c.CurrentSanity)</option>
+            }
+        </select>
+    </div>
+
+    @if (_selectedTarget != null)
+    {
+        <div class="mb-2 text-sm text-gray-600">
+            Текущий рассудок: <span class="font-semibold text-gray-900">@_selectedTarget.CurrentSanity / @_selectedTarget.MaxSanity</span>
+        </div>
+
+        <!-- Потеря при успехе -->
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Потеря при успехе</label>
+            <input type="text" @bind="_successLoss"
+                   class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                   placeholder="0, 1, 1D3" />
+        </div>
+
+        <!-- Потеря при неудаче -->
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Потеря при неудаче</label>
+            <input type="text" @bind="_failureLoss"
+                   class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                   placeholder="1D6, 1D10, 2D6" />
+        </div>
+
+        @if (_pendingSanityResult != null)
+        {
+            <!-- Результат проверки -->
+            <div class="bg-purple-50 border border-purple-200 rounded-md p-3 mb-3">
+                <div class="text-sm font-semibold @(_pendingSanityResult.AttackerSuccessLevel >= SuccessLevel.RegularSuccess ? "text-green-700" : "text-red-700")">
+                    Бросок: @_pendingSanityResult.AttackerRoll против @_pendingSanityResult.AttackerSkillValue
+                    — @(_pendingSanityResult.AttackerSuccessLevel >= SuccessLevel.RegularSuccess ? "успех" : "неудача")
+                </div>
+                <div class="text-sm text-gray-700 mt-1">
+                    Потеря рассудка: <span class="font-bold">@_pendingSanityResult.SanityLoss</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                    Рассудок: @_pendingSanityResult.SanityBefore → <span class="font-semibold">@_pendingSanityResult.SanityAfter</span>
+                </div>
+                @if (_pendingSanityResult.TriggeredTemporaryInsanity == true)
+                {
+                    <div class="text-sm font-bold text-purple-700 mt-1">Временное безумие!</div>
+                }
+
+                <div class="flex gap-2 mt-3">
+                    <Button Variant="primary" Size="sm" OnClick="ApplySanityResult" FullWidth="true">Применить</Button>
+                    <Button Variant="secondary" Size="sm" OnClick="CancelSanityResult" FullWidth="true">Отменить</Button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <Button Variant="info" FullWidth="true" OnClick="RollSanityCheck">
+                Проверка рассудка
+            </Button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<Combatant> Combatants { get; set; } = [];
+    [Parameter] public EventCallback<CombatActionResult> OnSanityResolved { get; set; }
+
+    private string _selectedTargetId = "";
+    private Combatant? _selectedTarget;
+    private string _successLoss = "0";
+    private string _failureLoss = "1D6";
+    private CombatActionResult? _pendingSanityResult;
+
+    private IEnumerable<Combatant> AvailableTargets =>
+        Combatants.Where(c => !c.IsDead);
+
+    private void OnTargetChanged(ChangeEventArgs e)
+    {
+        _selectedTargetId = e.Value?.ToString() ?? "";
+        _selectedTarget = Guid.TryParse(_selectedTargetId, out var id)
+            ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        _pendingSanityResult = null;
+    }
+
+    private void RollSanityCheck()
+    {
+        if (_selectedTarget == null) return;
+
+        var setup = new SanityCheckSetup
+        {
+            TargetId = _selectedTarget.Id,
+            CurrentSanity = _selectedTarget.CurrentSanity,
+            SuccessLoss = _successLoss,
+            FailureLoss = _failureLoss
+        };
+
+        _pendingSanityResult = CombatService.ResolveSanityCheck(setup);
+    }
+
+    private async Task ApplySanityResult()
+    {
+        if (_pendingSanityResult == null) return;
+        await OnSanityResolved.InvokeAsync(_pendingSanityResult);
+        _pendingSanityResult = null;
+    }
+
+    private void CancelSanityResult()
+    {
+        _pendingSanityResult = null;
+    }
+}

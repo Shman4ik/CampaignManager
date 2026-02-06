@@ -1,111 +1,156 @@
 @using CampaignManager.Web.Components.Features.Combat.Model
-@using CampaignManager.Web.Components.Features.Combat.Services
 
-<div class="bg-gray-800 rounded-lg shadow-md p-4 mb-4 border-l-4 @(IsActive ? "border-yellow-500" : "border-gray-600")">
-    <div class="flex justify-between items-start mb-4">
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-3 mb-2 border-l-4 @(IsActive ? "border-l-blue-500" : "border-l-transparent")
+            @(Combatant.IsDead ? "opacity-50" : "")">
+    <!-- Заголовок -->
+    <div class="flex justify-between items-start mb-2">
         <div>
-            <h3 class="text-xl font-bold text-white">@Combatant.Name</h3>
-            <div class="text-sm text-gray-400">
-                Init: @Combatant.Initiative | DEX: @Combatant.Dexterity
+            <div class="flex items-center gap-2">
+                <h4 class="font-semibold text-gray-900 text-sm">@Combatant.Name</h4>
                 @if (Combatant.IsPlayer)
                 {
-                    <span class="ml-2 bg-blue-900 text-blue-200 text-xs px-2 py-1 rounded">Player</span>
+                    <span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-medium">Игрок</span>
                 }
                 else
                 {
-                    <span class="ml-2 bg-red-900 text-red-200 text-xs px-2 py-1 rounded">Monster</span>
+                    <span class="bg-red-100 text-red-700 text-xs px-1.5 py-0.5 rounded font-medium">Существо</span>
                 }
             </div>
+            <div class="text-xs text-gray-500 mt-0.5">
+                ИН: @Combatant.Initiative &middot; ЛВК: @Combatant.Dexterity
+            </div>
         </div>
-        <button @onclick="OnRemove" class="text-red-400 hover:text-red-300">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <button @onclick="OnRemove" class="text-gray-400 hover:text-red-500 transition-colors p-0.5" title="Удалить">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
         </button>
     </div>
 
-    <div class="grid grid-cols-3 gap-4 mb-4">
+    <!-- Бейджи состояний -->
+    @if (HasAnyState())
+    {
+        <div class="flex flex-wrap gap-1 mb-2">
+            @if (Combatant.IsDead)
+            {
+                <span class="bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Мёртв</span>
+            }
+            @if (Combatant.IsDying && !Combatant.IsDead)
+            {
+                <span class="bg-red-700 text-white text-xs px-1.5 py-0.5 rounded font-medium">При смерти</span>
+            }
+            @if (Combatant.IsUnconscious)
+            {
+                <span class="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium">Без сознания</span>
+            }
+            @if (Combatant.HasMajorWound)
+            {
+                <span class="bg-orange-400 text-white text-xs px-1.5 py-0.5 rounded font-medium">Тяжёлая рана</span>
+            }
+            @if (Combatant.HasTemporaryInsanity)
+            {
+                <span class="bg-purple-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">Безумие</span>
+            }
+            @if (Combatant.HasIndefiniteInsanity)
+            {
+                <span class="bg-purple-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Бессрочное безумие</span>
+            }
+        </div>
+    }
+
+    <!-- Характеристики: HP / MP / Рассудок -->
+    <div class="space-y-1.5 mb-2">
         <!-- HP -->
-        <div class="bg-gray-700 p-2 rounded">
-            <div class="text-xs text-gray-400 mb-1">Hit Points</div>
-            <div class="flex items-center justify-between">
-                <input type="number" @bind="Combatant.CurrentHitPoints" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-white">@Combatant.MaxHitPoints</span>
+        <div>
+            <div class="flex items-center justify-between text-xs mb-0.5">
+                <span class="text-gray-600 font-medium">ОЗ</span>
+                <div class="flex items-center gap-1">
+                    <button @onclick="() => AdjustHp(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 text-xs flex items-center justify-center">−</button>
+                    <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.CurrentHitPoints / @Combatant.MaxHitPoints</span>
+                    <button @onclick="() => AdjustHp(1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 text-xs flex items-center justify-center">+</button>
+                </div>
+            </div>
+            <div class="bg-gray-200 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full transition-all @GetHpBarColor()" style="width: @GetHpPercent()%"></div>
             </div>
         </div>
 
         <!-- MP -->
-        <div class="bg-gray-700 p-2 rounded">
-            <div class="text-xs text-gray-400 mb-1">Magic Points</div>
-            <div class="flex items-center justify-between">
-                <input type="number" @bind="Combatant.CurrentMagicPoints" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-white">@Combatant.MaxMagicPoints</span>
+        <div>
+            <div class="flex items-center justify-between text-xs mb-0.5">
+                <span class="text-gray-600 font-medium">ОМ</span>
+                <div class="flex items-center gap-1">
+                    <button @onclick="() => AdjustMp(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 text-xs flex items-center justify-center">−</button>
+                    <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.CurrentMagicPoints / @Combatant.MaxMagicPoints</span>
+                    <button @onclick="() => AdjustMp(1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 text-xs flex items-center justify-center">+</button>
+                </div>
+            </div>
+            <div class="bg-gray-200 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full bg-blue-500 transition-all" style="width: @GetMpPercent()%"></div>
             </div>
         </div>
 
-        <!-- Sanity -->
-        <div class="bg-gray-700 p-2 rounded">
-            <div class="text-xs text-gray-400 mb-1">Sanity</div>
-            <div class="flex items-center justify-between">
-                <input type="number" @bind="Combatant.CurrentSanity" class="w-16 bg-gray-600 text-white border-none rounded px-2 py-1 text-center" />
-                <span class="text-gray-400 mx-1">/</span>
-                <span class="text-white">@Combatant.MaxSanity</span>
+        <!-- Рассудок -->
+        <div>
+            <div class="flex items-center justify-between text-xs mb-0.5">
+                <span class="text-gray-600 font-medium">Рас.</span>
+                <div class="flex items-center gap-1">
+                    <button @onclick="() => AdjustSanity(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 text-xs flex items-center justify-center">−</button>
+                    <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.CurrentSanity / @Combatant.MaxSanity</span>
+                    <button @onclick="() => AdjustSanity(1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 text-xs flex items-center justify-center">+</button>
+                </div>
+            </div>
+            <div class="bg-gray-200 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full bg-purple-500 transition-all" style="width: @GetSanityPercent()%"></div>
             </div>
         </div>
     </div>
 
-    <!-- Actions -->
-    <div class="space-y-2">
-        <h4 class="text-sm font-bold text-gray-300 border-b border-gray-600 pb-1">Actions</h4>
-        
-        @if (Combatant.CharacterSource != null)
-        {
-            @foreach (var weapon in Combatant.CharacterSource.Weapons)
-            {
-                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
-                    <div>
-                        <div class="font-bold text-white">@weapon.Name</div>
-                        <div class="text-gray-400 text-xs">@weapon.Damage | @weapon.Attacks attacks</div>
-                    </div>
-                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Roll</button>
-                </div>
-            }
-            @foreach (var spell in Combatant.CharacterSource.Spells)
-            {
-                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
-                    <div>
-                        <div class="font-bold text-purple-300">@spell.Name</div>
-                        <div class="text-gray-400 text-xs">@spell.Cost | @spell.CastingTime</div>
-                    </div>
-                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Cast</button>
-                </div>
-            }
-        }
-        else if (Combatant.CreatureSource != null)
-        {
-            @foreach (var attack in Combatant.CreatureSource.CombatDescriptions)
-            {
-                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
-                    <div>
-                        <div class="font-bold text-white">@attack.Key</div>
-                        <div class="text-gray-400 text-xs">@attack.Value</div>
-                    </div>
-                    <button class="bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded text-xs">Roll</button>
-                </div>
-            }
-             @foreach (var ability in Combatant.CreatureSource.SpecialAbilities)
-            {
-                <div class="flex justify-between items-center bg-gray-700 p-2 rounded text-sm">
-                    <div>
-                        <div class="font-bold text-yellow-300">@ability.Key</div>
-                        <div class="text-gray-400 text-xs">@ability.Value</div>
-                    </div>
-                </div>
-            }
-        }
-    </div>
+    <!-- Оружие / Атаки (свёрнуты по умолчанию) -->
+    @if (HasActions())
+    {
+        <details class="mt-2">
+            <summary class="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700">
+                Оружие и атаки
+            </summary>
+            <div class="mt-1.5 space-y-1">
+                @if (Combatant.CharacterSource != null)
+                {
+                    @foreach (var weapon in Combatant.CharacterSource.Weapons)
+                    {
+                        <div class="bg-gray-50 border border-gray-100 p-1.5 rounded text-xs">
+                            <span class="font-semibold text-gray-800">@weapon.Name</span>
+                            <span class="text-gray-500 ml-1">@weapon.Damage &middot; @weapon.Attacks ат.</span>
+                        </div>
+                    }
+                    @foreach (var spell in Combatant.CharacterSource.Spells)
+                    {
+                        <div class="bg-purple-50 border border-purple-100 p-1.5 rounded text-xs">
+                            <span class="font-semibold text-purple-800">@spell.Name</span>
+                            <span class="text-purple-500 ml-1">@spell.Cost</span>
+                        </div>
+                    }
+                }
+                else if (Combatant.CreatureSource != null)
+                {
+                    @foreach (var attack in Combatant.CreatureSource.CombatDescriptions)
+                    {
+                        <div class="bg-gray-50 border border-gray-100 p-1.5 rounded text-xs">
+                            <span class="font-semibold text-gray-800">@attack.Key</span>
+                            <span class="text-gray-500 ml-1">@attack.Value</span>
+                        </div>
+                    }
+                    @foreach (var ability in Combatant.CreatureSource.SpecialAbilities)
+                    {
+                        <div class="bg-yellow-50 border border-yellow-100 p-1.5 rounded text-xs">
+                            <span class="font-semibold text-yellow-800">@ability.Key</span>
+                            <span class="text-yellow-600 ml-1">@ability.Value</span>
+                        </div>
+                    }
+                }
+            </div>
+        </details>
+    }
 </div>
 
 @code {
@@ -113,8 +158,36 @@
     [Parameter] public bool IsActive { get; set; }
     [Parameter] public EventCallback<Combatant> OnRemoveCallback { get; set; }
 
-    private async Task OnRemove()
+    private async Task OnRemove() => await OnRemoveCallback.InvokeAsync(Combatant);
+
+    private void AdjustHp(int delta) => Combatant.CurrentHitPoints = Math.Clamp(Combatant.CurrentHitPoints + delta, -Combatant.MaxHitPoints, Combatant.MaxHitPoints);
+    private void AdjustMp(int delta) => Combatant.CurrentMagicPoints = Math.Clamp(Combatant.CurrentMagicPoints + delta, 0, Combatant.MaxMagicPoints);
+    private void AdjustSanity(int delta) => Combatant.CurrentSanity = Math.Clamp(Combatant.CurrentSanity + delta, 0, Combatant.MaxSanity);
+
+    private bool HasAnyState() =>
+        Combatant.IsUnconscious || Combatant.HasMajorWound || Combatant.IsDying || Combatant.IsDead
+        || Combatant.HasTemporaryInsanity || Combatant.HasIndefiniteInsanity;
+
+    private bool HasActions() =>
+        (Combatant.CharacterSource?.Weapons.Count > 0)
+        || (Combatant.CharacterSource?.Spells.Count > 0)
+        || (Combatant.CreatureSource?.CombatDescriptions.Count > 0)
+        || (Combatant.CreatureSource?.SpecialAbilities.Count > 0);
+
+    private double GetHpPercent() => Combatant.MaxHitPoints > 0
+        ? Math.Max(0, (double)Combatant.CurrentHitPoints / Combatant.MaxHitPoints * 100) : 0;
+
+    private double GetMpPercent() => Combatant.MaxMagicPoints > 0
+        ? Math.Max(0, (double)Combatant.CurrentMagicPoints / Combatant.MaxMagicPoints * 100) : 0;
+
+    private double GetSanityPercent() => Combatant.MaxSanity > 0
+        ? Math.Max(0, (double)Combatant.CurrentSanity / Combatant.MaxSanity * 100) : 0;
+
+    private string GetHpBarColor()
     {
-        await OnRemoveCallback.InvokeAsync(Combatant);
+        var pct = GetHpPercent();
+        if (pct > 50) return "bg-green-500";
+        if (pct > 25) return "bg-yellow-500";
+        return "bg-red-500";
     }
 }

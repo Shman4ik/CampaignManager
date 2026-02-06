@@ -1,51 +1,46 @@
 @using System.Security.Cryptography
+@using CampaignManager.Web.Components.Shared
 
-<div class="bg-gray-800 p-4 rounded-lg shadow-md">
-    <h3 class="text-lg font-bold mb-4 text-white">Dice Roller</h3>
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+    <h3 class="text-lg font-semibold text-gray-900 mb-3">Бросок кубиков</h3>
 
-    <div class="grid grid-cols-2 gap-4 mb-4">
-        <button @onclick="() => RollDice(100)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Roll d100
-        </button>
-        <button @onclick="() => RollDice(10)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Roll d10
-        </button>
-        <button @onclick="() => RollDice(6)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Roll d6
-        </button>
-        <button @onclick="() => RollDice(4)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-            Roll d4
-        </button>
+    <div class="grid grid-cols-4 gap-2 mb-3">
+        <Button Variant="secondary" Size="sm" OnClick="() => RollDice(100)">d100</Button>
+        <Button Variant="secondary" Size="sm" OnClick="() => RollDice(10)">d10</Button>
+        <Button Variant="secondary" Size="sm" OnClick="() => RollDice(6)">d6</Button>
+        <Button Variant="secondary" Size="sm" OnClick="() => RollDice(4)">d4</Button>
     </div>
 
-    <div class="mb-4">
-        <label class="block text-gray-300 text-sm font-bold mb-2">Manual Input / Custom Roll</label>
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Ручной ввод</label>
         <div class="flex gap-2">
-            <input @bind="ManualInput" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Value" />
-            <button @onclick="SetManualValue" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                Set
-            </button>
+            <input @bind="ManualInput" type="number"
+                   class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                   placeholder="Значение" />
+            <Button Variant="primary" Size="sm" OnClick="SetManualValue">Ввод</Button>
         </div>
     </div>
 
     @if (LastRollResult > 0)
     {
-        <div class="bg-gray-700 p-4 rounded text-center">
-            <div class="text-4xl font-bold text-yellow-400 mb-2">@LastRollResult</div>
-            <div class="text-sm text-gray-300">Last Result</div>
-            
+        <div class="bg-gray-50 border border-gray-200 rounded-md p-3 text-center">
+            <div class="text-3xl font-bold text-gray-900 mb-1">@LastRollResult</div>
+            <div class="text-xs text-gray-500">Последний результат</div>
+
             @if (TargetValue > 0)
             {
-                <div class="mt-2 text-lg font-semibold @GetSuccessColor()">
+                <div class="mt-2 text-sm font-semibold @GetSuccessColor()">
                     @GetSuccessLevel()
                 </div>
             }
         </div>
     }
-    
-    <div class="mt-4">
-         <label class="block text-gray-300 text-sm font-bold mb-2">Target Skill Level (Optional)</label>
-         <input @bind="TargetValue" type="number" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="Skill Value (e.g. 50)" />
+
+    <div class="mt-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Значение навыка (необяз.)</label>
+        <input @bind="TargetValue" type="number"
+               class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+               placeholder="Напр. 50" />
     </div>
 </div>
 
@@ -67,16 +62,16 @@
     private string GetSuccessLevel()
     {
         if (TargetValue <= 0) return "";
-        
-        if (LastRollResult == 1) return "Critical Success!";
-        if (LastRollResult == 100) return "Fumble!";
-        if (LastRollResult >= 96 && TargetValue < 50) return "Fumble!";
-        
-        if (LastRollResult <= TargetValue / 5) return "Extreme Success";
-        if (LastRollResult <= TargetValue / 2) return "Hard Success";
-        if (LastRollResult <= TargetValue) return "Regular Success";
-        
-        return "Failure";
+
+        if (LastRollResult == 1) return "Критический успех!";
+        if (LastRollResult == 100) return "Провал!";
+        if (LastRollResult >= 96 && TargetValue < 50) return "Провал!";
+
+        if (LastRollResult <= TargetValue / 5) return "Экстремальный успех";
+        if (LastRollResult <= TargetValue / 2) return "Сложный успех";
+        if (LastRollResult <= TargetValue) return "Обычный успех";
+
+        return "Неудача";
     }
 
     private string GetSuccessColor()
@@ -84,13 +79,13 @@
         var level = GetSuccessLevel();
         return level switch
         {
-            "Critical Success!" => "text-yellow-400",
-            "Extreme Success" => "text-green-400",
-            "Hard Success" => "text-green-500",
-            "Regular Success" => "text-green-600",
-            "Failure" => "text-red-500",
-            "Fumble!" => "text-red-600",
-            _ => "text-white"
+            "Критический успех!" => "text-yellow-600",
+            "Экстремальный успех" => "text-green-600",
+            "Сложный успех" => "text-green-500",
+            "Обычный успех" => "text-blue-600",
+            "Неудача" => "text-red-500",
+            "Провал!" => "text-red-700",
+            _ => "text-gray-700"
         };
     }
 }

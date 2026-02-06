@@ -1,0 +1,252 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Features.Weapons.Model
+@using CampaignManager.Web.Components.Shared
+
+@inject CombatService CombatService
+
+<div>
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Настройка атаки</h4>
+
+    <!-- Атакующий -->
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Атакующий</label>
+        <select class="border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value="@_selectedAttackerId"
+                @onchange="OnAttackerChanged">
+            <option value="">— Выберите —</option>
+            @foreach (var c in AvailableAttackers)
+            {
+                <option value="@c.Id">@c.Name (@(c.IsPlayer ? "игрок" : "существо"))</option>
+            }
+        </select>
+    </div>
+
+    <!-- Оружие / Атака -->
+    @if (_selectedAttacker != null)
+    {
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Оружие / Атака</label>
+            <select class="border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value="@_selectedWeaponIndex"
+                    @onchange="OnWeaponChanged">
+                <option value="-1">— Выберите —</option>
+                @for (var i = 0; i < _attackOptions.Count; i++)
+                {
+                    <option value="@i">@_attackOptions[i].Name — @_attackOptions[i].Damage</option>
+                }
+            </select>
+        </div>
+
+        @if (_selectedWeaponIndex >= 0)
+        {
+            <!-- Тип атаки -->
+            <div class="mb-2 text-xs">
+                <span class="inline-block px-2 py-0.5 rounded font-medium @(_isMelee ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700")">
+                    @(_isMelee ? "Ближний бой" : "Дальний бой")
+                </span>
+            </div>
+
+            <!-- Навык атаки -->
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Навык атаки</label>
+                <input type="number" @bind="_attackSkillValue"
+                       class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+
+            <!-- Цель -->
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Цель</label>
+                <select class="border border-gray-300 rounded-md px-2 py-1.5 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        value="@_selectedDefenderId"
+                        @onchange="OnDefenderChanged">
+                    <option value="">— Выберите —</option>
+                    @foreach (var c in AvailableDefenders)
+                    {
+                        <option value="@c.Id">@c.Name (@(c.IsPlayer ? "игрок" : "существо"))</option>
+                    }
+                </select>
+            </div>
+
+            @if (_selectedDefender != null && _isMelee)
+            {
+                <!-- Реакция защитника -->
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Реакция защитника</label>
+                    <div class="flex gap-3">
+                        <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                            <input type="radio" name="defenderReaction" checked="@(_defenderReaction == CombatActionType.Dodge)"
+                                   @onchange="() => SetDefenderReaction(CombatActionType.Dodge)" />
+                            Уклонение
+                        </label>
+                        <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                            <input type="radio" name="defenderReaction" checked="@(_defenderReaction == CombatActionType.FightBack)"
+                                   @onchange="() => SetDefenderReaction(CombatActionType.FightBack)" />
+                            Ответный удар
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Навык защиты -->
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">
+                        Навык защиты (@(_defenderReaction == CombatActionType.Dodge ? "Уклонение" : "Ближний бой"))
+                    </label>
+                    <input type="number" @bind="_defenderSkillValue"
+                           class="border border-gray-300 rounded-md px-2 py-1 text-sm text-gray-700 w-full focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                </div>
+            }
+
+            <!-- Кнопка атаки -->
+            <Button Variant="error" FullWidth="true" OnClick="ResolveAttack" IsDisabled="@(!CanResolve())">
+                Провести атаку
+            </Button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<Combatant> Combatants { get; set; } = [];
+    [Parameter] public EventCallback<CombatActionResult> OnAttackResolved { get; set; }
+
+    private string _selectedAttackerId = "";
+    private string _selectedDefenderId = "";
+    private int _selectedWeaponIndex = -1;
+    private Combatant? _selectedAttacker;
+    private Combatant? _selectedDefender;
+    private int _attackSkillValue;
+    private int _defenderSkillValue;
+    private bool _isMelee;
+    private CombatActionType _defenderReaction = CombatActionType.Dodge;
+
+    private List<AttackOption> _attackOptions = [];
+
+    private IEnumerable<Combatant> AvailableAttackers =>
+        Combatants.Where(c => !c.IsDead && !c.IsUnconscious);
+
+    private IEnumerable<Combatant> AvailableDefenders =>
+        Combatants.Where(c => !c.IsDead && c.Id != _selectedAttacker?.Id);
+
+    private void OnAttackerChanged(ChangeEventArgs e)
+    {
+        _selectedAttackerId = e.Value?.ToString() ?? "";
+        _selectedAttacker = Guid.TryParse(_selectedAttackerId, out var id)
+            ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        _selectedWeaponIndex = -1;
+        _attackOptions.Clear();
+
+        if (_selectedAttacker == null) return;
+
+        // Заполняем опции атаки
+        if (_selectedAttacker.CharacterSource != null)
+        {
+            foreach (var w in _selectedAttacker.CharacterSource.Weapons)
+            {
+                _attackOptions.Add(new AttackOption
+                {
+                    Name = w.Name,
+                    Damage = w.Damage,
+                    Weapon = w,
+                    IsMelee = w.Type == WeaponType.Melee,
+                    SkillValue = CombatService.FindSkillValue(_selectedAttacker.CharacterSource, w.Skill)
+                });
+            }
+        }
+        else if (_selectedAttacker.CreatureSource != null)
+        {
+            foreach (var kvp in _selectedAttacker.CreatureSource.CombatDescriptions)
+            {
+                _attackOptions.Add(new AttackOption
+                {
+                    Name = kvp.Key,
+                    Damage = kvp.Value,
+                    IsMelee = true, // по умолчанию ближний бой для существ
+                    SkillValue = 50 // значение по умолчанию, мастер может поправить
+                });
+            }
+        }
+
+        // Безоружная атака всегда доступна
+        _attackOptions.Add(new AttackOption
+        {
+            Name = "Безоружная атака",
+            Damage = "1D3",
+            IsMelee = true,
+            SkillValue = _selectedAttacker.FightingSkill
+        });
+    }
+
+    private void OnWeaponChanged(ChangeEventArgs e)
+    {
+        _selectedWeaponIndex = int.TryParse(e.Value?.ToString(), out var idx) ? idx : -1;
+        if (_selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count)
+        {
+            var option = _attackOptions[_selectedWeaponIndex];
+            _isMelee = option.IsMelee;
+            _attackSkillValue = option.SkillValue;
+        }
+    }
+
+    private void OnDefenderChanged(ChangeEventArgs e)
+    {
+        _selectedDefenderId = e.Value?.ToString() ?? "";
+        _selectedDefender = Guid.TryParse(_selectedDefenderId, out var id)
+            ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+
+        UpdateDefenderSkill();
+    }
+
+    private void SetDefenderReaction(CombatActionType reaction)
+    {
+        _defenderReaction = reaction;
+        UpdateDefenderSkill();
+    }
+
+    private void UpdateDefenderSkill()
+    {
+        if (_selectedDefender == null) return;
+        _defenderSkillValue = _defenderReaction == CombatActionType.Dodge
+            ? _selectedDefender.DodgeSkill
+            : _selectedDefender.FightingSkill;
+    }
+
+    private bool CanResolve() =>
+        _selectedAttacker != null && _selectedWeaponIndex >= 0
+        && (_selectedDefender != null || !_isMelee);
+
+    private async Task ResolveAttack()
+    {
+        if (_selectedAttacker == null || _selectedDefender == null) return;
+        if (_selectedWeaponIndex < 0 || _selectedWeaponIndex >= _attackOptions.Count) return;
+
+        var option = _attackOptions[_selectedWeaponIndex];
+
+        var setup = new AttackSetup
+        {
+            AttackerId = _selectedAttacker.Id,
+            DefenderId = _selectedDefender.Id,
+            SelectedWeapon = option.Weapon,
+            CreatureAttackName = option.Weapon == null ? option.Name : null,
+            CreatureAttackDamage = option.Weapon == null ? option.Damage : null,
+            AttackSkillValue = _attackSkillValue,
+            IsMelee = _isMelee,
+            DefenderReaction = _defenderReaction,
+            DefenderSkillValue = _defenderSkillValue
+        };
+
+        var result = _isMelee
+            ? CombatService.ResolveMeleeAttack(setup)
+            : CombatService.ResolveRangedAttack(setup);
+
+        await OnAttackResolved.InvokeAsync(result);
+    }
+
+    private class AttackOption
+    {
+        public string Name { get; set; } = "";
+        public string Damage { get; set; } = "";
+        public Weapon? Weapon { get; set; }
+        public bool IsMelee { get; set; }
+        public int SkillValue { get; set; }
+    }
+}
