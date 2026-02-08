@@ -1,5 +1,4 @@
-﻿using CampaignManager.ServiceDefaults;
-using CampaignManager.Web.Components;
+﻿using CampaignManager.Web.Components;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
