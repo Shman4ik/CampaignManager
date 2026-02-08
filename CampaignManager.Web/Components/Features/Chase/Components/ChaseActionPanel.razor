@@ -1,0 +1,192 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+@using CampaignManager.Web.Components.Features.Chase.Services
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Shared
+
+@inject ChaseService ChaseService
+
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+    @if (ActiveParticipant == null)
+    {
+        <p class="text-sm text-gray-400 text-center py-4">Нет активного участника</p>
+    }
+    else if (ActiveParticipant.HasActedThisRound)
+    {
+        <div class="text-center py-4">
+            <p class="text-sm text-gray-500 mb-2">@ActiveParticipant.Name уже выполнил действие в этом раунде.</p>
+            <p class="text-xs text-gray-400">Нажмите «Следующий ход» для продолжения.</p>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-4">
+            <!-- Инфо об участнике -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <span class="font-semibold text-gray-900">@ActiveParticipant.Name</span>
+                    <span class="text-xs text-gray-500 ml-2">Поз: @ActiveParticipant.CurrentLocation</span>
+                    <span class="text-xs text-gray-500 ml-2">Рывки: @ActiveParticipant.ExtraMovesAttempted/3</span>
+                </div>
+                @if (ActiveParticipant.IsInVehicle)
+                {
+                    <span class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded font-medium">
+                        @ActiveParticipant.VehicleName
+                    </span>
+                }
+            </div>
+
+            @{
+                var currentLocation = Locations.FirstOrDefault(l => l.Number == ActiveParticipant.CurrentLocation);
+            }
+
+            <!-- Препятствие на текущей локации -->
+            @if (currentLocation?.HasBarrier == true)
+            {
+                <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-lg">🚧</span>
+                        <span class="font-medium text-blue-800 text-sm">@(currentLocation.BarrierName ?? "Препятствие")</span>
+                        <span class="text-xs text-blue-600">
+                            (@(currentLocation.BarrierSkillName ?? "Навык"), @ChaseService.GetDifficultyText(currentLocation.BarrierDifficulty))
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-gray-600">Навык:</label>
+                        <input type="text" @bind="_barrierSkillName" placeholder="@currentLocation.BarrierSkillName"
+                               class="text-xs border border-gray-200 rounded px-2 py-1 w-24" />
+                        <label class="text-xs text-gray-600">Значение:</label>
+                        <input type="number" @bind="_barrierSkillValue"
+                               class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
+                        <Button Variant="primary" Size="sm" OnClick="ResolveBarrier">Преодолеть</Button>
+                    </div>
+                </div>
+            }
+
+            <!-- Опасность на текущей локации -->
+            @if (currentLocation?.HasHazard == true)
+            {
+                <div class="bg-orange-50 border border-orange-200 rounded-md p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-lg">⚡</span>
+                        <span class="font-medium text-orange-800 text-sm">@(currentLocation.HazardName ?? "Опасность")</span>
+                        <span class="text-xs text-orange-600">
+                            (@(currentLocation.HazardSkillName ?? "Навык"), @ChaseService.GetDifficultyText(currentLocation.HazardDifficulty))
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-gray-600">Навык:</label>
+                        <input type="text" @bind="_hazardSkillName" placeholder="@currentLocation.HazardSkillName"
+                               class="text-xs border border-gray-200 rounded px-2 py-1 w-24" />
+                        <label class="text-xs text-gray-600">Значение:</label>
+                        <input type="number" @bind="_hazardSkillValue"
+                               class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
+                        <Button Variant="warning" Size="sm" OnClick="ResolveHazardAction">Проверить</Button>
+                    </div>
+                </div>
+            }
+
+            <!-- Действия -->
+            <div class="flex flex-wrap gap-2">
+                @if (ActiveParticipant.ExtraMovesAttempted < 3 && !ActiveParticipant.IsExhausted)
+                {
+                    var nextDifficulty = ChaseService.GetConDifficultyForExtraMove(ActiveParticipant.ExtraMovesAttempted + 1);
+                    var diffText = ChaseService.GetDifficultyText(nextDifficulty);
+                    var skillLabel = ActiveParticipant.IsInVehicle ? "Вождение" : "ТЕЛ";
+
+                    <Button Variant="info" Size="sm" OnClick="AttemptExtraMove">
+                        Рывок (@skillLabel, @diffText)
+                    </Button>
+                }
+
+                <Button Variant="secondary" Size="sm" OnClick="SkipAction">Пропустить</Button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ChaseParticipant? ActiveParticipant { get; set; }
+    [Parameter] public List<ChaseLocation> Locations { get; set; } = [];
+    [Parameter] public EventCallback<ChaseActionResult> OnActionResolved { get; set; }
+
+    private string _barrierSkillName = "";
+    private int _barrierSkillValue;
+    private string _hazardSkillName = "";
+    private int _hazardSkillValue;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveParticipant == null) return;
+
+        var currentLocation = Locations.FirstOrDefault(l => l.Number == ActiveParticipant.CurrentLocation);
+        if (currentLocation != null)
+        {
+            // Авто-заполнение из локации
+            if (string.IsNullOrEmpty(_barrierSkillName) && currentLocation.HasBarrier)
+            {
+                _barrierSkillName = currentLocation.BarrierSkillName ?? "";
+                _barrierSkillValue = currentLocation.BarrierSkillValue;
+
+                // Попробовать найти навык у персонажа
+                if (ActiveParticipant.CharacterSource != null && !string.IsNullOrEmpty(currentLocation.BarrierSkillName))
+                {
+                    var charSkill = CombatService.FindSkillValue(ActiveParticipant.CharacterSource, currentLocation.BarrierSkillName);
+                    if (charSkill > 0) _barrierSkillValue = charSkill;
+                }
+            }
+
+            if (string.IsNullOrEmpty(_hazardSkillName) && currentLocation.HasHazard)
+            {
+                _hazardSkillName = currentLocation.HazardSkillName ?? "";
+                _hazardSkillValue = currentLocation.HazardSkillValue;
+
+                if (ActiveParticipant.CharacterSource != null && !string.IsNullOrEmpty(currentLocation.HazardSkillName))
+                {
+                    var charSkill = CombatService.FindSkillValue(ActiveParticipant.CharacterSource, currentLocation.HazardSkillName);
+                    if (charSkill > 0) _hazardSkillValue = charSkill;
+                }
+            }
+        }
+    }
+
+    private async Task AttemptExtraMove()
+    {
+        if (ActiveParticipant == null) return;
+        var result = ChaseService.AttemptExtraMove(ActiveParticipant.Id);
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ResolveBarrier()
+    {
+        if (ActiveParticipant == null) return;
+        var skillName = string.IsNullOrWhiteSpace(_barrierSkillName) ? "Навык" : _barrierSkillName;
+        var result = ChaseService.ResolveBarrier(ActiveParticipant.Id, skillName, _barrierSkillValue);
+        _barrierSkillName = "";
+        _barrierSkillValue = 0;
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ResolveHazardAction()
+    {
+        if (ActiveParticipant == null) return;
+        var skillName = string.IsNullOrWhiteSpace(_hazardSkillName) ? "Навык" : _hazardSkillName;
+        var result = ChaseService.ResolveHazard(ActiveParticipant.Id, skillName, _hazardSkillValue);
+        _hazardSkillName = "";
+        _hazardSkillValue = 0;
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task SkipAction()
+    {
+        if (ActiveParticipant == null) return;
+        ChaseService.SkipAction(ActiveParticipant.Id);
+        await OnActionResolved.InvokeAsync(new ChaseActionResult
+        {
+            Round = ChaseService.CurrentRound,
+            ActionType = ChaseActionType.SpeedMove,
+            ParticipantId = ActiveParticipant.Id,
+            ParticipantName = ActiveParticipant.Name,
+            Summary = $"{ActiveParticipant.Name} пропускает действие."
+        });
+    }
+}

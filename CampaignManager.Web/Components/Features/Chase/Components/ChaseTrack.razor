@@ -1,0 +1,88 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+    <h3 class="text-sm font-semibold text-gray-800 mb-3">Трасса погони</h3>
+
+    @if (Locations.Count == 0)
+    {
+        <p class="text-sm text-gray-400 text-center py-4">Трасса не настроена</p>
+    }
+    else
+    {
+        <div class="overflow-x-auto pb-2">
+            <div class="flex gap-1 min-w-max">
+                @foreach (var location in Locations)
+                {
+                    var occupants = Participants.Where(p => p.CurrentLocation == location.Number && p.IsActive).ToList();
+                    var isActiveLocation = ActiveParticipantId.HasValue &&
+                        Participants.Any(p => p.Id == ActiveParticipantId && p.CurrentLocation == location.Number);
+
+                    <div class="flex flex-col items-center gap-1 min-w-[60px]">
+                        <!-- Номер локации -->
+                        <span class="text-xs text-gray-400 font-mono">@location.Number</span>
+
+                        <!-- Ячейка локации -->
+                        <div class="w-14 h-14 rounded-md border-2 flex flex-col items-center justify-center gap-0.5 transition-all
+                                    @(isActiveLocation ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50")">
+                            <!-- Иконки барьеров/опасностей -->
+                            <div class="flex gap-0.5">
+                                @if (location.HasBarrier)
+                                {
+                                    <span class="text-xs" title="@($"Препятствие: {location.BarrierName}")">🚧</span>
+                                }
+                                @if (location.HasHazard)
+                                {
+                                    <span class="text-xs" title="@($"Опасность: {location.HazardName}")">⚡</span>
+                                }
+                            </div>
+
+                            <!-- Токены участников -->
+                            <div class="flex flex-wrap gap-0.5 justify-center">
+                                @foreach (var occupant in occupants)
+                                {
+                                    <div class="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold
+                                                @(occupant.Role == ChaseRole.Prey ? "bg-green-500" : "bg-red-500")"
+                                         title="@occupant.Name">
+                                        @(occupant.Name.Length > 0 ? occupant.Name[0].ToString().ToUpper() : "?")
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Линия связи (кроме последней) -->
+                        @if (location.Number < Locations.Count)
+                        {
+                            <div class="w-full h-0.5 bg-gray-200 -mt-8 -mb-8 z-[-1]"></div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Легенда -->
+        <div class="flex gap-4 mt-2 text-xs text-gray-500">
+            <div class="flex items-center gap-1">
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span>Жертва</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <span>Преследователь</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <span>🚧</span>
+                <span>Препятствие</span>
+            </div>
+            <div class="flex items-center gap-1">
+                <span>⚡</span>
+                <span>Опасность</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<ChaseLocation> Locations { get; set; } = [];
+    [Parameter] public List<ChaseParticipant> Participants { get; set; } = [];
+    [Parameter] public Guid? ActiveParticipantId { get; set; }
+}

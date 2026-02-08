@@ -7,6 +7,7 @@ using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Spells.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
+using CampaignManager.Web.Components.Features.Chase.Services;
 using CampaignManager.Web.Components.Features.Combat.Services;
 using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.DataBase;
@@ -180,6 +181,7 @@ builder.Services.AddScoped<ItemService>();
 //Register skills service
 builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<CombatService>();
+builder.Services.AddScoped<ChaseService>();
 
 // Register Minio service
 builder.Services.AddScoped<MinioService>();

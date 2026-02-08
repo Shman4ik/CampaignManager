@@ -1,0 +1,120 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+
+<div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-2">
+    <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-semibold text-gray-700">Локация @Location.Number</span>
+        <div class="flex gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                <input type="checkbox" checked="@Location.HasBarrier" @onchange="e => ToggleBarrier((bool)(e.Value ?? false))"
+                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                🚧 Препятствие
+            </label>
+            <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                <input type="checkbox" checked="@Location.HasHazard" @onchange="e => ToggleHazard((bool)(e.Value ?? false))"
+                       class="rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+                ⚡ Опасность
+            </label>
+        </div>
+    </div>
+
+    @if (Location.HasBarrier)
+    {
+        <div class="bg-blue-50 border border-blue-100 rounded p-2 mb-2">
+            <div class="text-xs font-medium text-blue-700 mb-1">Препятствие</div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs text-gray-600">Название</label>
+                    <input type="text" value="@Location.BarrierName" @onchange="e => UpdateBarrierName(e.Value?.ToString())"
+                           placeholder="Запертая дверь"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Навык</label>
+                    <input type="text" value="@Location.BarrierSkillName" @onchange="e => UpdateBarrierSkill(e.Value?.ToString())"
+                           placeholder="Взлом"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Значение навыка</label>
+                    <input type="number" value="@Location.BarrierSkillValue"
+                           @onchange="e => UpdateBarrierSkillValue(e.Value?.ToString())"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Сложность</label>
+                    <select value="@Location.BarrierDifficulty"
+                            @onchange="e => UpdateBarrierDifficulty(e.Value?.ToString())"
+                            class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                        <option value="1">Обычная</option>
+                        <option value="2">Сложная</option>
+                        <option value="3">Экстремальная</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (Location.HasHazard)
+    {
+        <div class="bg-orange-50 border border-orange-100 rounded p-2">
+            <div class="text-xs font-medium text-orange-700 mb-1">Опасность</div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs text-gray-600">Название</label>
+                    <input type="text" value="@Location.HazardName" @onchange="e => UpdateHazardName(e.Value?.ToString())"
+                           placeholder="Лёд на дороге"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Навык</label>
+                    <input type="text" value="@Location.HazardSkillName" @onchange="e => UpdateHazardSkill(e.Value?.ToString())"
+                           placeholder="ЛВК"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Значение навыка</label>
+                    <input type="number" value="@Location.HazardSkillValue"
+                           @onchange="e => UpdateHazardSkillValue(e.Value?.ToString())"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-600">Сложность</label>
+                    <select value="@Location.HazardDifficulty"
+                            @onchange="e => UpdateHazardDifficulty(e.Value?.ToString())"
+                            class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                        <option value="1">Обычная</option>
+                        <option value="2">Сложная</option>
+                        <option value="3">Экстремальная</option>
+                    </select>
+                </div>
+                <div class="col-span-2">
+                    <label class="text-xs text-gray-600">Последствие (формула урона)</label>
+                    <input type="text" value="@Location.HazardConsequence" @onchange="e => UpdateHazardConsequence(e.Value?.ToString())"
+                           placeholder="1D6"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required ChaseLocation Location { get; set; }
+    [Parameter] public EventCallback<ChaseLocation> OnLocationUpdated { get; set; }
+
+    private async Task NotifyUpdate() => await OnLocationUpdated.InvokeAsync(Location);
+
+    private async Task ToggleBarrier(bool value) { Location.HasBarrier = value; await NotifyUpdate(); }
+    private async Task ToggleHazard(bool value) { Location.HasHazard = value; await NotifyUpdate(); }
+
+    private async Task UpdateBarrierName(string? v) { Location.BarrierName = v; await NotifyUpdate(); }
+    private async Task UpdateBarrierSkill(string? v) { Location.BarrierSkillName = v; await NotifyUpdate(); }
+    private async Task UpdateBarrierSkillValue(string? v) { if (int.TryParse(v, out var val)) { Location.BarrierSkillValue = val; await NotifyUpdate(); } }
+    private async Task UpdateBarrierDifficulty(string? v) { if (int.TryParse(v, out var val)) { Location.BarrierDifficulty = val; await NotifyUpdate(); } }
+
+    private async Task UpdateHazardName(string? v) { Location.HazardName = v; await NotifyUpdate(); }
+    private async Task UpdateHazardSkill(string? v) { Location.HazardSkillName = v; await NotifyUpdate(); }
+    private async Task UpdateHazardSkillValue(string? v) { if (int.TryParse(v, out var val)) { Location.HazardSkillValue = val; await NotifyUpdate(); } }
+    private async Task UpdateHazardDifficulty(string? v) { if (int.TryParse(v, out var val)) { Location.HazardDifficulty = val; await NotifyUpdate(); } }
+    private async Task UpdateHazardConsequence(string? v) { Location.HazardConsequence = v; await NotifyUpdate(); }
+}

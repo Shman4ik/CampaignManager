@@ -1,0 +1,66 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 h-full">
+    <h3 class="text-lg font-semibold text-gray-900 mb-3">Журнал погони</h3>
+
+    <div class="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+        @if (LogEntries.Count == 0)
+        {
+            <p class="text-sm text-gray-400 text-center py-4">Журнал пуст</p>
+        }
+        else
+        {
+            @foreach (var entry in LogEntries)
+            {
+                <div class="border-l-4 @GetBorderColor(entry) bg-gray-50 rounded-r-md p-3">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="inline-block bg-primary-100 text-primary-800 text-xs font-medium rounded px-1.5 py-0.5">
+                            Р.@entry.Round
+                        </span>
+                        <span class="text-xs text-gray-400">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                        <span class="text-xs font-medium @GetActionColor(entry)">@GetActionLabel(entry)</span>
+                    </div>
+                    <p class="text-sm text-gray-700 leading-snug">@entry.Summary</p>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<ChaseActionResult> LogEntries { get; set; } = [];
+
+    private static string GetBorderColor(ChaseActionResult entry) => entry.ActionType switch
+    {
+        ChaseActionType.SpeedMove => "border-l-blue-400",
+        ChaseActionType.ExtraMove => entry.IsSuccess ? "border-l-green-500" : "border-l-red-400",
+        ChaseActionType.BarrierCheck => entry.IsSuccess ? "border-l-green-500" : "border-l-red-400",
+        ChaseActionType.HazardCheck => entry.IsSuccess ? "border-l-green-500" : "border-l-orange-500",
+        ChaseActionType.CaughtEvent => "border-l-red-700",
+        ChaseActionType.EscapedEvent => "border-l-green-700",
+        _ => "border-l-gray-300"
+    };
+
+    private static string GetActionColor(ChaseActionResult entry) => entry.ActionType switch
+    {
+        ChaseActionType.SpeedMove => "text-blue-600",
+        ChaseActionType.ExtraMove => "text-purple-600",
+        ChaseActionType.BarrierCheck => "text-amber-600",
+        ChaseActionType.HazardCheck => "text-orange-600",
+        ChaseActionType.CaughtEvent => "text-red-700",
+        ChaseActionType.EscapedEvent => "text-green-700",
+        _ => "text-gray-600"
+    };
+
+    private static string GetActionLabel(ChaseActionResult entry) => entry.ActionType switch
+    {
+        ChaseActionType.SpeedMove => "Перемещение",
+        ChaseActionType.ExtraMove => "Рывок",
+        ChaseActionType.BarrierCheck => "Препятствие",
+        ChaseActionType.HazardCheck => "Опасность",
+        ChaseActionType.CaughtEvent => "Пойман!",
+        ChaseActionType.EscapedEvent => "Сбежал!",
+        _ => ""
+    };
+}

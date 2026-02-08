@@ -1,0 +1,147 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+@using CampaignManager.Web.Components.Features.Chase.Services
+
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-3 mb-2 border-l-4
+            @(IsActive ? "border-l-blue-500" : "border-l-transparent")
+            @(!Participant.IsActive ? "opacity-50" : "")">
+    <!-- Заголовок -->
+    <div class="flex justify-between items-start mb-2">
+        <div>
+            <div class="flex items-center gap-2">
+                <h4 class="font-semibold text-gray-900 text-sm">@Participant.Name</h4>
+                @if (Participant.Role == ChaseRole.Prey)
+                {
+                    <span class="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-medium">Жертва</span>
+                }
+                else
+                {
+                    <span class="bg-red-100 text-red-700 text-xs px-1.5 py-0.5 rounded font-medium">Преследователь</span>
+                }
+                @if (Participant.IsPlayer)
+                {
+                    <span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-medium">Игрок</span>
+                }
+            </div>
+            <div class="text-xs text-gray-500 mt-0.5">
+                @if (Participant.IsInVehicle)
+                {
+                    <span>@Participant.VehicleName (СКР: @Participant.VehicleSpeed)</span>
+                }
+                else
+                {
+                    <span>Пешком (СКР: @Participant.MovementRate)</span>
+                }
+                &middot; ЛВК: @Participant.Dexterity &middot; Поз: @Participant.CurrentLocation
+            </div>
+        </div>
+        <button @onclick="OnRemove" class="text-gray-400 hover:text-red-500 transition-colors p-0.5" title="Удалить">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Бейджи состояний -->
+    @if (HasAnyState())
+    {
+        <div class="flex flex-wrap gap-1 mb-2">
+            @if (Participant.IsCaught)
+            {
+                <span class="bg-red-700 text-white text-xs px-1.5 py-0.5 rounded font-medium">Пойман</span>
+            }
+            @if (Participant.HasEscaped)
+            {
+                <span class="bg-green-700 text-white text-xs px-1.5 py-0.5 rounded font-medium">Сбежал</span>
+            }
+            @if (Participant.IsEliminated)
+            {
+                <span class="bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Выбыл</span>
+            }
+            @if (Participant.IsExhausted)
+            {
+                <span class="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium">Выдохся</span>
+            }
+        </div>
+    }
+
+    <!-- HP -->
+    <div class="mb-2">
+        <div class="flex items-center justify-between text-xs mb-0.5">
+            <span class="text-gray-600 font-medium">ОЗ</span>
+            <div class="flex items-center gap-1">
+                <button @onclick="() => AdjustHp(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 text-xs flex items-center justify-center">−</button>
+                <span class="text-gray-900 font-semibold w-12 text-center">@Participant.CurrentHitPoints / @Participant.MaxHitPoints</span>
+                <button @onclick="() => AdjustHp(1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 text-xs flex items-center justify-center">+</button>
+            </div>
+        </div>
+        <div class="bg-gray-200 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full transition-all @GetHpBarColor()" style="width: @GetHpPercent()%"></div>
+        </div>
+    </div>
+
+    <!-- Рывки -->
+    <div class="text-xs text-gray-500">
+        Рывки: @Participant.ExtraMovesAttempted / 3
+    </div>
+
+    <!-- Настройка (до начала погони) -->
+    @if (IsSetupMode)
+    {
+        <div class="mt-2 pt-2 border-t border-gray-100 space-y-2">
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-600">Роль:</label>
+                <select class="text-xs border border-gray-200 rounded px-1.5 py-1" value="@Participant.Role"
+                        @onchange="HandleRoleChange">
+                    <option value="@ChaseRole.Prey">Жертва</option>
+                    <option value="@ChaseRole.Pursuer">Преследователь</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-600">Позиция:</label>
+                <input type="number" min="1" class="text-xs border border-gray-200 rounded px-1.5 py-1 w-16"
+                       value="@Participant.CurrentLocation"
+                       @onchange="HandleLocationChange" />
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required ChaseParticipant Participant { get; set; }
+    [Parameter] public bool IsActive { get; set; }
+    [Parameter] public bool IsSetupMode { get; set; }
+    [Parameter] public EventCallback<ChaseParticipant> OnRemoveCallback { get; set; }
+    [Parameter] public EventCallback<(Guid, ChaseRole)> OnRoleChanged { get; set; }
+    [Parameter] public EventCallback<(Guid, int)> OnLocationChanged { get; set; }
+
+    private async Task OnRemove() => await OnRemoveCallback.InvokeAsync(Participant);
+
+    private void AdjustHp(int delta) =>
+        Participant.CurrentHitPoints = Math.Clamp(Participant.CurrentHitPoints + delta, 0, Participant.MaxHitPoints);
+
+    private bool HasAnyState() =>
+        Participant.IsCaught || Participant.HasEscaped || Participant.IsEliminated || Participant.IsExhausted;
+
+    private double GetHpPercent() => Participant.MaxHitPoints > 0
+        ? Math.Max(0, (double)Participant.CurrentHitPoints / Participant.MaxHitPoints * 100) : 0;
+
+    private string GetHpBarColor()
+    {
+        var pct = GetHpPercent();
+        if (pct > 50) return "bg-green-500";
+        if (pct > 25) return "bg-yellow-500";
+        return "bg-red-500";
+    }
+
+    private async Task HandleRoleChange(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ChaseRole>(e.Value?.ToString(), out var role))
+            await OnRoleChanged.InvokeAsync((Participant.Id, role));
+    }
+
+    private async Task HandleLocationChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var loc))
+            await OnLocationChanged.InvokeAsync((Participant.Id, loc));
+    }
+}

@@ -1,0 +1,396 @@
+@page "/chase"
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using CampaignManager.Web.Components.Features.Chase.Services
+@using CampaignManager.Web.Components.Features.Chase.Model
+@using CampaignManager.Web.Components.Features.Chase.Components
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Components.Features.Combat.Components
+@using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Utilities.Services
+
+@inject ChaseService ChaseService
+@inject CreatureService CreatureService
+@inject CampaignService CampaignService
+@inject IdentityService IdentityService
+@implements IDisposable
+
+<PageTitle>Помощник погони</PageTitle>
+
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для мастера игры.
+        </Alert>
+    </div>
+}
+else
+{
+<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <!-- Заголовок -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h1 class="cm-h2">Помощник погони</h1>
+        <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
+    </div>
+
+    @if (ChaseService.IsChaseActive)
+    {
+        <!-- Панель раундов -->
+        <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-semibold text-gray-800">Раунд: @ChaseService.CurrentRound</span>
+                @{
+                    var activeP = ChaseService.GetActiveParticipant();
+                }
+                @if (activeP != null)
+                {
+                    <span class="text-sm font-medium text-blue-700">
+                        → @activeP.Name
+                    </span>
+                }
+                @if (ChaseService.IsChaseOver())
+                {
+                    <span class="text-sm font-bold text-green-700">Погоня завершена!</span>
+                }
+            </div>
+            <div class="flex gap-2">
+                <Button Variant="info" Size="sm" OnClick="ExecuteSpeedPhase">Фаза скорости</Button>
+                <Button Variant="primary" Size="sm" OnClick="NextTurn">Следующий ход</Button>
+                <Button Variant="secondary" Size="sm" OnClick="NextRound">Следующий раунд</Button>
+            </div>
+        </div>
+    }
+
+    <!-- Три колонки -->
+    <div class="grid grid-cols-12 gap-4">
+
+        <!-- Левая: Участники + Добавление -->
+        <div class="col-span-12 lg:col-span-3 space-y-3">
+            <!-- Участники -->
+            <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
+                <h3 class="text-sm font-semibold text-gray-800 mb-2">Участники погони</h3>
+                <div class="max-h-[40vh] overflow-y-auto pr-1">
+                    @if (ChaseService.Participants.Any())
+                    {
+                        @foreach (var participant in ChaseService.Participants)
+                        {
+                            <ChaseParticipantCard Participant="participant"
+                                                   IsActive="@(participant == ChaseService.GetActiveParticipant())"
+                                                   IsSetupMode="@(!ChaseService.IsChaseActive)"
+                                                   OnRemoveCallback="RemoveParticipant"
+                                                   OnRoleChanged="HandleRoleChanged"
+                                                   OnLocationChanged="HandleLocationChanged" />
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-sm text-gray-400 text-center py-4">Нет участников</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Добавить участника -->
+            @if (!ChaseService.IsChaseActive)
+            {
+                <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
+                    <h3 class="text-sm font-semibold text-gray-800 mb-2">Добавить участника</h3>
+
+                    <!-- Роль при добавлении -->
+                    <div class="flex gap-1 mb-2">
+                        <button @onclick='() => _addRole = ChaseRole.Prey'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Prey ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Жертва
+                        </button>
+                        <button @onclick='() => _addRole = ChaseRole.Pursuer'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Pursuer ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Преследователь
+                        </button>
+                    </div>
+
+                    <!-- Транспорт -->
+                    <div class="mb-2">
+                        <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                            <input type="checkbox" @bind="_addInVehicle"
+                                   class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                            В транспорте
+                        </label>
+                        @if (_addInVehicle)
+                        {
+                            <div class="flex gap-2 mt-1">
+                                <input type="text" @bind="_addVehicleName" placeholder="Ford Model T"
+                                       class="text-xs border border-gray-200 rounded px-2 py-1 flex-1" />
+                                <input type="number" @bind="_addVehicleSpeed" placeholder="MOV"
+                                       class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Вкладки -->
+                    <div class="flex gap-1 mb-2">
+                        <button @onclick='() => _showAddMode = "characters"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Персонажи
+                        </button>
+                        <button @onclick='() => _showAddMode = "creatures"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Существа
+                        </button>
+                    </div>
+
+                    <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
+                        @if (_showAddMode == "characters")
+                        {
+                            @if (_availableCharacters == null)
+                            {
+                                <p class="text-xs text-gray-400 p-2">@(_selectedCampaign == null ? "Выберите кампанию" : "Загрузка...")</p>
+                            }
+                            else if (!_availableCharacters.Any())
+                            {
+                                <p class="text-xs text-gray-400 p-2">Нет персонажей</p>
+                            }
+                            else
+                            {
+                                @foreach (var chara in _availableCharacters)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddCharacter(chara)">
+                                        <span class="text-gray-800">@chara.PersonalInfo.Name</span>
+                                        <span class="text-xs text-gray-400">СКР @chara.PersonalInfo.MoveSpeed</span>
+                                    </div>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            @if (_availableCreatures == null)
+                            {
+                                <p class="text-xs text-gray-400 p-2">Загрузка...</p>
+                            }
+                            else
+                            {
+                                @foreach (var monster in _availableCreatures)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddMonster(monster)">
+                                        <span class="text-gray-800">@monster.Name</span>
+                                        <span class="text-xs text-gray-400">СКР @monster.CreatureCharacteristics.Speed</span>
+                                    </div>
+                                }
+                            }
+                        }
+                    </div>
+                </div>
+            }
+
+            <Button Variant="error" FullWidth="true" Size="sm" OnClick="ResetChase">Сбросить погоню</Button>
+        </div>
+
+        <!-- Центральная колонка -->
+        <div class="col-span-12 lg:col-span-6 space-y-3">
+            <!-- Трасса -->
+            <ChaseTrack Locations="ChaseService.Locations"
+                        Participants="ChaseService.Participants"
+                        ActiveParticipantId="@(ChaseService.GetActiveParticipant()?.Id)" />
+
+            @if (!ChaseService.IsChaseActive)
+            {
+                <!-- Настройка трассы -->
+                <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
+                    <h3 class="text-sm font-semibold text-gray-800 mb-3">Настройка трассы</h3>
+
+                    <div class="flex items-center gap-3 mb-4">
+                        <label class="text-sm text-gray-600">Количество локаций:</label>
+                        <input type="number" min="3" max="30" @bind="_trackLength"
+                               class="text-sm border border-gray-200 rounded px-2 py-1 w-20" />
+                        <Button Variant="primary" Size="sm" OnClick="SetupTrack">Создать трассу</Button>
+                    </div>
+
+                    @if (ChaseService.Locations.Any())
+                    {
+                        <div class="max-h-[40vh] overflow-y-auto space-y-1">
+                            @foreach (var location in ChaseService.Locations)
+                            {
+                                <LocationEditor Location="location" OnLocationUpdated="HandleLocationUpdated" />
+                            }
+                        </div>
+
+                        <div class="mt-4">
+                            <Button Variant="success" FullWidth="true" Size="md"
+                                    OnClick="StartChase"
+                                    Disabled="@(ChaseService.Participants.Count < 2)">
+                                Начать погоню
+                            </Button>
+                            @if (ChaseService.Participants.Count < 2)
+                            {
+                                <p class="text-xs text-gray-400 text-center mt-1">Добавьте минимум 2 участников</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Панель действий -->
+                @if (ChaseService.PendingResult != null)
+                {
+                    <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-3">Результат действия</h3>
+                        <div class="bg-gray-50 rounded-md p-3 mb-3">
+                            <p class="text-sm text-gray-700">@ChaseService.PendingResult.Summary</p>
+                            @if (ChaseService.PendingResult.Roll > 0)
+                            {
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Бросок: @ChaseService.PendingResult.Roll против @ChaseService.PendingResult.SkillValue
+                                </p>
+                            }
+                            @if (ChaseService.PendingResult.DamageDealt > 0)
+                            {
+                                <p class="text-xs text-red-600 mt-1">
+                                    Урон: @ChaseService.PendingResult.DamageDealt
+                                    (ОЗ: @ChaseService.PendingResult.HpBefore → @ChaseService.PendingResult.HpAfter)
+                                </p>
+                            }
+                        </div>
+                        <div class="flex gap-2">
+                            <Button Variant="success" Size="sm" OnClick="ApplyPendingResult">Применить</Button>
+                            <Button Variant="secondary" Size="sm" OnClick="CancelPendingResult">Отменить</Button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <ChaseActionPanel ActiveParticipant="ChaseService.GetActiveParticipant()"
+                                       Locations="ChaseService.Locations"
+                                       OnActionResolved="HandleActionResolved" />
+                }
+            }
+        </div>
+
+        <!-- Правая: Журнал -->
+        <div class="col-span-12 lg:col-span-3">
+            <ChaseLog LogEntries="ChaseService.ChaseLog" />
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    private bool _isKeeper;
+    private string _showAddMode = "characters";
+    private ChaseRole _addRole = ChaseRole.Prey;
+    private bool _addInVehicle;
+    private string _addVehicleName = "";
+    private int _addVehicleSpeed;
+    private int _trackLength = 10;
+    private Campaign? _selectedCampaign;
+    private List<Character>? _availableCharacters;
+    private List<Creature>? _availableCreatures;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ChaseService.OnChange += StateHasChanged;
+        _isKeeper = await IdentityService.IsKeeper();
+
+        if (_isKeeper)
+        {
+            _availableCreatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
+        }
+    }
+
+    private async Task HandleCampaignSelected(Campaign? campaign)
+    {
+        _selectedCampaign = campaign;
+
+        if (campaign != null)
+        {
+            ChaseService.SetCampaign(campaign.Id);
+
+            var fullCampaign = await CampaignService.GetCampaignWithCharactersAsync(campaign.Id);
+            _availableCharacters = fullCampaign?.Players
+                .SelectMany(p => p.Characters)
+                .Where(c => c.Status == CharacterStatus.Active)
+                .Select(c => c.Character)
+                .ToList() ?? [];
+        }
+        else
+        {
+            _availableCharacters = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private void AddCharacter(Character character)
+    {
+        var participant = new ChaseParticipant(character) { Role = _addRole };
+        if (_addInVehicle && !string.IsNullOrWhiteSpace(_addVehicleName))
+        {
+            participant.IsInVehicle = true;
+            participant.VehicleName = _addVehicleName;
+            participant.VehicleSpeed = _addVehicleSpeed;
+        }
+        ChaseService.AddParticipant(participant);
+    }
+
+    private void AddMonster(Creature creature)
+    {
+        var participant = new ChaseParticipant(creature) { Role = _addRole };
+        if (_addInVehicle && !string.IsNullOrWhiteSpace(_addVehicleName))
+        {
+            participant.IsInVehicle = true;
+            participant.VehicleName = _addVehicleName;
+            participant.VehicleSpeed = _addVehicleSpeed;
+        }
+        ChaseService.AddParticipant(participant);
+    }
+
+    private void RemoveParticipant(ChaseParticipant participant) =>
+        ChaseService.RemoveParticipant(participant);
+
+    private void HandleRoleChanged((Guid id, ChaseRole role) args) =>
+        ChaseService.SetParticipantRole(args.id, args.role);
+
+    private void HandleLocationChanged((Guid id, int location) args) =>
+        ChaseService.SetParticipantLocation(args.id, args.location);
+
+    private void SetupTrack() => ChaseService.SetupTrack(_trackLength);
+
+    private void HandleLocationUpdated(ChaseLocation location) =>
+        ChaseService.UpdateLocation(location.Number, location);
+
+    private void StartChase() => ChaseService.StartChase();
+
+    private void ExecuteSpeedPhase() => ChaseService.ExecuteSpeedPhase();
+
+    private void NextTurn() => ChaseService.NextTurn();
+
+    private void NextRound() => ChaseService.NextRound();
+
+    private void HandleActionResolved(ChaseActionResult result)
+    {
+        ChaseService.SetPendingResult(result);
+    }
+
+    private void ApplyPendingResult()
+    {
+        if (ChaseService.PendingResult != null)
+            ChaseService.ApplyResult(ChaseService.PendingResult);
+    }
+
+    private void CancelPendingResult() => ChaseService.CancelPendingResult();
+
+    private void ResetChase() => ChaseService.ResetChase();
+
+    public void Dispose()
+    {
+        ChaseService.OnChange -= StateHasChanged;
+    }
+}
