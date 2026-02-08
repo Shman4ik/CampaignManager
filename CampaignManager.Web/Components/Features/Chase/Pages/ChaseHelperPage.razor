@@ -20,7 +20,6 @@
 @inject CreatureService CreatureService
 @inject CampaignService CampaignService
 @inject IdentityService IdentityService
-@implements IDisposable
 
 <PageTitle>Помощник погони</PageTitle>
 
@@ -82,7 +81,8 @@ else
                     {
                         @foreach (var participant in ChaseService.Participants)
                         {
-                            <ChaseParticipantCard Participant="participant"
+                            <ChaseParticipantCard @key="participant.Id"
+                                                   Participant="participant"
                                                    IsActive="@(participant == ChaseService.GetActiveParticipant())"
                                                    IsSetupMode="@(!ChaseService.IsChaseActive)"
                                                    OnRemoveCallback="RemoveParticipant"
@@ -210,7 +210,10 @@ else
                         <label class="text-sm text-gray-600">Количество локаций:</label>
                         <input type="number" min="3" max="30" @bind="_trackLength"
                                class="text-sm border border-gray-200 rounded px-2 py-1 w-20" />
-                        <Button Variant="primary" Size="sm" OnClick="SetupTrack">Создать трассу</Button>
+                        <button @onclick="SetupTrack"
+                                class="inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 shadow-sm min-h-[36px] px-3 py-1.5 text-sm bg-primary-700 hover:bg-primary-800 active:bg-primary-900 text-white shadow-sm hover:shadow-md">
+                            Создать трассу
+                        </button>
                     </div>
 
                     @if (ChaseService.Locations.Any())
@@ -218,14 +221,14 @@ else
                         <div class="max-h-[40vh] overflow-y-auto space-y-1">
                             @foreach (var location in ChaseService.Locations)
                             {
-                                <LocationEditor Location="location" OnLocationUpdated="HandleLocationUpdated" />
+                                <LocationEditor @key="location.Number" Location="location" OnLocationUpdated="HandleLocationUpdated" />
                             }
                         </div>
 
                         <div class="mt-4">
                             <Button Variant="success" FullWidth="true" Size="md"
                                     OnClick="StartChase"
-                                    Disabled="@(ChaseService.Participants.Count < 2)">
+                                    IsDisabled="@(ChaseService.Participants.Count < 2)">
                                 Начать погоню
                             </Button>
                             @if (ChaseService.Participants.Count < 2)
@@ -296,7 +299,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        ChaseService.OnChange += StateHasChanged;
         _isKeeper = await IdentityService.IsKeeper();
 
         if (_isKeeper)
@@ -389,8 +391,4 @@ else
 
     private void ResetChase() => ChaseService.ResetChase();
 
-    public void Dispose()
-    {
-        ChaseService.OnChange -= StateHasChanged;
-    }
 }

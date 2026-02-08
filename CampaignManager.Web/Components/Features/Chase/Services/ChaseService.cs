@@ -24,12 +24,13 @@ public sealed class ChaseService
 
     public void SetupTrack(int locationCount)
     {
-        Locations.Clear();
+        var newLocations = new List<ChaseLocation>();
         for (var i = 1; i <= locationCount; i++)
         {
-            Locations.Add(new ChaseLocation { Number = i });
+            newLocations.Add(new ChaseLocation { Number = i });
         }
 
+        Locations = newLocations;
         NotifyStateChanged();
     }
 
