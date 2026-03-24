@@ -23,6 +23,7 @@ public sealed class CreatureService(
     ///     Gets all creatures in the system
     /// </summary>
     /// <param name="searchText">Optional search text to filter creatures</param>
+    /// <param name="creatureTypeStr"></param>
     /// <param name="page">Optional page number for pagination</param>
     /// <param name="pageSize">Optional page size for pagination</param>
     /// <returns>A list of all creatures</returns>
@@ -66,6 +67,7 @@ public sealed class CreatureService(
     ///     Gets the total count of creatures
     /// </summary>
     /// <param name="searchText">Optional search text to filter creatures</param>
+    /// <param name="creatureTypeStr"></param>
     /// <returns>The total count of creatures</returns>
     public async Task<int> GetCreatureCountAsync(string searchText = "", string? creatureTypeStr = null)
     {

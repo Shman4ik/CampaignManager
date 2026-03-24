@@ -1,4 +1,4 @@
-using Minio;
+﻿using Minio;
 using Minio.DataModel.Args;
 
 namespace CampaignManager.Web.Utilities.Services;
@@ -90,7 +90,6 @@ public class MinioService
     /// </summary>
     /// <param name="stream">The stream to upload</param>
     /// <param name="objectName">The name of the object in Minio (including path)</param>
-    /// <param name="folder">Optional folder path within the bucket</param>
     /// <param name="contentType">The MIME type of the content</param>
     /// <returns>The full object name (including folder if specified)</returns>
     public async Task<string> UploadAsync(Stream stream, string objectName, string contentType = "application/octet-stream")
