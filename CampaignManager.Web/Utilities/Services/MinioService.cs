@@ -13,7 +13,7 @@ public class MinioService
     {
         _logger = logger;
 
-        var endpoint = configuration["Minio:Endpoint"] ?? "s3.shmanev.xyz";
+        var endpoint = configuration["Minio:Endpoint"] ?? "s3.dmnet.dev";
         var accessKey = configuration["Minio:AccessKey"] ?? throw new ArgumentNullException("Minio:AccessKey");
         var secretKey = configuration["Minio:SecretKey"] ?? throw new ArgumentNullException("Minio:SecretKey");
         var secure = configuration.GetValue("Minio:Secure", true);
