@@ -273,6 +273,12 @@
                                     Не удалось выполнить автоматический вход. Пожалуйста, выполните вход вручную.
                                 </div>
                             }
+                            @if (accessDenied)
+                            {
+                                <div class="auth-alert hidden sm:block" style="color: var(--color-error);">
+                                    Доступ запрещён. Ваш аккаунт не авторизован для входа.
+                                </div>
+                            }
                             <button type="button" class="google-btn text-xs sm:text-sm" @onclick="ManualLogin">
                                 <svg class="w-4 h-4 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
                                     <path fill="#EA4335"
@@ -299,6 +305,7 @@
     private string? openDropdownId;
     private readonly HashSet<string> openMobileSubmenus = new();
     private bool silentLoginFailed;
+    private bool accessDenied;
     private bool hasRendered;
 
     protected override void OnInitialized()
@@ -314,6 +321,12 @@
             authStatus.ToString() == "silentFailed")
         {
             silentLoginFailed = true;
+        }
+
+        if (queryParams.TryGetValue("authStatus", out var accessStatus) &&
+            accessStatus.ToString() == "accessDenied")
+        {
+            accessDenied = true;
         }
     }
 
@@ -338,6 +351,13 @@
                     // Ignore JS interop errors during initialization
                 }
 
+                // Clean up URL by removing the authStatus query parameter
+                var cleanUrl = NavigationManager.Uri.Split('?')[0];
+                NavigationManager.NavigateTo(cleanUrl, replace: true);
+            }
+
+            if (accessDenied)
+            {
                 // Clean up URL by removing the authStatus query parameter
                 var cleanUrl = NavigationManager.Uri.Split('?')[0];
                 NavigationManager.NavigateTo(cleanUrl, replace: true);

@@ -107,6 +107,8 @@ builder.Services.AddAuthentication(options =>
             var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true
                            && mode == AccountEndpoints.SilentModeValue;
 
+            var isAccessDenied = context.Failure?.Message.Contains("not authorized", StringComparison.OrdinalIgnoreCase) == true;
+
             if (isSilent)
             {
                 // For silent failures, redirect back with error status
@@ -114,6 +116,11 @@ builder.Services.AddAuthentication(options =>
                     ? url
                     : "/";
                 context.Response.Redirect($"{returnUrl}?authStatus=silentFailed");
+                context.HandleResponse();
+            }
+            else if (isAccessDenied)
+            {
+                context.Response.Redirect("/?authStatus=accessDenied");
                 context.HandleResponse();
             }
             else
@@ -126,12 +133,31 @@ builder.Services.AddAuthentication(options =>
             return Task.CompletedTask;
         };
 
-        // Optional: Log successful ticket creation
+        // Validate user against allowed emails/domains whitelist
         options.Events.OnCreatingTicket = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogInformation("Successfully created authentication ticket for user: {Email}",
-                context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value);
+            var email = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+            var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+            var allowedEmails = config.GetSection("Authorization:AllowedEmails").Get<string[]>() ?? [];
+            var allowedDomains = config.GetSection("Authorization:AllowedDomains").Get<string[]>() ?? [];
+
+            if ((allowedEmails.Length > 0 || allowedDomains.Length > 0) && email is not null)
+            {
+                var emailDomain = email.Split('@').LastOrDefault() ?? string.Empty;
+                var isAllowed = allowedEmails.Contains(email, StringComparer.OrdinalIgnoreCase)
+                    || allowedDomains.Contains(emailDomain, StringComparer.OrdinalIgnoreCase);
+
+                if (!isAllowed)
+                {
+                    logger.LogWarning("Access denied for user {Email}: not in allowed list.", email);
+                    context.Fail("Access denied: your account is not authorized to access this application.");
+                    return Task.CompletedTask;
+                }
+            }
+
+            logger.LogInformation("Successfully created authentication ticket for user: {Email}", email);
             return Task.CompletedTask;
         };
     });
