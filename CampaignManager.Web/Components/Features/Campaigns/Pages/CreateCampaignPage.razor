@@ -6,9 +6,11 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @rendermode InteractiveServer
 
-<div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-    <h1 class="text-3xl font-bold mb-6">Создать кампанию</h1>
+<div class="max-w-2xl mx-auto py-6 sm:px-6 lg:px-8">
+    <h1 class="text-3xl font-bold mb-2">Создать кампанию</h1>
+    <p class="text-gray-500 mb-6">Создайте новую кампанию для вашей группы</p>
 
+    <div class="bg-white shadow-md rounded-lg p-6">
     <EditForm Model="@campaignModel" OnValidSubmit="@CreateCampaign" FormName="createCampaignForm">
         <DataAnnotationsValidator/>
         <Microsoft.AspNetCore.Components.Forms.ValidationSummary/>
@@ -25,14 +27,17 @@
             <label for="campaignStatus" class="block text-gray-700 text-sm font-bold mb-2">Статус:</label>
             <InputSelect id="campaignStatus" @bind-Value="campaignModel.Status"
                          class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                @foreach (var status in Enum.GetValues(typeof(CampaignStatus)))
+                @foreach (var status in Enum.GetValues<CampaignStatus>())
                 {
-                    <option value="@status">@status</option>
+                    <option value="@status">@GetStatusLabel(status)</option>
                 }
             </InputSelect>
         </div>
 
         <div class="flex items-center justify-between">
+            <NavLink href="/" class="cm-btn cm-btn-secondary">
+                <span>Отмена</span>
+            </NavLink>
             <button type="submit" class="cm-btn cm-btn-info" disabled="@isCreating">
                 @if (isCreating)
                 {
@@ -52,12 +57,22 @@
             </div>
         }
     </EditForm>
+    </div>
 </div>
 
 @code {
     private readonly CampaignCreateModel campaignModel = new();
     private bool isCreating;
     private string errorMessage = string.Empty;
+
+    private static string GetStatusLabel(CampaignStatus status) => status switch
+    {
+        CampaignStatus.Planning => "Планирование",
+        CampaignStatus.Active => "Активна",
+        CampaignStatus.OnHold => "На паузе",
+        CampaignStatus.Completed => "Завершена",
+        _ => status.ToString()
+    };
 
     private async Task CreateCampaign()
     {

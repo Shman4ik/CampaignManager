@@ -5,33 +5,25 @@
  * @param {string} elementId - The ID of the element to scroll to
  */
 window.scrollToElement = function(elementId) {
-    console.log('scrollToElement called with:', elementId);
-    
     const element = document.getElementById(elementId);
-    console.log('Element found:', element);
-    
-    if (element) {
-        const headerOffset = 140; // Increased offset for sticky header + топбар
-        
-        // Используем scrollIntoView с последующей коррекцией
-        element.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start'
-        });
-        
-        // Даем время для начала анимации, затем корректируем позицию
-        setTimeout(() => {
-            const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
-            const targetScrollY = currentScrollY - headerOffset;
-            
-            window.scrollTo({
-                top: targetScrollY,
-                behavior: 'smooth'
-            });
-        }, 10);
-    } else {
-        console.warn('Element not found:', elementId);
-    }
+    if (!element) return;
+
+    // Dynamically measure sticky headers to get the correct offset
+    const stickyBars = document.querySelectorAll('.sticky');
+    let totalOffset = 0;
+    stickyBars.forEach(function(bar) {
+        const pos = window.getComputedStyle(bar).position;
+        if (pos === 'sticky' || pos === 'fixed') {
+            totalOffset += bar.offsetHeight;
+        }
+    });
+    totalOffset += 8; // small padding
+
+    const elementTop = element.getBoundingClientRect().top + window.pageYOffset;
+    window.scrollTo({
+        top: elementTop - totalOffset,
+        behavior: 'smooth'
+    });
 };
 
 /**

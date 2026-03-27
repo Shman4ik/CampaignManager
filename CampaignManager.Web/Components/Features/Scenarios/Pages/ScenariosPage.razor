@@ -31,8 +31,22 @@
     }
     else
     {
+        <div class="mb-4">
+            <input type="search" placeholder="Поиск по названию..."
+                   class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   @bind="_searchTerm" @bind:event="oninput"/>
+        </div>
+
+        @if (!FilteredScenarios.Any())
+        {
+            <div class="bg-white shadow-md rounded-lg p-6 text-center">
+                <p class="text-gray-500">Шаблоны не найдены.</p>
+            </div>
+        }
+        else
+        {
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach (var scenario in _scenarios)
+            @foreach (var scenario in FilteredScenarios)
             {
                 <div
                     class="bg-white shadow-md rounded-md overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
@@ -63,26 +77,27 @@
 
                         <p class="cm-text-body text-gray-600 line-clamp-3">
                             @(string.IsNullOrEmpty(scenario.Description)
-                                ? "No description provided."
+                                ? "Описание отсутствует."
                                 : scenario.Description)
                         </p>
                     </div>
                     <div class="bg-gray-50 px-4 py-3 flex justify-between mt-auto border-t border-gray-100">
                         <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{scenario.Id}"))">
-                            <i class="fas fa-eye"></i> <span>View</span>
+                            <i class="fas fa-eye"></i> <span>Просмотр</span>
                         </button>
                         <div class="flex gap-2">
                             <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{scenario.Id}/edit"))">
-                                <i class="fas fa-edit"></i> <span>Edit</span>
+                                <i class="fas fa-edit"></i> <span>Редактировать</span>
                             </button>
                             <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="@(() => ConfirmDelete(scenario))">
-                                <i class="fas fa-trash"></i> <span>Delete</span>
+                                <i class="fas fa-trash"></i> <span>Удалить</span>
                             </button>
                         </div>
                     </div>
                 </div>
             }
         </div>
+        }
     }
 </div>
 
@@ -121,6 +136,11 @@
     private bool _loading = true;
     private bool _showDeleteModal;
     private Scenario? _scenarioToDelete;
+    private string _searchTerm = string.Empty;
+
+    private IEnumerable<Scenario> FilteredScenarios => string.IsNullOrWhiteSpace(_searchTerm)
+        ? _scenarios
+        : _scenarios.Where(s => s.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
