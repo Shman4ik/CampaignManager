@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
 
 jobs:
   build-and-deploy:
@@ -11,68 +11,76 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    
-    - name: Set version
-      id: version
-      run: |
-        echo "VERSION=0.1.${{ github.run_number }}" >> $GITHUB_ENV
-        echo "Using version: 0.1.${{ github.run_number }}"
-    
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        tags: |
-          ghcr.io/shman4ik/campaign-manager:latest
-          ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-    
-    - name: Deploy to VPS
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        passphrase: ${{ secrets.VPS_SSH_KEY_PASSPHRASE }}
-        script: |
-          # Login to GitHub Container Registry
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - uses: actions/checkout@v3
 
-          # Pull the versioned image
-          docker pull ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-          
-          # Stop and remove the existing container if it exists
-          docker stop campaign-manager || true
-          docker rm campaign-manager || true
-          
-          # Run the new container with environment variables and specific version
-          docker run -d --name campaign-manager \
-            --restart unless-stopped \
-            -p 8080:8080 \
-            -e "ConnectionStrings__DefaultConnection=${{ secrets.ConnectionStrings__DefaultConnection }}" \
-            -e "Authentication__Google__ClientId=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTID }}" \
-            -e "Authentication__Google__ClientSecret=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTSECRET }}" \
-            -e "Minio__AccessKey=${{ secrets.MINIO_ACCESSKEY }}" \
-            -e "Minio__SecretKey=${{ secrets.MINIO_SECRETKEY }}" \
-            -e "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true" \
-            -e "DOTNET_EnableDiagnostics=false" \
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set version
+        id: version
+        run: |
+          echo "VERSION=0.1.${{ github.run_number }}" >> $GITHUB_ENV
+          echo "Using version: 0.1.${{ github.run_number }}"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/shman4ik/campaign-manager:latest
             ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-          
-          # Reload Nginx to apply any changes
-          sudo systemctl reload nginx
 
-          # Output deployed version for logging
-          echo "Deployed version: ${{ env.VERSION }}"
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          passphrase: ${{ secrets.VPS_SSH_KEY_PASSPHRASE }}
+          script: |
+            # Login to GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the versioned image
+            docker pull ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
+
+            # Stop and remove the existing container if it exists
+            docker stop campaign-manager || true
+            docker rm campaign-manager || true
+
+            # Run the new container with environment variables and specific version
+            docker run -d --name campaign-manager \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -e "ConnectionStrings__DefaultConnection=${{ secrets.ConnectionStrings__DefaultConnection }}" \
+              -e "Authentication__Google__ClientId=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTID }}" \
+              -e "Authentication__Google__ClientSecret=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTSECRET }}" \
+              -e "Minio__AccessKey=${{ secrets.MINIO_ACCESSKEY }}" \
+              -e "Minio__SecretKey=${{ secrets.MINIO_SECRETKEY }}" \
+              -e "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true" \
+              -e "DOTNET_EnableDiagnostics=false" \
+              ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
+
+            # Reload Nginx to apply any changes
+            sudo systemctl reload nginx
+
+            # Output deployed version for logging
+            echo "Deployed version: ${{ env.VERSION }}"
+
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: campaign-manager
+          package-type: container
+          min-versions-to-keep: 3
+          ignore-versions: "^latest$"
