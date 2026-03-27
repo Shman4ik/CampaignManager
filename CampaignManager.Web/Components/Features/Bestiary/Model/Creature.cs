@@ -5,7 +5,7 @@ namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 /// <summary>
 ///     Model for monsters and supernatural entities
 /// </summary>
-public class Creature : BaseDataBaseEntity
+public class Creature : BaseDataBaseEntity, INamedEntity
 {
     public required string Name { get; set; }
 

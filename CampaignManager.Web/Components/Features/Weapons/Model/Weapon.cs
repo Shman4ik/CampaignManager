@@ -6,7 +6,7 @@ namespace CampaignManager.Web.Components.Features.Weapons.Model;
 /// <summary>
 ///     Класс для всех видов оружия
 /// </summary>
-public class Weapon : BaseDataBaseEntity
+public class Weapon : BaseDataBaseEntity, INamedEntity
 {
     public Weapon()
     {

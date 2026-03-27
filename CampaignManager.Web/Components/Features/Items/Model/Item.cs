@@ -6,7 +6,7 @@ namespace CampaignManager.Web.Components.Features.Items.Model;
 /// <summary>
 ///     Model for significant items and artifacts in scenarios
 /// </summary>
-public class Item : BaseDataBaseEntity
+public class Item : BaseDataBaseEntity, INamedEntity
 {
     /// <summary>
     ///     The name of the item

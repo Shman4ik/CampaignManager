@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
-public class CharacterService(
+public sealed class CharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
     ILogger<CharacterService> logger,

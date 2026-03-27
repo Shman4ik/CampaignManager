@@ -1,7 +1,8 @@
-﻿@page "/skills"
+@page "/skills"
 @using CampaignManager.Web.Components.Features.Skills.Components
 @using CampaignManager.Web.Components.Features.Skills.Model
 @using CampaignManager.Web.Components.Features.Skills.Services
+@using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
 @attribute [Authorize]
 
@@ -12,121 +13,97 @@
 <PageTitle>Навыки</PageTitle>
 
 <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-    <!-- Улучшенная панель фильтров - более компактная -->
-    <div class="sticky top-0 z-10 bg-white rounded-lg shadow-md p-3 mb-4 border border-gray-200">
-        <div class="flex justify-between items-center mb-2">
-            <div class="flex items-center">
-                <h2 class="text-base font-semibold text-gray-700 mr-2">Фильтры</h2>
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm !p-1 !min-h-0" @onclick="ToggleSearchPanel"><i class="fas @(_isSearchPanelVisible ? "fa-chevron-up" : "fa-chevron-down")"></i></button>
-            </div>
-            <div class="flex space-x-2">
-                @if (_isSearchPanelVisible)
-                {
-                    <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="ClearFilters"><i class="fas fa-undo-alt"></i> <span>Сбросить</span></button>
-                }
-                <!-- Кнопка добавления навыка (компактнее) -->
-                <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewSkill"><i class="fas fa-plus"></i> <span>Добавить</span></button>
-            </div>
-        </div>
-
-        @if (_isSearchPanelVisible)
-        {
-            <!-- Содержимое панели поиска -->
-            <div class="mb-3">
-                <!-- Более компактный макет фильтров -->
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <div class="flex-grow">
-                        <label for="searchQuery" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
-                        <div class="relative">
-                            <input type="text" id="searchQuery"
-                                   class="w-full border rounded-lg pl-8 pr-3 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
-                                   placeholder="Поиск по названию..." @bind="_searchTerm" @bind:event="oninput"
-                                   @onkeyup="SearchKeyUp"/>
-                            <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                                <i class="fas fa-search text-gray-400 text-xs"></i>
-                            </div>
+    <FilterPanel Title="Фильтры" @bind-IsExpanded="_isSearchPanelVisible">
+        <ActionButtons>
+            @if (_isSearchPanelVisible)
+            {
+                <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="ClearFilters">
+                    <i class="fas fa-undo-alt"></i> <span>Сбросить</span>
+                </button>
+            }
+            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewSkill">
+                <i class="fas fa-plus"></i> <span>Добавить</span>
+            </button>
+        </ActionButtons>
+        <ChildContent>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <div class="flex-grow">
+                    <label for="searchQuery" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
+                    <div class="relative">
+                        <input type="text" id="searchQuery"
+                               class="w-full border rounded-lg pl-8 pr-3 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                               placeholder="Поиск по названию..." @bind="_searchTerm" @bind:event="oninput"
+                               @onkeyup="SearchKeyUp" />
+                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400 text-xs"></i>
                         </div>
                     </div>
-
-                    <div class="w-full sm:w-48">
-                        <label for="categoryFilter" class="block text-xs font-medium text-gray-700 mb-1">Категория
-                            навыка</label>
-                        <select id="categoryFilter"
-                                class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
-                                @onchange="CategorySelectionChanged">
-                            <option value="">Все категории</option>
-                            @foreach (var category in EnumExtensions.GetEnumTypes<SkillCategory>())
-                            {
-                                <option value="@category">@category.ToRussianString()</option>
-                            }
-                        </select>
-                    </div>
+                </div>
+                <div class="w-full sm:w-48">
+                    <label for="categoryFilter" class="block text-xs font-medium text-gray-700 mb-1">Категория навыка</label>
+                    <select id="categoryFilter"
+                            class="w-full border rounded-lg px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                            @onchange="CategorySelectionChanged">
+                        <option value="">Все категории</option>
+                        @foreach (var category in EnumExtensions.GetEnumTypes<SkillCategory>())
+                        {
+                            <option value="@category">@category.ToRussianString()</option>
+                        }
+                    </select>
                 </div>
             </div>
-
-            <!-- Пагинация в панели фильтров -->
-            <div class="flex flex-wrap justify-between items-center gap-2 mt-2">
-                <div class="flex items-center gap-2 text-sm">
-                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm !p-1 !min-h-0" disabled="@(_currentPage <= 1)" @onclick="PreviousPage"><i class="fas fa-chevron-left"></i></button>
-                    <span class="px-2">Страница @_currentPage из @TotalPages</span>
-                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm !p-1 !min-h-0" disabled="@(_currentPage >= TotalPages)" @onclick="NextPage"><i class="fas fa-chevron-right"></i></button>
-                </div>
-            </div>
-        }
-    </div>
+        </ChildContent>
+    </FilterPanel>
 
     @if (_loading)
     {
-        <div class="flex justify-center items-center h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
+        <LoadingIndicator />
     }
     else if (_skills.Count == 0)
     {
-        <div class="bg-white shadow-md rounded-lg p-6 text-center">
-            @if (!string.IsNullOrEmpty(_searchTerm) || _selectedCategory != "")
-            {
-                <p class="text-lg text-gray-600 mb-4">Нет навыков, соответствующих критериям поиска.</p>
-                <button type="button" class="cm-btn cm-btn-secondary" @onclick="ClearFilters"><span>Очистить фильтры</span></button>
-            }
-            else
-            {
-                <p class="text-lg text-gray-600 mb-4">В базе данных нет навыков.</p>
-                <p class="text-gray-500">Добавьте первый навык, чтобы начать.</p>
-            }
-        </div>
+        <EmptyState IconClass="fa-book"
+                    Title="Навыки не найдены"
+                    Message="@(!string.IsNullOrEmpty(_searchTerm) || _selectedCategory != "" ? "Нет навыков, соответствующих критериям поиска." : "В базе данных нет навыков. Добавьте первый навык, чтобы начать.")">
+            <ActionButton>
+                @if (!string.IsNullOrEmpty(_searchTerm) || _selectedCategory != "")
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="ClearFilters">
+                        <span>Очистить фильтры</span>
+                    </button>
+                }
+            </ActionButton>
+        </EmptyState>
     }
     else
     {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             @foreach (var skill in _skills)
             {
-                <SkillCard Skill="@skill" OnDelete="@(s => ConfirmDelete(s))"/>
+                <SkillCard Skill="@skill" OnDelete="@(s => ConfirmDelete(s))" />
             }
         </div>
+        <Pagination CurrentPage="@_currentPage"
+                    TotalPages="@TotalPages"
+                    TotalItems="@_totalItems"
+                    ItemsPerPage="@_pageSize"
+                    ItemsLabel="навыков"
+                    OnPageChanged="GoToPage" />
     }
 </div>
 
-@if (_showDeleteModal)
-{
-    <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 class="text-xl font-bold mb-4">Подтверждение удаления</h2>
-            <p class="mb-6">Вы уверены, что хотите удалить <strong>@_skillToDelete?.Name</strong>? Это действие
-                нельзя отменить.</p>
-            <div class="flex justify-end space-x-3">
-                <Button OnClick="() => _showDeleteModal = false"
-                        Variant="secondary">
-                    Отмена
-                </Button>
-                <Button OnClick="DeleteSkill"
-                        Variant="error">
-                    Удалить
-                </Button>
-            </div>
-        </div>
-    </div>
-}
+<ConfirmationModal IsVisible="@_showDeleteModal"
+                  OnConfirm="DeleteSkill"
+                  OnCancel="() => _showDeleteModal = false"
+                  Title="Подтверждение удаления"
+                  Message="@($"Вы уверены, что хотите удалить навык? Это действие нельзя отменить.")"
+                  ConfirmText="Удалить"
+                  CancelText="Отмена">
+    <DetailsContent>
+        <p class="text-gray-700 text-base">
+            <span class="font-semibold text-gray-900">Название:</span> @(_skillToDelete?.Name)
+        </p>
+    </DetailsContent>
+</ConfirmationModal>
 
 @code {
     private List<SkillModel> _skills = [];
@@ -135,7 +112,6 @@
     private string _selectedCategory = "";
     private bool _isSearchPanelVisible = true;
 
-    // Модальное окно удаления
     private bool _showDeleteModal;
     private SkillModel? _skillToDelete;
 
@@ -170,23 +146,14 @@
     private async Task OnSearchTermChanged(string searchTerm)
     {
         _searchTerm = searchTerm;
-        _currentPage = 1; // Reset to first page when searching
+        _currentPage = 1;
         await LoadData();
     }
 
     private async Task CategorySelectionChanged(ChangeEventArgs e)
     {
-        // Преобразование значения в enum
-        if (string.IsNullOrEmpty(e.Value?.ToString()))
-        {
-            _selectedCategory = ""; // Для опции "Все категории"
-        }
-        else
-        {
-            _selectedCategory = e.Value.ToString() ?? "";
-        }
-
-        _currentPage = 1; // Reset to first page when filtering
+        _selectedCategory = e.Value?.ToString() ?? "";
+        _currentPage = 1;
         await LoadData();
     }
 
@@ -200,17 +167,14 @@
 
     private async Task SearchKeyUp(KeyboardEventArgs e)
     {
-        // Handle search input directly without timer for now, could add debounce later
         await OnSearchTermChanged(_searchTerm);
     }
 
-    // Создание нового навыка
     private void CreateNewSkill()
     {
         NavigationManager.NavigateTo("/skills/edit");
     }
 
-    // Удаление навыка
     private void ConfirmDelete(SkillModel skill)
     {
         _skillToDelete = skill;
@@ -219,18 +183,12 @@
 
     private async Task DeleteSkill()
     {
-        if (_skillToDelete is null)
-        {
-            return;
-        }
+        if (_skillToDelete is null) return;
 
         try
         {
             var success = await SkillService.DeleteSkillAsync(_skillToDelete.Id);
-            if (success)
-            {
-                await LoadData();
-            }
+            if (success) await LoadData();
         }
         catch (Exception ex)
         {
@@ -243,27 +201,9 @@
         }
     }
 
-    private async Task PreviousPage()
+    private async Task GoToPage(int page)
     {
-        if (_currentPage > 1)
-        {
-            _currentPage--;
-            await LoadData();
-        }
+        _currentPage = page;
+        await LoadData();
     }
-
-    private async Task NextPage()
-    {
-        if (_currentPage < TotalPages)
-        {
-            _currentPage++;
-            await LoadData();
-        }
-    }
-
-    private void ToggleSearchPanel()
-    {
-        _isSearchPanelVisible = !_isSearchPanelVisible;
-    }
-
 }

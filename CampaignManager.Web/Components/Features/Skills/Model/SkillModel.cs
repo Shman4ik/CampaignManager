@@ -1,17 +1,13 @@
 using System.ComponentModel.DataAnnotations;
+using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Skills.Model;
 
 /// <summary>
 /// Модель навыка персонажа в Call of Cthulhu
 /// </summary>
-public class SkillModel
+public class SkillModel : BaseDataBaseEntity, INamedEntity
 {
-    /// <summary>
-    /// Уникальный идентификатор навыка
-    /// </summary>
-    public Guid Id { get; set; }
-
     /// <summary>
     /// Название навыка
     /// </summary>
@@ -66,13 +62,4 @@ public class SkillModel
     /// </summary>
     public List<string> OpposingSkills { get; set; } = [];
 
-    /// <summary>
-    /// Дата создания
-    /// </summary>
-    public DateTimeOffset CreatedAt { get; set; }
-
-    /// <summary>
-    /// Дата последнего обновления
-    /// </summary>
-    public DateTimeOffset LastUpdated { get; set; }
 }

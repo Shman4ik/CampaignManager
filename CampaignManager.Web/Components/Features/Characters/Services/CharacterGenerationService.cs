@@ -2,7 +2,7 @@
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
-public class CharacterGenerationService
+public sealed class CharacterGenerationService
 {
     private readonly Random random = new();
 

@@ -6,7 +6,7 @@ namespace CampaignManager.Web.Components.Features.Scenarios.Model;
 /// <summary>
 ///     Base model for adventure scenarios that can be used as templates or added to campaigns
 /// </summary>
-public sealed class Scenario : BaseDataBaseEntity
+public sealed class Scenario : BaseDataBaseEntity, INamedEntity
 {
     /// <summary>
     ///     The name of the scenario

@@ -5,7 +5,7 @@ namespace CampaignManager.Web.Components.Features.Spells.Model;
 /// <summary>
 ///     Represents a spell entity for database storage or general use.
 /// </summary>
-public class Spell : BaseDataBaseEntity
+public class Spell : BaseDataBaseEntity, INamedEntity
 {
     /// <summary>
     ///     Название заклинания.

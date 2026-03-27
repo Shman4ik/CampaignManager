@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -30,7 +31,7 @@ public sealed class ScenarioService(
 
             if (cache.TryGetValue(cacheKey, out List<Scenario>? scenarios) && scenarios is not null) return scenarios;
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var query = dbContext.Scenarios.AsQueryable();
 
             if (templatesOnly) query = query.Where(s => s.IsTemplate);
@@ -60,7 +61,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
                 .Where(s => s.CampaignId == campaignId)
                 .OrderBy(s => s.Name)
@@ -76,13 +77,11 @@ public sealed class ScenarioService(
     /// <summary>
     ///     Gets a scenario by its ID
     /// </summary>
-    /// <param name="id">The ID of the scenario</param>
-    /// <returns>The scenario if found, null otherwise</returns>
     public async Task<Scenario?> GetScenarioByIdAsync(Guid id)
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
                 .Include(s => s.Npcs)
                 .FirstOrDefaultAsync(s => s.Id == id);
@@ -130,7 +129,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var existingScenario = await dbContext.Scenarios.FindAsync(scenario.Id);
             if (existingScenario is null) return false;
@@ -161,7 +160,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var scenario = await dbContext.Scenarios.FindAsync(id);
             if (scenario is null) return false;
@@ -193,7 +192,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Get the template scenario with all related entities
             var template = await dbContext.Scenarios
@@ -275,7 +274,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
                 .OrderBy(c => c.Name)
                 .ToListAsync();
@@ -296,7 +295,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
@@ -332,7 +331,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Items
                 .OrderBy(i => i.Name)
                 .ToListAsync();
@@ -353,7 +352,7 @@ public sealed class ScenarioService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);

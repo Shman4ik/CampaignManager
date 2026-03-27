@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace CampaignManager.Web.Components.Features.Campaigns.Services;
 
-public class CampaignService(
+public sealed class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
     IHttpContextAccessor httpContextAccessor,
