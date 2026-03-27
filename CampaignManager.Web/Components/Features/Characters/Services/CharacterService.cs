@@ -14,7 +14,7 @@ public sealed class CharacterService(
     ILogger<CharacterService> logger,
     SkillService skillService)
 {
-    public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId)
+    public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId, CharacterStatus status = CharacterStatus.Active)
     {
         try
         {
@@ -32,7 +32,7 @@ public sealed class CharacterService(
                 CharacterName = character.PersonalInfo.Name,
                 Character = character,
                 CampaignPlayerId = campaignPlayerId,
-                Status = CharacterStatus.Active
+                Status = status
             };
             // Инициализируем базовые поля сущности
             storageDto.Init();
@@ -223,27 +223,40 @@ public sealed class CharacterService(
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
-            // Get the original template
+            // Load template as detached entity so we can persist it as a new row.
             var character = await dbContext.CharacterStorage
+                .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == characterId && c.Status == CharacterStatus.Template);
 
-            if (character == null)
+            if (character is null)
                 throw new KeyNotFoundException($"Character template with ID {characterId} not found");
 
-
-            // Initialize the new template with a new ID
+            // Create scenario-bound copy.
             character.Init();
             character.Status = CharacterStatus.Active;
             character.ScenarioId = scenarioId;
+            character.Scenario = null;
+            character.CampaignPlayerId = null;
+            character.CampaignPlayer = null;
+
             dbContext.CharacterStorage.Add(character);
             await dbContext.SaveChangesAsync();
 
-            logger.LogInformation($"Character template {character.Id} created with scenario link {scenarioId} by user {userEmail}");
+            logger.LogInformation(
+                "Character template {TemplateId} copied to scenario {ScenarioId} as character {CharacterId} by user {UserEmail}",
+                characterId,
+                scenarioId,
+                character.Id,
+                userEmail);
             return character;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error creating character template with scenario link: {ex.Message}");
+            logger.LogError(
+                ex,
+                "Error creating character template from template {TemplateId} for scenario {ScenarioId}",
+                characterId,
+                scenarioId);
             throw;
         }
     }

@@ -11,6 +11,13 @@
        MaxWidth="lg"
        HeaderColorScheme="primary">
     <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <div class="mb-4 p-3 rounded-md bg-red-50 text-red-700 border border-red-200">
+                @_errorMessage
+            </div>
+        }
+
         <div class="mb-4">
             <input type="text"
                    placeholder="Search NPCs..."
@@ -70,6 +77,7 @@
     private string _searchTerm = string.Empty;
     private List<CharacterStorageDto> _availableNpcs = [];
     private CharacterStorageDto? _selectedNpc;
+    private string? _errorMessage;
     // Loading state tracked in UI
 
     private IEnumerable<CharacterStorageDto> FilteredNpcs =>
@@ -82,17 +90,20 @@
     {
         _selectedNpc = null;
         _searchTerm = string.Empty;
+        _errorMessage = null;
 
         // Load data before showing the modal
         await LoadAvailableNpcs();
 
         // Now show the modal with data loaded
         _isVisible = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Hide()
     {
         _isVisible = false;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void SelectNpc(CharacterStorageDto npc)
@@ -105,29 +116,36 @@
         try
         {
             _availableNpcs = await CharacterService.GetAllCharacterTemplatesAsync();
+            _errorMessage = null;
         }
         catch (Exception ex)
         {
-            // Handle error (could add a message service for displaying errors)
             Console.Error.WriteLine($"Error loading NPCs: {ex.Message}");
             _availableNpcs = [];
+            _errorMessage = "Не удалось загрузить шаблоны персонажей. Попробуйте еще раз.";
         }
     }
 
     private async Task AddNpcToScenario()
     {
-        if (_selectedNpc == null) return;
+        if (_selectedNpc is null)
+        {
+            _errorMessage = "Выберите шаблон персонажа перед добавлением.";
+            return;
+        }
 
         try
         {
             var addedNpc = await CharacterService.SaveCharacterTemplateWithScenarioAsync(_selectedNpc.Id, ScenarioId);
             await OnNpcAdded.InvokeAsync(addedNpc);
+            _errorMessage = null;
             Hide();
         }
         catch (Exception ex)
         {
-            // Handle error
             Console.Error.WriteLine($"Error adding NPC to scenario: {ex.Message}");
+            _errorMessage = "Не удалось добавить шаблон персонажа в сценарий.";
+            await InvokeAsync(StateHasChanged);
         }
     }
 

@@ -304,14 +304,12 @@ public sealed class ScenarioService(
             // Initialize the entity
             scenarioCreature.Init();
 
-            // If the scenario doesn't have a ScenarioCreatures collection, create one
-            if (scenario.ScenarioCreatures == null)
-            {
-                scenario.ScenarioCreatures = new List<ScenarioCreature>();
-            }
+            // JSON-backed collections need explicit reassignment for reliable change tracking.
+            var creatures = scenario.ScenarioCreatures?.ToList() ?? [];
+            creatures.Add(scenarioCreature);
+            scenario.ScenarioCreatures = creatures;
 
-            // Add the creature to the scenario's collection
-            scenario.ScenarioCreatures.Add(scenarioCreature);
+            dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
 
             return true;
@@ -361,14 +359,12 @@ public sealed class ScenarioService(
             // Initialize the entity
             scenarioItem.Init();
 
-            // If the scenario doesn't have a ScenarioItems collection, create one
-            if (scenario.ScenarioItems == null)
-            {
-                scenario.ScenarioItems = new List<ScenarioItem>();
-            }
+            // JSON-backed collections need explicit reassignment for reliable change tracking.
+            var items = scenario.ScenarioItems?.ToList() ?? [];
+            items.Add(scenarioItem);
+            scenario.ScenarioItems = items;
 
-            // Add the item to the scenario's collection
-            scenario.ScenarioItems.Add(scenarioItem);
+            dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
 
             return true;

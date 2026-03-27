@@ -332,7 +332,8 @@
 
     // Determine if we're in NPC creation mode based on the URL segment after CampaignId
     [Parameter] public string? Npc { get; set; }
-    private bool IsNpc => Npc == "npc" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
+    private bool IsTemplate => Npc == "template";
+    private bool IsNpc => Npc is "npc" or "template" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
 
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
@@ -458,7 +459,10 @@
             else
             {
                 Character.Id = Guid.Empty;
-                var createdCharacter = await CharacterService.CreateCharacterAsync(Character, CampaignPlayer?.Id);
+                var createdCharacter = await CharacterService.CreateCharacterAsync(
+                    Character,
+                    CampaignPlayer?.Id,
+                    IsTemplate ? CharacterStatus.Template : CharacterStatus.Active);
 
                 if (createdCharacter.Id != Guid.Empty)
                 {

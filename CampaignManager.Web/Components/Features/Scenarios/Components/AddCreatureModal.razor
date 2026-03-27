@@ -1,6 +1,7 @@
 ﻿@using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Services
 @using CampaignManager.Web.Components.Shared
 
 <Modal IsVisible="_isVisible"
@@ -18,6 +19,12 @@
         </div>
 
         <div class="grid grid-cols-1 gap-4 max-h-[40vh] overflow-y-auto mb-4">
+            @if (!string.IsNullOrWhiteSpace(_loadError))
+            {
+                <div class="text-center p-4 text-red-600">
+                    @_loadError
+                </div>
+            }
             @if (_availableCreatures == null || !_availableCreatures.Any())
             {
                 <div class="text-center p-4 text-gray-500">
@@ -92,6 +99,7 @@
     [Parameter] public EventCallback<ScenarioCreature> OnCreatureAdded { get; set; }
 
     [Inject] private ScenarioService ScenarioService { get; set; } = null!;
+    [Inject] private CreatureService CreatureService { get; set; } = null!;
 
     private bool _isVisible;
     private string _searchTerm = string.Empty;
@@ -100,6 +108,7 @@
     private int _quantity = 1;
     private string _location = string.Empty;
     private string _notes = string.Empty;
+    private string? _loadError;
 
     private IEnumerable<Creature> FilteredCreatures =>
         (string.IsNullOrWhiteSpace(_searchTerm)
@@ -120,11 +129,13 @@
 
         // Now show the modal with data loaded
         _isVisible = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Hide()
     {
         _isVisible = false;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void SelectCreature(Creature creature)
@@ -137,11 +148,31 @@
         try
         {
             _availableCreatures = await ScenarioService.GetAllCreaturesAsync();
+
+            // Fallback: in case scenario service query fails silently or returns empty set,
+            // load creatures via the dedicated bestiary service used by the creatures page.
+            if (_availableCreatures.Count == 0)
+            {
+                _availableCreatures = await CreatureService.GetAllCreaturesAsync(pageSize: 1000);
+            }
+
+            _loadError = null;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error loading creatures: {ex.Message}");
-            _availableCreatures = [];
+
+            try
+            {
+                _availableCreatures = await CreatureService.GetAllCreaturesAsync(pageSize: 1000);
+                _loadError = null;
+            }
+            catch (Exception fallbackEx)
+            {
+                Console.Error.WriteLine($"Fallback error loading creatures: {fallbackEx.Message}");
+                _availableCreatures = [];
+                _loadError = "Failed to load creatures list. Please try again.";
+            }
         }
     }
 
