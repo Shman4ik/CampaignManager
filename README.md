@@ -84,6 +84,10 @@ docker run -p 8080:8080 ghcr.io/shman4ik/campaign-manager:latest
 
 Swagger UI доступен по адресу `/swagger`.
 
+## Правовая информация
+
+**Call of Cthulhu** является торговой маркой Chaosium Inc. Данный проект — неофициальный фанатский инструмент, не связанный с Chaosium Inc. и не одобренный ими. Подробнее см. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Лицензия
 
 [GNU Affero General Public License v3](LICENSE)
