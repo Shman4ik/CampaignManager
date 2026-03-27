@@ -19,6 +19,7 @@ public static class MinioApi
             .WithTags("Minio Storage");
 
         minioGroup.MapGet("/image/{*objectPath}", GetImageAsync)
+            .RequireAuthorization()
             .WithName("GetImage")
             .WithSummary("Retrieve an image from Minio storage")
             .WithDescription("Fetches an image file from Minio object storage and returns it with the appropriate content type");
@@ -57,6 +58,10 @@ public static class MinioApi
         {
             if (string.IsNullOrEmpty(objectPath))
                 return TypedResults.BadRequest("Object path is required");
+
+            // Prevent path traversal attacks
+            if (objectPath.Contains("..") || Path.IsPathRooted(objectPath))
+                return TypedResults.BadRequest("Invalid object path");
 
             // Check if the object exists
             var exists = await minioService.DoesObjectExistAsync(objectPath);
@@ -115,6 +120,10 @@ public static class MinioApi
         {
             if (string.IsNullOrEmpty(objectPath))
                 return TypedResults.BadRequest("Object path is required");
+
+            // Prevent path traversal attacks
+            if (objectPath.Contains("..") || Path.IsPathRooted(objectPath))
+                return TypedResults.BadRequest("Invalid object path");
 
             // Check if the object exists
             var exists = await minioService.DoesObjectExistAsync(objectPath);

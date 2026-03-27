@@ -20,7 +20,7 @@ public static class CharacterMigrationApi
     public static void MapCharacterMigrationEndpoints(this IEndpointRouteBuilder routes)
     {
         var migrationGroup = routes.MapGroup("/api/migration")
-            .RequireAuthorization()
+            .RequireAuthorization("RequireAdministratorRole")
             .WithTags("Character Migration");
 
         migrationGroup.MapPost("/skills", MigrateCharacterSkillsAsync)
@@ -59,12 +59,12 @@ public static class CharacterMigrationApi
 
             if (result.Success)
             {
-                logger.LogInformation($"Skill migration completed successfully: {result.SkillsLinked} skills linked, {result.CharactersUpdated} characters updated");
+                logger.LogInformation("Skill migration completed successfully: {SkillsLinked} skills linked, {CharactersUpdated} characters updated", result.SkillsLinked, result.CharactersUpdated);
                 return TypedResults.Ok(result);
             }
             else
             {
-                logger.LogError($"Skill migration failed: {result.ErrorMessage}");
+                logger.LogError("Skill migration failed: {ErrorMessage}", result.ErrorMessage);
                 return TypedResults.StatusCode(500);
             }
         }

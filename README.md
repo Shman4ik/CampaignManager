@@ -10,7 +10,6 @@
 - **Google OAuth** — аутентификация
 - **.NET Aspire** — оркестрация сервисов
 - **Minio** — S3-совместимое хранилище файлов
-- **QuestPDF** — генерация PDF-листов персонажей
 - **OpenTelemetry** — observability
 
 ## Возможности
@@ -83,6 +82,10 @@ docker run -p 8080:8080 ghcr.io/shman4ik/campaign-manager:latest
 ## API
 
 Swagger UI доступен по адресу `/swagger`.
+
+## Правовая информация
+
+**Call of Cthulhu** является торговой маркой Chaosium Inc. Данный проект — неофициальный фанатский инструмент, не связанный с Chaosium Inc. и не одобренный ими. Подробнее см. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Лицензия
 
