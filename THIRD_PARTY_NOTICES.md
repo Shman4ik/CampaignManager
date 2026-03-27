@@ -20,7 +20,6 @@ This project uses the following open-source libraries:
 |---------|---------|
 | [Markdig](https://github.com/xoofx/markdig) | BSD-2-Clause |
 | [HtmlSanitizer](https://github.com/mganss/HtmlSanitizer) | MIT |
-| [QuestPDF](https://www.questpdf.com) | MIT (Community) |
 | [Minio .NET SDK](https://github.com/minio/minio-dotnet) | Apache-2.0 |
 | [Npgsql](https://www.npgsql.org) | PostgreSQL License |
 | [Flowbite](https://flowbite.com) | MIT |
@@ -30,7 +29,3 @@ This project uses the following open-source libraries:
 | OpenTelemetry .NET packages | Apache-2.0 |
 | Swashbuckle.AspNetCore | MIT |
 
-## QuestPDF License Notice
-
-This project uses QuestPDF under the **Community License**. If you deploy this application
-for commercial purposes, you must obtain a [QuestPDF Professional License](https://www.questpdf.com/pricing.html).
