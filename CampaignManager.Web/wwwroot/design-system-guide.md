@@ -1,349 +1,151 @@
 ﻿# CampaignManager Design System
 
-## Руководство по цветовой палитре
+Tailwind CSS + custom CSS utilities in `wwwroot/css/design-system.css`. Colors defined in `tailwind.config.js`.
 
-Данный документ описывает стандартизированную цветовую палитру для приложения CampaignManager,
-обеспечивая руководство для создания консистентного дизайна для всех компонентов.
+## Colors
 
-### Основные цвета (Primary)
+7 palettes × 11 shades (50–950). Use Tailwind classes: `bg-{palette}-{shade}`, `text-{palette}-{shade}`, `border-{palette}-{shade}`.
+CSS variables `--color-{palette}-{shade}` available for primary, secondary, accent.
 
-Основной цвет — нейтральный графитово-серый (#64748B / slate), создающий чистый и строгий визуальный стиль.
-Используется для заголовков, навбара, кнопок и основных интерактивных элементов.
+| Palette | 500 | Usage |
+|---------|-----|-------|
+| primary | #64748B | Nav, headings, primary buttons |
+| secondary | #78716C | Backgrounds, secondary accents |
+| accent | #4B7FAF | Highlights, badges |
+| success | #2C9D49 | Positive feedback |
+| warning | #D97706 | Caution |
+| error | #C71D20 | Errors, destructive actions |
+| info | #4B7FAF | Info messages (= accent) |
 
-### Вторичные цвета (Secondary)
+## CSS Variables
 
-Вторичные цвета (#78716C / stone) — тёплый серо-коричневый оттенок, добавляющий лёгкий
-характерный акцент. Используется для фоновых элементов и второстепенных компонентов.
-
-### Акцентные цвета (Accent)
-
-Акцентные цвета (#4B7FAF / steel blue) — приглушённый стальной синий для сдержанных выделений,
-бейджей и информационных элементов. Также используется как цвет `info`.
-
-### Статусные цвета
-
-- **Success**: #2C9D49 - Зелёный цвет для положительных результатов, завершений и одобрений
-- **Warning**: #D97706 - Янтарный цвет для предупреждений, предостережений или потенциальных проблем
-- **Error**: #C71D20 - Красный цвет для ошибок или критических проблем
-- **Info**: #4B7FAF - Стальной синий (= accent) для информационных сообщений и нейтральных состояний
-
-## Система отступов
-
-Система отступов CampaignManager представляет собой стандартизированный подход к управлению пространством между
-элементами интерфейса с использованием классов Tailwind CSS.
-
-### Стандартные отступы
-
-Во всем приложении мы используем следующие стандартизированные отступы:
-
-- **Маленькие элементы**: `px-2 py-0.5` - Для бейджей и мелких элементов управления
-- **Стандартные поля ввода**: `px-2 py-1` - Для текстовых полей и других элементов формы
-- **Кнопки**: `px-4 py-2` - Для стандартных кнопок
-- **Маленькие кнопки**: `px-2 py-1` - Для маленьких кнопок
-- **Контейнеры и блоки**: `p-4` - Для карточек, предупреждений и блоков контента
-
-### Использование классов отступов
-
-Всегда следуйте конвенции Tailwind, указывая горизонтальные отступы перед вертикальными:
-
-```html
-<!-- Правильно -->
-<button class="px-4 py-2">Кнопка</button>
-
-<!-- Неправильно -->
-<button class="py-2 px-4">Кнопка</button>
+```
+--cm-background: #F8F9FA          --cm-background-alpha: rgba(248,249,250,0.95)
+--cm-text-foreground: #0f172a     --cm-overlay: rgba(0,0,0,0.5)
+--cm-border-color: #e2e8f0        --cm-border-color-hover: #cbd5e1
+--cm-radius-md: 0.375rem          --cm-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05)
+--cm-shadow-error: 0 4px 12px rgba(199,29,32,0.25)
+--cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-800))
+--cm-gradient-error: linear-gradient(135deg, #A8191B, #C71D20)
+--font-family-primary: 'Inter', system-ui, sans-serif
+--font-family-serif: 'Bookman Old Style', 'Book Antiqua', Georgia, serif
 ```
 
-### Скругленные углы
+## Typography — Heading Classes
 
-Для обеспечения последовательности интерфейса используйте следующие классы скругленных углов:
+h1–h3: serif font (RPG book style). h4–h6: sans-serif. All have responsive sizes at <640px.
 
-- **Стандартный радиус**: `rounded-md` - Для большинства элементов
-- **Маленький радиус**: `rounded` - Для мелких элементов
-- **Круглые элементы**: `rounded-full` - Для аватаров и иконок
+| Class | Size | Mobile | Weight | Line-height | Margin-bottom |
+|-------|------|--------|--------|-------------|---------------|
+| cm-h1 | 3rem | 2.25rem | 700 | 1.2 | 0.5rem |
+| cm-h2 | 2.25rem | 1.875rem | 700 | 1.2 | 0.375rem |
+| cm-h3 | 1.875rem | 1.5rem | 600 | 1.3 | 0.25rem |
+| cm-h4 | 1.5rem | 1.25rem | 600 | 1.3 | 0.25rem |
+| cm-h5 | 1.25rem | 1.125rem | 500 | 1.4 | 0.125rem |
+| cm-h6 | 1.125rem | 1rem | 500 | 1.4 | 0.125rem |
 
-### Примеры применения системы отступов
+Usage: `<h1 class="cm-h1">Title</h1>`
 
-#### Бейджи и метки
+## CSS Button Classes
 
-```html
-<!-- Стандартный бейдж -->
-<StatusBadge Status="success">Стандартный бейдж</StatusBadge>
+Base `cm-btn` (44px, font-weight 600, rounded-lg) + variant. All have hover/active/disabled states.
 
-<!-- Маленький бейдж -->
-<StatusBadge Status="success" Small="true">Маленький бейдж</StatusBadge>
+| Class | Style |
+|-------|-------|
+| cm-btn-sm | 36px height |
+| cm-btn-lg | 52px height |
+| cm-btn-primary | primary-700 bg, white text |
+| cm-btn-secondary | gray bg, dark text, border |
+| cm-btn-success | green bg, white text |
+| cm-btn-error | red bg, white text |
+| cm-btn-warning | amber bg, white text |
+| cm-btn-info | accent-600 bg, white text |
+| cm-btn-outline-primary | transparent, primary border |
+| cm-btn-outline-error | transparent, error border |
+
+Usage: `<button class="cm-btn cm-btn-primary">Save</button>`
+
+Prefer the `<Button>` Blazor component over raw `cm-btn` classes in new code.
+
+## CSS Form Input
+
+`cm-input` — block, full-width, accent-500 focus ring, disabled gray bg.
+
+Usage: `<input class="cm-input" />`
+
+## Shared Blazor Components
+
+All in `Components/Shared/`, globally available.
+
+### Badge
+Color label. `<Badge Variant="success" Size="sm">Active</Badge>`
+- `Variant` string = "primary" — primary|secondary|accent|success|warning|error|info
+- `Size` string = "md" — sm|md|lg
+- `Rounded` string = "lg" — md|lg|full
+- `WithBorder` bool = true
+
+### Button
+Interactive button. `<Button Variant="error" Icon="fa-trash" OnClick="Delete">Remove</Button>`
+- `Variant` string = "primary" — primary|secondary|success|error|warning|info|outline-primary|outline-error
+- `Size` string = "md" — sm|md|lg
+- `Icon` string? — FontAwesome class, e.g. "fa-plus"
+- `IsDisabled` bool = false
+- `FullWidth` bool = false
+- `ButtonType` string = "button" — button|submit|reset
+- `AdditionalClasses` string?
+- `OnClick` EventCallback
+
+### Alert
+Status block. `<Alert Type="warning" Title="Warning">Message</Alert>`
+- `Type` string = "info" — success|warning|error|info|primary|secondary|accent
+- `Title` string?
+
+### SaveButton
+Save with spinner. `<SaveButton IsLoading="@_saving" OnClick="Save" />`
+- `IsLoading` bool = false
+- `OnClick` EventCallback
+
+### Modal
+Dialog container. Scrollable body, header/footer slots.
 ```
-
-#### Кнопки
-
-```html
-<!-- Стандартная кнопка -->
-<ColorButton Color="primary">Стандартная кнопка</ColorButton>
-
-<!-- Маленькая кнопка -->
-<ColorButton Color="primary" Small="true">Маленькая кнопка</ColorButton>
+<Modal IsVisible="@_show" OnClose="Close" Title="Edit" MaxWidth="2xl">
+    Body content
+    <FooterContent><Button Variant="primary" OnClick="Save">Save</Button></FooterContent>
+</Modal>
 ```
+- `IsVisible` bool
+- `OnClose` EventCallback
+- `Title` string = ""
+- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl
+- `MaxHeight` string? = "70vh"
+- `HeaderColorScheme` string = "primary"
+- `CloseOnBackdropClick` bool = true
+- `FooterContent` RenderFragment?
 
-#### Поля ввода
-
-```html
-<!-- Поле ввода с стандартными отступами -->
-<input class="px-2 py-1 text-sm border rounded" />
+### ConfirmationModal
+Dangerous action confirmation. Optional type-to-confirm.
 ```
-
-## Система типографики
-
-Система типографики CampaignManager обеспечивает последовательность и иерархию текста во всем приложении, повышая
-читаемость и удобство использования. **Оптимизирована для эффективного использования экранного пространства.**
-
-### Семейства шрифтов
-
-- **Основной шрифт**: Inter и системные шрифты без засечек используются для большинства UI-элементов
-- **Шрифт с засечками**: Bookman Old Style и другие шрифты с засечками для заголовков и элементов, требующих особого
-  внимания
-- **Моноширинный шрифт**: JetBrains Mono для отображения кода и технической информации
-
-### Размеры шрифтов
-
-- **xs**: 0.75rem (12px) - Для мелких надписей, сносок, меток
-- **sm**: 0.875rem (14px) - Для вспомогательного текста
-- **base**: 1rem (16px) - Базовый размер для основного текста
-- **lg**: 1.125rem (18px) - Для важного текста
-- **xl**: 1.25rem (20px) - Для подзаголовков
-- **2xl**: 1.5rem (24px) - Для небольших заголовков
-- **3xl**: 1.875rem (30px) - Для средних заголовков
-- **4xl**: 2.25rem (36px) - Для крупных заголовков
-- **5xl**: 3rem (48px) - Для очень крупных заголовков
-
-### Межстрочные интервалы
-
-- **none**: 1 - Для специальных случаев без дополнительного интервала
-- **tight**: 1.2-1.3 - Для заголовков (оптимизировано для экономии пространства)
-- **snug**: 1.375 - Для подзаголовков
-- **normal**: 1.4-1.5 - Для большинства текстовых элементов
-- **relaxed**: 1.625 - Для основного текста параграфов
-- **loose**: 2 - Для улучшения читаемости длинных текстов
-
-### Классы заголовков
-
-```html
-<h1 class="cm-h1">Заголовок первого уровня</h1>
-<h2 class="cm-h2">Заголовок второго уровня</h2>
-<h3 class="cm-h3">Заголовок третьего уровня</h3>
-<h4 class="cm-h4">Заголовок четвертого уровня</h4>
-<h5 class="cm-h5">Заголовок пятого уровня</h5>
-<h6 class="cm-h6">Заголовок шестого уровня</h6>
+<ConfirmationModal IsVisible="@_show" OnConfirm="Delete" OnCancel="Cancel"
+                   IconType="error" RequireConfirmationText="true" ConfirmationTextRequired="DELETE" />
 ```
+- `IsVisible` bool, `OnConfirm` EventCallback, `OnCancel` EventCallback
+- `Title` string = "Подтверждение", `Message` string = "Вы уверены?"
+- `WarningText` string = "Это действие нельзя отменить."
+- `ConfirmText`/`CancelText`/`LoadingText` strings
+- `IconType` string = "warning" — warning|error|info|question|success
+- `RequireConfirmationText` bool = false, `ConfirmationTextRequired` string = "УДАЛИТЬ"
+- `IsLoading` bool = false, `CloseOnBackdropClick` bool = true
+- `DetailsContent` RenderFragment?
 
-Заголовки h1-h3 используют шрифты с засечками для создания книжной атмосферы, подходящей тематике настольных RPG.
+### Other Components
 
-### Оптимизация пространства в типографике
-
-Система типографики была оптимизирована для эффективного использования экранного пространства:
-
-#### Отступы заголовков (margin-bottom):
-- **cm-h1**: 0.5rem (вместо 1rem) - экономия 50%
-- **cm-h2**: 0.375rem (вместо 0.875rem) - экономия 57%
-- **cm-h3**: 0.25rem (вместо 0.75rem) - экономия 67%
-- **cm-h4**: 0.25rem (вместо 0.75rem) - экономия 67%
-- **cm-h5**: 0.125rem (вместо 0.5rem) - экономия 75%
-- **cm-h6**: 0.125rem (вместо 0.5rem) - экономия 75%
-
-#### Межстрочные интервалы (line-height):
-- **h1, h2**: 1.2 (более компактно, чем стандартные 1.25)
-- **h3, h4**: 1.3 (более компактно, чем стандартные 1.375)
-- **h5, h6**: 1.4 (более компактно, чем стандартные 1.5)
-
-### Адаптивная типографика
-
-Система типографики автоматически адаптируется под мобильные устройства, уменьшая размеры шрифтов и отступы для экранов шириной менее 640px:
-
-```css
-/* Мобильные устройства (<640px) */
-.cm-h1 { font-size: 2.25rem; margin-bottom: 0.375rem; }
-.cm-h2 { font-size: 1.875rem; margin-bottom: 0.25rem; }
-.cm-h3 { font-size: 1.5rem; margin-bottom: 0.125rem; }
-.cm-h4 { font-size: 1.25rem; margin-bottom: 0.125rem; }
-.cm-h5 { font-size: 1.125rem; margin-bottom: 0; }
-.cm-h6 { font-size: 1rem; margin-bottom: 0; }
-```
-
-## Как использовать дизайн-систему
-
-### Классы Tailwind
-
-Дизайн-система реализована с использованием Tailwind CSS с настраиваемой цветовой палитрой. Вы можете использовать эти
-классы цветов непосредственно в ваших компонентах Razor:
-
-```html
-<!-- Цвета фона -->
-<div class="bg-primary-500">Основной фон</div>
-<div class="bg-secondary-500">Вторичный фон</div>
-<div class="bg-accent-500">Акцентный фон</div>
-
-<!-- Цвета текста -->
-<p class="text-primary-500">Основной текст</p>
-<p class="text-secondary-500">Вторичный текст</p>
-<p class="text-accent-500">Акцентный текст</p>
-
-<!-- Цвета границ -->
-<div class="border border-primary-500">Основная граница</div>
-<div class="border border-secondary-500">Вторичная граница</div>
-<div class="border border-accent-500">Акцентная граница</div>
-```
-
-Каждый цвет имеет 11 оттенков, от 50 (самый светлый) до 950 (самый темный), с 500 в качестве базового цвета.
-
-### CSS-переменные
-
-Для более сложного стилизования или когда классы Tailwind недостаточны, вы можете использовать CSS-переменные:
-
-```css
-.my-custom-element {
-  background-color: var(--color-primary-500);
-  color: var(--color-secondary-700);
-  border: 1px solid var(--color-accent-300);
-}
-```
-
-#### Доступные UI-переменные:
-
-```css
-/* Фон */
---cm-background: #F8F9FA;
---cm-background-alpha: rgba(248, 249, 250, 0.95);
-
-/* Текст */
---cm-text-foreground: #0f172a;
-
-/* Границы */
---cm-border-color: #e2e8f0;
---cm-border-color-hover: #cbd5e1;
-
-/* Оверлеи */
---cm-overlay: rgba(0, 0, 0, 0.5);
-
-/* Радиусы */
---cm-radius-md: 0.375rem;
-
-/* Тени */
---cm-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
---cm-shadow-error: 0 4px 12px rgba(199, 29, 32, 0.25);
-
-/* Градиенты — минимальные, только для CTA-кнопок */
---cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-800) 100%);
---cm-gradient-error: linear-gradient(135deg, #A8191B 0%, #C71D20 100%);
-```
-
-### Компоненты-утилиты
-
-Мы создали несколько компонентов-утилит, чтобы упростить использование дизайн-системы:
-
-#### StatusBadge
-
-```html
-<StatusBadge Status="success">Успех</StatusBadge>
-<StatusBadge Status="warning">Предупреждение</StatusBadge>
-<StatusBadge Status="error">Ошибка</StatusBadge>
-<StatusBadge Status="info">Информация</StatusBadge>
-
-<!-- С обводкой -->
-<StatusBadge Status="success" Outline="true">Успех с обводкой</StatusBadge>
-
-<!-- Маленький размер -->
-<StatusBadge Status="success" Small="true">Маленький успех</StatusBadge>
-```
-
-#### ColorButton
-
-```html
-<ColorButton Color="primary">Основная кнопка</ColorButton>
-<ColorButton Color="secondary">Вторичная кнопка</ColorButton>
-<ColorButton Color="accent">Акцентная кнопка</ColorButton>
-<ColorButton Color="success">Кнопка успеха</ColorButton>
-
-<!-- С обводкой -->
-<ColorButton Color="primary" Outline="true">Кнопка с обводкой</ColorButton>
-
-<!-- Маленький размер -->
-<ColorButton Color="primary" Small="true">Маленькая кнопка</ColorButton>
-
-<!-- Отключенное состояние -->
-<ColorButton Color="primary" Disabled="true">Отключенная кнопка</ColorButton>
-```
-
-## Удаление жестко закодированных цветов
-
-При рефакторинге существующих компонентов замените любые жестко закодированные значения цветов на соответствующие
-альтернативы из дизайн-системы:
-
-### До
-
-```html
-<button class="bg-blue-500 hover:bg-blue-600 text-white rounded-md p-2">
-  Нажми меня
-</button>
-```
-
-### После
-
-```html
-<button class="bg-primary-500 hover:bg-primary-600 text-white rounded-md p-2">
-  Нажми меня
-</button>
-```
-
-Или еще лучше, используйте компонент-утилиту:
-
-```html
-<ColorButton Color="primary">Нажми меня</ColorButton>
-```
-
-## Миграция на стандартизированную типографику
-
-При обновлении компонентов для использования новой системы типографики:
-
-### До
-
-```html
-<h1 class="text-3xl font-bold mb-4">Заголовок страницы</h1>
-<p class="text-base leading-relaxed">Текст страницы...</p>
-```
-
-### После
-
-```html
-<h1 class="cm-h1">Заголовок страницы</h1>
-<p class="cm-text-body">Текст страницы...</p>
-```
-
-## Оптимизация дизайн-системы
-
-Дизайн-система была оптимизирована для минимизации размера и повышения производительности:
-
-### Что было удалено
-
-- **Неиспользуемые утилитарные классы** (`cm-text-xs`, `cm-text-sm`, `cm-text-base`, и др.)
-- **Дублирующие переменные типографики** (font-size, line-height, font-weight) - используйте Tailwind классы
-- **Семантические цветовые переменные** (`--bg-primary`, `--text-primary`) - используйте напрямую цветовые переменные или Tailwind
-- **Статусные цвета в CSS** - определены только в Tailwind config в `App.razor`
-
-### Что осталось
-
-- **Классы заголовков** (`cm-h1` - `cm-h6`) - активно используются в компонентах
-- **Цветовые палитры** (primary, secondary, accent) - используются в Tailwind config
-- **UI-переменные** - используются в TopBar и других компонентах
-- **Шрифты** (primary, serif) - используются в заголовках
-- **Responsive typography** - адаптирует заголовки под мобильные устройства
-
-### Результат оптимизации
-
-- **Размер файла уменьшен на ~75%** (с ~550 до ~150 строк)
-- **Экономия вертикального пространства ~60-75%** благодаря уменьшенным отступам
-- **Более компактная типографика** без потери читаемости
-- **Убрана избыточность** с Tailwind CSS
-
-## Страница дизайн-системы
-
-Вы можете просмотреть все доступные цвета и компоненты на странице дизайн-системы по адресу `/design-system`.
-Используйте эту страницу в качестве справочника при реализации новых элементов UI.
+| Component | Parameters | Purpose |
+|-----------|-----------|---------|
+| NotificationAlert | Type, Message, OnClose | Dismissable notification |
+| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder |
+| LoadingIndicator | Message | Spinner |
+| Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
+| FilterPanel | Title, IsExpanded, IsExpandedChanged, ActionButtons(RF) | Collapsible filters |
+| SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
+| CustomInput | Label, Value, Type(text/number/checkbox), FullWidth, Disabled, OnValueChanged | Labeled form input |
+| InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |
