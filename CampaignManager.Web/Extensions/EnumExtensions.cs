@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 
@@ -62,5 +63,19 @@ public static class EnumExtensions
     public static IEnumerable<T> GetEnumTypes<T>() where T : Enum
     {
         return Enum.GetValues(typeof(T)).Cast<T>();
+    }
+
+    public static string ToRussianString(this OccupationSkillPointFormula formula)
+    {
+        return formula switch
+        {
+            OccupationSkillPointFormula.Edu4 => "ОБР × 4",
+            OccupationSkillPointFormula.Edu2Dex2 => "ОБР × 2 + ЛВК × 2",
+            OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + ВНШ × 2",
+            OccupationSkillPointFormula.Edu2Str2 => "ОБР × 2 + СИЛ × 2",
+            OccupationSkillPointFormula.Edu2Pow2 => "ОБР × 2 + МОЩ × 2",
+            OccupationSkillPointFormula.Edu2DexOrStr2 => "ОБР × 2 + max(ЛВК, СИЛ) × 2",
+            _ => formula.ToString()
+        };
     }
 }

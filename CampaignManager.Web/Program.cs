@@ -192,6 +192,7 @@ builder.Services.AddOutputCache();
 // Register services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
+builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
@@ -218,6 +219,13 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<DbInitializer>();
 
 var app = builder.Build();
+
+// Seed database on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbInitializer = scope.ServiceProvider.GetRequiredService<DbInitializer>();
+    await dbInitializer.InitializeDatabaseAsync();
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -257,4 +265,4 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.Run();
+await app.RunAsync();

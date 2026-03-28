@@ -1,0 +1,102 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Extensions
+
+@inject OccupationService OccupationService
+@rendermode InteractiveServer
+
+<Modal IsVisible="@IsVisible" OnClose="Cancel" Title="Генерация случайного персонажа" MaxWidth="lg" HeaderColorScheme="accent">
+    <ChildContent>
+    <div class="space-y-5">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+                Профессия <span class="text-red-500">*</span>
+            </label>
+            <select class="cm-input" @bind="_selectedOccupationId">
+                <option value="">Случайная</option>
+                @foreach (var occ in _occupations)
+                {
+                    <option value="@occ.Id">@occ.Name (@occ.SkillPointFormula.ToRussianString())</option>
+                }
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Если не выбрана — будет назначена случайная профессия</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Пол</label>
+                <select class="cm-input" @bind="_selectedGender">
+                    <option value="">Случайный</option>
+                    <option value="Мужской">Мужской</option>
+                    <option value="Женский">Женский</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Возраст</label>
+                <input type="number" class="cm-input" min="15" max="89" placeholder="Случайный (15–89)"
+                       @bind="_selectedAge" />
+            </div>
+        </div>
+    </div>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="Cancel">Отмена</button>
+        <button type="button" class="cm-btn cm-btn-info" @onclick="Generate">
+            <i class="fa-solid fa-dice mr-1"></i> Сгенерировать
+        </button>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<GenerationParameters> OnGenerate { get; set; }
+
+    private List<Occupation> _occupations = [];
+    private string _selectedOccupationId = "";
+    private string _selectedGender = "";
+    private int? _selectedAge;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _occupations = await OccupationService.GetAllOccupationsAsync();
+    }
+
+    private async Task Cancel()
+    {
+        ResetForm();
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task Generate()
+    {
+        Occupation? selectedOccupation = null;
+
+        if (!string.IsNullOrEmpty(_selectedOccupationId) && Guid.TryParse(_selectedOccupationId, out var id))
+            selectedOccupation = _occupations.FirstOrDefault(o => o.Id == id);
+
+        var parameters = new GenerationParameters
+        {
+            Occupation = selectedOccupation,
+            Gender = string.IsNullOrEmpty(_selectedGender) ? null : _selectedGender,
+            Age = _selectedAge
+        };
+
+        await OnGenerate.InvokeAsync(parameters);
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        _selectedOccupationId = "";
+        _selectedGender = "";
+        _selectedAge = null;
+    }
+
+    public sealed class GenerationParameters
+    {
+        public Occupation? Occupation { get; init; }
+        public string? Gender { get; init; }
+        public int? Age { get; init; }
+    }
+}

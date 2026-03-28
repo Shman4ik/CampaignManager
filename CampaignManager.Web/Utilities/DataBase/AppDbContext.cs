@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
@@ -23,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Scenario> Scenarios { get; set; } = null!;
     public DbSet<Creature> Creatures { get; set; } = null!;
     public DbSet<Item> Items { get; set; } = null!;
+    public DbSet<Occupation> Occupations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -191,6 +193,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(i => i.Name).IsRequired();
             entity.HasIndex(i => i.Name).IsUnique();
             entity.Property(i => i.Era).HasConversion<string>();
+        });
+
+        // Occupation Configuration
+        modelBuilder.Entity<Occupation>(entity =>
+        {
+            entity.ToTable("Occupations");
+            entity.Property(o => o.Name).IsRequired();
+            entity.HasIndex(o => o.Name).IsUnique();
+            entity.Property(o => o.SkillPointFormula).HasConversion<string>();
+            entity.Property(o => o.OccupationSkills).HasColumnType("jsonb");
         });
     }
 }

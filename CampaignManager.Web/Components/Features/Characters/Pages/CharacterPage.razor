@@ -12,6 +12,7 @@
 @inject CharacterService CharacterService
 @inject NavigationManager NavigationManager
 @inject CharacterGenerationService CharacterGenerationService
+@inject OccupationService OccupationService
 @inject IJSRuntime JsRuntime
 @rendermode InteractiveServer
 
@@ -107,7 +108,7 @@
                             <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="SaveCharacterAsync"><i class="fa-regular fa-floppy-disk"></i></button>
                             @if (CharacterId == null || CharacterId == Guid.Empty)
                             {
-                                <button type="button" class="cm-btn cm-btn-info" @onclick="GenerateRandom">
+                                <button type="button" class="cm-btn cm-btn-info" @onclick="OpenGenerateModal">
                                     <span class="hidden sm:inline">Случайный</span>
                                     <i class="fa-solid fa-dice sm:hidden"></i>
                                 </button>
@@ -309,6 +310,75 @@
                         </div>
                     </div>
                 </EditForm>
+
+                <GenerateCharacterModal IsVisible="@_showGenerateModal"
+                                        OnClose="CloseGenerateModal"
+                                        OnGenerate="HandleGenerate" />
+
+                @* Лог генерации персонажа *@
+                @if (_generationLog is not null)
+                {
+                    <div id="generation-log" class="mb-8 mt-4">
+                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
+                            <div class="section-header px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 flex justify-between items-center cursor-pointer select-none"
+                                 @onclick="ToggleGenerationLog">
+                                <div class="flex items-center space-x-3">
+                                    <i class="fa-solid fa-scroll text-white/70"></i>
+                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Лог генерации</h3>
+                                    <span class="text-white/60 text-xs">(@_generationLog.Entries.Count записей)</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" @onclick="ClearGenerationLog" @onclick:stopPropagation="true"
+                                            class="text-white/70 hover:text-white text-xs px-2 py-1 rounded border border-white/30 hover:border-white/60 transition-colors">
+                                        <i class="fa-solid fa-xmark mr-1"></i>Закрыть
+                                    </button>
+                                    <span class="text-white/70 text-sm transition-transform duration-200">@(_showGenerationLog ? "▲" : "▼")</span>
+                                </div>
+                            </div>
+                            @if (_showGenerationLog)
+                            {
+                                <div class="p-4 max-h-[600px] overflow-y-auto">
+                                    @{ var categories = _generationLog.Entries.Select(e => e.Category).Distinct().ToList(); }
+                                    @foreach (var category in categories)
+                                    {
+                                        <div class="mb-4">
+                                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2">
+                                                @category
+                                            </h4>
+                                            <div class="space-y-1">
+                                                @foreach (var entry in _generationLog.Entries.Where(e => e.Category == category))
+                                                {
+                                                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm py-0.5 @(entry.Description.StartsWith("---") ? "mt-2" : "")">
+                                                        @if (entry.Description.StartsWith("---"))
+                                                        {
+                                                            <span class="font-semibold text-gray-600 text-xs uppercase">@entry.Description.Trim('-', ' ')</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-gray-700 font-medium min-w-[160px]">@entry.Description</span>
+                                                            @if (entry.DiceRoll is not null)
+                                                            {
+                                                                <code class="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-mono">@entry.DiceRoll</code>
+                                                            }
+                                                            @if (entry.Result.HasValue)
+                                                            {
+                                                                <span class="font-bold text-emerald-700">= @entry.Result</span>
+                                                            }
+                                                            @if (entry.Details is not null)
+                                                            {
+                                                                <span class="text-gray-400 text-xs">@entry.Details</span>
+                                                            }
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             }
             else
             {
@@ -342,6 +412,9 @@
     private bool _isBusy;
     private readonly NotificationModel _notification = new();
     private CampaignPlayer? CampaignPlayer { get; set; }
+    private CharacterGenerationLog? _generationLog;
+    private bool _showGenerationLog = true;
+    private bool _showGenerateModal;
 
     // Section visibility state
     private readonly Dictionary<string, bool> _sectionVisibility = new()
@@ -361,6 +434,10 @@
             _sectionVisibility[section] = !_sectionVisibility[section];
         }
     }
+
+    private void ToggleGenerationLog() => _showGenerationLog = !_showGenerationLog;
+
+    private void ClearGenerationLog() => _generationLog = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -502,14 +579,25 @@
         _notification.Message = null;
     }
 
-    private void GenerateRandom()
+    private void OpenGenerateModal() => _showGenerateModal = true;
+
+    private void CloseGenerateModal() => _showGenerateModal = false;
+
+    private async Task HandleGenerate(GenerateCharacterModal.GenerationParameters parameters)
     {
-        Character = CharacterGenerationService.GenerateRandomCharacter();
+        _showGenerateModal = false;
 
-        // Сохраняем имя игрока даже в случайно сгенерированном персонаже
+        var occupations = await OccupationService.GetAllOccupationsAsync();
+        var result = CharacterGenerationService.GenerateRandomCharacter(
+            occupations,
+            parameters.Occupation,
+            parameters.Gender,
+            parameters.Age);
+
+        Character = result.Character;
+        _generationLog = result.Log;
+
         Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "No name";
-
-        // Set the character type based on whether we're creating an NPC
         Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
     }
 

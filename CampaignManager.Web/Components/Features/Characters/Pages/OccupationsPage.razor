@@ -1,0 +1,384 @@
+@page "/occupations"
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Extensions
+@attribute [Authorize]
+
+@inject OccupationService OccupationService
+@inject ILogger<OccupationsPage> Logger
+@rendermode InteractiveServer
+<PageTitle>Профессии</PageTitle>
+
+<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <h1 class="cm-h2 mb-4">Профессии</h1>
+    <FilterPanel Title="Фильтры" @bind-IsExpanded="_isFilterVisible">
+        <ActionButtons>
+            @if (_isFilterVisible)
+            {
+                <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="ClearFilters">
+                    <i class="fas fa-undo-alt"></i> <span>Сбросить</span>
+                </button>
+            }
+            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="OpenAddModal">
+                <i class="fas fa-plus"></i> <span>Добавить</span>
+            </button>
+        </ActionButtons>
+        <ChildContent>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <div class="flex-grow">
+                    <label for="searchQuery" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
+                    <div class="relative">
+                        <input type="text" id="searchQuery"
+                               class="w-full border border-primary-300 rounded-lg pl-8 pr-3 py-1 text-sm text-primary-700 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors shadow-sm"
+                               placeholder="Поиск по названию..." @bind="_searchTerm" @bind:event="oninput" />
+                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400 text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-full sm:w-56">
+                    <label for="formulaFilter" class="block text-xs font-medium text-gray-700 mb-1">Формула очков</label>
+                    <select id="formulaFilter"
+                            class="w-full border border-primary-300 rounded-lg px-2 py-1 text-sm text-primary-700 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors shadow-sm"
+                            @bind="_selectedFormula">
+                        <option value="">Все формулы</option>
+                        @foreach (var formula in EnumExtensions.GetEnumTypes<OccupationSkillPointFormula>())
+                        {
+                            <option value="@formula">@formula.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </ChildContent>
+    </FilterPanel>
+
+    @if (_loading)
+    {
+        <LoadingIndicator />
+    }
+    else if (FilteredOccupations.Count == 0)
+    {
+        <EmptyState IconClass="fa-briefcase"
+                    Title="Профессии не найдены"
+                    Message="@(!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedFormula) ? "Нет профессий, соответствующих критериям поиска." : "В базе данных нет профессий.")">
+            <ActionButton>
+                @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedFormula))
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="ClearFilters">
+                        <span>Очистить фильтры</span>
+                    </button>
+                }
+            </ActionButton>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            @foreach (var occ in FilteredOccupations)
+            {
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div class="p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-lg font-semibold text-gray-900">@occ.Name</h3>
+                            <div class="flex gap-1">
+                                <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="() => OpenEditModal(occ)">
+                                    <i class="fas fa-pen text-xs"></i>
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm" @onclick="() => ConfirmDelete(occ)">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1.5 text-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 w-24 flex-shrink-0">Формула:</span>
+                                <span class="font-medium text-accent-700">@occ.SkillPointFormula.ToRussianString()</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 w-24 flex-shrink-0">Средства:</span>
+                                <span class="font-medium">@occ.CreditRatingMin–@occ.CreditRatingMax%</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 w-24 flex-shrink-0">Своб. слоты:</span>
+                                <span class="font-medium">@occ.FreeSkillSlots</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-500 text-xs">Навыки:</span>
+                                <div class="flex flex-wrap gap-1 mt-1">
+                                    @foreach (var skill in occ.OccupationSkills)
+                                    {
+                                        <span class="inline-block px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700">@skill</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add/Edit Modal -->
+<Modal IsVisible="@_showModal" OnClose="CloseModal" Title="@(_editingOccupation is null ? "Новая профессия" : "Редактирование профессии")" MaxWidth="2xl">
+    <ChildContent>
+    <EditForm Model="_formModel" OnValidSubmit="SaveOccupation">
+        <DataAnnotationsValidator />
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                <InputText @bind-Value="_formModel.Name" class="cm-input" placeholder="Название профессии" />
+                <ValidationMessage For="() => _formModel.Name" class="text-red-500 text-xs mt-1" />
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Формула очков</label>
+                    <InputSelect @bind-Value="_formModel.SkillPointFormula"
+                                 class="cm-input">
+                        @foreach (var f in EnumExtensions.GetEnumTypes<OccupationSkillPointFormula>())
+                        {
+                            <option value="@f">@f.ToRussianString()</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Средства мин.</label>
+                    <InputNumber @bind-Value="_formModel.CreditRatingMin" class="cm-input" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Средства макс.</label>
+                    <InputNumber @bind-Value="_formModel.CreditRatingMax" class="cm-input" />
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Свободные слоты навыков</label>
+                <InputNumber @bind-Value="_formModel.FreeSkillSlots" class="cm-input w-24" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Навыки профессии (через запятую)</label>
+                <InputTextArea @bind-Value="_formModel.SkillsText" class="cm-input" rows="3"
+                               placeholder="Оценка, История, Работа в библиотеке, Средства" />
+                <p class="text-xs text-gray-400 mt-1">Каждый навык через запятую. Пробелы по краям убираются автоматически.</p>
+            </div>
+        </div>
+    </EditForm>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseModal">Отмена</button>
+        <button type="button" class="cm-btn cm-btn-success" @onclick="SaveOccupation">
+            @(_editingOccupation is null ? "Создать" : "Сохранить")
+        </button>
+    </FooterContent>
+</Modal>
+
+<ConfirmationModal IsVisible="@_showDeleteModal"
+                   OnConfirm="DeleteOccupation"
+                   OnCancel="() => _showDeleteModal = false"
+                   Title="Подтверждение удаления"
+                   Message="Вы уверены, что хотите удалить эту профессию? Это действие нельзя отменить."
+                   ConfirmText="Удалить"
+                   CancelText="Отмена">
+    <DetailsContent>
+        <p class="text-gray-700 text-base">
+            <span class="font-semibold text-gray-900">Название:</span> @(_occupationToDelete?.Name)
+        </p>
+    </DetailsContent>
+</ConfirmationModal>
+
+@if (!string.IsNullOrEmpty(_notification))
+{
+    <div class="fixed bottom-4 right-4 z-50">
+        <NotificationAlert Type="@_notificationType" Message="@_notification" OnClose="() => _notification = null" />
+    </div>
+}
+
+@code {
+    private List<Occupation> _occupations = [];
+    private bool _loading = true;
+    private string _searchTerm = "";
+    private string _selectedFormula = "";
+    private bool _isFilterVisible = true;
+
+    // Modal state
+    private bool _showModal;
+    private Occupation? _editingOccupation;
+    private OccupationFormModel _formModel = new();
+
+    // Delete state
+    private bool _showDeleteModal;
+    private Occupation? _occupationToDelete;
+
+    // Notification
+    private string? _notification;
+    private string _notificationType = "success";
+
+    private List<Occupation> FilteredOccupations
+    {
+        get
+        {
+            var query = _occupations.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                query = query.Where(o => o.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrEmpty(_selectedFormula) && Enum.TryParse<OccupationSkillPointFormula>(_selectedFormula, out var formula))
+                query = query.Where(o => o.SkillPointFormula == formula);
+
+            return query.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _loading = true;
+            _occupations = await OccupationService.GetAllOccupationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading occupations");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = "";
+        _selectedFormula = "";
+    }
+
+    private void OpenAddModal()
+    {
+        _editingOccupation = null;
+        _formModel = new OccupationFormModel();
+        _showModal = true;
+    }
+
+    private void OpenEditModal(Occupation occ)
+    {
+        _editingOccupation = occ;
+        _formModel = new OccupationFormModel
+        {
+            Name = occ.Name,
+            SkillPointFormula = occ.SkillPointFormula,
+            CreditRatingMin = occ.CreditRatingMin,
+            CreditRatingMax = occ.CreditRatingMax,
+            FreeSkillSlots = occ.FreeSkillSlots,
+            SkillsText = string.Join(", ", occ.OccupationSkills)
+        };
+        _showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        _showModal = false;
+        _editingOccupation = null;
+    }
+
+    private async Task SaveOccupation()
+    {
+        if (string.IsNullOrWhiteSpace(_formModel.Name))
+            return;
+
+        var skills = _formModel.SkillsText?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList() ?? [];
+
+        try
+        {
+            if (_editingOccupation is not null)
+            {
+                _editingOccupation.Name = _formModel.Name.Trim();
+                _editingOccupation.SkillPointFormula = _formModel.SkillPointFormula;
+                _editingOccupation.CreditRatingMin = _formModel.CreditRatingMin;
+                _editingOccupation.CreditRatingMax = _formModel.CreditRatingMax;
+                _editingOccupation.FreeSkillSlots = _formModel.FreeSkillSlots;
+                _editingOccupation.OccupationSkills = skills;
+                _editingOccupation.LastUpdated = DateTimeOffset.UtcNow;
+
+                var success = await OccupationService.UpdateAsync(_editingOccupation);
+                ShowNotification(success ? "Профессия обновлена" : "Ошибка при обновлении", success ? "success" : "error");
+            }
+            else
+            {
+                var occupation = new Occupation
+                {
+                    Name = _formModel.Name.Trim(),
+                    SkillPointFormula = _formModel.SkillPointFormula,
+                    CreditRatingMin = _formModel.CreditRatingMin,
+                    CreditRatingMax = _formModel.CreditRatingMax,
+                    FreeSkillSlots = _formModel.FreeSkillSlots,
+                    OccupationSkills = skills
+                };
+
+                var result = await OccupationService.CreateAsync(occupation);
+                ShowNotification(result is not null ? "Профессия создана" : "Ошибка (возможно, дубль имени)",
+                    result is not null ? "success" : "error");
+            }
+
+            await LoadData();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving occupation");
+            ShowNotification("Ошибка при сохранении", "error");
+        }
+    }
+
+    private void ConfirmDelete(Occupation occ)
+    {
+        _occupationToDelete = occ;
+        _showDeleteModal = true;
+    }
+
+    private async Task DeleteOccupation()
+    {
+        if (_occupationToDelete is null) return;
+
+        try
+        {
+            var success = await OccupationService.DeleteAsync(_occupationToDelete.Id);
+            ShowNotification(success ? "Профессия удалена" : "Ошибка при удалении", success ? "success" : "error");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting occupation {Id}", _occupationToDelete.Id);
+            ShowNotification("Ошибка при удалении", "error");
+        }
+        finally
+        {
+            _showDeleteModal = false;
+            _occupationToDelete = null;
+        }
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        _notification = message;
+        _notificationType = type;
+    }
+
+    private sealed class OccupationFormModel
+    {
+        [Required(ErrorMessage = "Введите название")]
+        [StringLength(100)]
+        public string Name { get; set; } = "";
+
+        public OccupationSkillPointFormula SkillPointFormula { get; set; } = OccupationSkillPointFormula.Edu4;
+        public int CreditRatingMin { get; set; } = 9;
+        public int CreditRatingMax { get; set; } = 50;
+        public int FreeSkillSlots { get; set; }
+        public string? SkillsText { get; set; } = "Средства";
+    }
+}
