@@ -1,0 +1,211 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Utilities.Services
+@inject MarkdownService MarkdownService
+
+<div class="h-full overflow-y-auto p-6">
+    @if (Location is null)
+    {
+        <p class="text-gray-500 text-center py-8">Выберите локацию</p>
+    }
+    else
+    {
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">@Location.Name</h1>
+            @if (!string.IsNullOrEmpty(Location.Address))
+            {
+                <p class="text-sm text-gray-500 mt-1">
+                    <i class="fas fa-map-pin mr-1"></i>@Location.Address
+                </p>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(Location.Description))
+        {
+            <div class="prose prose-sm max-w-none mb-6 markdown-content">
+                @((MarkupString)MarkdownService.ConvertToHtml(Location.Description))
+            </div>
+        }
+
+        @if (Location.SkillChecks.Count > 0)
+        {
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-dice text-accent-500 mr-2"></i>Проверки навыков
+                </h2>
+                <div class="space-y-3">
+                    @foreach (var check in Location.SkillChecks)
+                    {
+                        <div class="border border-gray-200 rounded-md overflow-hidden">
+                            <button type="button"
+                                    class="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                                    @onclick="() => ToggleSkillCheck(check.Id)">
+                                <span class="font-medium text-gray-800">@check.SkillName</span>
+                                @if (!string.IsNullOrEmpty(check.Difficulty))
+                                {
+                                    <span class="text-xs px-2 py-0.5 rounded-full @GetDifficultyClass(check.Difficulty)">
+                                        @GetDifficultyLabel(check.Difficulty)
+                                    </span>
+                                }
+                                <i class="fas @(_expandedChecks.Contains(check.Id) ? "fa-chevron-up" : "fa-chevron-down") ml-auto text-gray-400 text-xs"></i>
+                            </button>
+                            @if (_expandedChecks.Contains(check.Id))
+                            {
+                                <div class="px-4 py-3 border-t border-gray-200 space-y-2">
+                                    @if (!string.IsNullOrEmpty(check.SuccessResult))
+                                    {
+                                        <div>
+                                            <span class="text-xs font-semibold text-green-700 uppercase">Успех:</span>
+                                            <div class="text-sm text-gray-700 mt-0.5 markdown-content">
+                                                @((MarkupString)MarkdownService.ConvertToHtml(check.SuccessResult))
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(check.FailureResult))
+                                    {
+                                        <div>
+                                            <span class="text-xs font-semibold text-red-700 uppercase">Провал:</span>
+                                            <div class="text-sm text-gray-700 mt-0.5 markdown-content">
+                                                @((MarkupString)MarkdownService.ConvertToHtml(check.FailureResult))
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (GetLinkedNpcs() is { Count: > 0 } linkedNpcs)
+        {
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-users text-accent-500 mr-2"></i>Персонажи
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    @foreach (var npc in linkedNpcs)
+                    {
+                        <div class="border border-gray-200 rounded-md p-3">
+                            <span class="font-medium text-gray-800">@(npc.Character?.PersonalInfo?.Name ?? "Без имени")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (GetLinkedCreatures() is { Count: > 0 } linkedCreatures)
+        {
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-dragon text-accent-500 mr-2"></i>Существа
+                </h2>
+                <div class="space-y-2">
+                    @foreach (var creature in linkedCreatures)
+                    {
+                        <div class="border border-gray-200 rounded-md p-3">
+                            <div class="font-medium text-gray-800">@creature.Name</div>
+                            @if (!string.IsNullOrEmpty(creature.Notes))
+                            {
+                                <div class="text-sm text-gray-500 mt-1">@creature.Notes</div>
+                            }
+                            @if (creature.CreatureCharacteristics is not null)
+                            {
+                                <div class="text-xs text-gray-400 mt-1 flex gap-3">
+                                    <span>ПЗ: @creature.CreatureCharacteristics.HealPoint</span>
+                                    <span>ПМ: @creature.CreatureCharacteristics.ManaPoint</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (GetLinkedItems() is { Count: > 0 } linkedItems)
+        {
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-box-open text-accent-500 mr-2"></i>Предметы
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    @foreach (var item in linkedItems)
+                    {
+                        <div class="border border-gray-200 rounded-md p-3">
+                            <div class="font-medium text-gray-800">@item.Name</div>
+                            @if (!string.IsNullOrEmpty(item.Notes))
+                            {
+                                <div class="text-sm text-gray-500 mt-1">@item.Notes</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (GetLinkedHandouts() is { Count: > 0 } linkedHandouts)
+        {
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-file-image text-accent-500 mr-2"></i>Раздатки
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    @foreach (var handout in linkedHandouts)
+                    {
+                        <div class="border border-gray-200 rounded-md p-3">
+                            <div class="font-medium text-gray-800">@handout.Name</div>
+                            @if (!string.IsNullOrEmpty(handout.Description))
+                            {
+                                <div class="text-sm text-gray-500 mt-1 line-clamp-2">@handout.Description</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public ScenarioLocation? Location { get; set; }
+    [Parameter] public ICollection<ScenarioCreature> ScenarioCreatures { get; set; } = [];
+    [Parameter] public ICollection<ScenarioItem> ScenarioItems { get; set; } = [];
+    [Parameter] public ICollection<CharacterStorageDto> Npcs { get; set; } = [];
+    [Parameter] public ICollection<ScenarioHandout> Handouts { get; set; } = [];
+
+    private HashSet<Guid> _expandedChecks = [];
+
+    private void ToggleSkillCheck(Guid checkId)
+    {
+        if (!_expandedChecks.Remove(checkId))
+            _expandedChecks.Add(checkId);
+    }
+
+    private List<CharacterStorageDto> GetLinkedNpcs() =>
+        Location is null ? [] : Npcs.Where(n => Location.NpcIds.Contains(n.Id)).ToList();
+
+    private List<ScenarioCreature> GetLinkedCreatures() =>
+        Location is null ? [] : ScenarioCreatures.Where(c => Location.CreatureIds.Contains(c.Id)).ToList();
+
+    private List<ScenarioItem> GetLinkedItems() =>
+        Location is null ? [] : ScenarioItems.Where(i => Location.ItemIds.Contains(i.Id)).ToList();
+
+    private List<ScenarioHandout> GetLinkedHandouts() =>
+        Location is null ? [] : Handouts.Where(h => Location.HandoutIds.Contains(h.Id)).ToList();
+
+    private static string GetDifficultyClass(string? difficulty) => difficulty switch
+    {
+        "Hard" => "bg-yellow-100 text-yellow-800",
+        "Extreme" => "bg-red-100 text-red-800",
+        _ => "bg-green-100 text-green-800"
+    };
+
+    private static string GetDifficultyLabel(string? difficulty) => difficulty switch
+    {
+        "Hard" => "Сложная",
+        "Extreme" => "Экстремальная",
+        _ => "Обычная"
+    };
+}

@@ -20,15 +20,15 @@
 @rendermode InteractiveServer
 <PageTitle>@(_scenario?.Name ?? "Сценарий")</PageTitle>
 
-<div class="container mx-auto px-4 py-8">
-    @if (_loading)
-    {
-        <div class="flex justify-center items-center h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
-    }
-    else if (_scenario is null)
-    {
+@if (_loading)
+{
+    <div class="flex justify-center items-center h-64">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+}
+else if (_scenario is null)
+{
+    <div class="container mx-auto px-4 py-8">
         <div class="bg-white shadow-md rounded-lg p-6 text-center">
             <h2 class="text-xl font-semibold text-gray-700 mb-4">Сценарий не найден</h2>
             <p class="text-gray-600 mb-4">Запрошенный сценарий не найден.</p>
@@ -36,9 +36,109 @@
                 <span>К сценариям</span>
             </button>
         </div>
-    }
-    else
-    {
+    </div>
+}
+else if (_viewMode == "play" && _scenario.Locations.Count > 0)
+{
+    <!-- Play Mode: Three-panel layout -->
+    <div class="flex flex-col h-screen">
+        <!-- Top toolbar -->
+        <div class="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h1 class="text-lg font-bold text-gray-800 truncate">@_scenario.Name</h1>
+                @if (!string.IsNullOrEmpty(_scenario.Era))
+                {
+                    <span class="text-sm text-gray-500">@_scenario.Era</span>
+                }
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button"
+                        class="cm-btn cm-btn-secondary cm-btn-sm"
+                        @onclick='() => _viewMode = "overview"'>
+                    <i class="fas fa-th-large mr-1"></i> Обзор
+                </button>
+                <button type="button"
+                        class="cm-btn cm-btn-info cm-btn-sm"
+                        @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/edit"))">
+                    <i class="fas fa-edit mr-1"></i> Редактировать
+                </button>
+            </div>
+        </div>
+
+        <!-- Three-panel content -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Left: Location Sidebar -->
+            <div class="w-64 flex-shrink-0">
+                <LocationSidebar Locations="_scenario.Locations"
+                                 SelectedLocationId="_selectedLocationId"
+                                 OnLocationSelected="HandleLocationSelected"/>
+            </div>
+
+            <!-- Center: Location Detail / Overview -->
+            <div class="flex-1 overflow-hidden">
+                @if (_selectedLocationId is null)
+                {
+                    <!-- Overview: show scenario description + journal -->
+                    <div class="h-full overflow-y-auto p-6">
+                        @if (!string.IsNullOrEmpty(_scenario.Description))
+                        {
+                            <div class="mb-6">
+                                <h2 class="text-xl font-semibold mb-2">Описание</h2>
+                                <div class="bg-gray-50 p-4 rounded-lg">
+                                    <p class="text-gray-700">@_scenario.Description</p>
+                                </div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_scenario.Journal))
+                        {
+                            <div class="mb-6">
+                                <h2 class="text-xl font-semibold mb-2">Журнал</h2>
+                                <div class="bg-gray-50 p-4 rounded-lg markdown-content">
+                                    @((MarkupString)_markdownHtml)
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <LocationDetail Location="_selectedLocation"
+                                    ScenarioCreatures="_scenario.ScenarioCreatures"
+                                    ScenarioItems="_scenario.ScenarioItems"
+                                    Npcs="_characterTemplates"
+                                    Handouts="_scenario.Handouts"/>
+                }
+            </div>
+
+            <!-- Right: Key Facts Panel -->
+            @if (!_keyFactsPanelCollapsed)
+            {
+                <div class="w-80 flex-shrink-0">
+                    <KeyFactsPanel KeyFacts="_scenario.KeyFacts"
+                                   Handouts="_scenario.Handouts"
+                                   OnToggleCollapse="() => _keyFactsPanelCollapsed = true"/>
+                </div>
+            }
+            else
+            {
+                <div class="flex-shrink-0 border-l border-gray-200 bg-white">
+                    <button type="button" class="p-3 text-gray-400 hover:text-gray-600"
+                            @onclick="() => _keyFactsPanelCollapsed = false"
+                            title="Показать ключевые факты">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <!-- Overview Mode: Original card-based layout -->
+    <div class="container mx-auto px-4 py-8">
         <div class="flex justify-between items-center mb-6">
             <div>
                 <button type="button" class="cm-btn cm-btn-secondary" @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))">
@@ -46,6 +146,12 @@
                 </button>
             </div>
             <div class="flex gap-2">
+                @if (_scenario.Locations.Count > 0)
+                {
+                    <button type="button" class="cm-btn cm-btn-success" @onclick='() => _viewMode = "play"'>
+                        <i class="fas fa-map-marked-alt"></i> <span>Режим игры</span>
+                    </button>
+                }
                 <button type="button" class="cm-btn cm-btn-info" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/edit"))">
                     <i class="fas fa-edit"></i> <span>Редактировать</span>
                 </button>
@@ -83,8 +189,7 @@
                     <div>
                         <div class="mb-2">
                             <span class="font-semibold text-gray-700">Тип:</span>
-                            <span
-                                class="text-gray-600 ml-2">@(_scenario.IsTemplate ? "Шаблон" : "Сценарий кампании")</span>
+                            <span class="text-gray-600 ml-2">@(_scenario.IsTemplate ? "Шаблон" : "Сценарий кампании")</span>
                         </div>
 
                         @if (_scenario.CampaignId.HasValue)
@@ -114,6 +219,53 @@
                         <h2 class="text-xl font-semibold mb-2">Журнал</h2>
                         <div class="bg-gray-50 p-4 rounded-lg markdown-content">
                             @((MarkupString)_markdownHtml)
+                        </div>
+                    </div>
+                }
+
+                <!-- Structured content summary -->
+                @if (_scenario.Locations.Count > 0 || _scenario.KeyFacts.Count > 0 || _scenario.Handouts.Count > 0)
+                {
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <h2 class="text-xl font-semibold mb-4">Структурированный контент</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            @if (_scenario.Locations.Count > 0)
+                            {
+                                <div class="bg-accent-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-accent-700 mb-2">
+                                        <i class="fas fa-map-marker-alt mr-1"></i>Локации
+                                    </h3>
+                                    <ul class="text-sm text-gray-600 space-y-1">
+                                        @foreach (var loc in _scenario.Locations.Where(l => l.ParentLocationId is null).OrderBy(l => l.Order))
+                                        {
+                                            <li>@loc.Name</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                            @if (_scenario.KeyFacts.Count > 0)
+                            {
+                                <div class="bg-amber-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-amber-700 mb-2">
+                                        <i class="fas fa-key mr-1"></i>Ключевые факты
+                                    </h3>
+                                    <p class="text-sm text-gray-600">@_scenario.KeyFacts.Count фактов</p>
+                                </div>
+                            }
+                            @if (_scenario.Handouts.Count > 0)
+                            {
+                                <div class="bg-purple-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-purple-700 mb-2">
+                                        <i class="fas fa-file-image mr-1"></i>Раздатки
+                                    </h3>
+                                    <ul class="text-sm text-gray-600 space-y-1">
+                                        @foreach (var h in _scenario.Handouts.OrderBy(h => h.Order))
+                                        {
+                                            <li>@h.Name</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
                         </div>
                     </div>
                 }
@@ -243,8 +395,8 @@
                 </div>
             </div>
         </div>
-    }
-</div>
+    </div>
+}
 
 <!-- Use in Campaign Modal -->
 @if (_showUseCampaignModal)
@@ -323,10 +475,20 @@
     private Scenario? _scenario;
     private bool _loading = true;
     private string _markdownHtml = "";
+    private string _viewMode = "overview";
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
     private List<CharacterStorageDto> _characterTemplates = [];
+
+    // Play mode state
+    private Guid? _selectedLocationId;
+    private bool _keyFactsPanelCollapsed;
+
+    private ScenarioLocation? _selectedLocation =>
+        _selectedLocationId.HasValue
+            ? _scenario?.Locations.FirstOrDefault(l => l.Id == _selectedLocationId.Value)
+            : null;
 
     // Modal references
     private AddNpcModal? _addNpcModal;
@@ -350,11 +512,9 @@
 
             if (_scenario?.Journal is not null)
             {
-                // Convert markdown to HTML using our MarkdownService
                 _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
             }
 
-            // Load character templates linked to this scenario
             _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
         }
         catch (Exception ex)
@@ -365,6 +525,11 @@
         {
             _loading = false;
         }
+    }
+
+    private void HandleLocationSelected(Guid? locationId)
+    {
+        _selectedLocationId = locationId;
     }
 
     private async Task ShowUseCampaignModal()
@@ -394,12 +559,10 @@
         {
             var userEmail = IdentityService.GetCurrentUserEmail() ?? string.Empty;
 
-            // Create a new scenario in the selected campaign based on this template
             var newScenario = await ScenarioService.CreateScenarioFromTemplateAsync(Id, _selectedCampaignId, userEmail);
 
             if (newScenario is not null)
             {
-                // Navigate to the new scenario
                 NavigationManager.NavigateTo($"/scenarios/{newScenario.Id}");
             }
         }
@@ -417,10 +580,7 @@
     {
         try
         {
-            // Unlink the character template from this scenario
             await CharacterService.UnlinkCharacterTemplateFromScenarioAsync(template.Id);
-
-            // Reload character templates
             _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
         }
         catch (Exception ex)
@@ -509,7 +669,6 @@
 
     private async Task HandleNpcAdded(CharacterStorageDto _)
     {
-        // Reload character templates linked to this scenario
         _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
     }
 

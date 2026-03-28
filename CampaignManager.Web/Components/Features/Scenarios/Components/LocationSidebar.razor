@@ -1,0 +1,56 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+
+<div class="h-full flex flex-col bg-white border-r border-gray-200">
+    <div class="p-3 border-b border-gray-200 bg-gray-50">
+        <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Локации</h3>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <!-- Overview entry -->
+        <button type="button"
+                class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors @(SelectedLocationId is null ? "bg-accent-100 text-accent-800 font-medium" : "text-gray-700 hover:bg-gray-100")"
+                @onclick="() => OnLocationSelected.InvokeAsync(null)">
+            <i class="fas fa-book-open mr-2 text-xs"></i>Обзор
+        </button>
+
+        @foreach (var location in TopLevelLocations)
+        {
+            <div>
+                <button type="button"
+                        class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors @(SelectedLocationId == location.Id ? "bg-accent-100 text-accent-800 font-medium" : "text-gray-700 hover:bg-gray-100")"
+                        @onclick="() => OnLocationSelected.InvokeAsync(location.Id)">
+                    <i class="fas fa-map-marker-alt mr-2 text-xs text-accent-500"></i>@location.Name
+                </button>
+
+                @{
+                    var children = GetChildren(location.Id);
+                }
+                @if (children.Count > 0)
+                {
+                    <div class="ml-4 space-y-0.5">
+                        @foreach (var child in children)
+                        {
+                            <button type="button"
+                                    class="w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors @(SelectedLocationId == child.Id ? "bg-accent-100 text-accent-800 font-medium" : "text-gray-600 hover:bg-gray-100")"
+                                    @onclick="() => OnLocationSelected.InvokeAsync(child.Id)">
+                                <i class="fas fa-chevron-right mr-1.5 text-[10px] text-gray-400"></i>@child.Name
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </nav>
+</div>
+
+@code {
+    [Parameter] public ICollection<ScenarioLocation> Locations { get; set; } = [];
+    [Parameter] public Guid? SelectedLocationId { get; set; }
+    [Parameter] public EventCallback<Guid?> OnLocationSelected { get; set; }
+
+    private List<ScenarioLocation> TopLevelLocations =>
+        Locations.Where(l => l.ParentLocationId is null).OrderBy(l => l.Order).ToList();
+
+    private List<ScenarioLocation> GetChildren(Guid parentId) =>
+        Locations.Where(l => l.ParentLocationId == parentId).OrderBy(l => l.Order).ToList();
+}

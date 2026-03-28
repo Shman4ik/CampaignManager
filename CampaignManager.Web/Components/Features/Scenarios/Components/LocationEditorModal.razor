@@ -1,0 +1,189 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Utilities.Services
+@inject MarkdownService MarkdownService
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="@(_isEdit ? "Редактировать локацию" : "Добавить локацию")"
+       MaxWidth="xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                    <input type="text" @bind="_model.Name" class="cm-input" placeholder="Название локации"/>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Адрес</label>
+                    <input type="text" @bind="_model.Address" class="cm-input" placeholder="Адрес"/>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Родительская локация</label>
+                <select @bind="_selectedParentId" class="cm-input">
+                    <option value="">-- Нет (верхний уровень) --</option>
+                    @foreach (var loc in _availableParents)
+                    {
+                        <option value="@loc.Id">@loc.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-sm font-medium text-gray-700">Описание (Markdown)</label>
+                    <Button ButtonType="button" OnClick="TogglePreview" Variant="info" Size="sm">
+                        @(_showPreview ? "Редактор" : "Просмотр")
+                    </Button>
+                </div>
+                @if (_showPreview && !string.IsNullOrEmpty(_model.Description))
+                {
+                    <div class="border p-4 rounded-md bg-gray-50 markdown-content min-h-[200px] max-h-[400px] overflow-y-auto">
+                        @((MarkupString)MarkdownService.ConvertToHtml(_model.Description))
+                    </div>
+                }
+                else
+                {
+                    <textarea @bind="_model.Description" class="cm-input" rows="8"
+                              placeholder="Описание локации для хранителя..."></textarea>
+                }
+            </div>
+
+            <!-- Skill Checks -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700">Проверки навыков</label>
+                    <Button ButtonType="button" OnClick="AddSkillCheck" Variant="info" Size="sm" Icon="fa-plus">
+                        Добавить
+                    </Button>
+                </div>
+                @if (_model.SkillChecks.Count > 0)
+                {
+                    <div class="space-y-3">
+                        @foreach (var check in _model.SkillChecks)
+                        {
+                            <div class="border border-gray-200 rounded-md p-3 bg-gray-50">
+                                <div class="flex items-start gap-2">
+                                    <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        <input type="text" @bind="check.SkillName" class="cm-input" placeholder="Навык"/>
+                                        <select @bind="check.Difficulty" class="cm-input">
+                                            <option value="">Обычная</option>
+                                            <option value="Hard">Сложная</option>
+                                            <option value="Extreme">Экстремальная</option>
+                                        </select>
+                                        <textarea @bind="check.SuccessResult" class="cm-input" rows="2"
+                                                  placeholder="При успехе..."></textarea>
+                                        <textarea @bind="check.FailureResult" class="cm-input" rows="2"
+                                                  placeholder="При провале..."></textarea>
+                                    </div>
+                                    <Button ButtonType="button" OnClick="() => RemoveSkillCheck(check)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-sm text-gray-500">Нет проверок навыков.</p>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            <Button ButtonType="button" OnClick="Hide" Variant="secondary">Отмена</Button>
+            <Button ButtonType="button" OnClick="Save" Variant="info" IsDisabled="@(string.IsNullOrWhiteSpace(_model.Name))">
+                @(_isEdit ? "Сохранить" : "Добавить")
+            </Button>
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public EventCallback<ScenarioLocation> OnSaved { get; set; }
+
+    private bool _isVisible;
+    private bool _isEdit;
+    private bool _showPreview;
+    private ScenarioLocation _model = new() { Name = "" };
+    private List<ScenarioLocation> _availableParents = [];
+    private string _selectedParentId = "";
+
+    public void Show(List<ScenarioLocation> existingLocations, ScenarioLocation? editLocation = null)
+    {
+        _isEdit = editLocation is not null;
+
+        if (editLocation is not null)
+        {
+            _model = new ScenarioLocation
+            {
+                Id = editLocation.Id,
+                Name = editLocation.Name,
+                Address = editLocation.Address,
+                Description = editLocation.Description,
+                Order = editLocation.Order,
+                ParentLocationId = editLocation.ParentLocationId,
+                SkillChecks = editLocation.SkillChecks.Select(sc => new ScenarioSkillCheck
+                {
+                    Id = sc.Id,
+                    SkillName = sc.SkillName,
+                    Difficulty = sc.Difficulty,
+                    SuccessResult = sc.SuccessResult,
+                    FailureResult = sc.FailureResult
+                }).ToList(),
+                CreatureIds = [..editLocation.CreatureIds],
+                ItemIds = [..editLocation.ItemIds],
+                NpcIds = [..editLocation.NpcIds],
+                HandoutIds = [..editLocation.HandoutIds]
+            };
+            _selectedParentId = editLocation.ParentLocationId?.ToString() ?? "";
+            _availableParents = existingLocations.Where(l => l.Id != editLocation.Id).ToList();
+        }
+        else
+        {
+            _model = new ScenarioLocation
+            {
+                Name = "",
+                Order = existingLocations.Count
+            };
+            _selectedParentId = "";
+            _availableParents = existingLocations.ToList();
+        }
+
+        _showPreview = false;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    private void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private void TogglePreview() => _showPreview = !_showPreview;
+
+    private void AddSkillCheck()
+    {
+        _model.SkillChecks.Add(new ScenarioSkillCheck { SkillName = "" });
+    }
+
+    private void RemoveSkillCheck(ScenarioSkillCheck check)
+    {
+        _model.SkillChecks.Remove(check);
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Name)) return;
+
+        _model.ParentLocationId = Guid.TryParse(_selectedParentId, out var parentId) ? parentId : null;
+
+        await OnSaved.InvokeAsync(_model);
+        Hide();
+    }
+}

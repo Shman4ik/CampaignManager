@@ -141,6 +141,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             entity.Property(c => c.ScenarioCreatures).HasColumnType("jsonb");
             entity.Property(c => c.ScenarioItems).HasColumnType("jsonb");
+            entity.Property(s => s.Locations).HasColumnType("jsonb");
+            entity.Property(s => s.KeyFacts).HasColumnType("jsonb");
+            entity.Property(s => s.Handouts).HasColumnType("jsonb");
 
             // Relationship with Campaign (optional)
             entity.HasOne(s => s.Campaign)

@@ -218,38 +218,123 @@ public sealed class ScenarioService(
             await dbContext.Scenarios.AddAsync(newScenario);
             await dbContext.SaveChangesAsync();
 
+            // Build old→new ID maps for cross-reference remapping
+            var creatureIdMap = new Dictionary<Guid, Guid>();
+            var itemIdMap = new Dictionary<Guid, Guid>();
+            var handoutIdMap = new Dictionary<Guid, Guid>();
+
             // Copy creatures
-            if (template.ScenarioCreatures != null)
+            if (template.ScenarioCreatures is not null)
             {
                 newScenario.ScenarioCreatures = template.ScenarioCreatures
-                    .Select(sc => new ScenarioCreature
+                    .Select(sc =>
                     {
-                        Id = Guid.NewGuid(),
-                        ScenarioId = newScenario.Id,
-                        Name = sc.Name,
-                        Type = sc.Type,
-                        CreatureCharacteristics = sc.CreatureCharacteristics,
-                        CombatDescriptions = sc.CombatDescriptions,
-                        SpecialAbilities = sc.SpecialAbilities,
-                        Notes = sc.Notes
+                        var newId = Guid.CreateVersion7();
+                        creatureIdMap[sc.Id] = newId;
+                        return new ScenarioCreature
+                        {
+                            Id = newId,
+                            ScenarioId = newScenario.Id,
+                            Name = sc.Name,
+                            Type = sc.Type,
+                            CreatureCharacteristics = sc.CreatureCharacteristics,
+                            CombatDescriptions = sc.CombatDescriptions,
+                            SpecialAbilities = sc.SpecialAbilities,
+                            Notes = sc.Notes
+                        };
                     })
                     .ToList();
             }
 
             // Copy items
-            if (template.ScenarioItems != null)
+            if (template.ScenarioItems is not null)
             {
                 newScenario.ScenarioItems = template.ScenarioItems
-                    .Select(si => new ScenarioItem
+                    .Select(si =>
                     {
-                        Id = Guid.NewGuid(),
-                        ScenarioId = newScenario.Id,
-                        Name = si.Name,
-                        Era = si.Era,
-                        Type = si.Type,
-                        Description = si.Description,
-                        ImageUrl = si.ImageUrl,
-                        Notes = si.Notes
+                        var newId = Guid.CreateVersion7();
+                        itemIdMap[si.Id] = newId;
+                        return new ScenarioItem
+                        {
+                            Id = newId,
+                            ScenarioId = newScenario.Id,
+                            Name = si.Name,
+                            Era = si.Era,
+                            Type = si.Type,
+                            Description = si.Description,
+                            ImageUrl = si.ImageUrl,
+                            Notes = si.Notes
+                        };
+                    })
+                    .ToList();
+            }
+
+            // Copy handouts
+            if (template.Handouts is not null)
+            {
+                newScenario.Handouts = template.Handouts
+                    .Select(h =>
+                    {
+                        var newId = Guid.CreateVersion7();
+                        handoutIdMap[h.Id] = newId;
+                        return new ScenarioHandout
+                        {
+                            Id = newId,
+                            Name = h.Name,
+                            Description = h.Description,
+                            FileUrl = h.FileUrl,
+                            Order = h.Order
+                        };
+                    })
+                    .ToList();
+            }
+
+            // Copy key facts
+            if (template.KeyFacts is not null)
+            {
+                newScenario.KeyFacts = template.KeyFacts
+                    .Select(f => new ScenarioKeyFact
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Title = f.Title,
+                        Content = f.Content,
+                        Type = f.Type,
+                        Order = f.Order
+                    })
+                    .ToList();
+            }
+
+            // Copy locations with remapped references
+            if (template.Locations is not null)
+            {
+                var locationIdMap = new Dictionary<Guid, Guid>();
+                // First pass: generate new IDs
+                foreach (var loc in template.Locations)
+                    locationIdMap[loc.Id] = Guid.CreateVersion7();
+
+                newScenario.Locations = template.Locations
+                    .Select(loc => new ScenarioLocation
+                    {
+                        Id = locationIdMap[loc.Id],
+                        Name = loc.Name,
+                        Address = loc.Address,
+                        Description = loc.Description,
+                        Order = loc.Order,
+                        ParentLocationId = loc.ParentLocationId.HasValue && locationIdMap.TryGetValue(loc.ParentLocationId.Value, out var newParent)
+                            ? newParent
+                            : null,
+                        SkillChecks = loc.SkillChecks.Select(sc => new ScenarioSkillCheck
+                        {
+                            Id = Guid.CreateVersion7(),
+                            SkillName = sc.SkillName,
+                            Difficulty = sc.Difficulty,
+                            SuccessResult = sc.SuccessResult,
+                            FailureResult = sc.FailureResult
+                        }).ToList(),
+                        CreatureIds = loc.CreatureIds.Select(id => creatureIdMap.GetValueOrDefault(id, id)).ToList(),
+                        ItemIds = loc.ItemIds.Select(id => itemIdMap.GetValueOrDefault(id, id)).ToList(),
+                        NpcIds = [..loc.NpcIds],
+                        HandoutIds = loc.HandoutIds.Select(id => handoutIdMap.GetValueOrDefault(id, id)).ToList()
                     })
                     .ToList();
             }
@@ -496,6 +581,237 @@ public sealed class ScenarioService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error updating item {ItemId} in scenario {ScenarioId}", scenarioItem.Id, scenarioItem.ScenarioId);
+            return false;
+        }
+    }
+
+    // ── Location CRUD ──────────────────────────────────────────────
+
+    public async Task<bool> AddLocationAsync(Guid scenarioId, ScenarioLocation location)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var locations = scenario.Locations?.ToList() ?? [];
+            locations.Add(location);
+            scenario.Locations = locations;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding location to scenario {ScenarioId}", scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateLocationAsync(Guid scenarioId, ScenarioLocation location)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var locations = scenario.Locations?.ToList() ?? [];
+            var index = locations.FindIndex(l => l.Id == location.Id);
+            if (index < 0) return false;
+
+            locations[index] = location;
+            scenario.Locations = locations;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating location {LocationId} in scenario {ScenarioId}", location.Id, scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> RemoveLocationAsync(Guid scenarioId, Guid locationId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var locations = scenario.Locations?.ToList() ?? [];
+            var toRemove = locations.FirstOrDefault(l => l.Id == locationId);
+            if (toRemove is null) return false;
+
+            locations.Remove(toRemove);
+            scenario.Locations = locations;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing location {LocationId} from scenario {ScenarioId}", locationId, scenarioId);
+            return false;
+        }
+    }
+
+    // ── KeyFact CRUD ───────────────────────────────────────────────
+
+    public async Task<bool> AddKeyFactAsync(Guid scenarioId, ScenarioKeyFact keyFact)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var facts = scenario.KeyFacts?.ToList() ?? [];
+            facts.Add(keyFact);
+            scenario.KeyFacts = facts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding key fact to scenario {ScenarioId}", scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateKeyFactAsync(Guid scenarioId, ScenarioKeyFact keyFact)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var facts = scenario.KeyFacts?.ToList() ?? [];
+            var index = facts.FindIndex(f => f.Id == keyFact.Id);
+            if (index < 0) return false;
+
+            facts[index] = keyFact;
+            scenario.KeyFacts = facts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating key fact {KeyFactId} in scenario {ScenarioId}", keyFact.Id, scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> RemoveKeyFactAsync(Guid scenarioId, Guid keyFactId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var facts = scenario.KeyFacts?.ToList() ?? [];
+            var toRemove = facts.FirstOrDefault(f => f.Id == keyFactId);
+            if (toRemove is null) return false;
+
+            facts.Remove(toRemove);
+            scenario.KeyFacts = facts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing key fact {KeyFactId} from scenario {ScenarioId}", keyFactId, scenarioId);
+            return false;
+        }
+    }
+
+    // ── Handout CRUD ───────────────────────────────────────────────
+
+    public async Task<bool> AddHandoutAsync(Guid scenarioId, ScenarioHandout handout)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var handouts = scenario.Handouts?.ToList() ?? [];
+            handouts.Add(handout);
+            scenario.Handouts = handouts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding handout to scenario {ScenarioId}", scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> UpdateHandoutAsync(Guid scenarioId, ScenarioHandout handout)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var handouts = scenario.Handouts?.ToList() ?? [];
+            var index = handouts.FindIndex(h => h.Id == handout.Id);
+            if (index < 0) return false;
+
+            handouts[index] = handout;
+            scenario.Handouts = handouts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating handout {HandoutId} in scenario {ScenarioId}", handout.Id, scenarioId);
+            return false;
+        }
+    }
+
+    public async Task<bool> RemoveHandoutAsync(Guid scenarioId, Guid handoutId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var handouts = scenario.Handouts?.ToList() ?? [];
+            var toRemove = handouts.FirstOrDefault(h => h.Id == handoutId);
+            if (toRemove is null) return false;
+
+            handouts.Remove(toRemove);
+            scenario.Handouts = handouts;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing handout {HandoutId} from scenario {ScenarioId}", handoutId, scenarioId);
             return false;
         }
     }

@@ -2,6 +2,7 @@
 @page "/scenarios/{Id:guid}/edit"
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Scenarios.Components
 @using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
@@ -11,17 +12,17 @@
 @inject MarkdownService MarkdownService
 
 @rendermode InteractiveServer
-<PageTitle>@(IsNew ? "Create Scenario Template" : "Edit Scenario Template")</PageTitle>
+<PageTitle>@(IsNew ? "Создать сценарий" : "Редактировать сценарий")</PageTitle>
 
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
         <div>
             <Button OnClick="@(() => NavigationManager.NavigateTo(IsNew ? "/scenarios" : $"/scenarios/{Id}"))" Variant="secondary" Icon="fa-arrow-left">
-                Back
+                Назад
             </Button>
         </div>
-        <h1 class="text-3xl font-bold">@(IsNew ? "Create Scenario Template" : "Edit Scenario Template")</h1>
-        <div></div> <!-- Empty div for flex spacing -->
+        <h1 class="text-3xl font-bold">@(IsNew ? "Создать сценарий" : "Редактировать сценарий")</h1>
+        <div></div>
     </div>
 
     @if (_loading)
@@ -32,96 +33,289 @@
     }
     else
     {
+        <!-- Tab Navigation -->
+        <div class="border-b border-gray-200 mb-6">
+            <nav class="flex gap-1 -mb-px">
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "general" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "general"'>
+                    <i class="fas fa-file-alt mr-1"></i> Основное
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "locations" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "locations"'>
+                    <i class="fas fa-map-marker-alt mr-1"></i> Локации
+                    @if (_model.Locations.Count > 0)
+                    {
+                        <span class="ml-1 bg-accent-100 text-accent-700 text-xs px-1.5 py-0.5 rounded-full">@_model.Locations.Count</span>
+                    }
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "keyfacts" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "keyfacts"'>
+                    <i class="fas fa-key mr-1"></i> Ключевые факты
+                    @if (_model.KeyFacts.Count > 0)
+                    {
+                        <span class="ml-1 bg-accent-100 text-accent-700 text-xs px-1.5 py-0.5 rounded-full">@_model.KeyFacts.Count</span>
+                    }
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "handouts" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "handouts"'>
+                    <i class="fas fa-file-image mr-1"></i> Раздатки
+                    @if (_model.Handouts.Count > 0)
+                    {
+                        <span class="ml-1 bg-accent-100 text-accent-700 text-xs px-1.5 py-0.5 rounded-full">@_model.Handouts.Count</span>
+                    }
+                </button>
+            </nav>
+        </div>
+
         <div class="bg-white shadow-md rounded-lg overflow-hidden">
             <div class="p-6">
-                <EditForm Model="@_model" OnValidSubmit="HandleValidSubmit">
-                    <DataAnnotationsValidator/>
-                    <ValidationSummary class="text-red-600 mb-4"/>
+                @if (_activeTab == "general")
+                {
+                    <EditForm Model="@_model" OnValidSubmit="HandleValidSubmit">
+                        <DataAnnotationsValidator/>
+                        <ValidationSummary class="text-red-600 mb-4"/>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div class="mb-4">
-                            <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                            <input id="name" @bind="_model.Name"
-                                   class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                   placeholder="Enter scenario name"/>
-                            <ValidationMessage For="@(() => _model.Name)" class="text-red-600 text-sm mt-1"/>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                            <input id="location" @bind="_model.Location"
-                                   class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                   placeholder="Enter location"/>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="era" class="block text-sm font-medium text-gray-700 mb-1">Era</label>
-                            <input id="era" @bind="_model.Era"
-                                   class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                   placeholder="e.g., 1920s, Modern, etc."/>
-                        </div>
-
-                        <div class="mb-4 flex items-center">
-                            <label class="inline-flex items-center">
-                                <input type="checkbox" @bind="_model.IsTemplate"
-                                       class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                                <span class="ml-2 text-sm text-gray-700">Is this a reusable scenario template?</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="mb-6">
-                        <label for="description"
-                               class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea id="description" @bind="_model.Description"
-                                  class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                  rows="3"
-                                  placeholder="Enter a description of this scenario"></textarea>
-                    </div>
-
-                    <div class="mb-6">
-                        <label for="journal" class="block text-sm font-medium text-gray-700 mb-1">Journal
-                            (Markdown)</label>
-                        <textarea id="journal" @bind="_model.Journal"
-                                  class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                  rows="10"
-                                  placeholder="Enter scenario journal using Markdown syntax"></textarea>
-
-                        @if (!string.IsNullOrEmpty(_model.Journal))
-                        {
-                            <div class="flex items-center justify-between mt-4">
-                                <h3 class="text-sm font-medium text-gray-700">Preview:</h3>
-                                <Button ButtonType="button" OnClick="TogglePreview" Variant="info" Size="sm">
-                                    @(_showPreview ? "Hide Preview" : "Show Preview")
-                                </Button>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="mb-4">
+                                <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                                <input id="name" @bind="_model.Name" class="cm-input" placeholder="Название сценария"/>
+                                <ValidationMessage For="@(() => _model.Name)" class="text-red-600 text-sm mt-1"/>
                             </div>
 
-                            @if (_showPreview)
+                            <div class="mb-4">
+                                <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Город</label>
+                                <input id="location" @bind="_model.Location" class="cm-input" placeholder="Город действия"/>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="era" class="block text-sm font-medium text-gray-700 mb-1">Эпоха</label>
+                                <input id="era" @bind="_model.Era" class="cm-input" placeholder="1920-е, Современность и т.д."/>
+                            </div>
+
+                            <div class="mb-4 flex items-center">
+                                <label class="inline-flex items-center">
+                                    <input type="checkbox" @bind="_model.IsTemplate"
+                                           class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
+                                    <span class="ml-2 text-sm text-gray-700">Шаблон сценария (многоразовый)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-6">
+                            <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+                            <textarea id="description" @bind="_model.Description" class="cm-input" rows="3"
+                                      placeholder="Краткое описание сценария"></textarea>
+                        </div>
+
+                        <div class="mb-6">
+                            <label for="journal" class="block text-sm font-medium text-gray-700 mb-1">Журнал (Markdown)</label>
+                            <textarea id="journal" @bind="_model.Journal" class="cm-input" rows="10"
+                                      placeholder="Заметки сценария в формате Markdown"></textarea>
+
+                            @if (!string.IsNullOrEmpty(_model.Journal))
                             {
-                                <div class="mt-2 border p-4 rounded-md bg-gray-50">
-                                    <div class="markdown-content">
-                                        @((MarkupString)MarkdownService.ConvertToHtml(_model.Journal))
+                                <div class="flex items-center justify-between mt-4">
+                                    <h3 class="text-sm font-medium text-gray-700">Просмотр:</h3>
+                                    <Button ButtonType="button" OnClick="TogglePreview" Variant="info" Size="sm">
+                                        @(_showPreview ? "Скрыть" : "Показать")
+                                    </Button>
+                                </div>
+
+                                @if (_showPreview)
+                                {
+                                    <div class="mt-2 border p-4 rounded-md bg-gray-50">
+                                        <div class="markdown-content">
+                                            @((MarkupString)MarkdownService.ConvertToHtml(_model.Journal))
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+
+                        <div class="flex justify-end mt-6 space-x-2">
+                            <Button ButtonType="button"
+                                    OnClick="@(() => NavigationManager.NavigateTo(IsNew ? "/scenarios" : $"/scenarios/{Id}"))"
+                                    Variant="secondary">
+                                Отмена
+                            </Button>
+                            <Button ButtonType="submit" Variant="info">
+                                @(IsNew ? "Создать" : "Сохранить")
+                            </Button>
+                        </div>
+                    </EditForm>
+                }
+                else if (_activeTab == "locations")
+                {
+                    @if (IsNew)
+                    {
+                        <Alert Type="info" Title="Сначала создайте сценарий">
+                            Сохраните сценарий, чтобы добавлять локации.
+                        </Alert>
+                    }
+                    else
+                    {
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold">Локации</h2>
+                            <Button OnClick="ShowAddLocationModal" Variant="info" Size="sm" Icon="fa-plus">
+                                Добавить
+                            </Button>
+                        </div>
+
+                        @if (_model.Locations.Count == 0)
+                        {
+                            <p class="text-gray-500 text-center py-8">Нет локаций. Добавьте первую локацию для структурирования сценария.</p>
+                        }
+                        else
+                        {
+                            <div class="space-y-3">
+                                @foreach (var location in _model.Locations.OrderBy(l => l.Order))
+                                {
+                                    var isChild = location.ParentLocationId.HasValue;
+                                    <div class="border border-gray-200 rounded-md p-4 @(isChild ? "ml-8" : "")">
+                                        <div class="flex justify-between items-start">
+                                            <div>
+                                                <h3 class="font-medium text-gray-800">
+                                                    <i class="fas fa-map-marker-alt text-accent-500 mr-1"></i>
+                                                    @location.Name
+                                                </h3>
+                                                @if (!string.IsNullOrEmpty(location.Address))
+                                                {
+                                                    <p class="text-sm text-gray-500 mt-0.5">@location.Address</p>
+                                                }
+                                                @if (location.SkillChecks.Count > 0)
+                                                {
+                                                    <p class="text-xs text-gray-400 mt-1">
+                                                        <i class="fas fa-dice mr-1"></i>@location.SkillChecks.Count проверок навыков
+                                                    </p>
+                                                }
+                                            </div>
+                                            <div class="flex gap-1">
+                                                <Button ButtonType="button" OnClick="() => ShowEditLocationModal(location)" Variant="info" Size="sm" Icon="fa-edit"/>
+                                                <Button ButtonType="button" OnClick="() => RemoveLocation(location)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                }
+                else if (_activeTab == "keyfacts")
+                {
+                    @if (IsNew)
+                    {
+                        <Alert Type="info" Title="Сначала создайте сценарий">
+                            Сохраните сценарий, чтобы добавлять ключевые факты.
+                        </Alert>
+                    }
+                    else
+                    {
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold">Ключевые факты</h2>
+                            <Button OnClick="ShowAddKeyFactModal" Variant="info" Size="sm" Icon="fa-plus">
+                                Добавить
+                            </Button>
+                        </div>
+
+                        @if (_model.KeyFacts.Count == 0)
+                        {
+                            <p class="text-gray-500 text-center py-8">Нет ключевых фактов.</p>
+                        }
+                        else
+                        {
+                            @foreach (var group in _model.KeyFacts.OrderBy(f => f.Type).ThenBy(f => f.Order).GroupBy(f => f.Type))
+                            {
+                                <div class="mb-6">
+                                    <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                                        @GetKeyFactTypeName(group.Key)
+                                    </h3>
+                                    <div class="space-y-2">
+                                        @foreach (var fact in group)
+                                        {
+                                            <div class="border border-gray-200 rounded-md p-3 flex justify-between items-start">
+                                                <div>
+                                                    <span class="font-medium text-gray-800">@fact.Title</span>
+                                                    @if (!string.IsNullOrEmpty(fact.Content))
+                                                    {
+                                                        <p class="text-sm text-gray-500 mt-1 line-clamp-2">@fact.Content</p>
+                                                    }
+                                                </div>
+                                                <div class="flex gap-1 flex-shrink-0 ml-2">
+                                                    <Button ButtonType="button" OnClick="() => ShowEditKeyFactModal(fact)" Variant="info" Size="sm" Icon="fa-edit"/>
+                                                    <Button ButtonType="button" OnClick="() => RemoveKeyFact(fact)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                                </div>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             }
                         }
-                    </div>
+                    }
+                }
+                else if (_activeTab == "handouts")
+                {
+                    @if (IsNew)
+                    {
+                        <Alert Type="info" Title="Сначала создайте сценарий">
+                            Сохраните сценарий, чтобы добавлять раздатки.
+                        </Alert>
+                    }
+                    else
+                    {
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold">Раздаточные материалы</h2>
+                            <Button OnClick="ShowAddHandoutModal" Variant="info" Size="sm" Icon="fa-plus">
+                                Добавить
+                            </Button>
+                        </div>
 
-                    <div class="flex justify-end mt-6 space-x-2">
-                        <Button ButtonType="button"
-                                OnClick="@(() => NavigationManager.NavigateTo(IsNew ? "/scenarios" : $"/scenarios/{Id}"))"
-                                Variant="secondary">
-                            Cancel
-                        </Button>
-                        <Button ButtonType="submit" Variant="info">
-                            @(IsNew ? "Create" : "Save")
-                        </Button>
-                    </div>
-                </EditForm>
+                        @if (_model.Handouts.Count == 0)
+                        {
+                            <p class="text-gray-500 text-center py-8">Нет раздаточных материалов.</p>
+                        }
+                        else
+                        {
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                @foreach (var handout in _model.Handouts.OrderBy(h => h.Order))
+                                {
+                                    <div class="border border-gray-200 rounded-md overflow-hidden">
+                                        @if (!string.IsNullOrEmpty(handout.FileUrl))
+                                        {
+                                            <div class="h-32 bg-gray-100 flex items-center justify-center">
+                                                <img src="@handout.FileUrl" alt="@handout.Name" class="max-h-full max-w-full object-contain"/>
+                                            </div>
+                                        }
+                                        <div class="p-3">
+                                            <div class="flex justify-between items-start">
+                                                <span class="font-medium text-gray-800">@handout.Name</span>
+                                                <div class="flex gap-1 flex-shrink-0 ml-2">
+                                                    <Button ButtonType="button" OnClick="() => ShowEditHandoutModal(handout)" Variant="info" Size="sm" Icon="fa-edit"/>
+                                                    <Button ButtonType="button" OnClick="() => RemoveHandout(handout)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                                </div>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(handout.Description))
+                                            {
+                                                <p class="text-sm text-gray-500 mt-1 line-clamp-2">@handout.Description</p>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                }
             </div>
         </div>
     }
 </div>
+
+<LocationEditorModal @ref="_locationEditorModal" OnSaved="HandleLocationSaved"/>
+<KeyFactEditorModal @ref="_keyFactEditorModal" OnSaved="HandleKeyFactSaved"/>
+<HandoutEditorModal @ref="_handoutEditorModal" OnSaved="HandleHandoutSaved"/>
 
 @code {
     [Parameter] public Guid? Id { get; set; }
@@ -129,13 +323,14 @@
     private Scenario _model = new() { Name = "new" };
     private bool IsNew => Id is null || Id.Value == Guid.Empty;
     private bool _loading = true;
-    private bool _showPreview = false;
+    private bool _showPreview;
+    private string _activeTab = "general";
 
+    private LocationEditorModal? _locationEditorModal;
+    private KeyFactEditorModal? _keyFactEditorModal;
+    private HandoutEditorModal? _handoutEditorModal;
 
-    private void TogglePreview()
-    {
-        _showPreview = !_showPreview;
-    }
+    private void TogglePreview() => _showPreview = !_showPreview;
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,7 +341,7 @@
             if (Id.HasValue)
             {
                 var scenario = await ScenarioService.GetScenarioByIdAsync(Id.Value);
-                if (scenario != null)
+                if (scenario is not null)
                 {
                     _model = scenario;
                 }
@@ -160,7 +355,7 @@
                     Location = string.Empty,
                     Era = string.Empty,
                     Journal = string.Empty,
-                    IsTemplate = true // Default to template for new scenarios
+                    IsTemplate = true
                 };
             }
         }
@@ -178,12 +373,10 @@
     {
         try
         {
-            // Get the current user's email (in a real app, this would come from authentication)
             var userEmail = IdentityService.GetCurrentUserEmail();
 
             if (IsNew)
             {
-                // Create new scenario
                 Scenario newScenario = new()
                 {
                     Name = _model.Name,
@@ -199,12 +392,11 @@
 
                 if (result is not null)
                 {
-                    NavigationManager.NavigateTo($"/scenarios/{result.Id}");
+                    NavigationManager.NavigateTo($"/scenarios/{result.Id}/edit");
                 }
             }
             else
             {
-                // Update existing scenario
                 if (Id.HasValue)
                 {
                     var existingScenario = await ScenarioService.GetScenarioByIdAsync(Id.Value);
@@ -234,4 +426,154 @@
         }
     }
 
+    // ── Location handlers ──────────────────────────────────────
+
+    private void ShowAddLocationModal()
+    {
+        _locationEditorModal?.Show(_model.Locations.ToList());
+    }
+
+    private void ShowEditLocationModal(ScenarioLocation location)
+    {
+        _locationEditorModal?.Show(_model.Locations.ToList(), location);
+    }
+
+    private async Task HandleLocationSaved(ScenarioLocation location)
+    {
+        if (!Id.HasValue) return;
+
+        var existing = _model.Locations.FirstOrDefault(l => l.Id == location.Id);
+        bool success;
+
+        if (existing is not null)
+        {
+            success = await ScenarioService.UpdateLocationAsync(Id.Value, location);
+        }
+        else
+        {
+            success = await ScenarioService.AddLocationAsync(Id.Value, location);
+        }
+
+        if (success)
+        {
+            await ReloadScenario();
+        }
+    }
+
+    private async Task RemoveLocation(ScenarioLocation location)
+    {
+        if (!Id.HasValue) return;
+        if (await ScenarioService.RemoveLocationAsync(Id.Value, location.Id))
+        {
+            await ReloadScenario();
+        }
+    }
+
+    // ── KeyFact handlers ───────────────────────────────────────
+
+    private void ShowAddKeyFactModal()
+    {
+        _keyFactEditorModal?.Show(nextOrder: _model.KeyFacts.Count);
+    }
+
+    private void ShowEditKeyFactModal(ScenarioKeyFact fact)
+    {
+        _keyFactEditorModal?.Show(fact);
+    }
+
+    private async Task HandleKeyFactSaved(ScenarioKeyFact keyFact)
+    {
+        if (!Id.HasValue) return;
+
+        var existing = _model.KeyFacts.FirstOrDefault(f => f.Id == keyFact.Id);
+        bool success;
+
+        if (existing is not null)
+        {
+            success = await ScenarioService.UpdateKeyFactAsync(Id.Value, keyFact);
+        }
+        else
+        {
+            success = await ScenarioService.AddKeyFactAsync(Id.Value, keyFact);
+        }
+
+        if (success)
+        {
+            await ReloadScenario();
+        }
+    }
+
+    private async Task RemoveKeyFact(ScenarioKeyFact fact)
+    {
+        if (!Id.HasValue) return;
+        if (await ScenarioService.RemoveKeyFactAsync(Id.Value, fact.Id))
+        {
+            await ReloadScenario();
+        }
+    }
+
+    // ── Handout handlers ───────────────────────────────────────
+
+    private void ShowAddHandoutModal()
+    {
+        _handoutEditorModal?.Show(nextOrder: _model.Handouts.Count);
+    }
+
+    private void ShowEditHandoutModal(ScenarioHandout handout)
+    {
+        _handoutEditorModal?.Show(handout);
+    }
+
+    private async Task HandleHandoutSaved(ScenarioHandout handout)
+    {
+        if (!Id.HasValue) return;
+
+        var existing = _model.Handouts.FirstOrDefault(h => h.Id == handout.Id);
+        bool success;
+
+        if (existing is not null)
+        {
+            success = await ScenarioService.UpdateHandoutAsync(Id.Value, handout);
+        }
+        else
+        {
+            success = await ScenarioService.AddHandoutAsync(Id.Value, handout);
+        }
+
+        if (success)
+        {
+            await ReloadScenario();
+        }
+    }
+
+    private async Task RemoveHandout(ScenarioHandout handout)
+    {
+        if (!Id.HasValue) return;
+        if (await ScenarioService.RemoveHandoutAsync(Id.Value, handout.Id))
+        {
+            await ReloadScenario();
+        }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
+
+    private async Task ReloadScenario()
+    {
+        if (!Id.HasValue) return;
+        var scenario = await ScenarioService.GetScenarioByIdAsync(Id.Value);
+        if (scenario is not null)
+        {
+            _model = scenario;
+            StateHasChanged();
+        }
+    }
+
+    private static string GetKeyFactTypeName(KeyFactType type) => type switch
+    {
+        KeyFactType.Backstory => "Предыстория",
+        KeyFactType.Truth => "Зловещая истина",
+        KeyFactType.Timeline => "Хронология",
+        KeyFactType.Reward => "Награды",
+        _ => type.ToString()
+    };
 }

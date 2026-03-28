@@ -67,4 +67,19 @@ public sealed class Scenario : BaseDataBaseEntity, INamedEntity
     ///     Collection of items in this scenario
     /// </summary>
     public ICollection<ScenarioItem> ScenarioItems { get; set; } = [];
+
+    /// <summary>
+    ///     Structured locations within the scenario for Keeper navigation
+    /// </summary>
+    public ICollection<ScenarioLocation> Locations { get; set; } = [];
+
+    /// <summary>
+    ///     Key facts: backstory, truth, timeline events, rewards
+    /// </summary>
+    public ICollection<ScenarioKeyFact> KeyFacts { get; set; } = [];
+
+    /// <summary>
+    ///     Player handout materials
+    /// </summary>
+    public ICollection<ScenarioHandout> Handouts { get; set; } = [];
 }

@@ -1,0 +1,139 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Utilities.Services
+@inject MarkdownService MarkdownService
+
+<div class="h-full flex flex-col bg-white border-l border-gray-200">
+    <div class="p-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide">Ключевые факты</h3>
+        <button type="button" class="text-gray-400 hover:text-gray-600 text-xs" @onclick="() => OnToggleCollapse.InvokeAsync()">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-3 space-y-4">
+        @foreach (var group in GroupedFacts)
+        {
+            <div>
+                <button type="button"
+                        class="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-gray-50 transition-colors"
+                        @onclick="() => ToggleSection(group.Key)">
+                    <span class="text-xs font-semibold uppercase tracking-wide @GetTypeColor(group.Key)">
+                        <i class="@GetTypeIcon(group.Key) mr-1"></i>@GetTypeName(group.Key)
+                    </span>
+                    <span class="text-xs text-gray-400">
+                        <i class="fas @(_expandedSections.Contains(group.Key) ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                    </span>
+                </button>
+
+                @if (_expandedSections.Contains(group.Key))
+                {
+                    <div class="mt-1 space-y-2">
+                        @foreach (var fact in group.Value)
+                        {
+                            <div class="border-l-2 @GetBorderColor(group.Key) pl-3 py-1">
+                                <div class="text-sm font-medium text-gray-800">@fact.Title</div>
+                                @if (!string.IsNullOrEmpty(fact.Content))
+                                {
+                                    <div class="text-xs text-gray-600 mt-1 markdown-content">
+                                        @((MarkupString)MarkdownService.ConvertToHtml(fact.Content))
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (Handouts.Count > 0)
+        {
+            <div class="border-t border-gray-200 pt-3">
+                <button type="button"
+                        class="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-gray-50 transition-colors"
+                        @onclick="ToggleHandouts">
+                    <span class="text-xs font-semibold uppercase tracking-wide text-purple-600">
+                        <i class="fas fa-file-image mr-1"></i>Раздатки
+                    </span>
+                    <span class="text-xs text-gray-400">
+                        <i class="fas @(_showHandouts ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                    </span>
+                </button>
+
+                @if (_showHandouts)
+                {
+                    <div class="mt-1 space-y-1.5">
+                        @foreach (var handout in Handouts.OrderBy(h => h.Order))
+                        {
+                            <div class="border-l-2 border-purple-300 pl-3 py-1">
+                                <div class="text-sm font-medium text-gray-800">@handout.Name</div>
+                                @if (!string.IsNullOrEmpty(handout.Description))
+                                {
+                                    <div class="text-xs text-gray-500 mt-0.5 line-clamp-2">@handout.Description</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public ICollection<ScenarioKeyFact> KeyFacts { get; set; } = [];
+    [Parameter] public ICollection<ScenarioHandout> Handouts { get; set; } = [];
+    [Parameter] public EventCallback OnToggleCollapse { get; set; }
+
+    private HashSet<KeyFactType> _expandedSections = [KeyFactType.Backstory, KeyFactType.Truth, KeyFactType.Timeline, KeyFactType.Reward];
+    private bool _showHandouts = true;
+
+    private Dictionary<KeyFactType, List<ScenarioKeyFact>> GroupedFacts =>
+        KeyFacts
+            .OrderBy(f => f.Type).ThenBy(f => f.Order)
+            .GroupBy(f => f.Type)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+    private void ToggleSection(KeyFactType type)
+    {
+        if (!_expandedSections.Remove(type))
+            _expandedSections.Add(type);
+    }
+
+    private void ToggleHandouts() => _showHandouts = !_showHandouts;
+
+    private static string GetTypeName(KeyFactType type) => type switch
+    {
+        KeyFactType.Backstory => "Предыстория",
+        KeyFactType.Truth => "Зловещая истина",
+        KeyFactType.Timeline => "Хронология",
+        KeyFactType.Reward => "Награды",
+        _ => type.ToString()
+    };
+
+    private static string GetTypeIcon(KeyFactType type) => type switch
+    {
+        KeyFactType.Backstory => "fas fa-scroll",
+        KeyFactType.Truth => "fas fa-eye",
+        KeyFactType.Timeline => "fas fa-clock",
+        KeyFactType.Reward => "fas fa-trophy",
+        _ => "fas fa-info-circle"
+    };
+
+    private static string GetTypeColor(KeyFactType type) => type switch
+    {
+        KeyFactType.Backstory => "text-blue-600",
+        KeyFactType.Truth => "text-red-600",
+        KeyFactType.Timeline => "text-amber-600",
+        KeyFactType.Reward => "text-green-600",
+        _ => "text-gray-600"
+    };
+
+    private static string GetBorderColor(KeyFactType type) => type switch
+    {
+        KeyFactType.Backstory => "border-blue-300",
+        KeyFactType.Truth => "border-red-300",
+        KeyFactType.Timeline => "border-amber-300",
+        KeyFactType.Reward => "border-green-300",
+        _ => "border-gray-300"
+    };
+}
