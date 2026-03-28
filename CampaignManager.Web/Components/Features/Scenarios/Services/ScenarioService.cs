@@ -375,4 +375,128 @@ public sealed class ScenarioService(
             return false;
         }
     }
+
+    /// <summary>
+    ///     Removes a creature from a scenario
+    /// </summary>
+    public async Task<bool> RemoveCreatureFromScenarioAsync(Guid scenarioId, Guid creatureId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var creatures = scenario.ScenarioCreatures?.ToList() ?? [];
+            var toRemove = creatures.FirstOrDefault(c => c.Id == creatureId);
+            if (toRemove is null) return false;
+
+            creatures.Remove(toRemove);
+            scenario.ScenarioCreatures = creatures;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing creature {CreatureId} from scenario {ScenarioId}", creatureId, scenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Updates an existing creature entry inside a scenario (replaces by Id)
+    /// </summary>
+    public async Task<bool> UpdateCreatureInScenarioAsync(ScenarioCreature scenarioCreature)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
+            if (scenario is null) return false;
+
+            var creatures = scenario.ScenarioCreatures?.ToList() ?? [];
+            var index = creatures.FindIndex(c => c.Id == scenarioCreature.Id);
+            if (index < 0) return false;
+
+            creatures[index] = scenarioCreature;
+            scenario.ScenarioCreatures = creatures;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating creature {CreatureId} in scenario {ScenarioId}", scenarioCreature.Id, scenarioCreature.ScenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Removes an item from a scenario
+    /// </summary>
+    public async Task<bool> RemoveItemFromScenarioAsync(Guid scenarioId, Guid itemId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            var items = scenario.ScenarioItems?.ToList() ?? [];
+            var toRemove = items.FirstOrDefault(i => i.Id == itemId);
+            if (toRemove is null) return false;
+
+            items.Remove(toRemove);
+            scenario.ScenarioItems = items;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing item {ItemId} from scenario {ScenarioId}", itemId, scenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Updates an existing item entry inside a scenario (replaces by Id)
+    /// </summary>
+    public async Task<bool> UpdateItemInScenarioAsync(ScenarioItem scenarioItem)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);
+            if (scenario is null) return false;
+
+            var items = scenario.ScenarioItems?.ToList() ?? [];
+            var index = items.FindIndex(i => i.Id == scenarioItem.Id);
+            if (index < 0) return false;
+
+            items[index] = scenarioItem;
+            scenario.ScenarioItems = items;
+
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating item {ItemId} in scenario {ScenarioId}", scenarioItem.Id, scenarioItem.ScenarioId);
+            return false;
+        }
+    }
 }

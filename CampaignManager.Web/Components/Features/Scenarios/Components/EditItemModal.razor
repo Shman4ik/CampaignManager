@@ -1,0 +1,102 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Shared
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Редактировать предмет"
+       MaxWidth="lg"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        @if (_item is not null)
+        {
+            <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div class="font-semibold text-gray-800">@_item.Name</div>
+                @if (!string.IsNullOrEmpty(_item.Type))
+                {
+                    <div class="text-sm text-gray-500 mt-1">@_item.Type</div>
+                }
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label for="edit-item-location" class="block text-sm font-medium text-gray-700 mb-1">Расположение (опционально)</label>
+                    <input type="text"
+                           id="edit-item-location"
+                           @bind="_location"
+                           class="cm-input"/>
+                </div>
+
+                <div>
+                    <label for="edit-item-notes" class="block text-sm font-medium text-gray-700 mb-1">Заметки (опционально)</label>
+                    <textarea id="edit-item-notes"
+                              @bind="_notes"
+                              class="cm-input !min-h-[80px]"></textarea>
+                </div>
+            </div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <Button OnClick="Hide" Variant="secondary">Отмена</Button>
+        <Button OnClick="Save" Variant="info" IsDisabled="@(_item is null)">Сохранить</Button>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public EventCallback<ScenarioItem> OnItemUpdated { get; set; }
+
+    [Inject] private ScenarioService ScenarioService { get; set; } = null!;
+    [Inject] private ILogger<EditItemModal> Logger { get; set; } = null!;
+
+    private bool _isVisible;
+    private ScenarioItem? _item;
+    private string _location = string.Empty;
+    private string _notes = string.Empty;
+
+    public void Show(ScenarioItem item)
+    {
+        _item = item;
+        _location = item.Location ?? string.Empty;
+        _notes = item.Notes ?? string.Empty;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task Save()
+    {
+        if (_item is null) return;
+
+        try
+        {
+            // ScenarioItem extends Item with init-only Name/Era, so we create a replacement instance.
+            var updated = new ScenarioItem
+            {
+                Id = _item.Id,
+                CreatedAt = _item.CreatedAt,
+                LastUpdated = DateTimeOffset.UtcNow,
+                Name = _item.Name,
+                Era = _item.Era,
+                Type = _item.Type,
+                Description = _item.Description,
+                ImageUrl = _item.ImageUrl,
+                ScenarioId = _item.ScenarioId,
+                Location = _location,
+                Notes = _notes
+            };
+
+            await ScenarioService.UpdateItemInScenarioAsync(updated);
+            await OnItemUpdated.InvokeAsync(updated);
+            Hide();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating item {ItemId} in scenario", _item.Id);
+        }
+    }
+}

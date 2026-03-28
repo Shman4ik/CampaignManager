@@ -8,6 +8,7 @@
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Components
+@using CampaignManager.Web.Components.Features.Bestiary.Model
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
@@ -168,8 +169,23 @@
                             @foreach (var sc in _scenario.ScenarioCreatures)
                             {
                                 <div class="py-3">
-                                    <div class="flex justify-between items-center">
-                                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/creatures/{sc.Id}/edit"))"><i class="fas fa-edit"></i></button>
+                                    <div class="flex justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium text-gray-800 truncate">@sc.Name</div>
+                                            <div class="text-xs text-gray-500 mt-0.5">@sc.Type</div>
+                                            @if (!string.IsNullOrEmpty(sc.Location))
+                                            {
+                                                <div class="text-xs text-gray-600 mt-0.5"><span class="font-medium">Место:</span> @sc.Location</div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(sc.Notes))
+                                            {
+                                                <div class="text-xs text-gray-600 mt-0.5 truncate"><span class="font-medium">Заметки:</span> @sc.Notes</div>
+                                            }
+                                        </div>
+                                        <div class="flex gap-1 flex-shrink-0">
+                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditCreatureModal(sc))"><i class="fas fa-edit"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-danger cm-btn-sm" title="Удалить" @onclick="@(() => RemoveCreature(sc))"><i class="fas fa-trash"></i></button>
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -199,8 +215,26 @@
                             @foreach (var si in _scenario.ScenarioItems)
                             {
                                 <div class="py-3">
-                                    <div class="flex justify-between items-center">
-                                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/items/{si.Id}/edit"))"><i class="fas fa-edit"></i></button>
+                                    <div class="flex justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium text-gray-800 truncate">@si.Name</div>
+                                            @if (!string.IsNullOrEmpty(si.Type))
+                                            {
+                                                <div class="text-xs text-gray-500 mt-0.5">@si.Type</div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(si.Location))
+                                            {
+                                                <div class="text-xs text-gray-600 mt-0.5"><span class="font-medium">Место:</span> @si.Location</div>
+                                            }
+                                            @if (!string.IsNullOrEmpty(si.Notes))
+                                            {
+                                                <div class="text-xs text-gray-600 mt-0.5 truncate"><span class="font-medium">Заметки:</span> @si.Notes</div>
+                                            }
+                                        </div>
+                                        <div class="flex gap-1 flex-shrink-0">
+                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditItemModal(si))"><i class="fas fa-edit"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-danger cm-btn-sm" title="Удалить" @onclick="@(() => RemoveItem(si))"><i class="fas fa-trash"></i></button>
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -269,10 +303,18 @@
                   ScenarioId="Id"
                   OnCreatureAdded="HandleCreatureAdded"/>
 
+<!-- Edit Creature Modal -->
+<EditCreatureModal @ref="_editCreatureModal"
+                   OnCreatureUpdated="HandleCreatureUpdated"/>
+
 <!-- Add Item Modal -->
 <AddItemModal @ref="_addItemModal"
               ScenarioId="Id"
               OnItemAdded="HandleItemAdded"/>
+
+<!-- Edit Item Modal -->
+<EditItemModal @ref="_editItemModal"
+               OnItemUpdated="HandleItemUpdated"/>
 
 @code {
 
@@ -289,7 +331,9 @@
     // Modal references
     private AddNpcModal? _addNpcModal;
     private AddCreatureModal? _addCreatureModal;
+    private EditCreatureModal? _editCreatureModal;
     private AddItemModal? _addItemModal;
+    private EditItemModal? _editItemModal;
 
     protected override async Task OnInitializedAsync()
     {
@@ -401,6 +445,29 @@
         await LoadScenario();
     }
 
+    private void ShowEditCreatureModal(ScenarioCreature creature)
+    {
+        _editCreatureModal?.Show(creature);
+    }
+
+    private async Task HandleCreatureUpdated(ScenarioCreature _)
+    {
+        await LoadScenario();
+    }
+
+    private async Task RemoveCreature(ScenarioCreature creature)
+    {
+        try
+        {
+            await ScenarioService.RemoveCreatureFromScenarioAsync(Id, creature.Id);
+            await LoadScenario();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing creature {CreatureId} from scenario {ScenarioId}", creature.Id, Id);
+        }
+    }
+
     private async Task ShowAddItemModal()
     {
         if (_addItemModal is null)
@@ -415,6 +482,29 @@
     private async Task HandleItemAdded(ScenarioItem _)
     {
         await LoadScenario();
+    }
+
+    private void ShowEditItemModal(ScenarioItem item)
+    {
+        _editItemModal?.Show(item);
+    }
+
+    private async Task HandleItemUpdated(ScenarioItem _)
+    {
+        await LoadScenario();
+    }
+
+    private async Task RemoveItem(ScenarioItem item)
+    {
+        try
+        {
+            await ScenarioService.RemoveItemFromScenarioAsync(Id, item.Id);
+            await LoadScenario();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing item {ItemId} from scenario {ScenarioId}", item.Id, Id);
+        }
     }
 
     private async Task HandleNpcAdded(CharacterStorageDto _)
