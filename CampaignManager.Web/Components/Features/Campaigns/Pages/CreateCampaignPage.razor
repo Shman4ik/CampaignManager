@@ -1,13 +1,25 @@
 ﻿@page "/create-campaign"
 @using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Utilities.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @inject CampaignService CampaignService
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IdentityService IdentityService
 @rendermode InteractiveServer
 
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    </div>
+}
+else
+{
 <div class="max-w-2xl mx-auto py-6 sm:px-6 lg:px-8">
     <h1 class="text-3xl font-bold mb-2">Создать кампанию</h1>
     <p class="text-gray-500 mb-6">Создайте новую кампанию для вашей группы</p>
@@ -61,11 +73,18 @@
     </EditForm>
     </div>
 </div>
+}
 
 @code {
     private readonly CampaignCreateModel campaignModel = new();
     private bool isCreating;
     private string errorMessage = string.Empty;
+    private bool _isKeeper;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isKeeper = await IdentityService.IsKeeper();
+    }
 
     private static string GetStatusLabel(CampaignStatus status) => status switch
     {

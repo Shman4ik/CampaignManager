@@ -20,6 +20,16 @@
 @rendermode InteractiveServer
 <PageTitle>@(_scenario?.Name ?? "Сценарий")</PageTitle>
 
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    </div>
+}
+else
+{
 @if (_loading)
 {
     <div class="flex justify-center items-center h-64">
@@ -467,6 +477,7 @@ else
 <!-- Edit Item Modal -->
 <EditItemModal @ref="_editItemModal"
                OnItemUpdated="HandleItemUpdated"/>
+}
 
 @code {
 
@@ -475,6 +486,7 @@ else
     private Scenario? _scenario;
     private bool _loading = true;
     private string _markdownHtml = "";
+    private bool _isKeeper;
     private string _viewMode = "overview";
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
@@ -499,6 +511,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _isKeeper = await IdentityService.IsKeeper();
         await LoadScenario();
     }
 

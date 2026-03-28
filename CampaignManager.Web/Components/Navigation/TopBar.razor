@@ -1,9 +1,11 @@
 ﻿@using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.JSInterop
+@using CampaignManager.Web.Utilities.Services
 @implements IDisposable
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
+@inject IdentityService IdentityService
 @rendermode InteractiveServer
 
 
@@ -34,6 +36,8 @@
                                          class="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors">
                                     Погоня
                                 </NavLink>
+                                @if (_isKeeper)
+                                {
                                 <div class="relative group">
                                     <button @onclick="@(() => ToggleDropdown("campaigns"))"
                                             class="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors flex items-center gap-1">
@@ -64,6 +68,7 @@
                                         </div>
                                     }
                                 </div>
+                                }
 
                                 <div class="relative group">
                                     <button @onclick="@(() => ToggleDropdown("wiki"))"
@@ -182,6 +187,8 @@
                                  class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md">
                             Погоня
                         </NavLink>                        <!-- Mobile Campaigns -->
+                        @if (_isKeeper)
+                        {
                         <div class="space-y-1">
                             <button @onclick="@(() => ToggleMobileSubmenu("campaigns"))"
                                     class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md">
@@ -211,7 +218,8 @@
                                     </NavLink>
                                 </div>
                             }
-                        </div>                        <!-- Mobile Wiki -->
+                        </div>
+                        }                        <!-- Mobile Wiki -->
                         <div class="space-y-1">
                             <button @onclick="@(() => ToggleMobileSubmenu("wiki"))"
                                     class="w-full flex items-center justify-between px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md">
@@ -309,6 +317,7 @@
 </CascadingAuthenticationState>
 
 @code {
+    private bool _isKeeper;
     private bool mobileMenuOpen;
     private string? openDropdownId;
     private readonly HashSet<string> openMobileSubmenus = new();
@@ -394,6 +403,12 @@
                 {
                     // Ignore JS interop errors - user can manually login
                 }
+            }
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                _isKeeper = await IdentityService.IsKeeper();
+                StateHasChanged();
             }
         }
     }

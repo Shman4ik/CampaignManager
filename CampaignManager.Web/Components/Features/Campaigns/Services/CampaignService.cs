@@ -30,6 +30,7 @@ public sealed class CampaignService(
             .ThenInclude(cp => cp.Characters)
             .AsSplitQuery()
             .Where(c => c.Players.Any(p => p.PlayerEmail == user.Email))
+            .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
     }
 
@@ -83,7 +84,10 @@ public sealed class CampaignService(
     public async Task<List<Campaign>> GetAvailableCompaniesAsync()
     {
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Campaigns.Where(p => p.Status != CampaignStatus.Completed).ToListAsync();
+        return await dbContext.Campaigns
+            .Where(p => p.Status != CampaignStatus.Completed)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync();
     }
 
     public async Task<List<Campaign>> GetAllCampaignsAsync()

@@ -65,7 +65,7 @@
                                     </dl>
                                     <div class="mt-3">
                                         <button type="button" class="cm-btn cm-btn-info w-full" @onclick="() => EditCharacter(userCharacter.Id)">
-                                            <span>Редактировать</span>
+                                            <span>Открыть персонажа</span>
                                         </button>
                                     </div>
                                 </div>
@@ -81,6 +81,27 @@
                             </button>
                         </div>
                     }
+                    @if (_isKeeper && CurrentUserId == campaign.KeeperEmail)
+                    {
+                        var npcs = GetCampaignNpcs(campaign);
+                        @if (npcs.Count > 0)
+                        {
+                            <div class="mt-4 border-t pt-3">
+                                <p class="text-sm font-medium text-gray-700 mb-2">NPC в кампании:</p>
+                                <div class="space-y-1">
+                                    @foreach (var npc in npcs)
+                                    {
+                                        <div class="flex items-center justify-between bg-gray-50 rounded px-3 py-1.5">
+                                            <span class="text-sm text-gray-800">@npc.CharacterName</span>
+                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="() => EditCharacter(npc.Id)">
+                                                <span>Открыть</span>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
                 </div>
             }
         </div>
@@ -91,6 +112,7 @@
     private List<Campaign>? UserCampaigns;
     private bool IsUserAuthenticated => CurrentUserId is not null;
     private string? CurrentUserId;
+    private bool _isKeeper;
 
     protected override async Task OnInitializedAsync()
     {
@@ -98,6 +120,7 @@
         if (IsUserAuthenticated)
         {
             UserCampaigns = await CampaignService.GetUserCampaignsAsync();
+            _isKeeper = await UserInformationService.IsKeeper();
         }
     }
 
@@ -108,6 +131,14 @@
             ?.Characters?
             .Where(p => p.Status == CharacterStatus.Active)?
             .SingleOrDefault();
+    }
+
+    private List<CharacterStorageDto> GetCampaignNpcs(Campaign campaign)
+    {
+        return campaign.Players?
+            .SelectMany(p => p.Characters ?? [])
+            .Where(c => c.Character.CharacterType == CharacterType.NonPlayerCharacter)
+            .ToList() ?? [];
     }
 
     private void EditCharacter(Guid characterId)

@@ -1,13 +1,25 @@
 @page "/scenarios"
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
 @inject ILogger<ScenariosPage> Logger
+@inject IdentityService IdentityService
 @rendermode InteractiveServer
 <PageTitle>Шаблоны сценариев</PageTitle>
 
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    </div>
+}
+else
+{
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-3xl font-bold">Шаблоны сценариев</h1>
@@ -130,6 +142,7 @@
         </div>
     </div>
 }
+}
 
 @code {
     private List<Scenario> _scenarios = [];
@@ -137,6 +150,7 @@
     private bool _showDeleteModal;
     private Scenario? _scenarioToDelete;
     private string _searchTerm = string.Empty;
+    private bool _isKeeper;
 
     private IEnumerable<Scenario> FilteredScenarios => string.IsNullOrWhiteSpace(_searchTerm)
         ? _scenarios
@@ -144,6 +158,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _isKeeper = await IdentityService.IsKeeper();
         await LoadScenarios();
     }
 

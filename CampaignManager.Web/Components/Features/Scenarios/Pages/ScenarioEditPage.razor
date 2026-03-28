@@ -14,6 +14,16 @@
 @rendermode InteractiveServer
 <PageTitle>@(IsNew ? "Создать сценарий" : "Редактировать сценарий")</PageTitle>
 
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    </div>
+}
+else
+{
 <div class="container mx-auto px-4 py-8">
     <div class="flex justify-between items-center mb-6">
         <div>
@@ -316,6 +326,7 @@
 <LocationEditorModal @ref="_locationEditorModal" OnSaved="HandleLocationSaved"/>
 <KeyFactEditorModal @ref="_keyFactEditorModal" OnSaved="HandleKeyFactSaved"/>
 <HandoutEditorModal @ref="_handoutEditorModal" OnSaved="HandleHandoutSaved"/>
+}
 
 @code {
     [Parameter] public Guid? Id { get; set; }
@@ -324,6 +335,7 @@
     private bool IsNew => Id is null || Id.Value == Guid.Empty;
     private bool _loading = true;
     private bool _showPreview;
+    private bool _isKeeper;
     private string _activeTab = "general";
 
     private LocationEditorModal? _locationEditorModal;
@@ -334,6 +346,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _isKeeper = await IdentityService.IsKeeper();
         try
         {
             _loading = true;
