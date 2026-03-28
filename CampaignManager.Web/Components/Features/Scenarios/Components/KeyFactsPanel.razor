@@ -64,11 +64,17 @@
                     <div class="mt-1 space-y-1.5">
                         @foreach (var handout in Handouts.OrderBy(h => h.Order))
                         {
+                            var isExpanded = _expandedHandouts.Contains(handout.Id);
                             <div class="border-l-2 border-purple-300 pl-3 py-1">
                                 <div class="text-sm font-medium text-gray-800">@handout.Name</div>
                                 @if (!string.IsNullOrEmpty(handout.Description))
                                 {
-                                    <div class="text-xs text-gray-500 mt-0.5 line-clamp-2">@handout.Description</div>
+                                    <div class="text-xs text-gray-500 mt-0.5 @(isExpanded ? "" : "line-clamp-2")">@handout.Description</div>
+                                    <button type="button"
+                                            class="text-xs text-purple-500 hover:text-purple-700 mt-0.5"
+                                            @onclick="() => ToggleHandout(handout.Id)">
+                                        @(isExpanded ? "Свернуть" : "Развернуть")
+                                    </button>
                                 }
                             </div>
                         }
@@ -86,6 +92,7 @@
 
     private HashSet<KeyFactType> _expandedSections = [KeyFactType.Backstory, KeyFactType.Truth, KeyFactType.Timeline, KeyFactType.Reward];
     private bool _showHandouts = true;
+    private HashSet<Guid> _expandedHandouts = [];
 
     private Dictionary<KeyFactType, List<ScenarioKeyFact>> GroupedFacts =>
         KeyFacts
@@ -100,6 +107,12 @@
     }
 
     private void ToggleHandouts() => _showHandouts = !_showHandouts;
+
+    private void ToggleHandout(Guid id)
+    {
+        if (!_expandedHandouts.Remove(id))
+            _expandedHandouts.Add(id);
+    }
 
     private static string GetTypeName(KeyFactType type) => type switch
     {
