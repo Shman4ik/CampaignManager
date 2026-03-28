@@ -3,6 +3,7 @@
 @page "/character/create/{npc}"
 @page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
@@ -10,6 +11,7 @@
 @attribute [Authorize]
 
 @inject CharacterService CharacterService
+@inject CampaignService CampaignService
 @inject NavigationManager NavigationManager
 @inject CharacterGenerationService CharacterGenerationService
 @inject OccupationService OccupationService
@@ -480,6 +482,8 @@
 
             if (CharacterStorageDto?.CampaignPlayerId is not null)
                 CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
+            else if (CampaignPlayer is null && CampaignId.HasValue && !IsNpc)
+                CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
         }
         catch (Exception ex)
         {
