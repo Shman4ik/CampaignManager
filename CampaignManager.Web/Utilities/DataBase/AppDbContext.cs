@@ -70,6 +70,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(c => c.CampaignPlayerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Связь со сценарием (шаблоны персонажей, привязанные к сценарию)
+            entity.HasOne(c => c.Scenario)
+                .WithMany(s => s.Npcs)
+                .HasForeignKey(c => c.ScenarioId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // Индекс для быстрого поиска персонажей по игроку в кампании
             entity.HasIndex(c => c.CampaignPlayerId);
 
