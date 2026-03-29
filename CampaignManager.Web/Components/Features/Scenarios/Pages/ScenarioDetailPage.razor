@@ -521,14 +521,18 @@ else
         {
             _loading = true;
 
-            _scenario = await ScenarioService.GetScenarioByIdAsync(Id);
+            var scenarioTask = ScenarioService.GetScenarioByIdAsync(Id);
+            var templatesTask = CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+
+            await Task.WhenAll(scenarioTask, templatesTask);
+
+            _scenario = scenarioTask.Result;
+            _characterTemplates = templatesTask.Result;
 
             if (_scenario?.Journal is not null)
             {
                 _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
             }
-
-            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
         }
         catch (Exception ex)
         {

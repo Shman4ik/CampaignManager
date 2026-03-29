@@ -193,24 +193,29 @@
     private SkillModel _skill = new();
     private bool _saving = false;
     private string _errorMessage = "";
+    private Guid? _lastLoadedId;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        if (Id.HasValue)
+        if (Id != _lastLoadedId)
         {
-            await LoadSkill();
-        }
-        else
-        {
-            // Initialize new skill with default values
-            _skill = new SkillModel
+            _lastLoadedId = Id;
+            if (Id.HasValue)
             {
-                Category = SkillCategory.Actions,
-                BaseValue = 0,
-                UsageExamples = new List<string>(),
-                FailureConsequences = new List<string>(),
-                OpposingSkills = new List<string>()
-            };
+                await LoadSkill();
+            }
+            else
+            {
+                // Initialize new skill with default values
+                _skill = new SkillModel
+                {
+                    Category = SkillCategory.Actions,
+                    BaseValue = 0,
+                    UsageExamples = new List<string>(),
+                    FailureConsequences = new List<string>(),
+                    OpposingSkills = new List<string>()
+                };
+            }
         }
     }
 

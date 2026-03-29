@@ -341,12 +341,26 @@ else
     private LocationEditorModal? _locationEditorModal;
     private KeyFactEditorModal? _keyFactEditorModal;
     private HandoutEditorModal? _handoutEditorModal;
+    private Guid? _lastLoadedId;
 
     private void TogglePreview() => _showPreview = !_showPreview;
 
     protected override async Task OnInitializedAsync()
     {
         _isKeeper = await IdentityService.IsKeeper();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id != _lastLoadedId)
+        {
+            _lastLoadedId = Id;
+            await LoadData();
+        }
+    }
+
+    private async Task LoadData()
+    {
         try
         {
             _loading = true;
