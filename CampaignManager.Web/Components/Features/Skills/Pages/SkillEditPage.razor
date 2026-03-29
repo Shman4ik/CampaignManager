@@ -3,6 +3,7 @@
 @using CampaignManager.Web.Components.Features.Skills.Model
 @using CampaignManager.Web.Components.Features.Skills.Services
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
@@ -193,24 +194,29 @@
     private SkillModel _skill = new();
     private bool _saving = false;
     private string _errorMessage = "";
+    private Guid? _lastLoadedId;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        if (Id.HasValue)
+        if (Id != _lastLoadedId)
         {
-            await LoadSkill();
-        }
-        else
-        {
-            // Initialize new skill with default values
-            _skill = new SkillModel
+            _lastLoadedId = Id;
+            if (Id.HasValue)
             {
-                Category = SkillCategory.Actions,
-                BaseValue = 0,
-                UsageExamples = new List<string>(),
-                FailureConsequences = new List<string>(),
-                OpposingSkills = new List<string>()
-            };
+                await LoadSkill();
+            }
+            else
+            {
+                // Initialize new skill with default values
+                _skill = new SkillModel
+                {
+                    Category = SkillCategory.Actions,
+                    BaseValue = 0,
+                    UsageExamples = new List<string>(),
+                    FailureConsequences = new List<string>(),
+                    OpposingSkills = new List<string>()
+                };
+            }
         }
     }
 
@@ -249,22 +255,21 @@
             _skill.FailureConsequences = _skill.FailureConsequences.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
             _skill.OpposingSkills = _skill.OpposingSkills.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
 
-            bool success;
             if (Id.HasValue)
             {
-                success = await SkillService.UpdateSkillAsync(_skill);
-                if (!success)
+                var updateResult = await SkillService.UpdateSkillAsync(_skill);
+                if (!updateResult.IsSuccess)
                 {
-                    _errorMessage = "Не удалось обновить навык. Возможно, навык с таким названием уже существует.";
+                    _errorMessage = updateResult.Error!;
                     return;
                 }
             }
             else
             {
-                var result = await SkillService.CreateSkillAsync(_skill);
-                if (result is null)
+                var createResult = await SkillService.CreateSkillAsync(_skill);
+                if (!createResult.IsSuccess)
                 {
-                    _errorMessage = "Не удалось создать навык. Возможно, навык с таким названием уже существует.";
+                    _errorMessage = createResult.Error!;
                     return;
                 }
             }

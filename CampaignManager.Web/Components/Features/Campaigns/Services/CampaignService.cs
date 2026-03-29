@@ -1,6 +1,7 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -51,30 +52,32 @@ public sealed class CampaignService(
             .SingleOrDefaultAsync();
     }
 
-    public async Task<Campaign> CreateCampaignAsync(string name, CampaignStatus status = CampaignStatus.Planning)
+    public async Task<Result<Campaign>> CreateCampaignAsync(string name, CampaignStatus status = CampaignStatus.Planning)
     {
-        var userEmail = identityService.GetCurrentUserEmail();
-        if (userEmail == null) throw new UnauthorizedAccessException("Пользователь не авторизован");
-
-
-        logger.LogInformation("Пользователь {userEmail} создаёт кампанию '{name}'", userEmail, name);
-
-        Campaign campaign = new() { Name = name, Status = status, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
-
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
-        dbContext.Campaigns.Add(campaign);
-
         try
         {
+            if (string.IsNullOrWhiteSpace(name))
+                return Result<Campaign>.Fail("Название кампании не может быть пустым");
+
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (userEmail is null)
+                return Result<Campaign>.Fail("Пользователь не авторизован");
+
+            logger.LogInformation("Пользователь {UserEmail} создаёт кампанию '{Name}'", userEmail, name);
+
+            Campaign campaign = new() { Name = name, Status = status, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
+
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            dbContext.Campaigns.Add(campaign);
             await dbContext.SaveChangesAsync();
-            logger.LogInformation("Кампания '{name}' успешно создана пользователем {userEmail}", name, userEmail);
-            return campaign;
+
+            logger.LogInformation("Кампания '{Name}' успешно создана пользователем {UserEmail}", name, userEmail);
+            return Result<Campaign>.Ok(campaign);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Ошибка при создании кампании '{name}' пользователем {userEmail}", name, userEmail);
-            throw;
+            logger.LogError(ex, "Ошибка при создании кампании '{Name}'", name);
+            return Result<Campaign>.Fail("Не удалось создать кампанию");
         }
     }
 
@@ -230,62 +233,76 @@ public sealed class CampaignService(
     /// <summary>
     ///     Updates the name and status of a campaign owned by the current keeper.
     /// </summary>
-    public async Task UpdateCampaignAsync(Guid id, string name, CampaignStatus status)
+    public async Task<Result> UpdateCampaignAsync(Guid id, string name, CampaignStatus status)
     {
-        var userEmail = identityService.GetCurrentUserEmail();
-        if (string.IsNullOrEmpty(userEmail)) throw new UnauthorizedAccessException("Пользователь не авторизован");
-
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
-
-        if (campaign is null)
+        try
         {
-            logger.LogWarning("Campaign {CampaignId} not found for update", id);
-            return;
+            if (string.IsNullOrWhiteSpace(name))
+                return Result.Fail("Название кампании не может быть пустым");
+
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                return Result.Fail("Пользователь не авторизован");
+
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
+
+            if (campaign is null)
+            {
+                logger.LogWarning("Campaign {CampaignId} not found for update", id);
+                return Result.Fail("Кампания не найдена");
+            }
+
+            if (!string.Equals(campaign.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase))
+                return Result.Fail("Недостаточно прав для изменения кампании");
+
+            campaign.Name = name;
+            campaign.Status = status;
+            campaign.LastUpdated = DateTime.UtcNow;
+
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation("Campaign {CampaignId} updated by {UserEmail}", id, userEmail);
+            return Result.Ok();
         }
-
-        if (!string.Equals(campaign.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase))
-            throw new UnauthorizedAccessException("Недостаточно прав для изменения кампании");
-
-        campaign.Name = name;
-        campaign.Status = status;
-        campaign.LastUpdated = DateTime.UtcNow;
-
-        await dbContext.SaveChangesAsync();
-        logger.LogInformation("Campaign {CampaignId} updated by {UserEmail}", id, userEmail);
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating campaign {CampaignId}", id);
+            return Result.Fail("Не удалось обновить кампанию");
+        }
     }
 
     /// <summary>
     ///     Deletes a campaign and all associated players/characters (cascade).
     /// </summary>
-    public async Task<bool> DeleteCampaignAsync(Guid id)
+    public async Task<Result> DeleteCampaignAsync(Guid id)
     {
-        var userEmail = identityService.GetCurrentUserEmail();
-        if (string.IsNullOrEmpty(userEmail)) return false;
-
         try
         {
+            var userEmail = identityService.GetCurrentUserEmail();
+            if (string.IsNullOrEmpty(userEmail))
+                return Result.Fail("Пользователь не авторизован");
+
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
 
             if (campaign is null)
             {
                 logger.LogWarning("Campaign {CampaignId} not found for deletion", id);
-                return false;
+                return Result.Fail("Кампания не найдена");
             }
 
             if (!string.Equals(campaign.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase))
-                throw new UnauthorizedAccessException("Недостаточно прав для удаления кампании");
+                return Result.Fail("Недостаточно прав для удаления кампании");
 
             dbContext.Campaigns.Remove(campaign);
             await dbContext.SaveChangesAsync();
             logger.LogInformation("Campaign {CampaignId} deleted by {UserEmail}", id, userEmail);
-            return true;
+            return Result.Ok();
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error deleting campaign {CampaignId}", id);
-            return false;
+            return Result.Fail("Не удалось удалить кампанию");
         }
     }
 }
