@@ -42,6 +42,7 @@ public static class AccountEndpoints
     /// </summary>
     /// <param name="returnUrl">URL to redirect to after successful authentication (default: "/")</param>
     /// <param name="mode">Authentication mode: 'silent' (no user interaction) or 'interactive' (show login prompt)</param>
+    /// <param name="loginHint">Optional email hint for Google to pre-select the account during silent authentication</param>
     /// <param name="httpContext">HTTP context for the current request</param>
     /// <returns>
     /// <list type="bullet">
@@ -57,6 +58,7 @@ public static class AccountEndpoints
     private static async Task<ChallengeHttpResult> HandleLogin(
         string? returnUrl,
         string? mode,
+        string? loginHint,
         HttpContext httpContext)
     {
         // Clear existing cookies
@@ -82,6 +84,14 @@ public static class AccountEndpoints
         if (isSilent)
         {
             properties.SetParameter("prompt", "none");
+            if (!string.IsNullOrWhiteSpace(loginHint))
+            {
+                properties.SetParameter("login_hint", loginHint);
+            }
+        }
+        else
+        {
+            properties.SetParameter("prompt", "select_account");
         }
 
         // Initiate Google authentication
@@ -139,7 +149,7 @@ public static class AccountEndpoints
 
         if (Uri.TryCreate(returnUrl, UriKind.Relative, out var relativeUri))
         {
-            return relativeUri.OriginalString.StartsWith('/') ? relativeUri.OriginalString : "/";
+            return relativeUri.OriginalString.StartsWith('/') ? relativeUri.OriginalString : "/" + relativeUri.OriginalString;
         }
 
         if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var absoluteUri))

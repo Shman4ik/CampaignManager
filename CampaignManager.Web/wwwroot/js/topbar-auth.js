@@ -59,3 +59,17 @@ export function setSkipSilentLogin() {
 
     storage.setItem(SKIP_SILENT_KEY, "true");
 }
+
+const LOGIN_HINT_KEY = "cm.loginHint";
+
+export function saveLoginHint(email) {
+    try { localStorage.setItem(LOGIN_HINT_KEY, email); } catch {}
+}
+
+export function getLoginHint() {
+    try { return localStorage.getItem(LOGIN_HINT_KEY); } catch { return null; }
+}
+
+export function clearLoginHint() {
+    try { localStorage.removeItem(LOGIN_HINT_KEY); } catch {}
+}
