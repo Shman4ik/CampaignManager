@@ -1,0 +1,410 @@
+@page "/campaigns"
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Utilities.Services
+@attribute [Authorize]
+@inject CampaignService CampaignService
+@inject NavigationManager NavigationManager
+@inject IdentityService IdentityService
+@inject ILogger<CampaignsPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Кампании</PageTitle>
+
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    </div>
+}
+else
+{
+    <div class="max-w-7xl mx-auto px-4 py-8">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="cm-h2">Кампании</h1>
+            <button type="button" class="cm-btn cm-btn-primary" @onclick="OpenAddModal">
+                <i class="fas fa-plus"></i> <span>Создать кампанию</span>
+            </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex flex-col sm:flex-row gap-3 mb-6">
+            <div class="flex-1 min-w-0">
+                <input type="search" placeholder="Поиск по названию..."
+                       class="cm-input"
+                       @bind="_searchTerm" @bind:event="oninput" />
+            </div>
+            <div class="w-full sm:w-48 flex-shrink-0">
+                <select class="cm-input" @bind="_statusFilter">
+                    <option value="">Все статусы</option>
+                    @foreach (var status in Enum.GetValues<CampaignStatus>())
+                    {
+                        <option value="@status">@GetStatusLabel(status)</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        @if (_loading)
+        {
+            <div class="flex justify-center items-center h-48">
+                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+            </div>
+        }
+        else if (!FilteredCampaigns.Any())
+        {
+            <div class="bg-white shadow-md rounded-lg p-8 text-center">
+                <i class="fas fa-scroll text-4xl text-gray-300 mb-4 block"></i>
+                @if (_campaigns.Count == 0)
+                {
+                    <p class="text-lg text-gray-600 mb-1">Кампаний пока нет.</p>
+                    <p class="text-gray-500">Создайте свою первую кампанию.</p>
+                }
+                else
+                {
+                    <p class="text-gray-500">Нет кампаний по заданным фильтрам.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var campaign in FilteredCampaigns)
+                {
+                    <div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
+                        <div class="p-5 flex-grow space-y-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <h2 class="cm-h5 truncate">@campaign.Name</h2>
+                                <span class="flex-shrink-0 @GetStatusBadgeClass(campaign.Status) text-xs px-2.5 py-0.5 rounded-full font-medium whitespace-nowrap">
+                                    @GetStatusLabel(campaign.Status)
+                                </span>
+                            </div>
+                            <div class="text-sm text-gray-500 space-y-1">
+                                <div><span class="font-medium text-gray-700">Игроков:</span> @(campaign.Players?.Count ?? 0)</div>
+                                <div><span class="font-medium text-gray-700">Создана:</span> @campaign.CreatedAt.ToString("dd.MM.yyyy")</div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-4 py-3 border-t border-gray-100 grid grid-cols-2 gap-1.5">
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm justify-center"
+                                    @onclick="@(() => OpenEditModal(campaign))">
+                                <i class="fas fa-edit"></i> <span>Изменить</span>
+                            </button>
+                            <button type="button" class="cm-btn cm-btn-error cm-btn-sm justify-center"
+                                    @onclick="@(() => ConfirmDelete(campaign))">
+                                <i class="fas fa-trash"></i> <span>Удалить</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Add Campaign Modal -->
+    @if (_showAddModal)
+    {
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
+                <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold">Создать кампанию</h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" @onclick="CloseAddModal">
+                        <i class="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+                <div class="px-6 py-5">
+                    <EditForm Model="@_addModel" OnValidSubmit="@CreateCampaign" FormName="addCampaignForm">
+                        <DataAnnotationsValidator />
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
+                                <InputText @bind-Value="_addModel.Name" class="cm-input" placeholder="Введите название..." />
+                                <ValidationMessage For="@(() => _addModel.Name)" class="text-red-500 text-xs mt-1" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
+                                <InputSelect @bind-Value="_addModel.Status" class="cm-input">
+                                    @foreach (var status in Enum.GetValues<CampaignStatus>())
+                                    {
+                                        <option value="@status">@GetStatusLabel(status)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            @if (!string.IsNullOrEmpty(_addError))
+                            {
+                                <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    @_addError
+                                </div>
+                            }
+                        </div>
+                        <div class="flex justify-end gap-2 mt-6">
+                            <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseAddModal">
+                                <span>Отмена</span>
+                            </button>
+                            <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
+                                @if (_saving)
+                                {
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                }
+                                <span>@(_saving ? "Создание..." : "Создать")</span>
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Edit Campaign Modal -->
+    @if (_showEditModal && _editCampaign is not null)
+    {
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
+            <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
+                <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                    <h3 class="text-lg font-semibold">Изменить кампанию</h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" @onclick="CloseEditModal">
+                        <i class="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+                <div class="px-6 py-5">
+                    <EditForm Model="@_editModel" OnValidSubmit="@UpdateCampaign" FormName="editCampaignForm">
+                        <DataAnnotationsValidator />
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
+                                <InputText @bind-Value="_editModel.Name" class="cm-input" />
+                                <ValidationMessage For="@(() => _editModel.Name)" class="text-red-500 text-xs mt-1" />
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
+                                <InputSelect @bind-Value="_editModel.Status" class="cm-input">
+                                    @foreach (var status in Enum.GetValues<CampaignStatus>())
+                                    {
+                                        <option value="@status">@GetStatusLabel(status)</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            @if (!string.IsNullOrEmpty(_editError))
+                            {
+                                <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                                    @_editError
+                                </div>
+                            }
+                        </div>
+                        <div class="flex justify-end gap-2 mt-6">
+                            <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseEditModal">
+                                <span>Отмена</span>
+                            </button>
+                            <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
+                                @if (_saving)
+                                {
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                }
+                                <span>@(_saving ? "Сохранение..." : "Сохранить")</span>
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmationModal IsVisible="_showDeleteModal"
+                       OnConfirm="DeleteCampaign"
+                       OnCancel="@(() => { _showDeleteModal = false; _campaignToDelete = null; })"
+                       Title="Удалить кампанию"
+                       Message="@($"Вы уверены, что хотите удалить кампанию \"{_campaignToDelete?.Name}\"? Все игроки и персонажи будут удалены безвозвратно.")"
+                       ConfirmText="Удалить"
+                       IconType="error"
+                       IsLoading="_deleting" />
+}
+
+@code {
+    private List<Campaign> _campaigns = [];
+    private bool _loading = true;
+    private bool _isKeeper;
+
+    // Filters
+    private string _searchTerm = string.Empty;
+    private string _statusFilter = string.Empty;
+
+    // Add modal state
+    private bool _showAddModal;
+    private CampaignCreateModel _addModel = new();
+    private string _addError = string.Empty;
+
+    // Edit modal state
+    private bool _showEditModal;
+    private Campaign? _editCampaign;
+    private CampaignCreateModel _editModel = new();
+    private string _editError = string.Empty;
+
+    // Delete modal state
+    private bool _showDeleteModal;
+    private Campaign? _campaignToDelete;
+
+    // Shared
+    private bool _saving;
+    private bool _deleting;
+
+    private IEnumerable<Campaign> FilteredCampaigns => _campaigns
+        .Where(c => string.IsNullOrWhiteSpace(_searchTerm) ||
+                    c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+        .Where(c => string.IsNullOrEmpty(_statusFilter) ||
+                    c.Status.ToString() == _statusFilter);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isKeeper = await IdentityService.IsKeeper();
+        if (_isKeeper)
+        {
+            await LoadCampaigns();
+        }
+    }
+
+    private async Task LoadCampaigns()
+    {
+        try
+        {
+            _loading = true;
+            _campaigns = await CampaignService.GetKeeperCampaignsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading keeper campaigns");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    // ── Add modal ───────────────────────────────────────────────
+
+    private void OpenAddModal()
+    {
+        _addModel = new CampaignCreateModel();
+        _addError = string.Empty;
+        _showAddModal = true;
+    }
+
+    private void CloseAddModal()
+    {
+        _showAddModal = false;
+    }
+
+    private async Task CreateCampaign()
+    {
+        try
+        {
+            _saving = true;
+            _addError = string.Empty;
+            await CampaignService.CreateCampaignAsync(_addModel.Name, _addModel.Status);
+            _showAddModal = false;
+            await LoadCampaigns();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating campaign");
+            _addError = "Ошибка при создании кампании";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ── Edit modal ───────────────────────────────────────────────
+
+    private void OpenEditModal(Campaign campaign)
+    {
+        _editCampaign = campaign;
+        _editModel = new CampaignCreateModel { Name = campaign.Name, Status = campaign.Status };
+        _editError = string.Empty;
+        _showEditModal = true;
+    }
+
+    private void CloseEditModal()
+    {
+        _showEditModal = false;
+        _editCampaign = null;
+    }
+
+    private async Task UpdateCampaign()
+    {
+        if (_editCampaign is null) return;
+        var campaignId = _editCampaign.Id;
+        try
+        {
+            _saving = true;
+            _editError = string.Empty;
+            await CampaignService.UpdateCampaignAsync(campaignId, _editModel.Name, _editModel.Status);
+            _showEditModal = false;
+            _editCampaign = null;
+            await LoadCampaigns();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating campaign {CampaignId}", campaignId);
+            _editError = "Ошибка при обновлении кампании";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ── Delete modal ─────────────────────────────────────────────
+
+    private void ConfirmDelete(Campaign campaign)
+    {
+        _campaignToDelete = campaign;
+        _showDeleteModal = true;
+    }
+
+    private async Task DeleteCampaign()
+    {
+        if (_campaignToDelete is null) return;
+        try
+        {
+            _deleting = true;
+            await CampaignService.DeleteCampaignAsync(_campaignToDelete.Id);
+            await LoadCampaigns();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting campaign {CampaignId}", _campaignToDelete.Id);
+        }
+        finally
+        {
+            _deleting = false;
+            _showDeleteModal = false;
+            _campaignToDelete = null;
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────
+
+    private static string GetStatusLabel(CampaignStatus status) => status switch
+    {
+        CampaignStatus.Planning => "Планирование",
+        CampaignStatus.Active => "Активна",
+        CampaignStatus.OnHold => "На паузе",
+        CampaignStatus.Completed => "Завершена",
+        _ => status.ToString()
+    };
+
+    private static string GetStatusBadgeClass(CampaignStatus status) => status switch
+    {
+        CampaignStatus.Planning => "bg-gray-100 text-gray-700",
+        CampaignStatus.Active => "bg-green-100 text-green-800",
+        CampaignStatus.OnHold => "bg-yellow-100 text-yellow-800",
+        CampaignStatus.Completed => "bg-blue-100 text-blue-800",
+        _ => "bg-gray-100 text-gray-700"
+    };
+}

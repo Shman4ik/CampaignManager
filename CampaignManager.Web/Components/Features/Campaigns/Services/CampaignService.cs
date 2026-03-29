@@ -51,7 +51,7 @@ public sealed class CampaignService(
             .SingleOrDefaultAsync();
     }
 
-    public async Task<Campaign> CreateCampaignAsync(string name)
+    public async Task<Campaign> CreateCampaignAsync(string name, CampaignStatus status = CampaignStatus.Planning)
     {
         var userEmail = identityService.GetCurrentUserEmail();
         if (userEmail == null) throw new UnauthorizedAccessException("Пользователь не авторизован");
@@ -59,7 +59,7 @@ public sealed class CampaignService(
 
         logger.LogInformation("Пользователь {userEmail} создаёт кампанию '{name}'", userEmail, name);
 
-        Campaign campaign = new() { Name = name, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
+        Campaign campaign = new() { Name = name, Status = status, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
 
         using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -207,6 +207,84 @@ public sealed class CampaignService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error checking if user is admin or keeper for campaign {CampaignId}", campaignId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Returns all campaigns where the current user is the Keeper, including player counts.
+    /// </summary>
+    public async Task<List<Campaign>> GetKeeperCampaignsAsync()
+    {
+        var userEmail = identityService.GetCurrentUserEmail();
+        if (string.IsNullOrEmpty(userEmail)) return [];
+
+        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        return await dbContext.Campaigns
+            .Include(c => c.Players)
+            .Where(c => c.KeeperEmail == userEmail)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    ///     Updates the name and status of a campaign owned by the current keeper.
+    /// </summary>
+    public async Task UpdateCampaignAsync(Guid id, string name, CampaignStatus status)
+    {
+        var userEmail = identityService.GetCurrentUserEmail();
+        if (string.IsNullOrEmpty(userEmail)) throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
+
+        if (campaign is null)
+        {
+            logger.LogWarning("Campaign {CampaignId} not found for update", id);
+            return;
+        }
+
+        if (!string.Equals(campaign.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Недостаточно прав для изменения кампании");
+
+        campaign.Name = name;
+        campaign.Status = status;
+        campaign.LastUpdated = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync();
+        logger.LogInformation("Campaign {CampaignId} updated by {UserEmail}", id, userEmail);
+    }
+
+    /// <summary>
+    ///     Deletes a campaign and all associated players/characters (cascade).
+    /// </summary>
+    public async Task<bool> DeleteCampaignAsync(Guid id)
+    {
+        var userEmail = identityService.GetCurrentUserEmail();
+        if (string.IsNullOrEmpty(userEmail)) return false;
+
+        try
+        {
+            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
+
+            if (campaign is null)
+            {
+                logger.LogWarning("Campaign {CampaignId} not found for deletion", id);
+                return false;
+            }
+
+            if (!string.Equals(campaign.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase))
+                throw new UnauthorizedAccessException("Недостаточно прав для удаления кампании");
+
+            dbContext.Campaigns.Remove(campaign);
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation("Campaign {CampaignId} deleted by {UserEmail}", id, userEmail);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting campaign {CampaignId}", id);
             return false;
         }
     }
