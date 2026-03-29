@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Skills.Model;
+using CampaignManager.Web.Utilities;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -70,18 +71,39 @@ public sealed class SkillService(
     /// <summary>
     /// Creates a new skill, rejecting duplicates by name
     /// </summary>
-    public Task<SkillModel?> CreateSkillAsync(SkillModel skill) =>
-        CrudServiceHelper.CreateAsync(dbContextFactory, cache, SkillsCacheKey, skill, logger);
+    public async Task<Result<SkillModel>> CreateSkillAsync(SkillModel skill)
+    {
+        if (string.IsNullOrWhiteSpace(skill.Name))
+            return Result<SkillModel>.Fail("Название навыка не может быть пустым");
+
+        var created = await CrudServiceHelper.CreateAsync(dbContextFactory, cache, SkillsCacheKey, skill, logger);
+        return created is not null
+            ? Result<SkillModel>.Ok(created)
+            : Result<SkillModel>.Fail("Не удалось создать навык. Возможно, навык с таким названием уже существует.");
+    }
 
     /// <summary>
     /// Updates an existing skill
     /// </summary>
-    public Task<bool> UpdateSkillAsync(SkillModel skill) =>
-        CrudServiceHelper.UpdateAsync(dbContextFactory, cache, SkillsCacheKey, skill, logger);
+    public async Task<Result> UpdateSkillAsync(SkillModel skill)
+    {
+        if (string.IsNullOrWhiteSpace(skill.Name))
+            return Result.Fail("Название навыка не может быть пустым");
+
+        var success = await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, SkillsCacheKey, skill, logger);
+        return success
+            ? Result.Ok()
+            : Result.Fail("Не удалось обновить навык. Возможно, навык с таким названием уже существует.");
+    }
 
     /// <summary>
     /// Deletes a skill by its ID
     /// </summary>
-    public Task<bool> DeleteSkillAsync(Guid id) =>
-        CrudServiceHelper.DeleteAsync<SkillModel>(dbContextFactory, cache, SkillsCacheKey, id, logger);
+    public async Task<Result> DeleteSkillAsync(Guid id)
+    {
+        var success = await CrudServiceHelper.DeleteAsync<SkillModel>(dbContextFactory, cache, SkillsCacheKey, id, logger);
+        return success
+            ? Result.Ok()
+            : Result.Fail("Не удалось удалить навык");
+    }
 }

@@ -1,6 +1,7 @@
 @page "/campaigns"
 @using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Utilities
 @using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject CampaignService CampaignService
@@ -286,18 +287,18 @@ else
 
     private async Task CreateCampaign()
     {
+        _saving = true;
+        _addError = string.Empty;
         try
         {
-            _saving = true;
-            _addError = string.Empty;
-            await CampaignService.CreateCampaignAsync(_addModel.Name, _addModel.Status);
+            var result = await CampaignService.CreateCampaignAsync(_addModel.Name, _addModel.Status);
+            if (!result.IsSuccess)
+            {
+                _addError = result.Error!;
+                return;
+            }
             _showAddModal = false;
             await LoadCampaigns();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error creating campaign");
-            _addError = "Ошибка при создании кампании";
         }
         finally
         {
@@ -325,19 +326,19 @@ else
     {
         if (_editCampaign is null) return;
         var campaignId = _editCampaign.Id;
+        _saving = true;
+        _editError = string.Empty;
         try
         {
-            _saving = true;
-            _editError = string.Empty;
-            await CampaignService.UpdateCampaignAsync(campaignId, _editModel.Name, _editModel.Status);
+            var result = await CampaignService.UpdateCampaignAsync(campaignId, _editModel.Name, _editModel.Status);
+            if (!result.IsSuccess)
+            {
+                _editError = result.Error!;
+                return;
+            }
             _showEditModal = false;
             _editCampaign = null;
             await LoadCampaigns();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error updating campaign {CampaignId}", campaignId);
-            _editError = "Ошибка при обновлении кампании";
         }
         finally
         {
@@ -356,15 +357,18 @@ else
     private async Task DeleteCampaign()
     {
         if (_campaignToDelete is null) return;
+        _deleting = true;
         try
         {
-            _deleting = true;
-            await CampaignService.DeleteCampaignAsync(_campaignToDelete.Id);
-            await LoadCampaigns();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error deleting campaign {CampaignId}", _campaignToDelete.Id);
+            var result = await CampaignService.DeleteCampaignAsync(_campaignToDelete.Id);
+            if (result.IsSuccess)
+            {
+                await LoadCampaigns();
+            }
+            else
+            {
+                Logger.LogWarning("Delete campaign failed: {Error}", result.Error);
+            }
         }
         finally
         {

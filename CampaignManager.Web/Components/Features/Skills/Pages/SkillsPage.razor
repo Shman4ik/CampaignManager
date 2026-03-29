@@ -4,6 +4,7 @@
 @using CampaignManager.Web.Components.Features.Skills.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities
 @attribute [Authorize]
 
 @inject SkillService SkillService
@@ -188,12 +189,15 @@
 
         try
         {
-            var success = await SkillService.DeleteSkillAsync(_skillToDelete.Id);
-            if (success) await LoadData();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error deleting skill {SkillId}", _skillToDelete.Id);
+            var result = await SkillService.DeleteSkillAsync(_skillToDelete.Id);
+            if (result.IsSuccess)
+            {
+                await LoadData();
+            }
+            else
+            {
+                Logger.LogWarning("Delete skill failed: {Error}", result.Error);
+            }
         }
         finally
         {
