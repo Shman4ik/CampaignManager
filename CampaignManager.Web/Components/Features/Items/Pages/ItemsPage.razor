@@ -1,13 +1,6 @@
 ﻿@page "/items"
 @using CampaignManager.Web.Components.Features.Items.Model
-@using CampaignManager.Web.Components.Features.Items.Services
-@using CampaignManager.Web.Components.Shared.Model
 @attribute [Authorize]
-
-@inject ItemService ItemService
-@inject NavigationManager NavigationManager
-@inject ILogger<ItemsPage> Logger
-@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
 <PageTitle>Предметы - Campaign Manager</PageTitle>
@@ -242,497 +235,118 @@
 </div>
 
 <!-- Modal for adding/editing items -->
-<Modal IsVisible="showModal"
-       OnClose="HideModal"
-       Title="@(isEditMode ? "Редактировать предмет" : "Добавить предмет")"
-       MaxWidth="4xl">
-    <ChildContent>
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
-                <i class="fas fa-exclamation-triangle text-red-500 mr-2 mt-0.5"></i>
-                <span>@errorMessage</span>
-            </div>
-        }
-        <EditForm Model="editItem" OnValidSubmit="HandleValidSubmit" Id="item-edit-form">
-            <DataAnnotationsValidator/>
-            <ValidationSummary class="mb-4 text-red-600"/>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label for="item-name" class="block text-sm font-medium text-gray-700 mb-1">Название *</label>
-                    <InputText @bind-Value="editItem.Name" id="item-name"
-                               class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-                    <ValidationMessage For="@(() => editItem.Name)" class="text-red-600 text-sm mt-1"/>
+<div
+    class="@(showModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+    <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-4xl">
+        <div
+            class="p-5 border-b border-gray-200 bg-gradient-to-r from-primary-500 to-primary-600 text-white flex justify-between items-center">
+            <h3 class="font-bold text-xl">@(isEditMode ? "Редактировать предмет" : "Добавить предмет")</h3>
+            <button @onclick="HideModal" class="text-white hover:bg-primary-700 rounded-full p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="mb-4 p-3 bg-red-100 text-red-700 rounded-lg border border-red-300 flex items-start">
+                    <i class="fas fa-exclamation-triangle text-red-500 mr-2 mt-0.5"></i>
+                    <span>@errorMessage</span>
                 </div>
+            }
+            <EditForm Model="editItem" OnValidSubmit="HandleValidSubmit" Id="item-edit-form">
+                <DataAnnotationsValidator/>
+                <ValidationSummary class="mb-4 text-red-600"/>
 
-                <div>
-                    <label for="item-type" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
-                    <InputText @bind-Value="editItem.Type" id="item-type"
-                               class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-                    <ValidationMessage For="@(() => editItem.Type)" class="text-red-600 text-sm mt-1"/>
-                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="item-name" class="block text-sm font-medium text-gray-700 mb-1">Название *</label>
+                        <InputText @bind-Value="editItem.Name" id="item-name"
+                                   class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
+                        <ValidationMessage For="@(() => editItem.Name)" class="text-red-600 text-sm mt-1"/>
+                    </div>
 
-                <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Эпоха *</label>
-                    <div class="flex flex-wrap gap-4">
-                        <div class="flex items-center">
-                            <input type="checkbox" id="edit-era1920s" @bind="editItem1920"
-                                   class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
-                            <label for="edit-era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
-                        </div>
-                        <div class="flex items-center">
-                            <input type="checkbox" id="edit-eraModern" @bind="editItemModern"
-                                   class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
-                            <label for="edit-eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
+                    <div>
+                        <label for="item-type" class="block text-sm font-medium text-gray-700 mb-1">Тип</label>
+                        <InputText @bind-Value="editItem.Type" id="item-type"
+                                   class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
+                        <ValidationMessage For="@(() => editItem.Type)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Эпоха *</label>
+                        <div class="flex flex-wrap gap-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="edit-era1920s" @bind="editItem1920"
+                                       class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                                <label for="edit-era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" id="edit-eraModern" @bind="editItemModern"
+                                       class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
+                                <label for="edit-eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="md:col-span-2">
-                    <label for="item-description"
-                           class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
-                    <InputTextArea @bind-Value="editItem.Description" id="item-description" rows="4"
+                    <div class="md:col-span-2">
+                        <label for="item-description"
+                               class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+                        <InputTextArea @bind-Value="editItem.Description" id="item-description" rows="4"
+                                       class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
+                        <ValidationMessage For="@(() => editItem.Description)" class="text-red-600 text-sm mt-1"/>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label for="item-imageurl" class="block text-sm font-medium text-gray-700 mb-1">URL
+                            изображения</label>
+                        <InputText @bind-Value="editItem.ImageUrl" id="item-imageurl"
                                    class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-                    <ValidationMessage For="@(() => editItem.Description)" class="text-red-600 text-sm mt-1"/>
+                        <ValidationMessage For="@(() => editItem.ImageUrl)" class="text-red-600 text-sm mt-1"/>
+                    </div>
                 </div>
-
-                <div class="md:col-span-2">
-                    <label for="item-imageurl" class="block text-sm font-medium text-gray-700 mb-1">URL
-                        изображения</label>
-                    <InputText @bind-Value="editItem.ImageUrl" id="item-imageurl"
-                               class="w-full px-3 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-                    <ValidationMessage For="@(() => editItem.ImageUrl)" class="text-red-600 text-sm mt-1"/>
-                </div>
-            </div>
-            <!-- Hidden submit button for form submission -->
-            <button type="submit" @ref="itemFormSubmitButton" style="display:none;"></button>
-        </EditForm>
-    </ChildContent>
-    <FooterContent>
-        <button type="button" class="cm-btn cm-btn-secondary" @onclick="HideModal">
-            <span>Отмена</span>
-        </button>
-        <button type="button" class="cm-btn cm-btn-info" @onclick="SubmitItemForm">
-            <span>@(isEditMode ? "Сохранить" : "Добавить")</span>
-        </button>
-    </FooterContent>
-</Modal>
+                <!-- Hidden submit button for form submission -->
+                <button type="submit" @ref="itemFormSubmitButton" style="display:none;"></button>
+            </EditForm>
+        </div>
+        <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button type="button" class="cm-btn cm-btn-secondary" @onclick="HideModal">
+                <span>Отмена</span>
+            </button>
+            <button type="button" class="cm-btn cm-btn-info" @onclick="SubmitItemForm">
+                <span>@(isEditMode ? "Сохранить" : "Добавить")</span>
+            </button>
+        </div>
+    </div>
+</div>
 
 <!-- Modal for delete confirmation -->
-<ConfirmationModal IsVisible="showDeleteModal"
-                   OnConfirm="ConfirmDelete"
-                   OnCancel="HideDeleteModal"
-                   Title="Подтверждение удаления"
-                   Message="@($"Вы уверены, что хотите удалить предмет \"{deleteItem?.Name}\"?")"
-                   ConfirmText="Удалить"
-                   IconType="error" />
-
-@code {
-
-    // Editable item class for form binding
-    public class EditableItem
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? Type { get; set; }
-        public string? Description { get; set; }
-        public string? ImageUrl { get; set; }
-    }
-
-    private bool isSearchPanelVisible = true;
-
-    // List to hold all items fetched from the service
-    private List<Item>? items; // Nullable to indicate loading state
-    private List<string>? itemTypes; // Available item types
-
-    // Filtered list based on search query and other filters
-    private IQueryable<Item> filteredItems => FilterItems(); // Pagination properties
-    private int currentPage = 1;
-    private int itemsPerPage = 20;
-    private int totalPages => (int)Math.Ceiling((double)filteredItems.Count() / itemsPerPage);
-    private IEnumerable<Item> paginatedItems => filteredItems.Skip((currentPage - 1) * itemsPerPage).Take(itemsPerPage);
-
-    // Sorting properties
-    private string? sortField;
-    private bool sortAscending = true;
-
-    // Search query bound to the input field
-    private string searchQuery = string.Empty;
-
-    // Advanced filtering variables
-    private string? selectedType;
-    private bool is1920Filter = true;
-    private bool isModernFilter = false;
-    private readonly Dictionary<string, string> columnFilters = new();
-
-    // Modal visibility flags
-    private bool showModal;
-    private bool showDeleteModal; // State for Add/Edit modal
-    private bool isEditMode;
-    private EditableItem editItem = new(); // Model for the edit form
-    private bool editItem1920;
-    private bool editItemModern;
-
-    // Item object targeted for deletion
-    private Item? deleteItem;
-
-    // Error message state
-    private string? errorMessage;
-
-    // Expanded item details
-    private Guid? expandedItemId;
-
-    // Form submission reference
-    private ElementReference itemFormSubmitButton;
-
-    // Lifecycle method: Load data when the component is initialized
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadItemsAsync();
-    }
-
-    // Method to load items data from the service
-    private async Task LoadItemsAsync()
-    {
-        errorMessage = null; // Clear previous errors
-        try
-        {
-            var itemsTask = ItemService.GetAllItemsAsync();
-            var typesTask = ItemService.GetAllItemTypesAsync();
-
-            await Task.WhenAll(itemsTask, typesTask);
-
-            items = itemsTask.Result;
-            itemTypes = typesTask.Result;
-        }
-        catch (Exception ex)
-        {
-            // Log the error (e.g., to console or a logging service)
-            Console.WriteLine($"Error loading items: {ex.Message}");
-            errorMessage = "Не удалось загрузить список предметов. Пожалуйста, попробуйте позже.";
-            items = new List<Item>(); // Ensure items is not null
-            itemTypes = new List<string>();
-        }
-    }
-
-    // Pagination methods
-    private void GoToPage(int page)
-    {
-        if (page >= 1 && page <= totalPages)
-        {
-            currentPage = page;
-        }
-    }
-
-    // Sorting methods
-    private void ToggleSort(string field)
-    {
-        if (sortField == field)
-        {
-            sortAscending = !sortAscending;
-        }
-        else
-        {
-            sortField = field;
-            sortAscending = true;
-        }
-
-        currentPage = 1; // Reset to first page when sorting
-    }
-
-    private string GetSortIcon(string field)
-    {
-        if (sortField != field)
-            return "fa-sort";
-
-        return sortAscending ? "fa-sort-up" : "fa-sort-down";
-    }
-
-    // Toggle item details
-    private void ToggleItemDetails(Item item)
-    {
-        if (expandedItemId == item.Id)
-        {
-            expandedItemId = null;
-        }
-        else
-        {
-            expandedItemId = item.Id;
-        }
-    }
-
-    // Reset all filters to their default state
-    private void ResetFilters()
-    {
-        searchQuery = string.Empty;
-        selectedType = null;
-        is1920Filter = true;
-        isModernFilter = true;
-        columnFilters.Clear();
-        currentPage = 1;
-
-        // Apply filters to update the UI
-        ApplyFilters();
-    }
-
-    // Handle column header filter change
-    private void OnColumnHeaderFilterChanged(ChangeEventArgs e, string columnName)
-    {
-        var value = e.Value?.ToString() ?? "";
-
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            if (columnFilters.ContainsKey(columnName))
-            {
-                columnFilters.Remove(columnName);
-            }
-        }
-        else
-        {
-            columnFilters[columnName] = value;
-        }
-
-        currentPage = 1; // Reset to first page when filtering
-        ApplyFilters();
-    }
-
-    
-    private void ApplyFilters()
-    {
-        currentPage = 1; // Reset to first page when filtering
-        // This will trigger a re-render which will use our updated filter values
-        StateHasChanged();
-    } 
-
-    private void ShowAddModal()
-    {
-        isEditMode = false;
-        editItem = new EditableItem(); // Reset the edit model
-        editItem1920 = true;
-        editItemModern = false;
-        errorMessage = null; // Clear errors
-        showModal = true;
-    } // Show the modal for editing an existing item
-
-    private void ShowEditModal(Item item)
-    {
-        isEditMode = true;
-        // Copy the item data to the editable model
-        editItem = new EditableItem
-        {
-            Id = item.Id,
-            Name = item.Name,
-            Type = item.Type,
-            Description = item.Description,
-            ImageUrl = item.ImageUrl
-        };
-        editItem1920 = (item.Era & Eras.Classic) != 0;
-        editItemModern = (item.Era & Eras.Modern) != 0;
-        errorMessage = null; // Clear errors
-        showModal = true;
-    }
-
-    // Hide the Add/Edit modal
-    private void HideModal()
-    {
-        showModal = false;
-    }
-
-    // Submit the item form programmatically
-    private async Task SubmitItemForm()
-    {
-        await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('#item-edit-form button[type=submit]').click()");
-    }
-
-    // Handle the valid submission of the Add/Edit form
-
-    private async Task HandleValidSubmit()
-    {
-        errorMessage = null; // Clear previous errors
-        try
-        {
-            // Set the era based on checkboxes
-            var era = Eras.Classic; // Default value, but we'll override it
-            if (editItem1920 && editItemModern)
-                era = Eras.Classic | Eras.Modern;
-            else if (editItem1920)
-                era = Eras.Classic;
-            else if (editItemModern)
-                era = Eras.Modern;
-
-            var item = new Item
-            {
-                Id = editItem.Id,
-                Name = editItem.Name,
-                Type = editItem.Type,
-                Era = era,
-                Description = editItem.Description,
-                ImageUrl = editItem.ImageUrl
-            };
-
-            if (isEditMode)
-            {
-                var success = await ItemService.UpdateItemAsync(item);
-                if (!success)
-                {
-                    errorMessage = "Не удалось обновить предмет. Возможно, предмет с таким названием уже существует.";
-                    return;
-                }
-            }
-            else
-            {
-                var created = await ItemService.CreateItemAsync(item);
-                if (created == null)
-                {
-                    errorMessage = "Не удалось создать предмет. Возможно, предмет с таким названием уже существует.";
-                    return;
-                }
-            }
-
-            showModal = false; // Close modal on success
-            await LoadItemsAsync(); // Refresh the list
-            ApplyFilters(); // Reapply filters
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error saving item: {ex.Message}");
-            errorMessage = $"Не удалось сохранить предмет: {ex.Message}";
-            // Keep the modal open to show the error
-        }
-    }
-
-    // Show the delete confirmation modal
-    private void ShowDeleteModal(Item item)
-    {
-        deleteItem = item;
-        errorMessage = null; // Clear errors
-        showDeleteModal = true;
-    }
-
-    // Hide the delete confirmation modal
-    private void HideDeleteModal()
-    {
-        showDeleteModal = false;
-        deleteItem = null;
-    }
-
-    // Confirm and execute the item deletion
-    private async Task ConfirmDelete()
-    {
-        if (deleteItem == null) return; // Should not happen, but good practice
-
-        errorMessage = null; // Clear previous errors
-        try
-        {
-            await ItemService.DeleteItemAsync(deleteItem.Id); // Use Guid Id
-            showDeleteModal = false;
-            await LoadItemsAsync(); // Refresh the list
-            deleteItem = null; // Clear the selected item
-            ApplyFilters(); // Reapply filters
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error deleting item: {ex.Message}");
-            errorMessage = $"Не удалось удалить предмет: {ex.Message}";
-            // Keep the modal open to show the error
-        }
-    }
-
-    // Filter items based on all active filters
-    private IQueryable<Item> FilterItems()
-    {
-        if (items == null)
-        {
-            return Enumerable.Empty<Item>().AsQueryable(); // Return empty IQueryable if source is null
-        }
-
-        var query = items.AsQueryable(); // Use AsQueryable for sorting
-
-        // Apply search filter
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            query = query.Where(i =>
-                (i.Name != null && i.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                (i.Description != null && i.Description.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                (i.Type != null && i.Type.Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
-            );
-        }
-
-        // Apply type filter
-        if (!string.IsNullOrWhiteSpace(selectedType))
-        {
-            query = query.Where(i => i.Type == selectedType);
-        }
-
-        // Apply era filters
-        if (is1920Filter && !isModernFilter)
-        {
-            query = query.Where(i => (i.Era & Eras.Classic) != 0);
-        }
-        else if (!is1920Filter && isModernFilter)
-        {
-            query = query.Where(i => (i.Era & Eras.Modern) != 0);
-        }
-        else if (is1920Filter && isModernFilter)
-        {
-            query = query.Where(i => (i.Era & Eras.Classic) != 0 || (i.Era & Eras.Modern) != 0);
-        }
-
-        // Apply column header filters
-        foreach (var filter in columnFilters)
-        {
-            if (filter.Key == "Name" && !string.IsNullOrWhiteSpace(filter.Value))
-            {
-                query = query.Where(i => i.Name != null && i.Name.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
-            }
-            else if (filter.Key == "Type" && !string.IsNullOrWhiteSpace(filter.Value))
-            {
-                query = query.Where(i => i.Type != null && i.Type.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
-            }
-        }
-
-        // Apply sorting
-        if (!string.IsNullOrEmpty(sortField))
-        {
-            switch (sortField)
-            {
-                case nameof(Item.Name):
-                    query = sortAscending ? query.OrderBy(i => i.Name) : query.OrderByDescending(i => i.Name);
-                    break;
-                case nameof(Item.Type):
-                    query = sortAscending ? query.OrderBy(i => i.Type) : query.OrderByDescending(i => i.Type);
-                    break;
-                case nameof(Item.Era):
-                    query = sortAscending ? query.OrderBy(i => i.Era) : query.OrderByDescending(i => i.Era);
-                    break;
-                default:
-                    query = query.OrderBy(i => i.Name);
-                    break;
-            }
-        }
-        else
-        {
-            query = query.OrderBy(i => i.Name);
-        }
-
-        return query;
-    }
-
-    private string GetEraDisplay(Eras era)
-    {
-        if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
-            return "1920s & Modern";
-        if ((era & Eras.Classic) != 0)
-            return "1920s";
-        if ((era & Eras.Modern) != 0)
-            return "Modern";
-        return "Unknown";
-    }
-
-    private void ToggleSearchPanel()
-    {
-        isSearchPanelVisible = !isSearchPanelVisible;
-    }
-
-}
+<div
+    class="@(showDeleteModal ? "fixed inset-0 z-50 overflow-auto bg-black bg-opacity-50 flex justify-center items-start pt-20" : "hidden")">
+    <div class="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md">
+        <div
+            class="p-5 border-b border-gray-200 bg-gradient-to-r from-error-500 to-error-600 text-white flex justify-between items-center">
+            <h3 class="font-bold text-xl">Подтверждение удаления</h3>
+            <button @onclick="HideDeleteModal" class="text-white hover:bg-error-700 rounded-full p-1">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 bg-white max-h-[70vh] overflow-y-auto">
+            <div class="flex items-start">
+                <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3 mt-1"></i>
+                <div>
+                    <p class="text-gray-800 mb-2">Вы уверены, что хотите удалить предмет
+                        "<strong>@(deleteItem?.Name)</strong>"?</p>
+                    <p class="text-red-600 text-sm">Это действие нельзя отменить.</p>
+                </div>
+            </div>
+        </div>
+        <div class="p-5 border-t border-gray-200 flex justify-end space-x-3 bg-gray-50">
+            <button type="button" class="cm-btn cm-btn-secondary" @onclick="HideDeleteModal">
+                <span>Отмена</span>
+            </button>
+            <button type="button" class="cm-btn cm-btn-error" @onclick="ConfirmDelete">
+                <span>Удалить</span>
+            </button>
+        </div>
+    </div>
+</div>
