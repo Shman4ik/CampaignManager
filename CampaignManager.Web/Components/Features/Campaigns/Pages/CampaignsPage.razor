@@ -106,112 +106,98 @@ else
     </div>
 
     <!-- Add Campaign Modal -->
-    @if (_showAddModal)
-    {
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-            <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
-                <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold">Создать кампанию</h3>
-                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" @onclick="CloseAddModal">
-                        <i class="fas fa-times text-lg"></i>
+    <Modal IsVisible="_showAddModal"
+           OnClose="CloseAddModal"
+           Title="Создать кампанию"
+           MaxWidth="md"
+           MaxHeight="null">
+        <ChildContent>
+            <EditForm Model="@_addModel" OnValidSubmit="@CreateCampaign" FormName="addCampaignForm">
+                <DataAnnotationsValidator />
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
+                        <InputText @bind-Value="_addModel.Name" class="cm-input" placeholder="Введите название..." />
+                        <ValidationMessage For="@(() => _addModel.Name)" class="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
+                        <InputSelect @bind-Value="_addModel.Status" class="cm-input">
+                            @foreach (var status in Enum.GetValues<CampaignStatus>())
+                            {
+                                <option value="@status">@GetStatusLabel(status)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_addError))
+                    {
+                        <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                            @_addError
+                        </div>
+                    }
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseAddModal">
+                        <span>Отмена</span>
+                    </button>
+                    <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <i class="fas fa-spinner fa-spin"></i>
+                        }
+                        <span>@(_saving ? "Создание..." : "Создать")</span>
                     </button>
                 </div>
-                <div class="px-6 py-5">
-                    <EditForm Model="@_addModel" OnValidSubmit="@CreateCampaign" FormName="addCampaignForm">
-                        <DataAnnotationsValidator />
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
-                                <InputText @bind-Value="_addModel.Name" class="cm-input" placeholder="Введите название..." />
-                                <ValidationMessage For="@(() => _addModel.Name)" class="text-red-500 text-xs mt-1" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
-                                <InputSelect @bind-Value="_addModel.Status" class="cm-input">
-                                    @foreach (var status in Enum.GetValues<CampaignStatus>())
-                                    {
-                                        <option value="@status">@GetStatusLabel(status)</option>
-                                    }
-                                </InputSelect>
-                            </div>
-                            @if (!string.IsNullOrEmpty(_addError))
-                            {
-                                <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                                    @_addError
-                                </div>
-                            }
-                        </div>
-                        <div class="flex justify-end gap-2 mt-6">
-                            <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseAddModal">
-                                <span>Отмена</span>
-                            </button>
-                            <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
-                                @if (_saving)
-                                {
-                                    <i class="fas fa-spinner fa-spin"></i>
-                                }
-                                <span>@(_saving ? "Создание..." : "Создать")</span>
-                            </button>
-                        </div>
-                    </EditForm>
-                </div>
-            </div>
-        </div>
-    }
+            </EditForm>
+        </ChildContent>
+    </Modal>
 
     <!-- Edit Campaign Modal -->
-    @if (_showEditModal && _editCampaign is not null)
-    {
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 px-4">
-            <div class="bg-white rounded-lg shadow-lg w-full max-w-md">
-                <div class="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-                    <h3 class="text-lg font-semibold">Изменить кампанию</h3>
-                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" @onclick="CloseEditModal">
-                        <i class="fas fa-times text-lg"></i>
+    <Modal IsVisible="@(_showEditModal && _editCampaign is not null)"
+           OnClose="CloseEditModal"
+           Title="Изменить кампанию"
+           MaxWidth="md"
+           MaxHeight="null">
+        <ChildContent>
+            <EditForm Model="@_editModel" OnValidSubmit="@UpdateCampaign" FormName="editCampaignForm">
+                <DataAnnotationsValidator />
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
+                        <InputText @bind-Value="_editModel.Name" class="cm-input" />
+                        <ValidationMessage For="@(() => _editModel.Name)" class="text-red-500 text-xs mt-1" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
+                        <InputSelect @bind-Value="_editModel.Status" class="cm-input">
+                            @foreach (var status in Enum.GetValues<CampaignStatus>())
+                            {
+                                <option value="@status">@GetStatusLabel(status)</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_editError))
+                    {
+                        <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                            @_editError
+                        </div>
+                    }
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseEditModal">
+                        <span>Отмена</span>
+                    </button>
+                    <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <i class="fas fa-spinner fa-spin"></i>
+                        }
+                        <span>@(_saving ? "Сохранение..." : "Сохранить")</span>
                     </button>
                 </div>
-                <div class="px-6 py-5">
-                    <EditForm Model="@_editModel" OnValidSubmit="@UpdateCampaign" FormName="editCampaignForm">
-                        <DataAnnotationsValidator />
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Название кампании</label>
-                                <InputText @bind-Value="_editModel.Name" class="cm-input" />
-                                <ValidationMessage For="@(() => _editModel.Name)" class="text-red-500 text-xs mt-1" />
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Статус</label>
-                                <InputSelect @bind-Value="_editModel.Status" class="cm-input">
-                                    @foreach (var status in Enum.GetValues<CampaignStatus>())
-                                    {
-                                        <option value="@status">@GetStatusLabel(status)</option>
-                                    }
-                                </InputSelect>
-                            </div>
-                            @if (!string.IsNullOrEmpty(_editError))
-                            {
-                                <div class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                                    @_editError
-                                </div>
-                            }
-                        </div>
-                        <div class="flex justify-end gap-2 mt-6">
-                            <button type="button" class="cm-btn cm-btn-secondary" @onclick="CloseEditModal">
-                                <span>Отмена</span>
-                            </button>
-                            <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving">
-                                @if (_saving)
-                                {
-                                    <i class="fas fa-spinner fa-spin"></i>
-                                }
-                                <span>@(_saving ? "Сохранение..." : "Сохранить")</span>
-                            </button>
-                        </div>
-                    </EditForm>
-                </div>
-            </div>
-        </div>
-    }
+            </EditForm>
+        </ChildContent>
+    </Modal>
 
     <!-- Delete Confirmation Modal -->
     <ConfirmationModal IsVisible="_showDeleteModal"
