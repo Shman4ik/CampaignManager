@@ -4,7 +4,7 @@ namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 public sealed class CharacterGenerationService
 {
-    private readonly Random _random = new();
+    private readonly Random _random = Random.Shared;
 
     /// <summary>
     /// Результат генерации: персонаж + лог
@@ -52,6 +52,12 @@ public sealed class CharacterGenerationService
         // 7. Личная информация
         GeneratePersonalInfo(character, occupation, characterAge, gender, log);
 
+        // 8. Биография
+        GenerateBiography(character, log);
+
+        // 9. Финансы по таблице «Наличные и активы»
+        CalculateFinances(character, log);
+
         return new GenerationResult
         {
             Character = character,
@@ -74,10 +80,13 @@ public sealed class CharacterGenerationService
     {
         OccupationSkillPointFormula.Edu4 => "ОБР × 4",
         OccupationSkillPointFormula.Edu2Dex2 => "ОБР × 2 + ЛВК × 2",
-        OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + ВНШ × 2",
+        OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + НАР × 2",
         OccupationSkillPointFormula.Edu2Str2 => "ОБР × 2 + СИЛ × 2",
         OccupationSkillPointFormula.Edu2Pow2 => "ОБР × 2 + МОЩ × 2",
         OccupationSkillPointFormula.Edu2DexOrStr2 => "ОБР × 2 + max(ЛВК, СИЛ) × 2",
+        OccupationSkillPointFormula.Edu2AppOrPow2 => "ОБР × 2 + НАР × 2 или ОБР × 2 + МОЩ × 2",
+        OccupationSkillPointFormula.Edu2DexOrPow2 => "ОБР × 2 + ЛВК × 2 или ОБР × 2 + МОЩ × 2",
+        OccupationSkillPointFormula.Edu2AppOrDexOrStr2 => "ОБР × 2 + НАР × 2 / ЛВК × 2 / СИЛ × 2",
         _ => "ОБР × 4"
     };
 
@@ -105,13 +114,13 @@ public sealed class CharacterGenerationService
 
     private static string AgeCategory(int age) => age switch
     {
-        < 20 => "Юный (15–19): –5 к ОБР и СИЛ или РАЗ, удача бросается дважды и берётся лучший",
-        < 40 => "Молодой (20–39): улучшение ОБР возможно",
-        < 50 => "Средний (40–49): –5 к ВНШ, –5 к СИЛ/КОН/ЛВК, улучшение ОБР",
-        < 60 => "Зрелый (50–59): –10 к ВНШ, –10 к СИЛ/КОН/ЛВК, улучшение ОБР",
-        < 70 => "Пожилой (60–69): –15 к ВНШ, –20 к СИЛ/КОН/ЛВК, улучшение ОБР",
-        < 80 => "Старый (70–79): –20 к ВНШ, –40 к СИЛ/КОН/ЛВК, улучшение ОБР",
-        _ => "Престарелый (80+): –25 к ВНШ, –80 к СИЛ/КОН/ЛВК, улучшение ОБР"
+        < 20 => "Юный (15–19): –5 к ОБР, –5 к СИЛ и/или ТЕЛ, удача бросается дважды",
+        < 40 => "Молодой (20–39): 1 проверка улучшения ОБР",
+        < 50 => "Средний (40–49): –5 к НАР, –5 к СИЛ/ВЫН/ЛВК, 2 проверки улучшения ОБР",
+        < 60 => "Зрелый (50–59): –10 к НАР, –10 к СИЛ/ВЫН/ЛВК, 3 проверки улучшения ОБР",
+        < 70 => "Пожилой (60–69): –15 к НАР, –20 к СИЛ/ВЫН/ЛВК, 4 проверки улучшения ОБР",
+        < 80 => "Старый (70–79): –20 к НАР, –40 к СИЛ/ВЫН/ЛВК, 4 проверки улучшения ОБР",
+        _ => "Престарелый (80+): –25 к НАР, –80 к СИЛ/ВЫН/ЛВК, 4 проверки улучшения ОБР"
     };
 
     #endregion
@@ -122,14 +131,14 @@ public sealed class CharacterGenerationService
     {
         log.Add("Характеристики", "--- Генерация характеристик ---");
 
-        // СИЛ, КОН, ЛВК, ВНШ, МОЩ — 3d6 × 5
+        // СИЛ, ВЫН, ЛВК, НАР, МОЩ — 3d6 × 5
         character.Characteristics.Strength = RollAndLog3d6x5("СИЛ (Сила)", log);
-        character.Characteristics.Constitution = RollAndLog3d6x5("КОН (Телосложение)", log);
+        character.Characteristics.Constitution = RollAndLog3d6x5("ВЫН (Выносливость)", log);
         character.Characteristics.Dexterity = RollAndLog3d6x5("ЛВК (Ловкость)", log);
-        character.Characteristics.Appearance = RollAndLog3d6x5("ВНШ (Внешность)", log);
+        character.Characteristics.Appearance = RollAndLog3d6x5("НАР (Наружность)", log);
         character.Characteristics.Power = RollAndLog3d6x5("МОЩ (Мощь)", log);
 
-        // РАЗ, ТЕЛ, ОБР — (2d6+6) × 5
+        // ИНТ, ТЕЛ, ОБР — (2d6+6) × 5
         character.Characteristics.Intelligence = RollAndLog2d6p6x5("ИНТ (Интеллект)", log);
         character.Characteristics.Size = RollAndLog2d6p6x5("ТЕЛ (Телосложение)", log);
         character.Characteristics.Education = RollAndLog2d6p6x5("ОБР (Образование)", log);
@@ -168,17 +177,15 @@ public sealed class CharacterGenerationService
     {
         if (age < 20)
         {
-            // Юный: –5 ОБР, –5 СИЛ или ТЕЛ, удача дважды — лучший
-            log.Add("Возраст", "Юный возраст: –5 к ОБР, –5 к СИЛ");
+            // Юный: –5 ОБР, –5 суммарно из СИЛ и/или ТЕЛ, удача дважды — лучший
+            log.Add("Возраст", "Юный возраст: –5 к ОБР, –5 суммарно к СИЛ и/или ТЕЛ");
             var eduBefore = character.Characteristics.Education.Regular;
             character.Characteristics.Education = new AttributeValue(Math.Max(1, eduBefore - 5));
             log.Add("Возраст", "ОБР уменьшена", result: character.Characteristics.Education.Regular,
                 details: $"{eduBefore} → {character.Characteristics.Education.Regular}");
 
-            var strBefore = character.Characteristics.Strength.Regular;
-            character.Characteristics.Strength = new AttributeValue(Math.Max(1, strBefore - 5));
-            log.Add("Возраст", "СИЛ уменьшена", result: character.Characteristics.Strength.Regular,
-                details: $"{strBefore} → {character.Characteristics.Strength.Regular}");
+            // Распределяем –5 случайно между СИЛ и ТЕЛ (SIZE)
+            DistributeYouthReduction(character, 5, log);
         }
         else if (age is >= 20 and <= 39)
         {
@@ -218,18 +225,53 @@ public sealed class CharacterGenerationService
         }
     }
 
+    private void DistributeYouthReduction(Character character, int totalReduction, CharacterGenerationLog log)
+    {
+        log.Add("Возраст", $"Распределение –{totalReduction} между СИЛ и ТЕЛ");
+        var remaining = totalReduction;
+
+        while (remaining > 0)
+        {
+            var pick = _random.Next(2); // 0 = СИЛ, 1 = ТЕЛ
+            var reduce = Math.Min(remaining, _random.Next(1, remaining + 1));
+
+            if (pick == 0 && character.Characteristics.Strength.Regular > 1)
+            {
+                var before = character.Characteristics.Strength.Regular;
+                var actual = Math.Min(reduce, before - 1);
+                character.Characteristics.Strength = new AttributeValue(before - actual);
+                log.Add("Возраст", $"  СИЛ –{actual}", result: character.Characteristics.Strength.Regular,
+                    details: $"{before} → {character.Characteristics.Strength.Regular}");
+                remaining -= actual;
+            }
+            else if (pick == 1 && character.Characteristics.Size.Regular > 1)
+            {
+                var before = character.Characteristics.Size.Regular;
+                var actual = Math.Min(reduce, before - 1);
+                character.Characteristics.Size = new AttributeValue(before - actual);
+                log.Add("Возраст", $"  ТЕЛ –{actual}", result: character.Characteristics.Size.Regular,
+                    details: $"{before} → {character.Characteristics.Size.Regular}");
+                remaining -= actual;
+            }
+            else if (character.Characteristics.Strength.Regular <= 1 && character.Characteristics.Size.Regular <= 1)
+            {
+                remaining = 0;
+            }
+        }
+    }
+
     private void ApplyAppReduction(Character character, int amount, CharacterGenerationLog log)
     {
         var before = character.Characteristics.Appearance.Regular;
         character.Characteristics.Appearance = new AttributeValue(Math.Max(1, before - amount));
-        log.Add("Возраст", $"ВНШ –{amount}", result: character.Characteristics.Appearance.Regular,
+        log.Add("Возраст", $"НАР –{amount}", result: character.Characteristics.Appearance.Regular,
             details: $"{before} → {character.Characteristics.Appearance.Regular}");
     }
 
     private void DistributePhysicalReduction(Character character, int totalReduction, CharacterGenerationLog log)
     {
-        // Распределяем снижение случайно между СИЛ, КОН, ЛВК
-        log.Add("Возраст", $"Распределение –{totalReduction} между СИЛ/КОН/ЛВК");
+        // Распределяем снижение случайно между СИЛ, ВЫН, ЛВК
+        log.Add("Возраст", $"Распределение –{totalReduction} между СИЛ/ВЫН/ЛВК");
         var remaining = totalReduction;
 
         while (remaining > 0)
@@ -254,7 +296,7 @@ public sealed class CharacterGenerationService
                     var before = character.Characteristics.Constitution.Regular;
                     var actual = Math.Min(reduce, before - 1);
                     character.Characteristics.Constitution = new AttributeValue(before - actual);
-                    log.Add("Возраст", $"  КОН –{actual}", result: character.Characteristics.Constitution.Regular,
+                    log.Add("Возраст", $"  ВЫН –{actual}", result: character.Characteristics.Constitution.Regular,
                         details: $"{before} → {character.Characteristics.Constitution.Regular}");
                     remaining -= actual;
                     break;
@@ -314,10 +356,10 @@ public sealed class CharacterGenerationService
     {
         log.Add("Производные", "--- Расчёт производных характеристик ---");
 
-        // Хиты: (ТЕЛ + КОН) / 10
+        // Хиты: (ТЕЛ + ВЫН) / 10
         var hp = (character.Characteristics.Size.Regular + character.Characteristics.Constitution.Regular) / 10;
         character.DerivedAttributes.HitPoints = new AttributeWithMaxValue(hp, hp);
-        log.Add("Производные", "Очки здоровья = (ТЕЛ + КОН) / 10",
+        log.Add("Производные", "Очки здоровья = (ТЕЛ + ВЫН) / 10",
             result: hp,
             details: $"({character.Characteristics.Size.Regular} + {character.Characteristics.Constitution.Regular}) / 10 = {hp}");
 
@@ -413,12 +455,16 @@ public sealed class CharacterGenerationService
             >= 65 and <= 84 => ("-1", "-1"),
             >= 85 and <= 124 => ("0", "0"),
             >= 125 and <= 164 => ("1", "+1D4"),
-            _ => ("2", "+1D6")
+            >= 165 and <= 204 => ("2", "+1D6"),
+            >= 205 and <= 284 => ("3", "+2D6"),
+            >= 285 and <= 364 => ("4", "+3D6"),
+            >= 365 and <= 444 => ("5", "+4D6"),
+            _ => ($"{(sum - 365) / 80 + 5}", $"+{(sum - 365) / 80 + 4}D6")
         };
 
         character.PersonalInfo.Build = build;
         character.PersonalInfo.DamageBonus = dmg;
-        log.Add("Производные", $"Телосложение={build}, Бонус к урону={dmg}",
+        log.Add("Производные", $"Комплекция={build}, Бонус к урону={dmg}",
             details: $"СИЛ + ТЕЛ = {sum}");
     }
 
@@ -460,6 +506,19 @@ public sealed class CharacterGenerationService
         var occupationSkillNames = occupation.OccupationSkills
             .Where(n => n != "Мифы Ктулху")
             .ToList();
+
+        // Добавить социальные слоты — случайный выбор из пула
+        if (occupation.SocialSkillSlots > 0)
+        {
+            string[] socialPool = ["Запугивание", "Красноречие", "Обаяние", "Убеждение"];
+            var availableSocial = socialPool.Where(s => !occupationSkillNames.Contains(s)).ToList();
+            var socialChoices = availableSocial.OrderBy(_ => _random.Next()).Take(occupation.SocialSkillSlots).ToList();
+            foreach (var social in socialChoices)
+            {
+                occupationSkillNames.Add(social);
+                log.Add("Навыки", $"Социальный слот профессии: {social}");
+            }
+        }
 
         // Добавить свободные слоты — выбрать случайные навыки, которых нет в списке профессии
         var freeChoices = allSkills
@@ -514,48 +573,60 @@ public sealed class CharacterGenerationService
 
         if (targetSkills.Count == 0) return;
 
-        // Распределяем очки случайно, но не больше 80 на навык
-        while (remaining > 0 && targetSkills.Any(s => s.Value.Regular < 80))
+        // Умное распределение: пирамида — первые 2 навыка получают 60% очков, остальные 40%
+        var shuffled = targetSkills.OrderBy(_ => _random.Next()).ToList();
+        var primaryCount = Math.Min(2, shuffled.Count);
+        var primarySkills = shuffled.Take(primaryCount).ToList();
+        var secondarySkills = shuffled.Skip(primaryCount).ToList();
+
+        var primaryPool = (int)(remaining * 0.6);
+        var secondaryPool = remaining - primaryPool;
+
+        var leftover = DistributePointsToGroup(primarySkills, primaryPool, 80, "профессия", "🎓", log);
+        leftover = DistributePointsToGroup(secondarySkills.Count > 0 ? secondarySkills : primarySkills, secondaryPool + leftover, 80, "профессия", "🎓", log);
+
+        if (leftover > 0)
         {
-            var skill = targetSkills[_random.Next(targetSkills.Count)];
-            if (skill.Value.Regular >= 80) continue;
-
-            var maxAdd = Math.Min(remaining, 80 - skill.Value.Regular);
-            var add = _random.Next(1, Math.Max(2, maxAdd + 1));
-            add = Math.Min(add, remaining);
-
-            var before = skill.Value.Regular;
-            skill.Value.Regular += add;
-            remaining -= add;
-
-            log.Add("Навыки", $"🎓 {skill.Name} (профессия)",
-                result: skill.Value.Regular,
-                details: $"{before} + {add} = {skill.Value.Regular} (осталось {remaining} оч.)");
-        }
-
-        if (remaining > 0)
-        {
-            log.Add("Навыки", $"Нераспределённые очки профессии: {remaining}");
+            log.Add("Навыки", $"Нераспределённые очки профессии: {leftover}");
         }
     }
 
     private void DistributePersonalInterestPoints(List<Skill> allSkills, List<string> occupationSkillNames, int totalPoints, CharacterGenerationLog log)
     {
-        // Личные интересы нельзя тратить на Мифы Ктулху и Уклонение
+        // Личные интересы нельзя тратить на Мифы Ктулху и Средства
         var eligibleSkills = allSkills
-            .Where(s => s.Name != "Мифы Ктулху" && s.Name != "Средства" && s.Name != "Уклонение")
+            .Where(s => s.Name != "Мифы Ктулху" && s.Name != "Средства")
             .ToList();
 
         if (eligibleSkills.Count == 0) return;
 
-        var remaining = totalPoints;
+        // Умное распределение: пирамида — приоритет нескольким навыкам
+        var shuffled = eligibleSkills.OrderBy(_ => _random.Next()).ToList();
+        var primaryCount = Math.Min(4, shuffled.Count);
+        var primarySkills = shuffled.Take(primaryCount).ToList();
+        var secondarySkills = shuffled.Skip(primaryCount).ToList();
 
-        while (remaining > 0 && eligibleSkills.Any(s => s.Value.Regular < 80))
+        var primaryPool = (int)(totalPoints * 0.7);
+        var secondaryPool = totalPoints - primaryPool;
+
+        var leftover = DistributePointsToGroup(primarySkills, primaryPool, 80, "личный интерес", "📚", log);
+        leftover = DistributePointsToGroup(secondarySkills.Count > 0 ? secondarySkills : primarySkills, secondaryPool + leftover, 80, "личный интерес", "📚", log);
+
+        if (leftover > 0)
         {
-            var skill = eligibleSkills[_random.Next(eligibleSkills.Count)];
-            if (skill.Value.Regular >= 80) continue;
+            log.Add("Навыки", $"Нераспределённые очки личного интереса: {leftover}");
+        }
+    }
 
-            var maxAdd = Math.Min(remaining, 80 - skill.Value.Regular);
+    private int DistributePointsToGroup(List<Skill> skills, int totalPoints, int cap, string source, string emoji, CharacterGenerationLog log)
+    {
+        var remaining = totalPoints;
+        while (remaining > 0 && skills.Any(s => s.Value.Regular < cap))
+        {
+            var skill = skills[_random.Next(skills.Count)];
+            if (skill.Value.Regular >= cap) continue;
+
+            var maxAdd = Math.Min(remaining, cap - skill.Value.Regular);
             var add = _random.Next(1, Math.Max(2, maxAdd + 1));
             add = Math.Min(add, remaining);
 
@@ -563,15 +634,11 @@ public sealed class CharacterGenerationService
             skill.Value.Regular += add;
             remaining -= add;
 
-            log.Add("Навыки", $"📚 {skill.Name} (личный интерес)",
+            log.Add("Навыки", $"{emoji} {skill.Name} ({source})",
                 result: skill.Value.Regular,
                 details: $"{before} + {add} = {skill.Value.Regular} (осталось {remaining} оч.)");
         }
-
-        if (remaining > 0)
-        {
-            log.Add("Навыки", $"Нераспределённые очки личного интереса: {remaining}");
-        }
+        return remaining;
     }
 
     #endregion
@@ -643,6 +710,163 @@ public sealed class CharacterGenerationService
         // 60% шанс что живёт в Аркхеме (основное место действия), иначе случайный город
         var residence = _random.Next(100) < 60 ? "Аркхем" : locations[_random.Next(locations.Length)];
         return (birthplace, residence);
+    }
+
+    #endregion
+
+    #region Биография
+
+    private void GenerateBiography(Character character, CharacterGenerationLog log)
+    {
+        log.Add("Биография", "--- Генерация биографии ---");
+
+        character.Biography.Appearance = PickRandom(Appearances);
+        log.Add("Биография", $"Описание: {character.Biography.Appearance}");
+
+        character.Biography.IdealsAndPrinciples = PickRandom(Ideals);
+        log.Add("Биография", $"Идеалы: {character.Biography.IdealsAndPrinciples}");
+
+        var who = PickRandom(SignificantPeopleWho);
+        var why = PickRandom(SignificantPeopleWhy);
+        character.Biography.SignificantPeople = $"{who}. {why}";
+        log.Add("Биография", $"Значимый человек: {character.Biography.SignificantPeople}");
+
+        character.Biography.ImportantPlaces = PickRandom(ImportantPlaces);
+        log.Add("Биография", $"Важное место: {character.Biography.ImportantPlaces}");
+
+        character.Biography.ValuablePossessions = PickRandom(ValuablePossessions);
+        log.Add("Биография", $"Ценное имущество: {character.Biography.ValuablePossessions}");
+
+        character.Biography.Traits = PickRandom(Traits);
+        log.Add("Биография", $"Черта: {character.Biography.Traits}");
+    }
+
+    private string PickRandom(string[] items) => items[_random.Next(items.Length)];
+
+    private static readonly string[] Appearances =
+    [
+        "Выносливый", "Привлекательный", "Нескладный", "Симпатичный", "Очаровательный",
+        "Миловидный", "Умный", "Неопрятный", "Яркий", "Начитанный",
+        "Моложавый", "Измождённый", "Пухлый", "Грузный", "Лохматый",
+        "Стройный", "Заросший", "Коренастый", "Бледный", "Хмурый",
+        "Заурядный", "Румяный", "Загорелый", "Морщинистый", "Робкий",
+        "Мускулистый", "Утончённый", "Рослый", "Простоватый", "Хрупкий", "Со вкусом одетый"
+    ];
+
+    private static readonly string[] Ideals =
+    [
+        "Существует высшая сила, которой вы поклоняетесь",
+        "Человечество обошлось бы без религий — убеждённый атеист",
+        "Наука знает всё — вера в научный прогресс",
+        "Верит в судьбу, карму и приметы",
+        "Член тайного или открытого общества",
+        "В обществе есть зло, которое нужно искоренить",
+        "Увлечён оккультизмом: астрология, спиритизм, Таро",
+        "Политические убеждения определяют всю жизнь",
+        "Деньги — это власть, и нужно их как можно больше",
+        "Активист: борец за права, профсоюзный лидер"
+    ];
+
+    private static readonly string[] SignificantPeopleWho =
+    [
+        "Родитель (мать или отец)",
+        "Бабушка или дедушка",
+        "Брат или сестра",
+        "Сын или дочь",
+        "Спутник жизни (супруг/а, возлюбленный/ая)",
+        "Тот, кто научил главному профессиональному навыку",
+        "Друг детства",
+        "Знаменитость — герой или кумир",
+        "Другой сыщик из группы",
+        "Персонаж Хранителя"
+    ];
+
+    private static readonly string[] SignificantPeopleWhy =
+    [
+        "Он вас чему-то научил",
+        "Вы у него в долгу",
+        "Человек дал вам смысл в жизни",
+        "Вы подвели этого человека и хотите искупить вину",
+        "Вас связывает общее прошлое",
+        "Вы хотите проявить себя перед ним",
+        "Вы преклоняетесь перед ним",
+        "Сожаление — о чём-то несказанном или несделанном",
+        "Вы хотите доказать, что лучше него",
+        "Человек обманул вас, и вы жаждете справедливости"
+    ];
+
+    private static readonly string[] ImportantPlaces =
+    [
+        "Заведение, где вы учились",
+        "Ваша малая родина",
+        "Место, где вы встретили первую любовь",
+        "Тихое место для размышлений",
+        "Место общения: клуб, бар, дом друга",
+        "Место, связанное с верой или идеологией",
+        "Могила важного для вас человека",
+        "Семейный дом",
+        "Место, где вы были безмятежно счастливы",
+        "Ваше рабочее место"
+    ];
+
+    private static readonly string[] ValuablePossessions =
+    [
+        "Предмет, связанный с главным навыком",
+        "Предмет, необходимый в работе",
+        "Сувенир из детства",
+        "Сувенир в память о значимом человеке",
+        "Подарок от кого-то важного",
+        "Ваша коллекция",
+        "Непонятная находка неизвестного происхождения",
+        "Предмет, связанный со спортом",
+        "Оружие (табельное, наследственное или найденное)",
+        "Питомец (кошка, собака, черепаха)"
+    ];
+
+    private static readonly string[] Traits =
+    [
+        "Щедрый — всегда помогает нуждающимся",
+        "Любитель животных",
+        "Мечтатель и творческая натура",
+        "Гедонист — живёт сегодняшним днём",
+        "Любитель риска и острых ощущений",
+        "Кулинар — готовит с любовью",
+        "Дамский угодник / обольстительница",
+        "Верный — держит слово",
+        "Добрая слава: бесстрашен перед лицом опасности",
+        "Амбициозный — стремится к цели любой ценой"
+    ];
+
+    #endregion
+
+    #region Финансы
+
+    private void CalculateFinances(Character character, CharacterGenerationLog log)
+    {
+        log.Add("Финансы", "--- Расчёт финансов (1920-е) ---");
+
+        var creditRatingSkill = character.Skills.SkillGroups
+            .SelectMany(g => g.Skills)
+            .FirstOrDefault(s => s.Name == "Средства");
+
+        var cr = creditRatingSkill?.Value.Regular ?? 0;
+
+        var (cash, assets, pocket) = cr switch
+        {
+            0 => ("0.50", "нет", "0.50"),
+            >= 1 and <= 9 => ($"{cr * 1}", $"{cr * 10}", "2"),
+            >= 10 and <= 49 => ($"{cr * 2}", $"{cr * 50}", "10"),
+            >= 50 and <= 89 => ($"{cr * 5}", $"{cr * 500}", "50"),
+            >= 90 and <= 98 => ($"{cr * 20}", $"{cr * 2000}", "250"),
+            _ => ("50000", "5000000+", "5000")
+        };
+
+        character.Finances.Cash = $"${cash}";
+        character.Finances.PocketMoney = $"${pocket}";
+        character.Finances.Assets = [$"${assets}"];
+
+        log.Add("Финансы", $"Средства: {cr}%",
+            details: $"Наличные: ${cash}, Активы: ${assets}, Карманные: ${pocket}");
     }
 
     #endregion

@@ -14,7 +14,7 @@ public enum OccupationSkillPointFormula
     /// <summary>ОБР × 2 + ЛВК × 2</summary>
     Edu2Dex2,
 
-    /// <summary>ОБР × 2 + ВНШ × 2</summary>
+    /// <summary>ОБР × 2 + НАР × 2</summary>
     Edu2App2,
 
     /// <summary>ОБР × 2 + СИЛ × 2</summary>
@@ -24,7 +24,16 @@ public enum OccupationSkillPointFormula
     Edu2Pow2,
 
     /// <summary>ОБР × 2 + (ЛВК или СИЛ) × 2</summary>
-    Edu2DexOrStr2
+    Edu2DexOrStr2,
+
+    /// <summary>ОБР × 2 + НАР × 2 или ОБР × 2 + МОЩ × 2</summary>
+    Edu2AppOrPow2,
+
+    /// <summary>ОБР × 2 + ЛВК × 2 или ОБР × 2 + МОЩ × 2</summary>
+    Edu2DexOrPow2,
+
+    /// <summary>ОБР × 2 + НАР × 2 / ЛВК × 2 / СИЛ × 2</summary>
+    Edu2AppOrDexOrStr2
 }
 
 /// <summary>
@@ -52,6 +61,21 @@ public sealed class Occupation : BaseDataBaseEntity, INamedEntity
     /// </summary>
     public int FreeSkillSlots { get; set; }
 
+    /// <summary>
+    /// Количество слотов социальных навыков (Запугивание, Красноречие, Обаяние или Убеждение)
+    /// </summary>
+    public int SocialSkillSlots { get; set; }
+
+    /// <summary>
+    /// Признак современной профессии (true = только для современных сеттингов)
+    /// </summary>
+    public bool IsModern { get; set; }
+
+    /// <summary>
+    /// Признак лавкрафтовской профессии (true = упоминается в произведениях Лавкрафта)
+    /// </summary>
+    public bool IsLovecraftian { get; set; }
+
     public int CalculateSkillPoints(Characteristics c)
     {
         return SkillPointFormula switch
@@ -62,6 +86,9 @@ public sealed class Occupation : BaseDataBaseEntity, INamedEntity
             OccupationSkillPointFormula.Edu2Str2 => c.Education.Regular * 2 + c.Strength.Regular * 2,
             OccupationSkillPointFormula.Edu2Pow2 => c.Education.Regular * 2 + c.Power.Regular * 2,
             OccupationSkillPointFormula.Edu2DexOrStr2 => c.Education.Regular * 2 + Math.Max(c.Dexterity.Regular, c.Strength.Regular) * 2,
+            OccupationSkillPointFormula.Edu2AppOrPow2 => c.Education.Regular * 2 + Math.Max(c.Appearance.Regular, c.Power.Regular) * 2,
+            OccupationSkillPointFormula.Edu2DexOrPow2 => c.Education.Regular * 2 + Math.Max(c.Dexterity.Regular, c.Power.Regular) * 2,
+            OccupationSkillPointFormula.Edu2AppOrDexOrStr2 => c.Education.Regular * 2 + Math.Max(c.Appearance.Regular, Math.Max(c.Dexterity.Regular, c.Strength.Regular)) * 2,
             _ => c.Education.Regular * 4
         };
     }
@@ -71,25 +98,41 @@ public sealed class Occupation : BaseDataBaseEntity, INamedEntity
     /// </summary>
     public static List<Occupation> GetDefaultOccupations() =>
     [
-        new() { Name = "Антиквар", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 70, OccupationSkills = ["Оценка", "Искусство/ремесло", "История", "Работа в библиотеке", "Языки (иностр.)", "Внимание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Писатель", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Искусство/ремесло", "История", "Работа в библиотеке", "Языки (родной)", "Языки (иностр.)", "Оккультизм", "Психология", "Средства"], FreeSkillSlots = 0 },
+        // === Лавкрафтовские профессии ===
+        new() { Name = "Антиквар", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 70, OccupationSkills = ["Оценка", "Искусство/ремесло", "История", "Работа в библиотеке", "Языки (иностр.)", "Внимание", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1, IsLovecraftian = true },
+        new() { Name = "Писатель", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Искусство/ремесло", "История", "Работа в библиотеке", "Языки (родной)", "Языки (иностр.)", "Оккультизм", "Психология", "Средства"], FreeSkillSlots = 1, IsLovecraftian = true },
+        new() { Name = "Библиотекарь", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 35, OccupationSkills = ["Бухгалтерское дело", "Языки (иностр.)", "Работа в библиотеке", "Языки (родной)", "Средства"], FreeSkillSlots = 4, IsLovecraftian = true },
+        new() { Name = "Врач", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 80, OccupationSkills = ["Первая помощь", "Медицина", "Языки (иностр.)", "Психология", "Наука", "Средства"], FreeSkillSlots = 2, IsLovecraftian = true },
+        new() { Name = "Детектив", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 20, CreditRatingMax = 50, OccupationSkills = ["Искусство/ремесло", "Маскировка", "Психология", "Слух", "Стрельба (пистолет)", "Юриспруденция", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1, IsLovecraftian = true },
+        new() { Name = "Дилетант", SkillPointFormula = OccupationSkillPointFormula.Edu2App2, CreditRatingMin = 50, CreditRatingMax = 99, OccupationSkills = ["Верховая езда", "Языки (иностр.)", "Искусство/ремесло", "Средства"], FreeSkillSlots = 3, SocialSkillSlots = 1, IsLovecraftian = true },
+        new() { Name = "Журналист", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Искусство/ремесло", "История", "Психология", "Работа в библиотеке", "Языки (родной)", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 1, IsLovecraftian = true },
+        new() { Name = "Профессор", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 20, CreditRatingMax = 70, OccupationSkills = ["Языки (иностр.)", "Психология", "Работа в библиотеке", "Языки (родной)", "Наука", "Средства"], FreeSkillSlots = 4, IsLovecraftian = true },
+
+        // === Общие профессии ===
+        new() { Name = "Артист", SkillPointFormula = OccupationSkillPointFormula.Edu2App2, CreditRatingMin = 9, CreditRatingMax = 70, OccupationSkills = ["Искусство/ремесло", "Маскировка", "Психология", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 2 },
+        new() { Name = "Археолог", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 10, CreditRatingMax = 40, OccupationSkills = ["Оценка", "Археология", "История", "Языки (иностр.)", "Работа в библиотеке", "Внимание", "Наука", "Средства"] },
+        new() { Name = "Бродяга", SkillPointFormula = OccupationSkillPointFormula.Edu2AppOrDexOrStr2, CreditRatingMin = 0, CreditRatingMax = 5, OccupationSkills = ["Лазание", "Ориентирование", "Прыжки", "Скрытность", "Слух", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 1 },
         new() { Name = "Бухгалтер", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 70, OccupationSkills = ["Бухгалтерское дело", "Юриспруденция", "Работа в библиотеке", "Слух", "Убеждение", "Внимание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Актёр", SkillPointFormula = OccupationSkillPointFormula.Edu2App2, CreditRatingMin = 9, CreditRatingMax = 40, OccupationSkills = ["Искусство/ремесло", "Маскировка", "Красноречие", "Слух", "Языки (иностр.)", "Психология", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Археолог", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 10, CreditRatingMax = 40, OccupationSkills = ["Оценка", "Археология", "История", "Языки (иностр.)", "Работа в библиотеке", "Внимание", "Наука", "Средства"], FreeSkillSlots = 0 },
-        new() { Name = "Художник", SkillPointFormula = OccupationSkillPointFormula.Edu2Pow2, CreditRatingMin = 9, CreditRatingMax = 50, OccupationSkills = ["Искусство/ремесло", "История", "Языки (иностр.)", "Языки (родной)", "Психология", "Внимание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Спортсмен", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 70, OccupationSkills = ["Лазание", "Прыжки", "Ближний бой (драка)", "Верховая езда", "Плавание", "Метание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Священник", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 60, OccupationSkills = ["Бухгалтерское дело", "История", "Работа в библиотеке", "Слух", "Языки (иностр.)", "Убеждение", "Психология", "Средства"], FreeSkillSlots = 0 },
-        new() { Name = "Преступник", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 5, CreditRatingMax = 65, OccupationSkills = ["Запугивание", "Взлом", "Ловкость рук", "Скрытность", "Внимание", "Психология", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Доктор", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 80, OccupationSkills = ["Первая помощь", "Медицина", "Языки (иностр.)", "Психология", "Наука", "Работа в библиотеке", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Инженер", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 60, OccupationSkills = ["Искусство/ремесло", "Электрика", "Работа в библиотеке", "Механика", "Наука", "Внимание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Детектив", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 20, CreditRatingMax = 50, OccupationSkills = ["Искусство/ремесло", "Маскировка", "Юриспруденция", "Работа в библиотеке", "Внимание", "Психология", "Скрытность", "Средства"], FreeSkillSlots = 0 },
-        new() { Name = "Журналист", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Искусство/ремесло", "История", "Работа в библиотеке", "Языки (родной)", "Психология", "Убеждение", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Юрист", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 80, OccupationSkills = ["Бухгалтерское дело", "Юриспруденция", "Работа в библиотеке", "Убеждение", "Психология", "Красноречие", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Библиотекарь", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 35, OccupationSkills = ["Бухгалтерское дело", "Языки (иностр.)", "Работа в библиотеке", "Языки (родной)", "Средства"], FreeSkillSlots = 3 },
-        new() { Name = "Военный", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Ближний бой (драка)", "Первая помощь", "Запугивание", "Ориентирование", "Стрельба (винт./дроб.)", "Стрельба (пистолет)", "Скрытность", "Средства"], FreeSkillSlots = 0 },
-        new() { Name = "Профессор", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 20, CreditRatingMax = 70, OccupationSkills = ["Работа в библиотеке", "Языки (иностр.)", "Языки (родной)", "Психология", "Наука", "Средства"], FreeSkillSlots = 2 },
-        new() { Name = "Полицейский", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Ближний бой (драка)", "Стрельба (пистолет)", "Первая помощь", "Запугивание", "Юриспруденция", "Психология", "Внимание", "Средства"], FreeSkillSlots = 0 },
-        new() { Name = "Пилот", SkillPointFormula = OccupationSkillPointFormula.Edu2Dex2, CreditRatingMin = 20, CreditRatingMax = 60, OccupationSkills = ["Электрика", "Механика", "Ориентирование", "Пилотирование", "Наука", "Внимание", "Средства"], FreeSkillSlots = 1 },
-        new() { Name = "Механик", SkillPointFormula = OccupationSkillPointFormula.Edu2Dex2, CreditRatingMin = 9, CreditRatingMax = 40, OccupationSkills = ["Вождение", "Электрика", "Механика", "Упр. тяж. машинами", "Внимание", "Средства"], FreeSkillSlots = 2 }
+        new() { Name = "Военный (офицер)", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 20, CreditRatingMax = 70, OccupationSkills = ["Бухгалтерское дело", "Выживание", "Ориентирование", "Психология", "Стрельба (пистолет)", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 2 },
+        new() { Name = "Дикарь", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 0, CreditRatingMax = 15, OccupationSkills = ["Ближний бой (драка)", "Внимание", "Выживание", "Естествознание", "Лазание", "Оккультизм", "Плавание", "Слух", "Средства"] },
+        new() { Name = "Инженер", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 60, OccupationSkills = ["Искусство/ремесло", "Механика", "Наука", "Работа в библиотеке", "Упр. тяж. машинами", "Электрика", "Средства"], FreeSkillSlots = 1 },
+        new() { Name = "Лётчик", SkillPointFormula = OccupationSkillPointFormula.Edu2Dex2, CreditRatingMin = 20, CreditRatingMax = 70, OccupationSkills = ["Механика", "Наука", "Ориентирование", "Пилотирование", "Упр. тяж. машинами", "Электрика", "Средства"], FreeSkillSlots = 2 },
+        new() { Name = "Механик", SkillPointFormula = OccupationSkillPointFormula.Edu2Dex2, CreditRatingMin = 9, CreditRatingMax = 40, OccupationSkills = ["Вождение", "Электрика", "Механика", "Упр. тяж. машинами", "Внимание", "Средства"], FreeSkillSlots = 2 },
+        new() { Name = "Миссионер", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 0, CreditRatingMax = 30, OccupationSkills = ["Естествознание", "Искусство/ремесло", "Медицина", "Механика", "Первая помощь", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 1 },
+        new() { Name = "Музыкант", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrPow2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Искусство/ремесло", "Психология", "Слух", "Средства"], FreeSkillSlots = 4, SocialSkillSlots = 1 },
+        new() { Name = "Парапсихолог", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Антропология", "Языки (иностр.)", "Искусство/ремесло", "История", "Оккультизм", "Психология", "Работа в библиотеке", "Средства"], FreeSkillSlots = 1 },
+        new() { Name = "Полицейский", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Ближний бой (драка)", "Внимание", "Первая помощь", "Психология", "Стрельба (пистолет)", "Юриспруденция", "Средства"], SocialSkillSlots = 1 },
+        new() { Name = "Преступник", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 5, CreditRatingMax = 65, OccupationSkills = ["Внимание", "Психология", "Скрытность", "Средства"], FreeSkillSlots = 4, SocialSkillSlots = 1 },
+        new() { Name = "Священник", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 9, CreditRatingMax = 60, OccupationSkills = ["Бухгалтерское дело", "История", "Работа в библиотеке", "Слух", "Языки (иностр.)", "Психология", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1 },
+        new() { Name = "Солдат", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Ближний бой (драка)", "Выживание", "Скрытность", "Стрельба (винт./дроб.)", "Уклонение", "Средства"], FreeSkillSlots = 2 },
+        new() { Name = "Спортсмен", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 70, OccupationSkills = ["Ближний бой (драка)", "Верховая езда", "Лазание", "Метание", "Плавание", "Прыжки", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1 },
+        new() { Name = "Фанатик", SkillPointFormula = OccupationSkillPointFormula.Edu2AppOrPow2, CreditRatingMin = 0, CreditRatingMax = 30, OccupationSkills = ["История", "Психология", "Скрытность", "Средства"], FreeSkillSlots = 3, SocialSkillSlots = 2 },
+        new() { Name = "Фермер", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Вождение", "Естествознание", "Искусство/ремесло", "Механика", "Упр. тяж. машинами", "Чтение следов", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1 },
+        new() { Name = "Художник", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrPow2, CreditRatingMin = 9, CreditRatingMax = 50, OccupationSkills = ["Внимание", "Естествознание", "Языки (иностр.)", "История", "Искусство/ремесло", "Психология", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 1 },
+        new() { Name = "Частный сыщик", SkillPointFormula = OccupationSkillPointFormula.Edu2DexOrStr2, CreditRatingMin = 9, CreditRatingMax = 30, OccupationSkills = ["Внимание", "Искусство/ремесло", "Маскировка", "Психология", "Работа в библиотеке", "Юриспруденция", "Средства"], FreeSkillSlots = 1, SocialSkillSlots = 1 },
+        new() { Name = "Юрист", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 30, CreditRatingMax = 80, OccupationSkills = ["Бухгалтерское дело", "Психология", "Работа в библиотеке", "Юриспруденция", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 2 },
+
+        // === Современные профессии ===
+        new() { Name = "Хакер", SkillPointFormula = OccupationSkillPointFormula.Edu4, CreditRatingMin = 10, CreditRatingMax = 70, OccupationSkills = ["Внимание", "Работа в библиотеке", "Электрика", "Средства"], FreeSkillSlots = 2, SocialSkillSlots = 1, IsModern = true }
     ];
 }
