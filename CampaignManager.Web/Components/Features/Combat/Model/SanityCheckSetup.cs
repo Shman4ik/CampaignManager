@@ -17,4 +17,9 @@ public class SanityCheckSetup
     /// Потеря рассудка при неудаче (напр. "1D6", "1D10", "2D6")
     /// </summary>
     public string FailureLoss { get; set; } = "1D6";
+
+    /// <summary>
+    /// Ручной ввод броска d100 (null = авторбросок)
+    /// </summary>
+    public int? ManualRoll { get; set; }
 }

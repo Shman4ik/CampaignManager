@@ -1,0 +1,48 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+
+<div class="flex items-center gap-3">
+    <label class="text-sm font-medium text-gray-600 whitespace-nowrap">Сценарий:</label>
+    <select class="border border-primary-300 rounded-md px-3 py-1.5 text-sm text-primary-700 bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors min-w-[200px]"
+            value="@_selectedScenarioId"
+            @onchange="OnScenarioChanged">
+        <option value="">— Выберите сценарий —</option>
+        @if (Scenarios != null)
+        {
+            @foreach (var scenario in Scenarios)
+            {
+                <option value="@scenario.Id">@scenario.Name</option>
+            }
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public IEnumerable<Scenario>? Scenarios { get; set; }
+    [Parameter] public EventCallback<Scenario?> OnScenarioSelected { get; set; }
+
+    private string _selectedScenarioId = "";
+
+    protected override void OnParametersSet()
+    {
+        // Reset selection when scenario list changes (e.g. campaign switched)
+        if (Scenarios is null || !Scenarios.Any(s => s.Id.ToString() == _selectedScenarioId))
+        {
+            _selectedScenarioId = "";
+        }
+    }
+
+    private async Task OnScenarioChanged(ChangeEventArgs e)
+    {
+        _selectedScenarioId = e.Value?.ToString() ?? "";
+
+        if (Guid.TryParse(_selectedScenarioId, out var scenarioId))
+        {
+            var scenario = Scenarios?.FirstOrDefault(s => s.Id == scenarioId);
+            await OnScenarioSelected.InvokeAsync(scenario);
+        }
+        else
+        {
+            await OnScenarioSelected.InvokeAsync(null);
+        }
+    }
+}

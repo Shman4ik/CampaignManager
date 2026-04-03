@@ -21,9 +21,9 @@
         </select>
     </div>
 
-    <!-- Оружие / Атака -->
     @if (_selectedAttacker != null)
     {
+        <!-- Оружие / Атака -->
         <div class="mb-3">
             <label class="block text-xs font-medium text-gray-600 mb-1">Оружие / Атака</label>
             <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
@@ -53,6 +53,31 @@
                        class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors" />
             </div>
 
+            <!-- Дальность (только для дальнего боя) -->
+            @if (!_isMelee)
+            {
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Дальность</label>
+                    <div class="flex gap-2">
+                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                            <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Base)"
+                                   @onchange="() => SetRangeLevel(RangeLevel.Base)" />
+                            <span>Обычная (@_attackSkillValue)</span>
+                        </label>
+                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                            <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Long)"
+                                   @onchange="() => SetRangeLevel(RangeLevel.Long)" />
+                            <span>Большая (@(_attackSkillValue / 2))</span>
+                        </label>
+                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                            <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Extreme)"
+                                   @onchange="() => SetRangeLevel(RangeLevel.Extreme)" />
+                            <span>Сверхбольшая (@(_attackSkillValue / 5))</span>
+                        </label>
+                    </div>
+                </div>
+            }
+
             <!-- Цель -->
             <div class="mb-3">
                 <label class="block text-xs font-medium text-gray-600 mb-1">Цель</label>
@@ -69,6 +94,14 @@
 
             @if (_selectedDefender != null && _isMelee)
             {
+                <!-- Предупреждение о численном превосходстве -->
+                @if (_selectedDefender.HasDefendedThisRound)
+                {
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2 text-xs text-yellow-800">
+                        ⚠ @_selectedDefender.Name уже защищался в этом раунде — атакующий получает <strong>1 бонусную кость</strong>.
+                    </div>
+                }
+
                 <!-- Реакция защитника -->
                 <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Реакция защитника</label>
@@ -94,10 +127,193 @@
                     <input type="number" @bind="_defenderSkillValue"
                            class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors" />
                 </div>
+
+                <!-- Формула урона контратаки (fight back) -->
+                @if (_defenderReaction == CombatActionType.FightBack)
+                {
+                    <div class="mb-3">
+                        <label class="block text-xs font-medium text-gray-600 mb-1">
+                            Урон контратаки @_selectedDefender.Name
+                        </label>
+                        <input type="text" @bind="_counterDamageFormula"
+                               class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                               placeholder="1D3, 1D6, ..." />
+                    </div>
+                }
             }
 
+            <!-- ═══ БРОСКИ КУБИКОВ ═══ -->
+            <div class="border-t border-gray-200 pt-3 mt-3">
+                <div class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Броски кубиков</div>
+
+                <!-- Бросок атакующего -->
+                <div class="mb-3">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-medium text-gray-600 w-36 shrink-0">
+                            @_selectedAttacker.Name (d100)
+                        </label>
+                        <input type="number" min="1" max="100"
+                               value="@_attackerRoll"
+                               @oninput="e => OnRollInput(e, isAttacker: true)"
+                               class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-20 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                               placeholder="1–100" />
+                        <button @onclick="AutoRollAttacker" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">🎲 авто</button>
+                    </div>
+                    @if (_attackerRoll.HasValue)
+                    {
+                        <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_attackerSuccessLevel)">
+                            → @CombatService.GetSuccessLevelText(_attackerSuccessLevel)
+                        </div>
+                    }
+                </div>
+
+                <!-- Бросок защитника (ближний бой) -->
+                @if (_isMelee && _selectedDefender != null && !_targetUnaware)
+                {
+                    <div class="mb-3">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-medium text-gray-600 w-36 shrink-0">
+                                @_selectedDefender.Name (d100)
+                            </label>
+                            <input type="number" min="1" max="100"
+                                   value="@_defenderRoll"
+                                   @oninput="e => OnRollInput(e, isAttacker: false)"
+                                   class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-20 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                                   placeholder="1–100" />
+                            <button @onclick="AutoRollDefender" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">🎲 авто</button>
+                        </div>
+                        @if (_defenderRoll.HasValue)
+                        {
+                            <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_defenderSuccessLevel)">
+                                → @CombatService.GetSuccessLevelText(_defenderSuccessLevel)
+                            </div>
+                        }
+                    </div>
+                }
+                @if (_targetUnaware)
+                {
+                    <div class="mb-3 text-xs text-amber-700 bg-amber-50 rounded p-2">
+                        Цель не подозревает — бросок защитника не используется.
+                    </div>
+                }
+
+                <!-- Модификаторы (скрываются) -->
+                <details class="mb-3">
+                    <summary class="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700">Модификаторы и условия</summary>
+                    <div class="mt-2 space-y-2 pl-1">
+                        <div class="flex items-center gap-3">
+                            <label class="text-xs text-gray-600 w-36 shrink-0">Бонусные кости</label>
+                            <input type="number" min="0" max="2" @bind="_bonusDice"
+                                   class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <label class="text-xs text-gray-600 w-36 shrink-0">Штрафные кости</label>
+                            <input type="number" min="0" max="2" @bind="_penaltyDice"
+                                   class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                        </div>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="checkbox" @bind="_surpriseAttack" />
+                            Внезапная атака
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="checkbox" @bind="_targetUnaware" />
+                            Цель не подозревает (автопопадание, нет броска защиты)
+                        </label>
+                    </div>
+                </details>
+
+                <!-- Урон (показывается когда бросок введён и атака успешна) -->
+                @if (_attackerRoll.HasValue && _attackerSuccessLevel > SuccessLevel.Failure)
+                {
+                    var option = _attackOptions[_selectedWeaponIndex];
+                    bool isExtraordinary = _attackerSuccessLevel >= SuccessLevel.ExtremeSuccess;
+                    bool isImpaling = CombatService.IsImpalingWeapon(option.Weapon ?? new Weapon { Name = option.Name, Type = WeaponType.Melee });
+
+                    <div class="bg-gray-50 rounded-md border border-gray-100 p-3 mb-3">
+                        <div class="text-xs font-semibold text-gray-600 mb-2">
+                            Урон (@option.Damage
+                            @if (_selectedAttacker.DamageBonus != "0") { <span> + БкУ @_selectedAttacker.DamageBonus</span> })
+                        </div>
+
+                        @if (isExtraordinary)
+                        {
+                            var maxDmg = CombatService.MaximizeDiceFormula(option.Damage);
+                            var maxDb = _isMelee ? CombatService.MaximizeDiceFormula(_selectedAttacker.DamageBonus) : 0;
+                            <div class="text-xs text-green-700 mb-2">
+                                @(isImpaling ? "Проникающая рана" : "Чрезвычайный успех") — максимальный урон:
+                                <strong>@maxDmg@(maxDb != 0 ? $" + {maxDb}" : "")</strong>
+                                @if (isImpaling) { <span> + доп. бросок @option.Damage</span> }
+                            </div>
+                            @if (isImpaling && _isMelee)
+                            {
+                                <div class="flex items-center gap-2 mb-1">
+                                    <label class="text-xs text-gray-600 w-36 shrink-0">Доп. бросок (@option.Damage)</label>
+                                    <input type="number" min="0" value="@_extraImpalingRoll"
+                                           @oninput="e => OnDamageInput(e, DamageField.ExtraImpaling)"
+                                           class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
+                                           placeholder="рез." />
+                                    <button @onclick="() => AutoRollDamage(DamageField.ExtraImpaling, option.Damage)" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="flex items-center gap-2 mb-1">
+                                <label class="text-xs text-gray-600 w-36 shrink-0">Урон оружия</label>
+                                <input type="number" min="0" value="@_weaponDamageRoll"
+                                       @oninput="e => OnDamageInput(e, DamageField.Weapon)"
+                                       class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
+                                       placeholder="рез." />
+                                <button @onclick="() => AutoRollDamage(DamageField.Weapon, option.Damage)" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
+                            </div>
+                            @if (_isMelee && _selectedAttacker.DamageBonus != "0")
+                            {
+                                <div class="flex items-center gap-2 mb-1">
+                                    <label class="text-xs text-gray-600 w-36 shrink-0">БкУ (@_selectedAttacker.DamageBonus)</label>
+                                    <input type="number" value="@_damageBonusRoll"
+                                           @oninput="e => OnDamageInput(e, DamageField.DamageBonus)"
+                                           class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
+                                           placeholder="рез." />
+                                    <button @onclick="() => AutoRollDamage(DamageField.DamageBonus, _selectedAttacker.DamageBonus)" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
+                                </div>
+                            }
+                        }
+
+                        <!-- Контратака (fight back защитника победил) -->
+                        @if (_defenderReaction == CombatActionType.FightBack && _defenderRoll.HasValue
+                             && !ResolveOpposed())
+                        {
+                            <div class="border-t border-gray-200 pt-2 mt-2">
+                                <div class="text-xs font-semibold text-red-700 mb-1">Контратака @_selectedDefender!.Name</div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <label class="text-xs text-gray-600 w-36 shrink-0">Урон контратаки</label>
+                                    <input type="number" min="0" value="@_counterWeaponRoll"
+                                           @oninput="e => OnDamageInput(e, DamageField.CounterWeapon)"
+                                           class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
+                                           placeholder="рез." />
+                                    <button @onclick='() => AutoRollDamage(DamageField.CounterWeapon, _counterDamageFormula)' class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
+                                </div>
+                                @if (_selectedDefender.DamageBonus != "0")
+                                {
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <label class="text-xs text-gray-600 w-36 shrink-0">БкУ (@_selectedDefender.DamageBonus)</label>
+                                        <input type="number" value="@_counterBonusRoll"
+                                               @oninput="e => OnDamageInput(e, DamageField.CounterBonus)"
+                                               class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
+                                               placeholder="рез." />
+                                        <button @onclick='() => AutoRollDamage(DamageField.CounterBonus, _selectedDefender.DamageBonus)' class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
             <!-- Кнопка атаки -->
-            <button type="button" class="cm-btn cm-btn-error w-full" @onclick="ResolveAttack" disabled="@(!CanResolve())"><span>Провести атаку</span></button>
+            <button type="button" class="cm-btn cm-btn-error w-full" @onclick="ResolveAttack" disabled="@(!CanResolve())">
+                <span>Провести атаку</span>
+            </button>
         }
     }
 </div>
@@ -115,6 +331,27 @@
     private int _defenderSkillValue;
     private bool _isMelee;
     private CombatActionType _defenderReaction = CombatActionType.Dodge;
+    private RangeLevel _rangeLevel = RangeLevel.Base;
+    private string _counterDamageFormula = "1D3";
+
+    // Броски кубиков
+    private int? _attackerRoll;
+    private int? _defenderRoll;
+    private int? _weaponDamageRoll;
+    private int? _damageBonusRoll;
+    private int? _extraImpalingRoll;
+    private int? _counterWeaponRoll;
+    private int? _counterBonusRoll;
+
+    // Уровни успеха (вычисляются в реальном времени)
+    private SuccessLevel _attackerSuccessLevel;
+    private SuccessLevel _defenderSuccessLevel;
+
+    // Модификаторы
+    private int _bonusDice;
+    private int _penaltyDice;
+    private bool _surpriseAttack;
+    private bool _targetUnaware;
 
     private List<AttackOption> _attackOptions = [];
 
@@ -131,10 +368,10 @@
             ? Combatants.FirstOrDefault(c => c.Id == id) : null;
         _selectedWeaponIndex = -1;
         _attackOptions.Clear();
+        ResetRolls();
 
         if (_selectedAttacker == null) return;
 
-        // Заполняем опции атаки
         if (_selectedAttacker.CharacterSource != null)
         {
             foreach (var w in _selectedAttacker.CharacterSource.Weapons)
@@ -157,13 +394,12 @@
                 {
                     Name = kvp.Key,
                     Damage = kvp.Value,
-                    IsMelee = true, // по умолчанию ближний бой для существ
-                    SkillValue = 50 // значение по умолчанию, мастер может поправить
+                    IsMelee = true,
+                    SkillValue = 50
                 });
             }
         }
 
-        // Безоружная атака всегда доступна
         _attackOptions.Add(new AttackOption
         {
             Name = "Безоружная атака",
@@ -176,11 +412,13 @@
     private void OnWeaponChanged(ChangeEventArgs e)
     {
         _selectedWeaponIndex = int.TryParse(e.Value?.ToString(), out var idx) ? idx : -1;
+        ResetRolls();
         if (_selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count)
         {
             var option = _attackOptions[_selectedWeaponIndex];
             _isMelee = option.IsMelee;
             _attackSkillValue = option.SkillValue;
+            _rangeLevel = RangeLevel.Base;
         }
     }
 
@@ -189,14 +427,22 @@
         _selectedDefenderId = e.Value?.ToString() ?? "";
         _selectedDefender = Guid.TryParse(_selectedDefenderId, out var id)
             ? Combatants.FirstOrDefault(c => c.Id == id) : null;
-
+        ResetRolls();
         UpdateDefenderSkill();
+        UpdateCounterFormula();
     }
 
     private void SetDefenderReaction(CombatActionType reaction)
     {
         _defenderReaction = reaction;
+        ResetRolls();
         UpdateDefenderSkill();
+    }
+
+    private void SetRangeLevel(RangeLevel range)
+    {
+        _rangeLevel = range;
+        ResetRolls();
     }
 
     private void UpdateDefenderSkill()
@@ -207,36 +453,151 @@
             : _selectedDefender.FightingSkill;
     }
 
+    private void UpdateCounterFormula()
+    {
+        if (_selectedDefender?.CharacterSource?.Weapons.Count > 0)
+            _counterDamageFormula = _selectedDefender.CharacterSource.Weapons[0].Damage;
+        else
+            _counterDamageFormula = "1D3";
+    }
+
+    private void ResetRolls()
+    {
+        _attackerRoll = null;
+        _defenderRoll = null;
+        _weaponDamageRoll = null;
+        _damageBonusRoll = null;
+        _extraImpalingRoll = null;
+        _counterWeaponRoll = null;
+        _counterBonusRoll = null;
+        _attackerSuccessLevel = SuccessLevel.Failure;
+        _defenderSuccessLevel = SuccessLevel.Failure;
+    }
+
+    private void OnRollInput(ChangeEventArgs e, bool isAttacker)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v)) return;
+        v = Math.Clamp(v, 1, 100);
+
+        if (isAttacker)
+        {
+            _attackerRoll = v;
+            var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
+            _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, eff);
+        }
+        else
+        {
+            _defenderRoll = v;
+            _defenderSuccessLevel = CombatService.CalculateSuccessLevel(v, _defenderSkillValue);
+        }
+    }
+
+    private void OnDamageInput(ChangeEventArgs e, DamageField field)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v)) return;
+        switch (field)
+        {
+            case DamageField.Weapon: _weaponDamageRoll = v; break;
+            case DamageField.DamageBonus: _damageBonusRoll = v; break;
+            case DamageField.ExtraImpaling: _extraImpalingRoll = v; break;
+            case DamageField.CounterWeapon: _counterWeaponRoll = v; break;
+            case DamageField.CounterBonus: _counterBonusRoll = v; break;
+        }
+    }
+
+    private void AutoRollAttacker()
+    {
+        _attackerRoll = CombatService.RollD100();
+        var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
+        _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, eff);
+    }
+
+    private void AutoRollDefender()
+    {
+        _defenderRoll = CombatService.RollD100();
+        _defenderSuccessLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkillValue);
+    }
+
+    private void AutoRollDamage(DamageField field, string formula)
+    {
+        var roll = CombatService.RollDiceFormula(formula);
+        switch (field)
+        {
+            case DamageField.Weapon: _weaponDamageRoll = roll; break;
+            case DamageField.DamageBonus: _damageBonusRoll = roll; break;
+            case DamageField.ExtraImpaling: _extraImpalingRoll = roll; break;
+            case DamageField.CounterWeapon: _counterWeaponRoll = roll; break;
+            case DamageField.CounterBonus: _counterBonusRoll = roll; break;
+        }
+    }
+
+    private bool ResolveOpposed()
+    {
+        if (!_defenderRoll.HasValue) return true;
+        return CombatService.ResolveOpposedRoll(
+            _attackerSuccessLevel, _attackSkillValue,
+            _defenderSuccessLevel, _defenderSkillValue,
+            _defenderReaction);
+    }
+
     private bool CanResolve() =>
         _selectedAttacker != null && _selectedWeaponIndex >= 0
         && (_selectedDefender != null || !_isMelee);
 
     private async Task ResolveAttack()
     {
-        if (_selectedAttacker == null || _selectedDefender == null) return;
-        if (_selectedWeaponIndex < 0 || _selectedWeaponIndex >= _attackOptions.Count) return;
+        if (_selectedAttacker == null || _selectedWeaponIndex < 0) return;
+        if (_isMelee && _selectedDefender == null) return;
 
         var option = _attackOptions[_selectedWeaponIndex];
+        var effectiveBonusDice = _bonusDice + (_selectedDefender?.HasDefendedThisRound == true ? 1 : 0);
 
         var setup = new AttackSetup
         {
             AttackerId = _selectedAttacker.Id,
-            DefenderId = _selectedDefender.Id,
+            DefenderId = _selectedDefender?.Id ?? Guid.Empty,
             SelectedWeapon = option.Weapon,
             CreatureAttackName = option.Weapon == null ? option.Name : null,
             CreatureAttackDamage = option.Weapon == null ? option.Damage : null,
             AttackSkillValue = _attackSkillValue,
             IsMelee = _isMelee,
             DefenderReaction = _defenderReaction,
-            DefenderSkillValue = _defenderSkillValue
+            DefenderSkillValue = _defenderSkillValue,
+            RangeLevel = _rangeLevel,
+            BonusDice = effectiveBonusDice,
+            PenaltyDice = _penaltyDice,
+            IsSurpriseAttack = _surpriseAttack,
+            TargetUnawareMeansAutoSuccess = _targetUnaware,
+            CounterAttackDamageFormula = _counterDamageFormula,
+            ManualAttackerRoll = _attackerRoll,
+            ManualDefenderRoll = _defenderRoll,
+            ManualWeaponDamageRoll = _weaponDamageRoll,
+            ManualDamageBonusRoll = _damageBonusRoll,
+            ManualExtraImpalingRoll = _extraImpalingRoll,
+            ManualCounterWeaponDamageRoll = _counterWeaponRoll,
+            ManualCounterDamageBonusRoll = _counterBonusRoll
         };
 
         var result = _isMelee
             ? CombatService.ResolveMeleeAttack(setup)
             : CombatService.ResolveRangedAttack(setup);
 
+        ResetRolls();
         await OnAttackResolved.InvokeAsync(result);
     }
+
+    private static string GetLevelColor(SuccessLevel level) => level switch
+    {
+        SuccessLevel.CriticalSuccess => "text-yellow-600",
+        SuccessLevel.ExtremeSuccess => "text-green-600",
+        SuccessLevel.HardSuccess => "text-green-700",
+        SuccessLevel.RegularSuccess => "text-green-800",
+        SuccessLevel.Failure => "text-red-600",
+        SuccessLevel.Fumble => "text-red-800",
+        _ => "text-gray-600"
+    };
+
+    private enum DamageField { Weapon, DamageBonus, ExtraImpaling, CounterWeapon, CounterBonus }
 
     private class AttackOption
     {

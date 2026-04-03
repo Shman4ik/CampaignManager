@@ -37,6 +37,17 @@ public class Combatant
     public int ConstitutionValue { get; set; }
     public int Armor { get; set; }
 
+    // Тактические состояния
+    public bool IsProne { get; set; }      // Повалён
+    public bool IsGrappled { get; set; }   // В захвате
+    public Guid? GrappledBy { get; set; }  // Кто держит
+
+    // Трекинг раунда
+    public bool HasFirearmReady { get; set; }     // Огнестрельное на изготовку (+50 к ЛВК)
+    public bool HasDefendedThisRound { get; set; } // Уже защищался в этом раунде
+    public int DefenseCountThisRound { get; set; } // Число защитных действий за раунд
+    public int AttacksPerRound { get; set; } = 1;  // Число атак за раунд (существа)
+
     // Ссылки на исходные сущности
     public Character? CharacterSource { get; set; }
     public Creature? CreatureSource { get; set; }
@@ -105,6 +116,7 @@ public class Combatant
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
         Build = creature.CreatureCharacteristics.AverageComplexity;
         DodgeSkill = creature.CreatureCharacteristics.Dexterity.Value / 2; // половина ЛВК как уклонение по умолчанию
+        AttacksPerRound = 1;
     }
 
     private static int FindFightingSkill(Character character)

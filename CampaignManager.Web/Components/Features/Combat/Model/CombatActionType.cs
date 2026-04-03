@@ -6,5 +6,10 @@ public enum CombatActionType
     RangedAttack,
     Dodge,
     FightBack,
+    Maneuver,
+    TakeCover,
+    FirstAid,
+    DelayTurn,
+    FleeFromMelee,
     SanityCheck
 }

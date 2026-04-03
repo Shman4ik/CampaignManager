@@ -1,0 +1,288 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+@inject CombatService CombatService
+
+<div>
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Боевой манёвр</h4>
+
+    <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
+        Манёвр заменяет атаку. Позволяет: разоружить, сбить с ног, захватить, столкнуть, вырваться или создать помеху.
+    </div>
+
+    <!-- Инициатор манёвра -->
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Инициатор</label>
+        <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                value="@_attackerId"
+                @onchange="OnAttackerChanged">
+            <option value="">— Выберите —</option>
+            @foreach (var c in AvailableAttackers)
+            {
+                <option value="@c.Id">@c.Name (Комп: @FormatBuild(c.Build))</option>
+            }
+        </select>
+    </div>
+
+    @if (_attacker != null)
+    {
+        <!-- Тип манёвра -->
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Манёвр</label>
+            <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                    value="@_maneuverType"
+                    @onchange="OnManeuverTypeChanged">
+                @foreach (var mt in Enum.GetValues<ManeuverType>())
+                {
+                    <option value="@mt">@CombatService.GetManeuverName(mt)</option>
+                }
+            </select>
+        </div>
+
+        <!-- Цель -->
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Цель</label>
+            <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                    value="@_defenderId"
+                    @onchange="OnDefenderChanged">
+                <option value="">— Выберите —</option>
+                @foreach (var c in AvailableDefenders)
+                {
+                    <option value="@c.Id">@c.Name (Комп: @FormatBuild(c.Build))</option>
+                }
+            </select>
+        </div>
+
+        @if (_defender != null)
+        {
+            <!-- Сравнение Комплекции -->
+            @if (_defender.Build - _attacker.Build >= 3)
+            {
+                <div class="bg-red-50 border border-red-200 rounded-md p-2 mb-3 text-xs text-red-800">
+                    ✗ Манёвр невозможен: Комплекция цели превышает вашу на 3 или более (@FormatBuild(_attacker.Build) vs @FormatBuild(_defender.Build)).
+                </div>
+            }
+            else if (_defender.Build - _attacker.Build >= 1)
+            {
+                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-3 text-xs text-yellow-800">
+                    ⚠ Цель крупнее (@FormatBuild(_defender.Build) vs @FormatBuild(_attacker.Build)): штрафная кость за каждое очко разности.
+                </div>
+            }
+
+            <!-- Реакция защитника -->
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Реакция защитника</label>
+                <div class="flex gap-3">
+                    <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                        <input type="radio" name="manDefReaction" checked="@(_defenderReaction == CombatActionType.Dodge)"
+                               @onchange="() => SetDefenderReaction(CombatActionType.Dodge)" />
+                        Уклонение
+                    </label>
+                    <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                        <input type="radio" name="manDefReaction" checked="@(_defenderReaction == CombatActionType.FightBack)"
+                               @onchange="() => SetDefenderReaction(CombatActionType.FightBack)" />
+                        Ближний бой
+                    </label>
+                </div>
+            </div>
+
+            <!-- Навыки -->
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Навык @_attacker.Name</label>
+                    <input type="number" @bind="_attackSkill"
+                           class="border border-primary-300 rounded-md px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500" />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Навык @_defender.Name</label>
+                    <input type="number" @bind="_defenderSkill"
+                           class="border border-primary-300 rounded-md px-2 py-1 text-sm w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500" />
+                </div>
+            </div>
+
+            @if (_defender.Build - _attacker.Build < 3)
+            {
+                <!-- Броски -->
+                <div class="border-t border-gray-200 pt-3 mt-2">
+                    <div class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Броски кубиков</div>
+
+                    <!-- Бросок атакующего -->
+                    <div class="mb-3">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-medium text-gray-600 w-36 shrink-0">@_attacker.Name (d100)</label>
+                            <input type="number" min="1" max="100"
+                                   value="@_attackerRoll"
+                                   @oninput="e => OnRollInput(e, true)"
+                                   class="border border-primary-300 rounded-md px-2 py-1 text-sm w-20 focus:outline-none"
+                                   placeholder="1–100" />
+                            <button @onclick="AutoRollAttacker" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲 авто</button>
+                        </div>
+                        @if (_attackerRoll.HasValue)
+                        {
+                            <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_attackerLevel)">
+                                → @CombatService.GetSuccessLevelText(_attackerLevel)
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Бросок защитника -->
+                    <div class="mb-3">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-medium text-gray-600 w-36 shrink-0">@_defender.Name (d100)</label>
+                            <input type="number" min="1" max="100"
+                                   value="@_defenderRoll"
+                                   @oninput="e => OnRollInput(e, false)"
+                                   class="border border-primary-300 rounded-md px-2 py-1 text-sm w-20 focus:outline-none"
+                                   placeholder="1–100" />
+                            <button @onclick="AutoRollDefender" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲 авто</button>
+                        </div>
+                        @if (_defenderRoll.HasValue)
+                        {
+                            <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_defenderLevel)">
+                                → @CombatService.GetSuccessLevelText(_defenderLevel)
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <button type="button" class="cm-btn cm-btn-info w-full" @onclick="ResolveManeuver"
+                        disabled="@(!CanResolve())">
+                    <span>Провести манёвр</span>
+                </button>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<Combatant> Combatants { get; set; } = [];
+    [Parameter] public EventCallback<CombatActionResult> OnManeuverResolved { get; set; }
+
+    private string _attackerId = "";
+    private string _defenderId = "";
+    private Combatant? _attacker;
+    private Combatant? _defender;
+
+    private ManeuverType _maneuverType = ManeuverType.KnockDown;
+    private CombatActionType _defenderReaction = CombatActionType.Dodge;
+    private int _attackSkill = 50;
+    private int _defenderSkill;
+
+    private int? _attackerRoll;
+    private int? _defenderRoll;
+    private SuccessLevel _attackerLevel;
+    private SuccessLevel _defenderLevel;
+
+    private IEnumerable<Combatant> AvailableAttackers =>
+        Combatants.Where(c => !c.IsDead && !c.IsUnconscious);
+
+    private IEnumerable<Combatant> AvailableDefenders =>
+        Combatants.Where(c => !c.IsDead && c.Id != _attacker?.Id);
+
+    private void OnAttackerChanged(ChangeEventArgs e)
+    {
+        _attackerId = e.Value?.ToString() ?? "";
+        _attacker = Guid.TryParse(_attackerId, out var id) ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        _attackSkill = _attacker?.FightingSkill ?? 50;
+        ResetRolls();
+    }
+
+    private void OnDefenderChanged(ChangeEventArgs e)
+    {
+        _defenderId = e.Value?.ToString() ?? "";
+        _defender = Guid.TryParse(_defenderId, out var id) ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        _defenderSkill = _defender?.DodgeSkill ?? 50;
+        ResetRolls();
+    }
+
+    private void OnManeuverTypeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ManeuverType>(e.Value?.ToString(), out var mt))
+            _maneuverType = mt;
+    }
+
+    private void SetDefenderReaction(CombatActionType reaction)
+    {
+        _defenderReaction = reaction;
+        _defenderSkill = reaction == CombatActionType.Dodge
+            ? _defender?.DodgeSkill ?? 50
+            : _defender?.FightingSkill ?? 50;
+        ResetRolls();
+    }
+
+    private void ResetRolls()
+    {
+        _attackerRoll = null;
+        _defenderRoll = null;
+        _attackerLevel = SuccessLevel.Failure;
+        _defenderLevel = SuccessLevel.Failure;
+    }
+
+    private void OnRollInput(ChangeEventArgs e, bool isAttacker)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v)) return;
+        v = Math.Clamp(v, 1, 100);
+        if (isAttacker)
+        {
+            _attackerRoll = v;
+            _attackerLevel = CombatService.CalculateSuccessLevel(v, _attackSkill);
+        }
+        else
+        {
+            _defenderRoll = v;
+            _defenderLevel = CombatService.CalculateSuccessLevel(v, _defenderSkill);
+        }
+    }
+
+    private void AutoRollAttacker()
+    {
+        _attackerRoll = CombatService.RollD100();
+        _attackerLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, _attackSkill);
+    }
+
+    private void AutoRollDefender()
+    {
+        _defenderRoll = CombatService.RollD100();
+        _defenderLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkill);
+    }
+
+    private bool CanResolve() =>
+        _attacker != null && _defender != null
+        && (_defender.Build - _attacker.Build) < 3;
+
+    private async Task ResolveManeuver()
+    {
+        if (_attacker == null || _defender == null) return;
+
+        var setup = new ManeuverSetup
+        {
+            AttackerId = _attacker.Id,
+            DefenderId = _defender.Id,
+            ManeuverType = _maneuverType,
+            AttackSkillValue = _attackSkill,
+            DefenderReaction = _defenderReaction,
+            DefenderSkillValue = _defenderSkill,
+            AttackerBuild = _attacker.Build,
+            DefenderBuild = _defender.Build,
+            ManualAttackerRoll = _attackerRoll,
+            ManualDefenderRoll = _defenderRoll
+        };
+
+        var result = CombatService.ResolveManeuver(setup);
+        ResetRolls();
+        await OnManeuverResolved.InvokeAsync(result);
+    }
+
+    private static string FormatBuild(int build) => build > 0 ? $"+{build}" : $"{build}";
+
+    private static string GetLevelColor(SuccessLevel level) => level switch
+    {
+        SuccessLevel.CriticalSuccess => "text-yellow-600",
+        SuccessLevel.ExtremeSuccess => "text-green-600",
+        SuccessLevel.HardSuccess => "text-green-700",
+        SuccessLevel.RegularSuccess => "text-green-800",
+        SuccessLevel.Failure => "text-red-600",
+        SuccessLevel.Fumble => "text-red-800",
+        _ => "text-gray-600"
+    };
+}

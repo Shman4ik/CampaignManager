@@ -12,12 +12,16 @@
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Utilities.Services
 
 @inject CombatService CombatService
 @inject CreatureService CreatureService
 @inject CampaignService CampaignService
+@inject ScenarioService ScenarioService
+@inject CharacterService CharacterService
 @inject IdentityService IdentityService
 @implements IDisposable
 
@@ -37,7 +41,13 @@ else
     <!-- Заголовок -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 class="cm-h2">Боевой помощник</h1>
-        <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
+        <div class="flex flex-wrap items-center gap-3">
+            <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
+            @if (_selectedCampaign != null && _campaignScenarios.Count > 0)
+            {
+                <ScenarioSelector Scenarios="_campaignScenarios" OnScenarioSelected="HandleScenarioSelected" />
+            }
+        </div>
     </div>
 
     <!-- Панель раундов -->
@@ -88,7 +98,7 @@ else
             <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
                 <h3 class="text-sm font-semibold text-gray-800 mb-2">Добавить участника</h3>
 
-                <div class="flex gap-1 mb-2">
+                <div class="flex flex-wrap gap-1 mb-2">
                     <button @onclick='() => _showAddMode = "characters"'
                             class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
                         Персонажи
@@ -97,7 +107,27 @@ else
                             class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
                         Существа
                     </button>
+                    @if (_selectedScenario != null)
+                    {
+                        <button @onclick='() => _showAddMode = "scenario-npcs"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-npcs" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            НПС
+                        </button>
+                        <button @onclick='() => _showAddMode = "scenario-creatures"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-creatures" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Монстры сцен.
+                        </button>
+                    }
                 </div>
+
+                @if (_showAddMode == "creatures")
+                {
+                    <input type="text"
+                           class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                           placeholder="Поиск существа..."
+                           @bind="_creatureSearch"
+                           @bind:event="oninput" />
+                }
 
                 <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
                     @if (_showAddMode == "characters")
@@ -122,6 +152,42 @@ else
                             }
                         }
                     }
+                    else if (_showAddMode == "scenario-npcs")
+                    {
+                        @if (!_scenarioNpcs.Any())
+                        {
+                            <p class="text-xs text-gray-400 p-2">Нет НПС в сценарии</p>
+                        }
+                        else
+                        {
+                            @foreach (var npc in _scenarioNpcs)
+                            {
+                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-purple-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                     @onclick="() => AddNpc(npc)">
+                                    <span class="text-gray-800">@npc.CharacterName</span>
+                                    <span class="text-xs text-gray-400">ЛВК @npc.Character.Characteristics.Dexterity.Regular</span>
+                                </div>
+                            }
+                        }
+                    }
+                    else if (_showAddMode == "scenario-creatures")
+                    {
+                        @if (!_scenarioCreatures.Any())
+                        {
+                            <p class="text-xs text-gray-400 p-2">Нет монстров в сценарии</p>
+                        }
+                        else
+                        {
+                            @foreach (var monster in _scenarioCreatures)
+                            {
+                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-orange-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                     @onclick="() => AddMonster(monster)">
+                                    <span class="text-gray-800">@monster.Name</span>
+                                    <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
+                                </div>
+                            }
+                        }
+                    }
                     else
                     {
                         @if (_availableCreatures == null)
@@ -130,7 +196,10 @@ else
                         }
                         else
                         {
-                            @foreach (var monster in _availableCreatures)
+                            var filtered = string.IsNullOrWhiteSpace(_creatureSearch)
+                                ? _availableCreatures
+                                : _availableCreatures.Where(c => c.Name.Contains(_creatureSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                            @foreach (var monster in filtered)
                             {
                                 <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
                                      @onclick="() => AddMonster(monster)">
@@ -158,10 +227,18 @@ else
             {
                 <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
                     <!-- Вкладки -->
-                    <div class="flex gap-1 mb-4 border-b border-gray-200 pb-2">
+                    <div class="flex flex-wrap gap-1 mb-4 border-b border-gray-200 pb-2">
                         <button @onclick='() => _activeTab = "attack"'
                                 class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "attack" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
                             Атака
+                        </button>
+                        <button @onclick='() => _activeTab = "maneuver"'
+                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "maneuver" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
+                            Манёвр
+                        </button>
+                        <button @onclick='() => _activeTab = "firstaid"'
+                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "firstaid" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
+                            Помощь
                         </button>
                         <button @onclick='() => _activeTab = "sanity"'
                                 class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "sanity" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
@@ -177,6 +254,16 @@ else
                     {
                         <AttackSetupPanel Combatants="CombatService.Combatants"
                                           OnAttackResolved="HandleAttackResolved" />
+                    }
+                    else if (_activeTab == "maneuver")
+                    {
+                        <ManeuverSetupPanel Combatants="CombatService.Combatants"
+                                            OnManeuverResolved="HandleManeuverResolved" />
+                    }
+                    else if (_activeTab == "firstaid")
+                    {
+                        <FirstAidPanel Combatants="CombatService.Combatants"
+                                       OnFirstAidApplied="HandleFirstAidApplied" />
                     }
                     else if (_activeTab == "sanity")
                     {
@@ -206,6 +293,11 @@ else
     private Campaign? _selectedCampaign;
     private List<Character>? _availableCharacters;
     private List<Creature>? _availableCreatures;
+    private string _creatureSearch = "";
+    private List<Scenario> _campaignScenarios = [];
+    private Scenario? _selectedScenario;
+    private List<CharacterStorageDto> _scenarioNpcs = [];
+    private List<ScenarioCreature> _scenarioCreatures = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -221,6 +313,9 @@ else
     private async Task HandleCampaignSelected(Campaign? campaign)
     {
         _selectedCampaign = campaign;
+        _selectedScenario = null;
+        _scenarioNpcs = [];
+        _scenarioCreatures = [];
 
         if (campaign != null)
         {
@@ -232,10 +327,31 @@ else
                 .Where(c => c.Status == CharacterStatus.Active)
                 .Select(c => c.Character)
                 .ToList() ?? [];
+
+            _campaignScenarios = await ScenarioService.GetCampaignScenariosAsync(campaign.Id);
         }
         else
         {
             _availableCharacters = null;
+            _campaignScenarios = [];
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleScenarioSelected(Scenario? scenario)
+    {
+        _selectedScenario = scenario;
+        _scenarioNpcs = [];
+        _scenarioCreatures = [];
+
+        if (scenario != null)
+        {
+            _scenarioNpcs = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(scenario.Id);
+
+            var full = await ScenarioService.GetScenarioByIdAsync(scenario.Id);
+            if (full is not null)
+                _scenarioCreatures = [.. full.ScenarioCreatures];
         }
 
         StateHasChanged();
@@ -244,6 +360,11 @@ else
     private void AddCharacter(Character character)
     {
         CombatService.AddCombatant(new Combatant(character));
+    }
+
+    private void AddNpc(CharacterStorageDto npc)
+    {
+        CombatService.AddCombatant(new Combatant(npc.Character));
     }
 
     private void AddMonster(Creature creature)
@@ -264,6 +385,17 @@ else
     private void HandleAttackResolved(CombatActionResult result)
     {
         CombatService.SetPendingResult(result);
+    }
+
+    private void HandleManeuverResolved(CombatActionResult result)
+    {
+        CombatService.SetPendingResult(result);
+    }
+
+    private void HandleFirstAidApplied((Combatant target, bool isDying) args)
+    {
+        // Первая помощь применена непосредственно в FirstAidPanel; уведомляем об изменениях
+        StateHasChanged();
     }
 
     private void HandleSanityResolved(CombatActionResult result)

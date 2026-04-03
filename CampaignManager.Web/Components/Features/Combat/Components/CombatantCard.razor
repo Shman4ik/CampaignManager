@@ -18,13 +18,30 @@
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
                 ИН: @Combatant.Initiative &middot; ЛВК: @Combatant.Dexterity
+                @if (Combatant.Armor > 0) { <span> &middot; Броня: @Combatant.Armor</span> }
+                @if (Combatant.Build != 0) { <span> &middot; Комп: @(Combatant.Build > 0 ? "+" : "")@Combatant.Build</span> }
             </div>
         </div>
-        <button @onclick="OnRemove" class="text-gray-400 hover:text-red-500 transition-colors p-0.5" title="Удалить">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-        </button>
+        <div class="flex items-center gap-1">
+            @if (!Combatant.IsPlayer)
+            {
+                <!-- Огнестрельное на изготовку -->
+                <button @onclick="ToggleFirearmReady"
+                        class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.HasFirearmReady ? "border-blue-400 bg-blue-100 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
+                        title="Огнестрельное на изготовку (+50 к инициативе)">🔫</button>
+            }
+            else
+            {
+                <button @onclick="ToggleFirearmReady"
+                        class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.HasFirearmReady ? "border-blue-400 bg-blue-100 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
+                        title="Огнестрельное на изготовку (+50 к инициативе)">🔫</button>
+            }
+            <button @onclick="OnRemove" class="text-gray-400 hover:text-red-500 transition-colors p-0.5" title="Удалить">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
     </div>
 
     <!-- Бейджи состояний -->
@@ -54,6 +71,14 @@
             @if (Combatant.HasIndefiniteInsanity)
             {
                 <span class="bg-purple-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Бессрочное безумие</span>
+            }
+            @if (Combatant.IsProne)
+            {
+                <span class="bg-yellow-700 text-white text-xs px-1.5 py-0.5 rounded font-medium">Повалён</span>
+            }
+            @if (Combatant.IsGrappled)
+            {
+                <span class="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">Захвачен</span>
             }
         </div>
     }
@@ -164,9 +189,12 @@
     private void AdjustMp(int delta) => Combatant.CurrentMagicPoints = Math.Clamp(Combatant.CurrentMagicPoints + delta, 0, Combatant.MaxMagicPoints);
     private void AdjustSanity(int delta) => Combatant.CurrentSanity = Math.Clamp(Combatant.CurrentSanity + delta, 0, Combatant.MaxSanity);
 
+    private void ToggleFirearmReady() => Combatant.HasFirearmReady = !Combatant.HasFirearmReady;
+
     private bool HasAnyState() =>
         Combatant.IsUnconscious || Combatant.HasMajorWound || Combatant.IsDying || Combatant.IsDead
-        || Combatant.HasTemporaryInsanity || Combatant.HasIndefiniteInsanity;
+        || Combatant.HasTemporaryInsanity || Combatant.HasIndefiniteInsanity
+        || Combatant.IsProne || Combatant.IsGrappled;
 
     private bool HasActions() =>
         (Combatant.CharacterSource?.Weapons.Count > 0)

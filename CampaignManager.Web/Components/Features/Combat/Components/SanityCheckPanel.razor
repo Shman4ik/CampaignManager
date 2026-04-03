@@ -69,6 +69,26 @@
         }
         else
         {
+            <!-- Ручной ввод броска -->
+            <div class="mb-3">
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-medium text-gray-600 w-32 shrink-0">Бросок d100</label>
+                    <input type="number" min="1" max="100"
+                           value="@_manualRoll"
+                           @oninput="OnRollInput"
+                           class="border border-primary-300 rounded-md px-2 py-1 text-sm w-20 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                           placeholder="1–100" />
+                    <button @onclick="AutoRollSanity" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600 whitespace-nowrap">🎲 авто</button>
+                </div>
+                @if (_manualRoll.HasValue)
+                {
+                    var success = _manualRoll.Value <= _selectedTarget!.CurrentSanity;
+                    <div class="mt-0.5 ml-32 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
+                        → @(success ? "успех" : "неудача")
+                    </div>
+                }
+            </div>
+
             <button type="button" class="cm-btn cm-btn-info w-full" @onclick="RollSanityCheck"><span>Проверка рассудка</span></button>
         }
     }
@@ -83,6 +103,7 @@
     private string _successLoss = "0";
     private string _failureLoss = "1D6";
     private CombatActionResult? _pendingSanityResult;
+    private int? _manualRoll;
 
     private IEnumerable<Combatant> AvailableTargets =>
         Combatants.Where(c => !c.IsDead);
@@ -93,6 +114,18 @@
         _selectedTarget = Guid.TryParse(_selectedTargetId, out var id)
             ? Combatants.FirstOrDefault(c => c.Id == id) : null;
         _pendingSanityResult = null;
+        _manualRoll = null;
+    }
+
+    private void OnRollInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+            _manualRoll = Math.Clamp(v, 1, 100);
+    }
+
+    private void AutoRollSanity()
+    {
+        _manualRoll = CombatService.RollD100();
     }
 
     private void RollSanityCheck()
@@ -104,10 +137,12 @@
             TargetId = _selectedTarget.Id,
             CurrentSanity = _selectedTarget.CurrentSanity,
             SuccessLoss = _successLoss,
-            FailureLoss = _failureLoss
+            FailureLoss = _failureLoss,
+            ManualRoll = _manualRoll
         };
 
         _pendingSanityResult = CombatService.ResolveSanityCheck(setup);
+        _manualRoll = null;
     }
 
     private async Task ApplySanityResult()

@@ -7,7 +7,7 @@ using CampaignManager.Web.Components.Features.Weapons.Model;
 namespace CampaignManager.Web.Components.Features.Combat.Services;
 
 /// <summary>
-/// Сервис управления боевыми столкновениями по правилам Call of Cthulhu 7e
+/// Сервис управления боевыми столкновениями по правилам Call of Cthulhu 7e (Глава 6)
 /// </summary>
 public sealed partial class CombatService
 {
@@ -37,10 +37,13 @@ public sealed partial class CombatService
         NotifyStateChanged();
     }
 
+    /// <summary>
+    /// Сортировка по инициативе. Учитывает +50 к ЛВК при огнестрельном оружии на изготовку.
+    /// </summary>
     public void SortByInitiative()
     {
         Combatants = Combatants
-            .OrderByDescending(c => c.Initiative)
+            .OrderByDescending(c => c.HasFirearmReady ? c.Initiative + 50 : c.Initiative)
             .ThenByDescending(c => c.Dexterity)
             .ToList();
         NotifyStateChanged();
@@ -55,6 +58,7 @@ public sealed partial class CombatService
         {
             CurrentTurnIndex = 0;
             CurrentRound++;
+            ResetRoundTracking();
         }
 
         NotifyStateChanged();
@@ -64,7 +68,18 @@ public sealed partial class CombatService
     {
         CurrentRound++;
         CurrentTurnIndex = 0;
+        ResetRoundTracking();
         NotifyStateChanged();
+    }
+
+    /// <summary>Сброс флагов защиты и раунда для всех участников.</summary>
+    private void ResetRoundTracking()
+    {
+        foreach (var c in Combatants)
+        {
+            c.HasDefendedThisRound = false;
+            c.DefenseCountThisRound = 0;
+        }
     }
 
     public Combatant? GetActiveCombatant()
@@ -132,7 +147,8 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Максимизирует бросок по формуле (все кости на максимум) — для критических ударов
+    /// Максимизирует бросок по формуле (все кости на максимум).
+    /// Используется при чрезвычайном/критическом успехе.
     /// </summary>
     public static int MaximizeDiceFormula(string formula)
     {
@@ -194,6 +210,9 @@ public sealed partial class CombatService
 
     // ───────────────────── Правила CoC 7e ─────────────────────
 
+    /// <summary>
+    /// Рассчитывает уровень успеха по правилам CoC 7e (стр. 86–87).
+    /// </summary>
     public static SuccessLevel CalculateSuccessLevel(int roll, int skillValue)
     {
         if (roll == 1) return SuccessLevel.CriticalSuccess;
@@ -206,19 +225,39 @@ public sealed partial class CombatService
     }
 
     /// <summary>
+    /// Считает эффективное значение навыка с учётом дальности стрельбы.
+    /// </summary>
+    public static int GetEffectiveSkillForRange(int baseSkill, RangeLevel range) => range switch
+    {
+        RangeLevel.Long => baseSkill / 2,
+        RangeLevel.Extreme => baseSkill / 5,
+        _ => baseSkill
+    };
+
+    /// <summary>
     /// Разрешение встречного броска. Возвращает true если атакующий побеждает.
+    /// Правила ничьей (CoC 7e стр. 101):
+    ///   — при уклонении: ничья = победа защитника
+    ///   — при контратаке: ничья = победа атакующего
     /// </summary>
     public static bool ResolveOpposedRoll(
         SuccessLevel attackerLevel, int attackerSkill,
-        SuccessLevel defenderLevel, int defenderSkill)
+        SuccessLevel defenderLevel, int defenderSkill,
+        CombatActionType defenderReaction)
     {
         if (attackerLevel > defenderLevel) return true;
         if (defenderLevel > attackerLevel) return false;
-        return attackerSkill >= defenderSkill;
+
+        // Ничья — победитель определяется типом реакции
+        return defenderReaction == CombatActionType.FightBack;
     }
 
     // ───────────────────── Разрешение ближнего боя ─────────────────────
 
+    /// <summary>
+    /// Полное разрешение атаки ближнего боя по правилам CoC 7e.
+    /// Поддерживает ручной ввод бросков через <see cref="AttackSetup"/>.
+    /// </summary>
     public CombatActionResult ResolveMeleeAttack(AttackSetup setup)
     {
         var attacker = Combatants.First(c => c.Id == setup.AttackerId);
@@ -234,51 +273,75 @@ public sealed partial class CombatService
             DefenderName = defender.Name,
             DefenderReaction = setup.DefenderReaction,
             DefenderHpBefore = defender.CurrentHitPoints,
+            AttackerHpBefore = attacker.CurrentHitPoints,
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Безоружная атака"
         };
 
-        // 1. Бросок атакующего
+        // 1. Бросок атакующего (ручной или авто)
         result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = RollD100();
+        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
-        // 2. Бросок защитника
+        // 2. Бросок защитника (только если цель не застали врасплох)
         result.DefenderSkillValue = setup.DefenderSkillValue;
-        result.DefenderRoll = RollD100();
-        result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
 
-        // 3. Если атакующий провалил — промах
+        if (setup.TargetUnawareMeansAutoSuccess)
+        {
+            // Внезапная атака: цель не уклоняется, атака проходит автоматически (кроме провала)
+            result.DefenderRoll = 0;
+            result.DefenderSuccessLevel = SuccessLevel.Failure;
+        }
+        else
+        {
+            result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
+            result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
+        }
+
+        // 3. Атакующий провалил — промах
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue})!";
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue}).";
             return result;
         }
 
-        // 4. Если защитник провалил — попадание
+        // 4. Определяем победителя встречного броска
         if (result.DefenderSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = true;
         }
         else
         {
-            // 5. Оба преуспели — встречный бросок
             result.AttackerWins = ResolveOpposedRoll(
                 result.AttackerSuccessLevel, result.AttackerSkillValue,
-                result.DefenderSuccessLevel, result.DefenderSkillValue);
+                result.DefenderSuccessLevel, result.DefenderSkillValue,
+                setup.DefenderReaction);
         }
+
+        // Отслеживаем защитные действия (для численного превосходства)
+        defender.HasDefendedThisRound = true;
+        defender.DefenseCountThisRound++;
 
         if (!result.AttackerWins)
         {
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = setup.DefenderReaction == CombatActionType.FightBack
-                ? $"{defender.Name} отбивает атаку {attacker.Name}!"
-                : $"{defender.Name} уклоняется от атаки {attacker.Name}!";
+
+            if (setup.DefenderReaction == CombatActionType.FightBack)
+            {
+                // Защитник победил при контратаке — он наносит урон атакующему
+                result.Summary = $"{defender.Name} отбивает атаку и контратакует {attacker.Name}!";
+                CalculateCounterAttackDamage(result, setup, defender, attacker);
+            }
+            else
+            {
+                result.Summary = $"{defender.Name} уклоняется от атаки {attacker.Name}.";
+            }
+
             return result;
         }
 
-        // 6. Расчёт урона
+        // 5. Атакующий победил — рассчитываем урон
         CalculateDamage(result, setup, attacker, defender);
 
         return result;
@@ -286,10 +349,17 @@ public sealed partial class CombatService
 
     // ───────────────────── Разрешение дальнего боя ─────────────────────
 
+    /// <summary>
+    /// Разрешение атаки из огнестрельного или метательного оружия.
+    /// Стрельба без встречного броска. Сложность зависит от дальности.
+    /// </summary>
     public CombatActionResult ResolveRangedAttack(AttackSetup setup)
     {
         var attacker = Combatants.First(c => c.Id == setup.AttackerId);
         var defender = Combatants.First(c => c.Id == setup.DefenderId);
+
+        // Эффективное значение навыка с учётом дальности
+        int effectiveSkill = GetEffectiveSkillForRange(setup.AttackSkillValue, setup.RangeLevel);
 
         var result = new CombatActionResult
         {
@@ -300,27 +370,116 @@ public sealed partial class CombatService
             DefenderId = defender.Id,
             DefenderName = defender.Name,
             DefenderHpBefore = defender.CurrentHitPoints,
+            AttackerHpBefore = attacker.CurrentHitPoints,
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Дальняя атака"
         };
 
-        // Бросок атакующего
-        result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = RollD100();
-        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
+        result.AttackerSkillValue = effectiveSkill;
+        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, effectiveSkill);
 
         // Дальний бой — без встречного броска
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue})!";
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {effectiveSkill}).";
             return result;
         }
 
         result.AttackerWins = true;
-        result.IsImpalingWeapon = true; // Все огнестрельные = пронзающие
+        result.IsImpalingWeapon = true; // Всё огнестрельное = проникающее
+
+        // При сверхбольшой дальности проникающая рана только при 01
+        if (setup.RangeLevel == RangeLevel.Extreme && result.AttackerRoll != 1)
+        {
+            result.IsImpalingWeapon = false;
+        }
 
         CalculateDamage(result, setup, attacker, defender);
+
+        return result;
+    }
+
+    // ───────────────────── Боевые манёвры ─────────────────────
+
+    /// <summary>
+    /// Разрешение боевого манёвра (CoC 7e стр. 103):
+    /// разоружить, сбить с ног, захват, толкнуть, вырваться, невыгодное положение.
+    /// </summary>
+    public CombatActionResult ResolveManeuver(ManeuverSetup setup)
+    {
+        var attacker = Combatants.First(c => c.Id == setup.AttackerId);
+        var defender = Combatants.First(c => c.Id == setup.DefenderId);
+
+        var result = new CombatActionResult
+        {
+            Round = CurrentRound,
+            AttackerId = attacker.Id,
+            AttackerName = attacker.Name,
+            ActionType = CombatActionType.Maneuver,
+            DefenderId = defender.Id,
+            DefenderName = defender.Name,
+            DefenderReaction = setup.DefenderReaction,
+            DefenderHpBefore = defender.CurrentHitPoints,
+            ManeuverType = setup.ManeuverType
+        };
+
+        // Разница в Комплекции
+        int buildDiff = setup.DefenderBuild - setup.AttackerBuild;
+        if (buildDiff >= 3)
+        {
+            result.AttackerWins = false;
+            result.Summary = $"Манёвр «{GetManeuverName(setup.ManeuverType)}» невозможен: " +
+                             $"Комплекция {attacker.Name} слишком низкая (разница ≥3).";
+            return result;
+        }
+
+        result.AttackerSkillValue = setup.AttackSkillValue;
+        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
+
+        result.DefenderSkillValue = setup.DefenderSkillValue;
+        result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
+        result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
+
+        if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
+        {
+            result.AttackerWins = false;
+            result.ManeuverSucceeded = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался.";
+            return result;
+        }
+
+        if (result.DefenderSuccessLevel <= SuccessLevel.Failure)
+        {
+            result.AttackerWins = true;
+        }
+        else
+        {
+            result.AttackerWins = ResolveOpposedRoll(
+                result.AttackerSuccessLevel, result.AttackerSkillValue,
+                result.DefenderSuccessLevel, result.DefenderSkillValue,
+                setup.DefenderReaction);
+        }
+
+        result.ManeuverSucceeded = result.AttackerWins;
+        defender.HasDefendedThisRound = true;
+        defender.DefenseCountThisRound++;
+
+        result.DefenderHpAfter = defender.CurrentHitPoints;
+
+        if (result.ManeuverSucceeded)
+        {
+            result.Summary = $"{attacker.Name} успешно выполняет манёвр «{GetManeuverName(setup.ManeuverType)}» " +
+                             $"против {defender.Name}.";
+        }
+        else
+        {
+            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался — " +
+                             $"{defender.Name} успешно защитился.";
+        }
 
         return result;
     }
@@ -329,67 +488,155 @@ public sealed partial class CombatService
 
     private static void CalculateDamage(CombatActionResult result, AttackSetup setup, Combatant attacker, Combatant defender)
     {
-        result.IsCritical = result.AttackerSuccessLevel == SuccessLevel.CriticalSuccess;
-        result.IsExtreme = result.AttackerSuccessLevel == SuccessLevel.ExtremeSuccess;
-
         var damageFormula = setup.SelectedWeapon?.Damage ?? setup.CreatureAttackDamage ?? "1D3";
         result.DamageFormula = damageFormula;
 
-        // Бросок урона
-        result.DamageRolled = result.IsCritical
-            ? MaximizeDiceFormula(damageFormula)
-            : RollDiceFormula(damageFormula);
-
-        // Бонус к урону (только ближний бой)
-        if (setup.IsMelee)
-        {
-            result.BonusDamage = RollDamageBonus(attacker.DamageBonus);
-        }
-
-        // Пронзающее оружие (для ближнего — по типу оружия)
+        // Определяем тип оружия (проникающее или ударное)
         if (setup.SelectedWeapon != null && setup.IsMelee)
-        {
             result.IsImpalingWeapon = IsImpalingWeapon(setup.SelectedWeapon);
-        }
+        // Для дальнего боя IsImpalingWeapon устанавливается в ResolveRangedAttack
 
-        if (result.IsExtreme && result.IsImpalingWeapon)
+        // Чрезвычайный урон: критический (01) или экстремальный (≤навык/5)
+        // Правило: только при атаке в свой ход, НЕ при контратаке
+        bool isExtraordinary = result.AttackerSuccessLevel >= SuccessLevel.ExtremeSuccess;
+        result.IsExtreme = isExtraordinary;
+        result.IsCritical = result.AttackerSuccessLevel == SuccessLevel.CriticalSuccess;
+
+        if (isExtraordinary)
         {
-            result.ExtraDamage = MaximizeDiceFormula(damageFormula);
+            // Чрезвычайный успех: максимальный урон оружия + максимальный БкУ (CoC 7e стр. 101)
+            result.DamageRolled = MaximizeDiceFormula(damageFormula);
+            result.BonusDamage = setup.IsMelee ? MaximizeDiceFormula(attacker.DamageBonus) : 0;
+
+            // Проникающее оружие: дополнительный бросок урона
+            if (result.IsImpalingWeapon)
+            {
+                result.ExtraDamage = setup.ManualExtraImpalingRoll ?? RollDiceFormula(damageFormula);
+            }
+        }
+        else
+        {
+            // Обычный бросок урона
+            result.DamageRolled = setup.ManualWeaponDamageRoll ?? RollDiceFormula(damageFormula);
+            result.BonusDamage = setup.IsMelee
+                ? (setup.ManualDamageBonusRoll ?? RollDamageBonus(attacker.DamageBonus))
+                : 0;
         }
 
-        result.TotalDamage = Math.Max(0, result.DamageRolled + result.BonusDamage + result.ExtraDamage);
+        // Итого до вычета брони
+        result.RawDamage = Math.Max(0, result.DamageRolled + result.BonusDamage + result.ExtraDamage);
 
-        // Расчёт HP
-        var newHp = defender.CurrentHitPoints - result.TotalDamage;
-        result.DefenderHpAfter = newHp;
+        // Броня снижает урон
+        result.ArmorReduction = Math.Min(defender.Armor, result.RawDamage);
+        result.TotalDamage = result.RawDamage - result.ArmorReduction;
 
-        // Тяжёлая рана: урон ≥ половины макс. HP
-        if (result.TotalDamage >= defender.MaxHitPoints / 2)
+        // ── Расчёт последствий урона ──
+
+        // Мгновенная смерть: один удар > макс ПЗ (CoC 7e стр. 117)
+        if (result.TotalDamage > defender.MaxHitPoints)
+        {
+            result.IsInstantDeath = true;
+            result.DefenderDead = true;
+            result.DefenderHpAfter = 0;
+            result.Summary = BuildAttackSummary(result);
+            return;
+        }
+
+        int newHp = defender.CurrentHitPoints - result.TotalDamage;
+        result.DefenderHpAfter = Math.Max(0, newHp);
+
+        // Серьёзная рана: урон ≥ половины макс. ПЗ за одну атаку (CoC 7e стр. 117)
+        bool majorWound = result.TotalDamage * 2 >= defender.MaxHitPoints;
+        if (majorWound)
         {
             result.TriggeredMajorWound = true;
+            result.DefenderFallsProne = true; // Автоматическое падение
+
+            // Проверка ВЫН: при провале — потеря сознания
             result.MajorWoundConRoll = RollD100();
             result.MajorWoundConRollSuccess = result.MajorWoundConRoll <= defender.ConstitutionValue;
             if (!result.MajorWoundConRollSuccess)
-            {
                 result.DefenderKnockedUnconscious = true;
-            }
         }
 
-        // При смерти / мёртв
         if (newHp <= 0)
         {
-            result.DefenderDying = true;
-            if (newHp <= -defender.MaxHitPoints)
+            result.DefenderHpAfter = 0;
+            // При смерти = 0 ПЗ + серьёзная рана (новая или уже имевшаяся)
+            if (defender.HasMajorWound || result.TriggeredMajorWound)
             {
-                result.DefenderDead = true;
+                result.DefenderDying = true;
+            }
+            else
+            {
+                // 0 ПЗ без серьёзной раны → без сознания, не умрёт
+                result.DefenderKnockedUnconscious = true;
             }
         }
 
         result.Summary = BuildAttackSummary(result);
     }
 
+    /// <summary>
+    /// Расчёт урона контратаки: защитник победил при fight back и наносит урон атакующему.
+    /// </summary>
+    private static void CalculateCounterAttackDamage(CombatActionResult result, AttackSetup setup, Combatant defender, Combatant attacker)
+    {
+        var formula = setup.CounterAttackDamageFormula;
+        if (string.IsNullOrWhiteSpace(formula)) formula = "1D3";
+        result.CounterAttackDamageFormula = formula;
+
+        result.CounterDamageRolled = setup.ManualCounterWeaponDamageRoll ?? RollDiceFormula(formula);
+        result.CounterBonusDamage = setup.ManualCounterDamageBonusRoll ?? RollDamageBonus(defender.DamageBonus);
+
+        result.CounterRawDamage = Math.Max(0, result.CounterDamageRolled + result.CounterBonusDamage);
+        result.CounterArmorReduction = Math.Min(attacker.Armor, result.CounterRawDamage);
+        result.CounterTotalDamage = result.CounterRawDamage - result.CounterArmorReduction;
+
+        int newHp = attacker.CurrentHitPoints - result.CounterTotalDamage;
+        result.AttackerHpAfter = Math.Max(0, newHp);
+
+        // Серьёзная рана для атакующего
+        if (result.CounterTotalDamage * 2 >= attacker.MaxHitPoints)
+        {
+            result.AttackerTriggeredMajorWound = true;
+            result.AttackerFallsProne = true;
+
+            result.AttackerMajorWoundConRoll = RollD100();
+            result.AttackerMajorWoundConRollSuccess = result.AttackerMajorWoundConRoll <= attacker.ConstitutionValue;
+            if (!result.AttackerMajorWoundConRollSuccess)
+                result.AttackerKnockedUnconscious = true;
+        }
+
+        if (newHp <= 0)
+        {
+            result.AttackerHpAfter = 0;
+            if (attacker.HasMajorWound || result.AttackerTriggeredMajorWound)
+                result.AttackerDying = true;
+            else
+                result.AttackerKnockedUnconscious = true;
+        }
+
+        result.Summary += $" {defender.Name} наносит урон {attacker.Name}: " +
+                          $"{formula}={result.CounterDamageRolled}" +
+                          (result.CounterBonusDamage != 0 ? $" + БкУ {result.CounterBonusDamage}" : "") +
+                          (result.CounterArmorReduction > 0 ? $" − броня {result.CounterArmorReduction}" : "") +
+                          $" = {result.CounterTotalDamage} (ОЗ: {result.AttackerHpBefore}→{result.AttackerHpAfter}).";
+
+        if (result.AttackerTriggeredMajorWound)
+        {
+            var conRes = result.AttackerMajorWoundConRollSuccess ? "успех" : "провал";
+            result.Summary += $" Тяжёлая рана! Проверка ТЕЛ: {result.AttackerMajorWoundConRoll} — {conRes}.";
+        }
+        if (result.AttackerKnockedUnconscious) result.Summary += $" {attacker.Name} теряет сознание!";
+        if (result.AttackerDying) result.Summary += $" {attacker.Name} при смерти!";
+    }
+
     // ───────────────────── Проверка рассудка ─────────────────────
 
+    /// <summary>
+    /// Разрешение проверки рассудка. Поддерживает ручной ввод броска.
+    /// </summary>
     public CombatActionResult ResolveSanityCheck(SanityCheckSetup setup)
     {
         var target = Combatants.First(c => c.Id == setup.TargetId);
@@ -403,7 +650,7 @@ public sealed partial class CombatService
             SanityBefore = target.CurrentSanity
         };
 
-        var roll = RollD100();
+        var roll = setup.ManualRoll ?? RollD100();
         result.AttackerRoll = roll;
         result.AttackerSkillValue = target.CurrentSanity;
 
@@ -417,11 +664,8 @@ public sealed partial class CombatService
         result.SanityLoss = sanLoss;
         result.SanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
 
-        // Временное безумие: потеря ≥5 за одну проверку
         if (sanLoss >= 5)
-        {
             result.TriggeredTemporaryInsanity = true;
-        }
 
         var successText = success ? "успех" : "неудача";
         result.Summary = $"{target.Name}: проверка рассудка — бросок {roll} против {target.CurrentSanity} ({successText}). " +
@@ -441,21 +685,43 @@ public sealed partial class CombatService
 
     public void ApplyResult(CombatActionResult result)
     {
-        // Применение урона к защитнику
+        // Урон защитнику
         if (result.DefenderId.HasValue)
         {
             var defender = Combatants.FirstOrDefault(c => c.Id == result.DefenderId);
             if (defender != null)
             {
                 defender.CurrentHitPoints = result.DefenderHpAfter;
+                if (result.DefenderFallsProne) defender.IsProne = true;
                 if (result.DefenderKnockedUnconscious) defender.IsUnconscious = true;
                 if (result.TriggeredMajorWound) defender.HasMajorWound = true;
                 if (result.DefenderDying) defender.IsDying = true;
                 if (result.DefenderDead) defender.IsDead = true;
+
+                // Вырвался из захвата при манёвре
+                if (result.ActionType == CombatActionType.Maneuver && result.ManeuverSucceeded)
+                {
+                    ApplyManeuverEffect(result, defender);
+                }
             }
         }
 
-        // Проверка рассудка — применяется к цели
+        // Контратакующий урон по атакующему (fight back)
+        if (result.CounterTotalDamage > 0)
+        {
+            var attacker = Combatants.FirstOrDefault(c => c.Id == result.AttackerId);
+            if (attacker != null)
+            {
+                attacker.CurrentHitPoints = result.AttackerHpAfter;
+                if (result.AttackerFallsProne) attacker.IsProne = true;
+                if (result.AttackerKnockedUnconscious) attacker.IsUnconscious = true;
+                if (result.AttackerTriggeredMajorWound) attacker.HasMajorWound = true;
+                if (result.AttackerDying) attacker.IsDying = true;
+                if (result.AttackerDead) attacker.IsDead = true;
+            }
+        }
+
+        // Проверка рассудка
         if (result.ActionType == CombatActionType.SanityCheck)
         {
             var target = Combatants.FirstOrDefault(c => c.Id == result.AttackerId);
@@ -472,6 +738,29 @@ public sealed partial class CombatService
         NotifyStateChanged();
     }
 
+    private static void ApplyManeuverEffect(CombatActionResult result, Combatant defender)
+    {
+        switch (result.ManeuverType)
+        {
+            case ManeuverType.KnockDown:
+            case ManeuverType.Push:
+                defender.IsProne = true;
+                break;
+            case ManeuverType.Grapple:
+                defender.IsGrappled = true;
+                defender.GrappledBy = result.AttackerId;
+                break;
+            case ManeuverType.BreakFree:
+                defender.IsGrappled = false;
+                defender.GrappledBy = null;
+                break;
+            case ManeuverType.Disarm:
+            case ManeuverType.Disadvantage:
+                // Визуально — в журнале
+                break;
+        }
+    }
+
     public void CancelPendingResult()
     {
         PendingResult = null;
@@ -481,7 +770,7 @@ public sealed partial class CombatService
     // ───────────────────── Вспомогательные методы ─────────────────────
 
     /// <summary>
-    /// Поиск значения навыка персонажа по имени
+    /// Поиск значения навыка персонажа по имени (частичное совпадение).
     /// </summary>
     public static int FindSkillValue(Character character, string skillName)
     {
@@ -503,22 +792,24 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Определяет, является ли оружие пронзающим
+    /// Проверяет, является ли оружие проникающим (пронзающим).
+    /// Проникающее оружие при чрезвычайном успехе наносит дополнительный бросок урона.
     /// </summary>
     public static bool IsImpalingWeapon(Weapon weapon)
     {
         if (weapon.Type != WeaponType.Melee)
-            return true;
+            return true; // Всё огнестрельное — проникающее
 
         var name = weapon.Name.ToLowerInvariant();
         return name.Contains("нож") || name.Contains("кинжал") || name.Contains("меч")
-               || name.Contains("рапир") || name.Contains("копь") || name.Contains("knife")
-               || name.Contains("sword") || name.Contains("spear") || name.Contains("rapier")
-               || name.Contains("dagger") || name.Contains("штык");
+               || name.Contains("рапир") || name.Contains("копь") || name.Contains("пик")
+               || name.Contains("knife") || name.Contains("sword") || name.Contains("spear")
+               || name.Contains("rapier") || name.Contains("dagger") || name.Contains("штык")
+               || name.Contains("шпаг") || name.Contains("сабл") || name.Contains("клинок");
     }
 
     /// <summary>
-    /// Парсит и бросает бонус к урону: "+1D4", "0", "-1", "-2", "+1D6"
+    /// Парсит и бросает бонус к урону: "+1D4", "0", "-1", "+1D6"
     /// </summary>
     public static int RollDamageBonus(string damageBonus)
     {
@@ -528,44 +819,7 @@ public sealed partial class CombatService
         return RollDiceFormula(damageBonus);
     }
 
-    private static string BuildAttackSummary(CombatActionResult result)
-    {
-        var parts = new List<string>();
-
-        var atkLevel = GetSuccessLevelText(result.AttackerSuccessLevel);
-        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): бросок {result.AttackerRoll} против {result.AttackerSkillValue} — {atkLevel}.");
-
-        if (result.ActionType == CombatActionType.MeleeAttack && result.DefenderId.HasValue)
-        {
-            var defAction = result.DefenderReaction == CombatActionType.FightBack ? "ответный удар" : "уклонение";
-            var defLevel = GetSuccessLevelText(result.DefenderSuccessLevel);
-            parts.Add($"{result.DefenderName} ({defAction}): бросок {result.DefenderRoll} против {result.DefenderSkillValue} — {defLevel}.");
-        }
-
-        if (result.AttackerWins && result.TotalDamage > 0)
-        {
-            var dmgParts = new List<string> { $"{result.DamageFormula}={result.DamageRolled}" };
-            if (result.BonusDamage != 0) dmgParts.Add($"бонус {result.BonusDamage}");
-            if (result.ExtraDamage > 0) dmgParts.Add($"доп. {result.ExtraDamage}");
-            parts.Add($"Урон: {string.Join(" + ", dmgParts)} = {result.TotalDamage}.");
-
-            if (result.IsCritical) parts.Add("Критический удар!");
-            if (result.IsExtreme && result.IsImpalingWeapon) parts.Add("Пронзание!");
-        }
-
-        if (result.TriggeredMajorWound)
-        {
-            var conResult = result.MajorWoundConRollSuccess ? "успех" : "провал";
-            parts.Add($"Тяжёлая рана! Проверка ТЕЛ: {result.MajorWoundConRoll} — {conResult}.");
-        }
-
-        if (result.DefenderKnockedUnconscious) parts.Add($"{result.DefenderName} теряет сознание!");
-        if (result.DefenderDead) parts.Add($"{result.DefenderName} мёртв!");
-        else if (result.DefenderDying) parts.Add($"{result.DefenderName} при смерти!");
-
-        return string.Join(" ", parts);
-    }
-
+    /// <summary>Возвращает описание уровня успеха на русском.</summary>
     public static string GetSuccessLevelText(SuccessLevel level) => level switch
     {
         SuccessLevel.CriticalSuccess => "критический успех",
@@ -576,6 +830,71 @@ public sealed partial class CombatService
         SuccessLevel.Fumble => "провал",
         _ => "неизвестно"
     };
+
+    /// <summary>Возвращает название манёвра на русском.</summary>
+    public static string GetManeuverName(ManeuverType type) => type switch
+    {
+        ManeuverType.Disarm => "Разоружить",
+        ManeuverType.KnockDown => "Сбить с ног",
+        ManeuverType.Grapple => "Захват",
+        ManeuverType.Push => "Толкнуть",
+        ManeuverType.BreakFree => "Вырваться",
+        ManeuverType.Disadvantage => "Невыгодное положение",
+        _ => "Манёвр"
+    };
+
+    private static string BuildAttackSummary(CombatActionResult result)
+    {
+        var parts = new List<string>();
+
+        var atkLevel = GetSuccessLevelText(result.AttackerSuccessLevel);
+        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}.");
+
+        if (result.ActionType == CombatActionType.MeleeAttack && result.DefenderId.HasValue && !result.DefenderSuccessLevel.Equals(SuccessLevel.Failure) || result.DefenderRoll > 0)
+        {
+            var defAction = result.DefenderReaction == CombatActionType.FightBack ? "ответный удар" : "уклонение";
+            var defLevel = GetSuccessLevelText(result.DefenderSuccessLevel);
+            parts.Add($"{result.DefenderName} ({defAction}): {result.DefenderRoll}/{result.DefenderSkillValue} — {defLevel}.");
+        }
+
+        if (result.AttackerWins && result.TotalDamage > 0)
+        {
+            var dmgParts = new List<string> { $"{result.DamageFormula}={result.DamageRolled}" };
+            if (result.BonusDamage != 0) dmgParts.Add($"БкУ {result.BonusDamage}");
+            if (result.ExtraDamage > 0) dmgParts.Add($"доп. {result.ExtraDamage}");
+            var dmgStr = $"Урон: {string.Join(" + ", dmgParts)} = {result.RawDamage}";
+            if (result.ArmorReduction > 0) dmgStr += $" − броня {result.ArmorReduction} = {result.TotalDamage}";
+            parts.Add(dmgStr + $". ОЗ: {result.DefenderHpBefore}→{result.DefenderHpAfter}.");
+
+            if (result.IsCritical) parts.Add("Критический удар!");
+            else if (result.IsExtreme)
+            {
+                parts.Add(result.IsImpalingWeapon ? "Чрезвычайный успех — проникающая рана!" : "Чрезвычайный успех — максимальный урон!");
+            }
+        }
+        else if (!result.AttackerWins && result.TotalDamage == 0 && result.CounterTotalDamage == 0)
+        {
+            parts.Add("Атака не нанесла урона.");
+        }
+
+        if (result.IsInstantDeath)
+        {
+            parts.Add($"{result.DefenderName} убит мгновенно!");
+        }
+        else
+        {
+            if (result.TriggeredMajorWound)
+            {
+                var conRes = result.MajorWoundConRollSuccess ? "успех" : "провал";
+                parts.Add($"Серьёзная рана! ТЕЛ: {result.MajorWoundConRoll} — {conRes}. {result.DefenderName} падает.");
+            }
+            if (result.DefenderKnockedUnconscious) parts.Add($"{result.DefenderName} теряет сознание!");
+            if (result.DefenderDead) parts.Add($"{result.DefenderName} мёртв!");
+            else if (result.DefenderDying) parts.Add($"{result.DefenderName} при смерти!");
+        }
+
+        return string.Join(" ", parts);
+    }
 
     private void NotifyStateChanged() => OnChange?.Invoke();
 }
