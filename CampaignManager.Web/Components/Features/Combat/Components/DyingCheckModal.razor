@@ -1,0 +1,129 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+@inject CombatService CombatService
+
+@if (IsVisible && DyingCombatants.Any())
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div class="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-lg mx-4 p-5">
+            <h3 class="text-base font-bold text-red-700 mb-1">Проверки ВЫН — умирающие бойцы</h3>
+            <p class="text-xs text-gray-500 mb-4">CoC 7e: Каждый умирающий боец бросает ВЫН в конце раунда. Провал — смерть.</p>
+
+            <div class="space-y-3 mb-4">
+                @foreach (var dying in DyingCombatants)
+                {
+                    var roll = _rolls.ContainsKey(dying.Id) ? _rolls[dying.Id] : (int?)null;
+                    var success = roll.HasValue && roll.Value <= dying.ConstitutionValue;
+                    var failed = roll.HasValue && !success;
+
+                    <div class="border rounded-md p-3 @(failed ? "border-red-300 bg-red-50" : success ? "border-green-300 bg-green-50" : "border-gray-200 bg-gray-50")">
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <span class="font-semibold text-sm text-gray-900">@dying.Name</span>
+                                <span class="text-xs text-gray-500 ml-2">ВЫН: @dying.ConstitutionValue</span>
+                            </div>
+                            @if (failed)
+                            {
+                                <span class="text-xs font-bold text-red-700 bg-red-100 rounded px-2 py-0.5">☠ Умер</span>
+                            }
+                            else if (success)
+                            {
+                                <span class="text-xs font-bold text-green-700 bg-green-100 rounded px-2 py-0.5">✓ Выжил</span>
+                            }
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="number" min="1" max="100"
+                                   value="@(roll?.ToString() ?? "")"
+                                   @oninput="e => OnRollInput(dying.Id, e)"
+                                   class="border border-gray-300 rounded px-2 py-1 text-sm w-20 focus:outline-none"
+                                   placeholder="1–100" />
+                            <button @onclick="() => AutoRoll(dying.Id, dying.ConstitutionValue)"
+                                    class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲 авто</button>
+                            @if (roll.HasValue)
+                            {
+                                <span class="text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
+                                    @roll.Value / @dying.ConstitutionValue — @(success ? "успех" : "провал!")
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="flex gap-2">
+                <button type="button" class="cm-btn cm-btn-primary w-full"
+                        @onclick="ApplyAll"
+                        disabled="@(!AllRolled())">
+                    <span>Применить результаты</span>
+                </button>
+                <button type="button" class="cm-btn cm-btn-secondary"
+                        @onclick="() => OnCancel.InvokeAsync()">
+                    <span>Пропустить</span>
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public List<Combatant> DyingCombatants { get; set; } = [];
+    [Parameter] public EventCallback OnApplied { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private Dictionary<Guid, int> _rolls = new();
+
+    protected override void OnParametersSet()
+    {
+        // Reset rolls when modal opens
+        if (IsVisible) _rolls = new();
+    }
+
+    private void OnRollInput(Guid id, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+            _rolls[id] = Math.Clamp(v, 1, 100);
+    }
+
+    private void AutoRoll(Guid id, int conValue)
+    {
+        _rolls[id] = CombatService.RollD100();
+    }
+
+    private bool AllRolled() => DyingCombatants.All(d => _rolls.ContainsKey(d.Id));
+
+    private async Task ApplyAll()
+    {
+        foreach (var dying in DyingCombatants)
+        {
+            if (!_rolls.TryGetValue(dying.Id, out var roll)) continue;
+            var success = roll <= dying.ConstitutionValue;
+
+            var logEntry = new CombatActionResult
+            {
+                Round = CombatService.CurrentRound,
+                AttackerId = dying.Id,
+                AttackerName = dying.Name,
+                ActionType = CombatActionType.FirstAid, // reuse for CON check display
+                AttackerRoll = roll,
+                AttackerSkillValue = dying.ConstitutionValue,
+                AttackerSuccessLevel = CombatService.CalculateSuccessLevel(roll, dying.ConstitutionValue),
+                Summary = success
+                    ? $"{dying.Name}: проверка ВЫН при смерти — {roll}/{dying.ConstitutionValue} — выжил!"
+                    : $"{dying.Name}: проверка ВЫН при смерти — {roll}/{dying.ConstitutionValue} — провал! Умер."
+            };
+
+            if (!success)
+            {
+                dying.IsDying = false;
+                dying.IsDead = true;
+            }
+
+            CombatService.ApplyFirstAidLog(logEntry);
+        }
+
+        _rolls = new();
+        await OnApplied.InvokeAsync();
+    }
+}

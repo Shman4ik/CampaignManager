@@ -122,7 +122,20 @@
 
 @code {
     [Parameter] public List<Combatant> Combatants { get; set; } = [];
-    [Parameter] public EventCallback<(Combatant target, bool isDying)> OnFirstAidApplied { get; set; }
+    [Parameter] public EventCallback<(Combatant target, bool isDying, CombatActionResult logEntry)> OnFirstAidApplied { get; set; }
+    [Parameter] public Guid? ActiveCombatantId { get; set; }
+
+    private Guid? _lastActiveId;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveCombatantId.HasValue && ActiveCombatantId != _lastActiveId)
+        {
+            _lastActiveId = ActiveCombatantId;
+            var active = Combatants.FirstOrDefault(c => c.Id == ActiveCombatantId.Value && !c.IsDead);
+            if (active != null) { _healerId = active.Id.ToString(); _healer = active; _roll = null; }
+        }
+    }
 
     private string _healerId = "";
     private string _targetId = "";
@@ -163,6 +176,8 @@
         if (!success) return;
 
         var wasDying = _target.IsDying;
+        var hpBefore = _target.CurrentHitPoints;
+
         if (wasDying)
         {
             _target.IsDying = false; // стабилизация
@@ -172,7 +187,26 @@
             _target.CurrentHitPoints = Math.Min(_target.CurrentHitPoints + 1, _target.MaxHitPoints);
         }
 
-        await OnFirstAidApplied.InvokeAsync((_target, wasDying));
+        var logEntry = new CombatActionResult
+        {
+            Round = CombatService.CurrentRound,
+            AttackerId = _healer!.Id,
+            AttackerName = _healer.Name,
+            ActionType = CombatActionType.FirstAid,
+            DefenderId = _target.Id,
+            DefenderName = _target.Name,
+            DefenderHpBefore = hpBefore,
+            DefenderHpAfter = _target.CurrentHitPoints,
+            AttackerRoll = _roll.Value,
+            AttackerSkillValue = _firstAidSkill,
+            AttackerSuccessLevel = SuccessLevel.RegularSuccess,
+            AttackerWins = true,
+            Summary = wasDying
+                ? $"{_healer.Name} оказывает первую помощь {_target.Name}: бросок {_roll.Value}/{_firstAidSkill} — успех. Умирание остановлено."
+                : $"{_healer.Name} оказывает первую помощь {_target.Name}: бросок {_roll.Value}/{_firstAidSkill} — успех. +1 ОЗ ({hpBefore}→{_target.CurrentHitPoints})."
+        };
+
+        await OnFirstAidApplied.InvokeAsync((_target, wasDying, logEntry));
         Reset();
     }
 

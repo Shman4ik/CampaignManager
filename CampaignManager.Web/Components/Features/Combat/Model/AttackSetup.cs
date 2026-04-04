@@ -73,8 +73,42 @@ public class AttackSetup
     /// <summary>Цель не уклоняется и не контратакует (не подозревала) — атака автоуспешна кроме провала</summary>
     public bool TargetUnawareMeansAutoSuccess { get; set; }
 
+    // ── Ручной ввод бросков ВЫН при серьёзной ране ────────────────────────
+
+    /// <summary>Ручной бросок ВЫН защитника при серьёзной ране (null = авторбросок)</summary>
+    public int? ManualMajorWoundConRoll { get; set; }
+
+    /// <summary>Ручной бросок ВЫН атакующего при серьёзной ране от контратаки (null = авторбросок)</summary>
+    public int? ManualCounterMajorWoundConRoll { get; set; }
+
     // ── Дальность (огнестрельное) ────────────────────────────────────────
 
     /// <summary>Дальность стрельбы — влияет на эффективное значение навыка</summary>
     public RangeLevel RangeLevel { get; set; } = RangeLevel.Base;
+
+    // ── Модификаторы стрельбы (CoC 7e стр. 110–113) ─────────────────────
+
+    /// <summary>Стрельба в упор (≤ ЛВК/15 метров) → бонусная кость</summary>
+    public bool IsPointBlank { get; set; }
+
+    /// <summary>Прицеливание (потрачен прошлый раунд) → бонусная кость</summary>
+    public bool IsAiming { get; set; }
+
+    /// <summary>Стрельба в ближнем бою → штрафная кость</summary>
+    public bool IsFiringIntoMelee { get; set; }
+
+    /// <summary>Цель укрылась от огня → штрафная кость</summary>
+    public bool IsTargetTakingCover { get; set; }
+
+    /// <summary>Частичное укрытие (≥50%) → штрафная кость</summary>
+    public bool IsTargetBehindCover { get; set; }
+
+    /// <summary>Быстро движущаяся цель (СКО ≥8) → штрафная кость</summary>
+    public bool IsTargetFastMoving { get; set; }
+
+    /// <summary>Серия выстрелов из пистолета → штрафная кость</summary>
+    public bool IsMultipleShot { get; set; }
+
+    /// <summary>Зарядка + выстрел в одном раунде → штрафная кость</summary>
+    public bool IsReloadAndFire { get; set; }
 }

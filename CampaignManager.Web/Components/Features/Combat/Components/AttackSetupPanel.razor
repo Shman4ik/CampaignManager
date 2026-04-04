@@ -95,10 +95,10 @@
             @if (_selectedDefender != null && _isMelee)
             {
                 <!-- Предупреждение о численном превосходстве -->
-                @if (_selectedDefender.HasDefendedThisRound)
+                @if (_selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound && _selectedDefender.DefenseCountThisRound > 0)
                 {
                     <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2 text-xs text-yellow-800">
-                        ⚠ @_selectedDefender.Name уже защищался в этом раунде — атакующий получает <strong>1 бонусную кость</strong>.
+                        ⚠ @_selectedDefender.Name уже защищался в этом раунде (@_selectedDefender.DefenseCountThisRound/@_selectedDefender.AttacksPerRound) — атакующий получает <strong>1 бонусную кость</strong>.
                     </div>
                 }
 
@@ -219,6 +219,64 @@
                             <input type="checkbox" @bind="_targetUnaware" />
                             Цель не подозревает (автопопадание, нет броска защиты)
                         </label>
+
+                        @if (!_isMelee)
+                        {
+                            <div class="border-t border-gray-200 pt-2 mt-2">
+                                <div class="text-xs font-semibold text-gray-500 mb-1">Модификаторы стрельбы</div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isPointBlank" />
+                                        В упор (≤ЛВК/15 м) → +1 бонусная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isAiming" />
+                                        Прицеливание (потрачен раунд) → +1 бонусная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isTargetTakingCover" />
+                                        Цель укрылась от огня → +1 штрафная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isTargetBehindCover" />
+                                        Частичное укрытие (≥50%) → +1 штрафная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isTargetFastMoving" />
+                                        Быстро движущаяся цель (СКО ≥8) → +1 штрафная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isFiringIntoMelee" />
+                                        Стрельба в ближнем бою → +1 штрафная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isMultipleShot" />
+                                        Серия выстрелов из пистолета → +1 штрафная
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                        <input type="checkbox" @bind="_isReloadAndFire" />
+                                        Зарядка + выстрел → +1 штрафная
+                                    </label>
+                                </div>
+
+                                @{
+                                    var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
+                                    var netDice = autoBonus + _bonusDice - autoPenalty - _penaltyDice;
+                                }
+                                <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-1.5">
+                                    Итого: <strong class="text-green-700">+@(autoBonus + _bonusDice) бонусн.</strong>
+                                    / <strong class="text-red-700">−@(autoPenalty + _penaltyDice) штрафн.</strong>
+                                    @if (_selectedDefender != null && _selectedDefender.Build >= 4)
+                                    {
+                                        <span class="text-green-600"> (крупная цель)</span>
+                                    }
+                                    @if (_selectedDefender != null && _selectedDefender.Build <= -2)
+                                    {
+                                        <span class="text-red-600"> (мелкая цель)</span>
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
                 </details>
 
@@ -321,6 +379,19 @@
 @code {
     [Parameter] public List<Combatant> Combatants { get; set; } = [];
     [Parameter] public EventCallback<CombatActionResult> OnAttackResolved { get; set; }
+    [Parameter] public Guid? ActiveCombatantId { get; set; }
+
+    private Guid? _lastActiveId;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveCombatantId.HasValue && ActiveCombatantId != _lastActiveId)
+        {
+            _lastActiveId = ActiveCombatantId;
+            var active = Combatants.FirstOrDefault(c => c.Id == ActiveCombatantId.Value && !c.IsDead && !c.IsUnconscious);
+            if (active != null) SelectAttacker(active);
+        }
+    }
 
     private string _selectedAttackerId = "";
     private string _selectedDefenderId = "";
@@ -353,6 +424,20 @@
     private bool _surpriseAttack;
     private bool _targetUnaware;
 
+    // Модификаторы стрельбы (CoC 7e стр. 110–113)
+    private bool _isPointBlank;
+    private bool _isAiming;
+    private bool _isFiringIntoMelee;
+    private bool _isTargetTakingCover;
+    private bool _isTargetBehindCover;
+    private bool _isTargetFastMoving;
+    private bool _isMultipleShot;
+    private bool _isReloadAndFire;
+
+    // Ручной ввод ВЫН
+    private int? _manualConRoll;
+    private int? _manualCounterConRoll;
+
     private List<AttackOption> _attackOptions = [];
 
     private IEnumerable<Combatant> AvailableAttackers =>
@@ -363,9 +448,15 @@
 
     private void OnAttackerChanged(ChangeEventArgs e)
     {
-        _selectedAttackerId = e.Value?.ToString() ?? "";
-        _selectedAttacker = Guid.TryParse(_selectedAttackerId, out var id)
-            ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        var id = e.Value?.ToString() ?? "";
+        var combatant = Guid.TryParse(id, out var guid) ? Combatants.FirstOrDefault(c => c.Id == guid) : null;
+        SelectAttacker(combatant);
+    }
+
+    private void SelectAttacker(Combatant? attacker)
+    {
+        _selectedAttacker = attacker;
+        _selectedAttackerId = attacker?.Id.ToString() ?? "";
         _selectedWeaponIndex = -1;
         _attackOptions.Clear();
         ResetRolls();
@@ -470,8 +561,18 @@
         _extraImpalingRoll = null;
         _counterWeaponRoll = null;
         _counterBonusRoll = null;
+        _manualConRoll = null;
+        _manualCounterConRoll = null;
         _attackerSuccessLevel = SuccessLevel.Failure;
         _defenderSuccessLevel = SuccessLevel.Failure;
+        _isPointBlank = false;
+        _isAiming = false;
+        _isFiringIntoMelee = false;
+        _isTargetTakingCover = false;
+        _isTargetBehindCover = false;
+        _isTargetFastMoving = false;
+        _isMultipleShot = false;
+        _isReloadAndFire = false;
     }
 
     private void OnRollInput(ChangeEventArgs e, bool isAttacker)
@@ -550,7 +651,23 @@
         if (_isMelee && _selectedDefender == null) return;
 
         var option = _attackOptions[_selectedWeaponIndex];
-        var effectiveBonusDice = _bonusDice + (_selectedDefender?.HasDefendedThisRound == true ? 1 : 0);
+        var hasNumericalSuperiority = _isMelee && _selectedDefender != null
+            && _selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound
+            && _selectedDefender.DefenseCountThisRound > 0;
+
+        // Для дальнего боя: суммируем ручные + авто-модификаторы стрельбы
+        int effectiveBonusDice, effectivePenaltyDice;
+        if (!_isMelee)
+        {
+            var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
+            effectiveBonusDice = _bonusDice + autoBonus;
+            effectivePenaltyDice = _penaltyDice + autoPenalty;
+        }
+        else
+        {
+            effectiveBonusDice = _bonusDice + (hasNumericalSuperiority ? 1 : 0);
+            effectivePenaltyDice = _penaltyDice;
+        }
 
         var setup = new AttackSetup
         {
@@ -565,7 +682,7 @@
             DefenderSkillValue = _defenderSkillValue,
             RangeLevel = _rangeLevel,
             BonusDice = effectiveBonusDice,
-            PenaltyDice = _penaltyDice,
+            PenaltyDice = effectivePenaltyDice,
             IsSurpriseAttack = _surpriseAttack,
             TargetUnawareMeansAutoSuccess = _targetUnaware,
             CounterAttackDamageFormula = _counterDamageFormula,
@@ -575,7 +692,17 @@
             ManualDamageBonusRoll = _damageBonusRoll,
             ManualExtraImpalingRoll = _extraImpalingRoll,
             ManualCounterWeaponDamageRoll = _counterWeaponRoll,
-            ManualCounterDamageBonusRoll = _counterBonusRoll
+            ManualCounterDamageBonusRoll = _counterBonusRoll,
+            ManualMajorWoundConRoll = _manualConRoll,
+            ManualCounterMajorWoundConRoll = _manualCounterConRoll,
+            IsPointBlank = _isPointBlank,
+            IsAiming = _isAiming,
+            IsFiringIntoMelee = _isFiringIntoMelee,
+            IsTargetTakingCover = _isTargetTakingCover,
+            IsTargetBehindCover = _isTargetBehindCover,
+            IsTargetFastMoving = _isTargetFastMoving,
+            IsMultipleShot = _isMultipleShot,
+            IsReloadAndFire = _isReloadAndFire
         };
 
         var result = _isMelee
@@ -584,6 +711,22 @@
 
         ResetRolls();
         await OnAttackResolved.InvokeAsync(result);
+    }
+
+    private (int bonus, int penalty) CalculateAutoFirearmModifiers()
+    {
+        int bonus = 0, penalty = 0;
+        if (_isPointBlank) bonus++;
+        if (_isAiming) bonus++;
+        if (_selectedDefender?.Build >= 4) bonus++;
+        if (_isTargetTakingCover) penalty++;
+        if (_isTargetBehindCover) penalty++;
+        if (_isTargetFastMoving) penalty++;
+        if (_isFiringIntoMelee) penalty++;
+        if (_isMultipleShot) penalty++;
+        if (_isReloadAndFire) penalty++;
+        if (_selectedDefender?.Build <= -2) penalty++;
+        return (bonus, penalty);
     }
 
     private static string GetLevelColor(SuccessLevel level) => level switch

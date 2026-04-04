@@ -45,7 +45,9 @@ else
             <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
             @if (_selectedCampaign != null && _campaignScenarios.Count > 0)
             {
-                <ScenarioSelector Scenarios="_campaignScenarios" OnScenarioSelected="HandleScenarioSelected" />
+                <ScenarioSelector Scenarios="_campaignScenarios"
+                                  SelectedScenarioId="_selectedScenario?.Id"
+                                  OnScenarioSelected="HandleScenarioSelected" />
             }
         </div>
     </div>
@@ -65,15 +67,17 @@ else
         <div class="flex gap-2">
             <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn"><span>Следующий ход</span></button>
             <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound"><span>Следующий раунд</span></button>
-            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="SortInitiative"><span>Сортировать ИН</span></button>
+            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ToggleCombatLog">
+                <span>@(_showCombatLog ? "Скрыть журнал" : "Журнал боя")</span>
+            </button>
         </div>
     </div>
 
-    <!-- Три колонки -->
+    <!-- Колонки -->
     <div class="grid grid-cols-12 gap-4">
 
         <!-- Левая: Список инициативы + Добавление -->
-        <div class="col-span-12 lg:col-span-3 space-y-3">
+        <div class="col-span-12 lg:col-span-4 space-y-3">
             <!-- Участники -->
             <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
                 <h3 class="text-sm font-semibold text-gray-800 mb-2">Порядок инициативы</h3>
@@ -84,7 +88,9 @@ else
                         {
                             <CombatantCard Combatant="combatant"
                                            IsActive="@(combatant == CombatService.GetActiveCombatant())"
-                                           OnRemoveCallback="RemoveCombatant" />
+                                           OnRemoveCallback="RemoveCombatant"
+                                           OnDelayTurn="HandleDelayTurn"
+                                           OnSortNeeded="SortInitiative" />
                         }
                     }
                     else
@@ -216,7 +222,7 @@ else
         </div>
 
         <!-- Центральная: Панель действий -->
-        <div class="col-span-12 lg:col-span-6 space-y-3">
+        <div class="col-span-12 @(_showCombatLog ? "lg:col-span-5" : "lg:col-span-8") space-y-3">
             @if (CombatService.PendingResult != null)
             {
                 <AttackResultDisplay Result="CombatService.PendingResult"
@@ -226,44 +232,92 @@ else
             else
             {
                 <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
+                    <!-- Активный боец (контекст) -->
+                    @if (CombatService.GetActiveCombatant() is { } active)
+                    {
+                        <div class="flex items-center gap-2 mb-3 px-2 py-1.5 bg-blue-50 rounded-md border border-blue-100">
+                            <span class="text-xs text-blue-500 font-medium">Ход:</span>
+                            <span class="text-sm font-bold text-blue-800">@active.Name</span>
+                            <span class="text-xs text-gray-500">ОЗ @active.CurrentHitPoints/@active.MaxHitPoints</span>
+                            @if (active.IsDying)
+                            {
+                                <span class="text-xs font-bold text-red-600 ml-auto">⚠ ПРИ СМЕРТИ</span>
+                            }
+                        </div>
+                    }
+
                     <!-- Вкладки -->
                     <div class="flex flex-wrap gap-1 mb-4 border-b border-gray-200 pb-2">
                         <button @onclick='() => _activeTab = "attack"'
-                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "attack" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
-                            Атака
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "attack" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            ⚔ Атака
                         </button>
                         <button @onclick='() => _activeTab = "maneuver"'
-                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "maneuver" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
-                            Манёвр
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "maneuver" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🤼 Манёвр
+                        </button>
+                        <button @onclick='() => _activeTab = "cover"'
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "cover" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🛡 Укрытие
+                        </button>
+                        <button @onclick='() => _activeTab = "flee"'
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "flee" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🏃 Бегство
                         </button>
                         <button @onclick='() => _activeTab = "firstaid"'
-                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "firstaid" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
-                            Помощь
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "firstaid" ? "bg-green-100 text-green-800 border border-green-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🩹 Первая помощь
+                        </button>
+                        <button @onclick='() => _activeTab = "medicine"'
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "medicine" ? "bg-green-100 text-green-800 border border-green-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            💊 Медицина
                         </button>
                         <button @onclick='() => _activeTab = "sanity"'
-                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "sanity" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
-                            Рассудок
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "sanity" ? "bg-purple-100 text-purple-800 border border-purple-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🧠 Рассудок
                         </button>
                         <button @onclick='() => _activeTab = "dice"'
-                                class="px-3 py-1.5 text-sm rounded-t font-medium transition-colors @(_activeTab == "dice" ? "bg-white border border-gray-200 border-b-white text-gray-900 -mb-[3px]" : "text-gray-500 hover:text-gray-700")">
-                            Кубики
+                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "dice" ? "bg-gray-200 text-gray-800 border border-gray-300" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                            🎲 Кубики
                         </button>
                     </div>
 
+                    @{ var activeId = CombatService.GetActiveCombatant()?.Id; }
                     @if (_activeTab == "attack")
                     {
                         <AttackSetupPanel Combatants="CombatService.Combatants"
+                                          ActiveCombatantId="activeId"
                                           OnAttackResolved="HandleAttackResolved" />
                     }
                     else if (_activeTab == "maneuver")
                     {
                         <ManeuverSetupPanel Combatants="CombatService.Combatants"
+                                            ActiveCombatantId="activeId"
                                             OnManeuverResolved="HandleManeuverResolved" />
+                    }
+                    else if (_activeTab == "cover")
+                    {
+                        <TakeCoverPanel Combatants="CombatService.Combatants"
+                                        ActiveCombatantId="activeId"
+                                        OnTakeCoverResolved="HandleTakeCoverResolved" />
+                    }
+                    else if (_activeTab == "flee")
+                    {
+                        <FleePanel Combatants="CombatService.Combatants"
+                                   ActiveCombatantId="activeId"
+                                   OnFleeResolved="HandleFleeResolved" />
                     }
                     else if (_activeTab == "firstaid")
                     {
                         <FirstAidPanel Combatants="CombatService.Combatants"
+                                       ActiveCombatantId="activeId"
                                        OnFirstAidApplied="HandleFirstAidApplied" />
+                    }
+                    else if (_activeTab == "medicine")
+                    {
+                        <MedicinePanel Combatants="CombatService.Combatants"
+                                       ActiveCombatantId="activeId"
+                                       OnMedicineApplied="HandleMedicineApplied" />
                     }
                     else if (_activeTab == "sanity")
                     {
@@ -278,18 +332,29 @@ else
             }
         </div>
 
-        <!-- Правая: Боевой журнал -->
-        <div class="col-span-12 lg:col-span-3">
-            <CombatLog LogEntries="CombatService.CombatLog" />
-        </div>
+        <!-- Правая: Боевой журнал (скрывается) -->
+        @if (_showCombatLog)
+        {
+            <div class="col-span-12 lg:col-span-3">
+                <CombatLog LogEntries="CombatService.CombatLog" />
+            </div>
+        }
     </div>
 </div>
+
+<DyingCheckModal IsVisible="_showDyingModal"
+                 DyingCombatants="_dyingCombatants"
+                 OnApplied="HandleDyingModalApplied"
+                 OnCancel="HandleDyingModalCancel" />
 }
 
 @code {
     private bool _isKeeper;
     private string _showAddMode = "characters";
     private string _activeTab = "attack";
+    private bool _showDyingModal;
+    private List<Combatant> _dyingCombatants = [];
+    private bool _showCombatLog;
     private Campaign? _selectedCampaign;
     private List<Character>? _availableCharacters;
     private List<Creature>? _availableCreatures;
@@ -329,6 +394,10 @@ else
                 .ToList() ?? [];
 
             _campaignScenarios = await ScenarioService.GetCampaignScenariosAsync(campaign.Id);
+
+            var latestScenario = _campaignScenarios.MaxBy(s => s.LastUpdated);
+            if (latestScenario != null)
+                await HandleScenarioSelected(latestScenario);
         }
         else
         {
@@ -360,16 +429,19 @@ else
     private void AddCharacter(Character character)
     {
         CombatService.AddCombatant(new Combatant(character));
+        CombatService.SortByInitiative();
     }
 
     private void AddNpc(CharacterStorageDto npc)
     {
         CombatService.AddCombatant(new Combatant(npc.Character));
+        CombatService.SortByInitiative();
     }
 
     private void AddMonster(Creature creature)
     {
         CombatService.AddCombatant(new Combatant(creature));
+        CombatService.SortByInitiative();
     }
 
     private void RemoveCombatant(Combatant combatant)
@@ -377,8 +449,52 @@ else
         CombatService.RemoveCombatant(combatant);
     }
 
+    private void ToggleCombatLog() => _showCombatLog = !_showCombatLog;
+
     private void NextTurn() => CombatService.NextTurn();
-    private void NextRound() => CombatService.NextRound();
+
+    private void NextRound()
+    {
+        _dyingCombatants = CombatService.GetDyingCombatants();
+        if (_dyingCombatants.Any())
+            _showDyingModal = true;
+        else
+        {
+            CombatService.NextRound();
+            CombatService.SortByInitiative();
+        }
+    }
+
+    private void HandleDyingModalCancel() => _showDyingModal = false;
+
+    private void HandleDyingModalApplied()
+    {
+        _showDyingModal = false;
+        _dyingCombatants = [];
+        CombatService.NextRound();
+        CombatService.SortByInitiative();
+    }
+
+    private void HandleDelayTurn(Combatant combatant) => CombatService.DelayTurn(combatant.Id);
+
+    private void HandleTakeCoverResolved((Combatant combatant, bool success, CombatActionResult logEntry) args)
+    {
+        CombatService.ApplyFirstAidLog(args.logEntry);
+        StateHasChanged();
+    }
+
+    private void HandleFleeResolved((Combatant fleer, CombatActionResult logEntry) args)
+    {
+        CombatService.ApplyFirstAidLog(args.logEntry);
+        StateHasChanged();
+    }
+
+    private void HandleMedicineApplied(CombatActionResult result)
+    {
+        CombatService.ApplyFirstAidLog(result);
+        StateHasChanged();
+    }
+
     private void SortInitiative() => CombatService.SortByInitiative();
     private void ResetCombat() => CombatService.ResetCombat();
 
@@ -392,9 +508,9 @@ else
         CombatService.SetPendingResult(result);
     }
 
-    private void HandleFirstAidApplied((Combatant target, bool isDying) args)
+    private void HandleFirstAidApplied((Combatant target, bool isDying, CombatActionResult logEntry) args)
     {
-        // Первая помощь применена непосредственно в FirstAidPanel; уведомляем об изменениях
+        CombatService.ApplyFirstAidLog(args.logEntry);
         StateHasChanged();
     }
 

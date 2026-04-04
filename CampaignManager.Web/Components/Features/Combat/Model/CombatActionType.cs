@@ -11,5 +11,6 @@ public enum CombatActionType
     FirstAid,
     DelayTurn,
     FleeFromMelee,
-    SanityCheck
+    SanityCheck,
+    Medicine
 }

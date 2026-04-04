@@ -47,6 +47,12 @@ public class Combatant
     public bool HasDefendedThisRound { get; set; } // Уже защищался в этом раунде
     public int DefenseCountThisRound { get; set; } // Число защитных действий за раунд
     public int AttacksPerRound { get; set; } = 1;  // Число атак за раунд (существа)
+    public bool IsAiming { get; set; }             // Прицеливается (бонусная кость в след. раунде)
+    public bool HasTakenCover { get; set; }        // Укрылся от огня
+    public bool LostNextAttackFromCover { get; set; } // Теряет атаку из-за укрытия
+    public bool HasActedThisRound { get; set; }    // Уже действовал в этом раунде
+    public bool IsDelayed { get; set; }            // Отложил действие
+    public string? JammedWeaponName { get; set; }  // Заклинившее оружие (название)
 
     // Ссылки на исходные сущности
     public Character? CharacterSource { get; set; }

@@ -1,0 +1,109 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+@inject CombatService CombatService
+
+<div>
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Бегство из ближнего боя</h4>
+
+    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-3 text-xs text-yellow-800">
+        CoC 7e стр. 106: В свой ход по ЛВК персонаж может бежать, если есть путь к отступлению и он не обездвижен.
+        Противник может получить возможность свободной атаки.
+    </div>
+
+    <!-- Кто бежит -->
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Убегающий</label>
+        <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                value="@_fleerId"
+                @onchange="OnFleerChanged">
+            <option value="">— Выберите —</option>
+            @foreach (var c in Combatants.Where(c => !c.IsDead && !c.IsUnconscious && !c.IsGrappled))
+            {
+                <option value="@c.Id">@c.Name (ЛВК: @c.Dexterity)</option>
+            }
+        </select>
+    </div>
+
+    @if (_fleer != null)
+    {
+        @if (_fleer.IsGrappled)
+        {
+            <div class="bg-red-50 border border-red-200 rounded-md p-2 mb-3 text-xs text-red-800">
+                ⚠ @_fleer.Name в захвате — бегство невозможно. Сначала вырвитесь с помощью манёвра «Вырваться».
+            </div>
+        }
+        else
+        {
+            <div class="bg-gray-50 border border-gray-200 rounded-md p-3 mb-3 text-sm">
+                <div class="font-medium text-gray-800">@_fleer.Name бежит из боя</div>
+                <div class="text-xs text-gray-500 mt-1">ЛВК: @_fleer.Dexterity</div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
+                <strong>Хранителю:</strong> Противник может нанести удар по убегающему (в свой ход или если отложил действие).
+                Убирайте бойца из инициативы после применения, если он покинул сцену.
+            </div>
+
+            <div class="flex gap-2">
+                <button type="button" class="cm-btn cm-btn-primary w-full" @onclick="Apply">
+                    <span>Применить (бегство)</span>
+                </button>
+                <button type="button" class="cm-btn cm-btn-secondary w-full" @onclick="Reset">
+                    <span>Сброс</span>
+                </button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<Combatant> Combatants { get; set; } = [];
+    [Parameter] public EventCallback<(Combatant fleer, CombatActionResult logEntry)> OnFleeResolved { get; set; }
+    [Parameter] public Guid? ActiveCombatantId { get; set; }
+
+    private Guid? _lastActiveId;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveCombatantId.HasValue && ActiveCombatantId != _lastActiveId)
+        {
+            _lastActiveId = ActiveCombatantId;
+            var active = Combatants.FirstOrDefault(c => c.Id == ActiveCombatantId.Value && !c.IsDead && !c.IsUnconscious);
+            if (active != null) { _fleerId = active.Id.ToString(); _fleer = active; }
+        }
+    }
+
+    private string _fleerId = "";
+    private Combatant? _fleer;
+
+    private void OnFleerChanged(ChangeEventArgs e)
+    {
+        _fleerId = e.Value?.ToString() ?? "";
+        _fleer = Guid.TryParse(_fleerId, out var id) ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+    }
+
+    private async Task Apply()
+    {
+        if (_fleer == null) return;
+
+        var logEntry = new CombatActionResult
+        {
+            Round = CombatService.CurrentRound,
+            AttackerId = _fleer.Id,
+            AttackerName = _fleer.Name,
+            ActionType = CombatActionType.FleeFromMelee,
+            AttackerWins = true,
+            Summary = $"{_fleer.Name} бежит из ближнего боя."
+        };
+
+        await OnFleeResolved.InvokeAsync((_fleer, logEntry));
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _fleerId = "";
+        _fleer = null;
+    }
+}

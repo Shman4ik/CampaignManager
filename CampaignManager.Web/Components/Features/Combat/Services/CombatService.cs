@@ -44,7 +44,7 @@ public sealed partial class CombatService
     {
         Combatants = Combatants
             .OrderByDescending(c => c.HasFirearmReady ? c.Initiative + 50 : c.Initiative)
-            .ThenByDescending(c => c.Dexterity)
+            .ThenByDescending(c => Math.Max(c.FightingSkill, c.DodgeSkill))
             .ToList();
         NotifyStateChanged();
     }
@@ -79,6 +79,15 @@ public sealed partial class CombatService
         {
             c.HasDefendedThisRound = false;
             c.DefenseCountThisRound = 0;
+            c.HasActedThisRound = false;
+            c.IsDelayed = false;
+            c.HasTakenCover = false;
+
+            // Если укрывался — теряет атаку в этом раунде
+            if (c.LostNextAttackFromCover)
+                c.LostNextAttackFromCover = false;
+
+            // Если прицеливался — флаг сохраняется до использования
         }
     }
 
@@ -88,6 +97,32 @@ public sealed partial class CombatService
         if (CurrentTurnIndex >= Combatants.Count) return Combatants[0];
         return Combatants[CurrentTurnIndex];
     }
+
+    /// <summary>
+    /// Отложить ход: переместить бойца в конец текущего порядка инициативы.
+    /// </summary>
+    public void DelayTurn(Guid combatantId)
+    {
+        var combatant = Combatants.FirstOrDefault(c => c.Id == combatantId);
+        if (combatant == null) return;
+
+        combatant.IsDelayed = true;
+        var idx = Combatants.IndexOf(combatant);
+        Combatants.RemoveAt(idx);
+        Combatants.Add(combatant);
+
+        // Скорректировать CurrentTurnIndex если нужно
+        if (idx <= CurrentTurnIndex && CurrentTurnIndex > 0)
+            CurrentTurnIndex--;
+
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Возвращает список умирающих бойцов для проверок ВЫН в конце раунда.
+    /// </summary>
+    public List<Combatant> GetDyingCombatants() =>
+        Combatants.Where(c => c.IsDying && !c.IsDead).ToList();
 
     public void SetCampaign(Guid campaignId)
     {
@@ -277,6 +312,10 @@ public sealed partial class CombatService
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Безоружная атака"
         };
 
+        // Автоматические модификаторы: бонусная кость если цель повалена (CoC 7e опциональные правила)
+        if (defender.IsProne)
+            setup.BonusDice++;
+
         // 1. Бросок атакующего (ручной или авто)
         result.AttackerSkillValue = setup.AttackSkillValue;
         result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
@@ -323,6 +362,9 @@ public sealed partial class CombatService
         defender.HasDefendedThisRound = true;
         defender.DefenseCountThisRound++;
 
+        // Если атакующий победил в рукопашной и цель в лежачем положении — сбрасываем прицеливание
+        if (attacker.IsAiming) attacker.IsAiming = false;
+
         if (!result.AttackerWins)
         {
             result.DefenderHpAfter = defender.CurrentHitPoints;
@@ -345,6 +387,40 @@ public sealed partial class CombatService
         CalculateDamage(result, setup, attacker, defender);
 
         return result;
+    }
+
+    // ───────────────────── Модификаторы стрельбы (CoC 7e стр. 110–113) ─────
+
+    /// <summary>
+    /// Подсчитывает бонусные и штрафные кости для дальней атаки по правилам CoC 7e.
+    /// Возвращает (bonusDice, penaltyDice).
+    /// </summary>
+    public static (int bonusDice, int penaltyDice) CalculateFirearmModifiers(AttackSetup setup, Combatant? attacker, Combatant? defender)
+    {
+        int bonus = setup.BonusDice;
+        int penalty = setup.PenaltyDice;
+
+        // Бонусные кости
+        if (setup.IsPointBlank) bonus++;
+        if (setup.IsAiming) bonus++;
+        if (attacker?.IsAiming == true) bonus++; // Прицеливание через состояние бойца
+        if (defender != null && defender.Build >= 4) bonus++; // Крупная цель
+
+        // Поваленный состояние (CoC 7e, опциональные правила)
+        if (attacker?.IsProne == true) bonus++; // Стрельба из лежачего положения
+
+        // Штрафные кости
+        if (setup.IsTargetTakingCover) penalty++;
+        if (defender?.HasTakenCover == true) penalty++; // Цель укрылась (авто)
+        if (setup.IsTargetBehindCover) penalty++;
+        if (setup.IsTargetFastMoving) penalty++;
+        if (setup.IsFiringIntoMelee) penalty++;
+        if (setup.IsMultipleShot) penalty++;
+        if (setup.IsReloadAndFire) penalty++;
+        if (defender != null && defender.Build <= -2) penalty++; // Мелкая цель
+        if (defender?.IsProne == true && !setup.IsPointBlank) penalty++; // Цель лежит
+
+        return (bonus, penalty);
     }
 
     // ───────────────────── Разрешение дальнего боя ─────────────────────
@@ -378,6 +454,21 @@ public sealed partial class CombatService
         result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, effectiveSkill);
 
+        // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
+        if (setup.SelectedWeapon != null
+            && !string.IsNullOrWhiteSpace(setup.SelectedWeapon.Malfunction)
+            && int.TryParse(setup.SelectedWeapon.Malfunction, out var malfunctionValue)
+            && result.AttackerRoll >= malfunctionValue)
+        {
+            result.IsMalfunction = true;
+            result.AttackerWins = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+            attacker.JammedWeaponName = setup.SelectedWeapon.Name;
+            result.MalfunctionMessage = $"Осечка! {setup.SelectedWeapon.Name} заклинило (бросок {result.AttackerRoll} ≥ {malfunctionValue}).";
+            result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Требуется ремонт (проверка Механики или Стрельбы, 1d6 раундов).";
+            return result;
+        }
+
         // Дальний бой — без встречного броска
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
         {
@@ -389,6 +480,9 @@ public sealed partial class CombatService
 
         result.AttackerWins = true;
         result.IsImpalingWeapon = true; // Всё огнестрельное = проникающее
+
+        // Прицеливание использовано — сбросить флаг
+        if (attacker.IsAiming) attacker.IsAiming = false;
 
         // При сверхбольшой дальности проникающая рана только при 01
         if (setup.RangeLevel == RangeLevel.Extreme && result.AttackerRoll != 1)
@@ -553,7 +647,7 @@ public sealed partial class CombatService
             result.DefenderFallsProne = true; // Автоматическое падение
 
             // Проверка ВЫН: при провале — потеря сознания
-            result.MajorWoundConRoll = RollD100();
+            result.MajorWoundConRoll = setup.ManualMajorWoundConRoll ?? RollD100();
             result.MajorWoundConRollSuccess = result.MajorWoundConRoll <= defender.ConstitutionValue;
             if (!result.MajorWoundConRollSuccess)
                 result.DefenderKnockedUnconscious = true;
@@ -602,7 +696,7 @@ public sealed partial class CombatService
             result.AttackerTriggeredMajorWound = true;
             result.AttackerFallsProne = true;
 
-            result.AttackerMajorWoundConRoll = RollD100();
+            result.AttackerMajorWoundConRoll = setup.ManualCounterMajorWoundConRoll ?? RollD100();
             result.AttackerMajorWoundConRollSuccess = result.AttackerMajorWoundConRoll <= attacker.ConstitutionValue;
             if (!result.AttackerMajorWoundConRollSuccess)
                 result.AttackerKnockedUnconscious = true;
@@ -759,6 +853,16 @@ public sealed partial class CombatService
                 // Визуально — в журнале
                 break;
         }
+    }
+
+    /// <summary>
+    /// Добавляет результат первой помощи в лог боя (без изменения состояния бойцов —
+    /// оно уже применено в FirstAidPanel).
+    /// </summary>
+    public void ApplyFirstAidLog(CombatActionResult result)
+    {
+        CombatLog.Insert(0, result);
+        NotifyStateChanged();
     }
 
     public void CancelPendingResult()

@@ -40,6 +40,8 @@ public class CombatActionResult
     public bool IsExtreme { get; set; }       // Чрезвычайный/экстремальный (≤навык/5)
     public bool IsImpalingWeapon { get; set; }
     public bool IsInstantDeath { get; set; }  // Одним ударом ≥ макс. ПЗ
+    public bool IsMalfunction { get; set; }   // Осечка / заклинило
+    public string? MalfunctionMessage { get; set; }
 
     // ── Эффекты на защитника ──────────────────────────────────────────
     public int DefenderHpBefore { get; set; }

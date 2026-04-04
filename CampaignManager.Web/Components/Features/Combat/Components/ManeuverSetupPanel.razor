@@ -157,6 +157,19 @@
 @code {
     [Parameter] public List<Combatant> Combatants { get; set; } = [];
     [Parameter] public EventCallback<CombatActionResult> OnManeuverResolved { get; set; }
+    [Parameter] public Guid? ActiveCombatantId { get; set; }
+
+    private Guid? _lastActiveId;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveCombatantId.HasValue && ActiveCombatantId != _lastActiveId)
+        {
+            _lastActiveId = ActiveCombatantId;
+            var active = Combatants.FirstOrDefault(c => c.Id == ActiveCombatantId.Value && !c.IsDead && !c.IsUnconscious);
+            if (active != null) { _attackerId = active.Id.ToString(); _attacker = active; }
+        }
+    }
 
     private string _attackerId = "";
     private string _defenderId = "";

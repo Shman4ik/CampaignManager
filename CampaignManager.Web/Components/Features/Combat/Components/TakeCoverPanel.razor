@@ -1,0 +1,154 @@
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+@inject CombatService CombatService
+
+<div>
+    <h4 class="text-base font-semibold text-gray-900 mb-3">Укрыться от огня</h4>
+
+    <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
+        CoC 7e стр. 111: Успешная проверка Уклонения — стрелок получает штрафную кость. Укрывшийся теряет следующую атаку.
+    </div>
+
+    <!-- Боец -->
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Укрывающийся</label>
+        <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                value="@_combatantId"
+                @onchange="OnCombatantChanged">
+            <option value="">— Выберите —</option>
+            @foreach (var c in Combatants.Where(c => !c.IsDead && !c.IsUnconscious))
+            {
+                <option value="@c.Id">@c.Name (Уклонение: @c.DodgeSkill)</option>
+            }
+        </select>
+    </div>
+
+    @if (_combatant != null)
+    {
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Навык Уклонения</label>
+            <input type="number" min="1" max="100" @bind="_dodgeSkill"
+                   class="border border-primary-300 rounded-md px-2 py-1 text-sm w-full focus:outline-none" />
+        </div>
+
+        <div class="mb-3 border-t border-gray-200 pt-3">
+            <div class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Бросок d100</div>
+            <div class="flex items-center gap-2">
+                <label class="text-xs font-medium text-gray-600 w-28 shrink-0">d100 (@_combatant.Name)</label>
+                <input type="number" min="1" max="100"
+                       value="@_roll"
+                       @oninput="OnRollInput"
+                       class="border border-primary-300 rounded-md px-2 py-1 text-sm w-20 focus:outline-none"
+                       placeholder="1–100" />
+                <button @onclick="AutoRoll" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲 авто</button>
+            </div>
+            @if (_roll.HasValue)
+            {
+                var success = _roll.Value <= _dodgeSkill;
+                <div class="mt-1 ml-28 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
+                    → @_roll.Value / @_dodgeSkill — @(success ? "успех!" : "неудача")
+                </div>
+            }
+        </div>
+
+        @if (_roll.HasValue)
+        {
+            var success = _roll.Value <= _dodgeSkill;
+            <div class="rounded-md p-3 mb-3 @(success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200")">
+                @if (success)
+                {
+                    <div class="text-sm font-semibold text-green-700">✓ Успешное укрытие</div>
+                    <div class="text-xs text-gray-600 mt-0.5">@_combatant.Name укрылся. Следующий стрелок получает штрафную кость. @_combatant.Name теряет следующую атаку.</div>
+                }
+                else
+                {
+                    <div class="text-sm font-semibold text-red-700">✗ Укрыться не удалось</div>
+                }
+            </div>
+
+            <div class="flex gap-2">
+                <button type="button" class="cm-btn cm-btn-primary w-full" @onclick="Apply" disabled="@(_roll.Value > _dodgeSkill)">
+                    <span>Применить</span>
+                </button>
+                <button type="button" class="cm-btn cm-btn-secondary w-full" @onclick="Reset">
+                    <span>Сброс</span>
+                </button>
+            </div>
+        }
+        else
+        {
+            <p class="text-xs text-gray-400 text-center">Введите бросок для оценки результата</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<Combatant> Combatants { get; set; } = [];
+    [Parameter] public EventCallback<(Combatant combatant, bool success, CombatActionResult logEntry)> OnTakeCoverResolved { get; set; }
+    [Parameter] public Guid? ActiveCombatantId { get; set; }
+
+    private Guid? _lastActiveId;
+
+    protected override void OnParametersSet()
+    {
+        if (ActiveCombatantId.HasValue && ActiveCombatantId != _lastActiveId)
+        {
+            _lastActiveId = ActiveCombatantId;
+            var active = Combatants.FirstOrDefault(c => c.Id == ActiveCombatantId.Value && !c.IsDead && !c.IsUnconscious);
+            if (active != null) { _combatantId = active.Id.ToString(); _combatant = active; _dodgeSkill = active.DodgeSkill; _roll = null; }
+        }
+    }
+
+    private string _combatantId = "";
+    private Combatant? _combatant;
+    private int _dodgeSkill;
+    private int? _roll;
+
+    private void OnCombatantChanged(ChangeEventArgs e)
+    {
+        _combatantId = e.Value?.ToString() ?? "";
+        _combatant = Guid.TryParse(_combatantId, out var id) ? Combatants.FirstOrDefault(c => c.Id == id) : null;
+        if (_combatant != null) _dodgeSkill = _combatant.DodgeSkill;
+        _roll = null;
+    }
+
+    private void OnRollInput(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+            _roll = Math.Clamp(v, 1, 100);
+    }
+
+    private void AutoRoll() => _roll = CombatService.RollD100();
+
+    private async Task Apply()
+    {
+        if (_combatant == null || !_roll.HasValue) return;
+        var success = _roll.Value <= _dodgeSkill;
+        if (!success) return;
+
+        _combatant.HasTakenCover = true;
+        _combatant.LostNextAttackFromCover = true;
+
+        var logEntry = new CombatActionResult
+        {
+            Round = CombatService.CurrentRound,
+            AttackerId = _combatant.Id,
+            AttackerName = _combatant.Name,
+            ActionType = CombatActionType.TakeCover,
+            AttackerRoll = _roll.Value,
+            AttackerSkillValue = _dodgeSkill,
+            AttackerSuccessLevel = CombatService.CalculateSuccessLevel(_roll.Value, _dodgeSkill),
+            AttackerWins = true,
+            Summary = $"{_combatant.Name} укрылся от огня: бросок {_roll.Value}/{_dodgeSkill} — успех. Следующий стрелок получает штрафную кость."
+        };
+
+        await OnTakeCoverResolved.InvokeAsync((_combatant, true, logEntry));
+        Reset();
+    }
+
+    private void Reset()
+    {
+        _roll = null;
+    }
+}

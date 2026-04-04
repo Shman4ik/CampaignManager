@@ -17,24 +17,30 @@
                 }
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
-                ИН: @Combatant.Initiative &middot; ЛВК: @Combatant.Dexterity
+                ИН: @(Combatant.HasFirearmReady ? Combatant.Initiative + 50 : Combatant.Initiative) &middot; ЛВК: @Combatant.Dexterity
                 @if (Combatant.Armor > 0) { <span> &middot; Броня: @Combatant.Armor</span> }
                 @if (Combatant.Build != 0) { <span> &middot; Комп: @(Combatant.Build > 0 ? "+" : "")@Combatant.Build</span> }
+                @if (Combatant.DefenseCountThisRound > 0)
+                {
+                    <span class="ml-1 text-orange-600 font-medium">· Защит: @Combatant.DefenseCountThisRound/@Combatant.AttacksPerRound</span>
+                }
             </div>
         </div>
-        <div class="flex items-center gap-1">
-            @if (!Combatant.IsPlayer)
+        <div class="flex items-center gap-1 flex-wrap justify-end">
+            <button @onclick="ToggleFirearmReady"
+                    class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.HasFirearmReady ? "border-blue-400 bg-blue-100 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
+                    title="Огнестрельное на изготовку (+50 к инициативе)">🔫</button>
+            <button @onclick="ToggleAiming"
+                    class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.IsAiming ? "border-green-400 bg-green-100 text-green-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
+                    title="Прицеливание (бонусная кость в след. раунде)">🎯</button>
+            <button @onclick="ToggleProne"
+                    class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.IsProne ? "border-yellow-500 bg-yellow-100 text-yellow-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
+                    title="Повалён">↓</button>
+            @if (OnDelayTurn.HasDelegate && !Combatant.IsDelayed && !Combatant.HasActedThisRound)
             {
-                <!-- Огнестрельное на изготовку -->
-                <button @onclick="ToggleFirearmReady"
-                        class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.HasFirearmReady ? "border-blue-400 bg-blue-100 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
-                        title="Огнестрельное на изготовку (+50 к инициативе)">🔫</button>
-            }
-            else
-            {
-                <button @onclick="ToggleFirearmReady"
-                        class="text-xs px-1.5 py-0.5 rounded border transition-colors @(Combatant.HasFirearmReady ? "border-blue-400 bg-blue-100 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300")"
-                        title="Огнестрельное на изготовку (+50 к инициативе)">🔫</button>
+                <button @onclick="DelayTurn"
+                        class="text-xs px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-gray-400 hover:border-orange-300 hover:text-orange-600 transition-colors"
+                        title="Отложить ход">⏸</button>
             }
             <button @onclick="OnRemove" class="text-gray-400 hover:text-red-500 transition-colors p-0.5" title="Удалить">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,6 +85,22 @@
             @if (Combatant.IsGrappled)
             {
                 <span class="bg-indigo-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">Захвачен</span>
+            }
+            @if (Combatant.IsAiming)
+            {
+                <span class="bg-green-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">Прицел.</span>
+            }
+            @if (Combatant.HasTakenCover)
+            {
+                <span class="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">Укрылся</span>
+            }
+            @if (Combatant.IsDelayed)
+            {
+                <span class="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium">Отложен</span>
+            }
+            @if (Combatant.JammedWeaponName != null)
+            {
+                <span class="bg-gray-600 text-white text-xs px-1.5 py-0.5 rounded font-medium" title="@Combatant.JammedWeaponName заклинило">🔧 Осечка</span>
             }
         </div>
     }
@@ -182,19 +204,31 @@
     [Parameter] public required Combatant Combatant { get; set; }
     [Parameter] public bool IsActive { get; set; }
     [Parameter] public EventCallback<Combatant> OnRemoveCallback { get; set; }
+    [Parameter] public EventCallback<Combatant> OnDelayTurn { get; set; }
+    [Parameter] public EventCallback OnSortNeeded { get; set; }
 
     private async Task OnRemove() => await OnRemoveCallback.InvokeAsync(Combatant);
+    private async Task DelayTurn() => await OnDelayTurn.InvokeAsync(Combatant);
 
-    private void AdjustHp(int delta) => Combatant.CurrentHitPoints = Math.Clamp(Combatant.CurrentHitPoints + delta, -Combatant.MaxHitPoints, Combatant.MaxHitPoints);
+    private void AdjustHp(int delta) => Combatant.CurrentHitPoints = Math.Clamp(Combatant.CurrentHitPoints + delta, 0, Combatant.MaxHitPoints);
     private void AdjustMp(int delta) => Combatant.CurrentMagicPoints = Math.Clamp(Combatant.CurrentMagicPoints + delta, 0, Combatant.MaxMagicPoints);
     private void AdjustSanity(int delta) => Combatant.CurrentSanity = Math.Clamp(Combatant.CurrentSanity + delta, 0, Combatant.MaxSanity);
 
-    private void ToggleFirearmReady() => Combatant.HasFirearmReady = !Combatant.HasFirearmReady;
+    private async Task ToggleFirearmReady()
+    {
+        Combatant.HasFirearmReady = !Combatant.HasFirearmReady;
+        await OnSortNeeded.InvokeAsync();
+    }
+    private void ToggleProne() => Combatant.IsProne = !Combatant.IsProne;
+    private void ToggleAiming() => Combatant.IsAiming = !Combatant.IsAiming;
+    private void ToggleUnconscious() => Combatant.IsUnconscious = !Combatant.IsUnconscious;
 
     private bool HasAnyState() =>
         Combatant.IsUnconscious || Combatant.HasMajorWound || Combatant.IsDying || Combatant.IsDead
         || Combatant.HasTemporaryInsanity || Combatant.HasIndefiniteInsanity
-        || Combatant.IsProne || Combatant.IsGrappled;
+        || Combatant.IsProne || Combatant.IsGrappled
+        || Combatant.IsAiming || Combatant.HasTakenCover || Combatant.IsDelayed
+        || Combatant.JammedWeaponName != null;
 
     private bool HasActions() =>
         (Combatant.CharacterSource?.Weapons.Count > 0)
