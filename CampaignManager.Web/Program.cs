@@ -196,6 +196,7 @@ builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
+builder.Services.AddHostedService<WeaponDataMigrationService>();
 builder.Services.AddScoped<SpellService>();
 builder.Services.AddScoped<MarkdownService>();
 

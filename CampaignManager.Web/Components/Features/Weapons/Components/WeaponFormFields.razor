@@ -1,5 +1,6 @@
 ﻿@using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @namespace CampaignManager.Web.Components.Features.Weapons.Components
 
 <EditForm Model="Weapon" OnValidSubmit="OnValidSubmit" Id="@FormId">
@@ -36,9 +37,26 @@
 
         <div class="space-y-2">
             <label for="weaponDamage" class="block text-sm font-semibold text-gray-700">Урон</label>
-            <InputText id="weaponDamage" @bind-Value="Weapon.Damage"
+            <InputText id="weaponDamage" @bind-Value="Weapon.Damage" @bind-Value:after="OnDamageChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Damage)" class="text-red-600 text-sm font-medium"/>
+            @if (_damageInfo is not null)
+            {
+                @if (_damageInfo.IsParsed)
+                {
+                    <p class="text-xs text-green-700 flex items-center gap-1">
+                        <span>✓</span>
+                        <span>Распознано: @_damageInfo.Primary?.ToString() @(_damageInfo.BlastRadiusMeters.HasValue ? $"(радиус {_damageInfo.BlastRadiusMeters} м)" : "") @(_damageInfo.RangeDamages is not null ? $"{_damageInfo.RangeDamages.Count} дальностей" : "")</span>
+                    </p>
+                }
+                else
+                {
+                    <p class="text-xs text-amber-700 flex items-center gap-1">
+                        <span>⚠️</span>
+                        <span>Формула не распознана — расчёт урона будет выполнен по тексту. Проверьте значение вручную.</span>
+                    </p>
+                }
+            }
         </div>
 
         <div class="space-y-2">
@@ -76,16 +94,31 @@
             <ValidationMessage For="@(() => Weapon.Malfunction)" class="text-red-600 text-sm font-medium"/>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-4 sm:gap-8 p-4 bg-gray-50 rounded-lg">
-            <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                <InputCheckbox id="weaponIs1920" @bind-Value="Weapon.Is1920"
+        <div class="space-y-2 p-4 bg-gray-50 rounded-lg">
+            <span class="block text-sm font-semibold text-gray-700">Эпоха</span>
+            <div class="flex flex-wrap gap-6">
+                <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
+                    <InputCheckbox id="weaponIs1920" @bind-Value="Weapon.Is1920"
+                                   class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
+                    <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">1920-х</span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
+                    <InputCheckbox id="weaponIsModern" @bind-Value="Weapon.IsModern"
+                                   class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
+                    <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Современное</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="p-4 bg-gray-50 rounded-lg">
+            <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]"
+                   title="Проникающее оружие при чрезвычайном успехе наносит доп. бросок урона (CoC 7e стр. 101)">
+                <InputCheckbox id="weaponIsImpaling" @bind-Value="Weapon.IsImpaling"
                                class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Эпоха 1920-х</span>
-            </label>
-            <label class="flex items-center gap-3 cursor-pointer group min-h-[44px]">
-                <InputCheckbox id="weaponIsModern" @bind-Value="Weapon.IsModern"
-                               class="w-5 h-5 text-primary-600 focus:ring-2 focus:ring-primary-500 border-gray-300 rounded cursor-pointer"/>
-                <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Современное</span>
+                <div>
+                    <span class="text-base font-semibold text-gray-700 group-hover:text-primary-600 transition-colors">Проникающее</span>
+                    <p class="text-xs text-gray-500 mt-0.5">При чрезвычайном успехе — дополнительный бросок урона</p>
+                </div>
             </label>
         </div>
 
@@ -102,4 +135,23 @@
     [Parameter] public Weapon Weapon { get; set; } = new();
     [Parameter] public EventCallback OnValidSubmit { get; set; }
     [Parameter] public string FormId { get; set; } = "weapon-form";
+
+    private WeaponDamageInfo? _damageInfo;
+
+    protected override void OnParametersSet()
+    {
+        // Парсим введённое значение при отображении формы редактирования
+        if (!string.IsNullOrWhiteSpace(Weapon.Damage))
+            _damageInfo = DamageFormulaParser.Parse(Weapon.Damage);
+    }
+
+    private void OnDamageChanged()
+    {
+        _damageInfo = string.IsNullOrWhiteSpace(Weapon.Damage)
+            ? null
+            : DamageFormulaParser.Parse(Weapon.Damage);
+
+        // Обновляем DamageInfo на оружии при каждом изменении текста
+        Weapon.DamageInfo = _damageInfo;
+    }
 }

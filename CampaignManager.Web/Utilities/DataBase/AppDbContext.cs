@@ -100,6 +100,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasDefaultValue(WeaponType.Melee)
                 .HasConversion<string>();
             entity.HasIndex(w => w.Name).IsUnique();
+            entity.Property(w => w.IsImpaling)
+                .HasDefaultValue(false);
+            entity.Property(w => w.DamageInfo)
+                .HasColumnType("jsonb")
+                .HasComment("Структурированная информация об уроне (авто-парсинг поля Damage)");
         });
 
         // Настройка заклинаний

@@ -4,6 +4,7 @@
 @using CampaignManager.Web.Components.Features.Weapons.Components
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 
 @inject WeaponService WeaponService
@@ -237,7 +238,9 @@
             Skill = weapon.Skill,
             Is1920 = weapon.Is1920,
             IsModern = weapon.IsModern,
+            IsImpaling = weapon.IsImpaling,
             Damage = weapon.Damage,
+            DamageInfo = weapon.DamageInfo,
             Range = weapon.Range,
             Attacks = weapon.Attacks,
             Cost = weapon.Cost,
@@ -261,6 +264,10 @@
         modalErrorMessage = null;
         try
         {
+            // Обновляем DamageInfo перед сохранением, чтобы поле Damage и DamageInfo не рассинхронизировались
+            if (!string.IsNullOrWhiteSpace(editWeapon.Damage))
+                editWeapon.DamageInfo = DamageFormulaParser.Parse(editWeapon.Damage);
+
             if (isEditMode)
             {
                 await WeaponService.UpdateWeaponAsync(editWeapon);

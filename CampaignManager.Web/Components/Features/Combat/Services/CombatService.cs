@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Services;
 
@@ -242,6 +243,39 @@ public sealed partial class CombatService
 
     [GeneratedRegex(@"^([+-]?)(\d*)D(\d+)$", RegexOptions.IgnoreCase)]
     private static partial Regex DicePattern();
+
+    /// <summary>
+    /// Бросает структурированную формулу урона <see cref="DamageExpression"/>.
+    /// Не включает Б.К.У. — его нужно добавлять отдельно через <see cref="RollDamageBonus"/>.
+    /// </summary>
+    public static int RollDamageExpression(DamageExpression expr)
+    {
+        var total = 0;
+
+        foreach (var die in expr.Dice)
+        {
+            for (var i = 0; i < die.Count; i++)
+                total += die.IsNegative ? -RollDice(die.Sides) : RollDice(die.Sides);
+        }
+
+        total += expr.FlatModifier;
+        return total;
+    }
+
+    /// <summary>
+    /// Максимизирует структурированную формулу урона (все кости на максимум).
+    /// Используется при чрезвычайном/критическом успехе.
+    /// </summary>
+    public static int MaximizeDamageExpression(DamageExpression expr)
+    {
+        var total = 0;
+
+        foreach (var die in expr.Dice)
+            total += die.IsNegative ? -(die.Count * die.Sides) : die.Count * die.Sides;
+
+        total += expr.FlatModifier;
+        return total;
+    }
 
     // ───────────────────── Правила CoC 7e ─────────────────────
 
@@ -585,10 +619,24 @@ public sealed partial class CombatService
         var damageFormula = setup.SelectedWeapon?.Damage ?? setup.CreatureAttackDamage ?? "1D3";
         result.DamageFormula = damageFormula;
 
+        // Структурированная формула урона (если доступна)
+        var damageExpr = setup.SelectedWeapon?.DamageInfo?.GetDefaultDamage();
+
         // Определяем тип оружия (проникающее или ударное)
         if (setup.SelectedWeapon != null && setup.IsMelee)
             result.IsImpalingWeapon = IsImpalingWeapon(setup.SelectedWeapon);
         // Для дальнего боя IsImpalingWeapon устанавливается в ResolveRangedAttack
+
+        // Применяем Б.К.У. только если это ближний бой,
+        // ИЛИ если структурированная модель явно указывает тип бонуса
+        bool applyDamageBonus = setup.IsMelee;
+        DamageBonusType dbType = DamageBonusType.Full;
+        if (damageExpr is not null)
+        {
+            dbType = damageExpr.DamageBonus;
+            // Если в модели — None, не применяем Б.К.У. даже в ближнем бою
+            applyDamageBonus = damageExpr.DamageBonus != DamageBonusType.None;
+        }
 
         // Чрезвычайный урон: критический (01) или экстремальный (≤навык/5)
         // Правило: только при атаке в свой ход, НЕ при контратаке
@@ -599,22 +647,37 @@ public sealed partial class CombatService
         if (isExtraordinary)
         {
             // Чрезвычайный успех: максимальный урон оружия + максимальный БкУ (CoC 7e стр. 101)
-            result.DamageRolled = MaximizeDiceFormula(damageFormula);
-            result.BonusDamage = setup.IsMelee ? MaximizeDiceFormula(attacker.DamageBonus) : 0;
+            result.DamageRolled = damageExpr is not null
+                ? MaximizeDamageExpression(damageExpr)
+                : MaximizeDiceFormula(damageFormula);
+
+            if (applyDamageBonus)
+            {
+                result.BonusDamage = dbType == DamageBonusType.Half
+                    ? MaximizeDiceFormula(attacker.DamageBonus) / 2
+                    : MaximizeDiceFormula(attacker.DamageBonus);
+            }
 
             // Проникающее оружие: дополнительный бросок урона
             if (result.IsImpalingWeapon)
             {
-                result.ExtraDamage = setup.ManualExtraImpalingRoll ?? RollDiceFormula(damageFormula);
+                result.ExtraDamage = setup.ManualExtraImpalingRoll ?? (damageExpr is not null
+                    ? RollDamageExpression(damageExpr)
+                    : RollDiceFormula(damageFormula));
             }
         }
         else
         {
             // Обычный бросок урона
-            result.DamageRolled = setup.ManualWeaponDamageRoll ?? RollDiceFormula(damageFormula);
-            result.BonusDamage = setup.IsMelee
-                ? (setup.ManualDamageBonusRoll ?? RollDamageBonus(attacker.DamageBonus))
-                : 0;
+            result.DamageRolled = setup.ManualWeaponDamageRoll ?? (damageExpr is not null
+                ? RollDamageExpression(damageExpr)
+                : RollDiceFormula(damageFormula));
+
+            if (applyDamageBonus)
+            {
+                var rawBonus = setup.ManualDamageBonusRoll ?? RollDamageBonus(attacker.DamageBonus);
+                result.BonusDamage = dbType == DamageBonusType.Half ? rawBonus / 2 : rawBonus;
+            }
         }
 
         // Итого до вычета брони
@@ -901,6 +964,9 @@ public sealed partial class CombatService
     /// </summary>
     public static bool IsImpalingWeapon(Weapon weapon)
     {
+        // Если явный флаг установлен — доверяем ему
+        if (weapon.IsImpaling) return true;
+
         if (weapon.Type != WeaponType.Melee)
             return true; // Всё огнестрельное — проникающее
 

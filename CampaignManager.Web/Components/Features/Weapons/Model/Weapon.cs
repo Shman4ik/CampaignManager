@@ -87,4 +87,18 @@ public class Weapon : BaseDataBaseEntity, INamedEntity
     /// </summary>
     [StringLength(10)]
     public string Malfunction { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Является ли оружие проникающим по правилам CoC 7e.
+    ///     Проникающее оружие при чрезвычайном успехе наносит дополнительный бросок урона.
+    ///     Примеры: ножи, клинки, копья, всё огнестрельное оружие.
+    /// </summary>
+    public bool IsImpaling { get; set; }
+
+    /// <summary>
+    ///     Структурированная информация об уроне, полученная автоматическим парсингом поля Damage.
+    ///     Null означает, что парсинг ещё не выполнялся. IsParsed = false — текст не удалось распарсить.
+    ///     Хранится в БД как JSONB.
+    /// </summary>
+    public WeaponDamageInfo? DamageInfo { get; set; }
 }
