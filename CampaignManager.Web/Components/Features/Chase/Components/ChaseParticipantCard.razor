@@ -25,11 +25,18 @@
             <div class="text-xs text-gray-500 mt-0.5">
                 @if (Participant.IsInVehicle)
                 {
-                    <span>@Participant.VehicleName (СКР: @Participant.VehicleSpeed)</span>
+                    <span>@Participant.VehicleName (СКО: @Participant.VehicleSpeed)</span>
                 }
                 else
                 {
-                    <span>Пешком (СКР: @Participant.MovementRate)</span>
+                    <span>Пешком (СКО: @Participant.MovementRate)</span>
+                }
+                @if (Participant.SpeedCheckCompleted)
+                {
+                    var modText = Participant.MovModifier switch { 1 => "+1", -1 => "−1", _ => "0" };
+                    <span class="@(Participant.MovModifier > 0 ? "text-green-600" : Participant.MovModifier < 0 ? "text-red-600" : "text-gray-500")">
+                        (мод: @modText → @Participant.AdjustedMov)
+                    </span>
                 }
                 &middot; ЛВК: @Participant.Dexterity &middot; Поз: @Participant.CurrentLocation
             </div>
@@ -57,10 +64,6 @@
             {
                 <span class="bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Выбыл</span>
             }
-            @if (Participant.IsExhausted)
-            {
-                <span class="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium">Выдохся</span>
-            }
         </div>
     }
 
@@ -79,10 +82,24 @@
         </div>
     </div>
 
-    <!-- Рывки -->
-    <div class="text-xs text-gray-500">
-        Рывки: @Participant.ExtraMovesAttempted / 3
-    </div>
+    <!-- Действия перемещения -->
+    @if (IsChaseActive)
+    {
+        <div class="flex items-center gap-2 text-xs text-gray-600">
+            <span class="font-medium">Действия:</span>
+            <div class="flex gap-0.5">
+                @for (var i = 0; i < Participant.TotalMovementActions; i++)
+                {
+                    <div class="w-3 h-3 rounded-sm @(i < Participant.MovementActionsRemaining ? "bg-blue-500" : "bg-gray-200")"></div>
+                }
+            </div>
+            <span>@Participant.MovementActionsRemaining / @Participant.TotalMovementActions</span>
+            @if (Participant.MovementActionDebt > 0)
+            {
+                <span class="text-red-500">(долг: @Participant.MovementActionDebt)</span>
+            }
+        </div>
+    }
 
     <!-- Настройка (до начала погони) -->
     @if (IsSetupMode)
@@ -110,6 +127,7 @@
     [Parameter] public required ChaseParticipant Participant { get; set; }
     [Parameter] public bool IsActive { get; set; }
     [Parameter] public bool IsSetupMode { get; set; }
+    [Parameter] public bool IsChaseActive { get; set; }
     [Parameter] public EventCallback<ChaseParticipant> OnRemoveCallback { get; set; }
     [Parameter] public EventCallback<(Guid, ChaseRole)> OnRoleChanged { get; set; }
     [Parameter] public EventCallback<(Guid, int)> OnLocationChanged { get; set; }
@@ -120,7 +138,7 @@
         Participant.CurrentHitPoints = Math.Clamp(Participant.CurrentHitPoints + delta, 0, Participant.MaxHitPoints);
 
     private bool HasAnyState() =>
-        Participant.IsCaught || Participant.HasEscaped || Participant.IsEliminated || Participant.IsExhausted;
+        Participant.IsCaught || Participant.HasEscaped || Participant.IsEliminated;
 
     private double GetHpPercent() => Participant.MaxHitPoints > 0
         ? Math.Max(0, (double)Participant.CurrentHitPoints / Participant.MaxHitPoints * 100) : 0;
