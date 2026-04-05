@@ -1,11 +1,12 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
-<div class="bg-white shadow rounded-md overflow-hidden">
-    <div class="bg-primary-50 border-l-4 border-primary-500 px-4 py-2">
+@using CampaignManager.Web.Components.Features.Skills.Model
+<div class="bg-white shadow rounded-md">
+    <div class="bg-primary-50 border-l-4 border-primary-500 px-4 py-2 rounded-t-md">
         <h4 class="text-base font-semibold text-primary-800">@Group.Name</h4>
     </div>
     <div class="p-4">
         <!-- Column headers -->
-        <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 mb-2 pb-1 border-b border-gray-200">
+        <div class="hidden xl:flex xl:flex-row xl:items-start gap-2 xl:gap-3 mb-2 pb-1 border-b border-gray-200">
             <div class="flex items-center gap-2 flex-grow min-w-0">
                 <span class="w-4 flex-shrink-0"></span>
                 <span class="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Навык</span>
@@ -19,57 +20,75 @@
         </div>
 
         <div class="space-y-1 xl:space-y-1.5">
-            @foreach (var skill in Group.Skills)
+            @{
+                // Split skills: ungrouped (no ParentSkillName) vs. specialization groups
+                var ungrouped = Group.Skills.Where(s => string.IsNullOrEmpty(s.ParentSkillName)).ToList();
+                var specGroups = Group.Skills
+                    .Where(s => !string.IsNullOrEmpty(s.ParentSkillName))
+                    .GroupBy(s => s.ParentSkillName!)
+                    .OrderBy(g => g.Key)
+                    .ToList();
+            }
+
+            @* Ungrouped skills *@
+            @foreach (var skill in ungrouped)
             {
                 <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
-                    <div class="flex items-center gap-2 flex-grow min-w-0">
+                    <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                         <button @onclick="@(() => RemoveSkill(skill))"
                                 class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
                             <i class="fas fa-times text-xs"></i>
                         </button>
-                        <div class="min-w-0 flex-grow">
-                            <div>
-                                @if (skill.SkillModelId.HasValue)
-                                {
-                                    <a href="/skills/detail/@skill.SkillModelId.Value"
-                                       class="font-medium break-all hyphens-auto mr-1 text-sm text-primary-600 hover:text-primary-800 hover:underline"
-                                       style="word-break: break-word;"
-                                       title="Открыть информацию о навыке"
-                                       @onclick:stopPropagation="true">@skill.Name</a>
-                                }
-                                else
-                                {
-                                    <span class="font-medium break-all hyphens-auto mr-1 text-sm"
-                                          style="word-break: break-word;">@skill.Name</span>
-                                }
-                                <span class="text-xs text-gray-400 flex-shrink-0">(@skill.BaseValue)</span>
-                            </div>
+                        <div class="min-w-0 flex-grow text-sm leading-snug">
+                            @if (skill.SkillModelId.HasValue)
+                            {
+                                <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" />
+                            }
+                            else
+                            {
+                                <span class="font-medium">@skill.Name</span>
+                            }
+                            <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
+                            <SkillLevelBadge Value="@skill.Value.Regular" />
                         </div>
                     </div>
-                    <div
-                        class="flex items-center gap-2 flex-shrink-0 ml-auto xl:ml-0 w-full xl:w-auto justify-between xl:justify-start">
+                    <div class="flex items-center gap-2 flex-shrink-0 xl:ml-auto w-auto justify-start">
                         <input type="checkbox" checked="@skill.IsUsed" @onchange="@(e => OnSkillUsedChanged(skill, e))"
-                               class="text-center"/>
-                        <input type="number" value="@skill.Value.Regular"
-                               @onchange="@(e => OnSkillValueChanged(skill, e))"
-                               class="cm-input-sm !w-16"/>
-                        <input type="number" value="@skill.Value.Half" disabled
-                               class="cm-input-sm !w-16"/>
-                        <input type="number" value="@skill.Value.Fifth" disabled
-                               class="cm-input-sm !w-16"/>
+                               class="w-4 flex-shrink-0 text-center relative z-10"/>
+                        <div class="flex items-center gap-1">
+                            <span class="xl:hidden text-[10px] text-gray-400 font-semibold">О</span>
+                            <input type="number" value="@skill.Value.Regular"
+                                   @onchange="@(e => OnSkillValueChanged(skill, e))"
+                                   class="cm-input-sm !w-16"/>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Т</span>
+                            <input type="number" value="@skill.Value.Half" disabled class="cm-input-sm !w-16"/>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Ч</span>
+                            <input type="number" value="@skill.Value.Fifth" disabled class="cm-input-sm !w-16"/>
+                        </div>
                     </div>
                 </div>
+            }
+
+            @* Specialization groups *@
+            @foreach (var specGroup in specGroups)
+            {
+                <SpecializationGroup ParentSkillName="@specGroup.Key"
+                                     Skills="@specGroup.ToList()"
+                                     OnRemove="EventCallback.Factory.Create<Skill>(this, RemoveSkill)"
+                                     OnValueChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecValueChanged)"
+                                     OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)" />
             }
         </div>
 
         <!-- Add skill form -->
         <div class="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-2">
-            <div class="flex flex-1 min-w-0 gap-2 items-center">
-                <input type="text" @bind="Group.NewSkillName" placeholder="Навык"
-                       class="cm-input-sm !flex-grow !min-w-0 !w-auto !text-left"/>
-                <input type="text" @bind="Group.NewSkillBaseValue" placeholder="БЗ"
-                       class="cm-input-sm !w-14 xl:!w-16"/>
-            </div>
+            <SkillPicker @ref="_picker"
+                         CategoryFilter="@GroupCategory"
+                         OnSkillSelected="OnPickerSkillSelected" />
             <button type="button" class="cm-btn cm-btn-success h-6 w-6 !min-h-0 !rounded-full !p-0 flex-shrink-0 text-xs" @onclick="AddSkill"><i class="fas fa-plus"></i></button>
         </div>
     </div>
@@ -78,19 +97,56 @@
 @code {
     [Parameter] public required SkillGroup Group { get; set; }
 
+    private SkillPicker? _picker;
+
+    private static readonly Dictionary<string, SkillCategory> GroupToCategory = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Решение Проблем"] = SkillCategory.ProblemSolving,
+        ["Социальные"] = SkillCategory.Social,
+        ["Сбор Информации"] = SkillCategory.InformationGathering,
+        ["Лечение"] = SkillCategory.Healing,
+        ["Знания"] = SkillCategory.Knowledge,
+        ["Специальные"] = SkillCategory.Special,
+        ["Сражение (общее)"] = SkillCategory.CombatGeneral,
+        ["Сражение (Огнестрельное)"] = SkillCategory.CombatFirearms,
+        ["Действия"] = SkillCategory.Actions,
+    };
+
+    private SkillCategory? GroupCategory =>
+        GroupToCategory.TryGetValue(Group.Name, out var cat) ? cat : null;
+
+    private void OnPickerSkillSelected(SkillPicker.NewSkillInfo info)
+    {
+        Group.Skills.Add(new Skill
+        {
+            Name = info.Name,
+            BaseValue = info.BaseValue,
+            Value = new AttributeValue(0),
+            SkillModelId = info.SkillModelId,
+            ParentSkillName = info.ParentSkillName
+        });
+    }
+
     private void AddSkill()
     {
-        if (!string.IsNullOrWhiteSpace(Group.NewSkillName) && !string.IsNullOrWhiteSpace(Group.NewSkillBaseValue))
+        if (_picker is { IsManualMode: true })
         {
-            Group.Skills.Add(new Skill
+            var info = _picker.GetManualSkillInfo();
+            if (info is not null)
             {
-                Name = Group.NewSkillName,
-                BaseValue = Group.NewSkillBaseValue,
-                Value = new AttributeValue(0)
-            });
-            Group.NewSkillName = "";
-            Group.NewSkillBaseValue = "";
+                Group.Skills.Add(new Skill
+                {
+                    Name = info.Name,
+                    BaseValue = info.BaseValue,
+                    Value = new AttributeValue(0),
+                    SkillModelId = info.SkillModelId
+                });
+                _picker.ManualName = "";
+                _picker.ManualBaseValue = "";
+            }
+            return;
         }
+        // Picker mode: addition happens via OnPickerSkillSelected; "+" is a no-op there
     }
 
     private void RemoveSkill(Skill skill)
@@ -114,5 +170,11 @@
             skill.Value.UpdateDerived();
         }
     }
+
+    private void OnSpecValueChanged(SpecializationGroup.SkillChangeArgs args) =>
+        OnSkillValueChanged(args.Skill, args.Args);
+
+    private void OnSpecUsedChanged(SpecializationGroup.SkillChangeArgs args) =>
+        OnSkillUsedChanged(args.Skill, args.Args);
 
 }

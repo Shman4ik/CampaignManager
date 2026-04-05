@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Skills.Model;
+﻿using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Utilities;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -19,8 +20,119 @@ public sealed class SkillService(
     private const int DefaultPageSize = 6;
 
     /// <summary>
-    /// Gets all skills in the system
+    /// Gets all skills without pagination (uses cache)
     /// </summary>
+    public async Task<List<SkillModel>> GetAllSkillsUnpagedAsync()
+    {
+        return await CrudServiceHelper.GetAllCachedAsync<SkillModel>(dbContextFactory, cache, SkillsCacheKey, logger);
+    }
+
+    /// <summary>
+    /// Builds a default SkillsModel from skills stored in the database, grouped by category.
+    /// Falls back to the hardcoded default if fewer than 10 skills are found in the DB.
+    /// </summary>
+    public async Task<SkillsModel> BuildDefaultSkillsModelAsync()
+    {
+        try
+        {
+            var skills = await GetAllSkillsUnpagedAsync();
+            if (skills.Count < 10)
+            {
+                logger.LogWarning("Too few skills in DB ({Count}), falling back to hardcoded defaults", skills.Count);
+                return SkillsModel.DefaultSkillsModel();
+            }
+
+            var groups = BuildGroupsFromSkills(skills);
+            return new SkillsModel { SkillGroups = groups };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error building default skills model from DB, using fallback");
+            return SkillsModel.DefaultSkillsModel();
+        }
+    }
+
+    private static readonly Dictionary<SkillCategory, string> CategoryGroupNames = new()
+    {
+        [SkillCategory.ProblemSolving]     = "Решение Проблем",
+        [SkillCategory.Social]             = "Социальные",
+        [SkillCategory.InformationGathering] = "Сбор Информации",
+        [SkillCategory.Healing]            = "Лечение",
+        [SkillCategory.Knowledge]          = "Знания",
+        [SkillCategory.Special]            = "Специальные",
+        [SkillCategory.CombatGeneral]      = "Сражение (общее)",
+        [SkillCategory.CombatFirearms]     = "Сражение (Огнестрельное)",
+        [SkillCategory.Actions]            = "Действия",
+    };
+
+    private static List<SkillGroup> BuildGroupsFromSkills(List<SkillModel> skills)
+    {
+        var groups = new List<SkillGroup>();
+
+        // Build parent lookup: id → name
+        var parentNames = skills.ToDictionary(s => s.Id, s => s.Name);
+
+        // Preserve display order of groups
+        var orderedCategories = new[]
+        {
+            SkillCategory.ProblemSolving,
+            SkillCategory.Social,
+            SkillCategory.InformationGathering,
+            SkillCategory.Healing,
+            SkillCategory.Knowledge,
+            SkillCategory.Special,
+            SkillCategory.CombatGeneral,
+            SkillCategory.CombatFirearms,
+            SkillCategory.Actions,
+        };
+
+        foreach (var category in orderedCategories)
+        {
+            var categorySkills = skills
+                .Where(s => s.Category == category)
+                .OrderBy(s => s.Name)
+                .ToList();
+
+            if (categorySkills.Count == 0)
+                continue;
+
+            var groupName = CategoryGroupNames.TryGetValue(category, out var name)
+                ? name
+                : category.ToString();
+
+            var group = new SkillGroup { Name = groupName };
+            foreach (var s in categorySkills)
+            {
+                string? parentSkillName = s.ParentSkillId.HasValue && parentNames.TryGetValue(s.ParentSkillId.Value, out var pname)
+                    ? pname
+                    : null;
+
+                group.Skills.Add(new Skill
+                {
+                    Name = s.Name,
+                    BaseValue = GetBaseValueString(s),
+                    Value = new AttributeValue(s.BaseValue),
+                    SkillModelId = s.Id,
+                    ParentSkillName = parentSkillName
+                });
+            }
+            groups.Add(group);
+        }
+
+        return groups;
+    }
+
+    private static string GetBaseValueString(SkillModel skill)
+    {
+        return skill.Name switch
+        {
+            "Уклонение"        => "½ ЛВК",
+            "Языки (родной)"   => "ОБР",
+            _ => $"{skill.BaseValue}%"
+        };
+    }
+
+
     public async Task<List<SkillModel>> GetAllSkillsAsync(string searchText = "", string? skillCategoryStr = null, int page = 1, int pageSize = DefaultPageSize)
     {
         var all = await CrudServiceHelper.GetAllCachedAsync<SkillModel>(dbContextFactory, cache, SkillsCacheKey, logger);

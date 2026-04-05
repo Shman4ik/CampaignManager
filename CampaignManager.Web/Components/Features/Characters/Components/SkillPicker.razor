@@ -1,0 +1,180 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
+@inject SkillService SkillService
+
+@if (_manualMode)
+{
+    <div class="flex flex-1 min-w-0 gap-2 items-center">
+        <input type="text" @bind="ManualName" placeholder="Навык"
+               class="cm-input-sm !flex-grow !min-w-0 !w-auto !text-left" />
+        <input type="text" @bind="ManualBaseValue" placeholder="БЗ"
+               class="cm-input-sm !w-14 xl:!w-16" />
+        <button type="button"
+                class="cm-btn cm-btn-secondary h-6 !min-h-0 !rounded !p-1 flex-shrink-0 text-[10px]"
+                title="Выбрать из справочника"
+                @onclick="SwitchToPickerMode">
+            <i class="fas fa-book"></i>
+        </button>
+    </div>
+}
+else
+{
+    <div class="picker-wrapper flex-1 min-w-0">
+        <div class="flex gap-2 items-center">
+            <div class="relative flex-grow min-w-0">
+                <input type="text"
+                       value="@_searchText"
+                       @oninput="OnSearchInput"
+                       @onfocus="OnFocus"
+                       placeholder="Поиск навыка…"
+                       class="cm-input-sm !w-full !text-left" />
+                @if (_showDropdown && _filtered.Count > 0)
+                {
+                    <div class="picker-dropdown">
+                        @foreach (var s in _filtered.Take(12))
+                        {
+                            <button type="button"
+                                    class="picker-item"
+                                    @onclick="@(() => SelectSkill(s))">
+                                <span class="picker-item-name">@s.Name</span>
+                                <span class="picker-item-base">@s.BaseValue%</span>
+                                @if (s.IsUncommon)
+                                {
+                                    <span class="picker-badge">Необычный</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+            <button type="button"
+                    class="cm-btn cm-btn-secondary h-6 !min-h-0 !rounded !p-1 flex-shrink-0 text-[10px]"
+                    title="Ввести вручную"
+                    @onclick="SwitchToManualMode">
+                <i class="fas fa-pencil-alt"></i>
+            </button>
+        </div>
+    </div>
+}
+
+@if (_showDropdown)
+{
+    <div class="fixed inset-0 z-30" @onclick="CloseDropdown"></div>
+}
+
+@code {
+    /// <summary>Category to filter skills by (null = no filter)</summary>
+    [Parameter] public SkillCategory? CategoryFilter { get; set; }
+
+    /// <summary>Raised when a skill is picked from the DB or added manually</summary>
+    [Parameter] public EventCallback<NewSkillInfo> OnSkillSelected { get; set; }
+
+    // Public bindable fields used in manual mode
+    public string ManualName { get; set; } = "";
+    public string ManualBaseValue { get; set; } = "";
+
+    private bool _manualMode;
+    private string _searchText = "";
+    private bool _showDropdown;
+    private List<SkillModel> _allSkills = [];
+    private Dictionary<Guid, string> _parentNames = [];
+    private List<SkillModel> _filtered = [];
+    private bool _loaded;
+
+    private System.Threading.CancellationTokenSource? _debounceCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allSkills = await SkillService.GetAllSkillsUnpagedAsync();
+        _parentNames = _allSkills.ToDictionary(s => s.Id, s => s.Name);
+        _loaded = true;
+    }
+
+    private void OnFocus()
+    {
+        if (_loaded && !string.IsNullOrWhiteSpace(_searchText))
+            UpdateFilter();
+        _showDropdown = _filtered.Count > 0;
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchText = e.Value?.ToString() ?? "";
+        _debounceCts?.Cancel();
+        _debounceCts = new System.Threading.CancellationTokenSource();
+        var token = _debounceCts.Token;
+        try
+        {
+            await Task.Delay(300, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        UpdateFilter();
+        _showDropdown = _filtered.Count > 0;
+    }
+
+    private void UpdateFilter()
+    {
+        var text = _searchText.Trim();
+        _filtered = _allSkills
+            .Where(s => !s.IsUncommon || CategoryFilter.HasValue) // show uncommon only when category filtered
+            .Where(s => !CategoryFilter.HasValue || s.Category == CategoryFilter.Value)
+            .Where(s => string.IsNullOrWhiteSpace(text) || s.Name.Contains(text, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task SelectSkill(SkillModel skill)
+    {
+        _searchText = skill.Name;
+        _showDropdown = false;
+
+        string? parentSkillName = skill.ParentSkillId.HasValue && _parentNames.TryGetValue(skill.ParentSkillId.Value, out var pname)
+            ? pname
+            : null;
+
+        await OnSkillSelected.InvokeAsync(new NewSkillInfo
+        {
+            Name = skill.Name,
+            BaseValue = $"{skill.BaseValue}%",
+            SkillModelId = skill.Id,
+            ParentSkillName = parentSkillName
+        });
+        _searchText = "";
+    }
+
+    private void CloseDropdown() => _showDropdown = false;
+
+    private void SwitchToManualMode()
+    {
+        _manualMode = true;
+        _showDropdown = false;
+    }
+
+    private void SwitchToPickerMode()
+    {
+        _manualMode = false;
+        ManualName = "";
+        ManualBaseValue = "";
+    }
+
+    /// <summary>Returns manual entry info (for use by parent when in manual mode)</summary>
+    public NewSkillInfo? GetManualSkillInfo()
+    {
+        if (!_manualMode || string.IsNullOrWhiteSpace(ManualName) || string.IsNullOrWhiteSpace(ManualBaseValue))
+            return null;
+        return new NewSkillInfo { Name = ManualName, BaseValue = ManualBaseValue };
+    }
+
+    public bool IsManualMode => _manualMode;
+
+    public record NewSkillInfo
+    {
+        public required string Name { get; init; }
+        public required string BaseValue { get; init; }
+        public Guid? SkillModelId { get; init; }
+        public string? ParentSkillName { get; init; }
+    }
+}

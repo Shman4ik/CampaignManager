@@ -3,6 +3,7 @@ using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Components;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
+using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Model;
 using Microsoft.AspNetCore.Components;
@@ -18,6 +19,7 @@ public partial class CharacterPage
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private CharacterGenerationService CharacterGenerationService { get; set; } = default!;
     [Inject] private OccupationService OccupationService { get; set; } = default!;
+    [Inject] private SkillService SkillService { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
 
     [Parameter] public Guid? CharacterId { get; set; }
@@ -72,7 +74,7 @@ public partial class CharacterPage
         catch (Exception ex)
         {
             ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
-            Character = CreateNewCharacterTemplate();
+            Character = await CreateNewCharacterTemplateAsync();
             _errorBoundary?.Recover();
         }
         finally
@@ -92,13 +94,13 @@ public partial class CharacterPage
                 if (Character == null)
                 {
                     ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
-                    Character = CreateNewCharacterTemplate();
+                    Character = await CreateNewCharacterTemplateAsync();
                     CharacterId = null;
                 }
             }
             else
             {
-                Character = CreateNewCharacterTemplate();
+                Character = await CreateNewCharacterTemplateAsync();
             }
 
             if (CharacterStorageDto?.CampaignPlayerId is not null)
@@ -109,12 +111,13 @@ public partial class CharacterPage
         catch (Exception ex)
         {
             ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
-            Character = CreateNewCharacterTemplate();
+            Character = await CreateNewCharacterTemplateAsync();
         }
     }
 
-    private Character CreateNewCharacterTemplate()
+    private async Task<Character> CreateNewCharacterTemplateAsync()
     {
+        var skills = await SkillService.BuildDefaultSkillsModelAsync();
         return new Character
         {
             PersonalInfo = new PersonalInfo
@@ -122,7 +125,7 @@ public partial class CharacterPage
                 PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown"
             },
             Characteristics = new Characteristics(),
-            Skills = SkillsModel.DefaultSkillsModel(),
+            Skills = skills,
             Backstory = string.Empty,
             Biography = new BiographyInfo(),
             Equipment = new Equipment(),

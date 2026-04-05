@@ -62,4 +62,9 @@ public class SkillModel : BaseDataBaseEntity, INamedEntity
     /// </summary>
     public List<string> OpposingSkills { get; set; } = [];
 
+    /// <summary>
+    /// Ссылка на родительский навык для специализаций (например, "Ближний бой" для "Ближний бой (драка)").
+    /// Null — навык не является специализацией.
+    /// </summary>
+    public Guid? ParentSkillId { get; set; }
 }

@@ -139,6 +139,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             entity.Property(s => s.OpposingSkills)
                 .HasColumnType("jsonb");
+
+            // Self-referencing FK for specializations
+            entity.HasOne<SkillModel>()
+                .WithMany()
+                .HasForeignKey(s => s.ParentSkillId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
         });
 
         // Scenario Management Configuration

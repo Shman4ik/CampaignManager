@@ -1,0 +1,142 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
+@inject SkillService SkillService
+
+<div class="popover-wrapper group" @onkeydown="OnKeyDown" @onmouseenter="OnMouseEnter">
+    @* Trigger — click toggles, CSS hover also shows *@
+    <button type="button"
+            class="skill-name-btn font-medium text-sm text-primary-600 hover:text-primary-800 hover:underline"
+            @onclick="TogglePopover"
+            @onclick:stopPropagation="true">@SkillName</button>
+
+    @* Click backdrop – closes popover when open *@
+    @if (_isOpen)
+    {
+        <div class="fixed inset-0 z-40" @onclick="ClosePopover"></div>
+    }
+
+    @* Popover panel — shown on CSS hover OR when toggled open *@
+    <div class="popover-panel @(_isOpen ? "is-open" : "")">
+        @if (_isLoading)
+        {
+            <div class="p-4 text-center text-gray-400 text-xs">
+                <i class="fas fa-spinner fa-spin mr-1"></i>Загрузка…
+            </div>
+        }
+        else if (_skill != null)
+        {
+            <div class="p-3 space-y-2">
+                @* Title row *@
+                <div class="flex items-start justify-between gap-2">
+                    <span class="text-sm font-semibold text-gray-900 leading-tight">@_skill.Name</span>
+                    <div class="flex gap-1 flex-shrink-0">
+                        @if (_skill.IsUncommon)
+                        {
+                            <span class="badge-uncommon">Необычный</span>
+                        }
+                        @if (!_skill.CanRetry)
+                        {
+                            <span title="Повторная попытка недоступна" class="badge-no-retry"><i class="fas fa-ban text-[9px]"></i></span>
+                        }
+                    </div>
+                </div>
+
+                @* Description *@
+                @if (!string.IsNullOrWhiteSpace(_skill.Description))
+                {
+                    var desc = _skill.Description.Length > 220
+                        ? _skill.Description[..220] + "…"
+                        : _skill.Description;
+                    <p class="text-xs text-gray-600 leading-relaxed">@desc</p>
+                }
+
+                @* Time required *@
+                @if (!string.IsNullOrWhiteSpace(_skill.TimeRequired))
+                {
+                    <div class="flex items-center gap-1 text-xs text-gray-500">
+                        <i class="far fa-clock text-gray-400"></i>
+                        <span>@_skill.TimeRequired</span>
+                    </div>
+                }
+
+                @* Opposing skills *@
+                @if (_skill.OpposingSkills.Count > 0)
+                {
+                    <div class="flex flex-wrap gap-1 items-center">
+                        <span class="text-[10px] text-gray-400 uppercase tracking-wide">Vs:</span>
+                        @foreach (var opp in _skill.OpposingSkills)
+                        {
+                            <span class="badge-opposing">@opp</span>
+                        }
+                    </div>
+                }
+
+                @* Footer link *@
+                <div class="pt-1 border-t border-gray-100">
+                    <a href="/skills/detail/@SkillModelId"
+                       class="text-xs text-primary-600 hover:text-primary-800 hover:underline"
+                       @onclick:stopPropagation="true">
+                        Подробнее <i class="fas fa-arrow-right text-[9px]"></i>
+                    </a>
+                </div>
+            </div>
+        }
+        else if (_loaded)
+        {
+            <div class="p-3 text-xs text-gray-400">Данные не найдены</div>
+        }
+        else
+        {
+            <div class="p-4 text-center text-gray-400 text-xs">
+                <i class="fas fa-spinner fa-spin mr-1"></i>Загрузка…
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required string SkillName { get; set; }
+    [Parameter] public required Guid SkillModelId { get; set; }
+
+    private bool _isOpen;
+    private bool _isLoading;
+    private bool _loaded;
+    private SkillModel? _skill;
+
+    private async Task OnMouseEnter()
+    {
+        if (!_loaded && !_isLoading)
+            await LoadSkillDataAsync();
+    }
+
+    private async Task TogglePopover()
+    {
+        _isOpen = !_isOpen;
+        if (_isOpen && !_loaded)
+            await LoadSkillDataAsync();
+    }
+
+    private void ClosePopover() => _isOpen = false;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            ClosePopover();
+        await Task.CompletedTask;
+    }
+
+    private async Task LoadSkillDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _skill = await SkillService.GetSkillByIdAsync(SkillModelId);
+            _loaded = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
