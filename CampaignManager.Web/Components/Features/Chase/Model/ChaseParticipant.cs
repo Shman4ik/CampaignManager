@@ -23,15 +23,22 @@ public class ChaseParticipant
     public int MaxHitPoints { get; set; }
     public int CurrentHitPoints { get; set; }
     public int DrivingSkill { get; set; }
+    public int BuildValue { get; set; } // Комплекция (для разрушения преград)
+    public int LuckValue { get; set; } // Удача
 
-    public int EffectiveSpeed => IsInVehicle ? VehicleSpeed : MovementRate;
+    // Проверка скорости
+    public int MovModifier { get; set; } // +1/0/-1 от проверки скорости
+    public bool SpeedCheckCompleted { get; set; }
+    public int AdjustedMov => (IsInVehicle ? VehicleSpeed : MovementRate) + MovModifier;
+
+    // Экономика действий перемещения
+    public int TotalMovementActions { get; set; }
+    public int MovementActionsRemaining { get; set; }
+    public int MovementActionDebt { get; set; } // Перенос потерянных действий на следующий раунд
 
     // Позиция и состояние
     public int CurrentLocation { get; set; }
-    public int SpeedMovesThisRound { get; set; }
-    public int ExtraMovesAttempted { get; set; }
     public bool HasActedThisRound { get; set; }
-    public bool IsExhausted { get; set; }
     public bool IsEliminated { get; set; }
     public bool HasEscaped { get; set; }
     public bool IsCaught { get; set; }
@@ -57,6 +64,10 @@ public class ChaseParticipant
         MaxHitPoints = character.DerivedAttributes.HitPoints.MaxValue;
         CurrentHitPoints = character.DerivedAttributes.HitPoints.Value;
         DrivingSkill = CombatService.FindSkillValue(character, "Вождение");
+        LuckValue = character.DerivedAttributes.Luck.Value;
+
+        if (int.TryParse(character.PersonalInfo.Build, out var build))
+            BuildValue = build;
     }
 
     public ChaseParticipant(Creature creature)

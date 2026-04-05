@@ -5,18 +5,20 @@ using CampaignManager.Web.Components.Features.Combat.Services;
 namespace CampaignManager.Web.Components.Features.Chase.Services;
 
 /// <summary>
-/// Сервис управления погонями по правилам Call of Cthulhu 7e
+/// Сервис управления погонями по правилам Call of Cthulhu 7e (Глава 7).
+/// Хранитель вводит все результаты бросков кубиков — сервис не кидает за игроков.
 /// </summary>
 public sealed class ChaseService
 {
+    public ChasePhase Phase { get; private set; } = ChasePhase.Setup;
     public List<ChaseParticipant> Participants { get; private set; } = [];
     public List<ChaseLocation> Locations { get; private set; } = [];
     public int CurrentRound { get; private set; } = 1;
     public int CurrentTurnIndex { get; private set; }
+    public int MinAdjustedMov { get; private set; }
     public List<ChaseActionResult> ChaseLog { get; private set; } = [];
     public ChaseActionResult? PendingResult { get; private set; }
     public Guid? SelectedCampaignId { get; private set; }
-    public bool IsChaseActive { get; private set; }
 
     public event Action? OnChange;
 
@@ -66,7 +68,7 @@ public sealed class ChaseService
     public void SetParticipantLocation(Guid id, int location)
     {
         var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p != null)
+        if (p is not null)
         {
             p.CurrentLocation = Math.Clamp(location, 1, Locations.Count);
             NotifyStateChanged();
@@ -76,7 +78,7 @@ public sealed class ChaseService
     public void SetParticipantRole(Guid id, ChaseRole role)
     {
         var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p != null)
+        if (p is not null)
         {
             p.Role = role;
             NotifyStateChanged();
@@ -86,7 +88,7 @@ public sealed class ChaseService
     public void SetVehicle(Guid id, string vehicleName, int vehicleSpeed)
     {
         var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p != null)
+        if (p is not null)
         {
             p.IsInVehicle = true;
             p.VehicleName = vehicleName;
@@ -98,7 +100,7 @@ public sealed class ChaseService
     public void RemoveVehicle(Guid id)
     {
         var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p != null)
+        if (p is not null)
         {
             p.IsInVehicle = false;
             p.VehicleName = null;
@@ -113,44 +115,158 @@ public sealed class ChaseService
         NotifyStateChanged();
     }
 
-    // ───────────────────── Управление раундами ─────────────────────
+    // ───────────────────── Проверка скорости (Часть 1) ─────────────────────
 
-    public void StartChase()
+    public void BeginSpeedChecks()
     {
-        SortByDexterity();
-        IsChaseActive = true;
-        CurrentRound = 1;
-        CurrentTurnIndex = 0;
+        if (Participants.Count < 2 || Locations.Count < 3)
+            return;
+
+        Phase = ChasePhase.SpeedCheck;
+        foreach (var p in Participants)
+        {
+            p.SpeedCheckCompleted = false;
+            p.MovModifier = 0;
+        }
+
         NotifyStateChanged();
     }
 
-    public void SortByDexterity()
+    public ChaseActionResult ResolveSpeedCheck(Guid participantId, int? roll)
     {
+        var participant = Participants.First(p => p.Id == participantId);
+
+        var skillName = participant.IsInVehicle ? "Вождение" : "ВЫН";
+        var skillValue = participant.IsInVehicle
+            ? (participant.DrivingSkill > 0 ? participant.DrivingSkill : 20)
+            : participant.ConstitutionValue;
+
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
+
+        // Чрезвычайный успех (+1), обычный успех (0), провал (-1)
+        participant.MovModifier = level switch
+        {
+            >= SuccessLevel.ExtremeSuccess => 1,
+            >= SuccessLevel.RegularSuccess => 0,
+            _ => -1
+        };
+        participant.SpeedCheckCompleted = true;
+
+        var modText = participant.MovModifier switch
+        {
+            1 => "+1",
+            -1 => "−1",
+            _ => "0"
+        };
+
+        var result = new ChaseActionResult
+        {
+            Round = 0,
+            ActionType = ChaseActionType.SpeedCheck,
+            ParticipantId = participant.Id,
+            ParticipantName = participant.Name,
+            SkillName = skillName,
+            SkillValue = skillValue,
+            Roll = actualRoll,
+            SuccessLevel = level,
+            IsSuccess = level >= SuccessLevel.RegularSuccess,
+            Summary = $"{participant.Name}: проверка {skillName} — бросок {actualRoll} против {skillValue} " +
+                      $"({CombatService.GetSuccessLevelText(level)}). СКО {participant.AdjustedMov} (модификатор {modText})."
+        };
+
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
+        return result;
+    }
+
+    public bool AllSpeedChecksCompleted() =>
+        Participants.All(p => p.SpeedCheckCompleted);
+
+    public (bool ChaseHappens, string Reason) EvaluateChaseStart()
+    {
+        var maxPreyMov = Participants
+            .Where(p => p.Role == ChaseRole.Prey && p.IsActive)
+            .Select(p => p.AdjustedMov)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        var maxPursuerMov = Participants
+            .Where(p => p.Role == ChaseRole.Pursuer && p.IsActive)
+            .Select(p => p.AdjustedMov)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        if (maxPreyMov > maxPursuerMov)
+        {
+            return (false,
+                $"Жертва (СКО {maxPreyMov}) быстрее преследователя (СКО {maxPursuerMov}). " +
+                "Жертва убегает — погоня не состоялась!");
+        }
+
+        return (true,
+            $"Преследователь (СКО {maxPursuerMov}) не уступает жертве (СКО {maxPreyMov}). " +
+            "Погоня начинается!");
+    }
+
+    public void StartChase()
+    {
+        // Сортировка по ЛВК (убывание)
         Participants = Participants
             .OrderByDescending(p => p.Dexterity)
             .ToList();
+
+        // Рассчитать минимальный СКО
+        MinAdjustedMov = Participants
+            .Where(p => p.IsActive)
+            .Select(p => p.AdjustedMov)
+            .DefaultIfEmpty(1)
+            .Min();
+
+        Phase = ChasePhase.Active;
+        CurrentRound = 1;
+        CurrentTurnIndex = 0;
+        CalculateMovementActions();
         NotifyStateChanged();
+    }
+
+    // ───────────────────── Управление раундами (Часть 2) ─────────────────────
+
+    public void CalculateMovementActions()
+    {
+        foreach (var p in Participants.Where(p => p.IsActive))
+        {
+            var actions = 1 + (p.AdjustedMov - MinAdjustedMov);
+            actions = Math.Max(0, actions - p.MovementActionDebt);
+            p.MovementActionDebt = Math.Max(0, p.MovementActionDebt - (1 + (p.AdjustedMov - MinAdjustedMov)));
+            p.TotalMovementActions = Math.Max(0, actions);
+            p.MovementActionsRemaining = p.TotalMovementActions;
+            p.HasActedThisRound = false;
+        }
     }
 
     public ChaseParticipant? GetActiveParticipant()
     {
         var active = Participants.Where(p => p.IsActive).ToList();
         if (active.Count == 0) return null;
-        if (CurrentTurnIndex >= active.Count) return active[0];
+        if (CurrentTurnIndex >= active.Count) return null;
         return active[CurrentTurnIndex];
     }
 
     public void NextTurn()
     {
+        var current = GetActiveParticipant();
+        if (current is not null)
+            current.HasActedThisRound = true;
+
         var active = Participants.Where(p => p.IsActive).ToList();
         if (active.Count == 0) return;
 
         CurrentTurnIndex++;
         if (CurrentTurnIndex >= active.Count)
         {
-            CurrentTurnIndex = 0;
-            CurrentRound++;
-            ResetRoundState();
+            NextRound();
+            return;
         }
 
         NotifyStateChanged();
@@ -160,19 +276,20 @@ public sealed class ChaseService
     {
         CurrentRound++;
         CurrentTurnIndex = 0;
-        ResetRoundState();
+        CalculateMovementActions();
         NotifyStateChanged();
     }
 
-    private void ResetRoundState()
+    public void EndTurn(Guid participantId)
     {
-        foreach (var p in Participants.Where(p => p.IsActive))
+        var participant = Participants.FirstOrDefault(p => p.Id == participantId);
+        if (participant is not null)
         {
-            p.HasActedThisRound = false;
-            p.ExtraMovesAttempted = 0;
-            p.SpeedMovesThisRound = 0;
-            p.IsExhausted = false;
+            participant.MovementActionsRemaining = 0;
+            participant.HasActedThisRound = true;
         }
+
+        NextTurn();
     }
 
     public void ResetChase()
@@ -181,101 +298,63 @@ public sealed class ChaseService
         Locations.Clear();
         CurrentRound = 1;
         CurrentTurnIndex = 0;
+        MinAdjustedMov = 0;
         ChaseLog.Clear();
         PendingResult = null;
         SelectedCampaignId = null;
-        IsChaseActive = false;
+        Phase = ChasePhase.Setup;
         NotifyStateChanged();
     }
 
-    // ───────────────────── Фаза скорости ─────────────────────
+    // ───────────────────── Перемещение (Часть 3) ─────────────────────
 
-    public List<ChaseActionResult> ExecuteSpeedPhase()
+    public ChaseActionResult MoveForward(Guid participantId)
     {
-        var results = new List<ChaseActionResult>();
+        var participant = Participants.First(p => p.Id == participantId);
+        var startLocation = participant.CurrentLocation;
+        var newLocation = Math.Min(startLocation + 1, Locations.Count);
 
-        foreach (var participant in Participants.Where(p => p.IsActive))
+        participant.CurrentLocation = newLocation;
+        participant.MovementActionsRemaining = Math.Max(0, participant.MovementActionsRemaining - 1);
+
+        var result = new ChaseActionResult
         {
-            var speed = participant.EffectiveSpeed;
-            var startLocation = participant.CurrentLocation;
-            var targetLocation = startLocation + speed;
-            var actualLocation = startLocation;
+            Round = CurrentRound,
+            ActionType = ChaseActionType.MovementAction,
+            ParticipantId = participant.Id,
+            ParticipantName = participant.Name,
+            IsSuccess = true,
+            LocationBefore = startLocation,
+            LocationAfter = newLocation,
+            Summary = $"{participant.Name} перемещается с локации {startLocation} на {newLocation}."
+        };
 
-            // Двигаемся по локациям, проверяя барьеры и опасности
-            for (var loc = startLocation + 1; loc <= targetLocation && loc <= Locations.Count; loc++)
-            {
-                var location = GetLocation(loc);
-                if (location == null) continue;
-
-                // Проверка опасности (не блокирует, но может нанести урон)
-                if (location.HasHazard)
-                {
-                    var hazardResult = AutoResolveHazard(participant, location);
-                    if (hazardResult != null)
-                        results.Add(hazardResult);
-                }
-
-                // Проверка барьера (блокирует движение)
-                if (location.HasBarrier)
-                {
-                    actualLocation = loc; // Останавливаемся НА локации барьера
-                    break;
-                }
-
-                actualLocation = loc;
-            }
-
-            // Если вышел за пределы трассы — сбежал (только для Prey)
-            if (actualLocation > Locations.Count)
-                actualLocation = Locations.Count;
-
-            participant.CurrentLocation = actualLocation;
-            participant.SpeedMovesThisRound = actualLocation - startLocation;
-
-            var moveResult = new ChaseActionResult
-            {
-                Round = CurrentRound,
-                ActionType = ChaseActionType.SpeedMove,
-                ParticipantId = participant.Id,
-                ParticipantName = participant.Name,
-                LocationBefore = startLocation,
-                LocationAfter = actualLocation,
-                IsSuccess = true,
-                Summary = $"{participant.Name} перемещается с {startLocation} на {actualLocation} (скорость {speed})."
-            };
-            results.Add(moveResult);
-        }
-
-        // Добавляем все результаты в лог
-        foreach (var result in results)
-        {
-            ChaseLog.Insert(0, result);
-        }
-
-        // Проверка пойман/сбежал
-        var statusResults = CheckCaughtAndEscaped();
-        results.AddRange(statusResults);
-
+        ChaseLog.Insert(0, result);
+        CheckCaughtAndEscaped();
         NotifyStateChanged();
-        return results;
+        return result;
     }
 
-    private ChaseActionResult? AutoResolveHazard(ChaseParticipant participant, ChaseLocation location)
+    // ───────────────────── Помехи (Часть 3) ─────────────────────
+
+    /// <summary>
+    /// Разрешить помеху. bonusDice (0-2) — каждая стоит 1 действие перемещения.
+    /// Провал: урон + потеря действий. Участник ВСЕГДА проходит дальше.
+    /// </summary>
+    public ChaseActionResult ResolveHazard(Guid participantId, string skillName, int skillValue,
+        int? roll, int bonusDice, int? damageRoll, int? lostActionsRoll)
     {
-        var skillValue = location.HazardSkillValue;
+        var participant = Participants.First(p => p.Id == participantId);
+        var location = GetLocation(participant.CurrentLocation);
 
-        // Попробовать найти навык у персонажа
-        if (participant.CharacterSource != null && !string.IsNullOrEmpty(location.HazardSkillName))
-        {
-            var charSkill = CombatService.FindSkillValue(participant.CharacterSource, location.HazardSkillName);
-            if (charSkill > 0) skillValue = charSkill;
-        }
+        // Бонусные кости стоят действия перемещения (макс 2)
+        bonusDice = Math.Clamp(bonusDice, 0, 2);
+        participant.MovementActionsRemaining = Math.Max(0, participant.MovementActionsRemaining - bonusDice);
 
-        if (skillValue <= 0) skillValue = 50; // значение по умолчанию
-
-        var threshold = GetDifficultyThreshold(skillValue, location.HazardDifficulty);
-        var roll = CombatService.RollD100();
-        var level = CombatService.CalculateSuccessLevel(roll, threshold);
+        var difficulty = location?.HazardDifficulty ?? 1;
+        var threshold = GetDifficultyThreshold(skillValue, difficulty);
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, threshold);
         var success = level >= SuccessLevel.RegularSuccess;
 
         var result = new ChaseActionResult
@@ -284,162 +363,80 @@ public sealed class ChaseService
             ActionType = ChaseActionType.HazardCheck,
             ParticipantId = participant.Id,
             ParticipantName = participant.Name,
-            SkillName = location.HazardName ?? location.HazardSkillName,
+            SkillName = $"{location?.HazardName ?? "Помеха"} ({skillName})",
             SkillValue = threshold,
-            Roll = roll,
+            Roll = actualRoll,
             SuccessLevel = level,
             IsSuccess = success,
+            BonusDiceUsed = bonusDice,
             LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation
+            LocationAfter = participant.CurrentLocation // Всегда проходит — обновится ниже
         };
-
-        if (!success && !string.IsNullOrWhiteSpace(location.HazardConsequence))
-        {
-            var damage = CombatService.RollDiceFormula(location.HazardConsequence);
-            result.HpBefore = participant.CurrentHitPoints;
-            participant.CurrentHitPoints = Math.Max(0, participant.CurrentHitPoints - damage);
-            result.HpAfter = participant.CurrentHitPoints;
-            result.DamageDealt = damage;
-
-            if (participant.CurrentHitPoints <= 0)
-                participant.IsEliminated = true;
-
-            result.Summary = $"{participant.Name}: опасность \"{location.HazardName}\" — бросок {roll} против {threshold} " +
-                             $"({CombatService.GetSuccessLevelText(level)}). Получает {damage} ед. урона!";
-        }
-        else if (!success)
-        {
-            result.Summary = $"{participant.Name}: опасность \"{location.HazardName}\" — бросок {roll} против {threshold} " +
-                             $"({CombatService.GetSuccessLevelText(level)}). Неудача!";
-        }
-        else
-        {
-            result.Summary = $"{participant.Name}: опасность \"{location.HazardName}\" — бросок {roll} против {threshold} " +
-                             $"({CombatService.GetSuccessLevelText(level)}). Успех!";
-        }
-
-        return result;
-    }
-
-    // ───────────────────── Действия участника ─────────────────────
-
-    public ChaseActionResult AttemptExtraMove(Guid participantId)
-    {
-        var participant = Participants.First(p => p.Id == participantId);
-        var attemptNumber = participant.ExtraMovesAttempted + 1;
-
-        string skillName;
-        int skillValue;
-        int difficulty;
-
-        if (participant.IsInVehicle)
-        {
-            skillName = "Вождение";
-            skillValue = participant.DrivingSkill > 0 ? participant.DrivingSkill : 20;
-            difficulty = GetConDifficultyForExtraMove(attemptNumber);
-        }
-        else
-        {
-            skillName = "ТЕЛ";
-            skillValue = participant.ConstitutionValue;
-            difficulty = GetConDifficultyForExtraMove(attemptNumber);
-        }
-
-        var threshold = GetDifficultyThreshold(skillValue, difficulty);
-        var roll = CombatService.RollD100();
-        var level = CombatService.CalculateSuccessLevel(roll, threshold);
-        var success = level >= SuccessLevel.RegularSuccess;
-
-        var startLocation = participant.CurrentLocation;
-
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.ExtraMove,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            SkillName = $"{skillName} ({GetDifficultyText(difficulty)})",
-            SkillValue = threshold,
-            Roll = roll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            LocationBefore = startLocation
-        };
-
-        participant.ExtraMovesAttempted = attemptNumber;
-        participant.HasActedThisRound = true;
 
         if (success)
         {
-            // Перемещение на +1 локацию
-            var newLocation = Math.Min(startLocation + 1, Locations.Count);
-
-            // Проверить барьер на новой локации
-            var loc = GetLocation(newLocation);
-            if (loc?.HasBarrier == true)
-            {
-                newLocation = startLocation; // Не может пройти через барьер рывком
-                result.Summary = $"{participant.Name}: рывок ({skillName}) — бросок {roll} против {threshold} " +
-                                 $"({CombatService.GetSuccessLevelText(level)}). Успех, но путь преграждает \"{loc.BarrierName}\"!";
-            }
-            else
-            {
-                // Проверить опасность на новой локации
-                if (loc?.HasHazard == true)
-                {
-                    var hazardResult = AutoResolveHazard(participant, loc);
-                    if (hazardResult != null)
-                        ChaseLog.Insert(0, hazardResult);
-                }
-
-                result.Summary = $"{participant.Name}: рывок ({skillName}) — бросок {roll} против {threshold} " +
-                                 $"({CombatService.GetSuccessLevelText(level)}). Перемещается на {newLocation}!";
-            }
-
-            participant.CurrentLocation = newLocation;
-            result.LocationAfter = newLocation;
+            result.Summary = $"{participant.Name}: помеха \"{location?.HazardName}\" ({skillName}) — " +
+                             $"бросок {actualRoll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). " +
+                             (bonusDice > 0 ? $"Бонусных костей: {bonusDice}. " : "") +
+                             "Успех!";
         }
         else
         {
-            // Провал рывка
-            participant.IsExhausted = true;
-            result.LocationAfter = startLocation;
-
-            int damage;
-            if (participant.IsInVehicle)
+            // Провал — урон
+            var damageFormula = location?.HazardDamageFormula;
+            if (!string.IsNullOrWhiteSpace(damageFormula))
             {
-                damage = CombatService.RollDiceFormula("2D6");
-                result.Summary = $"{participant.Name}: рывок ({skillName}) — бросок {roll} против {threshold} " +
-                                 $"({CombatService.GetSuccessLevelText(level)}). Авария! Получает {damage} ед. урона!";
+                var damage = damageRoll ?? CombatService.RollDiceFormula(damageFormula);
+                result.HpBefore = participant.CurrentHitPoints;
+                participant.CurrentHitPoints = Math.Max(0, participant.CurrentHitPoints - damage);
+                result.HpAfter = participant.CurrentHitPoints;
+                result.DamageDealt = damage;
+
+                if (participant.CurrentHitPoints <= 0)
+                    participant.IsEliminated = true;
+            }
+
+            // Потеря действий перемещения (1d3)
+            var lostActions = lostActionsRoll ?? CombatService.RollDiceFormula("1D3");
+            result.MovementActionsLost = lostActions;
+
+            // Применяем потерю: сначала из оставшихся, остаток → долг
+            if (lostActions <= participant.MovementActionsRemaining)
+            {
+                participant.MovementActionsRemaining -= lostActions;
             }
             else
             {
-                damage = CombatService.RollDiceFormula("1D3");
-                result.Summary = $"{participant.Name}: рывок ({skillName}) — бросок {roll} против {threshold} " +
-                                 $"({CombatService.GetSuccessLevelText(level)}). Выдохся! Получает {damage} ед. урона!";
+                var overflow = lostActions - participant.MovementActionsRemaining;
+                participant.MovementActionsRemaining = 0;
+                participant.MovementActionDebt += overflow;
             }
 
-            result.HpBefore = participant.CurrentHitPoints;
-            participant.CurrentHitPoints = Math.Max(0, participant.CurrentHitPoints - damage);
-            result.HpAfter = participant.CurrentHitPoints;
-            result.DamageDealt = damage;
-
-            if (participant.CurrentHitPoints <= 0)
-                participant.IsEliminated = true;
+            result.Summary = $"{participant.Name}: помеха \"{location?.HazardName}\" ({skillName}) — " +
+                             $"бросок {actualRoll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). " +
+                             (bonusDice > 0 ? $"Бонусных костей: {bonusDice}. " : "") +
+                             $"Провал! " +
+                             (result.DamageDealt > 0 ? $"Урон: {result.DamageDealt}. " : "") +
+                             $"Потеряно действий: {lostActions}.";
         }
 
+        // Участник ВСЕГДА проходит дальше (ключевое правило)
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
         return result;
     }
 
-    public ChaseActionResult ResolveBarrier(Guid participantId, string skillName, int skillValue)
+    // ───────────────────── Преграды (Часть 3) ─────────────────────
+
+    public ChaseActionResult ResolveBarrier(Guid participantId, string skillName, int skillValue, int? roll)
     {
         var participant = Participants.First(p => p.Id == participantId);
         var location = GetLocation(participant.CurrentLocation);
 
         var difficulty = location?.BarrierDifficulty ?? 1;
         var threshold = GetDifficultyThreshold(skillValue, difficulty);
-        var roll = CombatService.RollD100();
-        var level = CombatService.CalculateSuccessLevel(roll, threshold);
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, threshold);
         var success = level >= SuccessLevel.RegularSuccess;
 
         var result = new ChaseActionResult
@@ -448,98 +445,338 @@ public sealed class ChaseService
             ActionType = ChaseActionType.BarrierCheck,
             ParticipantId = participant.Id,
             ParticipantName = participant.Name,
-            SkillName = $"{location?.BarrierName ?? "Препятствие"} ({skillName})",
+            SkillName = $"{location?.BarrierName ?? "Преграда"} ({skillName})",
             SkillValue = threshold,
-            Roll = roll,
+            Roll = actualRoll,
             SuccessLevel = level,
             IsSuccess = success,
             LocationBefore = participant.CurrentLocation
         };
 
-        participant.HasActedThisRound = true;
+        participant.MovementActionsRemaining = Math.Max(0, participant.MovementActionsRemaining - 1);
 
         if (success)
         {
-            // Преодолел — двигается на +1 за барьер
             var newLocation = Math.Min(participant.CurrentLocation + 1, Locations.Count);
             participant.CurrentLocation = newLocation;
             result.LocationAfter = newLocation;
-            result.Summary = $"{participant.Name}: препятствие \"{location?.BarrierName}\" ({skillName}) — " +
-                             $"бросок {roll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Преодолено!";
+            result.Summary = $"{participant.Name}: преграда \"{location?.BarrierName}\" ({skillName}) — " +
+                             $"бросок {actualRoll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Преодолено!";
         }
         else
         {
             result.LocationAfter = participant.CurrentLocation;
-            result.Summary = $"{participant.Name}: препятствие \"{location?.BarrierName}\" ({skillName}) — " +
-                             $"бросок {roll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Не удалось!";
+            result.Summary = $"{participant.Name}: преграда \"{location?.BarrierName}\" ({skillName}) — " +
+                             $"бросок {actualRoll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Не удалось!";
         }
 
+        ChaseLog.Insert(0, result);
+        CheckCaughtAndEscaped();
+        NotifyStateChanged();
         return result;
     }
 
-    public ChaseActionResult ResolveHazard(Guid participantId, string skillName, int skillValue)
+    /// <summary>
+    /// Разрушение преграды: Комплекция × 1d10 урона. Стоит 1 действие перемещения.
+    /// </summary>
+    public ChaseActionResult AttemptDestroyBarrier(Guid participantId, int? damageRoll)
     {
         var participant = Participants.First(p => p.Id == participantId);
         var location = GetLocation(participant.CurrentLocation);
 
-        var difficulty = location?.HazardDifficulty ?? 1;
-        var threshold = GetDifficultyThreshold(skillValue, difficulty);
-        var roll = CombatService.RollD100();
-        var level = CombatService.CalculateSuccessLevel(roll, threshold);
+        participant.MovementActionsRemaining = Math.Max(0, participant.MovementActionsRemaining - 1);
+
+        // Комплекция × 1d10
+        var buildValue = Math.Max(1, participant.BuildValue);
+        var damage = damageRoll ?? (buildValue * CombatService.RollDice(10));
+
+        var barrierHpBefore = location?.BarrierCurrentHitPoints ?? 0;
+        if (location is not null)
+        {
+            location.BarrierCurrentHitPoints = Math.Max(0, location.BarrierCurrentHitPoints - damage);
+
+            if (location.BarrierCurrentHitPoints <= 0)
+            {
+                // Преграда разрушена → становится помехой
+                location.IsBarrierDestroyed = true;
+                location.HasBarrier = false;
+                location.HasHazard = true;
+                location.HazardName = $"Обломки: {location.BarrierName}";
+                location.HazardDifficulty = 1;
+                location.HazardDamageFormula = "1D3";
+            }
+        }
+
+        var result = new ChaseActionResult
+        {
+            Round = CurrentRound,
+            ActionType = ChaseActionType.BarrierDestroy,
+            ParticipantId = participant.Id,
+            ParticipantName = participant.Name,
+            IsSuccess = location?.BarrierCurrentHitPoints <= 0,
+            LocationBefore = participant.CurrentLocation,
+            LocationAfter = participant.CurrentLocation,
+            BarrierDamageDealt = damage,
+            BarrierHpAfter = location?.BarrierCurrentHitPoints ?? 0,
+            Summary = location?.BarrierCurrentHitPoints <= 0
+                ? $"{participant.Name} разрушает преграду \"{location?.BarrierName}\"! Урон: {damage}, ПЗ: {barrierHpBefore} → 0. Обломки стали помехой."
+                : $"{participant.Name} бьёт преграду \"{location?.BarrierName}\". Урон: {damage}, ПЗ: {barrierHpBefore} → {location?.BarrierCurrentHitPoints}."
+        };
+
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
+        return result;
+    }
+
+    // ───────────────────── Бой в погоне (Часть 4) ─────────────────────
+
+    public ChaseActionResult ResolveMeleeAttack(Guid attackerId, Guid targetId,
+        string skillName, int skillValue, int? roll, int? damageRoll)
+    {
+        var attacker = Participants.First(p => p.Id == attackerId);
+        var target = Participants.First(p => p.Id == targetId);
+
+        attacker.MovementActionsRemaining = Math.Max(0, attacker.MovementActionsRemaining - 1);
+
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
         var result = new ChaseActionResult
         {
             Round = CurrentRound,
-            ActionType = ChaseActionType.HazardCheck,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            SkillName = $"{location?.HazardName ?? "Опасность"} ({skillName})",
-            SkillValue = threshold,
-            Roll = roll,
+            ActionType = ChaseActionType.MeleeAttack,
+            ParticipantId = attacker.Id,
+            ParticipantName = attacker.Name,
+            TargetId = target.Id,
+            TargetName = target.Name,
+            SkillName = skillName,
+            SkillValue = skillValue,
+            Roll = actualRoll,
             SuccessLevel = level,
             IsSuccess = success,
-            LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation
+            LocationBefore = attacker.CurrentLocation,
+            LocationAfter = attacker.CurrentLocation
         };
 
-        if (!success && location != null && !string.IsNullOrWhiteSpace(location.HazardConsequence))
+        if (success && damageRoll.HasValue)
         {
-            var damage = CombatService.RollDiceFormula(location.HazardConsequence);
-            result.HpBefore = participant.CurrentHitPoints;
-            participant.CurrentHitPoints = Math.Max(0, participant.CurrentHitPoints - damage);
-            result.HpAfter = participant.CurrentHitPoints;
+            var damage = damageRoll.Value;
+            result.HpBefore = target.CurrentHitPoints;
+            target.CurrentHitPoints = Math.Max(0, target.CurrentHitPoints - damage);
+            result.HpAfter = target.CurrentHitPoints;
             result.DamageDealt = damage;
 
-            if (participant.CurrentHitPoints <= 0)
-                participant.IsEliminated = true;
+            if (target.CurrentHitPoints <= 0)
+                target.IsEliminated = true;
 
-            result.Summary = $"{participant.Name}: опасность \"{location.HazardName}\" ({skillName}) — " +
-                             $"бросок {roll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). " +
-                             $"Получает {damage} ед. урона!";
+            result.Summary = $"{attacker.Name} атакует {target.Name} ({skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). " +
+                             $"Урон: {damage}.";
         }
-        else if (!success)
+        else if (success)
         {
-            result.Summary = $"{participant.Name}: опасность \"{location?.HazardName}\" ({skillName}) — " +
-                             $"бросок {roll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Неудача!";
+            result.Summary = $"{attacker.Name} атакует {target.Name} ({skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). Попадание!";
         }
         else
         {
-            result.Summary = $"{participant.Name}: опасность \"{location?.HazardName}\" ({skillName}) — " +
-                             $"бросок {roll} против {threshold} ({CombatService.GetSuccessLevelText(level)}). Успех!";
+            result.Summary = $"{attacker.Name} атакует {target.Name} ({skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). Промах!";
         }
 
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
         return result;
     }
+
+    public ChaseActionResult ResolveRangedAttack(Guid attackerId, Guid targetId,
+        string skillName, int skillValue, int? roll, int? damageRoll, bool stoppedToShoot)
+    {
+        var attacker = Participants.First(p => p.Id == attackerId);
+        var target = Participants.First(p => p.Id == targetId);
+
+        // Стоя на месте = 1 действие. На ходу = 0 действий (штрафная кость — Хранитель учитывает)
+        if (stoppedToShoot)
+            attacker.MovementActionsRemaining = Math.Max(0, attacker.MovementActionsRemaining - 1);
+
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
+        var success = level >= SuccessLevel.RegularSuccess;
+
+        var shootStyle = stoppedToShoot ? "стоя" : "на ходу";
+
+        var result = new ChaseActionResult
+        {
+            Round = CurrentRound,
+            ActionType = ChaseActionType.RangedAttack,
+            ParticipantId = attacker.Id,
+            ParticipantName = attacker.Name,
+            TargetId = target.Id,
+            TargetName = target.Name,
+            SkillName = skillName,
+            SkillValue = skillValue,
+            Roll = actualRoll,
+            SuccessLevel = level,
+            IsSuccess = success,
+            LocationBefore = attacker.CurrentLocation,
+            LocationAfter = attacker.CurrentLocation
+        };
+
+        if (success && damageRoll.HasValue)
+        {
+            var damage = damageRoll.Value;
+            result.HpBefore = target.CurrentHitPoints;
+            target.CurrentHitPoints = Math.Max(0, target.CurrentHitPoints - damage);
+            result.HpAfter = target.CurrentHitPoints;
+            result.DamageDealt = damage;
+
+            if (target.CurrentHitPoints <= 0)
+                target.IsEliminated = true;
+
+            result.Summary = $"{attacker.Name} стреляет в {target.Name} ({shootStyle}, {skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). " +
+                             $"Урон: {damage}.";
+        }
+        else if (success)
+        {
+            result.Summary = $"{attacker.Name} стреляет в {target.Name} ({shootStyle}, {skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). Попадание!";
+        }
+        else
+        {
+            result.Summary = $"{attacker.Name} стреляет в {target.Name} ({shootStyle}, {skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). Промах!";
+        }
+
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
+        return result;
+    }
+
+    /// <summary>
+    /// Боевой манёвр: успех → цель теряет 1d3 действий + возможный урон. Стоит 1 действие.
+    /// </summary>
+    public ChaseActionResult ResolveCombatManeuver(Guid attackerId, Guid targetId,
+        string skillName, int skillValue, int? roll, int? lostActionsRoll, int? damageRoll)
+    {
+        var attacker = Participants.First(p => p.Id == attackerId);
+        var target = Participants.First(p => p.Id == targetId);
+
+        attacker.MovementActionsRemaining = Math.Max(0, attacker.MovementActionsRemaining - 1);
+
+        var actualRoll = roll ?? CombatService.RollD100();
+        var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
+        var success = level >= SuccessLevel.RegularSuccess;
+
+        var result = new ChaseActionResult
+        {
+            Round = CurrentRound,
+            ActionType = ChaseActionType.CombatManeuver,
+            ParticipantId = attacker.Id,
+            ParticipantName = attacker.Name,
+            TargetId = target.Id,
+            TargetName = target.Name,
+            SkillName = skillName,
+            SkillValue = skillValue,
+            Roll = actualRoll,
+            SuccessLevel = level,
+            IsSuccess = success,
+            LocationBefore = attacker.CurrentLocation,
+            LocationAfter = attacker.CurrentLocation
+        };
+
+        if (success)
+        {
+            // Цель теряет 1d3 действий
+            var lostActions = lostActionsRoll ?? CombatService.RollDiceFormula("1D3");
+            result.MovementActionsLost = lostActions;
+
+            if (lostActions <= target.MovementActionsRemaining)
+            {
+                target.MovementActionsRemaining -= lostActions;
+            }
+            else
+            {
+                var overflow = lostActions - target.MovementActionsRemaining;
+                target.MovementActionsRemaining = 0;
+                target.MovementActionDebt += overflow;
+            }
+
+            // Урон (опционально, вводит Хранитель)
+            if (damageRoll.HasValue && damageRoll.Value > 0)
+            {
+                result.HpBefore = target.CurrentHitPoints;
+                target.CurrentHitPoints = Math.Max(0, target.CurrentHitPoints - damageRoll.Value);
+                result.HpAfter = target.CurrentHitPoints;
+                result.DamageDealt = damageRoll.Value;
+
+                if (target.CurrentHitPoints <= 0)
+                    target.IsEliminated = true;
+            }
+
+            result.Summary = $"{attacker.Name} проводит манёвр против {target.Name} ({skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). " +
+                             $"Успех! {target.Name} теряет {lostActions} действий." +
+                             (result.DamageDealt > 0 ? $" Урон: {result.DamageDealt}." : "");
+        }
+        else
+        {
+            result.Summary = $"{attacker.Name} проводит манёвр против {target.Name} ({skillName}) — " +
+                             $"бросок {actualRoll} против {skillValue} ({CombatService.GetSuccessLevelText(level)}). Не удалось!";
+        }
+
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
+        return result;
+    }
+
+    // ───────────────────── Прочие действия ─────────────────────
 
     public void SkipAction(Guid participantId)
     {
         var participant = Participants.FirstOrDefault(p => p.Id == participantId);
-        if (participant != null)
+        if (participant is not null)
         {
             participant.HasActedThisRound = true;
+            participant.MovementActionsRemaining = 0;
+
+            var result = new ChaseActionResult
+            {
+                Round = CurrentRound,
+                ActionType = ChaseActionType.SkipAction,
+                ParticipantId = participant.Id,
+                ParticipantName = participant.Name,
+                IsSuccess = true,
+                Summary = $"{participant.Name} пропускает ход."
+            };
+            ChaseLog.Insert(0, result);
             NotifyStateChanged();
         }
+    }
+
+    public ChaseActionResult RecordOtherAction(Guid participantId, string description, bool costsMovementAction)
+    {
+        var participant = Participants.First(p => p.Id == participantId);
+
+        if (costsMovementAction)
+            participant.MovementActionsRemaining = Math.Max(0, participant.MovementActionsRemaining - 1);
+
+        var result = new ChaseActionResult
+        {
+            Round = CurrentRound,
+            ActionType = ChaseActionType.Other,
+            ParticipantId = participant.Id,
+            ParticipantName = participant.Name,
+            IsSuccess = true,
+            LocationBefore = participant.CurrentLocation,
+            LocationAfter = participant.CurrentLocation,
+            Summary = $"{participant.Name}: {description}"
+        };
+
+        ChaseLog.Insert(0, result);
+        NotifyStateChanged();
+        return result;
     }
 
     // ───────────────────── Проверки состояния ─────────────────────
@@ -558,7 +795,7 @@ public sealed class ChaseService
                     .Where(p => p.Role == ChaseRole.Pursuer && p.IsActive)
                     .MaxBy(p => p.CurrentLocation);
 
-                if (farthestPursuer == null || prey.CurrentLocation > farthestPursuer.CurrentLocation)
+                if (farthestPursuer is null || prey.CurrentLocation > farthestPursuer.CurrentLocation)
                 {
                     prey.HasEscaped = true;
                     var escapeResult = new ChaseActionResult
@@ -582,7 +819,7 @@ public sealed class ChaseService
                     .Where(p => p.Role == ChaseRole.Pursuer && p.IsActive)
                     .FirstOrDefault(p => p.CurrentLocation >= prey.CurrentLocation);
 
-                if (catcher != null)
+                if (catcher is not null)
                 {
                     prey.IsCaught = true;
                     var caughtResult = new ChaseActionResult
@@ -601,7 +838,12 @@ public sealed class ChaseService
         }
 
         if (results.Count > 0)
+        {
+            if (IsChaseOver())
+                Phase = ChasePhase.Ended;
+
             NotifyStateChanged();
+        }
 
         return results;
     }
@@ -610,7 +852,7 @@ public sealed class ChaseService
     {
         var p1 = Participants.FirstOrDefault(p => p.Id == id1);
         var p2 = Participants.FirstOrDefault(p => p.Id == id2);
-        if (p1 == null || p2 == null) return 0;
+        if (p1 is null || p2 is null) return 0;
         return Math.Abs(p1.CurrentLocation - p2.CurrentLocation);
     }
 
@@ -628,7 +870,7 @@ public sealed class ChaseService
     public void ApplyResult(ChaseActionResult result)
     {
         var participant = Participants.FirstOrDefault(p => p.Id == result.ParticipantId);
-        if (participant != null)
+        if (participant is not null)
         {
             if (result.LocationAfter.HasValue)
                 participant.CurrentLocation = result.LocationAfter.Value;
@@ -642,10 +884,7 @@ public sealed class ChaseService
 
         ChaseLog.Insert(0, result);
         PendingResult = null;
-
-        // Проверка пойман/сбежал
         CheckCaughtAndEscaped();
-
         NotifyStateChanged();
     }
 
@@ -671,20 +910,20 @@ public sealed class ChaseService
         _ => "обычная"
     };
 
-    public static int GetConDifficultyForExtraMove(int attemptNumber) => attemptNumber switch
-    {
-        1 => 1,
-        2 => 2,
-        3 => 3,
-        _ => 3
-    };
-
     public static string GetRoleText(ChaseRole role) => role switch
     {
         ChaseRole.Prey => "Жертва",
         ChaseRole.Pursuer => "Преследователь",
         _ => "Неизвестно"
     };
+
+    /// <summary>
+    /// Получить список участников в той же локации (для выбора цели атаки).
+    /// </summary>
+    public List<ChaseParticipant> GetParticipantsAtLocation(int location, Guid? excludeId = null) =>
+        Participants
+            .Where(p => p.IsActive && p.CurrentLocation == location && p.Id != excludeId)
+            .ToList();
 
     private void NotifyStateChanged() => OnChange?.Invoke();
 }

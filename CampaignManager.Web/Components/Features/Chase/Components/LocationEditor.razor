@@ -7,20 +7,27 @@
             <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
                 <input type="checkbox" checked="@Location.HasBarrier" @onchange="e => ToggleBarrier((bool)(e.Value ?? false))"
                        class="rounded border-primary-300 accent-accent-500" />
-                🚧 Препятствие
+                🚧 Преграда
             </label>
             <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
                 <input type="checkbox" checked="@Location.HasHazard" @onchange="e => ToggleHazard((bool)(e.Value ?? false))"
                        class="rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
-                ⚡ Опасность
+                ⚡ Помеха
             </label>
         </div>
+    </div>
+
+    <!-- Описание локации -->
+    <div class="mb-2">
+        <input type="text" value="@Location.Description" @onchange="e => UpdateDescription(e.Value?.ToString())"
+               placeholder="Описание локации (например: узкий переулок)"
+               class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
     </div>
 
     @if (Location.HasBarrier)
     {
         <div class="bg-blue-50 border border-blue-100 rounded p-2 mb-2">
-            <div class="text-xs font-medium text-blue-700 mb-1">Препятствие</div>
+            <div class="text-xs font-medium text-blue-700 mb-1">Преграда</div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="text-xs text-gray-600">Название</label>
@@ -50,6 +57,13 @@
                         <option value="3">Экстремальная</option>
                     </select>
                 </div>
+                <div>
+                    <label class="text-xs text-gray-600">Прочность (ПЗ)</label>
+                    <input type="number" min="0" value="@Location.BarrierHitPoints"
+                           @onchange="e => UpdateBarrierHitPoints(e.Value?.ToString())"
+                           placeholder="0 = нельзя разрушить"
+                           class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                </div>
             </div>
         </div>
     }
@@ -57,7 +71,7 @@
     @if (Location.HasHazard)
     {
         <div class="bg-orange-50 border border-orange-100 rounded p-2">
-            <div class="text-xs font-medium text-orange-700 mb-1">Опасность</div>
+            <div class="text-xs font-medium text-orange-700 mb-1">Помеха</div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="text-xs text-gray-600">Название</label>
@@ -88,8 +102,8 @@
                     </select>
                 </div>
                 <div class="col-span-2">
-                    <label class="text-xs text-gray-600">Последствие (формула урона)</label>
-                    <input type="text" value="@Location.HazardConsequence" @onchange="e => UpdateHazardConsequence(e.Value?.ToString())"
+                    <label class="text-xs text-gray-600">Формула урона при провале</label>
+                    <input type="text" value="@Location.HazardDamageFormula" @onchange="e => UpdateHazardDamageFormula(e.Value?.ToString())"
                            placeholder="1D6"
                            class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
                 </div>
@@ -106,15 +120,25 @@
 
     private async Task ToggleBarrier(bool value) { Location.HasBarrier = value; await NotifyUpdate(); }
     private async Task ToggleHazard(bool value) { Location.HasHazard = value; await NotifyUpdate(); }
+    private async Task UpdateDescription(string? v) { Location.Description = v; await NotifyUpdate(); }
 
     private async Task UpdateBarrierName(string? v) { Location.BarrierName = v; await NotifyUpdate(); }
     private async Task UpdateBarrierSkill(string? v) { Location.BarrierSkillName = v; await NotifyUpdate(); }
     private async Task UpdateBarrierSkillValue(string? v) { if (int.TryParse(v, out var val)) { Location.BarrierSkillValue = val; await NotifyUpdate(); } }
     private async Task UpdateBarrierDifficulty(string? v) { if (int.TryParse(v, out var val)) { Location.BarrierDifficulty = val; await NotifyUpdate(); } }
+    private async Task UpdateBarrierHitPoints(string? v)
+    {
+        if (int.TryParse(v, out var val))
+        {
+            Location.BarrierHitPoints = val;
+            Location.BarrierCurrentHitPoints = val;
+            await NotifyUpdate();
+        }
+    }
 
     private async Task UpdateHazardName(string? v) { Location.HazardName = v; await NotifyUpdate(); }
     private async Task UpdateHazardSkill(string? v) { Location.HazardSkillName = v; await NotifyUpdate(); }
     private async Task UpdateHazardSkillValue(string? v) { if (int.TryParse(v, out var val)) { Location.HazardSkillValue = val; await NotifyUpdate(); } }
     private async Task UpdateHazardDifficulty(string? v) { if (int.TryParse(v, out var val)) { Location.HazardDifficulty = val; await NotifyUpdate(); } }
-    private async Task UpdateHazardConsequence(string? v) { Location.HazardConsequence = v; await NotifyUpdate(); }
+    private async Task UpdateHazardDamageFormula(string? v) { Location.HazardDamageFormula = v; await NotifyUpdate(); }
 }
