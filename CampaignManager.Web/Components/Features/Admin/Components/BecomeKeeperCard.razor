@@ -2,6 +2,7 @@
 @using CampaignManager.Web.Utilities.Services
 @inject IdentityService IdentityService
 @inject AdminService AdminService
+@inject UserPreferencesService UserPreferencesService
 @rendermode InteractiveServer
 
 @if (_visible)
@@ -30,6 +31,11 @@
                     </button>
                 }
             </div>
+            <button class="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                    @onclick="DismissAsync"
+                    title="Скрыть">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
         </div>
     </div>
 }
@@ -54,10 +60,24 @@
     </Modal>
 }
 
+@if (_showToast)
+{
+    <div class="keeper-toast">
+        <i class="fa-solid fa-check-circle keeper-toast-icon"></i>
+        <span>Заявка принята, ожидайте.</span>
+        <button @onclick="() => _showToast = false" class="keeper-toast-close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+}
+
 @code {
+    private const string DismissedKey = "becomeKeeperCard.dismissed";
+
     private bool _visible;
     private bool _showModal;
     private bool _submitted;
+    private bool _showToast;
     private string? _message;
 
     protected override async Task OnInitializedAsync()
@@ -65,9 +85,12 @@
         var isKeeper = await IdentityService.IsKeeper();
         if (isKeeper) return;
 
+        var dismissed = await UserPreferencesService.GetAsync(DismissedKey);
+        if (dismissed == "true") return;
+
         var hasPending = await IdentityService.HasPendingKeeperApplicationAsync();
-        _visible = !hasPending;
         _submitted = hasPending;
+        _visible = true;
     }
 
     private void ShowModal()
@@ -81,6 +104,12 @@
         _showModal = false;
     }
 
+    private async Task DismissAsync()
+    {
+        _visible = false;
+        await UserPreferencesService.SetAsync(DismissedKey, "true");
+    }
+
     private async Task SubmitAsync()
     {
         if (string.IsNullOrWhiteSpace(_message)) return;
@@ -90,6 +119,12 @@
         {
             _submitted = true;
             _showModal = false;
+            _showToast = true;
+            _ = Task.Delay(5000).ContinueWith(_ =>
+            {
+                _showToast = false;
+                InvokeAsync(StateHasChanged);
+            });
         }
     }
 }
