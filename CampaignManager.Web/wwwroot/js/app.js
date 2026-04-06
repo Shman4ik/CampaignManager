@@ -90,3 +90,27 @@ window.sessionStorage = {
         sessionStorage.removeItem(key);
     }
 };
+
+// Функция для получения BoundingClientRect элемента (для Blazor JS Interop)
+window.getElementBoundingRect = function (element) {
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    return {
+        top: rect.top,
+        left: rect.left,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height
+    };
+};
+
+// Функция для получения высоты viewport (для Blazor JS Interop)
+window.getViewportHeight = function () {
+    return window.innerHeight || document.documentElement.clientHeight;
+};
+
+// Функция для получения ширины viewport (для Blazor JS Interop)
+window.getViewportWidth = function () {
+    return window.innerWidth || document.documentElement.clientWidth;
+};

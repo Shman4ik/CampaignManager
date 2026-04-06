@@ -2,10 +2,12 @@
 @using CampaignManager.Web.Components.Features.Skills.Model
 @using CampaignManager.Web.Components.Features.Skills.Services
 @inject SkillService SkillService
+@inject IJSRuntime JS
 
 <div class="popover-wrapper group" @onkeydown="OnKeyDown" @onmouseenter="OnMouseEnter">
     @* Trigger — click toggles, CSS hover also shows *@
     <button type="button"
+            @ref="_triggerBtn"
             class="skill-name-btn font-medium text-sm text-primary-600 hover:text-primary-800 hover:underline"
             @onclick="TogglePopover"
             @onclick:stopPropagation="true">@SkillName</button>
@@ -17,7 +19,7 @@
     }
 
     @* Popover panel — shown on CSS hover OR when toggled open *@
-    <div class="popover-panel @(_isOpen ? "is-open" : "")">
+    <div class="popover-panel @(_isOpen ? "is-open" : "")" style="@_popoverStyle">
         @if (_isLoading)
         {
             <div class="p-4 text-center text-gray-400 text-xs">
@@ -103,6 +105,8 @@
     private bool _isLoading;
     private bool _loaded;
     private SkillModel? _skill;
+    private string _popoverStyle = "";
+    private ElementReference _triggerBtn;
 
     private async Task OnMouseEnter()
     {
@@ -115,6 +119,9 @@
         _isOpen = !_isOpen;
         if (_isOpen && !_loaded)
             await LoadSkillDataAsync();
+        
+        if (_isOpen)
+            await PositionPopoverAsync();
     }
 
     private void ClosePopover() => _isOpen = false;
@@ -138,5 +145,52 @@
         {
             _isLoading = false;
         }
+    }
+
+    private async Task PositionPopoverAsync()
+    {
+        try
+        {
+            var viewportWidth = await JS.InvokeAsync<double>("getViewportWidth");
+
+            // На десктопе позиционирование полностью через CSS (position: absolute)
+            if (viewportWidth > 768)
+            {
+                _popoverStyle = "";
+                return;
+            }
+
+            // На мобиле: fixed + центр по горизонтали + привязка по вертикали к кнопке
+            var rect = await JS.InvokeAsync<BoundingClientRect>("getElementBoundingRect", _triggerBtn);
+            var viewportHeight = await JS.InvokeAsync<double>("getViewportHeight");
+
+            if (rect.Width > 0 && viewportHeight > 0)
+            {
+                var left = (int)(viewportWidth / 2);
+                var top = (int)(rect.Bottom + 8);
+
+                const int popoverHeight = 300;
+                if (top + popoverHeight > viewportHeight)
+                    top = (int)(rect.Top - popoverHeight - 8);
+
+                if (top < 8) top = 8;
+
+                _popoverStyle = $"top: {top}px; left: {left}px; transform: translateX(-50%);";
+            }
+        }
+        catch
+        {
+            _popoverStyle = "";
+        }
+    }
+
+    public struct BoundingClientRect
+    {
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Right { get; set; }
+        public double Bottom { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
     }
 }
