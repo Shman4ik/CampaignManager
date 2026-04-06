@@ -247,6 +247,7 @@ builder.Services.AddScoped<ChaseService>();
 // Register Admin and Wiki services
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<WikiHistoryService>();
+builder.Services.AddScoped<UserPreferencesService>();
 
 // Register Minio service
 builder.Services.AddScoped<MinioService>();

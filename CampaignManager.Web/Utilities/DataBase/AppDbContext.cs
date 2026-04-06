@@ -34,6 +34,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Wiki Audit DbSets
     public DbSet<EditHistoryEntry> EditHistoryEntries { get; set; } = null!;
 
+    // User Preferences
+    public DbSet<UserPreferences> UserPreferences { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -236,6 +239,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(a => new { a.UserEmail, a.Status })
                 .HasFilter("\"Status\" = 'Pending'")
                 .IsUnique();
+        });
+
+        // UserPreferences Configuration
+        modelBuilder.Entity<UserPreferences>(entity =>
+        {
+            entity.ToTable("UserPreferences");
+            entity.Property(p => p.UserEmail).IsRequired();
+            entity.HasIndex(p => p.UserEmail).IsUnique();
+            entity.Property(p => p.Preferences).HasColumnType("jsonb");
         });
 
         // EditHistoryEntry Configuration
