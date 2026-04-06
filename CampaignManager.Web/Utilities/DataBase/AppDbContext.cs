@@ -9,12 +9,16 @@ using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Features.Wiki.Model;
 using CampaignManager.Web.Model;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Web.Utilities.DataBase;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
+    // Required by IDataProtectionKeyContext — keys stored in DB survive container restarts
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
+
     public DbSet<Campaign> Campaigns { get; set; } = null!;
     public DbSet<CharacterStorageDto> CharacterStorage { get; set; } = null!;
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; } = null!;

@@ -1,7 +1,8 @@
-﻿using CampaignManager.Web.Components.Features.Admin.Model;
+using CampaignManager.Web.Components.Features.Admin.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -9,12 +10,31 @@ namespace CampaignManager.Web.Utilities.Services;
 
 public class IdentityService(
     IHttpContextAccessor httpContextAccessor,
+    AuthenticationStateProvider authenticationStateProvider,
     IDbContextFactory<AppIdentityDbContext> appIdentityDbContextFactory,
     IDbContextFactory<AppDbContext> appDbContextFactory)
 {
+    /// <summary>
+    /// Sync — works during SSR/prerender (HttpContext available).
+    /// Returns null during interactive WebSocket rendering.
+    /// Prefer <see cref="GetCurrentUserEmailAsync"/> in interactive components.
+    /// </summary>
     public string? GetCurrentUserEmail()
     {
         return httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.Email)?.Value;
+    }
+
+    /// <summary>
+    /// Async — works in both SSR prerender and interactive Blazor Server rendering.
+    /// Falls back to AuthenticationStateProvider when HttpContext is unavailable.
+    /// </summary>
+    public async Task<string?> GetCurrentUserEmailAsync()
+    {
+        var email = GetCurrentUserEmail();
+        if (email is not null) return email;
+
+        var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.FindFirst(ClaimTypes.Email)?.Value;
     }
 
     public async Task<bool> IsKeeper()
@@ -35,7 +55,7 @@ public class IdentityService(
 
     public async Task<bool> HasPendingKeeperApplicationAsync()
     {
-        var email = GetCurrentUserEmail();
+        var email = await GetCurrentUserEmailAsync();
         if (email is null) return false;
 
         await using var db = await appDbContextFactory.CreateDbContextAsync();
@@ -46,7 +66,7 @@ public class IdentityService(
 
     public async Task<ApplicationUser?> GetUserAsync()
     {
-        var userEmail = GetCurrentUserEmail();
+        var userEmail = await GetCurrentUserEmailAsync();
         return await GetUserAsync(userEmail);
     }
 

@@ -86,7 +86,7 @@ public sealed class AdminService(
     {
         try
         {
-            var email = identityService.GetCurrentUserEmail();
+            var email = await identityService.GetCurrentUserEmailAsync();
             if (email is null) return null;
 
             await using var db = await dbContextFactory.CreateDbContextAsync();

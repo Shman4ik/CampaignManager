@@ -39,6 +39,15 @@
         </div>
     </div>
 }
+else if (_dismissed)
+{
+    <div class="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
+        <i class="fa-solid fa-hat-wizard"></i>
+        <button class="hover:text-gray-600 hover:underline transition-colors" @onclick="RestoreAsync">
+            Стать Хранителем?
+        </button>
+    </div>
+}
 
 @if (_showModal)
 {
@@ -75,6 +84,7 @@
     private const string DismissedKey = "becomeKeeperCard.dismissed";
 
     private bool _visible;
+    private bool _dismissed;
     private bool _showModal;
     private bool _submitted;
     private bool _showToast;
@@ -86,7 +96,11 @@
         if (isKeeper) return;
 
         var dismissed = await UserPreferencesService.GetAsync(DismissedKey);
-        if (dismissed == "true") return;
+        if (dismissed == "true")
+        {
+            _dismissed = true;
+            return;
+        }
 
         var hasPending = await IdentityService.HasPendingKeeperApplicationAsync();
         _submitted = hasPending;
@@ -107,7 +121,15 @@
     private async Task DismissAsync()
     {
         _visible = false;
+        _dismissed = true;
         await UserPreferencesService.SetAsync(DismissedKey, "true");
+    }
+
+    private async Task RestoreAsync()
+    {
+        _dismissed = false;
+        _visible = true;
+        await UserPreferencesService.SetAsync(DismissedKey, "false");
     }
 
     private async Task SubmitAsync()

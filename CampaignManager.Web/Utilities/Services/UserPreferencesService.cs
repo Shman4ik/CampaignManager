@@ -11,7 +11,7 @@ public sealed class UserPreferencesService(
 {
     public async Task<string?> GetAsync(string key)
     {
-        var email = identityService.GetCurrentUserEmail();
+        var email = await identityService.GetCurrentUserEmailAsync();
         if (email is null) return null;
 
         try
@@ -29,7 +29,7 @@ public sealed class UserPreferencesService(
 
     public async Task SetAsync(string key, string value)
     {
-        var email = identityService.GetCurrentUserEmail();
+        var email = await identityService.GetCurrentUserEmailAsync();
         if (email is null) return;
 
         try

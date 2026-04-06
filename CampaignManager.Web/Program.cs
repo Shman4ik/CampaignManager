@@ -15,6 +15,7 @@ using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.DataBase.Interceptors;
+using Microsoft.AspNetCore.DataProtection;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -257,6 +258,11 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<DbInitializer>();
+
+// Persist Data Protection keys to PostgreSQL so they survive container restarts and work across replicas
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<AppDbContext>()
+    .SetApplicationName("CampaignManager");
 
 // Rate limiting
 builder.Services.AddRateLimiter(options =>
