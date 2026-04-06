@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components;
+using CampaignManager.Web.Components.Features.Admin.Services;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
@@ -9,8 +10,11 @@ using CampaignManager.Web.Components.Features.Spells.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Components.Features.Chase.Services;
 using CampaignManager.Web.Components.Features.Combat.Services;
+using CampaignManager.Web.Components.Features.Wiki.Services;
 using CampaignManager.Web.Utilities.Api;
+using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
+using CampaignManager.Web.Utilities.DataBase.Interceptors;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -18,6 +22,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire components.
@@ -54,8 +59,11 @@ var dataSourceBuilder = new NpgsqlDataSourceBuilder(builder.Configuration.GetCon
 dataSourceBuilder.EnableDynamicJson();
 var dataSource = dataSourceBuilder.Build();
 
-builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(dataSource));
+builder.Services.AddSingleton<WikiAuditInterceptor>();
+
+builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
+    options.UseNpgsql(dataSource)
+        .AddInterceptors(sp.GetRequiredService<WikiAuditInterceptor>()));
 
 builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
     options.UseNpgsql(dataSource));
@@ -133,8 +141,8 @@ builder.Services.AddAuthentication(options =>
             return Task.CompletedTask;
         };
 
-        // Validate user against allowed emails/domains whitelist
-        options.Events.OnCreatingTicket = context =>
+        // Validate user against allowed emails/domains whitelist and bootstrap admin
+        options.Events.OnCreatingTicket = async context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
             var email = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
@@ -153,18 +161,44 @@ builder.Services.AddAuthentication(options =>
                 {
                     logger.LogWarning("Access denied for user {Email}: not in allowed list.", email);
                     context.Fail("Access denied: your account is not authorized to access this application.");
-                    return Task.CompletedTask;
+                    return;
+                }
+            }
+
+            // Bootstrap admin from config
+            if (email is not null)
+            {
+                var adminEmails = config.GetSection("Authorization:AdminEmails").Get<string[]>() ?? [];
+                if (adminEmails.Contains(email, StringComparer.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var identityFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppIdentityDbContext>>();
+                        await using var identityDb = await identityFactory.CreateDbContextAsync();
+                        var user = await identityDb.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
+                        if (user is not null && user.Role != CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator)
+                        {
+                            user.Role = CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator;
+                            await identityDb.SaveChangesAsync();
+                            logger.LogInformation("Bootstrapped admin role for {Email}", email);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to bootstrap admin for {Email}", email);
+                    }
                 }
             }
 
             logger.LogInformation("Successfully created authentication ticket for user: {Email}", email);
-            return Task.CompletedTask;
         };
     });
 
 builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+    .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"))
+    .AddPolicy("RequireKeeper", policy => policy.RequireRole("GameMaster", "Administrator"));
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddTransient<IClaimsTransformation, RoleClaimsTransformation>();
 
 // Add OpenAPI services with comprehensive documentation (.NET 10 - OpenAPI 3.1)
 builder.Services.AddEndpointsApiExplorer();
@@ -210,6 +244,10 @@ builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<CombatService>();
 builder.Services.AddScoped<ChaseService>();
 
+// Register Admin and Wiki services
+builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<WikiHistoryService>();
+
 // Register Minio service
 builder.Services.AddScoped<MinioService>();
 
@@ -218,6 +256,21 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<DbInitializer>();
+
+// Rate limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("api", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 
 var app = builder.Build();
 
@@ -240,6 +293,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.UseStaticFiles();
 app.UseAntiforgery();

@@ -1,0 +1,128 @@
+@page "/admin/users"
+@using CampaignManager.Web.Components.Features.Admin.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Model
+@using CampaignManager.Web.Utilities.Services
+@attribute [Authorize(Roles = "Administrator")]
+@inject AdminService AdminService
+@inject IdentityService IdentityService
+@inject ILogger<AdminUsersPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Управление пользователями</PageTitle>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Управление пользователями</h1>
+        <a href="/admin/applications" class="cm-btn cm-btn-info">
+            <i class="fa-solid fa-file-lines mr-1"></i> Заявки
+            @if (_pendingCount > 0)
+            {
+                <span class="ml-1 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">@_pendingCount</span>
+            }
+        </a>
+    </div>
+
+    <!-- Search -->
+    <div class="mb-4">
+        <div class="relative max-w-md">
+            <input type="text" @bind="_searchTerm" @bind:event="oninput" @bind:after="SearchAsync"
+                   placeholder="Поиск по email или имени..."
+                   class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"/>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Имя</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Роль</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Действия</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                @foreach (var user in _users)
+                {
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">@user.Email</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">@user.UserName</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <Badge Color="@GetRoleBadgeColor(user.Role)">@user.Role</Badge>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <select value="@user.Role.ToString()"
+                                    @onchange="@(e => ChangeRoleAsync(user.Email!, (string)e.Value!))"
+                                    class="text-sm border border-gray-300 rounded px-2 py-1">
+                                @foreach (var role in Enum.GetValues<PlayerRole>())
+                                {
+                                    <option value="@role.ToString()" selected="@(user.Role == role)">@role</option>
+                                }
+                            </select>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_totalCount > PageSize)
+    {
+        <div class="mt-4">
+            <Pagination CurrentPage="_currentPage" TotalPages="@((int)Math.Ceiling((double)_totalCount / PageSize))"
+                        OnPageChanged="GoToPageAsync"/>
+        </div>
+    }
+</div>
+
+@code {
+    private const int PageSize = 20;
+    private List<ApplicationUser> _users = [];
+    private int _totalCount;
+    private int _currentPage = 1;
+    private string? _searchTerm;
+    private int _pendingCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+        _pendingCount = await AdminService.GetPendingApplicationsCountAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var (users, total) = await AdminService.ListUsersAsync(_searchTerm, _currentPage, PageSize);
+        _users = users;
+        _totalCount = total;
+    }
+
+    private async Task SearchAsync()
+    {
+        _currentPage = 1;
+        await LoadUsersAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _currentPage = page;
+        await LoadUsersAsync();
+    }
+
+    private async Task ChangeRoleAsync(string email, string roleStr)
+    {
+        if (Enum.TryParse<PlayerRole>(roleStr, out var role))
+        {
+            await AdminService.SetUserRoleAsync(email, role);
+            await LoadUsersAsync();
+        }
+    }
+
+    private static string GetRoleBadgeColor(PlayerRole role) => role switch
+    {
+        PlayerRole.Administrator => "red",
+        PlayerRole.GameMaster => "blue",
+        _ => "gray"
+    };
+}

@@ -1,11 +1,13 @@
 ﻿@using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.JSInterop
+@using CampaignManager.Web.Components.Features.Admin.Services
 @using CampaignManager.Web.Utilities.Services
 @implements IDisposable
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IJSRuntime JS
 @inject IdentityService IdentityService
+@inject AdminService AdminService
 @rendermode InteractiveServer
 
 
@@ -112,6 +114,19 @@
                                         </div>
                                     }
                                 </div>
+
+                                @if (_isAdmin)
+                                {
+                                    <NavLink href="/admin/users"
+                                             class="px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors flex items-center gap-1">
+                                        <i class="fa-solid fa-shield-halved text-xs"></i>
+                                        Админка
+                                        @if (_pendingApplicationsCount > 0)
+                                        {
+                                            <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">@_pendingApplicationsCount</span>
+                                        }
+                                    </NavLink>
+                                }
                             </nav>
                         </div>
 
@@ -266,6 +281,19 @@
                                 </div>
                             }
                         </div>
+
+                        @if (_isAdmin)
+                        {
+                            <NavLink href="/admin/users" @onclick="ToggleMobileMenu"
+                                     class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md flex items-center gap-2">
+                                <i class="fa-solid fa-shield-halved text-xs"></i>
+                                Админка
+                                @if (_pendingApplicationsCount > 0)
+                                {
+                                    <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white">@_pendingApplicationsCount</span>
+                                }
+                            </NavLink>
+                        }
                     </div>                    <!-- Mobile Logout -->
                     <div class="p-4 border-t border-gray-200">
                         <button @onclick="Logout"
@@ -336,6 +364,8 @@
 
 @code {
     private bool _isKeeper;
+    private bool _isAdmin;
+    private int _pendingApplicationsCount;
     private bool mobileMenuOpen;
     private string? openDropdownId;
     private readonly HashSet<string> openMobileSubmenus = new();
@@ -451,6 +481,11 @@
             if (user.Identity?.IsAuthenticated == true)
             {
                 _isKeeper = await IdentityService.IsKeeper();
+                _isAdmin = await IdentityService.IsAdministrator();
+                if (_isAdmin)
+                {
+                    _pendingApplicationsCount = await AdminService.GetPendingApplicationsCountAsync();
+                }
 
                 // Save login hint for future silent login attempts
                 try

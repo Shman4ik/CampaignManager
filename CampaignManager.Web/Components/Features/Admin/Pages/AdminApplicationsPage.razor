@@ -1,0 +1,178 @@
+@page "/admin/applications"
+@using CampaignManager.Web.Components.Features.Admin.Model
+@using CampaignManager.Web.Components.Features.Admin.Services
+@attribute [Authorize(Roles = "Administrator")]
+@inject AdminService AdminService
+@inject ILogger<AdminApplicationsPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Заявки на роль хранителя</PageTitle>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold text-gray-800">Заявки на роль хранителя</h1>
+        <a href="/admin/users" class="cm-btn cm-btn-secondary">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Пользователи
+        </a>
+    </div>
+
+    <!-- Status Filter -->
+    <div class="mb-4 flex gap-2">
+        <button class="cm-btn @(_statusFilter is null ? "cm-btn-info" : "cm-btn-secondary") text-sm"
+                @onclick="@(() => FilterByStatusAsync(null))">
+            Все
+        </button>
+        <button class="cm-btn @(_statusFilter == KeeperApplicationStatus.Pending ? "cm-btn-info" : "cm-btn-secondary") text-sm"
+                @onclick="@(() => FilterByStatusAsync(KeeperApplicationStatus.Pending))">
+            Ожидающие
+        </button>
+        <button class="cm-btn @(_statusFilter == KeeperApplicationStatus.Approved ? "cm-btn-info" : "cm-btn-secondary") text-sm"
+                @onclick="@(() => FilterByStatusAsync(KeeperApplicationStatus.Approved))">
+            Одобренные
+        </button>
+        <button class="cm-btn @(_statusFilter == KeeperApplicationStatus.Rejected ? "cm-btn-info" : "cm-btn-secondary") text-sm"
+                @onclick="@(() => FilterByStatusAsync(KeeperApplicationStatus.Rejected))">
+            Отклонённые
+        </button>
+    </div>
+
+    @if (_applications.Count == 0)
+    {
+        <EmptyState Title="Нет заявок" Description="Заявки на роль хранителя пока не поступали." Icon="fa-file-lines"/>
+    }
+    else
+    {
+        <div class="space-y-4">
+            @foreach (var app in _applications)
+            {
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="font-semibold text-gray-900">@app.UserName</span>
+                                <span class="text-sm text-gray-500">@app.UserEmail</span>
+                                <Badge Color="@GetStatusBadgeColor(app.Status)">@GetStatusText(app.Status)</Badge>
+                            </div>
+                            <p class="text-gray-700 mb-2">@app.Message</p>
+                            <p class="text-xs text-gray-400">Подана: @app.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</p>
+                            @if (app.ReviewedAt.HasValue)
+                            {
+                                <p class="text-xs text-gray-400">
+                                    Рассмотрена: @app.ReviewedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                                    @if (app.ReviewedByEmail is not null)
+                                    {
+                                        <span> — @app.ReviewedByEmail</span>
+                                    }
+                                </p>
+                                @if (app.ReviewComment is not null)
+                                {
+                                    <p class="text-xs text-gray-500 mt-1">Комментарий: @app.ReviewComment</p>
+                                }
+                            }
+                        </div>
+
+                        @if (app.Status == KeeperApplicationStatus.Pending)
+                        {
+                            <div class="flex gap-2 flex-shrink-0">
+                                <button class="cm-btn cm-btn-success text-sm" @onclick="@(() => ApproveAsync(app.Id))">
+                                    <i class="fa-solid fa-check mr-1"></i> Одобрить
+                                </button>
+                                <button class="cm-btn cm-btn-danger text-sm" @onclick="@(() => StartReject(app.Id))">
+                                    <i class="fa-solid fa-xmark mr-1"></i> Отклонить
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (_showRejectModal)
+{
+    <Modal Title="Отклонить заявку" OnClose="CancelReject">
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Комментарий (необязательно)</label>
+                <textarea @bind="_rejectComment" rows="3"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Причина отклонения..."></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button class="cm-btn cm-btn-secondary" @onclick="CancelReject">Отмена</button>
+                <button class="cm-btn cm-btn-danger" @onclick="ConfirmReject">Отклонить</button>
+            </div>
+        </div>
+    </Modal>
+}
+
+@code {
+    private List<KeeperApplication> _applications = [];
+    private KeeperApplicationStatus? _statusFilter = KeeperApplicationStatus.Pending;
+    private bool _showRejectModal;
+    private Guid? _rejectTargetId;
+    private string? _rejectComment;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadApplicationsAsync();
+    }
+
+    private async Task LoadApplicationsAsync()
+    {
+        _applications = await AdminService.ListApplicationsAsync(_statusFilter);
+    }
+
+    private async Task FilterByStatusAsync(KeeperApplicationStatus? status)
+    {
+        _statusFilter = status;
+        await LoadApplicationsAsync();
+    }
+
+    private async Task ApproveAsync(Guid id)
+    {
+        await AdminService.ApproveAsync(id);
+        await LoadApplicationsAsync();
+    }
+
+    private void StartReject(Guid id)
+    {
+        _rejectTargetId = id;
+        _rejectComment = null;
+        _showRejectModal = true;
+    }
+
+    private void CancelReject()
+    {
+        _showRejectModal = false;
+        _rejectTargetId = null;
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (_rejectTargetId.HasValue)
+        {
+            await AdminService.RejectAsync(_rejectTargetId.Value, _rejectComment);
+        }
+        _showRejectModal = false;
+        _rejectTargetId = null;
+        await LoadApplicationsAsync();
+    }
+
+    private static string GetStatusBadgeColor(KeeperApplicationStatus status) => status switch
+    {
+        KeeperApplicationStatus.Pending => "yellow",
+        KeeperApplicationStatus.Approved => "green",
+        KeeperApplicationStatus.Rejected => "red",
+        _ => "gray"
+    };
+
+    private static string GetStatusText(KeeperApplicationStatus status) => status switch
+    {
+        KeeperApplicationStatus.Pending => "Ожидает",
+        KeeperApplicationStatus.Approved => "Одобрена",
+        KeeperApplicationStatus.Rejected => "Отклонена",
+        _ => status.ToString()
+    };
+}

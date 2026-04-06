@@ -1,0 +1,144 @@
+@using CampaignManager.Web.Components.Features.Wiki.Model
+@using CampaignManager.Web.Components.Features.Wiki.Services
+@using CampaignManager.Web.Utilities.Services
+@inject WikiHistoryService WikiHistoryService
+@inject IdentityService IdentityService
+@rendermode InteractiveServer
+
+@if (_entries.Count > 0 || _isLoading)
+{
+    <div class="mt-6">
+        <button class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-3"
+                @onclick="TogglePanel">
+            <i class="fa-solid @(_expanded ? "fa-chevron-down" : "fa-chevron-right") text-xs"></i>
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            История изменений (@_entries.Count)
+        </button>
+
+        @if (_expanded)
+        {
+            @if (_isLoading)
+            {
+                <LoadingIndicator/>
+            }
+            else
+            {
+                <div class="space-y-2 max-h-96 overflow-y-auto">
+                    @foreach (var entry in _entries)
+                    {
+                        <div class="bg-gray-50 rounded-lg p-3 text-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="font-medium text-gray-800">@entry.EditorName</span>
+                                    <span class="text-gray-400 ml-2">@entry.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <Badge Color="@GetActionColor(entry.Action)">@GetActionText(entry.Action)</Badge>
+                                    @if (_isKeeper && entry.PreviousSnapshotJson is not null)
+                                    {
+                                        <button class="text-xs text-blue-600 hover:text-blue-800"
+                                                @onclick="@(() => ShowDiff(entry))">
+                                            Diff
+                                        </button>
+                                        <button class="text-xs text-orange-600 hover:text-orange-800"
+                                                @onclick="@(() => RevertAsync(entry.Id))">
+                                            Откатить
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+}
+
+@if (_showDiffModal && _selectedEntry is not null)
+{
+    <Modal Title="Изменения" OnClose="CloseDiff" MaxHeight="@null">
+        <div class="grid grid-cols-2 gap-4 text-xs">
+            <div>
+                <h4 class="font-semibold text-gray-700 mb-2">До</h4>
+                <pre class="bg-red-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.PreviousSnapshotJson ?? "—")</pre>
+            </div>
+            <div>
+                <h4 class="font-semibold text-gray-700 mb-2">После</h4>
+                <pre class="bg-green-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.SnapshotJson ?? "—")</pre>
+            </div>
+        </div>
+    </Modal>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public string EntityType { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Guid EntityId { get; set; }
+
+    private List<EditHistoryEntry> _entries = [];
+    private bool _isLoading = true;
+    private bool _expanded;
+    private bool _isKeeper;
+    private bool _showDiffModal;
+    private EditHistoryEntry? _selectedEntry;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isKeeper = await IdentityService.IsKeeper();
+        await LoadHistoryAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadHistoryAsync();
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        _isLoading = true;
+        _entries = await WikiHistoryService.GetHistoryAsync(EntityType, EntityId);
+        _isLoading = false;
+    }
+
+    private void TogglePanel()
+    {
+        _expanded = !_expanded;
+    }
+
+    private void ShowDiff(EditHistoryEntry entry)
+    {
+        _selectedEntry = entry;
+        _showDiffModal = true;
+    }
+
+    private void CloseDiff()
+    {
+        _showDiffModal = false;
+        _selectedEntry = null;
+    }
+
+    private async Task RevertAsync(Guid entryId)
+    {
+        await WikiHistoryService.RevertAsync(entryId);
+        await LoadHistoryAsync();
+    }
+
+    private static string GetActionColor(EditAction action) => action switch
+    {
+        EditAction.Created => "green",
+        EditAction.Updated => "blue",
+        EditAction.Deleted => "red",
+        _ => "gray"
+    };
+
+    private static string GetActionText(EditAction action) => action switch
+    {
+        EditAction.Created => "Создано",
+        EditAction.Updated => "Изменено",
+        EditAction.Deleted => "Удалено",
+        _ => action.ToString()
+    };
+}

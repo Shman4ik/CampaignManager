@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+﻿using CampaignManager.Web.Components.Features.Admin.Model;
+using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Items.Model;
@@ -6,6 +7,7 @@ using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Spells.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Components.Features.Wiki.Model;
 using CampaignManager.Web.Model;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +27,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Creature> Creatures { get; set; } = null!;
     public DbSet<Item> Items { get; set; } = null!;
     public DbSet<Occupation> Occupations { get; set; } = null!;
+
+    // Admin DbSets
+    public DbSet<KeeperApplication> KeeperApplications { get; set; } = null!;
+
+    // Wiki Audit DbSets
+    public DbSet<EditHistoryEntry> EditHistoryEntries { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -215,6 +223,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(o => o.Name).IsUnique();
             entity.Property(o => o.SkillPointFormula).HasConversion<string>();
             entity.Property(o => o.OccupationSkills).HasColumnType("jsonb");
+        });
+
+        // KeeperApplication Configuration
+        modelBuilder.Entity<KeeperApplication>(entity =>
+        {
+            entity.ToTable("KeeperApplications");
+            entity.Property(a => a.UserEmail).IsRequired();
+            entity.Property(a => a.Status).HasConversion<string>();
+
+            // Only one pending application per user
+            entity.HasIndex(a => new { a.UserEmail, a.Status })
+                .HasFilter("\"Status\" = 'Pending'")
+                .IsUnique();
+        });
+
+        // EditHistoryEntry Configuration
+        modelBuilder.Entity<EditHistoryEntry>(entity =>
+        {
+            entity.ToTable("EditHistoryEntries");
+            entity.Property(e => e.EntityType).IsRequired();
+            entity.Property(e => e.Action).HasConversion<string>();
+            entity.Property(e => e.SnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.PreviousSnapshotJson).HasColumnType("jsonb");
+
+            entity.HasIndex(e => new { e.EntityType, e.EntityId, e.CreatedAt })
+                .IsDescending(false, false, true);
         });
     }
 }
