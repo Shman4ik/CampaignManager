@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Admin.Services
+﻿@using CampaignManager.Web.Components.Features.Admin.Services
 @using CampaignManager.Web.Utilities.Services
 @inject IdentityService IdentityService
 @inject AdminService AdminService
@@ -26,8 +26,16 @@
                 }
                 else
                 {
-                    <button class="cm-btn cm-btn-info text-sm" @onclick="ShowModal">
-                        <i class="fa-solid fa-paper-plane mr-1"></i> Подать заявку
+                    <button class="cm-btn cm-btn-info text-sm" @onclick="SubmitAsync" disabled="@_submitting">
+                        @if (_submitting)
+                        {
+                            <i class="fa-solid fa-spinner fa-spin mr-1"></i>
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-paper-plane mr-1"></i>
+                        }
+                        Подать заявку
                     </button>
                 }
             </div>
@@ -41,41 +49,11 @@
 }
 else if (_dismissed)
 {
-    <div class="flex items-center gap-1.5 text-xs text-gray-400 mb-4">
-        <i class="fa-solid fa-hat-wizard"></i>
-        <button class="hover:text-gray-600 hover:underline transition-colors" @onclick="RestoreAsync">
+    <div class="mb-6">
+        <button @onclick="RestoreAsync"
+                class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 text-xs px-3 py-1.5 transition-colors">
+            <i class="fa-solid fa-hat-wizard"></i>
             Стать Хранителем?
-        </button>
-    </div>
-}
-
-@if (_showModal)
-{
-    <Modal Title="Заявка на роль Хранителя" OnClose="CloseModal">
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Почему вы хотите стать Хранителем?</label>
-                <textarea @bind="_message" rows="4"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="Расскажите о своём опыте вождения CoC или других TTRPG..."></textarea>
-            </div>
-            <div class="flex justify-end gap-2">
-                <button class="cm-btn cm-btn-secondary" @onclick="CloseModal">Отмена</button>
-                <button class="cm-btn cm-btn-info" @onclick="SubmitAsync" disabled="@string.IsNullOrWhiteSpace(_message)">
-                    Отправить
-                </button>
-            </div>
-        </div>
-    </Modal>
-}
-
-@if (_showToast)
-{
-    <div class="keeper-toast">
-        <i class="fa-solid fa-check-circle keeper-toast-icon"></i>
-        <span>Заявка принята, ожидайте.</span>
-        <button @onclick="() => _showToast = false" class="keeper-toast-close">
-            <i class="fa-solid fa-xmark"></i>
         </button>
     </div>
 }
@@ -85,10 +63,8 @@ else if (_dismissed)
 
     private bool _visible;
     private bool _dismissed;
-    private bool _showModal;
     private bool _submitted;
-    private bool _showToast;
-    private string? _message;
+    private bool _submitting;
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,17 +83,6 @@ else if (_dismissed)
         _visible = true;
     }
 
-    private void ShowModal()
-    {
-        _message = null;
-        _showModal = true;
-    }
-
-    private void CloseModal()
-    {
-        _showModal = false;
-    }
-
     private async Task DismissAsync()
     {
         _visible = false;
@@ -134,19 +99,11 @@ else if (_dismissed)
 
     private async Task SubmitAsync()
     {
-        if (string.IsNullOrWhiteSpace(_message)) return;
-
-        var result = await AdminService.SubmitApplicationAsync(_message);
+        if (_submitting) return;
+        _submitting = true;
+        var result = await AdminService.SubmitApplicationAsync(string.Empty);
+        _submitting = false;
         if (result is not null)
-        {
             _submitted = true;
-            _showModal = false;
-            _showToast = true;
-            _ = Task.Delay(5000).ContinueWith(_ =>
-            {
-                _showToast = false;
-                InvokeAsync(StateHasChanged);
-            });
-        }
     }
 }
