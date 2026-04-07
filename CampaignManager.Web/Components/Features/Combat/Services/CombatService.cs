@@ -887,6 +887,20 @@ public sealed partial class CombatService
                 target.CurrentSanity = result.SanityAfter ?? target.CurrentSanity;
                 if (result.TriggeredTemporaryInsanity == true)
                     target.HasTemporaryInsanity = true;
+
+                // Синхронизация с исходным персонажем (для листа сыщика)
+                if (target.CharacterSource is { } src)
+                {
+                    src.DerivedAttributes.Sanity.Value = target.CurrentSanity;
+                    var loss = result.SanityLoss ?? 0;
+                    if (loss > 0)
+                        src.State.SanityLossEpisode += loss;
+                    if (result.TriggeredTemporaryInsanity == true && !src.State.HasTemporaryInsanity)
+                    {
+                        src.State.HasTemporaryInsanity = true;
+                        src.State.TemporaryInsanityStartedAt = DateTime.UtcNow;
+                    }
+                }
             }
         }
 

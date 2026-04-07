@@ -48,6 +48,7 @@ public partial class CharacterPage
         { "skills", true },
         { "combat", true },
         { "equipment", true },
+        { "sanity", true },
         { "biography", true }
     };
 

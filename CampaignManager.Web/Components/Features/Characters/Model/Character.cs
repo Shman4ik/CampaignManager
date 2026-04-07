@@ -68,6 +68,11 @@ public class Character
     public string Notes { get; set; } = "";
 
     /// <summary>
+    ///     Структурированный список фобий и маний сыщика.
+    /// </summary>
+    public List<InsanityCondition> InsanityConditions { get; set; } = [];
+
+    /// <summary>
     ///     Тип персонажа (игровой персонаж или NPC)
     /// </summary>
     public CharacterType CharacterType { get; set; } = CharacterType.PlayerCharacter;

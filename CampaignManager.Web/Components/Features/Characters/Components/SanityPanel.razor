@@ -1,0 +1,272 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+<div class="sanity-panel">
+    @{
+        var maxSan = SanityRules.ComputeMaxSanity(Character);
+        var current = Math.Clamp(Character.DerivedAttributes.Sanity.Value, 0, maxSan);
+        if (current != Character.DerivedAttributes.Sanity.Value)
+        {
+            Character.DerivedAttributes.Sanity.Value = current;
+        }
+        if (Character.DerivedAttributes.Sanity.MaxValue != maxSan)
+        {
+            Character.DerivedAttributes.Sanity.MaxValue = maxSan;
+        }
+        var pct = maxSan > 0 ? Math.Clamp((int)((double)current / maxSan * 100), 0, 100) : 0;
+        var barColor = pct <= 25 ? "bg-red-600" : pct <= 50 ? "bg-yellow-500" : "bg-purple-500";
+        var mythos = SanityRules.GetMythosValue(Character);
+        var indefThreshold = SanityRules.IndefiniteInsanityThreshold(current);
+        var episode = Character.State.SanityLossEpisode;
+        var triggersTemp = episode >= SanityRules.TemporaryInsanityThreshold;
+        var triggersIndef = episode >= indefThreshold && episode > 0;
+    }
+
+    <!-- Текущий / Максимум -->
+    <div class="mb-3">
+        <div class="flex items-baseline justify-between mb-1">
+            <span class="text-sm font-semibold text-gray-700">Рассудок</span>
+            <span class="text-sm text-gray-600">
+                <span class="font-bold text-purple-700">@current</span>
+                <span class="text-gray-400">/ @maxSan</span>
+                <span class="text-xs text-gray-400 ml-1">(99 − Мифы Ктулху @mythos)</span>
+            </span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+            <div class="@barColor h-2.5 transition-all duration-300" style="width: @(pct)%"></div>
+        </div>
+    </div>
+
+    <!-- Ручное изменение -->
+    <div class="flex flex-wrap items-center gap-1.5 mb-3">
+        <div class="flex items-center rounded-md border border-gray-300 overflow-hidden">
+            <button type="button"
+                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border-r border-gray-300 text-sm transition-colors"
+                    @onclick="ApplyManualLoss" title="Отнять">
+                <i class="fa-solid fa-minus"></i>
+            </button>
+            <input type="number" min="1" max="99"
+                   class="w-12 text-center text-sm py-1 focus:outline-none"
+                   @bind="_manualAmount" @bind:event="oninput" />
+            <button type="button"
+                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border-l border-gray-300 text-sm transition-colors"
+                    @onclick="ApplyManualHeal" title="Прибавить">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        </div>
+        <span class="text-xs text-gray-400">кубики:</span>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 3))">−1d3</button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 4))">−1d4</button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 6))">−1d6</button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 10))">−1d10</button>
+    </div>
+
+    <!-- Эпизод -->
+    <div class="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
+        <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-semibold text-gray-600 uppercase">Эпизод потери</span>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ResetEpisode">
+                <i class="fa-solid fa-rotate-left mr-1"></i>Новый эпизод
+            </button>
+        </div>
+        <div class="text-sm text-gray-700">
+            Накоплено в текущем эпизоде: <span class="font-bold text-gray-900">@episode</span>
+            <span class="text-xs text-gray-500">(порог бессрочного: @indefThreshold)</span>
+        </div>
+        @if (triggersTemp)
+        {
+            <div class="mt-2 px-2 py-1 bg-purple-50 border border-purple-200 rounded text-xs text-purple-800">
+                ⚠ ≥5 пунктов за один эпизод — пройдите проверку <strong>ИНТ</strong>: при успехе сыщик впадает во временное безумие (1d10 часов).
+            </div>
+        }
+        @if (triggersIndef)
+        {
+            <div class="mt-2 px-2 py-1 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                ⚠ Потеряно ≥1/5 от текущего Рассудка за день — <strong>бессрочное безумие</strong>.
+            </div>
+        }
+    </div>
+
+    <!-- Состояние безумия -->
+    <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <label class="flex items-start gap-2 p-2 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" class="mt-0.5 w-3.5 h-3.5 accent-purple-600"
+                   checked="@Character.State.HasTemporaryInsanity"
+                   @onchange="@(e => ToggleTemporary(e.Value is true))" />
+            <div>
+                <div class="text-xs font-semibold text-gray-700">Временное безумие</div>
+                @if (Character.State.HasTemporaryInsanity && Character.State.TemporaryInsanityStartedAt.HasValue)
+                {
+                    <div class="text-[10px] text-gray-500">с @Character.State.TemporaryInsanityStartedAt.Value.ToLocalTime().ToString("g")</div>
+                }
+            </div>
+        </label>
+        <label class="flex items-start gap-2 p-2 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-50">
+            <input type="checkbox" class="mt-0.5 w-3.5 h-3.5 accent-purple-700"
+                   checked="@Character.State.HasIndefiniteInsanity"
+                   @onchange="@(e => ToggleIndefinite(e.Value is true))" />
+            <div>
+                <div class="text-xs font-semibold text-gray-700">Бессрочное безумие</div>
+                @if (Character.State.HasIndefiniteInsanity && Character.State.IndefiniteInsanityStartedAt.HasValue)
+                {
+                    <div class="text-[10px] text-gray-500">с @Character.State.IndefiniteInsanityStartedAt.Value.ToLocalTime().ToString("g")</div>
+                }
+            </div>
+        </label>
+    </div>
+
+    <!-- Счётчик Мифа-безумий -->
+    <div class="mb-4 flex items-center gap-2 text-sm">
+        <span class="text-gray-700">Случаев безумия от Мифов:</span>
+        <button type="button" class="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200" @onclick="() => Character.State.MythosInsanityCount = Math.Max(0, Character.State.MythosInsanityCount - 1)">−</button>
+        <span class="font-bold text-gray-900 w-6 text-center">@Character.State.MythosInsanityCount</span>
+        <button type="button" class="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200" @onclick="() => Character.State.MythosInsanityCount++">+</button>
+        <span class="text-xs text-gray-500">(1-й: +5 к Мифам, далее: +1)</span>
+    </div>
+
+    <!-- Фобии и мании -->
+    <div>
+        <div class="flex items-center justify-between mb-2">
+            <h6 class="text-xs font-semibold text-gray-600 uppercase">Фобии и мании</h6>
+            <div class="flex gap-1">
+                <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Phobia)">
+                    <i class="fa-solid fa-plus mr-1"></i>Фобия
+                </button>
+                <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Mania)">
+                    <i class="fa-solid fa-plus mr-1"></i>Мания
+                </button>
+            </div>
+        </div>
+
+        @if (_addingKind.HasValue)
+        {
+            <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="text-xs text-gray-600 mb-1">Новая @(_addingKind == InsanityConditionKind.Phobia ? "фобия" : "мания") (бросьте 1d100 по таблице @(_addingKind == InsanityConditionKind.Phobia ? "IX" : "X"))</div>
+                <input type="text" class="cm-input cm-input-sm w-full mb-1" placeholder="Название" @bind="_newName" />
+                <input type="text" class="cm-input cm-input-sm w-full mb-2" placeholder="Описание (необязательно)" @bind="_newDescription" />
+                <div class="flex gap-1">
+                    <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ConfirmAdd">Добавить</button>
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAdd">Отмена</button>
+                </div>
+            </div>
+        }
+
+        @if (Character.InsanityConditions.Count == 0)
+        {
+            <div class="text-xs text-gray-400 italic">Нет записей</div>
+        }
+        else
+        {
+            <div class="space-y-1">
+                @foreach (var c in Character.InsanityConditions.OrderByDescending(x => x.Active).ThenBy(x => x.AcquiredAt))
+                {
+                    <div class="flex items-start gap-2 p-2 rounded-md border @(c.Active ? "border-purple-200 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-60")">
+                        <span class="text-[10px] uppercase font-bold @(c.Kind == InsanityConditionKind.Phobia ? "text-red-700" : "text-orange-700")">
+                            @(c.Kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")
+                        </span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-semibold text-gray-900 @(c.Active ? "" : "line-through")">@c.Name</div>
+                            @if (!string.IsNullOrWhiteSpace(c.Description))
+                            {
+                                <div class="text-xs text-gray-600">@c.Description</div>
+                            }
+                            <div class="text-[10px] text-gray-400">@c.AcquiredAt.ToLocalTime().ToString("d")</div>
+                        </div>
+                        <div class="flex gap-1">
+                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-gray-300 hover:bg-gray-100"
+                                    title="@(c.Active ? "Вылечено" : "Активно")"
+                                    @onclick="() => c.Active = !c.Active">
+                                <i class="fa-solid @(c.Active ? "fa-check" : "fa-rotate-left")"></i>
+                            </button>
+                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                                    @onclick="() => Character.InsanityConditions.Remove(c)">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required Character Character { get; set; }
+
+    private InsanityConditionKind? _addingKind;
+    private string _newName = "";
+    private string _newDescription = "";
+    private int _manualAmount = 1;
+    private static readonly Random _rng = new();
+
+    private static int RollDice(int count, int sides)
+    {
+        var total = 0;
+        for (var i = 0; i < count; i++) total += _rng.Next(1, sides + 1);
+        return total;
+    }
+
+    private void ApplyManualLoss() => ApplyLoss(Math.Max(1, _manualAmount));
+    private void ApplyManualHeal() => ApplyHeal(Math.Max(1, _manualAmount));
+
+    private void ApplyLoss(int amount)
+    {
+        var maxSan = SanityRules.ComputeMaxSanity(Character);
+        var current = Math.Clamp(Character.DerivedAttributes.Sanity.Value, 0, maxSan);
+        var newVal = Math.Max(0, current - amount);
+        var actualLoss = current - newVal;
+        Character.DerivedAttributes.Sanity.Value = newVal;
+        Character.State.SanityLossEpisode += actualLoss;
+    }
+
+    private void ApplyHeal(int amount)
+    {
+        var maxSan = SanityRules.ComputeMaxSanity(Character);
+        Character.DerivedAttributes.Sanity.Value = Math.Min(maxSan, Character.DerivedAttributes.Sanity.Value + amount);
+    }
+
+    private void ResetEpisode() => Character.State.SanityLossEpisode = 0;
+
+    private void ToggleTemporary(bool v)
+    {
+        Character.State.HasTemporaryInsanity = v;
+        Character.State.TemporaryInsanityStartedAt = v ? DateTime.UtcNow : null;
+    }
+
+    private void ToggleIndefinite(bool v)
+    {
+        Character.State.HasIndefiniteInsanity = v;
+        Character.State.IndefiniteInsanityStartedAt = v ? DateTime.UtcNow : null;
+    }
+
+    private void StartAdd(InsanityConditionKind kind)
+    {
+        _addingKind = kind;
+        _newName = "";
+        _newDescription = "";
+    }
+
+    private void CancelAdd()
+    {
+        _addingKind = null;
+    }
+
+    private void ConfirmAdd()
+    {
+        if (_addingKind is null || string.IsNullOrWhiteSpace(_newName))
+        {
+            _addingKind = null;
+            return;
+        }
+
+        Character.InsanityConditions.Add(new InsanityCondition
+        {
+            Kind = _addingKind.Value,
+            Name = _newName.Trim(),
+            Description = string.IsNullOrWhiteSpace(_newDescription) ? null : _newDescription.Trim()
+        });
+        _addingKind = null;
+        _newName = "";
+        _newDescription = "";
+    }
+}
