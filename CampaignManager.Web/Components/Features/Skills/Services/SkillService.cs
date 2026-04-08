@@ -82,6 +82,12 @@ public sealed class SkillService(
         // Build parent lookup: id → name
         var parentNames = skills.ToDictionary(s => s.Id, s => s.Name);
 
+        // Skills that are referenced as a parent — they are category containers, not assignable to characters
+        var parentIds = skills
+            .Where(s => s.ParentSkillId.HasValue)
+            .Select(s => s.ParentSkillId!.Value)
+            .ToHashSet();
+
         // Preserve display order of groups
         var orderedCategories = new[]
         {
@@ -99,7 +105,7 @@ public sealed class SkillService(
         foreach (var category in orderedCategories)
         {
             var categorySkills = skills
-                .Where(s => s.Category == category)
+                .Where(s => s.Category == category && !parentIds.Contains(s.Id))
                 .OrderBy(s => s.Name)
                 .ToList();
 

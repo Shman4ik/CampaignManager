@@ -1,67 +1,75 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
 
 <div class="spec-group">
-    <div class="spec-group-header">
+    <div class="spec-group-header" @onclick="@(() => _isExpanded = !_isExpanded)">
         <i class="fas fa-layer-group text-[9px] text-gray-400 mr-1"></i>
         <span class="spec-group-name">@ParentSkillName</span>
+        <span class="spec-count-badge">@Skills.Count</span>
+        <i class="fas @(_isExpanded ? "fa-chevron-down" : "fa-chevron-right") text-[9px] text-gray-400 ml-1"></i>
     </div>
 
-    @foreach (var skill in Skills)
+    @if (_isExpanded)
     {
-        var showBonus = ShouldShowBonus(skill);
-        <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
-            <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                <button @onclick="@(() => OnRemove.InvokeAsync(skill))"
-                        class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
-                    <i class="fas fa-times text-xs"></i>
-                </button>
-                <div class="min-w-0 flex-grow text-sm leading-snug">
-                    @if (skill.SkillModelId.HasValue)
-                    {
-                        <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
-                    }
-                    else
-                    {
-                        <span class="font-medium break-normal">@skill.Name</span>
-                    }
-                    <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
-                    @if (showBonus)
-                    {
-                        <span class="spec-bonus-badge" title="Другая специализация достигла порога — +10 бонус">+10</span>
-                    }
+        @foreach (var skill in Skills)
+        {
+            var showBonus = ShouldShowBonus(skill);
+            <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
+                <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
+                    <button @onclick="@(() => OnRemove.InvokeAsync(skill))"
+                            class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                    <div class="min-w-0 flex-grow text-sm leading-snug">
+                        @if (skill.SkillModelId.HasValue)
+                        {
+                            <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
+                        }
+                        else
+                        {
+                            <span class="font-medium break-normal">@skill.Name</span>
+                        }
+                        <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
+                        @if (showBonus)
+                        {
+                            <span class="spec-bonus-badge" title="Другая специализация достигла порога — +10 бонус">+10</span>
+                        }
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0 xl:ml-auto w-auto justify-start">
+                    <input type="checkbox" checked="@skill.IsUsed"
+                           @onchange="@(e => OnUsedChanged.InvokeAsync(new SkillChangeArgs(skill, e)))"
+                           class="w-4 flex-shrink-0 text-center relative z-10" />
+                    <div class="flex items-center gap-1">
+                        <span class="xl:hidden text-[10px] text-gray-400 font-semibold">О</span>
+                        <input type="number" value="@skill.Value.Regular"
+                               @onchange="@(e => OnValueChanged.InvokeAsync(new SkillChangeArgs(skill, e)))"
+                               class="cm-input-sm !w-16" />
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Т</span>
+                        <input type="number" value="@skill.Value.Half" disabled class="cm-input-sm !w-16" />
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Ч</span>
+                        <input type="number" value="@skill.Value.Fifth" disabled class="cm-input-sm !w-16" />
+                    </div>
                 </div>
             </div>
-            <div class="flex items-center gap-2 flex-shrink-0 xl:ml-auto w-auto justify-start">
-                <input type="checkbox" checked="@skill.IsUsed"
-                       @onchange="@(e => OnUsedChanged.InvokeAsync(new SkillChangeArgs(skill, e)))"
-                       class="w-4 flex-shrink-0 text-center relative z-10" />
-                <div class="flex items-center gap-1">
-                    <span class="xl:hidden text-[10px] text-gray-400 font-semibold">О</span>
-                    <input type="number" value="@skill.Value.Regular"
-                           @onchange="@(e => OnValueChanged.InvokeAsync(new SkillChangeArgs(skill, e)))"
-                           class="cm-input-sm !w-16" />
-                </div>
-                <div class="flex items-center gap-1">
-                    <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Т</span>
-                    <input type="number" value="@skill.Value.Half" disabled class="cm-input-sm !w-16" />
-                </div>
-                <div class="flex items-center gap-1">
-                    <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Ч</span>
-                    <input type="number" value="@skill.Value.Fifth" disabled class="cm-input-sm !w-16" />
-                </div>
-            </div>
-        </div>
+        }
     }
 </div>
 
 @code {
     [Parameter] public required string ParentSkillName { get; set; }
     [Parameter] public required List<Skill> Skills { get; set; }
+    [Parameter] public required List<Skill> AllGroupSkills { get; set; }
     [Parameter] public EventCallback<Skill> OnRemove { get; set; }
     [Parameter] public EventCallback<SkillChangeArgs> OnValueChanged { get; set; }
     [Parameter] public EventCallback<SkillChangeArgs> OnUsedChanged { get; set; }
 
     public record SkillChangeArgs(Skill Skill, ChangeEventArgs Args);
+
+    private bool _isExpanded;
 
     /// <summary>
     /// Returns true if a skill should show the +10 bonus badge.
@@ -70,11 +78,11 @@
     /// </summary>
     private bool ShouldShowBonus(Skill skill)
     {
-        if (Skills.Count < 2)
+        if (AllGroupSkills.Count < 2)
             return false;
 
         // Highest threshold that any OTHER skill in the group has crossed
-        int maxOther = Skills
+        int maxOther = AllGroupSkills
             .Where(s => !ReferenceEquals(s, skill))
             .Select(s => s.Value.Regular)
             .DefaultIfEmpty(0)

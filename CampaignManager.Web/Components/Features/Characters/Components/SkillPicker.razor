@@ -79,6 +79,7 @@ else
     private bool _showDropdown;
     private List<SkillModel> _allSkills = [];
     private Dictionary<Guid, string> _parentNames = [];
+    private HashSet<Guid> _parentIds = [];
     private List<SkillModel> _filtered = [];
     private bool _loaded;
 
@@ -88,6 +89,10 @@ else
     {
         _allSkills = await SkillService.GetAllSkillsUnpagedAsync();
         _parentNames = _allSkills.ToDictionary(s => s.Id, s => s.Name);
+        _parentIds = _allSkills
+            .Where(s => s.ParentSkillId.HasValue)
+            .Select(s => s.ParentSkillId!.Value)
+            .ToHashSet();
         _loaded = true;
     }
 
@@ -120,6 +125,7 @@ else
     {
         var text = _searchText.Trim();
         _filtered = _allSkills
+            .Where(s => !_parentIds.Contains(s.Id))
             .Where(s => !s.IsUncommon || CategoryFilter.HasValue) // show uncommon only when category filtered
             .Where(s => !CategoryFilter.HasValue || s.Category == CategoryFilter.Value)
             .Where(s => string.IsNullOrWhiteSpace(text) || s.Name.Contains(text, StringComparison.OrdinalIgnoreCase))

@@ -1,5 +1,7 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
+@inject SkillService SkillService
 <div class="bg-white shadow rounded-md">
     <div class="bg-primary-50 border-l-4 border-primary-500 px-4 py-2 rounded-t-md">
         <h4 class="text-base font-semibold text-primary-800">@Group.Name</h4>
@@ -22,8 +24,12 @@
         <div class="space-y-1 xl:space-y-1.5">
             @{
                 // Split skills: ungrouped (no ParentSkillName) vs. specialization groups
-                var ungrouped = Group.Skills.Where(s => string.IsNullOrEmpty(s.ParentSkillName)).ToList();
-                var specGroups = Group.Skills
+                // Exclude parent skills (those that serve as specialization containers in the DB)
+                var visibleSkills = Group.Skills
+                    .Where(s => !s.SkillModelId.HasValue || !_parentSkillIds.Contains(s.SkillModelId.Value))
+                    .ToList();
+                var ungrouped = visibleSkills.Where(s => string.IsNullOrEmpty(s.ParentSkillName)).ToList();
+                var specGroups = visibleSkills
                     .Where(s => !string.IsNullOrEmpty(s.ParentSkillName))
                     .GroupBy(s => s.ParentSkillName!)
                     .OrderBy(g => g.Key)
@@ -75,11 +81,67 @@
             @* Specialization groups *@
             @foreach (var specGroup in specGroups)
             {
-                <SpecializationGroup ParentSkillName="@specGroup.Key"
-                                     Skills="@specGroup.ToList()"
-                                     OnRemove="EventCallback.Factory.Create<Skill>(this, RemoveSkill)"
-                                     OnValueChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecValueChanged)"
-                                     OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)" />
+                var allInGroup = specGroup.ToList();
+                var modifiedSpecs = allInGroup.Where(IsSkillModified).ToList();
+                var unmodifiedSpecs = allInGroup.Where(s => !IsSkillModified(s)).ToList();
+
+                @* Modified specializations rendered as regular skill rows *@
+                @foreach (var skill in modifiedSpecs)
+                {
+                    <div class="flex flex-col xl:flex-row xl:items-start gap-2 xl:gap-3 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
+                        <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
+                            <button @onclick="@(() => RemoveSkill(skill))"
+                                    class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                            <div class="min-w-0 flex-grow text-sm leading-snug">
+                                @if (skill.SkillModelId.HasValue)
+                                {
+                                    <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
+                                }
+                                else
+                                {
+                                    <span class="font-medium break-normal">@skill.Name</span>
+                                }
+                                <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
+                                @if (SpecializationHasBonus(skill, allInGroup))
+                                {
+                                    <span class="spec-bonus-badge" title="Другая специализация достигла порога — +10 бонус">+10</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0 xl:ml-auto w-auto justify-start">
+                            <input type="checkbox" checked="@skill.IsUsed"
+                                   @onchange="@(e => OnSkillUsedChanged(skill, e))"
+                                   class="w-4 flex-shrink-0 text-center relative z-10" />
+                            <div class="flex items-center gap-1">
+                                <span class="xl:hidden text-[10px] text-gray-400 font-semibold">О</span>
+                                <input type="number" value="@skill.Value.Regular"
+                                       @onchange="@(e => OnSkillValueChanged(skill, e))"
+                                       class="cm-input-sm !w-16" />
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Т</span>
+                                <input type="number" value="@skill.Value.Half" disabled class="cm-input-sm !w-16" />
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <span class="xl:hidden text-[10px] text-gray-400 font-semibold">Ч</span>
+                                <input type="number" value="@skill.Value.Fifth" disabled class="cm-input-sm !w-16" />
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* Unmodified specializations in collapsible group *@
+                @if (unmodifiedSpecs.Any())
+                {
+                    <SpecializationGroup ParentSkillName="@specGroup.Key"
+                                         Skills="@unmodifiedSpecs"
+                                         AllGroupSkills="@allInGroup"
+                                         OnRemove="EventCallback.Factory.Create<Skill>(this, RemoveSkill)"
+                                         OnValueChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecValueChanged)"
+                                         OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)" />
+                }
             }
         </div>
 
@@ -175,5 +237,38 @@
 
     private void OnSpecUsedChanged(SpecializationGroup.SkillChangeArgs args) =>
         OnSkillUsedChanged(args.Skill, args.Args);
+
+    private Dictionary<Guid, int> _skillBaseValues = [];
+    private HashSet<Guid> _parentSkillIds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var skills = await SkillService.GetAllSkillsUnpagedAsync();
+        _skillBaseValues = skills.ToDictionary(s => s.Id, s => s.BaseValue);
+        _parentSkillIds = skills
+            .Where(s => s.ParentSkillId.HasValue)
+            .Select(s => s.ParentSkillId!.Value)
+            .ToHashSet();
+    }
+
+    private bool IsSkillModified(Skill skill)
+    {
+        if (skill.SkillModelId.HasValue && _skillBaseValues.TryGetValue(skill.SkillModelId.Value, out var baseNum))
+            return skill.Value.Regular != baseNum;
+        return false;
+    }
+
+    private static bool SpecializationHasBonus(Skill skill, List<Skill> allInGroup)
+    {
+        if (allInGroup.Count < 2)
+            return false;
+        int maxOther = allInGroup
+            .Where(s => !ReferenceEquals(s, skill))
+            .Select(s => s.Value.Regular)
+            .DefaultIfEmpty(0)
+            .Max();
+        return (maxOther >= 90 && skill.Value.Regular < 90) ||
+               (maxOther >= 50 && skill.Value.Regular < 50);
+    }
 
 }
