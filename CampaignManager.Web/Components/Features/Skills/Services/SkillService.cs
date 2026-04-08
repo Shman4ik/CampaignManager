@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
+using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Utilities;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -31,7 +32,7 @@ public sealed class SkillService(
     /// Builds a default SkillsModel from skills stored in the database, grouped by category.
     /// Falls back to the hardcoded default if fewer than 10 skills are found in the DB.
     /// </summary>
-    public async Task<SkillsModel> BuildDefaultSkillsModelAsync()
+    public async Task<SkillsModel> BuildDefaultSkillsModelAsync(Eras? era = null)
     {
         try
         {
@@ -40,6 +41,15 @@ public sealed class SkillService(
             {
                 logger.LogWarning("Too few skills in DB ({Count}), falling back to hardcoded defaults", skills.Count);
                 return SkillsModel.DefaultSkillsModel();
+            }
+
+            if (era is { } e)
+            {
+                skills = skills
+                    .Where(s =>
+                        (e.HasFlag(Eras.Classic) && s.Is1920) ||
+                        (e.HasFlag(Eras.Modern) && s.IsModern))
+                    .ToList();
             }
 
             var groups = BuildGroupsFromSkills(skills);

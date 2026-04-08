@@ -67,4 +67,14 @@ public class SkillModel : BaseDataBaseEntity, INamedEntity
     /// Null — навык не является специализацией.
     /// </summary>
     public Guid? ParentSkillId { get; set; }
+
+    /// <summary>
+    /// Доступен в сеттинге 1920-х (классический Call of Cthulhu)
+    /// </summary>
+    public bool Is1920 { get; set; } = true;
+
+    /// <summary>
+    /// Доступен в современном сеттинге
+    /// </summary>
+    public bool IsModern { get; set; } = true;
 }

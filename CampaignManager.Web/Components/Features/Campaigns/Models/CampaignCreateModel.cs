@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using CampaignManager.Web.Components.Shared.Model;
 
 namespace CampaignManager.Web.Components.Features.Campaigns.Models;
 
@@ -9,4 +10,6 @@ public class CampaignCreateModel
     public string Name { get; set; } = string.Empty;
 
     public CampaignStatus Status { get; set; } = CampaignStatus.Planning;
+
+    public Eras Era { get; set; } = Eras.Classic;
 }

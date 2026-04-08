@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities;
 using CampaignManager.Web.Utilities.DataBase;
@@ -52,7 +53,7 @@ public sealed class CampaignService(
             .SingleOrDefaultAsync();
     }
 
-    public async Task<Result<Campaign>> CreateCampaignAsync(string name, CampaignStatus status = CampaignStatus.Planning)
+    public async Task<Result<Campaign>> CreateCampaignAsync(string name, CampaignStatus status = CampaignStatus.Planning, Eras era = Eras.Classic)
     {
         try
         {
@@ -65,7 +66,7 @@ public sealed class CampaignService(
 
             logger.LogInformation("Пользователь {UserEmail} создаёт кампанию '{Name}'", userEmail, name);
 
-            Campaign campaign = new() { Name = name, Status = status, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
+            Campaign campaign = new() { Name = name, Status = status, Era = era, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
 
             using var dbContext = await dbContextFactory.CreateDbContextAsync();
             dbContext.Campaigns.Add(campaign);
@@ -233,7 +234,7 @@ public sealed class CampaignService(
     /// <summary>
     ///     Updates the name and status of a campaign owned by the current keeper.
     /// </summary>
-    public async Task<Result> UpdateCampaignAsync(Guid id, string name, CampaignStatus status)
+    public async Task<Result> UpdateCampaignAsync(Guid id, string name, CampaignStatus status, Eras? era = null)
     {
         try
         {
@@ -258,6 +259,8 @@ public sealed class CampaignService(
 
             campaign.Name = name;
             campaign.Status = status;
+            if (era.HasValue)
+                campaign.Era = era.Value;
             campaign.LastUpdated = DateTime.UtcNow;
 
             await dbContext.SaveChangesAsync();

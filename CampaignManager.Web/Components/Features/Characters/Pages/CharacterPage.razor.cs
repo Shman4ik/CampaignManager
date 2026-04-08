@@ -5,6 +5,7 @@ using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -37,6 +38,7 @@ public partial class CharacterPage
     private bool _isBusy;
     private readonly NotificationModel _notification = new();
     private CampaignPlayer? CampaignPlayer { get; set; }
+    private Eras? CampaignEra { get; set; }
     private CharacterGenerationLog? _generationLog;
     private bool _showGenerationLog = true;
     private bool _showGenerateModal;
@@ -88,6 +90,12 @@ public partial class CharacterPage
     {
         try
         {
+            if (CampaignId.HasValue)
+            {
+                var campaign = await CampaignService.GetCampaignWithCharactersAsync(CampaignId.Value);
+                CampaignEra = campaign?.Era;
+            }
+
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
                 CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
@@ -118,7 +126,7 @@ public partial class CharacterPage
 
     private async Task<Character> CreateNewCharacterTemplateAsync()
     {
-        var skills = await SkillService.BuildDefaultSkillsModelAsync();
+        var skills = await SkillService.BuildDefaultSkillsModelAsync(CampaignEra);
         return new Character
         {
             PersonalInfo = new PersonalInfo
@@ -217,11 +225,12 @@ public partial class CharacterPage
         _showGenerateModal = false;
 
         var occupations = await OccupationService.GetAllOccupationsAsync();
-        var result = CharacterGenerationService.GenerateRandomCharacter(
+        var result = await CharacterGenerationService.GenerateRandomCharacter(
             occupations,
             parameters.Occupation,
             parameters.Gender,
-            parameters.Age);
+            parameters.Age,
+            CampaignEra);
 
         Character = result.Character;
         _generationLog = result.Log;

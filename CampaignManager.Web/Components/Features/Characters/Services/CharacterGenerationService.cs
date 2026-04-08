@@ -1,8 +1,10 @@
 ﻿using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Skills.Services;
+using CampaignManager.Web.Components.Shared.Model;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
-public sealed class CharacterGenerationService
+public sealed class CharacterGenerationService(SkillService skillService)
 {
     private readonly Random _random = Random.Shared;
 
@@ -19,17 +21,30 @@ public sealed class CharacterGenerationService
     /// <summary>
     /// Генерирует случайного персонажа. Принимает список доступных профессий из БД и опциональные параметры.
     /// </summary>
-    public GenerationResult GenerateRandomCharacter(
+    public async Task<GenerationResult> GenerateRandomCharacter(
         List<Occupation> availableOccupations,
         Occupation? selectedOccupation = null,
         string? gender = null,
-        int? age = null)
+        int? age = null,
+        Eras? era = null)
     {
         var log = new CharacterGenerationLog();
         var character = new Character();
 
-        // 1. Выбор профессии
+        // 1. Выбор профессии — фильтр по эпохе, если задана
         var occupations = availableOccupations.Count > 0 ? availableOccupations : Occupation.GetDefaultOccupations();
+        if (era is { } e)
+        {
+            var filtered = occupations
+                .Where(o =>
+                    (e.HasFlag(Eras.Classic) && !o.IsModern) ||
+                    (e.HasFlag(Eras.Modern) && o.IsModern))
+                .ToList();
+            if (filtered.Count > 0)
+                occupations = filtered;
+            else
+                log.Add("Профессия", "Нет профессий, соответствующих эпохе — используется полный список");
+        }
         var occupation = selectedOccupation ?? PickOccupation(occupations, log);
 
         // 2. Генерация возраста (15–89 лет)
@@ -47,7 +62,7 @@ public sealed class CharacterGenerationService
         CalculateDerivedAttributes(character, characterAge, log);
 
         // 6. Навыки: база → профессия → личный интерес
-        GenerateSkills(character, occupation, log);
+        await GenerateSkills(character, occupation, log, era);
 
         // 7. Личная информация
         GeneratePersonalInfo(character, occupation, characterAge, gender, log);
@@ -472,9 +487,9 @@ public sealed class CharacterGenerationService
 
     #region Навыки
 
-    private void GenerateSkills(Character character, Occupation occupation, CharacterGenerationLog log)
+    private async Task GenerateSkills(Character character, Occupation occupation, CharacterGenerationLog log, Eras? era)
     {
-        character.Skills = SkillsModel.DefaultSkillsModel();
+        character.Skills = await skillService.BuildDefaultSkillsModelAsync(era);
         var allSkills = character.Skills.SkillGroups.SelectMany(g => g.Skills).ToList();
 
         // 1. Установить базовые значения Уклонения и Родного языка
