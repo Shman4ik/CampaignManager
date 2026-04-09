@@ -238,6 +238,7 @@ public sealed class ScenarioService(
                             Name = sc.Name,
                             Type = sc.Type,
                             CreatureCharacteristics = sc.CreatureCharacteristics,
+                            Attacks = sc.Attacks,
                             CombatDescriptions = sc.CombatDescriptions,
                             SpecialAbilities = sc.SpecialAbilities,
                             Notes = sc.Notes

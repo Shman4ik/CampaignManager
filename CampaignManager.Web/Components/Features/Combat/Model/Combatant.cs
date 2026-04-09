@@ -121,8 +121,18 @@ public class Combatant
         DamageBonus = creature.CreatureCharacteristics.AverageBonusToHit;
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
         Build = creature.CreatureCharacteristics.AverageComplexity;
-        DodgeSkill = creature.CreatureCharacteristics.Dexterity.Value / 2; // половина ЛВК как уклонение по умолчанию
-        AttacksPerRound = 1;
+        Armor = creature.CreatureCharacteristics.Armor;
+
+        DodgeSkill = creature.CreatureCharacteristics.DodgeSkill > 0
+            ? creature.CreatureCharacteristics.DodgeSkill
+            : creature.CreatureCharacteristics.Dexterity.Value / 2;
+
+        FightingSkill = creature.Attacks
+            .FirstOrDefault(a => a.IsMelee)?.SkillValue ?? 50;
+
+        AttacksPerRound = creature.Attacks.Count > 0
+            ? creature.Attacks.Max(a => a.AttacksPerRound)
+            : 1;
     }
 
     private static int FindFightingSkill(Character character)

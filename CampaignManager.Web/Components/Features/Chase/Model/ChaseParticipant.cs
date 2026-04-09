@@ -82,5 +82,7 @@ public class ChaseParticipant
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
         MaxHitPoints = creature.CreatureCharacteristics.HealPoint;
         CurrentHitPoints = creature.CreatureCharacteristics.HealPoint;
+        BuildValue = creature.CreatureCharacteristics.AverageComplexity;
+        LuckValue = creature.CreatureCharacteristics.Luck;
     }
 }

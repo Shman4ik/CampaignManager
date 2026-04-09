@@ -199,7 +199,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(c => c.CreatureCharacteristics)
                 .HasColumnType("jsonb");
 
-            // Store CombatDescriptions as JSONB
+            // Store Attacks as JSONB
+            entity.Property(c => c.Attacks)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb");
+
+            // Store CombatDescriptions as JSONB (legacy)
             entity.Property(c => c.CombatDescriptions)
                 .HasColumnType("jsonb");
 

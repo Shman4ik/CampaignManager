@@ -238,6 +238,7 @@ builder.Services.AddScoped<MarkdownService>();
 // Register scenario management services
 builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<CreatureService>();
+builder.Services.AddScoped<CreatureDataMigrationService>();
 builder.Services.AddScoped<ItemService>();
 
 //Register skills service
@@ -315,6 +316,7 @@ app.MapDefaultEndpoints();
 app.MapAccountEndpoints();
 app.MapMinioEndpoints();
 app.MapCharacterMigrationEndpoints();
+app.MapCreatureMigrationEndpoints();
 
 // Enable middleware to serve generated OpenAPI specification in both JSON and YAML formats
 if (app.Environment.IsDevelopment())

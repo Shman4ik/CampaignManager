@@ -23,7 +23,12 @@ public class Creature : BaseDataBaseEntity, INamedEntity
     public required CreatureCharacteristics CreatureCharacteristics { get; set; }
 
     /// <summary>
-    ///     Описание боевых действий
+    ///     Структурированные атаки существа
+    /// </summary>
+    public List<CreatureAttack> Attacks { get; set; } = [];
+
+    /// <summary>
+    ///     Описание боевых действий (legacy — используйте Attacks для структурированных данных)
     /// </summary>
     public Dictionary<string, string> CombatDescriptions { get; set; } = new();
 

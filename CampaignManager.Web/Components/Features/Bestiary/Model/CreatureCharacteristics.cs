@@ -77,4 +77,19 @@ public class CreatureCharacteristics
     ///     Комплекция
     /// </summary>
     public int Constitutions { get; set; }
+
+    /// <summary>
+    ///     Броня (снижение урона)
+    /// </summary>
+    public int Armor { get; set; }
+
+    /// <summary>
+    ///     Навык уклонения (если 0, используется ЛВК/2 как fallback)
+    /// </summary>
+    public int DodgeSkill { get; set; }
+
+    /// <summary>
+    ///     Удача
+    /// </summary>
+    public int Luck { get; set; }
 }

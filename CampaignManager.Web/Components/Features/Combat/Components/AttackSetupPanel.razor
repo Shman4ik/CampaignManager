@@ -479,15 +479,30 @@
         }
         else if (_selectedAttacker.CreatureSource != null)
         {
-            foreach (var kvp in _selectedAttacker.CreatureSource.CombatDescriptions)
+            foreach (var attack in _selectedAttacker.CreatureSource.Attacks)
             {
                 _attackOptions.Add(new AttackOption
                 {
-                    Name = kvp.Key,
-                    Damage = kvp.Value,
-                    IsMelee = true,
-                    SkillValue = 50
+                    Name = attack.Name,
+                    Damage = attack.DamageFormula,
+                    IsMelee = attack.IsMelee,
+                    SkillValue = attack.SkillValue
                 });
+            }
+
+            // Fallback: legacy CombatDescriptions для немигрированных данных
+            if (_selectedAttacker.CreatureSource.Attacks.Count == 0)
+            {
+                foreach (var kvp in _selectedAttacker.CreatureSource.CombatDescriptions)
+                {
+                    _attackOptions.Add(new AttackOption
+                    {
+                        Name = kvp.Key,
+                        Damage = "1D3",
+                        IsMelee = true,
+                        SkillValue = 50
+                    });
+                }
             }
         }
 
