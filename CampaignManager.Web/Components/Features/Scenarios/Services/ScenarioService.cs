@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Scenarios.Model;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Services;
+using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +13,12 @@ namespace CampaignManager.Web.Components.Features.Scenarios.Services;
 public sealed class ScenarioService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    CampaignService campaignService,
     ILogger<ScenarioService> logger)
 {
     private const string ScenariosCacheKey = "AllScenarios";
     private const string TemplatesCacheKey = "ScenarioTemplates";
+    private const string PublishedCacheKey = "PublishedScenarios";
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
 
     /// <summary>
@@ -48,6 +51,36 @@ public sealed class ScenarioService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving scenarios");
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Gets published one-shot scenarios for the home page announcement
+    /// </summary>
+    public async Task<List<Scenario>> GetPublishedScenariosAsync()
+    {
+        try
+        {
+            if (cache.TryGetValue(PublishedCacheKey, out List<Scenario>? scenarios) && scenarios is not null)
+                return scenarios;
+
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            scenarios = await dbContext.Scenarios
+                .Include(s => s.Npcs)
+                .ThenInclude(n => n.CampaignPlayer)
+                .Where(s => s.IsPublished)
+                .OrderBy(s => s.ScheduledDate)
+                .ToListAsync();
+
+            cache.Set(PublishedCacheKey, scenarios, new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(CacheExpiration));
+
+            return scenarios;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving published scenarios");
             return [];
         }
     }
@@ -109,6 +142,7 @@ public sealed class ScenarioService(
 
             // Invalidate cache
             cache.Remove(ScenariosCacheKey);
+            cache.Remove(PublishedCacheKey);
             if (scenario.IsTemplate)
                 cache.Remove(TemplatesCacheKey);
             return scenario;
@@ -134,6 +168,23 @@ public sealed class ScenarioService(
             var existingScenario = await dbContext.Scenarios.FindAsync(scenario.Id);
             if (existingScenario is null) return false;
 
+            // Auto-create a campaign when a scenario is first published as a one-shot without one.
+            // Reservations need a campaign to attach CampaignPlayer records to.
+            var publishingWithoutCampaign =
+                scenario.IsPublished
+                && !existingScenario.IsPublished
+                && existingScenario.CampaignId is null
+                && scenario.CampaignId is null;
+
+            if (publishingWithoutCampaign)
+            {
+                var campaign = await campaignService.CreateCampaignForOneShotAsync(scenario.Name);
+                scenario.CampaignId = campaign.Id;
+                logger.LogInformation(
+                    "Scenario {ScenarioId} auto-linked to new one-shot campaign {CampaignId}",
+                    scenario.Id, campaign.Id);
+            }
+
             // Update the existing scenario with the new values
             dbContext.Entry(existingScenario).CurrentValues.SetValues(scenario);
             await dbContext.SaveChangesAsync();
@@ -141,6 +192,7 @@ public sealed class ScenarioService(
             // Invalidate cache
             cache.Remove(ScenariosCacheKey);
             cache.Remove(TemplatesCacheKey);
+            cache.Remove(PublishedCacheKey);
 
             return true;
         }
@@ -149,6 +201,15 @@ public sealed class ScenarioService(
             logger.LogError(ex, "Error updating scenario {ScenarioId}", scenario.Id);
             return false;
         }
+    }
+
+    /// <summary>
+    ///     Drops the cached list of published one-shot scenarios so the next home-page load reflects
+    ///     fresh reservation state.
+    /// </summary>
+    public void InvalidatePublishedCache()
+    {
+        cache.Remove(PublishedCacheKey);
     }
 
     /// <summary>
@@ -170,6 +231,7 @@ public sealed class ScenarioService(
 
             // Invalidate cache
             cache.Remove(ScenariosCacheKey);
+            cache.Remove(PublishedCacheKey);
             if (scenario.IsTemplate) cache.Remove(TemplatesCacheKey);
 
             return true;

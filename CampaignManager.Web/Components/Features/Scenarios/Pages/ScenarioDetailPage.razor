@@ -214,6 +214,59 @@ else
                     </div>
                 </div>
 
+                <!-- Анонс ваншота -->
+                <div class="mb-6 bg-white border border-gray-200 rounded-md p-4 shadow-sm">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-xl font-semibold flex items-center gap-2">
+                            <i class="fa-solid fa-bullhorn text-accent-600"></i>
+                            Анонс ваншота
+                        </h2>
+                        @if (_scenario.IsPublished)
+                        {
+                            <Badge Variant="success" Size="sm" Rounded="full">Опубликован</Badge>
+                        }
+                        else
+                        {
+                            <Badge Variant="secondary" Size="sm" Rounded="full">Черновик</Badge>
+                        }
+                    </div>
+
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" @bind="_scenario.IsPublished"
+                                   class="w-4 h-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"/>
+                            <span class="text-sm font-medium text-gray-700">Показывать на главной странице</span>
+                        </label>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Дата и время проведения</label>
+                            <input type="datetime-local" value="@FormatScheduledDateForInput(_scenario.ScheduledDate)"
+                                   @onchange="OnScheduledDateChanged"
+                                   class="w-full md:w-auto px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"/>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Текст анонса <span class="text-gray-500 font-normal">(поддерживается markdown)</span>
+                            </label>
+                            <textarea @bind="_scenario.AnnouncementText" rows="4"
+                                      placeholder="Короткий маркетинговый текст для главной страницы — о чём игра, атмосфера, триггеры..."
+                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"></textarea>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_announcementSaveMessage))
+                        {
+                            <NotificationAlert Type="@_announcementSaveType" Message="@_announcementSaveMessage" OnClose="ClearAnnouncementMessage" />
+                        }
+
+                        <div class="flex justify-end">
+                            <Button Variant="primary" Icon="fa-save" OnClick="SaveAnnouncementAsync" IsDisabled="_savingAnnouncement">
+                                @(_savingAnnouncement ? "Сохранение..." : "Сохранить анонс")
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-6">
                     <h2 class="text-xl font-semibold mb-2">Описание</h2>
                     <div class="bg-gray-50 p-4 rounded-lg">
@@ -487,6 +540,11 @@ else
     private Guid? _selectedLocationId;
     private bool _keyFactsPanelCollapsed;
 
+    // Announcement form state
+    private bool _savingAnnouncement;
+    private string? _announcementSaveMessage;
+    private string _announcementSaveType = "success";
+
     private ScenarioLocation? _selectedLocation =>
         _selectedLocationId.HasValue
             ? _scenario?.Locations.FirstOrDefault(l => l.Id == _selectedLocationId.Value)
@@ -537,6 +595,62 @@ else
     private void HandleLocationSelected(Guid? locationId)
     {
         _selectedLocationId = locationId;
+    }
+
+    private static string FormatScheduledDateForInput(DateTime? date) =>
+        date.HasValue ? date.Value.ToString("yyyy-MM-ddTHH:mm") : string.Empty;
+
+    private void OnScheduledDateChanged(ChangeEventArgs e)
+    {
+        if (_scenario is null) return;
+        var raw = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            _scenario.ScheduledDate = null;
+            return;
+        }
+        if (DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var parsed))
+        {
+            _scenario.ScheduledDate = parsed;
+        }
+    }
+
+    private void ClearAnnouncementMessage() => _announcementSaveMessage = null;
+
+    private async Task SaveAnnouncementAsync()
+    {
+        if (_scenario is null) return;
+        _savingAnnouncement = true;
+        _announcementSaveMessage = null;
+        try
+        {
+            var success = await ScenarioService.UpdateScenarioAsync(_scenario);
+            if (success)
+            {
+                _announcementSaveMessage = _scenario.IsPublished
+                    ? "Анонс сохранён и опубликован на главной"
+                    : "Анонс сохранён";
+                _announcementSaveType = "success";
+                // Reload to pick up auto-created CampaignId if it was assigned server-side.
+                await LoadScenario();
+            }
+            else
+            {
+                _announcementSaveMessage = "Не удалось сохранить анонс";
+                _announcementSaveType = "error";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving announcement for scenario {ScenarioId}", Id);
+            _announcementSaveMessage = $"Ошибка: {ex.Message}";
+            _announcementSaveType = "error";
+        }
+        finally
+        {
+            _savingAnnouncement = false;
+        }
     }
 
     private async Task ShowUseCampaignModal()

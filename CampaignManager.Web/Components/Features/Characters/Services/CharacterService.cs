@@ -1,10 +1,12 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
@@ -12,8 +14,10 @@ public sealed class CharacterService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
     ILogger<CharacterService> logger,
-    SkillService skillService)
+    SkillService skillService,
+    IMemoryCache cache)
 {
+    private const string PublishedScenariosCacheKey = "PublishedScenarios";
     public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId, CharacterStatus status = CharacterStatus.Active)
     {
         try
@@ -242,6 +246,8 @@ public sealed class CharacterService(
             dbContext.CharacterStorage.Add(character);
             await dbContext.SaveChangesAsync();
 
+            cache.Remove(PublishedScenariosCacheKey);
+
             logger.LogInformation(
                 "Character template {TemplateId} copied to scenario {ScenarioId} as character {CharacterId} by user {UserEmail}",
                 characterId,
@@ -287,6 +293,145 @@ public sealed class CharacterService(
     }
 
     /// <summary>
+    ///     Reserves a pregen character for the current user: the pregen template is transformed into the
+    ///     user's active character in the scenario's campaign. Called when a player clicks "Забронировать"
+    ///     on the home page one-shot announcement.
+    /// </summary>
+    /// <param name="pregenId">ID of the pregen template to reserve.</param>
+    /// <exception cref="UnauthorizedAccessException">User is not authenticated.</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Pregen is not available, scenario has no campaign, or the user already reserved a pregen in this
+    ///     scenario.
+    /// </exception>
+    public async Task<CharacterStorageDto> ReservePregenAsync(Guid pregenId)
+    {
+        var user = await identityService.GetUserAsync()
+            ?? throw new UnauthorizedAccessException("Пользователь не авторизован");
+        var userEmail = user.Email
+            ?? throw new UnauthorizedAccessException("У пользователя нет email");
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        var pregen = await dbContext.CharacterStorage
+            .Include(c => c.Scenario)
+            .FirstOrDefaultAsync(c => c.Id == pregenId);
+
+        if (pregen is null)
+            throw new InvalidOperationException("Персонаж не найден");
+        if (pregen.CampaignPlayerId.HasValue)
+            throw new InvalidOperationException("Этот персонаж уже забронирован");
+        if (pregen.ScenarioId is null || pregen.Scenario is null)
+            throw new InvalidOperationException("Персонаж не привязан к сценарию");
+        if (pregen.Character?.CharacterType != CharacterType.PlayerCharacter)
+            throw new InvalidOperationException("Этот персонаж не является играбельным");
+
+        Guid campaignId;
+        if (pregen.Scenario.CampaignId.HasValue)
+        {
+            campaignId = pregen.Scenario.CampaignId.Value;
+        }
+        else
+        {
+            // Auto-create a one-shot campaign and link it to the scenario.
+            var campaign = new Campaign
+            {
+                Name = $"{pregen.Scenario.Name} (Ваншот)",
+                Status = CampaignStatus.Planning,
+                Era = Eras.Classic,
+                KeeperEmail = pregen.Scenario.CreatorEmail ?? userEmail,
+            };
+            campaign.Init();
+            dbContext.Campaigns.Add(campaign);
+            pregen.Scenario.CampaignId = campaign.Id;
+            await dbContext.SaveChangesAsync();
+            campaignId = campaign.Id;
+            logger.LogInformation(
+                "Auto-created one-shot campaign {CampaignId} for scenario {ScenarioId}",
+                campaign.Id, pregen.ScenarioId);
+        }
+
+        // Find-or-create CampaignPlayer for the current user in the one-shot campaign.
+        var player = await dbContext.CampaignPlayers
+            .FirstOrDefaultAsync(cp => cp.CampaignId == campaignId && cp.PlayerEmail == userEmail);
+
+        if (player is null)
+        {
+            player = new CampaignPlayer
+            {
+                CampaignId = campaignId,
+                PlayerEmail = userEmail,
+                PlayerName = user.UserName ?? userEmail
+            };
+            player.Init();
+            dbContext.CampaignPlayers.Add(player);
+            await dbContext.SaveChangesAsync();
+        }
+        else
+        {
+            // Block double-booking in the same scenario.
+            var alreadyReserved = await dbContext.CharacterStorage
+                .AnyAsync(c => c.CampaignPlayerId == player.Id
+                               && c.ScenarioId == pregen.ScenarioId
+                               && c.Status == CharacterStatus.Active);
+            if (alreadyReserved)
+                throw new InvalidOperationException("Вы уже забронировали персонажа на эту игру");
+        }
+
+        // Transform the pregen into the player's active character.
+        pregen.Status = CharacterStatus.Active;
+        pregen.CampaignPlayerId = player.Id;
+        pregen.LastUpdated = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        cache.Remove(PublishedScenariosCacheKey);
+
+        logger.LogInformation(
+            "Pregen {PregenId} reserved by {UserEmail} for scenario {ScenarioId}",
+            pregenId, userEmail, pregen.ScenarioId);
+
+        return pregen;
+    }
+
+    /// <summary>
+    ///     Releases a reserved pregen so it becomes available again.
+    ///     Allowed for: the player who owns the pregen, global Keeper/Admin.
+    /// </summary>
+    /// <exception cref="UnauthorizedAccessException">User is not authenticated or lacks permission.</exception>
+    /// <exception cref="InvalidOperationException">Pregen not found or not reserved.</exception>
+    public async Task ReleasePregenAsync(Guid pregenId)
+    {
+        var user = await identityService.GetUserAsync()
+            ?? throw new UnauthorizedAccessException("Пользователь не авторизован");
+        var userEmail = user.Email
+            ?? throw new UnauthorizedAccessException("У пользователя нет email");
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        var pregen = await dbContext.CharacterStorage
+            .Include(c => c.CampaignPlayer)
+            .FirstOrDefaultAsync(c => c.Id == pregenId);
+
+        if (pregen is null)
+            throw new InvalidOperationException("Персонаж не найден");
+        if (!pregen.CampaignPlayerId.HasValue)
+            throw new InvalidOperationException("Персонаж не забронирован");
+
+        var isOwner = string.Equals(pregen.CampaignPlayer?.PlayerEmail, userEmail, StringComparison.OrdinalIgnoreCase);
+        var isKeeperOrAdmin = user.Role is PlayerRole.GameMaster or PlayerRole.Administrator;
+
+        if (!isOwner && !isKeeperOrAdmin)
+            throw new UnauthorizedAccessException("Недостаточно прав для освобождения персонажа");
+
+        pregen.CampaignPlayerId = null;
+        pregen.LastUpdated = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+
+        cache.Remove(PublishedScenariosCacheKey);
+
+        logger.LogInformation("Pregen {PregenId} released by {UserEmail}", pregenId, userEmail);
+    }
+
+    /// <summary>
     ///     Unlinks a character template from a scenario
     /// </summary>
     /// <param name="characterId">ID of the character template to unlink</param>
@@ -315,6 +460,8 @@ public sealed class CharacterService(
 
             dbContext.Update(character);
             await dbContext.SaveChangesAsync();
+
+            cache.Remove(PublishedScenariosCacheKey);
 
             logger.LogInformation($"Character template {characterId} unlinked from scenario by user {userEmail}");
             return true;

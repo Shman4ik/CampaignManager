@@ -171,6 +171,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.ToTable("Scenarios");
             entity.Property(s => s.Name).IsRequired();
             entity.Property(s => s.IsTemplate).HasDefaultValue(false);
+            entity.Property(s => s.IsPublished).HasDefaultValue(false);
 
             // Index for quick lookup by creator
             entity.HasIndex(s => s.CreatorEmail);

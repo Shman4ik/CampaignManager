@@ -275,6 +275,35 @@ public sealed class CampaignService(
     }
 
     /// <summary>
+    ///     Creates a dedicated campaign for a one-shot scenario announcement. Used when a keeper publishes
+    ///     a scenario that has no campaign yet — gives reservations a place to attach players.
+    /// </summary>
+    public async Task<Campaign> CreateCampaignForOneShotAsync(string scenarioName)
+    {
+        var userEmail = identityService.GetCurrentUserEmail()
+            ?? throw new UnauthorizedAccessException("Пользователь не авторизован");
+
+        var campaign = new Campaign
+        {
+            Name = $"{scenarioName} (Ваншот)",
+            Status = CampaignStatus.Planning,
+            Era = Eras.Classic,
+            KeeperEmail = userEmail,
+            CreatedAt = DateTime.UtcNow,
+            LastUpdated = DateTime.UtcNow
+        };
+        campaign.Init();
+
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        dbContext.Campaigns.Add(campaign);
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation("One-shot campaign {CampaignId} ('{Name}') created by {UserEmail}",
+            campaign.Id, campaign.Name, userEmail);
+        return campaign;
+    }
+
+    /// <summary>
     ///     Deletes a campaign and all associated players/characters (cascade).
     /// </summary>
     public async Task<Result> DeleteCampaignAsync(Guid id)

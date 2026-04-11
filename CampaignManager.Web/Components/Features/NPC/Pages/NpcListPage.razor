@@ -26,9 +26,14 @@ else
 <div class="max-w-7xl mx-auto px-4 py-6">
     <div class="flex justify-between items-center mb-6">
         <h1 class="text-2xl font-bold text-gray-800">Шаблоны персонажей</h1>
-        <Button OnClick="CreateNewTemplate" Variant="info" Icon="fa-plus">
-            Добавить шаблон
-        </Button>
+        <div class="flex gap-2">
+            <Button OnClick="CreateNewPregen" Variant="success" Icon="fa-user-plus">
+                Добавить преген
+            </Button>
+            <Button OnClick="CreateNewTemplate" Variant="info" Icon="fa-plus">
+                Добавить NPC
+            </Button>
+        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_notification.Message))
@@ -59,9 +64,30 @@ else
     }
     else
     {
+        <!-- Tab filter for Pregens vs NPCs -->
+        <div class="border-b border-gray-200 mb-6">
+            <nav class="flex gap-1 -mb-px">
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "all" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "all"'>
+                    Все (@_characterTemplates.Count)
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "pregens" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "pregens"'>
+                    <i class="fa-solid fa-user mr-1"></i> Преген-персонажи (@_pregens.Count)
+                </button>
+                <button type="button"
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "npcs" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _activeTab = "npcs"'>
+                    <i class="fa-solid fa-masks-theater mr-1"></i> NPC (@_npcs.Count)
+                </button>
+            </nav>
+        </div>
+
         <!-- Card Grid View -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach (var template in _characterTemplates)
+            @foreach (var template in FilteredTemplates)
             {
                 <CharacterTemplateCard
                     Template="@template"
@@ -69,6 +95,13 @@ else
                     OnLinkToScenario="@(async (template) => await ShowLinkToScenarioDialog(template))"/>
             }
         </div>
+
+        @if (!FilteredTemplates.Any())
+        {
+            <div class="bg-gray-50 border border-gray-200 text-gray-700 px-6 py-8 rounded-lg text-center mt-4">
+                <p class="text-gray-600">Нет шаблонов в этой категории</p>
+            </div>
+        }
     }
 </div>
 
@@ -92,10 +125,20 @@ else
 
 @code {
     private List<CharacterStorageDto>? _characterTemplates;
+    private List<CharacterStorageDto> _pregens = [];
+    private List<CharacterStorageDto> _npcs = [];
     private bool _isLoading = true;
     private bool _isKeeper;
     private bool _showDeleteConfirmation = false;
     private CharacterStorageDto? _templateToDelete;
+    private string _activeTab = "all";
+
+    private IEnumerable<CharacterStorageDto> FilteredTemplates => _activeTab switch
+    {
+        "pregens" => _pregens,
+        "npcs" => _npcs,
+        _ => _characterTemplates ?? []
+    };
 
     // Link to scenario dialog
     private bool _showLinkDialog = false;
@@ -123,6 +166,12 @@ else
         {
             // Load all character templates
             _characterTemplates = await CharacterService.GetAllCharacterTemplatesAsync();
+            _pregens = _characterTemplates
+                .Where(t => t.Character?.CharacterType == CharacterType.PlayerCharacter)
+                .ToList();
+            _npcs = _characterTemplates
+                .Where(t => t.Character?.CharacterType == CharacterType.NonPlayerCharacter)
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -142,6 +191,11 @@ else
     private void CreateNewTemplate()
     {
         NavigationManager.NavigateTo("/character/create/template");
+    }
+
+    private void CreateNewPregen()
+    {
+        NavigationManager.NavigateTo("/character/create/pregen");
     }
 
     private void EditTemplate(Guid id)
@@ -216,33 +270,16 @@ else
     }
 
     // Save character template with scenario link
-    private Task SaveCharacterTemplateWithScenario()
+    private async Task SaveCharacterTemplateWithScenario()
     {
-        try
+        _notification = new Notification
         {
-            // Here you would update the database with the character template scenario link
-            // For now, we'll just show a notification
+            Type = "success",
+            Message = "Персонаж успешно привязан к сценарию"
+        };
 
-            _notification = new Notification
-            {
-                Type = "success",
-                Message = $"Персонаж успешно привязан к сценарию"
-            };
-
-            CloseLinkDialog();
-            // In a real implementation, you might refresh the list of templates here
-            // await LoadTemplatesAsync();
-        }
-        catch (Exception ex)
-        {
-            _notification = new Notification
-            {
-                Type = "error",
-                Message = $"Ошибка при привязке персонажа к сценарию: {ex.Message}"
-            };
-        }
-
-        return Task.CompletedTask;
+        CloseLinkDialog();
+        await LoadTemplatesAsync();
     }
 
 }

@@ -28,7 +28,7 @@ public partial class CharacterPage
 
     // Determine if we're in NPC creation mode based on the URL segment after CampaignId
     [Parameter] public string? Npc { get; set; }
-    private bool IsTemplate => Npc == "template";
+    private bool IsTemplate => Npc is "template" or "pregen";
     private bool IsNpc => Npc is "npc" or "template" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
 
     private Character? Character { get; set; }

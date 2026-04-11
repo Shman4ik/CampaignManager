@@ -39,6 +39,21 @@ public sealed class Scenario : BaseDataBaseEntity, INamedEntity
     public bool IsTemplate { get; set; }
 
     /// <summary>
+    ///     Whether this scenario is published as a one-shot announcement on the home page
+    /// </summary>
+    public bool IsPublished { get; set; }
+
+    /// <summary>
+    ///     Scheduled date and time for the one-shot game session
+    /// </summary>
+    public DateTime? ScheduledDate { get; set; }
+
+    /// <summary>
+    ///     Short announcement text displayed on the home page
+    /// </summary>
+    public string? AnnouncementText { get; set; }
+
+    /// <summary>
     ///     Email of the user who created this scenario
     /// </summary>
     public string? CreatorEmail { get; set; }
