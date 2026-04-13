@@ -14,6 +14,8 @@ public class IdentityService(
     IDbContextFactory<AppIdentityDbContext> appIdentityDbContextFactory,
     IDbContextFactory<AppDbContext> appDbContextFactory)
 {
+    private ApplicationUser? _cachedUser;
+    private bool _userCacheLoaded;
     /// <summary>
     /// Sync — works during SSR/prerender (HttpContext available).
     /// Returns null during interactive WebSocket rendering.
@@ -66,11 +68,32 @@ public class IdentityService(
 
     public async Task<ApplicationUser?> GetUserAsync()
     {
+        if (_userCacheLoaded) return _cachedUser;
+
         var userEmail = await GetCurrentUserEmailAsync();
-        return await GetUserAsync(userEmail);
+        _cachedUser = await GetUserByEmailFromDb(userEmail);
+        _userCacheLoaded = true;
+        return _cachedUser;
+    }
+
+    public void InvalidateUserCache()
+    {
+        _cachedUser = null;
+        _userCacheLoaded = false;
     }
 
     public async Task<ApplicationUser?> GetUserAsync(string? email)
+    {
+        if (email == null) return null;
+
+        var currentEmail = await GetCurrentUserEmailAsync();
+        if (_userCacheLoaded && string.Equals(currentEmail, email, StringComparison.OrdinalIgnoreCase))
+            return _cachedUser;
+
+        return await GetUserByEmailFromDb(email);
+    }
+
+    private async Task<ApplicationUser?> GetUserByEmailFromDb(string? email)
     {
         if (email == null) return null;
 

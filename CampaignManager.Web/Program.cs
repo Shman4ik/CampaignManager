@@ -166,28 +166,45 @@ builder.Services.AddAuthentication(options =>
                 }
             }
 
-            // Bootstrap admin from config
+            // Upsert user record and bootstrap admin from config
             if (email is not null)
             {
-                var adminEmails = config.GetSection("Authorization:AdminEmails").Get<string[]>() ?? [];
-                if (adminEmails.Contains(email, StringComparer.OrdinalIgnoreCase))
+                try
                 {
-                    try
+                    var name = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? email;
+                    var adminEmails = config.GetSection("Authorization:AdminEmails").Get<string[]>() ?? [];
+                    var isAdmin = adminEmails.Contains(email, StringComparer.OrdinalIgnoreCase);
+
+                    var identityFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppIdentityDbContext>>();
+                    await using var identityDb = await identityFactory.CreateDbContextAsync();
+                    var user = await identityDb.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
+                    if (user is null)
                     {
-                        var identityFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppIdentityDbContext>>();
-                        await using var identityDb = await identityFactory.CreateDbContextAsync();
-                        var user = await identityDb.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
-                        if (user is not null && user.Role != CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator)
+                        user = new CampaignManager.Web.Model.ApplicationUser
+                        {
+                            Email = email,
+                            UserName = name,
+                            Role = isAdmin
+                                ? CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator
+                                : CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Player
+                        };
+                        identityDb.Users.Add(user);
+                        await identityDb.SaveChangesAsync();
+                        logger.LogInformation("Created new user record for {Email}", email);
+                    }
+                    else
+                    {
+                        if (isAdmin && user.Role != CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator)
                         {
                             user.Role = CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator;
                             await identityDb.SaveChangesAsync();
                             logger.LogInformation("Bootstrapped admin role for {Email}", email);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Failed to bootstrap admin for {Email}", email);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to upsert user record for {Email}", email);
                 }
             }
 
