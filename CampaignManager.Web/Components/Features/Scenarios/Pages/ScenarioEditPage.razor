@@ -251,43 +251,64 @@ else
                     {
                         <div class="flex justify-between items-center mb-4">
                             <h2 class="text-lg font-semibold">Ключевые факты</h2>
-                            <Button OnClick="ShowAddKeyFactModal" Variant="info" Size="sm" Icon="fa-plus">
+                            <Button OnClick="AddNewKeyFact" Variant="info" Size="sm" Icon="fa-plus">
                                 Добавить
                             </Button>
                         </div>
 
-                        @if (_model.KeyFacts.Count == 0)
+                        @if (_editableFacts.Count == 0)
                         {
                             <p class="text-gray-500 text-center py-8">Нет ключевых фактов.</p>
                         }
                         else
                         {
-                            @foreach (var group in _model.KeyFacts.OrderBy(f => f.Type).ThenBy(f => f.Order).GroupBy(f => f.Type))
-                            {
-                                <div class="mb-6">
-                                    <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
-                                        @GetKeyFactTypeName(group.Key)
-                                    </h3>
-                                    <div class="space-y-2">
-                                        @foreach (var fact in group)
-                                        {
-                                            <div class="border border-gray-200 rounded-md p-3 flex justify-between items-start">
+                            <div class="space-y-3" @ondragover:preventDefault>
+                                @foreach (var fact in _editableFacts.OrderBy(f => f.Order))
+                                {
+                                    var factId = fact.Id;
+                                    <div class="border border-gray-200 rounded-md p-3 bg-white @(_dragOverFactId == factId ? "border-blue-400 bg-blue-50" : "")"
+                                         draggable="true"
+                                         @ondragstart="() => OnDragStart(factId)"
+                                         @ondragover="() => OnDragOver(factId)"
+                                         @ondragover:preventDefault
+                                         @ondrop="() => OnDrop(factId)"
+                                         @ondrop:preventDefault>
+                                        <div class="flex items-start gap-3">
+                                            <div class="flex-shrink-0 mt-2 cursor-grab text-gray-400 hover:text-gray-600">
+                                                <i class="fas fa-grip-vertical"></i>
+                                            </div>
+                                            <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 <div>
-                                                    <span class="font-medium text-gray-800">@fact.Title</span>
-                                                    @if (!string.IsNullOrEmpty(fact.Content))
-                                                    {
-                                                        <p class="text-sm text-gray-500 mt-1 line-clamp-2">@fact.Content</p>
-                                                    }
+                                                    <label class="block text-xs font-medium text-gray-500 mb-1">Заголовок</label>
+                                                    <input type="text" class="cm-input" value="@fact.Title"
+                                                           @onchange="e => fact.Title = e.Value?.ToString() ?? string.Empty"
+                                                           placeholder="Заголовок факта"/>
                                                 </div>
-                                                <div class="flex gap-1 flex-shrink-0 ml-2">
-                                                    <Button ButtonType="button" OnClick="() => ShowEditKeyFactModal(fact)" Variant="info" Size="sm" Icon="fa-edit"/>
-                                                    <Button ButtonType="button" OnClick="() => RemoveKeyFact(fact)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                                <div>
+                                                    <label class="block text-xs font-medium text-gray-500 mb-1">Тип</label>
+                                                    <select class="cm-input" value="@fact.Type"
+                                                            @onchange="e => fact.Type = Enum.Parse<KeyFactType>(e.Value?.ToString() ?? nameof(KeyFactType.Backstory))">
+                                                        <option value="@KeyFactType.Backstory">Предыстория</option>
+                                                        <option value="@KeyFactType.Truth">Зловещая истина</option>
+                                                        <option value="@KeyFactType.Timeline">Хронология</option>
+                                                        <option value="@KeyFactType.Reward">Награды</option>
+                                                    </select>
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                    <label class="block text-xs font-medium text-gray-500 mb-1">Содержание (Markdown)</label>
+                                                    <textarea class="cm-input" rows="3" value="@fact.Content"
+                                                              @onchange="e => fact.Content = e.Value?.ToString()"
+                                                              placeholder="Содержание факта..."></textarea>
                                                 </div>
                                             </div>
-                                        }
+                                            <div class="flex-shrink-0 flex flex-col gap-1">
+                                                <Button ButtonType="button" OnClick="() => SaveKeyFact(fact)" Variant="info" Size="sm" Icon="fa-save"/>
+                                                <Button ButtonType="button" OnClick="() => RemoveKeyFact(fact)" Variant="error" Size="sm" Icon="fa-trash"/>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            }
+                                }
+                            </div>
                         }
                     }
                 }
@@ -349,7 +370,6 @@ else
 </div>
 
 <LocationEditorModal @ref="_locationEditorModal" OnSaved="HandleLocationSaved"/>
-<KeyFactEditorModal @ref="_keyFactEditorModal" OnSaved="HandleKeyFactSaved"/>
 <HandoutEditorModal @ref="_handoutEditorModal" OnSaved="HandleHandoutSaved"/>
 }
 
@@ -364,9 +384,13 @@ else
     private string _activeTab = "general";
 
     private LocationEditorModal? _locationEditorModal;
-    private KeyFactEditorModal? _keyFactEditorModal;
     private HandoutEditorModal? _handoutEditorModal;
     private Guid? _lastLoadedId;
+
+    // ── KeyFact inline editing state ───────────────────────────────
+    private List<ScenarioKeyFact> _editableFacts = [];
+    private Guid? _draggingFactId;
+    private Guid? _dragOverFactId;
 
     private void TogglePreview() => _showPreview = !_showPreview;
 
@@ -398,6 +422,7 @@ else
                 if (scenario is not null)
                 {
                     _model = scenario;
+                    _editableFacts = [.. _model.KeyFacts];
                 }
             }
             else
@@ -531,30 +556,29 @@ else
 
     // ── KeyFact handlers ───────────────────────────────────────
 
-    private void ShowAddKeyFactModal()
+    private void AddNewKeyFact()
     {
-        _keyFactEditorModal?.Show(nextOrder: _model.KeyFacts.Count);
+        _editableFacts.Add(new ScenarioKeyFact
+        {
+            Title = string.Empty,
+            Order = _editableFacts.Count
+        });
     }
 
-    private void ShowEditKeyFactModal(ScenarioKeyFact fact)
+    private async Task SaveKeyFact(ScenarioKeyFact fact)
     {
-        _keyFactEditorModal?.Show(fact);
-    }
+        if (!Id.HasValue || string.IsNullOrWhiteSpace(fact.Title)) return;
 
-    private async Task HandleKeyFactSaved(ScenarioKeyFact keyFact)
-    {
-        if (!Id.HasValue) return;
-
-        var existing = _model.KeyFacts.FirstOrDefault(f => f.Id == keyFact.Id);
+        var existing = _model.KeyFacts.FirstOrDefault(f => f.Id == fact.Id);
         bool success;
 
         if (existing is not null)
         {
-            success = await ScenarioService.UpdateKeyFactAsync(Id.Value, keyFact);
+            success = await ScenarioService.UpdateKeyFactAsync(Id.Value, fact);
         }
         else
         {
-            success = await ScenarioService.AddKeyFactAsync(Id.Value, keyFact);
+            success = await ScenarioService.AddKeyFactAsync(Id.Value, fact);
         }
 
         if (success)
@@ -566,8 +590,67 @@ else
     private async Task RemoveKeyFact(ScenarioKeyFact fact)
     {
         if (!Id.HasValue) return;
+
+        var existing = _model.KeyFacts.FirstOrDefault(f => f.Id == fact.Id);
+        if (existing is null)
+        {
+            // Not yet saved — just remove from editable list
+            _editableFacts.Remove(fact);
+            return;
+        }
+
         if (await ScenarioService.RemoveKeyFactAsync(Id.Value, fact.Id))
         {
+            await ReloadScenario();
+        }
+    }
+
+    // ── Drag-and-drop ──────────────────────────────────────────
+
+    private void OnDragStart(Guid factId)
+    {
+        _draggingFactId = factId;
+    }
+
+    private void OnDragOver(Guid factId)
+    {
+        _dragOverFactId = factId;
+    }
+
+    private async Task OnDrop(Guid targetFactId)
+    {
+        if (_draggingFactId is null || _draggingFactId == targetFactId)
+        {
+            _draggingFactId = null;
+            _dragOverFactId = null;
+            return;
+        }
+
+        var ordered = _editableFacts.OrderBy(f => f.Order).ToList();
+        var dragged = ordered.FirstOrDefault(f => f.Id == _draggingFactId);
+        var target = ordered.FirstOrDefault(f => f.Id == targetFactId);
+
+        if (dragged is null || target is null)
+        {
+            _draggingFactId = null;
+            _dragOverFactId = null;
+            return;
+        }
+
+        ordered.Remove(dragged);
+        var targetIndex = ordered.IndexOf(target);
+        ordered.Insert(targetIndex, dragged);
+
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Order = i;
+
+        _editableFacts = ordered;
+        _draggingFactId = null;
+        _dragOverFactId = null;
+
+        if (Id.HasValue)
+        {
+            await ScenarioService.SaveAllKeyFactsAsync(Id.Value, _editableFacts);
             await ReloadScenario();
         }
     }
@@ -624,6 +707,7 @@ else
         if (scenario is not null)
         {
             _model = scenario;
+            _editableFacts = [.. _model.KeyFacts];
             StateHasChanged();
         }
     }

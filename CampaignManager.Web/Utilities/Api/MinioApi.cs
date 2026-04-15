@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Minio.Exceptions;
 using System.Security.Claims;
 
 namespace CampaignManager.Web.Utilities.Api;
@@ -54,27 +55,25 @@ public static class MinioApi
         MinioService minioService,
         ILogger<Program> logger)
     {
+        if (string.IsNullOrEmpty(objectPath))
+            return TypedResults.BadRequest("Object path is required");
+
+        // Prevent path traversal attacks
+        if (objectPath.Contains("..") || Path.IsPathRooted(objectPath))
+            return TypedResults.BadRequest("Invalid object path");
+
         try
         {
-            if (string.IsNullOrEmpty(objectPath))
-                return TypedResults.BadRequest("Object path is required");
-
-            // Prevent path traversal attacks
-            if (objectPath.Contains("..") || Path.IsPathRooted(objectPath))
-                return TypedResults.BadRequest("Invalid object path");
-
-            // Check if the object exists
-            var exists = await minioService.DoesObjectExistAsync(objectPath);
-            if (!exists)
-                return TypedResults.NotFound($"Image {objectPath} not found");
-
-            // Get the object stream
+            // Get the object stream directly — skip the separate existence check
+            // (DoesObjectExistAsync made 2 extra HEAD requests before every GET).
+            // ObjectNotFoundException is thrown by the SDK on HTTP 404.
             var stream = await minioService.GetObjectAsync(objectPath);
-
-            // Determine content type based on file extension
             var contentType = GetContentType(objectPath);
-
             return TypedResults.File(stream, contentType);
+        }
+        catch (ObjectNotFoundException)
+        {
+            return TypedResults.NotFound($"Image {objectPath} not found");
         }
         catch (Exception ex)
         {

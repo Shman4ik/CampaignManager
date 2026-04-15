@@ -282,7 +282,6 @@ public sealed class CharacterService(
 
             // Get character templates that are linked to the specified scenario
             return await dbContext.CharacterStorage
-                .Include(c => c.Scenario)
                 .Where(c => c.ScenarioId == scenarioId)
                 .OrderBy(c => c.CharacterName)
                 .ToListAsync();

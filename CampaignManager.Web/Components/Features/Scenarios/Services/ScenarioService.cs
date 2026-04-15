@@ -802,6 +802,26 @@ public sealed class ScenarioService(
         }
     }
 
+    public async Task<bool> SaveAllKeyFactsAsync(Guid scenarioId, List<ScenarioKeyFact> facts)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null) return false;
+
+            scenario.KeyFacts = facts;
+            dbContext.Scenarios.Update(scenario);
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error saving all key facts for scenario {ScenarioId}", scenarioId);
+            return false;
+        }
+    }
+
     // ── Handout CRUD ───────────────────────────────────────────────
 
     public async Task<bool> AddHandoutAsync(Guid scenarioId, ScenarioHandout handout)

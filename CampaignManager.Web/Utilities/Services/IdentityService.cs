@@ -5,6 +5,7 @@ using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 
 namespace CampaignManager.Web.Utilities.Services;
 
@@ -51,8 +52,26 @@ public class IdentityService(
 
     public async Task<PlayerRole> GetCurrentUserRole()
     {
+        // RoleClaimsTransformation already adds ClaimTypes.Role to the principal on every request.
+        // Read it from there to avoid an extra round-trip to the database.
+        var principal = await GetCurrentPrincipalAsync();
+        var roleStr = principal?.FindFirst(ClaimTypes.Role)?.Value;
+        if (roleStr is not null && Enum.TryParse<PlayerRole>(roleStr, out var roleFromClaims))
+            return roleFromClaims;
+
+        // Fallback: user not yet authenticated or claims not yet transformed.
         var user = await GetUserAsync();
         return user?.Role ?? PlayerRole.Player;
+    }
+
+    private async Task<ClaimsPrincipal?> GetCurrentPrincipalAsync()
+    {
+        var httpUser = httpContextAccessor.HttpContext?.User;
+        if (httpUser?.Identity?.IsAuthenticated == true)
+            return httpUser;
+
+        var state = await authenticationStateProvider.GetAuthenticationStateAsync();
+        return state.User.Identity?.IsAuthenticated == true ? state.User : null;
     }
 
     public async Task<bool> HasPendingKeeperApplicationAsync()
