@@ -9,7 +9,7 @@ public class MinioService
     private readonly ILogger<MinioService> _logger;
     private readonly IMinioClient _minioClient;
 
-    public MinioService(IConfiguration configuration, ILogger<MinioService> logger)
+    public MinioService(IConfiguration configuration, ILogger<MinioService> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
 
@@ -23,6 +23,7 @@ public class MinioService
             .WithEndpoint(endpoint)
             .WithCredentials(accessKey, secretKey)
             .WithSSL(secure)
+            .WithHttpClient(httpClientFactory.CreateClient("minio"))
             .Build();
     }
 
