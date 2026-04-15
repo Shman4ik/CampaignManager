@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,13 @@ public static class CrudServiceHelper
 {
     private static readonly TimeSpan DefaultExpiration = TimeSpan.FromMinutes(15);
 
+    // One semaphore per cache key — prevents concurrent cache-miss DB fetches (TOCTOU race).
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> FetchLocks = new();
+
     /// <summary>
     /// Loads all entities of type T, caching the result with a 15-minute absolute expiration.
-    /// Entities are ordered by name.
+    /// Entities are ordered by name. Uses double-checked async locking so that concurrent
+    /// callers on a cache miss issue only ONE database query instead of N.
     /// </summary>
     public static async Task<List<T>> GetAllCachedAsync<T>(
         IDbContextFactory<AppDbContext> factory,
@@ -26,14 +31,29 @@ public static class CrudServiceHelper
     {
         try
         {
+            // Fast path — already cached.
             if (cache.TryGetValue(cacheKey, out List<T>? cached) && cached is not null)
                 return cached;
 
-            await using var dbContext = await factory.CreateDbContextAsync();
-            var list = await dbContext.Set<T>().OrderBy(e => e.Name).ToListAsync();
+            // Acquire a per-key semaphore so only one caller fetches from the DB.
+            var sem = FetchLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync();
+            try
+            {
+                // Double-check: another caller may have populated the cache while we waited.
+                if (cache.TryGetValue(cacheKey, out cached) && cached is not null)
+                    return cached;
 
-            cache.Set(cacheKey, list, new MemoryCacheEntryOptions().SetAbsoluteExpiration(DefaultExpiration));
-            return list;
+                await using var dbContext = await factory.CreateDbContextAsync();
+                var list = await dbContext.Set<T>().OrderBy(e => e.Name).ToListAsync();
+
+                cache.Set(cacheKey, list, new MemoryCacheEntryOptions().SetAbsoluteExpiration(DefaultExpiration));
+                return list;
+            }
+            finally
+            {
+                sem.Release();
+            }
         }
         catch (Exception ex)
         {
