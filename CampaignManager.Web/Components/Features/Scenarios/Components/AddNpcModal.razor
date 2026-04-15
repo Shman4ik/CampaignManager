@@ -3,11 +3,12 @@
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Model
 
 <Modal IsVisible="_isVisible"
        OnClose="Hide"
-       Title="Add NPC to Scenario"
+       Title="@ModalTitle"
        MaxWidth="lg"
        HeaderColorScheme="primary">
     <ChildContent>
@@ -20,17 +21,31 @@
 
         <div class="mb-4">
             <input type="text"
-                   placeholder="Search NPCs..."
+                   placeholder="Поиск по имени..."
                    @bind-value="_searchTerm"
                    @bind-value:event="oninput"
                    class="cm-input"/>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 max-h-[50vh] overflow-y-auto">
-            @if (_availableNpcs == null || !_availableNpcs.Any())
+        @if (FilterByType == CharacterType.NonPlayerCharacter)
+        {
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Роль НПС</label>
+                <select @bind="_selectedRole"
+                        class="cm-input">
+                    @foreach (var role in Enum.GetValues<NpcRole>())
+                    {
+                        <option value="@role">@role.ToRussianString()</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <div class="grid grid-cols-1 gap-3 max-h-[50vh] overflow-y-auto">
+            @if (!FilteredNpcs.Any())
             {
                 <div class="text-center p-4 text-gray-500">
-                    No NPCs available.
+                    Нет доступных шаблонов.
                 </div>
             }
             else
@@ -41,20 +56,30 @@
                         class="border p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-all duration-200 @(_selectedNpc?.Id == npc.Id ? "border-primary-500 bg-primary-50" : "border-gray-200")"
                         @onclick="() => SelectNpc(npc)">
                         <div class="flex items-center justify-between">
-                            <h3 class="font-medium">@npc.CharacterName</h3>
-                            <Button OnClick="() => SelectNpc(npc)" Variant="info" Size="sm">
-                                Select
-                            </Button>
-                        </div>
-                        <div class="mt-2 text-sm text-gray-600">
-                            <div>Status: @npc.Status</div>
-                            <div>
-                                Character:
-                                @if (npc.Character != null)
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-medium">@npc.CharacterName</h3>
+                                @if (npc.Character?.CharacterType == CharacterType.NonPlayerCharacter)
                                 {
-                                    <span>@npc.Character.PersonalInfo.Name</span>
+                                    <Badge Variant="error" Size="sm" Rounded="full" WithBorder="false">НПС</Badge>
+                                }
+                                else
+                                {
+                                    <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">Преген</Badge>
                                 }
                             </div>
+                            <Button OnClick="() => SelectNpc(npc)" Variant="info" Size="sm">
+                                Выбрать
+                            </Button>
+                        </div>
+                        <div class="mt-1 text-sm text-gray-600">
+                            @if (!string.IsNullOrEmpty(npc.Character?.PersonalInfo?.Occupation))
+                            {
+                                <span class="mr-3">@npc.Character.PersonalInfo.Occupation</span>
+                            }
+                            @if (npc.Character?.PersonalInfo?.Age is not null)
+                            {
+                                <span>@npc.Character.PersonalInfo.Age лет</span>
+                            }
                         </div>
                     </div>
                 }
@@ -62,14 +87,15 @@
         </div>
     </ChildContent>
     <FooterContent>
-		<Button OnClick="Hide" Variant="secondary">     Cancel </Button>
-		<Button OnClick="AddNpcToScenario" Variant="info" IsDisabled="@(_selectedNpc == null)">     Add NPC </Button>
+		<Button OnClick="Hide" Variant="secondary">Отмена</Button>
+		<Button OnClick="AddNpcToScenario" Variant="info" IsDisabled="@(_selectedNpc == null)">Добавить</Button>
     </FooterContent>
 </Modal>
 
 @code {
     [Parameter] public Guid ScenarioId { get; set; }
     [Parameter] public EventCallback<CharacterStorageDto> OnNpcAdded { get; set; }
+    [Parameter] public CharacterType? FilterByType { get; set; }
 
     [Inject] private CharacterService CharacterService { get; set; } = null!;
 
@@ -78,24 +104,44 @@
     private List<CharacterStorageDto> _availableNpcs = [];
     private CharacterStorageDto? _selectedNpc;
     private string? _errorMessage;
-    // Loading state tracked in UI
+    private NpcRole _selectedRole = NpcRole.Neutral;
 
-    private IEnumerable<CharacterStorageDto> FilteredNpcs =>
-        (string.IsNullOrWhiteSpace(_searchTerm)
-            ? _availableNpcs
-            : _availableNpcs.Where(n => n.CharacterName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)))
-        .Take(5);
+    private string ModalTitle => FilterByType switch
+    {
+        CharacterType.NonPlayerCharacter => "Добавить НПС в сценарий",
+        CharacterType.PlayerCharacter => "Добавить преген-персонажа в сценарий",
+        _ => "Добавить персонажа в сценарий"
+    };
+
+    private IEnumerable<CharacterStorageDto> FilteredNpcs
+    {
+        get
+        {
+            IEnumerable<CharacterStorageDto> result = _availableNpcs;
+
+            if (FilterByType.HasValue)
+            {
+                result = result.Where(n => n.Character?.CharacterType == FilterByType.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                result = result.Where(n => n.CharacterName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return result.Take(10);
+        }
+    }
 
     public async Task Show()
     {
         _selectedNpc = null;
         _searchTerm = string.Empty;
         _errorMessage = null;
+        _selectedRole = NpcRole.Neutral;
 
-        // Load data before showing the modal
         await LoadAvailableNpcs();
 
-        // Now show the modal with data loaded
         _isVisible = true;
         await InvokeAsync(StateHasChanged);
     }
@@ -136,7 +182,8 @@
 
         try
         {
-            var addedNpc = await CharacterService.SaveCharacterTemplateWithScenarioAsync(_selectedNpc.Id, ScenarioId);
+            var addedNpc = await CharacterService.SaveCharacterTemplateWithScenarioAsync(
+                _selectedNpc.Id, ScenarioId, _selectedRole);
             await OnNpcAdded.InvokeAsync(addedNpc);
             _errorMessage = null;
             Hide();

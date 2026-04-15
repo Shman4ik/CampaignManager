@@ -1,3 +1,5 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Extensions
 @inject NavigationManager NavigationManager
 
 <div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
@@ -38,8 +40,28 @@
             </div>
         </div>
 
-        <!-- Tags section -->
-        <div class="text-sm text-gray-600 mb-3 gap-2">
+        <!-- Type and Role badges -->
+        <div class="flex flex-wrap gap-1.5 mb-3">
+            @if (Template.Character?.CharacterType == CharacterType.NonPlayerCharacter)
+            {
+                <Badge Variant="error" Size="sm" Rounded="full" WithBorder="false">
+                    <i class="fa-solid fa-masks-theater mr-1"></i>НПС
+                </Badge>
+            }
+            else
+            {
+                <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">
+                    <i class="fa-solid fa-user mr-1"></i>Преген
+                </Badge>
+            }
+
+            @if (Template.ScenarioId.HasValue && Template.Character?.CharacterType == CharacterType.NonPlayerCharacter)
+            {
+                <Badge Variant="@GetRoleBadgeVariant(Template.NpcRole)" Size="sm" Rounded="full" WithBorder="false">
+                    @Template.NpcRole.ToRussianString()
+                </Badge>
+            }
+
             @if (!string.IsNullOrEmpty(Template.Character?.PersonalInfo?.Occupation))
             {
                 <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">
@@ -59,6 +81,21 @@
                 </Badge>
             }
         </div>
+
+        <!-- NPC Role selector (only for NPCs linked to scenario) -->
+        @if (Template.ScenarioId.HasValue && Template.Character?.CharacterType == CharacterType.NonPlayerCharacter && OnRoleChanged.HasDelegate)
+        {
+            <div class="mb-3">
+                <select value="@Template.NpcRole"
+                        @onchange="HandleRoleChanged"
+                        class="text-sm px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-accent-500">
+                    @foreach (var role in Enum.GetValues<NpcRole>())
+                    {
+                        <option value="@role">@role.ToRussianString()</option>
+                    }
+                </select>
+            </div>
+        }
 
         <!-- Personal info and Image row -->
         <div class="flex flex-col md:flex-row gap-4 mb-6">
@@ -109,9 +146,25 @@
 
     [Parameter] public EventCallback<CharacterStorageDto> OnLinkToScenario { get; set; }
 
+    [Parameter] public EventCallback<(CharacterStorageDto Template, NpcRole Role)> OnRoleChanged { get; set; }
+
     private void EditTemplate(Guid id)
     {
         NavigationManager.NavigateTo($"/character/{id}");
     }
 
+    private async Task HandleRoleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<NpcRole>(e.Value?.ToString(), out var role))
+        {
+            await OnRoleChanged.InvokeAsync((Template, role));
+        }
+    }
+
+    private static string GetRoleBadgeVariant(NpcRole role) => role switch
+    {
+        NpcRole.Enemy => "error",
+        NpcRole.Ally => "success",
+        _ => "secondary"
+    };
 }

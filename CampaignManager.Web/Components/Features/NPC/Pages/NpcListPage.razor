@@ -1,6 +1,7 @@
 ﻿@page "/npcs"
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.NPC.Components
 @using CampaignManager.Web.Utilities.Services
@@ -85,6 +86,25 @@ else
             </nav>
         </div>
 
+        @if (_activeTab == "npcs")
+        {
+            <div class="flex gap-2 mb-4">
+                <button type="button"
+                        class="px-3 py-1 text-xs font-medium rounded-full transition-colors @(_roleFilter is null ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")"
+                        @onclick="() => _roleFilter = null">
+                    Все роли
+                </button>
+                @foreach (var role in Enum.GetValues<NpcRole>())
+                {
+                    <button type="button"
+                            class="px-3 py-1 text-xs font-medium rounded-full transition-colors @(_roleFilter == role ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")"
+                            @onclick="() => _roleFilter = role">
+                        @role.ToRussianString()
+                    </button>
+                }
+            </div>
+        }
+
         <!-- Card Grid View -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             @foreach (var template in FilteredTemplates)
@@ -132,11 +152,14 @@ else
     private bool _showDeleteConfirmation = false;
     private CharacterStorageDto? _templateToDelete;
     private string _activeTab = "all";
+    private NpcRole? _roleFilter;
 
     private IEnumerable<CharacterStorageDto> FilteredTemplates => _activeTab switch
     {
         "pregens" => _pregens,
-        "npcs" => _npcs,
+        "npcs" => _roleFilter.HasValue
+            ? _npcs.Where(t => t.NpcRole == _roleFilter.Value)
+            : _npcs,
         _ => _characterTemplates ?? []
     };
 

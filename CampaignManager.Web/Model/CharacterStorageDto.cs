@@ -35,6 +35,11 @@ public class CharacterStorageDto : BaseDataBaseEntity
     public CampaignPlayer? CampaignPlayer { get; set; }
 
     /// <summary>
+    ///     Роль НПС в сценарии (враг, союзник, нейтральный).
+    /// </summary>
+    public NpcRole NpcRole { get; set; } = NpcRole.Neutral;
+
+    /// <summary>
     ///     Идентификатор сценария, к которому привязан шаблон персонажа.
     /// </summary>
     public Guid? ScenarioId { get; set; }

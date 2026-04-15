@@ -78,4 +78,15 @@ public static class EnumExtensions
             _ => formula.ToString()
         };
     }
+
+    public static string ToRussianString(this NpcRole role)
+    {
+        return role switch
+        {
+            NpcRole.Neutral => "Нейтральный",
+            NpcRole.Enemy => "Враг",
+            NpcRole.Ally => "Союзник",
+            _ => role.ToString()
+        };
+    }
 }

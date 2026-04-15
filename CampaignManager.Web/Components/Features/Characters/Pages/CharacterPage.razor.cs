@@ -28,6 +28,8 @@ public partial class CharacterPage
 
     // Determine if we're in NPC creation mode based on the URL segment after CampaignId
     [Parameter] public string? Npc { get; set; }
+
+    [SupplyParameterFromQuery] public Guid? ScenarioId { get; set; }
     private bool IsTemplate => Npc is "template" or "pregen";
     private bool IsNpc => Npc is "npc" or "template" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
 
@@ -182,8 +184,20 @@ public partial class CharacterPage
                 {
                     Character.Id = createdCharacter.Id;
                     CharacterId = createdCharacter.Id;
-                    ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно создан!", "success");
-                    NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
+
+                    // If created from scenario, link to it and redirect back
+                    if (ScenarioId.HasValue && ScenarioId.Value != Guid.Empty)
+                    {
+                        await CharacterService.SaveCharacterTemplateWithScenarioAsync(
+                            createdCharacter.Id, ScenarioId.Value);
+                        ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} создан и привязан к сценарию!", "success");
+                        NavigationManager.NavigateTo($"/scenarios/{ScenarioId.Value}", replace: true);
+                    }
+                    else
+                    {
+                        ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно создан!", "success");
+                        NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
+                    }
                 }
                 else
                 {

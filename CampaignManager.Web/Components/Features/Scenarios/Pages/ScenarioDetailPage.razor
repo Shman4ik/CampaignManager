@@ -8,6 +8,7 @@
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Components
+@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
@@ -335,26 +336,71 @@ else
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Character Templates Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <!-- NPC Section -->
             <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
+                <div class="bg-red-50 px-6 py-4 border-b border-red-200">
                     <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold">Шаблоны персонажей</h2>
-                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddNpcModal">
-                            <i class="fas fa-plus"></i> <span>Добавить</span>
-                        </button>
+                        <h2 class="text-lg font-semibold text-red-800">
+                            <i class="fa-solid fa-masks-theater mr-2"></i>НПС сценария
+                            <span class="text-sm font-normal text-red-600 ml-1">(@_scenarioNpcs.Count)</span>
+                        </h2>
+                        <div class="flex gap-1">
+                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewNpc">
+                                <i class="fas fa-plus"></i> <span>Создать</span>
+                            </button>
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddNpcModal">
+                                <i class="fas fa-link"></i> <span>Из шаблонов</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="p-4">
-                    @if (_characterTemplates.Count == 0)
+                    @if (_scenarioNpcs.Count == 0)
                     {
-                        <p class="text-gray-500 text-center py-4">Нет привязанных шаблонов персонажей.</p>
+                        <p class="text-gray-500 text-center py-4">Нет НПС в сценарии.</p>
                     }
                     else
                     {
                         <div class="space-y-4">
-                            @foreach (var template in _characterTemplates)
+                            @foreach (var template in _scenarioNpcs)
+                            {
+                                <CharacterTemplateCard Template="template"
+                                                      OnDelete="RemoveCharacterTemplate"
+                                                      OnRoleChanged="HandleNpcRoleChanged"/>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Pregen Characters Section -->
+            <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                <div class="bg-blue-50 px-6 py-4 border-b border-blue-200">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-blue-800">
+                            <i class="fa-solid fa-user mr-2"></i>Преген-персонажи
+                            <span class="text-sm font-normal text-blue-600 ml-1">(@_scenarioPregens.Count)</span>
+                        </h2>
+                        <div class="flex gap-1">
+                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewPregen">
+                                <i class="fas fa-plus"></i> <span>Создать</span>
+                            </button>
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddPregenModal">
+                                <i class="fas fa-link"></i> <span>Из шаблонов</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4">
+                    @if (_scenarioPregens.Count == 0)
+                    {
+                        <p class="text-gray-500 text-center py-4">Нет преген-персонажей.</p>
+                    }
+                    else
+                    {
+                        <div class="space-y-4">
+                            @foreach (var template in _scenarioPregens)
                             {
                                 <CharacterTemplateCard Template="template" OnDelete="RemoveCharacterTemplate"/>
                             }
@@ -362,7 +408,9 @@ else
                     }
                 </div>
             </div>
+        </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Creatures Section -->
             <div class="bg-white shadow-md rounded-lg overflow-hidden">
                 <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
@@ -498,9 +546,16 @@ else
     </FooterContent>
 </Modal>
 
-<!-- Add NPC Modal -->
+<!-- Add NPC Modal (filtered to NonPlayerCharacter) -->
 <AddNpcModal @ref="_addNpcModal"
              ScenarioId="Id"
+             FilterByType="CharacterType.NonPlayerCharacter"
+             OnNpcAdded="HandleNpcAdded"/>
+
+<!-- Add Pregen Modal (filtered to PlayerCharacter) -->
+<AddNpcModal @ref="_addPregenModal"
+             ScenarioId="Id"
+             FilterByType="CharacterType.PlayerCharacter"
              OnNpcAdded="HandleNpcAdded"/>
 
 <!-- Add Creature Modal -->
@@ -536,6 +591,12 @@ else
     private Guid _selectedCampaignId = Guid.Empty;
     private List<CharacterStorageDto> _characterTemplates = [];
 
+    private List<CharacterStorageDto> _scenarioNpcs =>
+        _characterTemplates.Where(t => t.Character?.CharacterType == CharacterType.NonPlayerCharacter).ToList();
+
+    private List<CharacterStorageDto> _scenarioPregens =>
+        _characterTemplates.Where(t => t.Character?.CharacterType == CharacterType.PlayerCharacter).ToList();
+
     // Play mode state
     private Guid? _selectedLocationId;
     private bool _keyFactsPanelCollapsed;
@@ -552,6 +613,7 @@ else
 
     // Modal references
     private AddNpcModal? _addNpcModal;
+    private AddNpcModal? _addPregenModal;
     private AddCreatureModal? _addCreatureModal;
     private EditCreatureModal? _editCreatureModal;
     private AddItemModal? _addItemModal;
@@ -802,6 +864,40 @@ else
         }
 
         await _addNpcModal.Show();
+    }
+
+    private async Task ShowAddPregenModal()
+    {
+        if (_addPregenModal is null)
+        {
+            Logger.LogWarning("AddPregenModal reference is not initialized for scenario {ScenarioId}", Id);
+            return;
+        }
+
+        await _addPregenModal.Show();
+    }
+
+    private async Task HandleNpcRoleChanged((CharacterStorageDto Template, NpcRole Role) args)
+    {
+        try
+        {
+            await CharacterService.UpdateNpcRoleAsync(args.Template.Id, args.Role);
+            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating NPC role for {TemplateId}", args.Template.Id);
+        }
+    }
+
+    private void CreateNewNpc()
+    {
+        NavigationManager.NavigateTo($"/character/create/template?scenarioId={Id}");
+    }
+
+    private void CreateNewPregen()
+    {
+        NavigationManager.NavigateTo($"/character/create/pregen?scenarioId={Id}");
     }
 
 }

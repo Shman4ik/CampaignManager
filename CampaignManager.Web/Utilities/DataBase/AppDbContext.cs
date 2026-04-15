@@ -101,6 +101,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(c => c.Status)
                 .HasConversion<string>();
 
+            entity.Property(c => c.NpcRole)
+                .HasConversion<string>()
+                .HasDefaultValue(NpcRole.Neutral);
+
             // Используем JSONB для хранения данных персонажа
             entity.Property(c => c.Character)
                 .HasColumnType("jsonb")

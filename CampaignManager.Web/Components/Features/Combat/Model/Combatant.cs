@@ -76,7 +76,7 @@ public class Combatant
         MaxSanity = character.DerivedAttributes.Sanity.MaxValue;
         CurrentSanity = character.DerivedAttributes.Sanity.Value;
 
-        IsPlayer = true;
+        IsPlayer = character.CharacterType != CharacterType.NonPlayerCharacter;
         CharacterSource = character;
 
         // Боевые характеристики

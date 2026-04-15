@@ -216,8 +216,9 @@ public sealed class CharacterService(
     /// </summary>
     /// <param name="characterId">ID of the character template to copy</param>
     /// <param name="scenarioId">ID of the scenario to link the template to</param>
+    /// <param name="npcRole">Role of the NPC in the scenario</param>
     /// <returns>The newly created character template with scenario link</returns>
-    public async Task<CharacterStorageDto> SaveCharacterTemplateWithScenarioAsync(Guid characterId, Guid scenarioId)
+    public async Task<CharacterStorageDto> SaveCharacterTemplateWithScenarioAsync(Guid characterId, Guid scenarioId, NpcRole npcRole = NpcRole.Neutral)
     {
         try
         {
@@ -242,6 +243,7 @@ public sealed class CharacterService(
             character.Scenario = null;
             character.CampaignPlayerId = null;
             character.CampaignPlayer = null;
+            character.NpcRole = npcRole;
 
             dbContext.CharacterStorage.Add(character);
             await dbContext.SaveChangesAsync();
@@ -290,6 +292,18 @@ public sealed class CharacterService(
             logger.LogError(ex, $"Error retrieving character templates for scenario {scenarioId}: {ex.Message}");
             return new List<CharacterStorageDto>();
         }
+    }
+
+    public async Task UpdateNpcRoleAsync(Guid characterId, NpcRole role)
+    {
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var character = await dbContext.CharacterStorage.FindAsync(characterId);
+        if (character is null)
+            throw new KeyNotFoundException($"Character with ID {characterId} not found");
+
+        character.NpcRole = role;
+        character.LastUpdated = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
     }
 
     /// <summary>
