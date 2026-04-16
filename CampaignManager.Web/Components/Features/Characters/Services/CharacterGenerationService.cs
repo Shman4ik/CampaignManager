@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Characters.Model;
+﻿using System.Numerics;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Shared.Model;
 
@@ -535,18 +536,26 @@ public sealed class CharacterGenerationService(SkillService skillService)
             }
         }
 
-        // Добавить свободные слоты — выбрать случайные навыки, которых нет в списке профессии
-        var freeChoices = allSkills
-            .Where(s => s.Name != "Мифы Ктулху" && s.Name != "Уклонение" && !occupationSkillNames.Contains(s.Name))
-            .OrderBy(_ => _random.Next())
-            .Take(occupation.FreeSkillSlots)
-            .Select(s => s.Name)
-            .ToList();
-
-        foreach (var free in freeChoices)
+        // Добавить свободные слоты — взвешенный выбор по тегам профессии
+        if (occupation.FreeSkillSlots > 0)
         {
-            occupationSkillNames.Add(free);
-            log.Add("Навыки", $"Свободный слот профессии: {free}");
+            var freePool = allSkills
+                .Where(s => s.Name != "Мифы Ктулху" && s.Name != "Уклонение" && !occupationSkillNames.Contains(s.Name))
+                .ToList();
+
+            var freeChoices = PickWeighted(freePool,
+                    s => SkillWeight(s.Name, occupation.Tags),
+                    occupation.FreeSkillSlots)
+                .Select(s => s.Name)
+                .ToList();
+
+            foreach (var free in freeChoices)
+            {
+                occupationSkillNames.Add(free);
+                var weight = SkillWeight(free, occupation.Tags);
+                log.Add("Навыки", $"Свободный слот профессии: {free}",
+                    details: $"Вес: {weight}");
+            }
         }
 
         // Распределить очки профессии
@@ -557,7 +566,7 @@ public sealed class CharacterGenerationService(SkillService skillService)
         log.Add("Навыки", "--- Очки личного интереса ---",
             details: $"ИНТ × 2 = {character.Characteristics.Intelligence.Regular} × 2 = {personalPoints}");
 
-        DistributePersonalInterestPoints(allSkills, occupationSkillNames, personalPoints, log);
+        DistributePersonalInterestPoints(allSkills, occupationSkillNames, personalPoints, occupation, log);
 
         // Обновить производные для всех навыков
         foreach (var skill in allSkills)
@@ -606,7 +615,7 @@ public sealed class CharacterGenerationService(SkillService skillService)
         }
     }
 
-    private void DistributePersonalInterestPoints(List<Skill> allSkills, List<string> occupationSkillNames, int totalPoints, CharacterGenerationLog log)
+    private void DistributePersonalInterestPoints(List<Skill> allSkills, List<string> occupationSkillNames, int totalPoints, Occupation occupation, CharacterGenerationLog log)
     {
         // Личные интересы нельзя тратить на Мифы Ктулху и Средства
         var eligibleSkills = allSkills
@@ -615,11 +624,20 @@ public sealed class CharacterGenerationService(SkillService skillService)
 
         if (eligibleSkills.Count == 0) return;
 
-        // Умное распределение: пирамида — приоритет нескольким навыкам
-        var shuffled = eligibleSkills.OrderBy(_ => _random.Next()).ToList();
-        var primaryCount = Math.Min(4, shuffled.Count);
-        var primarySkills = shuffled.Take(primaryCount).ToList();
-        var secondarySkills = shuffled.Skip(primaryCount).ToList();
+        // Взвешенный выбор top-4 навыков по тегам профессии
+        var primaryCount = Math.Min(4, eligibleSkills.Count);
+        var primarySkills = PickWeighted(eligibleSkills,
+            s => SkillWeight(s.Name, occupation.Tags),
+            primaryCount);
+
+        foreach (var s in primarySkills)
+        {
+            var weight = SkillWeight(s.Name, occupation.Tags);
+            log.Add("Навыки", $"Личный интерес (приоритет): {s.Name}",
+                details: $"Вес: {weight}");
+        }
+
+        var secondarySkills = eligibleSkills.Where(s => !primarySkills.Contains(s)).OrderBy(_ => _random.Next()).ToList();
 
         var primaryPool = (int)(totalPoints * 0.7);
         var secondaryPool = totalPoints - primaryPool;
@@ -882,6 +900,74 @@ public sealed class CharacterGenerationService(SkillService skillService)
 
         log.Add("Финансы", $"Средства: {cr}%",
             details: $"Наличные: ${cash}, Активы: ${assets}, Карманные: ${pocket}");
+    }
+
+    #endregion
+
+    #region Взвешенный выбор навыков
+
+    /// <summary>
+    /// Коэффициент усиления за каждый совпавший тег. Вес = 1 + Multiplier × overlap.
+    /// При 0 совпадений навык всё равно имеет вес 1 (шум сохраняется).
+    /// </summary>
+    private const int TagWeightMultiplier = 4;
+
+    /// <summary>
+    /// Вычисляет вес навыка по пересечению тегов навыка и профессии.
+    /// </summary>
+    private static int SkillWeight(string skillName, OccupationTag occupationTags)
+    {
+        var skillTags = SkillTagCatalog.GetTags(skillName);
+        var overlap = BitOperations.PopCount((uint)(skillTags & occupationTags));
+        return 1 + TagWeightMultiplier * overlap;
+    }
+
+    /// <summary>
+    /// Взвешенный случайный выбор без повторений (roulette wheel).
+    /// Fallback на равномерный выбор при нулевой сумме весов.
+    /// </summary>
+    private List<T> PickWeighted<T>(IList<T> items, Func<T, int> weightFn, int count)
+    {
+        if (count <= 0 || items.Count == 0)
+            return [];
+
+        count = Math.Min(count, items.Count);
+        var result = new List<T>(count);
+        var available = new List<(T Item, int Weight)>(items.Count);
+
+        foreach (var item in items)
+            available.Add((item, Math.Max(0, weightFn(item))));
+
+        for (var i = 0; i < count; i++)
+        {
+            var totalWeight = available.Sum(a => a.Weight);
+
+            int selectedIndex;
+            if (totalWeight <= 0)
+            {
+                selectedIndex = _random.Next(available.Count);
+            }
+            else
+            {
+                var roll = _random.Next(totalWeight);
+                var cumulative = 0;
+                selectedIndex = 0;
+                for (var j = 0; j < available.Count; j++)
+                {
+                    cumulative += available[j].Weight;
+                    if (roll < cumulative)
+                    {
+                        selectedIndex = j;
+                        break;
+                    }
+                }
+            }
+
+            result.Add(available[selectedIndex].Item);
+            available.RemoveAt(selectedIndex);
+        }
+
+        return result;
     }
 
     #endregion

@@ -29,21 +29,25 @@ public sealed class OccupationService(
         CrudServiceHelper.DeleteAsync<Occupation>(dbContextFactory, cache, OccupationsCacheKey, id, logger);
 
     /// <summary>
-    /// Заполняет таблицу профессий начальными данными, если она пуста
+    /// Заполняет таблицу профессий начальными данными, если она пуста.
+    /// Для существующих профессий обновляет теги, если они не заданы.
     /// </summary>
     public async Task SeedDefaultOccupationsAsync()
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var defaults = Occupation.GetDefaultOccupations();
 
             if (await dbContext.Occupations.AnyAsync())
             {
                 logger.LogInformation("Таблица профессий уже содержит данные, сидирование пропущено");
+
+                // Идемпотентный upgrade: проставить теги существующим профессиям без тегов
+                await UpgradeOccupationTagsAsync(dbContext, defaults);
                 return;
             }
 
-            var defaults = Occupation.GetDefaultOccupations();
             foreach (var occupation in defaults)
                 occupation.Init();
 
@@ -56,6 +60,33 @@ public sealed class OccupationService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Ошибка при заполнении таблицы профессий");
+        }
+    }
+
+    private async Task UpgradeOccupationTagsAsync(AppDbContext dbContext, List<Occupation> defaults)
+    {
+        var defaultsByName = defaults
+            .ToDictionary(d => d.Name, d => d.Tags);
+
+        var occupationsWithoutTags = await dbContext.Occupations
+            .Where(o => o.Tags == OccupationTag.None)
+            .ToListAsync();
+
+        var updated = 0;
+        foreach (var occupation in occupationsWithoutTags)
+        {
+            if (defaultsByName.TryGetValue(occupation.Name, out var tags) && tags != OccupationTag.None)
+            {
+                occupation.Tags = tags;
+                updated++;
+            }
+        }
+
+        if (updated > 0)
+        {
+            await dbContext.SaveChangesAsync();
+            cache.Remove(OccupationsCacheKey);
+            logger.LogInformation("Обновлены теги у {Count} профессий", updated);
         }
     }
 }
