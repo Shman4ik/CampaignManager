@@ -1,0 +1,235 @@
+@namespace CampaignManager.Web.Components.Features.Characters.Components
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Shared
+@inject LlmCharacterValidationService LlmService
+@inject CharacterService CharacterService
+@inject ILogger<LlmSuggestionsModal> Logger
+
+<Modal IsVisible="@_isVisible"
+       OnClose="Close"
+       Title="@_title"
+       MaxWidth="4xl"
+       MaxHeight="@null"
+       HeaderColorScheme="@_headerColor">
+    <ChildContent>
+        @switch (_state)
+        {
+            case ModalState.Loading:
+                <div class="flex flex-col items-center justify-center py-8 gap-4">
+                    <LoadingIndicator Message="Анализ персонажа через LLM..." />
+                    @if (!string.IsNullOrEmpty(_streamingText))
+                    {
+                        <div class="w-full mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-[50vh] overflow-y-auto">
+                            <pre class="whitespace-pre-wrap text-sm text-gray-700 font-mono">@_streamingText<span class="animate-pulse">▌</span></pre>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-sm text-gray-500">Это может занять 30–120 секунд</p>
+                    }
+                    <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm mt-2" @onclick="Cancel">
+                        <i class="fa-solid fa-xmark mr-1"></i>Отмена
+                    </button>
+                </div>
+                break;
+
+            case ModalState.Review:
+                <div class="space-y-4">
+                    <p class="text-sm text-gray-600">
+                        Ниже — рекомендации LLM. Вы можете отредактировать текст перед применением.
+                    </p>
+                    <textarea @bind="_suggestions"
+                              class="cm-input w-full font-mono text-sm"
+                              rows="16"
+                              placeholder="Рекомендации LLM..."></textarea>
+                </div>
+                break;
+
+            case ModalState.Applying:
+                <div class="flex flex-col items-center justify-center py-12 gap-4">
+                    <LoadingIndicator Message="Применение рекомендаций..." />
+                    <p class="text-sm text-gray-500">LLM исправляет персонажа</p>
+                </div>
+                break;
+
+            case ModalState.Error:
+                <div class="space-y-4">
+                    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+                        <div class="flex items-start gap-2">
+                            <i class="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                            <div>
+                                <p class="font-semibold">Ошибка</p>
+                                <p class="text-sm mt-1">@_errorMessage</p>
+                            </div>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(_suggestions))
+                    {
+                        <details class="text-sm">
+                            <summary class="cursor-pointer text-gray-500">Показать рекомендации</summary>
+                            <pre class="mt-2 bg-gray-50 p-3 rounded text-xs overflow-auto max-h-60">@_suggestions</pre>
+                        </details>
+                    }
+                </div>
+                break;
+        }
+    </ChildContent>
+    <FooterContent>
+        @switch (_state)
+        {
+            case ModalState.Review:
+                <button type="button" class="cm-btn cm-btn-secondary" @onclick="Close">Закрыть</button>
+                <button type="button" class="cm-btn cm-btn-success" @onclick="ApplyAsync" disabled="@string.IsNullOrWhiteSpace(_suggestions)">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Применить и сохранить
+                </button>
+                break;
+            case ModalState.Error:
+                <button type="button" class="cm-btn cm-btn-secondary" @onclick="Close">Закрыть</button>
+                <button type="button" class="cm-btn cm-btn-info" @onclick="RetryAsync">
+                    <i class="fa-solid fa-rotate-right mr-1"></i>Повторить
+                </button>
+                break;
+        }
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public Character? Character { get; set; }
+    [Parameter] public EventCallback<Character> OnApplied { get; set; }
+
+    private enum ModalState { Loading, Review, Applying, Error }
+
+    private bool _isVisible;
+    private ModalState _state;
+    private string _suggestions = string.Empty;
+    private string _streamingText = string.Empty;
+    private string _errorMessage = string.Empty;
+    private CancellationTokenSource? _cts;
+
+    private string _title => _state switch
+    {
+        ModalState.Loading => "Проверка персонажа",
+        ModalState.Review => "Рекомендации LLM",
+        ModalState.Applying => "Применение изменений",
+        ModalState.Error => "Ошибка",
+        _ => "Проверка персонажа"
+    };
+
+    private string _headerColor => _state switch
+    {
+        ModalState.Error => "red",
+        ModalState.Review => "blue",
+        _ => "primary"
+    };
+
+    public async Task OpenAsync()
+    {
+        if (Character is null) return;
+
+        _isVisible = true;
+        _state = ModalState.Loading;
+        _suggestions = string.Empty;
+        _streamingText = string.Empty;
+        _errorMessage = string.Empty;
+        StateHasChanged();
+
+        await ValidateAsync();
+    }
+
+    private async Task ValidateAsync()
+    {
+        if (Character is null) return;
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _streamingText = string.Empty;
+
+        try
+        {
+            _state = ModalState.Loading;
+            StateHasChanged();
+
+            await foreach (var chunk in LlmService.ValidateCharacterStreamingAsync(Character, _cts.Token))
+            {
+                _streamingText += chunk;
+                StateHasChanged();
+            }
+
+            _suggestions = _streamingText;
+            _state = ModalState.Review;
+        }
+        catch (OperationCanceledException)
+        {
+            if (_isVisible)
+            {
+                _errorMessage = "Операция отменена";
+                _state = ModalState.Error;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LLM validation failed for character {CharacterId}", Character.Id);
+            _errorMessage = ex.Message;
+            _state = ModalState.Error;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (Character is null || string.IsNullOrWhiteSpace(_suggestions)) return;
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            _state = ModalState.Applying;
+            StateHasChanged();
+
+            // Load fresh character from DB to avoid concurrent edit issues
+            var fresh = await CharacterService.GetCharacterByIdAsync(Character.Id);
+            var original = fresh?.Character ?? Character;
+
+            var updated = await LlmService.ApplySuggestionsAsync(original, _suggestions, _cts.Token);
+
+            await OnApplied.InvokeAsync(updated);
+            _isVisible = false;
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "Операция отменена";
+            _state = ModalState.Error;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LLM apply failed for character {CharacterId}", Character.Id);
+            _errorMessage = ex.Message;
+            _state = ModalState.Error;
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task RetryAsync()
+    {
+        await ValidateAsync();
+    }
+
+    private void Cancel()
+    {
+        _cts?.Cancel();
+    }
+
+    private void Close()
+    {
+        _cts?.Cancel();
+        _isVisible = false;
+    }
+}

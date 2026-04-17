@@ -7,6 +7,7 @@ using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
@@ -22,6 +23,8 @@ public partial class CharacterPage
     [Inject] private OccupationService OccupationService { get; set; } = default!;
     [Inject] private SkillService SkillService { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
+    [Inject] private LlmCharacterValidationService LlmService { get; set; } = default!;
+    [Inject] private IdentityService IdentityService { get; set; } = default!;
 
     [Parameter] public Guid? CharacterId { get; set; }
     [Parameter] public Guid? CampaignId { get; set; }
@@ -44,6 +47,8 @@ public partial class CharacterPage
     private CharacterGenerationLog? _generationLog;
     private bool _showGenerationLog = true;
     private bool _showGenerateModal;
+    private bool _isKeeper;
+    private LlmSuggestionsModal? _llmModal;
 
     // Section visibility state
     private readonly Dictionary<string, bool> _sectionVisibility = new()
@@ -74,6 +79,7 @@ public partial class CharacterPage
         try
         {
             _isLoading = true;
+            _isKeeper = await IdentityService.IsKeeper();
             await LoadCharacterDataAsync();
         }
         catch (Exception ex)
@@ -233,6 +239,20 @@ public partial class CharacterPage
     private void OpenGenerateModal() => _showGenerateModal = true;
 
     private void CloseGenerateModal() => _showGenerateModal = false;
+
+    private async Task OpenLlmModal()
+    {
+        if (_llmModal is not null)
+            await _llmModal.OpenAsync();
+    }
+
+    private async Task HandleLlmApplied(Character updated)
+    {
+        await CharacterService.UpdateCharacterAsync(updated);
+        CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(updated.Id);
+        Character = CharacterStorageDto?.Character;
+        ShowNotification("Персонаж обновлён по рекомендациям LLM", "success");
+    }
 
     private async Task HandleGenerate(GenerateCharacterModal.GenerationParameters parameters)
     {
