@@ -254,7 +254,6 @@ builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
-builder.Services.AddHostedService<WeaponDataMigrationService>();
 builder.Services.AddScoped<SpellService>();
 builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<MarkdownService>();
@@ -262,7 +261,6 @@ builder.Services.AddScoped<MarkdownService>();
 // Register scenario management services
 builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<CreatureService>();
-builder.Services.AddScoped<CreatureDataMigrationService>();
 builder.Services.AddScoped<ItemService>();
 
 //Register skills service
@@ -287,13 +285,10 @@ builder.Services.AddSingleton<LlmClientFactory>();
 builder.Services.Configure<LlmValidationOptions>(
     builder.Configuration.GetSection(LlmValidationOptions.SectionName));
 builder.Services.AddScoped<LlmCharacterValidationService>();
-builder.Services.AddScoped<LlmKnowledgeSeeder>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
-
-builder.Services.AddScoped<DbInitializer>();
 
 // Persist Data Protection keys to PostgreSQL so they survive container restarts and work across replicas
 builder.Services.AddDataProtection()
@@ -316,13 +311,6 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
-
-// Seed database on startup
-using (var scope = app.Services.CreateScope())
-{
-    var dbInitializer = scope.ServiceProvider.GetRequiredService<DbInitializer>();
-    await dbInitializer.InitializeDatabaseAsync();
-}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -350,9 +338,6 @@ app.MapDefaultEndpoints();
 
 app.MapAccountEndpoints();
 app.MapMinioEndpoints();
-app.MapCharacterMigrationEndpoints();
-app.MapCreatureMigrationEndpoints();
-app.MapBookMigrationEndpoints();
 
 // Enable middleware to serve generated OpenAPI specification in both JSON and YAML formats
 if (app.Environment.IsDevelopment())

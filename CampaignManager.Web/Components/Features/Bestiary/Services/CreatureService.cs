@@ -3,7 +3,6 @@ using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using System.Text.Json;
 
 namespace CampaignManager.Web.Components.Features.Bestiary.Services;
 
@@ -13,8 +12,7 @@ namespace CampaignManager.Web.Components.Features.Bestiary.Services;
 public sealed class CreatureService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
-    ILogger<CreatureService> logger,
-    IWebHostEnvironment env)
+    ILogger<CreatureService> logger)
 {
     private const string CreaturesCacheKey = "AllCreatures";
     private const int DefaultPageSize = 6;
@@ -101,79 +99,4 @@ public sealed class CreatureService(
     /// </summary>
     public Task<bool> DeleteCreatureAsync(Guid id) =>
         CrudServiceHelper.DeleteAsync<Creature>(dbContextFactory, cache, CreaturesCacheKey, id, logger);
-
-    /// <summary>
-    ///     Imports creatures from JSON files in the Data directory
-    /// </summary>
-    /// <returns>The number of creatures imported</returns>
-    public async Task<int> ImportCreaturesFromJsonFilesAsync()
-    {
-        try
-        {
-            var dataDirectory = Path.Combine(env.ContentRootPath, "Data");
-            if (!Directory.Exists(dataDirectory))
-            {
-                logger.LogWarning("Data directory not found at {DataDirectory}", dataDirectory);
-                return 0;
-            }
-
-            var jsonFiles = Directory.GetFiles(dataDirectory, "*.json");
-            if (jsonFiles.Length == 0)
-            {
-                logger.LogInformation("No JSON files found in the Data directory");
-                return 0;
-            }
-
-            var totalImported = 0;
-            JsonSerializerOptions options = new() { PropertyNameCaseInsensitive = true };
-
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
-            foreach (var jsonFile in jsonFiles)
-            {
-                logger.LogInformation("Processing file: {FileName}", Path.GetFileName(jsonFile));
-
-                try
-                {
-                    var jsonContent = await File.ReadAllTextAsync(jsonFile);
-                    var importedCreatures = JsonSerializer.Deserialize<List<Creature>>(jsonContent, options);
-
-                    if (importedCreatures == null || importedCreatures.Count == 0)
-                    {
-                        logger.LogWarning("No creatures found in file {FileName}", Path.GetFileName(jsonFile));
-                        continue;
-                    }
-
-                    foreach (var importedCreature in importedCreatures)
-                    {
-                        importedCreature.Init();
-                        await dbContext.Creatures.AddAsync(importedCreature);
-                        totalImported++;
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogError(ex, "Error deserializing JSON from file {FileName}", Path.GetFileName(jsonFile));
-                }
-            }
-
-            // Save all changes to the database
-            if (totalImported > 0)
-            {
-                await dbContext.SaveChangesAsync();
-
-                // Clear cache
-                cache.Remove(CreaturesCacheKey);
-
-                logger.LogInformation("Successfully imported {TotalImported} creatures", totalImported);
-            }
-
-            return totalImported;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error importing creatures from JSON files");
-            return 0;
-        }
-    }
 }
