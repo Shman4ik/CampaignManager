@@ -25,13 +25,13 @@ public sealed class CampaignService(
         var user = await identityService.GetUserAsync();
         if (user == null) return [];
 
-
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var userEmail = user.Email?.ToLower() ?? string.Empty;
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
             .Include(c => c.Players)
             .ThenInclude(cp => cp.Characters)
             .AsSplitQuery()
-            .Where(c => c.Players.Any(p => p.PlayerEmail == user.Email))
+            .Where(c => c.Players.Any(p => p.PlayerEmail.ToLower() == userEmail))
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
     }
@@ -46,10 +46,11 @@ public sealed class CampaignService(
         var user = await identityService.GetUserAsync();
         if (user == null) return null;
 
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var userEmail = user.Email?.ToLower() ?? string.Empty;
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.CampaignPlayers
-            .Include(p => p.Characters) // Include characters!
-            .Where(p => p.PlayerEmail == user.Email && p.CampaignId == campaignId)
+            .Include(p => p.Characters)
+            .Where(p => p.PlayerEmail.ToLower() == userEmail && p.CampaignId == campaignId)
             .SingleOrDefaultAsync();
     }
 
@@ -66,9 +67,10 @@ public sealed class CampaignService(
 
             logger.LogInformation("Пользователь {UserEmail} создаёт кампанию '{Name}'", userEmail, name);
 
-            Campaign campaign = new() { Name = name, Status = status, Era = era, KeeperEmail = userEmail, CreatedAt = DateTime.UtcNow, LastUpdated = DateTime.UtcNow };
+            Campaign campaign = new() { Name = name, Status = status, Era = era, KeeperEmail = userEmail };
+            campaign.Init();
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             dbContext.Campaigns.Add(campaign);
             await dbContext.SaveChangesAsync();
 
@@ -87,7 +89,7 @@ public sealed class CampaignService(
     /// </summary>
     public async Task<List<Campaign>> GetAvailableCompaniesAsync()
     {
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
             .Where(p => p.Status != CampaignStatus.Completed)
             .OrderByDescending(p => p.CreatedAt)
@@ -98,16 +100,15 @@ public sealed class CampaignService(
     {
         var userEmail = identityService.GetCurrentUserEmail();
         if (string.IsNullOrEmpty(userEmail))
-        {
-            return new List<Campaign>();
-        }
+            return [];
 
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var userEmailLower = userEmail.ToLower();
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
             .Include(c => c.Players)
             .ThenInclude(p => p.Characters)
             .AsSplitQuery()
-            .Where(c => c.KeeperEmail == userEmail || c.Players.Any(p => p.PlayerEmail == userEmail))
+            .Where(c => (c.KeeperEmail ?? string.Empty).ToLower() == userEmailLower || c.Players.Any(p => p.PlayerEmail.ToLower() == userEmailLower))
             .ToListAsync();
     }
 
@@ -118,7 +119,7 @@ public sealed class CampaignService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns
                 .Include(c => c.Players)
                 .FirstOrDefaultAsync(c => c.Id == campaignId);
@@ -170,7 +171,7 @@ public sealed class CampaignService(
     {
         try
         {
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns
                 .Include(c => c.Players)
                 .ThenInclude(p => p.Characters)
@@ -202,7 +203,7 @@ public sealed class CampaignService(
             if (user.Role == PlayerRole.Administrator) return true;
 
             // Check if user is campaign keeper
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns
                 .FirstOrDefaultAsync(c => c.Id == campaignId);
 
@@ -223,10 +224,11 @@ public sealed class CampaignService(
         var userEmail = identityService.GetCurrentUserEmail();
         if (string.IsNullOrEmpty(userEmail)) return [];
 
-        using var dbContext = await dbContextFactory.CreateDbContextAsync();
+        var userEmailLower = userEmail.ToLower();
+        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
             .Include(c => c.Players)
-            .Where(c => c.KeeperEmail == userEmail)
+            .Where(c => (c.KeeperEmail ?? string.Empty).ToLower() == userEmailLower)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync();
     }
@@ -245,7 +247,7 @@ public sealed class CampaignService(
             if (string.IsNullOrEmpty(userEmail))
                 return Result.Fail("Пользователь не авторизован");
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
 
             if (campaign is null)
@@ -289,8 +291,6 @@ public sealed class CampaignService(
             Status = CampaignStatus.Planning,
             Era = Eras.Classic,
             KeeperEmail = userEmail,
-            CreatedAt = DateTime.UtcNow,
-            LastUpdated = DateTime.UtcNow
         };
         campaign.Init();
 
@@ -314,7 +314,7 @@ public sealed class CampaignService(
             if (string.IsNullOrEmpty(userEmail))
                 return Result.Fail("Пользователь не авторизован");
 
-            using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var campaign = await dbContext.Campaigns.FirstOrDefaultAsync(c => c.Id == id);
 
             if (campaign is null)

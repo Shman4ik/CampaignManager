@@ -60,12 +60,12 @@ public sealed class CharacterService(
 
             await dbContext.SaveChangesAsync();
 
-            logger.LogInformation($"Character {character.Id} created by user {userId}");
+            logger.LogInformation("Character {CharacterId} created by user {UserEmail}", character.Id, userId);
             return character;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error creating character: {ex.Message}");
+            logger.LogError(ex, "Error creating character");
             throw;
         }
     }
@@ -88,7 +88,7 @@ public sealed class CharacterService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving all characters");
-            return new List<Character>();
+            return [];
         }
     }
 
@@ -109,7 +109,7 @@ public sealed class CharacterService(
         try
         {
             var userEmail = identityService.GetCurrentUserEmail();
-            logger.LogInformation($"Attempting to update character {character.Id} by user email {userEmail}");
+            logger.LogInformation("Attempting to update character {CharacterId} by user {UserEmail}", character.Id, userEmail);
 
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to update a character");
@@ -119,7 +119,7 @@ public sealed class CharacterService(
             var storageDto = await dbContext.CharacterStorage.FindAsync(character.Id);
             if (storageDto == null)
             {
-                logger.LogWarning($"Character with ID {character.Id} not found during update");
+                logger.LogWarning("Character {CharacterId} not found during update", character.Id);
                 throw new KeyNotFoundException($"Character with ID {character.Id} not found");
             }
 
@@ -131,7 +131,7 @@ public sealed class CharacterService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error updating character: {ex.Message}");
+            logger.LogError(ex, "Error updating character {CharacterId}", character.Id);
             throw;
         }
     }
@@ -181,11 +181,11 @@ public sealed class CharacterService(
             dbContext.Update(character);
 
             await dbContext.SaveChangesAsync();
-            logger.LogInformation($"Character {characterId} status changed to {newStatus} by user {userEmail}");
+            logger.LogInformation("Character {CharacterId} status changed to {Status} by user {UserEmail}", characterId, newStatus, userEmail);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error changing character status: {ex.Message}");
+            logger.LogError(ex, "Error changing status of character {CharacterId}", characterId);
             throw;
         }
     }
@@ -207,7 +207,7 @@ public sealed class CharacterService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving character templates");
-            return new List<CharacterStorageDto>();
+            return [];
         }
     }
 
@@ -288,8 +288,8 @@ public sealed class CharacterService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error retrieving character templates for scenario {scenarioId}: {ex.Message}");
-            return new List<CharacterStorageDto>();
+            logger.LogError(ex, "Error retrieving character templates for scenario {ScenarioId}", scenarioId);
+            return [];
         }
     }
 
@@ -476,12 +476,12 @@ public sealed class CharacterService(
 
             cache.Remove(PublishedScenariosCacheKey);
 
-            logger.LogInformation($"Character template {characterId} unlinked from scenario by user {userEmail}");
+            logger.LogInformation("Character template {CharacterId} unlinked from scenario by user {UserEmail}", characterId, userEmail);
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, $"Error unlinking character template from scenario: {ex.Message}");
+            logger.LogError(ex, "Error unlinking character template {CharacterId} from scenario", characterId);
             return false;
         }
     }
@@ -535,7 +535,7 @@ public sealed class CharacterService(
                 }
             }
 
-            logger.LogInformation($"Starting skill migration for {allCharacters.Count} characters with {allSkills.Count} wiki skills");
+            logger.LogInformation("Starting skill migration for {CharacterCount} characters with {SkillCount} wiki skills", allCharacters.Count, allSkills.Count);
 
             foreach (var characterStorage in allCharacters)
             {
@@ -617,7 +617,8 @@ public sealed class CharacterService(
 
             await dbContext.SaveChangesAsync();
 
-            logger.LogInformation($"Skill migration completed: {result.SkillsLinked} skills linked, {result.SkillsNotFound} not found, {result.CharactersUpdated} characters updated");
+            logger.LogInformation("Skill migration completed: {SkillsLinked} skills linked, {SkillsNotFound} not found, {CharactersUpdated} characters updated",
+                result.SkillsLinked, result.SkillsNotFound, result.CharactersUpdated);
             result.Success = true;
         }
         catch (Exception ex)
