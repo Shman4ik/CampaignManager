@@ -1,7 +1,7 @@
 ﻿using CampaignManager.Web.Components.Features.Admin.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
-using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
@@ -40,6 +40,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // User Preferences
     public DbSet<UserPreferences> UserPreferences { get; set; } = null!;
+
+    // LLM Knowledge Base
+    public DbSet<LlmKnowledgeEntry> LlmKnowledgeEntries { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -262,6 +265,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(p => p.UserEmail).IsRequired();
             entity.HasIndex(p => p.UserEmail).IsUnique();
             entity.Property(p => p.Preferences).HasColumnType("jsonb");
+        });
+
+        // LlmKnowledgeEntry Configuration
+        modelBuilder.Entity<LlmKnowledgeEntry>(entity =>
+        {
+            entity.ToTable("LlmKnowledgeEntries");
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.HasIndex(e => e.Key).IsUnique();
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
         });
 
         // EditHistoryEntry Configuration

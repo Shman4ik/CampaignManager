@@ -1,28 +1,28 @@
-using System.ClientModel;
-using System.Reflection;
 using System.Text.Json;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using OpenAI;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 public sealed class LlmCharacterValidationService(
+    LlmClientFactory llmClientFactory,
     IOptions<LlmValidationOptions> options,
-    IHostEnvironment env,
+    IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
     ILogger<LlmCharacterValidationService> logger)
 {
-    private static readonly Lazy<string> CoCRules = new(LoadEmbeddedRules);
+    private string? _rulesCache;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public bool IsEnabled => options.Value.Enabled && env.IsDevelopment();
+    public bool IsEnabled => llmClientFactory.IsEnabled;
 
     public async IAsyncEnumerable<string> ValidateCharacterStreamingAsync(
         Character character,
@@ -30,8 +30,8 @@ public sealed class LlmCharacterValidationService(
     {
         await EnsureAuthorizedAsync();
 
-        var chatClient = CreateChatClient();
-        var rules = CoCRules.Value;
+        var chatClient = llmClientFactory.CreateChatClient();
+        var rules = await LoadRulesAsync();
         var charContext = BuildCharacterContext(character);
         var skillsSummary = BuildSkillsSummary(character);
 
@@ -76,13 +76,20 @@ public sealed class LlmCharacterValidationService(
         var chatOptions = new ChatOptions
         {
             Temperature = options.Value.TemperatureValidate,
-            MaxOutputTokens = options.Value.MaxOutputTokensValidate
+            MaxOutputTokens = options.Value.MaxOutputTokensValidate,
+            TopP = options.Value.TopP,
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["chat_template_kwargs"] = new Dictionary<string, object?> { ["enable_thinking"] = options.Value.EnableThinking },
+                ["reasoning_budget"] = options.Value.ReasoningBudget
+            }
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(options.Value.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(llmClientFactory.TimeoutSeconds));
 
-        logger.LogInformation("Starting LLM streaming validation for character {CharacterId}", character.Id);
+        logger.LogInformation("Starting LLM streaming validation for character {CharacterId} via {Provider}",
+            character.Id, llmClientFactory.Provider);
 
         await foreach (var update in chatClient.GetStreamingResponseAsync(messages, chatOptions, cts.Token))
         {
@@ -165,8 +172,8 @@ public sealed class LlmCharacterValidationService(
     {
         await EnsureAuthorizedAsync();
 
-        var chatClient = CreateChatClient();
-        var rules = CoCRules.Value;
+        var chatClient = llmClientFactory.CreateChatClient();
+        var rules = await LoadRulesAsync();
         var originalJson = JsonSerializer.Serialize(original, JsonOptions);
 
         var messages = new List<ChatMessage>
@@ -203,13 +210,15 @@ public sealed class LlmCharacterValidationService(
         var chatOptions = new ChatOptions
         {
             Temperature = options.Value.TemperatureApply,
-            ResponseFormat = ChatResponseFormat.Json
+            ResponseFormat = ChatResponseFormat.Json,
+            TopP = options.Value.TopP
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(options.Value.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(llmClientFactory.TimeoutSeconds));
 
-        logger.LogInformation("Applying LLM suggestions for character {CharacterId}", original.Id);
+        logger.LogInformation("Applying LLM suggestions for character {CharacterId} via {Provider}",
+            original.Id, llmClientFactory.Provider);
 
         var sb = new System.Text.StringBuilder();
         await foreach (var update in chatClient.GetStreamingResponseAsync(messages, chatOptions, cts.Token))
@@ -292,24 +301,6 @@ public sealed class LlmCharacterValidationService(
         }
     }
 
-    private IChatClient CreateChatClient()
-    {
-        var opts = options.Value;
-        var endpoint = new Uri(opts.OllamaEndpoint + "/v1");
-
-        var openAiClient = new OpenAIClient(
-            new ApiKeyCredential("ollama"),
-            new OpenAIClientOptions
-            {
-                Endpoint = endpoint,
-                NetworkTimeout = TimeSpan.FromSeconds(opts.TimeoutSeconds)
-            });
-
-        return openAiClient
-            .GetChatClient(opts.Model)
-            .AsIChatClient();
-    }
-
     private async Task EnsureAuthorizedAsync()
     {
         if (!IsEnabled)
@@ -319,28 +310,23 @@ public sealed class LlmCharacterValidationService(
             throw new InvalidOperationException("Только Keeper/Administrator может использовать LLM-валидацию");
     }
 
-    private static string LoadEmbeddedRules()
+    private async Task<string> LoadRulesAsync()
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        var resourceNames = assembly.GetManifestResourceNames()
-            .Where(n => n.Contains("CoCRules", StringComparison.OrdinalIgnoreCase) &&
-                        n.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(n => n)
-            .ToList();
+        if (_rulesCache is not null)
+            return _rulesCache;
 
-        if (resourceNames.Count == 0)
-            return "Правила не найдены. Используй свои знания о Call of Cthulhu 7e.";
+        await using var db = await dbContextFactory.CreateDbContextAsync();
+        var parts = await db.LlmKnowledgeEntries
+            .Where(e => e.IsActive)
+            .OrderBy(e => e.SortOrder)
+            .Select(e => e.Content)
+            .ToListAsync();
 
-        var parts = new List<string>();
-        foreach (var resourceName in resourceNames)
-        {
-            using var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream is null) continue;
+        _rulesCache = parts.Count > 0
+            ? string.Join("\n\n---\n\n", parts)
+            : "Правила не найдены. Используй свои знания о Call of Cthulhu 7e.";
 
-            using var reader = new StreamReader(stream);
-            parts.Add(reader.ReadToEnd());
-        }
-
-        return string.Join("\n\n---\n\n", parts);
+        logger.LogDebug("Loaded {Count} LLM knowledge entries from database", parts.Count);
+        return _rulesCache;
     }
 }

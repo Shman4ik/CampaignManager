@@ -9,6 +9,7 @@ namespace CampaignManager.Web.Utilities.DataBase;
 public class DbInitializer(
     IDbContextFactory<AppDbContext> dbContextFactory,
     OccupationService occupationService,
+    LlmKnowledgeSeeder llmKnowledgeSeeder,
     ILogger<DbInitializer> logger)
 {
     /// <summary>
@@ -22,6 +23,7 @@ public class DbInitializer(
             await dbContext.Database.MigrateAsync();
 
             await occupationService.SeedDefaultOccupationsAsync();
+            await llmKnowledgeSeeder.SeedAsync();
 
             logger.LogInformation("База данных успешно инициализирована");
         }
