@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Books.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
@@ -89,4 +90,11 @@ public static class EnumExtensions
             _ => role.ToString()
         };
     }
+
+    public static string ToRussianString(this BookType type) => type switch
+    {
+        BookType.MythosBook => "Книга Мифов",
+        BookType.OccultBook => "Книга по оккультизму",
+        _ => type.ToString()
+    };
 }

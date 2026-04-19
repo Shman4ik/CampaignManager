@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Admin.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Books.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Items.Model;
@@ -24,6 +25,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; } = null!;
     public DbSet<Weapon> Weapons { get; set; } = null!;
     public DbSet<Spell> Spells { get; set; } = null!;
+    public DbSet<Book> Books { get; set; } = null!;
     public DbSet<SkillModel> Skills { get; set; } = null!;
 
     // Scenario Management DbSets
@@ -139,6 +141,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Настройка для хранения списка альтернативных имен
             entity.Property(s => s.AlternativeNames)
                 .HasColumnType("jsonb");
+        });
+
+        // Настройка книг Мифов / оккультных книг
+        modelBuilder.Entity<Book>(entity =>
+        {
+            entity.ToTable("Books");
+            entity.Property(b => b.Name).IsRequired().HasMaxLength(300);
+            entity.HasIndex(b => b.Name).IsUnique();
+            entity.Property(b => b.BookType).HasConversion<string>().IsRequired();
+            entity.Property(b => b.Language).HasMaxLength(100);
+            entity.Property(b => b.Year).HasMaxLength(50);
+            entity.Property(b => b.Author).HasMaxLength(300);
+            entity.Property(b => b.SanityLoss).HasMaxLength(50);
+            entity.Property(b => b.Description).HasMaxLength(10000);
+            entity.Property(b => b.ImageUrl).HasMaxLength(500);
+            entity.Property(b => b.AlternativeNames).HasColumnType("jsonb");
+            entity.Property(b => b.PossibleSpells).HasColumnType("jsonb");
         });
 
         // Настройка навыков

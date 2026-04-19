@@ -1,0 +1,436 @@
+@page "/books"
+@using CampaignManager.Web.Components.Features.Books.Components
+@using CampaignManager.Web.Components.Features.Books.Model
+@using CampaignManager.Web.Components.Features.Books.Services
+@using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Extensions
+@attribute [Authorize]
+@inject BookService BookService
+@inject ILogger<BooksPage> Logger
+@rendermode InteractiveServer
+
+<PageTitle>Книги - Campaign Manager</PageTitle>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 font-sans">
+    <h1 class="cm-h2 mb-4">Книги</h1>
+    <FilterPanel Title="Фильтры" @bind-IsExpanded="isSearchPanelVisible">
+        <ActionButtons>
+            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm text-xs" @onclick="ResetFilters">
+                <i class="fas fa-undo-alt"></i>
+                <span>Сбросить</span>
+            </button>
+            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddModal">
+                <i class="fas fa-plus"></i>
+                <span>Добавить</span>
+            </button>
+        </ActionButtons>
+        <ChildContent>
+            <BooksFilterControls
+                SearchQuery="@searchQuery"
+                SearchQueryChanged="@((string value) => { searchQuery = value; ApplyFilters(); })"
+                SelectedBookTypeFilter="@selectedBookTypeFilter"
+                SelectedBookTypeFilterChanged="@((BookType? value) => { selectedBookTypeFilter = value; ApplyFilters(); })"
+                SelectedLanguageFilter="@selectedLanguageFilter"
+                SelectedLanguageFilterChanged="@((string? value) => { selectedLanguageFilter = value; ApplyFilters(); })"
+                Languages="@Languages"
+                OnFiltersChanged="ApplyFilters" />
+        </ChildContent>
+    </FilterPanel>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <Alert Type="error" Title="Ошибка">
+            @errorMessage
+        </Alert>
+    }
+
+    @if (!paginatedBooks.Any())
+    {
+        <EmptyState
+            Title="Книги не найдены"
+            Message="Попробуйте изменить параметры фильтра или добавить новую книгу."
+            IconClass="fa-book">
+            <ActionButton>
+                <button @onclick="ShowAddModal"
+                        class="min-h-[44px] px-5 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-base font-semibold shadow-md transition-all duration-200">
+                    Добавить книгу
+                </button>
+            </ActionButton>
+        </EmptyState>
+    }
+    else
+    {
+        <BooksListView
+            Books="@paginatedBooks"
+            ExpandedBookId="@expandedBookId"
+            CurrentSortField="@sortField"
+            SortAscending="@sortAscending"
+            OnSortChanged="ToggleSort"
+            OnEdit="ShowEditModal"
+            OnDelete="ShowDeleteModal"
+            OnToggleExpand="@((Book book) => ToggleBookDetails(book))" />
+
+        <Pagination
+            CurrentPage="@currentPage"
+            TotalPages="@totalPages"
+            TotalItems="@filteredBooks.Count()"
+            ItemsPerPage="@booksPerPage"
+            ItemsLabel="книг"
+            OnPageChanged="GoToPage" />
+    }
+
+    <Modal IsVisible="@showModal"
+           OnClose="HideModal"
+           Title="@(isEditMode ? "Редактировать книгу" : "Добавить книгу")"
+           MaxWidth="4xl"
+           HeaderColorScheme="primary">
+        <ChildContent>
+            @if (!string.IsNullOrEmpty(modalErrorMessage))
+            {
+                <Alert Type="error" class="mb-6">
+                    @modalErrorMessage
+                </Alert>
+            }
+            <BookFormFields
+                Book="@editBook"
+                OnValidSubmit="HandleValidSubmit"
+                FormId="book-edit-form" />
+        </ChildContent>
+        <FooterContent>
+            <button type="button"
+                    class="cm-btn cm-btn-secondary"
+                    @onclick="HideModal">
+                Отмена
+            </button>
+            <button type="submit" form="book-edit-form"
+                    class="cm-btn cm-btn-primary">
+                Сохранить
+            </button>
+        </FooterContent>
+    </Modal>
+
+    <ConfirmationModal
+        IsVisible="@showDeleteModal"
+        OnConfirm="ConfirmDelete"
+        OnCancel="HideDeleteModal"
+        Title="Подтверждение удаления"
+        Message="Вы уверены, что хотите удалить эту книгу?"
+        ConfirmText="Удалить"
+        CancelText="Отмена"
+        IconType="warning">
+        <DetailsContent>
+            <p class="text-gray-700 text-base">
+                <span class="font-semibold text-gray-900">Название:</span> @(deleteBook?.Name)
+            </p>
+            <p class="text-gray-700 text-base">
+                <span class="font-semibold text-gray-900">Категория:</span> @(deleteBook?.BookType.ToRussianString())
+            </p>
+        </DetailsContent>
+    </ConfirmationModal>
+</div>
+
+@code {
+    private const int booksPerPage = 6;
+
+    private bool isSearchPanelVisible = true;
+    private bool showModal;
+    private bool showDeleteModal;
+    private bool isEditMode;
+
+    private List<Book>? books;
+    private string searchQuery = string.Empty;
+    private BookType? selectedBookTypeFilter;
+    private string? selectedLanguageFilter;
+
+    private Book editBook = new() { Name = string.Empty, BookType = BookType.MythosBook };
+    private Book? deleteBook;
+    private Guid? expandedBookId;
+
+    private string? errorMessage;
+    private string? modalErrorMessage;
+
+    private int currentPage = 1;
+    private int totalPages => Math.Max(1, (int)Math.Ceiling(filteredBooks.Count() / (double)booksPerPage));
+    private string? sortField;
+    private bool sortAscending = true;
+
+    private IQueryable<Book> filteredBooks => FilterBooks();
+    private IEnumerable<Book> paginatedBooks => filteredBooks
+        .Skip((currentPage - 1) * booksPerPage)
+        .Take(booksPerPage)
+        .ToList();
+
+    private IEnumerable<string> Languages => books?
+        .Where(b => !string.IsNullOrWhiteSpace(b.Language))
+        .Select(b => b.Language!.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(l => l, StringComparer.OrdinalIgnoreCase)
+        ?? Enumerable.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBooksAsync();
+    }
+
+    private async Task LoadBooksAsync()
+    {
+        errorMessage = null;
+        try
+        {
+            books = await BookService.GetAllBooksAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading books");
+            errorMessage = "Не удалось загрузить список книг. Пожалуйста, попробуйте позже.";
+            books = [];
+        }
+
+        currentPage = 1;
+        expandedBookId = null;
+    }
+
+    private void ApplyFilters()
+    {
+        currentPage = 1;
+        StateHasChanged();
+    }
+
+    private void ResetFilters()
+    {
+        searchQuery = string.Empty;
+        selectedBookTypeFilter = null;
+        selectedLanguageFilter = null;
+        ApplyFilters();
+    }
+
+    private IQueryable<Book> FilterBooks()
+    {
+        if (books is null)
+            return Enumerable.Empty<Book>().AsQueryable();
+
+        var query = books.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var term = searchQuery.Trim();
+            query = query.Where(b =>
+                (!string.IsNullOrWhiteSpace(b.Name) && b.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(b.Author) && b.Author.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(b.Description) && b.Description.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                b.AlternativeNames.Any(n => n.Contains(term, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (selectedBookTypeFilter.HasValue)
+        {
+            query = query.Where(b => b.BookType == selectedBookTypeFilter.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedLanguageFilter))
+        {
+            query = query.Where(b => !string.IsNullOrWhiteSpace(b.Language) &&
+                                     b.Language.Equals(selectedLanguageFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        query = sortField switch
+        {
+            nameof(Book.BookType) => sortAscending
+                ? query.OrderBy(b => b.BookType)
+                : query.OrderByDescending(b => b.BookType),
+            nameof(Book.Language) => sortAscending
+                ? query.OrderBy(b => b.Language)
+                : query.OrderByDescending(b => b.Language),
+            nameof(Book.Year) => sortAscending
+                ? query.OrderBy(b => b.Year)
+                : query.OrderByDescending(b => b.Year),
+            nameof(Book.Author) => sortAscending
+                ? query.OrderBy(b => b.Author)
+                : query.OrderByDescending(b => b.Author),
+            _ => sortAscending
+                ? query.OrderBy(b => b.Name)
+                : query.OrderByDescending(b => b.Name)
+        };
+
+        return query;
+    }
+
+    private void ToggleSort(string field)
+    {
+        if (sortField == field)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortField = field;
+            sortAscending = true;
+        }
+
+        currentPage = 1;
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page >= 1 && page <= totalPages)
+        {
+            currentPage = page;
+        }
+    }
+
+    private void ShowAddModal()
+    {
+        isEditMode = false;
+        editBook = new Book
+        {
+            Name = string.Empty,
+            BookType = BookType.MythosBook,
+            Language = null,
+            Year = null,
+            Author = null,
+            SanityLoss = null,
+            CthulhuMythosInitial = null,
+            CthulhuMythosFull = null,
+            MythosRating = null,
+            StudyWeeks = null,
+            OccultismBonus = null,
+            Description = string.Empty,
+            AlternativeNames = [],
+            PossibleSpells = [],
+            ImageUrl = null
+        };
+        modalErrorMessage = null;
+        showModal = true;
+    }
+
+    private void ShowEditModal(Book book)
+    {
+        isEditMode = true;
+        editBook = new Book
+        {
+            Id = book.Id,
+            Name = book.Name,
+            BookType = book.BookType,
+            Language = book.Language,
+            Year = book.Year,
+            Author = book.Author,
+            SanityLoss = book.SanityLoss,
+            CthulhuMythosInitial = book.CthulhuMythosInitial,
+            CthulhuMythosFull = book.CthulhuMythosFull,
+            MythosRating = book.MythosRating,
+            StudyWeeks = book.StudyWeeks,
+            OccultismBonus = book.OccultismBonus,
+            Description = book.Description,
+            AlternativeNames = book.AlternativeNames?.ToList() ?? [],
+            PossibleSpells = book.PossibleSpells?.ToList() ?? [],
+            ImageUrl = book.ImageUrl
+        };
+        modalErrorMessage = null;
+        showModal = true;
+    }
+
+    private void HideModal()
+    {
+        showModal = false;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        modalErrorMessage = null;
+        CleanBook(editBook);
+
+        try
+        {
+            if (isEditMode)
+            {
+                var updated = await BookService.UpdateBookAsync(editBook);
+                if (!updated)
+                {
+                    modalErrorMessage = "Не удалось обновить книгу.";
+                    return;
+                }
+            }
+            else
+            {
+                var added = await BookService.AddBookAsync(editBook);
+                if (!added)
+                {
+                    modalErrorMessage = "Не удалось добавить книгу. Возможно, книга с таким названием уже существует.";
+                    return;
+                }
+            }
+
+            showModal = false;
+            await LoadBooksAsync();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving book {BookName}", editBook.Name);
+            modalErrorMessage = $"Не удалось сохранить книгу: {ex.Message}";
+        }
+    }
+
+    private static void CleanBook(Book book)
+    {
+        book.Name = book.Name.Trim();
+        book.Language = string.IsNullOrWhiteSpace(book.Language) ? null : book.Language.Trim();
+        book.Year = string.IsNullOrWhiteSpace(book.Year) ? null : book.Year.Trim();
+        book.Author = string.IsNullOrWhiteSpace(book.Author) ? null : book.Author.Trim();
+        book.SanityLoss = string.IsNullOrWhiteSpace(book.SanityLoss) ? null : book.SanityLoss.Trim();
+        book.Description = (book.Description ?? string.Empty).Trim();
+        book.ImageUrl = string.IsNullOrWhiteSpace(book.ImageUrl) ? null : book.ImageUrl.Trim();
+        book.AlternativeNames = book.AlternativeNames
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        book.PossibleSpells = book.PossibleSpells
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private void ShowDeleteModal(Book book)
+    {
+        deleteBook = book;
+        showDeleteModal = true;
+    }
+
+    private void HideDeleteModal()
+    {
+        showDeleteModal = false;
+        deleteBook = null;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (deleteBook is null) return;
+
+        try
+        {
+            var deleted = await BookService.DeleteBookAsync(deleteBook.Id);
+            if (!deleted)
+            {
+                errorMessage = "Не удалось удалить книгу.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting book {BookId}", deleteBook.Id);
+            errorMessage = $"Не удалось удалить книгу: {ex.Message}";
+        }
+        finally
+        {
+            showDeleteModal = false;
+            deleteBook = null;
+            await LoadBooksAsync();
+            ApplyFilters();
+        }
+    }
+
+    private void ToggleBookDetails(Book book)
+    {
+        expandedBookId = expandedBookId == book.Id ? null : book.Id;
+    }
+}

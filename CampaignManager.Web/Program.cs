@@ -7,6 +7,7 @@ using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Spells.Services;
+using CampaignManager.Web.Components.Features.Books.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Components.Features.Chase.Services;
 using CampaignManager.Web.Components.Features.Combat.Services;
@@ -218,6 +219,11 @@ builder.Services.AddAuthorizationBuilder()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddTransient<IClaimsTransformation, RoleClaimsTransformation>();
 
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+});
+
 // Add OpenAPI services with comprehensive documentation (.NET 10 - OpenAPI 3.1)
 builder.Services.AddEndpointsApiExplorer();
 
@@ -250,6 +256,7 @@ builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddHostedService<WeaponDataMigrationService>();
 builder.Services.AddScoped<SpellService>();
+builder.Services.AddScoped<BookService>();
 builder.Services.AddScoped<MarkdownService>();
 
 // Register scenario management services
@@ -345,6 +352,7 @@ app.MapAccountEndpoints();
 app.MapMinioEndpoints();
 app.MapCharacterMigrationEndpoints();
 app.MapCreatureMigrationEndpoints();
+app.MapBookMigrationEndpoints();
 
 // Enable middleware to serve generated OpenAPI specification in both JSON and YAML formats
 if (app.Environment.IsDevelopment())

@@ -1,0 +1,80 @@
+@using CampaignManager.Web.Components.Features.Books.Model
+@using CampaignManager.Web.Extensions
+@namespace CampaignManager.Web.Components.Features.Books.Components
+
+<div class="flex flex-col lg:flex-row gap-3">
+    <input type="text"
+           value="@SearchQuery"
+           @oninput="HandleSearchInput"
+           placeholder="Поиск книг..."
+           class="cm-input !flex-1" />
+
+    <select value="@(SelectedBookTypeFilter?.ToString() ?? "")"
+            @onchange="HandleBookTypeChanged"
+            class="cm-input lg:!w-64">
+        <option value="">Все категории</option>
+        @foreach (var bt in Enum.GetValues<BookType>())
+        {
+            <option value="@bt" selected="@(SelectedBookTypeFilter == bt)">@bt.ToRussianString()</option>
+        }
+    </select>
+
+    <select value="@(SelectedLanguageFilter ?? "")"
+            @onchange="HandleLanguageChanged"
+            class="cm-input lg:!w-48">
+        <option value="">Все языки</option>
+        @foreach (var lang in LanguageOptions)
+        {
+            <option value="@lang" selected="@IsLanguageSelected(lang)">@lang</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public string SearchQuery { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> SearchQueryChanged { get; set; }
+
+    [Parameter] public BookType? SelectedBookTypeFilter { get; set; }
+    [Parameter] public EventCallback<BookType?> SelectedBookTypeFilterChanged { get; set; }
+
+    [Parameter] public string? SelectedLanguageFilter { get; set; }
+    [Parameter] public EventCallback<string?> SelectedLanguageFilterChanged { get; set; }
+
+    [Parameter] public IEnumerable<string> Languages { get; set; } = Enumerable.Empty<string>();
+    [Parameter] public EventCallback OnFiltersChanged { get; set; }
+
+    private IEnumerable<string> LanguageOptions
+        => Languages
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => l.Trim())
+            .Concat(!string.IsNullOrWhiteSpace(SelectedLanguageFilter) ? new[] { SelectedLanguageFilter!.Trim() } : Array.Empty<string>())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(l => l, StringComparer.OrdinalIgnoreCase);
+
+    private bool IsLanguageSelected(string lang)
+        => !string.IsNullOrWhiteSpace(SelectedLanguageFilter) &&
+           lang.Equals(SelectedLanguageFilter, StringComparison.OrdinalIgnoreCase);
+
+    private async Task HandleSearchInput(ChangeEventArgs e)
+    {
+        var text = (e.Value?.ToString() ?? string.Empty).Trim();
+        await SearchQueryChanged.InvokeAsync(text);
+        await OnFiltersChanged.InvokeAsync();
+    }
+
+    private async Task HandleBookTypeChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        BookType? parsed = string.IsNullOrWhiteSpace(value) ? null : Enum.Parse<BookType>(value);
+        await SelectedBookTypeFilterChanged.InvokeAsync(parsed);
+        await OnFiltersChanged.InvokeAsync();
+    }
+
+    private async Task HandleLanguageChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        await SelectedLanguageFilterChanged.InvokeAsync(normalized);
+        await OnFiltersChanged.InvokeAsync();
+    }
+}

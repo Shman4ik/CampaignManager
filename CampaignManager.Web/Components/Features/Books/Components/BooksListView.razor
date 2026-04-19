@@ -1,0 +1,235 @@
+@using CampaignManager.Web.Components.Features.Books.Model
+@using CampaignManager.Web.Components.Features.Books.Components
+@using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Extensions
+@namespace CampaignManager.Web.Components.Features.Books.Components
+
+<div class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+    <!-- Desktop Table View -->
+    <div class="hidden xl:block overflow-x-auto">
+        <table class="w-full text-sm sm:text-base">
+            <thead class="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+            <tr>
+                <SortableTableHeader
+                    Title="Название"
+                    FieldName="@nameof(Book.Name)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Категория"
+                    FieldName="@nameof(Book.BookType)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Язык"
+                    FieldName="@nameof(Book.Language)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Год"
+                    FieldName="@nameof(Book.Year)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <SortableTableHeader
+                    Title="Автор"
+                    FieldName="@nameof(Book.Author)"
+                    CurrentSortField="@CurrentSortField"
+                    SortAscending="@SortAscending"
+                    OnSortChanged="OnSortChanged" />
+
+                <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700">ЗМ / +Оккультизм</th>
+                <th class="px-4 sm:px-6 py-4 text-center font-semibold text-gray-700">Действия</th>
+            </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-100">
+            @foreach (var book in Books)
+            {
+                <BookTableRow
+                    Book="@book"
+                    IsExpanded="@(ExpandedBookId == book.Id)"
+                    OnEdit="OnEdit"
+                    OnDelete="OnDelete"
+                    OnToggleExpand="() => OnToggleExpand.InvokeAsync(book)" />
+            }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Mobile & Tablet Card View -->
+    <div class="xl:hidden">
+        <div class="divide-y divide-gray-200">
+            @foreach (var book in Books)
+            {
+                <div class="bg-white">
+                    <div class="p-4 flex justify-between items-start gap-3 cursor-pointer active:bg-gray-50"
+                         @onclick="() => OnToggleExpand.InvokeAsync(book)">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start gap-2 mb-2">
+                                <button @onclick:stopPropagation="true"
+                                        @onclick="() => OnToggleExpand.InvokeAsync(book)"
+                                        class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded transition-colors">
+                                    <i class="fas @(ExpandedBookId == book.Id ? "fa-chevron-up" : "fa-chevron-down")"></i>
+                                </button>
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-semibold text-gray-900 text-base truncate">@book.Name</h3>
+                                    <div class="mt-1">
+                                        <Badge Variant="@(book.BookType == BookType.MythosBook ? "error" : "secondary")" Size="sm">
+                                            @book.BookType.ToRussianString()
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ml-10 text-sm text-gray-700 flex flex-wrap gap-3">
+                                @if (!string.IsNullOrWhiteSpace(book.Language))
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-gray-500">Язык:</span>
+                                        <span>@book.Language</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(book.Author))
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-gray-500">Автор:</span>
+                                        <span>@book.Author</span>
+                                    </div>
+                                }
+                                @if (book.BookType == BookType.MythosBook && book.MythosRating.HasValue)
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-gray-500">ЗМ:</span>
+                                        <span>@book.MythosRating</span>
+                                    </div>
+                                }
+                                @if (book.BookType == BookType.OccultBook && book.OccultismBonus.HasValue)
+                                {
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-gray-500">+Оккультизм:</span>
+                                        <span>@(book.OccultismBonus)%</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="px-4 pb-4 ml-10">
+                        <div class="flex gap-2">
+                            <button @onclick:stopPropagation="true"
+                                    @onclick="() => OnEdit.InvokeAsync(book)"
+                                    class="cm-btn cm-btn-outline-primary cm-btn-sm flex-1">
+                                <i class="fas fa-edit"></i>
+                                <span>Изменить</span>
+                            </button>
+                            <button @onclick:stopPropagation="true"
+                                    @onclick="() => OnDelete.InvokeAsync(book)"
+                                    class="cm-btn cm-btn-outline-error cm-btn-sm flex-1">
+                                <i class="fas fa-trash-alt"></i>
+                                <span>Удалить</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (ExpandedBookId == book.Id)
+                    {
+                        <div class="px-4 pb-4 ml-10 pt-2 border-t border-gray-200">
+                            <div class="bg-gray-50 rounded-lg p-4 space-y-4 text-sm">
+                                <div class="grid grid-cols-1 gap-3">
+                                    @if (!string.IsNullOrWhiteSpace(book.SanityLoss))
+                                    {
+                                        <div>
+                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Потеря рассудка</div>
+                                            <div class="text-gray-700">@book.SanityLoss</div>
+                                        </div>
+                                    }
+
+                                    @if (book.BookType == BookType.MythosBook)
+                                    {
+                                        <div class="flex flex-wrap gap-4">
+                                            @if (book.CthulhuMythosInitial.HasValue)
+                                            {
+                                                <div>
+                                                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">МКН</div>
+                                                    <div class="text-gray-700">+@book.CthulhuMythosInitial</div>
+                                                </div>
+                                            }
+                                            @if (book.CthulhuMythosFull.HasValue)
+                                            {
+                                                <div>
+                                                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">МКП</div>
+                                                    <div class="text-gray-700">+@book.CthulhuMythosFull</div>
+                                                </div>
+                                            }
+                                            @if (book.StudyWeeks.HasValue)
+                                            {
+                                                <div>
+                                                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Время изучения</div>
+                                                    <div class="text-gray-700">@book.StudyWeeks нед.</div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(book.Description))
+                                    {
+                                        <div>
+                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Описание</div>
+                                            <div class="text-gray-700 whitespace-pre-wrap leading-relaxed">@book.Description</div>
+                                        </div>
+                                    }
+
+                                    @if (book.PossibleSpells.Count > 0)
+                                    {
+                                        <div>
+                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Возможные заклинания</div>
+                                            <div class="flex flex-wrap gap-2">
+                                                @foreach (var spell in book.PossibleSpells)
+                                                {
+                                                    <Badge Variant="primary" Size="sm" Rounded="md">@spell</Badge>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (book.AlternativeNames.Count > 0)
+                                    {
+                                        <div>
+                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Альтернативные названия</div>
+                                            <div class="flex flex-wrap gap-2">
+                                                @foreach (var altName in book.AlternativeNames)
+                                                {
+                                                    <Badge Variant="secondary" Size="sm" Rounded="md">@altName</Badge>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IEnumerable<Book> Books { get; set; } = Enumerable.Empty<Book>();
+    [Parameter] public Guid? ExpandedBookId { get; set; }
+
+    [Parameter] public string? CurrentSortField { get; set; }
+    [Parameter] public bool SortAscending { get; set; } = true;
+    [Parameter] public EventCallback<string> OnSortChanged { get; set; }
+
+    [Parameter] public EventCallback<Book> OnEdit { get; set; }
+    [Parameter] public EventCallback<Book> OnDelete { get; set; }
+    [Parameter] public EventCallback<Book> OnToggleExpand { get; set; }
+}

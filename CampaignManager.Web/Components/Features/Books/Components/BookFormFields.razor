@@ -1,0 +1,248 @@
+@using CampaignManager.Web.Components.Features.Books.Model
+@using CampaignManager.Web.Extensions
+@using Microsoft.AspNetCore.Components.Forms
+@namespace CampaignManager.Web.Components.Features.Books.Components
+
+<EditForm Model="Book" OnValidSubmit="HandleValidSubmit" Id="@FormId">
+    <DataAnnotationsValidator />
+    <Microsoft.AspNetCore.Components.Forms.ValidationSummary
+        class="mb-6 p-4 bg-red-50 text-red-700 rounded-xl border-2 border-red-200" />
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-2">
+            <label for="bookName" class="block text-sm font-semibold text-gray-700">Название</label>
+            <InputText id="bookName" @bind-Value="Book.Name"
+                       class="cm-input" />
+            <ValidationMessage For="@(() => Book.Name)" class="text-red-600 text-sm font-medium" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookType" class="block text-sm font-semibold text-gray-700">Категория</label>
+            <InputSelect id="bookType" @bind-Value="Book.BookType"
+                         class="cm-input">
+                @foreach (var bt in Enum.GetValues<BookType>())
+                {
+                    <option value="@bt">@bt.ToRussianString()</option>
+                }
+            </InputSelect>
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookLanguage" class="block text-sm font-semibold text-gray-700">Язык</label>
+            <InputText id="bookLanguage" @bind-Value="Book.Language"
+                       class="cm-input" placeholder="латынь, английский, арабский..." />
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookYear" class="block text-sm font-semibold text-gray-700">Год / век</label>
+            <InputText id="bookYear" @bind-Value="Book.Year"
+                       class="cm-input" placeholder="1228, XV в., ок. 730 г. н. э." />
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookAuthor" class="block text-sm font-semibold text-gray-700">Автор</label>
+            <InputText id="bookAuthor" @bind-Value="Book.Author"
+                       class="cm-input" placeholder="автор или переводчик" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookSanityLoss" class="block text-sm font-semibold text-gray-700">Потеря рассудка</label>
+            <InputText id="bookSanityLoss" @bind-Value="Book.SanityLoss"
+                       class="cm-input" placeholder="1d4, 2d10, нет" />
+        </div>
+
+        @if (Book.BookType == BookType.MythosBook)
+        {
+            <div class="space-y-2">
+                <label for="bookCMI" class="block text-sm font-semibold text-gray-700">МКН (начальное чтение)</label>
+                <InputNumber id="bookCMI" @bind-Value="Book.CthulhuMythosInitial"
+                             class="cm-input" />
+            </div>
+
+            <div class="space-y-2">
+                <label for="bookCMF" class="block text-sm font-semibold text-gray-700">МКП (полное изучение)</label>
+                <InputNumber id="bookCMF" @bind-Value="Book.CthulhuMythosFull"
+                             class="cm-input" />
+            </div>
+
+            <div class="space-y-2">
+                <label for="bookMR" class="block text-sm font-semibold text-gray-700">Значение Мифов (ЗМ)</label>
+                <InputNumber id="bookMR" @bind-Value="Book.MythosRating"
+                             class="cm-input" />
+            </div>
+        }
+
+        @if (Book.BookType == BookType.OccultBook)
+        {
+            <div class="space-y-2">
+                <label for="bookOccBonus" class="block text-sm font-semibold text-gray-700">Бонус к оккультизму (%)</label>
+                <InputNumber id="bookOccBonus" @bind-Value="Book.OccultismBonus"
+                             class="cm-input" />
+            </div>
+        }
+
+        <div class="space-y-2">
+            <label for="bookStudyWeeks" class="block text-sm font-semibold text-gray-700">Время изучения (недели)</label>
+            <InputNumber id="bookStudyWeeks" @bind-Value="Book.StudyWeeks"
+                         class="cm-input" />
+        </div>
+
+        <div class="space-y-2">
+            <label for="bookImageUrl" class="block text-sm font-semibold text-gray-700">URL изображения</label>
+            <InputText id="bookImageUrl" @bind-Value="Book.ImageUrl"
+                       class="cm-input" placeholder="https://..." />
+        </div>
+
+        <div class="md:col-span-2 space-y-2">
+            <label for="bookDescription" class="block text-sm font-semibold text-gray-700">Описание</label>
+            <InputTextArea id="bookDescription" @bind-Value="Book.Description" rows="4"
+                           class="cm-input resize-y" />
+        </div>
+
+        <div class="md:col-span-2 space-y-2">
+            <label class="block text-sm font-semibold text-gray-700">Альтернативные названия</label>
+            <div class="space-y-3">
+                @if (Book.AlternativeNames.Count == 0)
+                {
+                    <div class="text-sm text-gray-500">Добавьте альтернативные названия при необходимости.</div>
+                }
+
+                @for (var index = 0; index < Book.AlternativeNames.Count; index++)
+                {
+                    var i = index;
+                    var value = Book.AlternativeNames[i];
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <input type="text"
+                               class="cm-input !flex-1"
+                               placeholder="Альтернативное название"
+                               value="@value"
+                               @oninput="(e) => UpdateAlternativeName(i, e.Value?.ToString() ?? string.Empty)" />
+                        <button type="button" class="cm-btn cm-btn-outline-error" @onclick="() => RemoveAlternativeName(i)">
+                            <i class="fas fa-times"></i>
+                            <span class="hidden sm:inline">Удалить</span>
+                        </button>
+                    </div>
+                }
+
+                <button type="button" class="cm-btn cm-btn-outline-primary" @onclick="AddAlternativeName">
+                    <i class="fas fa-plus"></i>
+                    <span>Добавить альтернативное название</span>
+                </button>
+            </div>
+        </div>
+
+        @if (Book.BookType == BookType.MythosBook)
+        {
+            <div class="md:col-span-2 space-y-2">
+                <label class="block text-sm font-semibold text-gray-700">Возможные заклинания</label>
+                <div class="space-y-3">
+                    @if (Book.PossibleSpells.Count == 0)
+                    {
+                        <div class="text-sm text-gray-500">Добавьте заклинания, содержащиеся в книге.</div>
+                    }
+
+                    @for (var index = 0; index < Book.PossibleSpells.Count; index++)
+                    {
+                        var i = index;
+                        var value = Book.PossibleSpells[i];
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <input type="text"
+                                   class="cm-input !flex-1"
+                                   placeholder="Название заклинания"
+                                   value="@value"
+                                   @oninput="(e) => UpdatePossibleSpell(i, e.Value?.ToString() ?? string.Empty)" />
+                            <button type="button" class="cm-btn cm-btn-outline-error" @onclick="() => RemovePossibleSpell(i)">
+                                <i class="fas fa-times"></i>
+                                <span class="hidden sm:inline">Удалить</span>
+                            </button>
+                        </div>
+                    }
+
+                    <button type="button" class="cm-btn cm-btn-outline-primary" @onclick="AddPossibleSpell">
+                        <i class="fas fa-plus"></i>
+                        <span>Добавить заклинание</span>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public Book Book { get; set; } = new() { Name = string.Empty, BookType = BookType.MythosBook };
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public string FormId { get; set; } = "book-form";
+
+    protected override void OnParametersSet()
+    {
+        Book.AlternativeNames ??= [];
+        Book.PossibleSpells ??= [];
+        Book.Description ??= string.Empty;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        NormalizeLists();
+        await OnValidSubmit.InvokeAsync();
+    }
+
+    private void AddAlternativeName()
+    {
+        Book.AlternativeNames.Add(string.Empty);
+        StateHasChanged();
+    }
+
+    private void RemoveAlternativeName(int index)
+    {
+        if (index >= 0 && index < Book.AlternativeNames.Count)
+        {
+            Book.AlternativeNames.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private void UpdateAlternativeName(int index, string value)
+    {
+        if (index >= 0 && index < Book.AlternativeNames.Count)
+        {
+            Book.AlternativeNames[index] = value;
+        }
+    }
+
+    private void AddPossibleSpell()
+    {
+        Book.PossibleSpells.Add(string.Empty);
+        StateHasChanged();
+    }
+
+    private void RemovePossibleSpell(int index)
+    {
+        if (index >= 0 && index < Book.PossibleSpells.Count)
+        {
+            Book.PossibleSpells.RemoveAt(index);
+            StateHasChanged();
+        }
+    }
+
+    private void UpdatePossibleSpell(int index, string value)
+    {
+        if (index >= 0 && index < Book.PossibleSpells.Count)
+        {
+            Book.PossibleSpells[index] = value;
+        }
+    }
+
+    private void NormalizeLists()
+    {
+        Book.AlternativeNames = Book.AlternativeNames
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Book.PossibleSpells = Book.PossibleSpells
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}
