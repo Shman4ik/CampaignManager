@@ -8,15 +8,12 @@ window.scrollToElement = function(elementId) {
     const element = document.getElementById(elementId);
     if (!element) return;
 
-    // Dynamically measure sticky headers to get the correct offset
-    const stickyBars = document.querySelectorAll('.sticky');
+    // Measure the page-topbar height (shared sticky header component)
     let totalOffset = 0;
-    stickyBars.forEach(function(bar) {
-        const pos = window.getComputedStyle(bar).position;
-        if (pos === 'sticky' || pos === 'fixed') {
-            totalOffset += bar.offsetHeight;
-        }
-    });
+    const topbar = document.querySelector('.page-topbar');
+    if (topbar) {
+        totalOffset += topbar.offsetHeight;
+    }
     totalOffset += 8; // small padding
 
     const elementTop = element.getBoundingClientRect().top + window.pageYOffset;
