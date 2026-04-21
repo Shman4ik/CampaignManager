@@ -1,4 +1,4 @@
-﻿@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Utilities.Services
@@ -8,100 +8,99 @@
 
 @rendermode InteractiveServer
 
-<div class="mb-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <h3 class="text-2xl font-bold mb-4">Ваши кампании</h3>
+<div class="campaigns-section">
+    <div class="campaigns-header">
+        <span class="campaigns-title">Ваши кампании</span>
+    </div>
+
     @if (!IsUserAuthenticated)
     {
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
-            <p class="text-blue-700">Войдите в систему, чтобы увидеть свои кампании и присоединиться к новым.</p>
+        <div class="cm-info-banner">
+            <i class="fa-solid fa-circle-info mr-1.5"></i>Войдите в систему, чтобы увидеть свои кампании.
         </div>
     }
-    else if (UserCampaigns == null)
+    else if (UserCampaigns is null)
     {
-        <p>Загрузка кампаний...</p>
+        <p class="cm-empty"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Загрузка...</p>
     }
     else if (UserCampaigns.Count == 0)
     {
-        <p>У вас пока нет доступных кампаний.</p>
+        <p class="cm-empty">У вас пока нет доступных кампаний.</p>
     }
     else
     {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+        <div class="campaigns-grid">
             @foreach (var campaign in UserCampaigns)
             {
-                <div class="bg-white shadow-md rounded-lg p-4 max-w-md">
-                    <h4 class="text-xl font-semibold mb-2">@campaign.Name</h4>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Хранитель:</span> @campaign.KeeperEmail
-                        @if (CurrentUserId == campaign.KeeperEmail)
+                var isKeeper = CurrentUserId == campaign.KeeperEmail;
+                var userCharacter = GetUserCharacter(campaign);
+                var npcs = isKeeper && _isKeeper ? GetCampaignNpcs(campaign) : [];
+
+                <div class="cm-card campaign-card">
+                    <div class="campaign-card-header">
+                        <span class="campaign-card-name" title="@campaign.Name">@campaign.Name</span>
+                        @if (isKeeper)
                         {
-                            <span class="ml-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full">Вы</span>
-                            <div class="mt-3">
-                                <button type="button" class="cm-btn cm-btn-success w-full" @onclick="() => AddNpc(campaign.Id)">
-                                    <span>Добавить NPC</span>
+                            <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">Хранитель</Badge>
+                        }
+                    </div>
+                    <div class="campaign-card-body">
+                        <div class="campaign-meta">
+                            <span class="campaign-meta-label">Хранитель:</span>
+                            <span class="campaign-meta-value">@campaign.KeeperEmail</span>
+                        </div>
+                        <div class="campaign-meta">
+                            <span class="campaign-meta-label">Игроков:</span>
+                            <span class="campaign-meta-value">@(campaign.Players?.Count ?? 0)</span>
+                        </div>
+
+                        @if (isKeeper && _isKeeper)
+                        {
+                            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm campaign-full-btn"
+                                    @onclick="() => AddNpc(campaign.Id)">
+                                <i class="fa-solid fa-plus"></i>Добавить NPC
+                            </button>
+                        }
+
+                        @if (userCharacter is not null)
+                        {
+                            <div class="campaign-char-box">
+                                <div class="campaign-char-name">@userCharacter.CharacterName</div>
+                                <div class="campaign-char-occ">@userCharacter.Character.PersonalInfo.Occupation</div>
+                                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm campaign-full-btn"
+                                        @onclick="() => EditCharacter(userCharacter.Id)">
+                                    <i class="fa-solid fa-user"></i>Открыть персонажа
                                 </button>
                             </div>
                         }
-                    </div>
-                    <div class="text-gray-600 mb-4">
-                        <span class="font-medium">Игроки:</span> @campaign.Players?.Count
-                    </div>
-                    @{
-                        var userCharacter = GetUserCharacter(campaign);
-                    }
-                    @if (userCharacter != null)
-                    {
-                        <div class="space-y-4">
-                            <div class="bg-gray-50 overflow-hidden shadow rounded-lg">
-                                <div class="px-4 py-4">
-                                    <h4 class="text-lg font-medium text-gray-900 truncate">
-                                        @userCharacter!.CharacterName
-                                    </h4>
-                                    <dl class="mt-2 space-y-1">
-                                        <div class="flex flex-wrap text-sm font-normal text-gray-500">
-                                            <dt class="mr-1">Профессия:</dt>
-                                            <dd>@userCharacter!.Character.PersonalInfo.Occupation</dd>
-                                        </div>
-                                    </dl>
-                                    <div class="mt-3">
-                                        <button type="button" class="cm-btn cm-btn-info w-full" @onclick="() => EditCharacter(userCharacter.Id)">
-                                            <span>Открыть персонажа</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <p>У вас пока нет персонажей в этой кампании.</p>
-                        <div class="mt-4">
-                            <button type="button" class="cm-btn cm-btn-info w-full" @onclick="() => CreateNewCharacter(campaign.Id)">
-                                <span>Создать нового персонажа</span>
-                            </button>
-                        </div>
-                    }
-                    @if (_isKeeper && CurrentUserId == campaign.KeeperEmail)
-                    {
-                        var npcs = GetCampaignNpcs(campaign);
-                        @if (npcs.Count > 0)
+                        else
                         {
-                            <div class="mt-4 border-t pt-3">
-                                <p class="text-sm font-medium text-gray-700 mb-2">NPC в кампании:</p>
-                                <div class="space-y-1">
-                                    @foreach (var npc in npcs)
-                                    {
-                                        <div class="flex items-center justify-between bg-gray-50 rounded px-3 py-1.5">
-                                            <span class="text-sm text-gray-800">@npc.CharacterName</span>
-                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="() => EditCharacter(npc.Id)">
-                                                <span>Открыть</span>
-                                            </button>
-                                        </div>
-                                    }
-                                </div>
+                            <div class="campaign-no-char">
+                                <p class="campaign-no-char-text">Нет персонажа в этой кампании</p>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm campaign-full-btn"
+                                        @onclick="() => CreateNewCharacter(campaign.Id)">
+                                    <i class="fa-solid fa-plus"></i>Создать персонажа
+                                </button>
                             </div>
                         }
-                    }
+
+                        @if (isKeeper && _isKeeper && npcs.Count > 0)
+                        {
+                            <div class="campaign-npcs">
+                                <div class="campaign-npcs-title">NPC (@npcs.Count)</div>
+                                @foreach (var npc in npcs)
+                                {
+                                    <div class="campaign-npc-row">
+                                        <span class="campaign-npc-name" title="@npc.CharacterName">@npc.CharacterName</span>
+                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                                @onclick="() => EditCharacter(npc.Id)">
+                                            Открыть
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
             }
         </div>
@@ -124,36 +123,25 @@
         }
     }
 
-    private CharacterStorageDto? GetUserCharacter(Campaign campaign)
-    {
-        return campaign.Players?
+    private CharacterStorageDto? GetUserCharacter(Campaign campaign) =>
+        campaign.Players?
             .FirstOrDefault(p => p.PlayerEmail == CurrentUserId)
             ?.Characters?
-            .Where(p => p.Status == CharacterStatus.Active)?
+            .Where(p => p.Status == CharacterStatus.Active)
             .SingleOrDefault();
-    }
 
-    private List<CharacterStorageDto> GetCampaignNpcs(Campaign campaign)
-    {
-        return campaign.Players?
+    private List<CharacterStorageDto> GetCampaignNpcs(Campaign campaign) =>
+        campaign.Players?
             .SelectMany(p => p.Characters ?? [])
             .Where(c => c.Character.CharacterType == CharacterType.NonPlayerCharacter)
             .ToList() ?? [];
-    }
 
-    private void EditCharacter(Guid characterId)
-    {
+    private void EditCharacter(Guid characterId) =>
         NavigationManager.NavigateTo($"/character/{characterId}");
-    }
 
-    private void CreateNewCharacter(Guid campaignId)
-    {
+    private void CreateNewCharacter(Guid campaignId) =>
         NavigationManager.NavigateTo($"/character/create/{campaignId}");
-    }
 
-    private void AddNpc(Guid campaignId)
-    {
+    private void AddNpc(Guid campaignId) =>
         NavigationManager.NavigateTo($"/character/create/{campaignId}/npc");
-    }
-
 }

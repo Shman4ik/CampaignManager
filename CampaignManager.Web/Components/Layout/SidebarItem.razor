@@ -1,0 +1,41 @@
+@rendermode InteractiveServer
+@inject NavigationManager Nav
+@implements IDisposable
+
+<a href="@Href"
+   class="sidebar-item @(IsActive ? "active" : "")"
+   title="@Label">
+    <span class="sidebar-icon"><i class="fa-solid @Icon"></i></span>
+    <span class="sidebar-label">@Label</span>
+    @if (Badge is not null)
+    {
+        <span class="sidebar-badge">@Badge</span>
+    }
+</a>
+
+@code {
+    [Parameter] public string Href { get; set; } = "/";
+    [Parameter] public string Icon { get; set; } = "fa-circle";
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Badge { get; set; }
+
+    private bool IsActive =>
+        Href == "/"
+            ? Nav.Uri == Nav.BaseUri || Nav.Uri == Nav.BaseUri.TrimEnd('/')
+            : Nav.Uri.Contains(Href, StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

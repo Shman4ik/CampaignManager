@@ -285,6 +285,7 @@ builder.Services.AddSingleton<LlmClientFactory>();
 builder.Services.Configure<LlmValidationOptions>(
     builder.Configuration.GetSection(LlmValidationOptions.SectionName));
 builder.Services.AddScoped<LlmCharacterValidationService>();
+builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.LastCharacterService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();

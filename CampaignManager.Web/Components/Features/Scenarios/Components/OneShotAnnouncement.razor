@@ -14,68 +14,65 @@
 
 @if (_scenarios is not null && _scenarios.Count > 0)
 {
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
+    <div class="oneshot-section">
         @foreach (var scenario in _scenarios)
         {
+            var pregens = scenario.Npcs
+                .Where(n => n.Character?.CharacterType == CharacterType.PlayerCharacter)
+                .ToList();
             <div class="oneshot-card">
-                <div class="oneshot-header">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-dice-d20 text-lg"></i>
-                        <span class="text-sm font-semibold uppercase tracking-wider">Ваншот</span>
+                <!-- Header -->
+                <div class="scenario-hd">
+                    <div class="hd-left">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        <span class="hd-label">Активный ваншот</span>
                     </div>
                     @if (scenario.ScheduledDate.HasValue)
                     {
-                        <div class="flex items-center gap-1.5 text-sm">
-                            <i class="fa-regular fa-calendar"></i>
-                            <time datetime="@scenario.ScheduledDate.Value.ToString("yyyy-MM-dd")">
-                                @scenario.ScheduledDate.Value.ToString("d MMMM yyyy, HH:mm", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))
-                            </time>
-                        </div>
+                        <span class="hd-date">
+                            @scenario.ScheduledDate.Value.ToString("d MMMM yyyy, HH:mm", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))
+                        </span>
                     }
                 </div>
 
-                <div class="oneshot-body">
-                    <h3 class="oneshot-title">@scenario.Name</h3>
+                <!-- Body -->
+                <div class="card-body">
+                    <div class="body-layout">
+                        <!-- Left: Scenario info -->
+                        <div class="scenario-info">
+                            <h2 class="scenario-title">@scenario.Name</h2>
 
-                    @if (!string.IsNullOrEmpty(scenario.AnnouncementText))
-                    {
-                        <div class="oneshot-description markdown-content">
-                            @((MarkupString)MarkdownService.ConvertToHtml(scenario.AnnouncementText))
+                            @if (!string.IsNullOrEmpty(scenario.AnnouncementText))
+                            {
+                                <div class="scenario-desc markdown-content">
+                                    @((MarkupString)MarkdownService.ConvertToHtml(scenario.AnnouncementText))
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(scenario.Description))
+                            {
+                                <p class="scenario-desc">@scenario.Description</p>
+                            }
+
+                            <div class="meta-tags">
+                                @if (!string.IsNullOrEmpty(scenario.Era))
+                                {
+                                    <span class="era-badge">@scenario.Era</span>
+                                }
+                                @if (!string.IsNullOrEmpty(scenario.Location))
+                                {
+                                    <span class="location-text">@scenario.Location</span>
+                                }
+                            </div>
                         </div>
-                    }
-                    else if (!string.IsNullOrEmpty(scenario.Description))
-                    {
-                        <p class="oneshot-description">@scenario.Description</p>
-                    }
 
-                    <div class="oneshot-meta">
-                        @if (!string.IsNullOrEmpty(scenario.Era))
+                        <!-- Right: Characters (hidden on mobile) -->
+                        @if (pregens.Count > 0)
                         {
-                            <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">
-                                <i class="fa-solid fa-clock-rotate-left mr-1"></i>@scenario.Era
-                            </Badge>
-                        }
-                        @if (!string.IsNullOrEmpty(scenario.Location))
-                        {
-                            <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">
-                                <i class="fa-solid fa-location-dot mr-1"></i>@scenario.Location
-                            </Badge>
-                        }
-                    </div>
-
-                    @{
-                        var pregens = scenario.Npcs
-                            .Where(n => n.Character?.CharacterType == CharacterType.PlayerCharacter)
-                            .ToList();
-                    }
-
-                    @if (pregens.Count > 0)
-                    {
-                        <div class="oneshot-pregens">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-2">
-                                <i class="fa-solid fa-users mr-1"></i>Доступные персонажи (@pregens.Count)
-                            </h4>
-                            <div class="oneshot-pregens-grid">
+                            <div class="pregens-panel">
+                                <div class="pregens-title">Доступные персонажи (@pregens.Count)</div>
                                 @foreach (var pregen in pregens)
                                 {
                                     var pregenId = pregen.Id;
@@ -83,80 +80,58 @@
                                     var isMine = isReserved && !string.IsNullOrEmpty(_currentUserEmail)
                                                  && pregen.CampaignPlayer is not null
                                                  && string.Equals(pregen.CampaignPlayer.PlayerEmail, _currentUserEmail, StringComparison.OrdinalIgnoreCase);
-                                    <div class="oneshot-pregen-card @(isReserved ? "is-reserved" : null)">
-                                        <div class="flex items-center gap-2 cursor-pointer" @onclick="() => NavigateToCharacter(pregenId)">
+                                    <div class="pregen-row">
+                                        <div class="pregen-info" @onclick="() => NavigateToCharacter(pregenId)">
                                             <div class="pregen-avatar">
-                                                <i class="fa-solid fa-user text-xs"></i>
+                                                @(pregen.CharacterName?.Length > 0 ? pregen.CharacterName[0].ToString().ToUpper() : "?")
                                             </div>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="font-medium text-sm text-gray-800 truncate">@pregen.CharacterName</div>
+                                            <div>
+                                                <div class="pregen-name">@pregen.CharacterName</div>
                                                 @if (!string.IsNullOrEmpty(pregen.Character?.PersonalInfo?.Occupation))
                                                 {
-                                                    <div class="text-xs text-gray-500 truncate">@pregen.Character.PersonalInfo.Occupation</div>
+                                                    <div class="pregen-occ">@pregen.Character.PersonalInfo.Occupation</div>
                                                 }
                                             </div>
                                         </div>
-
-                                        <div class="pregen-action mt-2">
-                                            @if (isMine)
+                                        @if (isMine)
+                                        {
+                                            <button class="action-btn release-btn" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
+                                        }
+                                        else if (isReserved)
+                                        {
+                                            @if (_isKeeperOrAdmin)
                                             {
-                                                <div class="flex flex-col gap-1">
-                                                    <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                                                        <i class="fa-solid fa-circle-check"></i>Ваш персонаж
-                                                    </span>
-                                                    <Button Variant="error" Size="sm" FullWidth="true"
-                                                            OnClick="@(() => OpenReleaseConfirm(pregen))">
-                                                        Освободить
-                                                    </Button>
-                                                </div>
-                                            }
-                                            else if (isReserved)
-                                            {
-                                                <div class="flex flex-col gap-1">
-                                                    <span class="inline-flex items-center gap-1 text-xs text-gray-500">
-                                                        <i class="fa-solid fa-lock"></i>Забронирован
-                                                    </span>
-                                                    @if (_isKeeperOrAdmin)
-                                                    {
-                                                        <Button Variant="error" Size="sm" FullWidth="true"
-                                                                OnClick="@(() => OpenReleaseConfirm(pregen))">
-                                                            Освободить
-                                                        </Button>
-                                                    }
-                                                </div>
+                                                <button class="action-btn release-btn" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
                                             }
                                             else
                                             {
-                                                <AuthorizeView>
-                                                    <Authorized>
-                                                        <Button Variant="primary" Size="sm" FullWidth="true"
-                                                                OnClick="@(() => OpenReserveConfirm(pregen, scenario))">
-                                                            Забронировать
-                                                        </Button>
-                                                    </Authorized>
-                                                    <NotAuthorized>
-                                                        <Button Variant="secondary" Size="sm" FullWidth="true"
-                                                                OnClick="@(() => NavigationManager.NavigateTo("/api/account/login", true))">
-                                                            Войти чтобы забронировать
-                                                        </Button>
-                                                    </NotAuthorized>
-                                                </AuthorizeView>
+                                                <span class="reserved-label">Забронирован</span>
                                             }
-                                        </div>
+                                        }
+                                        else
+                                        {
+                                            <AuthorizeView>
+                                                <Authorized>
+                                                    <button class="action-btn reserve-btn" @onclick="() => OpenReserveConfirm(pregen, scenario)">Забронировать</button>
+                                                </Authorized>
+                                                <NotAuthorized>
+                                                    <button class="action-btn ghost-btn" @onclick='() => NavigationManager.NavigateTo("/api/account/login", true)'>Войти</button>
+                                                </NotAuthorized>
+                                            </AuthorizeView>
+                                        }
                                     </div>
                                 }
                             </div>
-                        </div>
-                    }
+                        }
+                    </div>
                 </div>
-
             </div>
         }
     </div>
 
     @if (!string.IsNullOrEmpty(_notification))
     {
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+        <div class="mb-4">
             <NotificationAlert Type="@_notificationType" Message="@_notification" OnClose="ClearNotification" />
         </div>
     }

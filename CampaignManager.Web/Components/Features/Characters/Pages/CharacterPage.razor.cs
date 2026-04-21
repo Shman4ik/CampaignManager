@@ -5,6 +5,7 @@ using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Components.Layout.Services;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.Services;
@@ -25,6 +26,7 @@ public partial class CharacterPage
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
     [Inject] private LlmCharacterValidationService LlmService { get; set; } = default!;
     [Inject] private IdentityService IdentityService { get; set; } = default!;
+    [Inject] private LastCharacterService LastCharacterService { get; set; } = default!;
 
     [Parameter] public Guid? CharacterId { get; set; }
     [Parameter] public Guid? CampaignId { get; set; }
@@ -394,8 +396,15 @@ public partial class CharacterPage
     {
         if (firstRender)
         {
-            // Ждем, пока JavaScript функции загрузятся
             await Task.Delay(100);
+
+            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character is not null && !IsNpc)
+            {
+                var name = Character.PersonalInfo.Name ?? "Персонаж";
+                LastCharacterService.Set(CharacterId.Value.ToString(), name);
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "last-character-id", CharacterId.Value.ToString());
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", "last-character-name", name);
+            }
         }
 
         await base.OnAfterRenderAsync(firstRender);
