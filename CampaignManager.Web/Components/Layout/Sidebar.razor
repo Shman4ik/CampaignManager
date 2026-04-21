@@ -7,8 +7,18 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IdentityService IdentityService
 @inject AdminService AdminService
+@implements IDisposable
 
-<div class="sidebar @(_collapsed ? "collapsed" : "")">
+@if (_tabletExpanded)
+{
+    <div class="tablet-sidebar-backdrop" @onclick="CollapseTablet"></div>
+}
+@if (!_tabletExpanded)
+{
+    <div class="sidebar-tablet-hit-area" @onclick="ExpandTablet"></div>
+}
+
+<div class="sidebar @(_collapsed ? "collapsed" : "") @(_tabletExpanded ? "tablet-expanded" : "")">
     <!-- Logo -->
     <div class="sidebar-logo">
         <div class="sidebar-logo-icon sidebar-logo-icon--cthulhu">
@@ -21,22 +31,26 @@
     <nav class="sidebar-nav">
         <div class="sidebar-section">Основное</div>
         <SidebarItem Href="/" Icon="fa-house" Label="Главная"/>
-        <SidebarItem Href="/combat" Icon="fa-crosshairs" Label="Бой"/>
-        <SidebarItem Href="/chase" Icon="fa-person-running" Label="Погоня"/>
-        <SidebarItem Href="/campaigns" Icon="fa-map" Label="Кампании"/>
+        <AuthorizeView>
+            <SidebarItem Href="/combat" Icon="fa-crosshairs" Label="Бой"/>
+            <SidebarItem Href="/chase" Icon="fa-person-running" Label="Погоня"/>
+            <SidebarItem Href="/campaigns" Icon="fa-map" Label="Кампании"/>
+        </AuthorizeView>
         <AuthorizeView Policy="RequireKeeper">
             <SidebarItem Href="/scenarios" Icon="fa-scroll" Label="Сценарии"/>
             <SidebarItem Href="/npcs" Icon="fa-person" Label="NPC"/>
         </AuthorizeView>
 
-        <div class="sidebar-section">Вики</div>
-        <SidebarItem Href="/weapons" Icon="fa-gun" Label="Оружие"/>
-        <SidebarItem Href="/bestiary" Icon="fa-skull" Label="Существа"/>
-        <SidebarItem Href="/items" Icon="fa-box" Label="Предметы"/>
-        <SidebarItem Href="/occupations" Icon="fa-briefcase" Label="Профессии"/>
-        <SidebarItem Href="/skills" Icon="fa-book" Label="Навыки"/>
-        <SidebarItem Href="/spells" Icon="fa-hat-wizard" Label="Заклинания"/>
-        <SidebarItem Href="/books" Icon="fa-book-open" Label="Книги"/>
+        <AuthorizeView>
+            <div class="sidebar-section">Вики</div>
+            <SidebarItem Href="/weapons" Icon="fa-gun" Label="Оружие"/>
+            <SidebarItem Href="/bestiary" Icon="fa-skull" Label="Существа"/>
+            <SidebarItem Href="/items" Icon="fa-box" Label="Предметы"/>
+            <SidebarItem Href="/occupations" Icon="fa-briefcase" Label="Профессии"/>
+            <SidebarItem Href="/skills" Icon="fa-book" Label="Навыки"/>
+            <SidebarItem Href="/spells" Icon="fa-hat-wizard" Label="Заклинания"/>
+            <SidebarItem Href="/books" Icon="fa-book-open" Label="Книги"/>
+        </AuthorizeView>
 
         <AuthorizeView Policy="RequireAdministratorRole">
             <div class="sidebar-section">Система</div>
@@ -118,6 +132,7 @@
 
 @code {
     private bool _collapsed;
+    private bool _tabletExpanded;
     private bool _checkingAuth = true;
     private bool _silentLoginFailed;
     private bool _accessDenied;
@@ -126,6 +141,8 @@
 
     protected override void OnInitialized()
     {
+        Nav.LocationChanged += OnLocationChanged;
+
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var q = QueryHelpers.ParseQuery(uri.Query);
         if (q.TryGetValue("authStatus", out var s))
@@ -134,6 +151,24 @@
             _accessDenied      = s == "accessDenied";
             _loginFailed       = s == "failed";
         }
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _tabletExpanded = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    private void ExpandTablet() => _tabletExpanded = true;
+
+    private void CollapseTablet()
+    {
+        _tabletExpanded = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

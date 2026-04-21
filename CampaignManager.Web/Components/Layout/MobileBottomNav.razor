@@ -7,6 +7,7 @@
 @inject IdentityService IdentityService
 @inject AdminService AdminService
 @inject LastCharacterService LastCharacterService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
 <!-- Bottom nav bar -->
@@ -16,27 +17,30 @@
             <i class="fa-solid fa-house"></i>
             <span>Главная</span>
         </a>
-        <a href="/combat" class="mobile-tab @(IsActive("/combat") ? "mobile-tab--active" : "")">
-            <i class="fa-solid fa-crosshairs"></i>
-            <span>Бой</span>
-        </a>
-        <a href="/chase" class="mobile-tab @(IsActive("/chase") ? "mobile-tab--active" : "")">
-            <i class="fa-solid fa-person-running"></i>
-            <span>Погоня</span>
-        </a>
-        @if (_lastCharacterId is not null)
+        @if (_isAuthenticated)
         {
-            <a href="/character/@_lastCharacterId" class="mobile-tab @(IsOnCharacterPage() ? "mobile-tab--active" : "")">
-                <i class="fa-solid fa-user"></i>
-                <span style="max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@_lastCharacterName</span>
+            <a href="/combat" class="mobile-tab @(IsActive("/combat") ? "mobile-tab--active" : "")">
+                <i class="fa-solid fa-crosshairs"></i>
+                <span>Бой</span>
             </a>
-        }
-        else
-        {
-            <span class="mobile-tab mobile-tab--disabled">
-                <i class="fa-solid fa-user"></i>
-                <span>Персонаж</span>
-            </span>
+            <a href="/chase" class="mobile-tab @(IsActive("/chase") ? "mobile-tab--active" : "")">
+                <i class="fa-solid fa-person-running"></i>
+                <span>Погоня</span>
+            </a>
+            @if (_lastCharacterId is not null)
+            {
+                <a href="/character/@_lastCharacterId" class="mobile-tab @(IsOnCharacterPage() ? "mobile-tab--active" : "")">
+                    <i class="fa-solid fa-user"></i>
+                    <span style="max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@_lastCharacterName</span>
+                </a>
+            }
+            else
+            {
+                <span class="mobile-tab mobile-tab--disabled">
+                    <i class="fa-solid fa-user"></i>
+                    <span>Персонаж</span>
+                </span>
+            }
         }
         <button class="mobile-tab @(_drawerOpen ? "mobile-tab--active" : "")" @onclick="ToggleDrawer">
             <i class="fa-solid fa-bars"></i>
@@ -54,52 +58,55 @@
             <div class="mobile-drawer-handle"></div>
         </div>
         <div class="mobile-drawer-content">
-            <div class="mobile-drawer-section-title">Основное</div>
-            <a href="/campaigns" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-map"></i>
-                <span>Кампании</span>
-            </a>
-            @if (_isKeeper)
+            @if (_isAuthenticated)
             {
-                <a href="/scenarios" @onclick="CloseDrawer" class="mobile-drawer-item">
-                    <i class="fa-solid fa-scroll"></i>
-                    <span>Сценарии</span>
+                <div class="mobile-drawer-section-title">Основное</div>
+                <a href="/campaigns" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-map"></i>
+                    <span>Кампании</span>
                 </a>
-                <a href="/npcs" @onclick="CloseDrawer" class="mobile-drawer-item">
-                    <i class="fa-solid fa-person"></i>
-                    <span>NPC</span>
+                @if (_isKeeper)
+                {
+                    <a href="/scenarios" @onclick="CloseDrawer" class="mobile-drawer-item">
+                        <i class="fa-solid fa-scroll"></i>
+                        <span>Сценарии</span>
+                    </a>
+                    <a href="/npcs" @onclick="CloseDrawer" class="mobile-drawer-item">
+                        <i class="fa-solid fa-person"></i>
+                        <span>NPC</span>
+                    </a>
+                }
+
+                <div class="mobile-drawer-section-title">Вики</div>
+                <a href="/weapons" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-gun"></i>
+                    <span>Оружие</span>
+                </a>
+                <a href="/bestiary" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-skull"></i>
+                    <span>Существа</span>
+                </a>
+                <a href="/items" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-box"></i>
+                    <span>Предметы</span>
+                </a>
+                <a href="/occupations" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-briefcase"></i>
+                    <span>Профессии</span>
+                </a>
+                <a href="/skills" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-book"></i>
+                    <span>Навыки</span>
+                </a>
+                <a href="/spells" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-hat-wizard"></i>
+                    <span>Заклинания</span>
+                </a>
+                <a href="/books" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Книги</span>
                 </a>
             }
-
-            <div class="mobile-drawer-section-title">Вики</div>
-            <a href="/weapons" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-gun"></i>
-                <span>Оружие</span>
-            </a>
-            <a href="/bestiary" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-skull"></i>
-                <span>Существа</span>
-            </a>
-            <a href="/items" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-box"></i>
-                <span>Предметы</span>
-            </a>
-            <a href="/occupations" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-briefcase"></i>
-                <span>Профессии</span>
-            </a>
-            <a href="/skills" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-book"></i>
-                <span>Навыки</span>
-            </a>
-            <a href="/spells" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-hat-wizard"></i>
-                <span>Заклинания</span>
-            </a>
-            <a href="/books" @onclick="CloseDrawer" class="mobile-drawer-item">
-                <i class="fa-solid fa-book-open"></i>
-                <span>Книги</span>
-            </a>
 
             @if (_isAdmin)
             {
@@ -125,6 +132,7 @@
     private bool _drawerOpen;
     private string? _lastCharacterId;
     private string? _lastCharacterName;
+    private bool _isAuthenticated;
     private bool _isKeeper;
     private bool _isAdmin;
     private int _pendingCount;
@@ -150,6 +158,8 @@
             _lastCharacterName = await JS.InvokeAsync<string?>("localStorage.getItem", "last-character-name");
         }
 
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
         _isKeeper = await IdentityService.IsKeeper();
         _isAdmin = await IdentityService.IsAdministrator();
         if (_isAdmin)
