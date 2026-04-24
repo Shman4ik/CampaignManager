@@ -13,10 +13,6 @@
 {
     <div class="tablet-sidebar-backdrop" @onclick="CollapseTablet"></div>
 }
-@if (!_tabletExpanded)
-{
-    <div class="sidebar-tablet-hit-area" @onclick="ExpandTablet"></div>
-}
 
 <div class="sidebar @(_collapsed ? "collapsed" : "") @(_tabletExpanded ? "tablet-expanded" : "")">
     <!-- Logo -->
@@ -124,14 +120,14 @@
 
 <!-- Collapse toggle button -->
 <button class="sidebar-collapse-btn"
-        style="left: @(_collapsed ? "var(--sidebar-width-collapsed)" : "var(--sidebar-width)")"
-        @onclick="ToggleCollapse"
-        title="@(_collapsed ? "Развернуть" : "Свернуть")">
-    <i class="fa-solid @(_collapsed ? "fa-chevron-right" : "fa-chevron-left")" style="font-size:10px"></i>
+        style="left: @ToggleBtnLeft"
+        @onclick="ToggleSidebar"
+        title="@(IsVisuallyExpanded ? "Свернуть" : "Развернуть")">
+    <i class="fa-solid @(IsVisuallyExpanded ? "fa-chevron-left" : "fa-chevron-right")" style="font-size:10px"></i>
 </button>
 
 @code {
-    private bool _collapsed;
+    private bool _collapsed = true;
     private bool _tabletExpanded;
     private bool _checkingAuth = true;
     private bool _silentLoginFailed;
@@ -164,21 +160,40 @@
         Nav.LocationChanged -= OnLocationChanged;
     }
 
-    private void ExpandTablet() => _tabletExpanded = true;
+    private bool IsVisuallyExpanded => _tabletExpanded || !_collapsed;
+
+    private string ToggleBtnLeft =>
+        _tabletExpanded ? "var(--sidebar-width)"
+            : _collapsed ? "var(--sidebar-width-collapsed)"
+                : "var(--sidebar-width)";
 
     private void CollapseTablet()
     {
         _tabletExpanded = false;
     }
 
+    private async Task ToggleSidebar()
+    {
+        var width = await JS.InvokeAsync<double>("eval", "window.innerWidth");
+        if (width is >= 769 and <= 1100)
+        {
+            _tabletExpanded = !_tabletExpanded;
+        }
+        else
+        {
+            _collapsed = !_collapsed;
+            await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
-        // Restore sidebar collapsed state
+        // Restore sidebar collapsed state — default to collapsed
         var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "sidebar-collapsed");
-        _collapsed = stored == "true";
-        await SyncMainContentClass();
+        _collapsed = stored != "false";
+        StateHasChanged();
 
         // Clean up authStatus from URL
         if (_silentLoginFailed || _accessDenied || _loginFailed)
@@ -243,21 +258,6 @@
         catch { }
 
         StateHasChanged();
-    }
-
-    private async Task ToggleCollapse()
-    {
-        _collapsed = !_collapsed;
-        await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
-        await SyncMainContentClass();
-    }
-
-    private async Task SyncMainContentClass()
-    {
-        if (_collapsed)
-            await JS.InvokeVoidAsync("eval", "document.getElementById('main-content')?.classList.add('sidebar-collapsed')");
-        else
-            await JS.InvokeVoidAsync("eval", "document.getElementById('main-content')?.classList.remove('sidebar-collapsed')");
     }
 
     private async Task Logout()
