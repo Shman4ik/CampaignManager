@@ -23,11 +23,18 @@
 
 <PageTitle>Помощник погони</PageTitle>
 
-<PageHeader Title="Помощник погони"/>
+<PageHeader Title="Помощник погони">
+    <Actions>
+        @if (_isKeeper)
+        {
+            <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
+        }
+    </Actions>
+</PageHeader>
 
 @if (!_isKeeper)
 {
-    <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
+    <div class="max-w-7xl mx-auto px-4 py-6">
         <Alert Type="error" Title="Доступ запрещён">
             Эта страница доступна только для мастера игры.
         </Alert>
@@ -35,39 +42,35 @@
 }
 else
 {
-<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-    <!-- Заголовок -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 class="cm-h2">Помощник погони</h1>
-        <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
-    </div>
-
+<div class="max-w-7xl mx-auto px-4 py-6">
     <!-- Панель раундов (только в активной фазе) -->
     @if (ChaseService.Phase == ChasePhase.Active)
     {
         var activeP = ChaseService.GetActiveParticipant();
-        <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div class="flex items-center gap-4 flex-wrap">
-                <span class="text-sm font-semibold text-gray-800">Раунд: @ChaseService.CurrentRound</span>
-                @if (activeP is not null)
-                {
-                    <span class="text-sm font-medium text-blue-700">→ @activeP.Name</span>
-                    <span class="text-xs text-gray-500">
-                        Действий: @activeP.MovementActionsRemaining / @activeP.TotalMovementActions
-                    </span>
-                }
-                @if (ChaseService.IsChaseOver())
-                {
-                    <span class="text-sm font-bold text-green-700">Погоня завершена!</span>
-                }
-            </div>
-            <div class="flex gap-2">
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn">
-                    <span>Следующий ход</span>
-                </button>
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound">
-                    <span>Следующий раунд</span>
-                </button>
+        <div class="cm-card mb-4">
+            <div class="cm-card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div class="flex items-center gap-4 flex-wrap">
+                    <span class="text-sm font-semibold text-gray-800">Раунд: @ChaseService.CurrentRound</span>
+                    @if (activeP is not null)
+                    {
+                        <span class="text-sm font-medium text-blue-700">→ @activeP.Name</span>
+                        <span class="text-xs text-gray-500">
+                            Действий: @activeP.MovementActionsRemaining / @activeP.TotalMovementActions
+                        </span>
+                    }
+                    @if (ChaseService.IsChaseOver())
+                    {
+                        <span class="text-sm font-bold text-green-700">Погоня завершена!</span>
+                    }
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn">
+                        <span>Следующий ход</span>
+                    </button>
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound">
+                        <span>Следующий раунд</span>
+                    </button>
+                </div>
             </div>
         </div>
     }
@@ -78,9 +81,11 @@ else
         <!-- Левая: Участники + Добавление -->
         <div class="col-span-12 lg:col-span-3 space-y-3">
             <!-- Список участников -->
-            <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
-                <h3 class="text-sm font-semibold text-gray-800 mb-2">Участники погони</h3>
-                <div class="max-h-[40vh] overflow-y-auto pr-1">
+            <div class="cm-card">
+                <div class="cm-card-header">
+                    <span class="cm-section-title">Участники погони</span>
+                </div>
+                <div class="max-h-[40vh] overflow-y-auto p-3 pr-2">
                     @if (ChaseService.Participants.Any())
                     {
                         @foreach (var participant in ChaseService.Participants)
@@ -97,7 +102,7 @@ else
                     }
                     else
                     {
-                        <p class="text-sm text-gray-400 text-center py-4">Нет участников</p>
+                        <p class="cm-empty">Нет участников</p>
                     }
                 </div>
             </div>
@@ -105,92 +110,95 @@ else
             <!-- Добавить участника (только в Setup) -->
             @if (ChaseService.Phase == ChasePhase.Setup)
             {
-                <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
-                    <h3 class="text-sm font-semibold text-gray-800 mb-2">Добавить участника</h3>
-
-                    <!-- Роль при добавлении -->
-                    <div class="flex gap-1 mb-2">
-                        <button @onclick='() => _addRole = ChaseRole.Prey'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Prey ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Жертва
-                        </button>
-                        <button @onclick='() => _addRole = ChaseRole.Pursuer'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Pursuer ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Преследователь
-                        </button>
+                <div class="cm-card">
+                    <div class="cm-card-header">
+                        <span class="cm-section-title">Добавить участника</span>
                     </div>
+                    <div class="cm-card-body">
+                        <!-- Роль при добавлении -->
+                        <div class="flex gap-1 mb-2">
+                            <button @onclick='() => _addRole = ChaseRole.Prey'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Prey ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                Жертва
+                            </button>
+                            <button @onclick='() => _addRole = ChaseRole.Pursuer'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_addRole == ChaseRole.Pursuer ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                Преследователь
+                            </button>
+                        </div>
 
-                    <!-- Транспорт -->
-                    <div class="mb-2">
-                        <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                            <input type="checkbox" @bind="_addInVehicle"
-                                   class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                            В транспорте
-                        </label>
-                        @if (_addInVehicle)
-                        {
-                            <div class="flex gap-2 mt-1">
-                                <input type="text" @bind="_addVehicleName" placeholder="Ford Model T"
-                                       class="text-xs border border-gray-200 rounded px-2 py-1 flex-1" />
-                                <input type="number" @bind="_addVehicleSpeed" placeholder="СКО"
-                                       class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
-                            </div>
-                        }
-                    </div>
-
-                    <!-- Вкладки -->
-                    <div class="flex gap-1 mb-2">
-                        <button @onclick='() => _showAddMode = "characters"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Персонажи
-                        </button>
-                        <button @onclick='() => _showAddMode = "creatures"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Существа
-                        </button>
-                    </div>
-
-                    <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
-                        @if (_showAddMode == "characters")
-                        {
-                            @if (_availableCharacters is null)
+                        <!-- Транспорт -->
+                        <div class="mb-2">
+                            <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                                <input type="checkbox" @bind="_addInVehicle"
+                                       class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                                В транспорте
+                            </label>
+                            @if (_addInVehicle)
                             {
-                                <p class="text-xs text-gray-400 p-2">@(_selectedCampaign is null ? "Выберите кампанию" : "Загрузка...")</p>
+                                <div class="flex gap-2 mt-1">
+                                    <input type="text" @bind="_addVehicleName" placeholder="Ford Model T"
+                                           class="text-xs border border-gray-200 rounded px-2 py-1 flex-1" />
+                                    <input type="number" @bind="_addVehicleSpeed" placeholder="СКО"
+                                           class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
+                                </div>
                             }
-                            else if (!_availableCharacters.Any())
+                        </div>
+
+                        <!-- Вкладки -->
+                        <div class="flex gap-1 mb-2">
+                            <button @onclick='() => _showAddMode = "characters"'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                Персонажи
+                            </button>
+                            <button @onclick='() => _showAddMode = "creatures"'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                Существа
+                            </button>
+                        </div>
+
+                        <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
+                            @if (_showAddMode == "characters")
                             {
-                                <p class="text-xs text-gray-400 p-2">Нет персонажей</p>
+                                @if (_availableCharacters is null)
+                                {
+                                    <p class="cm-empty">@(_selectedCampaign is null ? "Выберите кампанию" : "Загрузка...")</p>
+                                }
+                                else if (!_availableCharacters.Any())
+                                {
+                                    <p class="cm-empty">Нет персонажей</p>
+                                }
+                                else
+                                {
+                                    @foreach (var chara in _availableCharacters)
+                                    {
+                                        <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                             @onclick="() => AddCharacter(chara)">
+                                            <span class="text-gray-800">@chara.PersonalInfo.Name</span>
+                                            <span class="text-xs text-gray-400">СКО @chara.PersonalInfo.MoveSpeed</span>
+                                        </div>
+                                    }
+                                }
                             }
                             else
                             {
-                                @foreach (var chara in _availableCharacters)
+                                @if (_availableCreatures is null)
                                 {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddCharacter(chara)">
-                                        <span class="text-gray-800">@chara.PersonalInfo.Name</span>
-                                        <span class="text-xs text-gray-400">СКО @chara.PersonalInfo.MoveSpeed</span>
-                                    </div>
+                                    <p class="cm-empty">Загрузка...</p>
+                                }
+                                else
+                                {
+                                    @foreach (var monster in _availableCreatures)
+                                    {
+                                        <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                             @onclick="() => AddMonster(monster)">
+                                            <span class="text-gray-800">@monster.Name</span>
+                                            <span class="text-xs text-gray-400">СКО @monster.CreatureCharacteristics.Speed</span>
+                                        </div>
+                                    }
                                 }
                             }
-                        }
-                        else
-                        {
-                            @if (_availableCreatures is null)
-                            {
-                                <p class="text-xs text-gray-400 p-2">Загрузка...</p>
-                            }
-                            else
-                            {
-                                @foreach (var monster in _availableCreatures)
-                                {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddMonster(monster)">
-                                        <span class="text-gray-800">@monster.Name</span>
-                                        <span class="text-xs text-gray-400">СКО @monster.CreatureCharacteristics.Speed</span>
-                                    </div>
-                                }
-                            }
-                        }
+                        </div>
                     </div>
                 </div>
             }
@@ -211,40 +219,42 @@ else
             <!-- Фаза Setup: настройка трассы -->
             @if (ChaseService.Phase == ChasePhase.Setup)
             {
-                <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
-                    <h3 class="text-sm font-semibold text-gray-800 mb-3">Настройка трассы</h3>
-
-                    <div class="flex items-center gap-3 mb-4">
-                        <label class="text-sm text-gray-600">Количество локаций:</label>
-                        <input type="number" min="3" max="30" @bind="_trackLength"
-                               class="text-sm border border-gray-200 rounded px-2 py-1 w-20" />
-                        <button @onclick="SetupTrack"
-                                class="inline-flex items-center justify-center gap-2 font-semibold rounded-lg transition-all duration-200 shadow-sm min-h-[36px] px-3 py-1.5 text-sm bg-primary-700 hover:bg-primary-800 active:bg-primary-900 text-white shadow-sm hover:shadow-md">
-                            Создать трассу
-                        </button>
+                <div class="cm-card">
+                    <div class="cm-card-header">
+                        <span class="cm-section-title">Настройка трассы</span>
                     </div>
-
-                    @if (ChaseService.Locations.Any())
-                    {
-                        <div class="max-h-[40vh] overflow-y-auto space-y-1">
-                            @foreach (var location in ChaseService.Locations)
-                            {
-                                <LocationEditor @key="location.Number" Location="location" OnLocationUpdated="HandleLocationUpdated" />
-                            }
-                        </div>
-
-                        <div class="mt-4">
-                            <button type="button" class="cm-btn cm-btn-success w-full"
-                                    disabled="@(ChaseService.Participants.Count < 2)"
-                                    @onclick="BeginSpeedChecks">
-                                <span>Начать проверку скорости →</span>
+                    <div class="cm-card-body">
+                        <div class="flex items-center gap-3 mb-4">
+                            <label class="text-sm text-gray-600">Количество локаций:</label>
+                            <input type="number" min="3" max="30" @bind="_trackLength"
+                                   class="text-sm border border-gray-200 rounded px-2 py-1 w-20" />
+                            <button @onclick="SetupTrack" class="cm-btn cm-btn-primary cm-btn-sm">
+                                Создать трассу
                             </button>
-                            @if (ChaseService.Participants.Count < 2)
-                            {
-                                <p class="text-xs text-gray-400 text-center mt-1">Добавьте минимум 2 участников</p>
-                            }
                         </div>
-                    }
+
+                        @if (ChaseService.Locations.Any())
+                        {
+                            <div class="max-h-[40vh] overflow-y-auto space-y-1">
+                                @foreach (var location in ChaseService.Locations)
+                                {
+                                    <LocationEditor @key="location.Number" Location="location" OnLocationUpdated="HandleLocationUpdated" />
+                                }
+                            </div>
+
+                            <div class="mt-4">
+                                <button type="button" class="cm-btn cm-btn-success w-full"
+                                        disabled="@(ChaseService.Participants.Count < 2)"
+                                        @onclick="BeginSpeedChecks">
+                                    <span>Начать проверку скорости →</span>
+                                </button>
+                                @if (ChaseService.Participants.Count < 2)
+                                {
+                                    <p class="text-xs text-gray-400 text-center mt-1">Добавьте минимум 2 участников</p>
+                                }
+                            </div>
+                        }
+                    </div>
                 </div>
             }
 
@@ -260,31 +270,35 @@ else
             {
                 @if (ChaseService.PendingResult is not null)
                 {
-                    <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
-                        <h3 class="text-sm font-semibold text-gray-800 mb-3">Результат действия</h3>
-                        <div class="bg-gray-50 rounded-md p-3 mb-3">
-                            <p class="text-sm text-gray-700">@ChaseService.PendingResult.Summary</p>
-                            @if (ChaseService.PendingResult.Roll > 0)
-                            {
-                                <p class="text-xs text-gray-500 mt-1">
-                                    Бросок: @ChaseService.PendingResult.Roll против @ChaseService.PendingResult.SkillValue
-                                </p>
-                            }
-                            @if (ChaseService.PendingResult.DamageDealt > 0)
-                            {
-                                <p class="text-xs text-red-600 mt-1">
-                                    Урон: @ChaseService.PendingResult.DamageDealt
-                                    (ОЗ: @ChaseService.PendingResult.HpBefore → @ChaseService.PendingResult.HpAfter)
-                                </p>
-                            }
+                    <div class="cm-card">
+                        <div class="cm-card-header">
+                            <span class="cm-section-title">Результат действия</span>
                         </div>
-                        <div class="flex gap-2">
-                            <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ApplyPendingResult">
-                                <span>Применить</span>
-                            </button>
-                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelPendingResult">
-                                <span>Отменить</span>
-                            </button>
+                        <div class="cm-card-body">
+                            <div class="bg-gray-50 rounded-md p-3 mb-3">
+                                <p class="text-sm text-gray-700">@ChaseService.PendingResult.Summary</p>
+                                @if (ChaseService.PendingResult.Roll > 0)
+                                {
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        Бросок: @ChaseService.PendingResult.Roll против @ChaseService.PendingResult.SkillValue
+                                    </p>
+                                }
+                                @if (ChaseService.PendingResult.DamageDealt > 0)
+                                {
+                                    <p class="text-xs text-red-600 mt-1">
+                                        Урон: @ChaseService.PendingResult.DamageDealt
+                                        (ОЗ: @ChaseService.PendingResult.HpBefore → @ChaseService.PendingResult.HpAfter)
+                                    </p>
+                                }
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ApplyPendingResult">
+                                    <span>Применить</span>
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelPendingResult">
+                                    <span>Отменить</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 }
@@ -299,19 +313,21 @@ else
             <!-- Фаза Ended -->
             @if (ChaseService.Phase == ChasePhase.Ended)
             {
-                <div class="bg-white shadow-sm rounded-md border border-green-200 p-4 text-center">
-                    <div class="text-2xl mb-2">🏁</div>
-                    <h3 class="text-base font-semibold text-gray-800 mb-1">Погоня завершена</h3>
-                    <div class="text-sm text-gray-600 space-y-1">
-                        @foreach (var prey in ChaseService.Participants.Where(p => p.Role == ChaseRole.Prey))
-                        {
-                            <p>
-                                @prey.Name:
-                                @if (prey.HasEscaped) { <span class="text-green-700 font-medium">Сбежал</span> }
-                                else if (prey.IsCaught) { <span class="text-red-700 font-medium">Пойман</span> }
-                                else if (prey.IsEliminated) { <span class="text-gray-700 font-medium">Выбыл</span> }
-                            </p>
-                        }
+                <div class="cm-card text-center">
+                    <div class="cm-card-body">
+                        <div class="text-2xl mb-2">🏁</div>
+                        <h3 class="text-base font-semibold text-gray-800 mb-1">Погоня завершена</h3>
+                        <div class="text-sm text-gray-600 space-y-1">
+                            @foreach (var prey in ChaseService.Participants.Where(p => p.Role == ChaseRole.Prey))
+                            {
+                                <p>
+                                    @prey.Name:
+                                    @if (prey.HasEscaped) { <span class="text-green-700 font-medium">Сбежал</span> }
+                                    else if (prey.IsCaught) { <span class="text-red-700 font-medium">Пойман</span> }
+                                    else if (prey.IsEliminated) { <span class="text-gray-700 font-medium">Выбыл</span> }
+                                </p>
+                            }
+                        </div>
                     </div>
                 </div>
             }

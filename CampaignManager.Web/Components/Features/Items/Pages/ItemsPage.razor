@@ -5,9 +5,17 @@
 
 <PageTitle>Предметы - Campaign Manager</PageTitle>
 
-<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-    <h1 class="cm-h2 mb-4">Предметы</h1>
-    <FilterPanel Title="Фильтры" 
+<PageHeader Title="Предметы">
+    <Actions>
+        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddModal">
+            <i class="fas fa-plus"></i>
+            <span>Добавить</span>
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <FilterPanel Title="Фильтры"
                  @bind-IsExpanded="isSearchPanelVisible">
         <ActionButtons>
             @if (isSearchPanelVisible)
@@ -17,35 +25,39 @@
                     <span>Сбросить</span>
                 </button>
             }
-            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddModal">
-                <i class="fas fa-plus"></i>
-                <span>Добавить</span>
-            </button>
         </ActionButtons>
         <ChildContent>
-            <!-- Более компактный макет фильтров -->
             <div class="flex flex-col sm:flex-row gap-2">
-                <input type="text" @bind="searchQuery"
-                       @bind:event="oninput"
-                       @onkeyup="@(() => ApplyFilters())"
-                       placeholder="Поиск предметов..."
-                       class="flex-1 px-3 py-1 border border-primary-300 rounded text-sm bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-
-                <select @bind="selectedType" @bind:event="onchange"
-                        class="px-3 py-1 border border-primary-300 rounded text-sm bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors">
-                    <option value="">Все типы</option>
-                    @if (itemTypes != null)
-                    {
-                        @foreach (var type in itemTypes)
+                <div class="flex-grow">
+                    <label for="itemSearch" class="block text-xs font-medium text-gray-700 mb-1">Поиск</label>
+                    <div class="relative">
+                        <input type="text" id="itemSearch" @bind="searchQuery"
+                               @bind:event="oninput"
+                               @onkeyup="@(() => ApplyFilters())"
+                               placeholder="Поиск предметов..."
+                               class="w-full border border-primary-300 rounded-lg pl-8 pr-3 py-1 text-sm text-primary-700 bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors shadow-sm"/>
+                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400 text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-full sm:w-48">
+                    <label for="itemType" class="block text-xs font-medium text-gray-700 mb-1">Тип предмета</label>
+                    <select id="itemType" @bind="selectedType" @bind:event="onchange"
+                            class="w-full border border-primary-300 rounded-lg px-2 py-1 text-sm text-primary-700 bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors shadow-sm">
+                        <option value="">Все типы</option>
+                        @if (itemTypes != null)
                         {
-                            <option value="@type">@type</option>
+                            @foreach (var type in itemTypes)
+                            {
+                                <option value="@type">@type</option>
+                            }
                         }
-                    }
-                </select>
+                    </select>
+                </div>
             </div>
-
-            <div class="flex flex-wrap justify-between items-center gap-2 mt-2">
-                <!-- Компактные эпоха фильтры -->
+            <div class="mt-2">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Эпоха</label>
                 <div class="flex flex-wrap items-center gap-3 sm:gap-4">
                     <div class="flex items-center">
                         <input type="checkbox" id="era1920s" @bind="is1920Filter"
@@ -65,20 +77,22 @@
 
     @if (paginatedItems.Count() == 0)
     {
-        <div class="bg-white rounded-lg shadow-md p-4 text-center border border-gray-200">
-            <div class="flex flex-col items-center justify-center py-6">
-                <div class="rounded-full bg-gray-100 p-3 mb-4">
-                    <i class="fas fa-search text-gray-400 text-2xl"></i>
+        <div class="cm-card">
+            <div class="cm-card-body text-center">
+                <div class="flex flex-col items-center justify-center py-6">
+                    <div class="rounded-full bg-gray-100 p-3 mb-4">
+                        <i class="fas fa-search text-gray-400 text-2xl"></i>
+                    </div>
+                    <p class="cm-empty">
+                        Предметы не найдены. Попробуйте изменить параметры фильтра.
+                    </p>
                 </div>
-                <p class="text-gray-600 text-base">
-                    Предметы не найдены. Попробуйте изменить параметры фильтра.
-                </p>
             </div>
         </div>
     }
     else
     {
-        <div class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
+        <div class="cm-card">
             <!-- Таблица для средних и больших экранов с компактными ячейками -->
             <div class="block overflow-x-auto">
                 <table class="w-full text-sm">

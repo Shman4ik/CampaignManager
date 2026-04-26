@@ -27,23 +27,10 @@
 
 <PageTitle>Боевой помощник</PageTitle>
 
-<PageHeader Title="Боевой помощник"/>
-
-@if (!_isKeeper)
-{
-    <div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-        <Alert Type="error" Title="Доступ запрещён">
-            Эта страница доступна только для мастера игры.
-        </Alert>
-    </div>
-}
-else
-{
-<div class="max-w-7xl mx-auto px-2 py-4 font-sans">
-    <!-- Заголовок -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 class="cm-h2">Боевой помощник</h1>
-        <div class="flex flex-wrap items-center gap-3">
+<PageHeader Title="Боевой помощник">
+    <Actions>
+        @if (_isKeeper)
+        {
             <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
             @if (_selectedCampaign != null && _campaignScenarios.Count > 0)
             {
@@ -51,27 +38,41 @@ else
                                   SelectedScenarioId="_selectedScenario?.Id"
                                   OnScenarioSelected="HandleScenarioSelected" />
             }
-        </div>
-    </div>
+        }
+    </Actions>
+</PageHeader>
 
+@if (!_isKeeper)
+{
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для мастера игры.
+        </Alert>
+    </div>
+}
+else
+{
+<div class="max-w-7xl mx-auto px-4 py-6">
     <!-- Панель раундов -->
-    <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div class="flex items-center gap-4">
-            <span class="text-sm font-semibold text-gray-800">Раунд: @CombatService.CurrentRound</span>
-            <span class="text-sm text-gray-500">Ход: @(CombatService.CurrentTurnIndex + 1) / @Math.Max(1, CombatService.Combatants.Count)</span>
-            @if (CombatService.GetActiveCombatant() != null)
-            {
-                <span class="text-sm font-medium text-blue-700">
-                    → @CombatService.GetActiveCombatant()!.Name
-                </span>
-            }
-        </div>
-        <div class="flex gap-2">
-            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn"><span>Следующий ход</span></button>
-            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound"><span>Следующий раунд</span></button>
-            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ToggleCombatLog">
-                <span>@(_showCombatLog ? "Скрыть журнал" : "Журнал боя")</span>
-            </button>
+    <div class="cm-card mb-4">
+        <div class="cm-card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div class="flex items-center gap-4">
+                <span class="text-sm font-semibold text-gray-800">Раунд: @CombatService.CurrentRound</span>
+                <span class="text-sm text-gray-500">Ход: @(CombatService.CurrentTurnIndex + 1) / @Math.Max(1, CombatService.Combatants.Count)</span>
+                @if (CombatService.GetActiveCombatant() != null)
+                {
+                    <span class="text-sm font-medium text-blue-700">
+                        → @CombatService.GetActiveCombatant()!.Name
+                    </span>
+                }
+            </div>
+            <div class="flex gap-2">
+                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn"><span>Следующий ход</span></button>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound"><span>Следующий раунд</span></button>
+                <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ToggleCombatLog">
+                    <span>@(_showCombatLog ? "Скрыть журнал" : "Журнал боя")</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -81,9 +82,11 @@ else
         <!-- Левая: Список инициативы + Добавление -->
         <div class="col-span-12 lg:col-span-4 space-y-3">
             <!-- Участники -->
-            <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
-                <h3 class="text-sm font-semibold text-gray-800 mb-2">Порядок инициативы</h3>
-                <div class="max-h-[40vh] overflow-y-auto pr-1">
+            <div class="cm-card">
+                <div class="cm-card-header">
+                    <span class="cm-section-title">Порядок инициативы</span>
+                </div>
+                <div class="max-h-[40vh] overflow-y-auto p-3 pr-2">
                     @if (CombatService.Combatants.Any())
                     {
                         @foreach (var combatant in CombatService.Combatants)
@@ -97,126 +100,129 @@ else
                     }
                     else
                     {
-                        <p class="text-sm text-gray-400 text-center py-4">Нет участников</p>
+                        <p class="cm-empty">Нет участников</p>
                     }
                 </div>
             </div>
 
             <!-- Добавить участника -->
-            <div class="bg-white shadow-sm rounded-md border border-gray-200 p-3">
-                <h3 class="text-sm font-semibold text-gray-800 mb-2">Добавить участника</h3>
-
-                <div class="flex flex-wrap gap-1 mb-2">
-                    <button @onclick='() => _showAddMode = "characters"'
-                            class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                        Персонажи
-                    </button>
-                    <button @onclick='() => _showAddMode = "creatures"'
-                            class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                        Существа
-                    </button>
-                    @if (_selectedScenario != null)
-                    {
-                        <button @onclick='() => _showAddMode = "scenario-npcs"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-npcs" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            НПС
-                        </button>
-                        <button @onclick='() => _showAddMode = "scenario-creatures"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-creatures" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Монстры сцен.
-                        </button>
-                    }
+            <div class="cm-card">
+                <div class="cm-card-header">
+                    <span class="cm-section-title">Добавить участника</span>
                 </div>
+                <div class="cm-card-body">
+                    <div class="flex flex-wrap gap-1 mb-2">
+                        <button @onclick='() => _showAddMode = "characters"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Персонажи
+                        </button>
+                        <button @onclick='() => _showAddMode = "creatures"'
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            Существа
+                        </button>
+                        @if (_selectedScenario != null)
+                        {
+                            <button @onclick='() => _showAddMode = "scenario-npcs"'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-npcs" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                НПС
+                            </button>
+                            <button @onclick='() => _showAddMode = "scenario-creatures"'
+                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-creatures" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                Монстры сцен.
+                            </button>
+                        }
+                    </div>
 
-                @if (_showAddMode == "creatures")
-                {
-                    <input type="text"
-                           class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
-                           placeholder="Поиск существа..."
-                           @bind="_creatureSearch"
-                           @bind:event="oninput" />
-                }
+                    @if (_showAddMode == "creatures")
+                    {
+                        <input type="text"
+                               class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+                               placeholder="Поиск существа..."
+                               @bind="_creatureSearch"
+                               @bind:event="oninput" />
+                    }
 
-                <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
-                    @if (_showAddMode == "characters")
-                    {
-                        @if (_availableCharacters == null)
+                    <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
+                        @if (_showAddMode == "characters")
                         {
-                            <p class="text-xs text-gray-400 p-2">@(_selectedCampaign == null ? "Выберите кампанию" : "Загрузка...")</p>
+                            @if (_availableCharacters == null)
+                            {
+                                <p class="cm-empty">@(_selectedCampaign == null ? "Выберите кампанию" : "Загрузка...")</p>
+                            }
+                            else if (!_availableCharacters.Any())
+                            {
+                                <p class="cm-empty">Нет персонажей</p>
+                            }
+                            else
+                            {
+                                @foreach (var chara in _availableCharacters)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddCharacter(chara)">
+                                        <span class="text-gray-800">@chara.PersonalInfo.Name</span>
+                                        <span class="text-xs text-gray-400">ЛВК @chara.Characteristics.Dexterity.Regular</span>
+                                    </div>
+                                }
+                            }
                         }
-                        else if (!_availableCharacters.Any())
+                        else if (_showAddMode == "scenario-npcs")
                         {
-                            <p class="text-xs text-gray-400 p-2">Нет персонажей</p>
+                            @if (!_scenarioNpcs.Any())
+                            {
+                                <p class="cm-empty">Нет НПС в сценарии</p>
+                            }
+                            else
+                            {
+                                @foreach (var npc in _scenarioNpcs)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-purple-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddNpc(npc)">
+                                        <span class="text-gray-800">@npc.CharacterName</span>
+                                        <span class="text-xs text-gray-400">ЛВК @npc.Character.Characteristics.Dexterity.Regular</span>
+                                    </div>
+                                }
+                            }
+                        }
+                        else if (_showAddMode == "scenario-creatures")
+                        {
+                            @if (!_scenarioCreatures.Any())
+                            {
+                                <p class="cm-empty">Нет монстров в сценарии</p>
+                            }
+                            else
+                            {
+                                @foreach (var monster in _scenarioCreatures)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-orange-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddMonster(monster)">
+                                        <span class="text-gray-800">@monster.Name</span>
+                                        <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
+                                    </div>
+                                }
+                            }
                         }
                         else
                         {
-                            @foreach (var chara in _availableCharacters)
+                            @if (_availableCreatures == null)
                             {
-                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                     @onclick="() => AddCharacter(chara)">
-                                    <span class="text-gray-800">@chara.PersonalInfo.Name</span>
-                                    <span class="text-xs text-gray-400">ЛВК @chara.Characteristics.Dexterity.Regular</span>
-                                </div>
+                                <p class="cm-empty">Загрузка...</p>
+                            }
+                            else
+                            {
+                                var filtered = string.IsNullOrWhiteSpace(_creatureSearch)
+                                    ? _availableCreatures
+                                    : _availableCreatures.Where(c => c.Name.Contains(_creatureSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+                                @foreach (var monster in filtered)
+                                {
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                         @onclick="() => AddMonster(monster)">
+                                        <span class="text-gray-800">@monster.Name</span>
+                                        <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
+                                    </div>
+                                }
                             }
                         }
-                    }
-                    else if (_showAddMode == "scenario-npcs")
-                    {
-                        @if (!_scenarioNpcs.Any())
-                        {
-                            <p class="text-xs text-gray-400 p-2">Нет НПС в сценарии</p>
-                        }
-                        else
-                        {
-                            @foreach (var npc in _scenarioNpcs)
-                            {
-                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-purple-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                     @onclick="() => AddNpc(npc)">
-                                    <span class="text-gray-800">@npc.CharacterName</span>
-                                    <span class="text-xs text-gray-400">ЛВК @npc.Character.Characteristics.Dexterity.Regular</span>
-                                </div>
-                            }
-                        }
-                    }
-                    else if (_showAddMode == "scenario-creatures")
-                    {
-                        @if (!_scenarioCreatures.Any())
-                        {
-                            <p class="text-xs text-gray-400 p-2">Нет монстров в сценарии</p>
-                        }
-                        else
-                        {
-                            @foreach (var monster in _scenarioCreatures)
-                            {
-                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-orange-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                     @onclick="() => AddMonster(monster)">
-                                    <span class="text-gray-800">@monster.Name</span>
-                                    <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
-                                </div>
-                            }
-                        }
-                    }
-                    else
-                    {
-                        @if (_availableCreatures == null)
-                        {
-                            <p class="text-xs text-gray-400 p-2">Загрузка...</p>
-                        }
-                        else
-                        {
-                            var filtered = string.IsNullOrWhiteSpace(_creatureSearch)
-                                ? _availableCreatures
-                                : _availableCreatures.Where(c => c.Name.Contains(_creatureSearch, StringComparison.OrdinalIgnoreCase)).ToList();
-                            @foreach (var monster in filtered)
-                            {
-                                <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                     @onclick="() => AddMonster(monster)">
-                                    <span class="text-gray-800">@monster.Name</span>
-                                    <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
-                                </div>
-                            }
-                        }
-                    }
+                    </div>
                 </div>
             </div>
 
@@ -233,7 +239,8 @@ else
             }
             else
             {
-                <div class="bg-white shadow-sm rounded-md border border-gray-200 p-4">
+                <div class="cm-card">
+                    <div class="cm-card-body">
                     <!-- Активный боец (контекст) -->
                     @if (CombatService.GetActiveCombatant() is { } active)
                     {
@@ -330,6 +337,7 @@ else
                     {
                         <DiceRoller />
                     }
+                    </div>
                 </div>
             }
         </div>
