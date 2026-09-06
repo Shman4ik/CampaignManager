@@ -86,7 +86,16 @@ public class Combatant
     public int AttacksPerRound { get; set; } = 1;  // Число атак за раунд (существа)
     public bool IsAiming { get; set; }             // Прицеливается (бонусная кость в след. раунде)
     public bool HasTakenCover { get; set; }        // Укрылся от огня
-    public bool LostNextAttackFromCover { get; set; } // Теряет атаку из-за укрытия
+
+    /// <summary>
+    /// Номер раунда, в котором боец не может атаковать: укрытие от огня отнимает
+    /// следующую атаку — текущего раунда, если он ещё не атаковал, иначе следующего
+    /// (стр. 111). У существ с несколькими атаками пропадают все атаки этого раунда.
+    /// </summary>
+    public int? AttackBlockedInRound { get; set; }
+
+    /// <summary>Сколько атак боец уже совершил в этом раунде (стр. 100).</summary>
+    public int AttacksThisRound { get; set; }
     public bool HasActedThisRound { get; set; }    // Уже действовал в этом раунде
     public bool IsDelayed { get; set; }            // Отложил действие
     public string? JammedWeaponName { get; set; }  // Заклинившее оружие (название)

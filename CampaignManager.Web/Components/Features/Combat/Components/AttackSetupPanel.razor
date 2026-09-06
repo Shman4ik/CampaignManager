@@ -24,6 +24,13 @@
 
     @if (_selectedAttacker != null)
     {
+        @if (AttackBlockReason is { } blockReason)
+        {
+            <div class="mb-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                ⚠ @blockReason
+            </div>
+        }
+
         <!-- Оружие / Атака -->
         <div class="mb-3">
             <label class="block text-xs font-medium text-gray-600 mb-1">Оружие / Атака</label>
@@ -949,8 +956,13 @@
             _defenderReaction);
     }
 
+    /// <summary>Почему атака сейчас невозможна: укрытие или израсходованные атаки за раунд.</summary>
+    private string? AttackBlockReason =>
+        _selectedAttacker is null ? null : CombatService.GetAttackBlockReason(_selectedAttacker);
+
     private bool CanResolve() =>
         _selectedAttacker != null && _selectedWeaponIndex >= 0
+        && AttackBlockReason is null
         && (_selectedDefender != null || !_isMelee)
         && !WeaponIsJammed
         && !ShotIsImpossible

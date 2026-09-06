@@ -84,12 +84,14 @@ public sealed partial class CombatService
             c.IsDelayed = false;
             c.HasTakenCover = false;
             c.AutofireChecksThisRound = 0;
+            c.AttacksThisRound = 0;
 
-            // Если укрывался — теряет атаку в этом раунде
-            if (c.LostNextAttackFromCover)
-                c.LostNextAttackFromCover = false;
+            // Пропуск атаки за прошедший раунд больше не актуален
+            if (c.AttackBlockedInRound < CurrentRound)
+                c.AttackBlockedInRound = null;
 
-            // Если прицеливался — флаг сохраняется до использования
+            // Прицеливание сохраняется до выстрела; оно теряется, только если боец
+            // получил урон или переместился (стр. 111)
         }
     }
 
@@ -562,6 +564,9 @@ public sealed partial class CombatService
         var modifiers = CalculateAttackModifiers(setup, attacker, defender);
         result.Modifiers = modifiers;
 
+        // Ход потрачен на атаку независимо от того, попадёт она или нет
+        RegisterAttack(attacker);
+
         // 1. Бросок атакующего (ручной или авто)
         result.AttackerSkillValue = setup.AttackSkillValue;
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
@@ -632,7 +637,7 @@ public sealed partial class CombatService
             defender.DefenseCountThisRound++;
         }
 
-        // Если атакующий победил в рукопашной и цель в лежачем положении — сбрасываем прицеливание
+        // Прицеливание израсходовано
         if (attacker.IsAiming) attacker.IsAiming = false;
 
         if (!result.AttackerWins)
@@ -800,6 +805,49 @@ public sealed partial class CombatService
             : setup.SurpriseMode;
 
     /// <summary>
+    /// Может ли боец атаковать в этом раунде: укрытие от огня отнимает атаку,
+    /// а число атак за раунд ограничено (стр. 100, 111).
+    /// </summary>
+    public bool CanAttack(Combatant combatant) =>
+        combatant.AttackBlockedInRound != CurrentRound
+        && combatant.AttacksThisRound < Math.Max(1, combatant.AttacksPerRound);
+
+    /// <summary>Почему боец не может атаковать; null — может.</summary>
+    public string? GetAttackBlockReason(Combatant combatant)
+    {
+        if (combatant.AttackBlockedInRound == CurrentRound)
+            return $"{combatant.Name} укрывался от огня и теряет атаку в этом раунде (стр. 111). " +
+                   "До следующей атаки он может только уклоняться.";
+
+        var limit = Math.Max(1, combatant.AttacksPerRound);
+        if (combatant.AttacksThisRound >= limit)
+            return $"{combatant.Name} уже совершил все свои атаки за раунд ({combatant.AttacksThisRound} из {limit}).";
+
+        return null;
+    }
+
+    /// <summary>Записывает совершённое действие бойца в трекинг раунда.</summary>
+    private static void RegisterAttack(Combatant attacker)
+    {
+        attacker.HasActedThisRound = true;
+        attacker.AttacksThisRound++;
+    }
+
+    /// <summary>
+    /// Укрытие от огня: боец теряет следующую атаку — этого раунда, если ещё не
+    /// атаковал, иначе следующего (стр. 111).
+    /// </summary>
+    public void TakeCover(Combatant combatant)
+    {
+        combatant.HasTakenCover = true;
+        combatant.AttackBlockedInRound = combatant.AttacksThisRound == 0
+            ? CurrentRound
+            : CurrentRound + 1;
+
+        NotifyStateChanged();
+    }
+
+    /// <summary>
     /// Численное превосходство (стр. 106): цель уже уклонялась или контратаковала
     /// столько раз, сколько у неё атак за раунд.
     /// </summary>
@@ -845,6 +893,7 @@ public sealed partial class CombatService
         // Патроны расходуются вне зависимости от исхода проверки
         SpendAmmo(attacker, setup);
         if (setup.FiringMode == FiringMode.Volley) attacker.AutofireChecksThisRound++;
+        RegisterAttack(attacker);
 
         result.AttackerSkillValue = setup.AttackSkillValue;
         result.RequiredSuccessLevel = requiredLevel;
@@ -968,6 +1017,9 @@ public sealed partial class CombatService
                              $"Комплекция {attacker.Name} слишком низкая (разница ≥3).";
             return result;
         }
+
+        // Манёвр заменяет атаку и тратит ход независимо от исхода
+        RegisterAttack(attacker);
 
         // Разница Комплекции даёт штрафные кости: по одной за каждый пункт, максимум две (стр. 103)
         var buildPenalty = Math.Clamp(buildDiff, 0, 2);
@@ -1374,6 +1426,9 @@ public sealed partial class CombatService
                     defender.FirstAidAttempted = false;
                     defender.IsStabilized = false;
                     defender.TemporaryHitPoints = 0;
+
+                    // Получивший урон теряет преимущество от прицеливания (стр. 111)
+                    defender.IsAiming = false;
                 }
 
                 // Вырвался из захвата при манёвре
@@ -1400,6 +1455,7 @@ public sealed partial class CombatService
                 attacker.FirstAidAttempted = false;
                 attacker.IsStabilized = false;
                 attacker.TemporaryHitPoints = 0;
+                attacker.IsAiming = false;
             }
         }
 
