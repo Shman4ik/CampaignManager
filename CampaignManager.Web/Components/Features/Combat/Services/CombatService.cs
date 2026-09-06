@@ -815,6 +815,30 @@ public sealed partial class CombatService
 
     // ───────────────────── Расчёт урона ─────────────────────
 
+    /// <summary>
+    /// Определяет, как применяется бонус к урону (CoC 7e, стр. 106).
+    /// <para>
+    /// По умолчанию решает правило: ближний бой — полный Б.к.У., дистанционная
+    /// атака — без Б.к.У. Данные оружия могут переопределить это, явно указав
+    /// <see cref="DamageBonusType.Half"/> (лук, праща, метательное оружие) или
+    /// <see cref="DamageBonusType.Full"/>. Значение <see cref="DamageBonusType.None"/>
+    /// в данных совпадает со значением по умолчанию и потому не считается
+    /// переопределением — иначе у любого оружия с незаполненным DamageInfo
+    /// бонус к урону молча пропадал бы.
+    /// </para>
+    /// <para>
+    /// В <c>WeaponType</c> нет категории метательного оружия, поэтому половинный
+    /// Б.к.У. задаётся только через данные конкретного оружия.
+    /// </para>
+    /// </summary>
+    public static DamageBonusType ResolveDamageBonusType(bool isMelee, DamageExpression? damageExpr)
+    {
+        if (damageExpr is not null && damageExpr.DamageBonus != DamageBonusType.None)
+            return damageExpr.DamageBonus;
+
+        return isMelee ? DamageBonusType.Full : DamageBonusType.None;
+    }
+
     private static void CalculateDamage(CombatActionResult result, AttackSetup setup, Combatant attacker, Combatant defender)
     {
         var damageFormula = setup.SelectedWeapon?.Damage ?? setup.CreatureAttackDamage ?? "1D3";
@@ -828,16 +852,8 @@ public sealed partial class CombatService
             result.IsImpalingWeapon = IsImpalingWeapon(setup.SelectedWeapon);
         // Для дальнего боя IsImpalingWeapon устанавливается в ResolveRangedAttack
 
-        // Применяем Б.К.У. только если это ближний бой,
-        // ИЛИ если структурированная модель явно указывает тип бонуса
-        bool applyDamageBonus = setup.IsMelee;
-        DamageBonusType dbType = DamageBonusType.Full;
-        if (damageExpr is not null)
-        {
-            dbType = damageExpr.DamageBonus;
-            // Если в модели — None, не применяем Б.К.У. даже в ближнем бою
-            applyDamageBonus = damageExpr.DamageBonus != DamageBonusType.None;
-        }
+        var dbType = ResolveDamageBonusType(setup.IsMelee, damageExpr);
+        var applyDamageBonus = dbType != DamageBonusType.None;
 
         // Чрезвычайный урон: критический (01) или экстремальный (≤навык/5)
         // Правило: только при атаке в свой ход, НЕ при контратаке
@@ -890,8 +906,8 @@ public sealed partial class CombatService
 
         // ── Расчёт последствий урона ──
 
-        // Мгновенная смерть: один удар > макс ПЗ (CoC 7e стр. 117)
-        if (result.TotalDamage > defender.MaxHitPoints)
+        // Мгновенная смерть: один удар наносит урон, равный максимуму ПЗ или больше (стр. 118)
+        if (result.TotalDamage >= defender.MaxHitPoints)
         {
             result.IsInstantDeath = true;
             result.DefenderDead = true;
@@ -951,6 +967,16 @@ public sealed partial class CombatService
         result.CounterArmorReduction = Math.Min(attacker.Armor, result.CounterRawDamage);
         result.CounterTotalDamage = result.CounterRawDamage - result.CounterArmorReduction;
 
+        // Мгновенная смерть от контратаки: урон одной атакой ≥ максимума ПЗ (стр. 118)
+        if (result.CounterTotalDamage >= attacker.MaxHitPoints)
+        {
+            result.AttackerDead = true;
+            result.AttackerHpAfter = 0;
+            result.Summary += $" {defender.Name} наносит {attacker.Name} {result.CounterTotalDamage} урона — " +
+                              $"это не меньше его максимума ПЗ ({attacker.MaxHitPoints}). {attacker.Name} убит мгновенно!";
+            return;
+        }
+
         int newHp = attacker.CurrentHitPoints - result.CounterTotalDamage;
         result.AttackerHpAfter = Math.Max(0, newHp);
 
@@ -984,7 +1010,7 @@ public sealed partial class CombatService
         if (result.AttackerTriggeredMajorWound)
         {
             var conRes = result.AttackerMajorWoundConRollSuccess ? "успех" : "провал";
-            result.Summary += $" Тяжёлая рана! Проверка ТЕЛ: {result.AttackerMajorWoundConRoll} — {conRes}.";
+            result.Summary += $" Серьёзная рана! Проверка ВЫН: {result.AttackerMajorWoundConRoll} — {conRes}.";
         }
         if (result.AttackerKnockedUnconscious) result.Summary += $" {attacker.Name} теряет сознание!";
         if (result.AttackerDying) result.Summary += $" {attacker.Name} при смерти!";
@@ -1293,7 +1319,7 @@ public sealed partial class CombatService
             if (result.TriggeredMajorWound)
             {
                 var conRes = result.MajorWoundConRollSuccess ? "успех" : "провал";
-                parts.Add($"Серьёзная рана! ТЕЛ: {result.MajorWoundConRoll} — {conRes}. {result.DefenderName} падает.");
+                parts.Add($"Серьёзная рана! ВЫН: {result.MajorWoundConRoll} — {conRes}. {result.DefenderName} падает.");
             }
             if (result.DefenderKnockedUnconscious) parts.Add($"{result.DefenderName} теряет сознание!");
             if (result.DefenderDead) parts.Add($"{result.DefenderName} мёртв!");
