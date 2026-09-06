@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Bestiary.Model;
+﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Model;
@@ -32,6 +32,21 @@ public class Combatant
     // Боевые характеристики
     public int DodgeSkill { get; set; }
     public int FightingSkill { get; set; }
+
+    /// <summary>ИНТ — нужен для проверки при потере 5+ пунктов рассудка (стр. 153).</summary>
+    public int IntelligenceValue { get; set; }
+
+    /// <summary>
+    /// Потеряно рассудка за текущий игровой день. Потеря не менее ⅕ текущего
+    /// рассудка за день означает бессрочное безумие (стр. 153).
+    /// </summary>
+    public int SanityLostToday { get; set; }
+
+    /// <summary>Часов, оставшихся до конца временного безумия (1d10 при наступлении).</summary>
+    public int TemporaryInsanityHours { get; set; }
+
+    /// <summary>Неизлечимое безумие: рассудок упал до нуля (стр. 153).</summary>
+    public bool HasPermanentInsanity { get; set; }
     public string DamageBonus { get; set; } = "0";
     public int Build { get; set; }
     public int ConstitutionValue { get; set; }
@@ -86,6 +101,7 @@ public class Combatant
         _ = int.TryParse(character.PersonalInfo.Build, out var buildValue);
         Build = buildValue;
         ConstitutionValue = character.Characteristics.Constitution.Regular;
+        IntelligenceValue = character.Characteristics.Intelligence.Regular;
 
         // Состояния из персонажа
         if (character.State != null)
@@ -120,6 +136,7 @@ public class Combatant
         // Боевые характеристики существа
         DamageBonus = creature.CreatureCharacteristics.AverageBonusToHit;
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
+        IntelligenceValue = creature.CreatureCharacteristics.Intelligence.Value;
         Build = creature.CreatureCharacteristics.AverageComplexity;
         Armor = creature.CreatureCharacteristics.Armor;
 

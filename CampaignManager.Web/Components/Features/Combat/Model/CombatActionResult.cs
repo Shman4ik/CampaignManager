@@ -100,7 +100,32 @@ public class CombatActionResult
     public int? SanityBefore { get; set; }
     public int? SanityAfter { get; set; }
     public int? SanityLoss { get; set; }
+
+    /// <summary>Крах в проверке Рассудка — теряется максимум пунктов (стр. 153).</summary>
+    public bool SanityFumble { get; set; }
+
+    /// <summary>Бросок ИНТ при потере 5+ пунктов за раз (стр. 153).</summary>
+    public int? IntelligenceRoll { get; set; }
+
+    /// <summary>Значение ИНТ, против которого шёл бросок.</summary>
+    public int? IntelligenceValue { get; set; }
+
+    /// <summary>
+    /// Временное безумие. Наступает при УСПЕХЕ проверки ИНТ: сыщик осознал ужас.
+    /// </summary>
     public bool? TriggeredTemporaryInsanity { get; set; }
+
+    /// <summary>Длительность временного безумия в часах (1d10).</summary>
+    public int? TemporaryInsanityHours { get; set; }
+
+    /// <summary>Бессрочное безумие: потеряно не менее ⅕ текущего рассудка за игровой день.</summary>
+    public bool TriggeredIndefiniteInsanity { get; set; }
+
+    /// <summary>Неизлечимое безумие: рассудок упал до нуля.</summary>
+    public bool TriggeredPermanentInsanity { get; set; }
+
+    /// <summary>Сколько рассудка цель потеряла за игровой день с учётом этой проверки.</summary>
+    public int? SanityLostToday { get; set; }
 
     // ── Описание результата ────────────────────────────────────────────
     public string Summary { get; set; } = string.Empty;

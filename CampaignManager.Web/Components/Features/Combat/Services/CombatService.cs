@@ -1074,29 +1074,86 @@ public sealed partial class CombatService
             SanityBefore = target.CurrentSanity
         };
 
+        // Бонусные и штрафные кости к проверкам Рассудка не применяются (стр. 152)
         var roll = setup.ManualRoll ?? RollD100();
         result.AttackerRoll = roll;
         result.AttackerSkillValue = target.CurrentSanity;
+        result.AttackerSuccessLevel = CalculateSuccessLevel(roll, target.CurrentSanity);
 
-        var success = roll <= target.CurrentSanity;
-        result.AttackerSuccessLevel = success ? SuccessLevel.RegularSuccess : SuccessLevel.Failure;
+        var isFumble = result.AttackerSuccessLevel == SuccessLevel.Fumble;
+        var success = result.AttackerSuccessLevel >= SuccessLevel.RegularSuccess;
+        result.SanityFumble = isFumble;
 
-        var sanLoss = success
-            ? RollDiceFormula(setup.SuccessLoss)
-            : RollDiceFormula(setup.FailureLoss);
+        // Крах — теряется максимум возможных пунктов (стр. 153)
+        var sanLoss = isFumble
+            ? MaximizeDiceFormula(setup.FailureLoss)
+            : RollDiceFormula(success ? setup.SuccessLoss : setup.FailureLoss);
 
         result.SanityLoss = sanLoss;
-        result.SanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
+        var sanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
+        result.SanityAfter = sanityAfter;
 
+        var lostToday = target.SanityLostToday + sanLoss;
+        result.SanityLostToday = lostToday;
+
+        var notes = new List<string>();
+
+        // Потеря 5+ пунктов за раз — проверка ИНТ; безумие наступает при УСПЕХЕ (стр. 153)
         if (sanLoss >= 5)
-            result.TriggeredTemporaryInsanity = true;
+        {
+            var intRoll = setup.ManualIntRoll ?? RollD100();
+            result.IntelligenceRoll = intRoll;
+            result.IntelligenceValue = target.IntelligenceValue;
 
-        var successText = success ? "успех" : "неудача";
+            var realizedTheHorror = intRoll <= target.IntelligenceValue;
+            result.TriggeredTemporaryInsanity = realizedTheHorror;
+
+            if (realizedTheHorror)
+            {
+                result.TemporaryInsanityHours = setup.ManualInsanityDurationRoll ?? RollDice(10);
+                notes.Add($"Потеряно 5+ пунктов за раз. Проверка ИНТ: {intRoll}/{target.IntelligenceValue} — " +
+                          $"успех, сыщик осознал ужас. Временное безумие на {result.TemporaryInsanityHours} ч.");
+            }
+            else
+            {
+                notes.Add($"Потеряно 5+ пунктов за раз. Проверка ИНТ: {intRoll}/{target.IntelligenceValue} — " +
+                          "провал, рассудок отгородился от ужаса. Безумие не наступает.");
+            }
+        }
+
+        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 153)
+        if (target.CurrentSanity > 0 && lostToday * 5 >= target.CurrentSanity && !target.HasIndefiniteInsanity)
+        {
+            result.TriggeredIndefiniteInsanity = true;
+            notes.Add($"За игровой день потеряно {lostToday} из {target.CurrentSanity} — это не меньше ⅕. Бессрочное безумие.");
+        }
+
+        // Неизлечимое безумие при нулевом рассудке (стр. 153)
+        if (sanityAfter == 0)
+        {
+            result.TriggeredPermanentInsanity = true;
+            notes.Add($"{target.Name} теряет рассудок полностью — неизлечимое безумие, персонаж выбывает из игры.");
+        }
+
+        var successText = GetSuccessLevelText(result.AttackerSuccessLevel);
         result.Summary = $"{target.Name}: проверка рассудка — бросок {roll} против {target.CurrentSanity} ({successText}). " +
-                         $"Потеря: {sanLoss} ед." +
-                         (sanLoss >= 5 ? " Временное безумие!" : "");
+                         (isFumble ? $"Крах — максимальная потеря: {sanLoss} ед. " : $"Потеря: {sanLoss} ед. ") +
+                         $"РАС: {target.CurrentSanity}→{sanityAfter}." +
+                         (notes.Count > 0 ? " " + string.Join(" ", notes) : "");
 
         return result;
+    }
+
+    /// <summary>
+    /// Сбрасывает счётчик потерянного за день рассудка — вызывать, когда сыщики
+    /// добрались до безопасного места и игровой день закончился (стр. 153).
+    /// </summary>
+    public void StartNewGameDay()
+    {
+        foreach (var c in Combatants)
+            c.SanityLostToday = 0;
+
+        NotifyStateChanged();
     }
 
     // ───────────────────── Применение результата ─────────────────────
@@ -1152,8 +1209,19 @@ public sealed partial class CombatService
             if (target != null)
             {
                 target.CurrentSanity = result.SanityAfter ?? target.CurrentSanity;
+                target.SanityLostToday = result.SanityLostToday ?? target.SanityLostToday;
+
                 if (result.TriggeredTemporaryInsanity == true)
+                {
                     target.HasTemporaryInsanity = true;
+                    target.TemporaryInsanityHours = result.TemporaryInsanityHours ?? 0;
+                }
+
+                if (result.TriggeredIndefiniteInsanity)
+                    target.HasIndefiniteInsanity = true;
+
+                if (result.TriggeredPermanentInsanity)
+                    target.HasPermanentInsanity = true;
 
                 // Синхронизация с исходным персонажем (для листа сыщика)
                 if (target.CharacterSource is { } src)
@@ -1167,6 +1235,8 @@ public sealed partial class CombatService
                         src.State.HasTemporaryInsanity = true;
                         src.State.TemporaryInsanityStartedAt = DateTime.UtcNow;
                     }
+                    if (result.TriggeredIndefiniteInsanity)
+                        src.State.HasIndefiniteInsanity = true;
                 }
             }
         }
@@ -1277,8 +1347,8 @@ public sealed partial class CombatService
         SuccessLevel.ExtremeSuccess => "чрезвычайный успех",
         SuccessLevel.HardSuccess => "трудный успех",
         SuccessLevel.RegularSuccess => "обычный успех",
-        SuccessLevel.Failure => "неудача",
-        SuccessLevel.Fumble => "провал",
+        SuccessLevel.Failure => "провал",
+        SuccessLevel.Fumble => "крах",
         _ => "неизвестно"
     };
 
