@@ -335,13 +335,33 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Считает эффективное значение навыка с учётом дальности стрельбы.
+    /// Уровень успеха, необходимый для попадания на данной дальности (CoC 7e, стр. 110).
+    /// Дальность задаёт уровень сложности, а не урезает значение навыка.
     /// </summary>
-    public static int GetEffectiveSkillForRange(int baseSkill, RangeLevel range) => range switch
+    public static SuccessLevel GetRequiredLevelForRange(RangeLevel range) => range switch
+    {
+        RangeLevel.Long => SuccessLevel.HardSuccess,
+        RangeLevel.Extreme => SuccessLevel.ExtremeSuccess,
+        _ => SuccessLevel.RegularSuccess
+    };
+
+    /// <summary>
+    /// Порог броска для данной дальности — то же число, что и уровень сложности,
+    /// но в виде значения навыка. Нужно только для подписей в интерфейсе.
+    /// </summary>
+    public static int GetRollThresholdForRange(int baseSkill, RangeLevel range) => range switch
     {
         RangeLevel.Long => baseSkill / 2,
         RangeLevel.Extreme => baseSkill / 5,
         _ => baseSkill
+    };
+
+    /// <summary>Название уровня сложности для подписей: «трудный», «чрезвычайный».</summary>
+    public static string GetDifficultyName(RangeLevel range) => range switch
+    {
+        RangeLevel.Long => "трудный",
+        RangeLevel.Extreme => "чрезвычайный",
+        _ => "обычный"
     };
 
     /// <summary>
@@ -614,8 +634,8 @@ public sealed partial class CombatService
         var attacker = Combatants.First(c => c.Id == setup.AttackerId);
         var defender = Combatants.First(c => c.Id == setup.DefenderId);
 
-        // Эффективное значение навыка с учётом дальности
-        int effectiveSkill = GetEffectiveSkillForRange(setup.AttackSkillValue, setup.RangeLevel);
+        // Дальность задаёт уровень сложности, а не урезает навык (стр. 110)
+        var requiredLevel = GetRequiredLevelForRange(setup.RangeLevel);
 
         var result = new CombatActionResult
         {
@@ -634,10 +654,12 @@ public sealed partial class CombatService
         var modifiers = CalculateAttackModifiers(setup, attacker, defender);
         result.Modifiers = modifiers;
 
-        result.AttackerSkillValue = effectiveSkill;
+        result.AttackerSkillValue = setup.AttackSkillValue;
+        result.RequiredSuccessLevel = requiredLevel;
+        result.RangeLevel = setup.RangeLevel;
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
         result.AttackerRoll = result.AttackerRollDetail.Result;
-        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, effectiveSkill);
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
         if (setup.SelectedWeapon != null
@@ -654,12 +676,18 @@ public sealed partial class CombatService
             return result;
         }
 
-        // Дальний бой — без встречного броска
-        if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
+        // Дальний бой — без встречного броска. Попадание требует уровня сложности по дальности.
+        if (result.AttackerSuccessLevel < requiredLevel)
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {effectiveSkill}).";
+
+            var threshold = GetRollThresholdForRange(setup.AttackSkillValue, setup.RangeLevel);
+            var needed = setup.RangeLevel == RangeLevel.Base
+                ? $"против {setup.AttackSkillValue}"
+                : $"нужен {GetDifficultyName(setup.RangeLevel)} успех — не выше {threshold}";
+
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll}, {needed}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
@@ -669,8 +697,9 @@ public sealed partial class CombatService
         // Прицеливание использовано — сбросить флаг
         if (attacker.IsAiming) attacker.IsAiming = false;
 
-        // При сверхбольшой дальности проникающая рана только при 01
-        if (setup.RangeLevel == RangeLevel.Extreme && result.AttackerRoll != 1)
+        // При сверхбольшой дальности проникающая рана только при критическом успехе (стр. 110)
+        if (setup.RangeLevel == RangeLevel.Extreme
+            && result.AttackerSuccessLevel != SuccessLevel.CriticalSuccess)
         {
             result.IsImpalingWeapon = false;
         }
@@ -1179,8 +1208,8 @@ public sealed partial class CombatService
     public static string GetSuccessLevelText(SuccessLevel level) => level switch
     {
         SuccessLevel.CriticalSuccess => "критический успех",
-        SuccessLevel.ExtremeSuccess => "экстремальный успех",
-        SuccessLevel.HardSuccess => "сложный успех",
+        SuccessLevel.ExtremeSuccess => "чрезвычайный успех",
+        SuccessLevel.HardSuccess => "трудный успех",
         SuccessLevel.RegularSuccess => "обычный успех",
         SuccessLevel.Failure => "неудача",
         SuccessLevel.Fumble => "провал",

@@ -62,17 +62,17 @@
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Base)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Base)" />
-                            <span>Обычная (@_attackSkillValue)</span>
+                            <span>Обычная — обычный успех (@_attackSkillValue)</span>
                         </label>
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Long)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Long)" />
-                            <span>Большая (@(_attackSkillValue / 2))</span>
+                            <span>Большая — трудный успех (@(_attackSkillValue / 2))</span>
                         </label>
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Extreme)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Extreme)" />
-                            <span>Сверхбольшая (@(_attackSkillValue / 5))</span>
+                            <span>Сверхбольшая — чрезвычайный успех (@(_attackSkillValue / 5))</span>
                         </label>
                     </div>
                 </div>
@@ -199,6 +199,16 @@
                             {
                                 <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_attackerRollDetail)</span>
                             }
+                            @if (!_isMelee && _rangeLevel != RangeLevel.Base)
+                            {
+                                var required = CombatService.GetRequiredLevelForRange(_rangeLevel);
+                                <span>&#160;</span>
+                                <span class="font-normal @(_attackerSuccessLevel < required ? "text-red-600" : "text-green-700")">
+                                    @(_attackerSuccessLevel < required
+                                        ? $"— для этой дальности нужен {CombatService.GetDifficultyName(_rangeLevel)} успех"
+                                        : "— дальности хватает")
+                                </span>
+                            }
                         </div>
                     }
                 </div>
@@ -322,7 +332,7 @@
                 </details>
 
                 <!-- Урон (показывается когда бросок введён и атака успешна) -->
-                @if (_attackerRoll.HasValue && _attackerSuccessLevel > SuccessLevel.Failure)
+                @if (_attackerRoll.HasValue && _attackerSuccessLevel >= RequiredLevel)
                 {
                     var option = _attackOptions[_selectedWeaponIndex];
                     bool isExtraordinary = _attackerSuccessLevel >= SuccessLevel.ExtremeSuccess;
@@ -649,8 +659,7 @@
             // Хранитель ввёл итог своих физических костей — модификаторы он применил сам
             _attackerRoll = v;
             _attackerRollDetail = null;
-            var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
-            _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, eff);
+            _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, _attackSkillValue);
         }
         else
         {
@@ -678,8 +687,7 @@
         var mods = CurrentModifiers();
         _attackerRollDetail = CombatService.RollD100(mods.BonusDice, mods.PenaltyDice);
         _attackerRoll = _attackerRollDetail.Result;
-        var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
-        _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, eff);
+        _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, _attackSkillValue);
     }
 
     private void AutoRollDefender()
@@ -693,6 +701,13 @@
     /// Модификаторы текущей атаки. Считаются сервисом, чтобы предпросмотр
     /// и фактический бросок не расходились.
     /// </summary>
+    /// <summary>
+    /// Уровень успеха, нужный для попадания: в ближнем бою обычный,
+    /// в дальнем — заданный дальностью (CoC 7e, стр. 110).
+    /// </summary>
+    private SuccessLevel RequiredLevel =>
+        _isMelee ? SuccessLevel.RegularSuccess : CombatService.GetRequiredLevelForRange(_rangeLevel);
+
     private AttackModifiers CurrentModifiers() =>
         _selectedAttacker is null
             ? AttackModifiers.None

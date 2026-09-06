@@ -23,6 +23,15 @@ public class CombatActionResult
     /// <summary>Какие модификаторы применялись к броску атакующего и почему.</summary>
     public AttackModifiers Modifiers { get; set; } = AttackModifiers.None;
 
+    /// <summary>
+    /// Уровень успеха, необходимый для попадания. Для стрельбы задаётся дальностью
+    /// (стр. 110), в остальных случаях — обычный успех.
+    /// </summary>
+    public SuccessLevel RequiredSuccessLevel { get; set; } = SuccessLevel.RegularSuccess;
+
+    /// <summary>Дальность стрельбы, если это была дальняя атака.</summary>
+    public RangeLevel RangeLevel { get; set; } = RangeLevel.Base;
+
     // ── Защитник (для ближнего боя / opposed roll) ─────────────────────
     public Guid? DefenderId { get; set; }
     public string DefenderName { get; set; } = string.Empty;
