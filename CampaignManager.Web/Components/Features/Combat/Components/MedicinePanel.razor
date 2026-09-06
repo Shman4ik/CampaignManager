@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 @inject CombatService CombatService
@@ -7,7 +7,9 @@
     <h4 class="text-base font-semibold text-gray-900 mb-3">Медицина</h4>
 
     <div class="bg-green-50 border border-green-200 rounded-md p-2 mb-3 text-xs text-green-800">
-        CoC 7e: Медицина — минимум 1 час. Успех: +1d3 ОЗ. Для умирающих: сначала требуется успешная Первая помощь, затем Медицина снимает статус «При смерти» и даёт +1d3 ОЗ.
+        CoC 7e стр. 118: лечение занимает не меньше часа. Успех даёт +1d3 ОЗ. Если лечение
+        начато не в тот же день, нужен трудный успех. Умирающему сначала должна помочь
+        Первая помощь — только после этого Медицина снимает отметку «При смерти» и даёт +1d3 ОЗ.
     </div>
 
     <!-- Врач -->
@@ -42,12 +44,25 @@
 
         @if (_target != null)
         {
-            @if (_target.IsDying)
+            @if (_target.IsDying && !_target.IsStabilized)
             {
                 <div class="bg-red-50 border border-red-300 rounded-md p-2 mb-3 text-xs text-red-800">
-                    ⚠ @_target.Name при смерти! Сначала оказывается Первая помощь. При успехе Медицины: снять статус «При смерти», +1d3 ОЗ.
+                    ⚠ @_target.Name при смерти и не стабилизирован. По правилам сначала нужна
+                    успешная Первая помощь — только потом Медицина.
                 </div>
             }
+            else if (_target.IsDying)
+            {
+                <div class="bg-amber-50 border border-amber-300 rounded-md p-2 mb-3 text-xs text-amber-800">
+                    @_target.Name стабилизирован Первой помощью. Успех Медицины снимет отметку
+                    «При смерти» и восстановит 1d3 ОЗ.
+                </div>
+            }
+
+            <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer mb-3">
+                <input type="checkbox" @bind="_notSameDay" />
+                Лечение начато не в тот же день — нужен трудный успех
+            </label>
 
             <!-- Навык -->
             <div class="mb-3">
@@ -70,9 +85,10 @@
                 </div>
                 @if (_skillRoll.HasValue)
                 {
-                    var success = _skillRoll.Value <= _medicineSkill;
+                    var level = CombatService.CalculateSuccessLevel(_skillRoll.Value, _medicineSkill);
+                    var success = level >= RequiredLevel;
                     <div class="mt-1 ml-32 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
-                        → @_skillRoll.Value / @_medicineSkill — @(success ? "успех!" : "неудача")
+                        → @_skillRoll.Value / @_medicineSkill — @CombatService.GetSuccessLevelText(level)@(_notSameDay && !success ? " — нужен трудный" : "")
                     </div>
                 }
             </div>
@@ -96,7 +112,7 @@
 
             @if (_skillRoll.HasValue)
             {
-                var success = _skillRoll.Value <= _medicineSkill;
+                var success = CombatService.CalculateSuccessLevel(_skillRoll.Value, _medicineSkill) >= RequiredLevel;
                 <div class="rounded-md p-3 mb-3 @(success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200")">
                     @if (success && _healRoll.HasValue)
                     {
@@ -123,7 +139,7 @@
 
                 <div class="flex gap-2">
                     <button type="button" class="cm-btn cm-btn-primary w-full" @onclick="Apply"
-                            disabled="@(!success || !_healRoll.HasValue)">
+                            disabled="@(!success || !_healRoll.HasValue || BlockedByDying)">
                         <span>Применить</span>
                     </button>
                     <button type="button" class="cm-btn cm-btn-secondary w-full" @onclick="Reset">
@@ -163,6 +179,14 @@
     private int _medicineSkill = 30;
     private int? _skillRoll;
     private int? _healRoll;
+    private bool _notSameDay;
+
+    /// <summary>Требуемый уровень успеха: трудный, если лечение начато не в тот же день (стр. 118).</summary>
+    private SuccessLevel RequiredLevel =>
+        _notSameDay ? SuccessLevel.HardSuccess : SuccessLevel.RegularSuccess;
+
+    /// <summary>Умирающего нельзя лечить Медициной, пока его не стабилизировала Первая помощь.</summary>
+    private bool BlockedByDying => _target is { IsDying: true, IsStabilized: false };
 
     private void OnDoctorChanged(ChangeEventArgs e)
     {
@@ -195,14 +219,20 @@
     private async Task Apply()
     {
         if (_target == null || _doctor == null || !_skillRoll.HasValue || !_healRoll.HasValue) return;
-        if (_skillRoll.Value > _medicineSkill) return;
+        if (BlockedByDying) return;
+
+        var level = CombatService.CalculateSuccessLevel(_skillRoll.Value, _medicineSkill);
+        if (level < RequiredLevel) return;
 
         var hpBefore = _target.CurrentHitPoints;
         var wasDying = _target.IsDying;
 
         if (wasDying)
         {
+            // Медицина снимает отметку «При смерти» и заодно временные ПЗ от Первой помощи
             _target.IsDying = false;
+            _target.IsStabilized = false;
+            _target.TemporaryHitPoints = 0;
         }
         _target.CurrentHitPoints = Math.Min(_target.CurrentHitPoints + _healRoll.Value, _target.MaxHitPoints);
 
@@ -218,11 +248,11 @@
             DefenderHpAfter = _target.CurrentHitPoints,
             AttackerRoll = _skillRoll.Value,
             AttackerSkillValue = _medicineSkill,
-            AttackerSuccessLevel = CombatService.CalculateSuccessLevel(_skillRoll.Value, _medicineSkill),
+            AttackerSuccessLevel = level,
             AttackerWins = true,
             Summary = wasDying
-                ? $"{_doctor.Name} применяет Медицину на {_target.Name}: {_skillRoll.Value}/{_medicineSkill} — успех. Статус «При смерти» снят. ОЗ: {hpBefore}→{_target.CurrentHitPoints} (+{_healRoll.Value})."
-                : $"{_doctor.Name} применяет Медицину на {_target.Name}: {_skillRoll.Value}/{_medicineSkill} — успех. +{_healRoll.Value} ОЗ ({hpBefore}→{_target.CurrentHitPoints})."
+                ? $"{_doctor.Name} применяет Медицину на {_target.Name}: {_skillRoll.Value}/{_medicineSkill} — {CombatService.GetSuccessLevelText(level)}. Отметка «При смерти» снята. ОЗ: {hpBefore}→{_target.CurrentHitPoints} (+{_healRoll.Value})."
+                : $"{_doctor.Name} применяет Медицину на {_target.Name}: {_skillRoll.Value}/{_medicineSkill} — {CombatService.GetSuccessLevelText(level)}. +{_healRoll.Value} ОЗ ({hpBefore}→{_target.CurrentHitPoints})."
         };
 
         await OnMedicineApplied.InvokeAsync(logEntry);

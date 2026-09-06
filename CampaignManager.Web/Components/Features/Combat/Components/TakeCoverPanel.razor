@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 @inject CombatService CombatService
@@ -7,7 +7,9 @@
     <h4 class="text-base font-semibold text-gray-900 mb-3">Укрыться от огня</h4>
 
     <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
-        CoC 7e стр. 111: Успешная проверка Уклонения — стрелок получает штрафную кость. Укрывшийся теряет следующую атаку.
+        CoC 7e стр. 111: успешная проверка Уклонения даёт стрелку штрафную кость. Атаку укрывшийся
+        теряет в любом случае — этого раунда, если ещё не атаковал, иначе следующего. До неё он может
+        только уклоняться, а существо с несколькими атаками теряет все.
     </div>
 
     <!-- Боец -->
@@ -47,7 +49,7 @@
             {
                 var success = _roll.Value <= _dodgeSkill;
                 <div class="mt-1 ml-28 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
-                    → @_roll.Value / @_dodgeSkill — @(success ? "успех!" : "неудача")
+                    → @_roll.Value / @_dodgeSkill — @(success ? "успех!" : "провал")
                 </div>
             }
         </div>
@@ -127,8 +129,8 @@
         var success = _roll.Value <= _dodgeSkill;
         if (!success) return;
 
-        _combatant.HasTakenCover = true;
-        _combatant.LostNextAttackFromCover = true;
+        CombatService.TakeCover(_combatant);
+        var blockedRound = _combatant.AttackBlockedInRound;
 
         var logEntry = new CombatActionResult
         {
@@ -140,7 +142,8 @@
             AttackerSkillValue = _dodgeSkill,
             AttackerSuccessLevel = CombatService.CalculateSuccessLevel(_roll.Value, _dodgeSkill),
             AttackerWins = true,
-            Summary = $"{_combatant.Name} укрылся от огня: бросок {_roll.Value}/{_dodgeSkill} — успех. Следующий стрелок получает штрафную кость."
+            Summary = $"{_combatant.Name} укрылся от огня: бросок {_roll.Value}/{_dodgeSkill} — успех. " +
+                      $"Стрелок по нему получает штрафную кость, а сам он теряет атаку в раунде {blockedRound} (стр. 111)."
         };
 
         await OnTakeCoverResolved.InvokeAsync((_combatant, true, logEntry));

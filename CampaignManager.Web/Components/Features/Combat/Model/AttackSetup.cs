@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Weapons.Model;
+﻿using CampaignManager.Web.Components.Features.Weapons.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Model;
 
@@ -39,6 +39,15 @@ public class AttackSetup
     /// <summary>Результат d100 защитника (null = авторбросок)</summary>
     public int? ManualDefenderRoll { get; set; }
 
+    /// <summary>
+    /// Уже брошенные кости атакующего (панель бросает их заранее, чтобы показать результат).
+    /// Если задано, повторный бросок не выполняется.
+    /// </summary>
+    public DiceRollResult? AttackerRollDetail { get; set; }
+
+    /// <summary>Уже брошенные кости защитника.</summary>
+    public DiceRollResult? DefenderRollDetail { get; set; }
+
     /// <summary>Итог броска урона оружия (null = авторбросок). Не используется при чрезвычайном/крит. успехе.</summary>
     public int? ManualWeaponDamageRoll { get; set; }
 
@@ -59,19 +68,28 @@ public class AttackSetup
 
     // ── Модификаторы (бонусные / штрафные кости) ─────────────────────────
 
-    /// <summary>Число бонусных костей (0–2). Итоговые = max(0, BonusDice - PenaltyDice)</summary>
+    /// <summary>
+    /// Бонусные кости атакующего, назначенные Хранителем вручную.
+    /// Автоматические кости по правилам добавляет <c>CombatService.CalculateAttackModifiers</c>.
+    /// </summary>
     public int BonusDice { get; set; }
 
-    /// <summary>Число штрафных костей (0–2)</summary>
+    /// <summary>Штрафные кости атакующего, назначенные Хранителем вручную.</summary>
     public int PenaltyDice { get; set; }
+
+    /// <summary>Бонусные кости защитника (уклонение или контратака), назначаются вручную.</summary>
+    public int DefenderBonusDice { get; set; }
+
+    /// <summary>Штрафные кости защитника, назначаются вручную.</summary>
+    public int DefenderPenaltyDice { get; set; }
 
     // ── Особые условия ───────────────────────────────────────────────────
 
-    /// <summary>Внезапная атака — цель не подозревала об атаке (автоуспех или бонусная кость)</summary>
-    public bool IsSurpriseAttack { get; set; }
-
-    /// <summary>Цель не уклоняется и не контратакует (не подозревала) — атака автоуспешна кроме провала</summary>
-    public bool TargetUnawareMeansAutoSuccess { get; set; }
+    /// <summary>
+    /// Готовность цели к атаке (стр. 104–105). Определяет, защищается ли цель
+    /// и получает ли атакующий автоматическое попадание или бонусную кость.
+    /// </summary>
+    public SurpriseMode SurpriseMode { get; set; } = SurpriseMode.TargetReady;
 
     // ── Ручной ввод бросков ВЫН при серьёзной ране ────────────────────────
 
@@ -106,9 +124,37 @@ public class AttackSetup
     /// <summary>Быстро движущаяся цель (СКО ≥8) → штрафная кость</summary>
     public bool IsTargetFastMoving { get; set; }
 
+    /// <summary>
+    /// Режим стрельбы. Серия из пистолета даёт штрафную кость на каждый выстрел,
+    /// залп автоматического оружия — нарастающий штраф по номеру проверки (стр. 111, 114).
+    /// </summary>
+    public FiringMode FiringMode { get; set; } = FiringMode.Single;
+
     /// <summary>Серия выстрелов из пистолета → штрафная кость</summary>
-    public bool IsMultipleShot { get; set; }
+    public bool IsMultipleShot => FiringMode == FiringMode.PistolBurst;
+
+    /// <summary>
+    /// Номер проверки атаки при автоматической стрельбе в этом раунде, начиная с нуля.
+    /// Каждая следующая проверка получает штрафную кость (стр. 114).
+    /// </summary>
+    public int AutofireCheckIndex { get; set; }
+
+    /// <summary>Сколько патронов уходит на эту проверку атаки.</summary>
+    public int ShotsFired { get; set; } = 1;
 
     /// <summary>Зарядка + выстрел в одном раунде → штрафная кость</summary>
     public bool IsReloadAndFire { get; set; }
+
+    // ── Броня и тип урона (стр. 106, 125) ────────────────────────────────
+
+    /// <summary>
+    /// Урон не снижается бронёй: магия, яд, утопление и тому подобное (стр. 106).
+    /// </summary>
+    public bool IgnoresArmor { get; set; }
+
+    /// <summary>
+    /// Броня преграды при стрельбе сквозь укрытие: вычитается дополнительно к
+    /// броне цели. Тонкий забор — 1, низкая кирпичная стенка — 10 (стр. 125).
+    /// </summary>
+    public int CoverArmor { get; set; }
 }

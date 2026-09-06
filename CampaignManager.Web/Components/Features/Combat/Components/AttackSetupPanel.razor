@@ -1,6 +1,7 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
+@using CampaignManager.Web.Model
 
 @inject CombatService CombatService
 
@@ -23,6 +24,13 @@
 
     @if (_selectedAttacker != null)
     {
+        @if (AttackBlockReason is { } blockReason)
+        {
+            <div class="mb-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                ⚠ @blockReason
+            </div>
+        }
+
         <!-- Оружие / Атака -->
         <div class="mb-3">
             <label class="block text-xs font-medium text-gray-600 mb-1">Оружие / Атака</label>
@@ -62,19 +70,108 @@
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Base)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Base)" />
-                            <span>Обычная (@_attackSkillValue)</span>
+                            <span>Обычная — обычный успех (@_attackSkillValue)</span>
                         </label>
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Long)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Long)" />
-                            <span>Большая (@(_attackSkillValue / 2))</span>
+                            <span>Большая — трудный успех (@(_attackSkillValue / 2))</span>
                         </label>
                         <label class="flex items-center gap-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Extreme)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Extreme)" />
-                            <span>Сверхбольшая (@(_attackSkillValue / 5))</span>
+                            <span>Сверхбольшая — чрезвычайный успех (@(_attackSkillValue / 5))</span>
                         </label>
                     </div>
+                </div>
+
+                @if (WeaponIsJammed)
+                {
+                    <div class="mb-3 rounded-md border border-red-300 bg-red-50 p-3">
+                        <div class="text-xs font-semibold text-red-800">
+                            @_selectedAttacker!.JammedWeaponName заклинило. Стрелять из него нельзя,
+                            пока оружие не починят: осталось @_selectedAttacker.JamRepairRoundsLeft раунд(ов)
+                            успешных проверок Механики или Стрельбы, по одной за раунд (стр. 113).
+                        </div>
+                        <div class="mt-2 flex items-center gap-2">
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="number" min="1" max="100" @bind="_repairSkill"
+                                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none" />
+                            <label class="text-xs text-gray-600">Бросок</label>
+                            <input type="number" min="1" max="100" @bind="_repairRoll"
+                                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none"
+                                   placeholder="1–100" />
+                            <button type="button" @onclick="RepairJam"
+                                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs text-gray-700">
+                                Чинить
+                            </button>
+                        </div>
+                        @if (_repairMessage is not null)
+                        {
+                            <div class="mt-1 text-xs text-gray-600">@_repairMessage</div>
+                        }
+                    </div>
+                }
+
+                <!-- Режим стрельбы (стр. 111–114) -->
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Режим стрельбы</label>
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Single)"
+                                   @onchange="() => SetFiringMode(FiringMode.Single)" />
+                            Одиночный выстрел
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.PistolBurst)"
+                                   @onchange="() => SetFiringMode(FiringMode.PistolBurst)" />
+                            Серия из пистолета — отдельная проверка на выстрел, каждая со штрафной костью
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Volley)"
+                                   @onchange="() => SetFiringMode(FiringMode.Volley)" />
+                            Очередь или залп автоматического оружия
+                        </label>
+                    </div>
+
+                    @if (_firingMode == FiringMode.Volley && _selectedAttacker != null)
+                    {
+                        var checkNo = _selectedAttacker.AutofireChecksThisRound + 1;
+                        <div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
+                            Залп при непрерывном огне — <strong>@CombatService.GetVolleySize(_attackSkillValue) пуль</strong>
+                            (навык ÷ 10, минимум 3). Это <strong>проверка №@checkNo</strong> за раунд.
+                            @if (checkNo > 1)
+                            {
+                                <text>Каждая следующая проверка добавляет штрафную кость, после двух — поднимает сложность.</text>
+                            }
+                            <div class="mt-1 flex items-center gap-2">
+                                <label class="text-gray-600">Патронов в залпе</label>
+                                <input type="number" min="1" @bind="_shotsInVolley"
+                                       class="border border-primary-300 rounded px-2 py-0.5 w-16 focus:outline-none" />
+                            </div>
+                        </div>
+                    }
+
+                    @if (AmmoCapacity > 0 && _selectedAttacker != null)
+                    {
+                        var left = CombatService.GetAmmoLeft(_selectedAttacker, _attackOptions[_selectedWeaponIndex].Weapon);
+                        <div class="mt-2 flex items-center gap-2 text-xs">
+                            <span class="@(left < ShotsPerCheck ? "text-red-700 font-semibold" : "text-gray-600")">
+                                Патронов: @left / @AmmoCapacity
+                            </span>
+                            <button type="button" @onclick="Reload"
+                                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">
+                                Перезарядить
+                            </button>
+                            @if (left < ShotsPerCheck)
+                            {
+                                <span class="text-red-700">— не хватает патронов на эту проверку</span>
+                            }
+                        </div>
+                        <p class="mt-1 text-xs text-gray-400">
+                            Смена магазина занимает раунд, лента в пулемёт — два (стр. 111).
+                        </p>
+                    }
                 </div>
             }
 
@@ -95,7 +192,7 @@
             @if (_selectedDefender != null && _isMelee)
             {
                 <!-- Предупреждение о численном превосходстве -->
-                @if (_selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound && _selectedDefender.DefenseCountThisRound > 0)
+                @if (CombatService.HasNumericalSuperiority(_selectedDefender))
                 {
                     <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2 text-xs text-yellow-800">
                         ⚠ @_selectedDefender.Name уже защищался в этом раунде (@_selectedDefender.DefenseCountThisRound/@_selectedDefender.AttacksPerRound) — атакующий получает <strong>1 бонусную кость</strong>.
@@ -146,11 +243,43 @@
             <div class="border-t border-gray-200 pt-3 mt-3">
                 <div class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Броски кубиков</div>
 
+                <!-- Итог модификаторов: виден всегда, чтобы бросок не был сюрпризом -->
+                @{
+                    var mods = CurrentModifiers();
+                }
+                @if (mods.BonusDice > 0 || mods.PenaltyDice > 0)
+                {
+                    <div class="mb-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+                        <div class="text-xs font-semibold text-gray-700">
+                            @if (mods.Net > 0)
+                            {
+                                <span class="text-green-700">@CombatService.DescribeDice(mods.Net, true) к броску атаки</span>
+                            }
+                            else if (mods.Net < 0)
+                            {
+                                <span class="text-red-700">@CombatService.DescribeDice(-mods.Net, false) к броску атаки</span>
+                            }
+                            else
+                            {
+                                <span class="text-gray-600">Кости взаимно погашены</span>
+                            }
+                            <span class="font-normal text-gray-400"> (+@mods.BonusDice / −@mods.PenaltyDice)</span>
+                        </div>
+                        <ul class="mt-1 space-y-0.5">
+                            @foreach (var reason in mods.Reasons)
+                            {
+                                <li class="text-xs text-gray-500">@reason</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+
                 <!-- Бросок атакующего -->
                 <div class="mb-3">
                     <div class="flex items-center gap-2">
                         <label class="text-xs font-medium text-gray-600 w-36 shrink-0">
-                            @_selectedAttacker.Name (d100)
+                            @_selectedAttacker!.Name (d100)
                         </label>
                         <input type="number" min="1" max="100"
                                value="@_attackerRoll"
@@ -163,12 +292,26 @@
                     {
                         <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_attackerSuccessLevel)">
                             → @CombatService.GetSuccessLevelText(_attackerSuccessLevel)
+                            @if (_attackerRollDetail is { HasExtraDice: true })
+                            {
+                                <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_attackerRollDetail)</span>
+                            }
+                            @if (!_isMelee && RequiredLevel != SuccessLevel.RegularSuccess)
+                            {
+                                var required = RequiredLevel;
+                                <span>&#160;</span>
+                                <span class="font-normal @(_attackerSuccessLevel < required ? "text-red-600" : "text-green-700")">
+                                    @(_attackerSuccessLevel < required
+                                        ? $"— нужен {CombatService.GetDifficultyName(required)} успех"
+                                        : "— сложности хватает")
+                                </span>
+                            }
                         </div>
                     }
                 </div>
 
                 <!-- Бросок защитника (ближний бой) -->
-                @if (_isMelee && _selectedDefender != null && !_targetUnaware)
+                @if (_isMelee && _selectedDefender != null && EffectiveSurprise == SurpriseMode.TargetReady)
                 {
                     <div class="mb-3">
                         <div class="flex items-center gap-2">
@@ -186,14 +329,32 @@
                         {
                             <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_defenderSuccessLevel)">
                                 → @CombatService.GetSuccessLevelText(_defenderSuccessLevel)
+                                @if (_defenderRollDetail is { HasExtraDice: true })
+                                {
+                                    <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_defenderRollDetail)</span>
+                                }
                             </div>
                         }
                     </div>
                 }
-                @if (_targetUnaware)
+                @if (EffectiveSurprise != SurpriseMode.TargetReady)
                 {
                     <div class="mb-3 text-xs text-amber-700 bg-amber-50 rounded p-2">
-                        Цель не подозревает — бросок защитника не используется.
+                        @if (EffectiveSurprise == SurpriseMode.AutoHit)
+                        {
+                            <text>Цель застигнута врасплох: она не защищается, а атака проходит
+                            автоматически — промахом считается только крах.</text>
+                        }
+                        else
+                        {
+                            <text>Цель застигнута врасплох: она не защищается, атакующий получает
+                            бонусную кость.</text>
+                            @if (!_isMelee && _surprise == SurpriseMode.AutoHit)
+                            {
+                                <text> Для дистанционной атаки автоматическое попадание правилами
+                                не допускается (стр. 105), поэтому применена бонусная кость.</text>
+                            }
+                        }
                     </div>
                 }
 
@@ -211,14 +372,62 @@
                             <input type="number" min="0" max="2" @bind="_penaltyDice"
                                    class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
                         </div>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="checkbox" @bind="_surpriseAttack" />
-                            Внезапная атака
-                        </label>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="checkbox" @bind="_targetUnaware" />
-                            Цель не подозревает (автопопадание, нет броска защиты)
-                        </label>
+                        @if (_isMelee && _selectedDefender != null)
+                        {
+                            <div class="flex items-center gap-3">
+                                <label class="text-xs text-gray-600 w-36 shrink-0">Бонусные защитнику</label>
+                                <input type="number" min="0" max="2" @bind="_defenderBonusDice"
+                                       class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <label class="text-xs text-gray-600 w-36 shrink-0">Штрафные защитнику</label>
+                                <input type="number" min="0" max="2" @bind="_defenderPenaltyDice"
+                                       class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                            </div>
+                        }
+                        <p class="text-xs text-gray-400">
+                            Кости применяются к бросающимся автоматически. Если вы вводите результат
+                            своих физических костей вручную, модификаторы уже должны быть в нём учтены.
+                        </p>
+                        <div class="border-t border-gray-200 pt-2 mt-2">
+                            <div class="text-xs font-semibold text-gray-500 mb-1">Броня и тип урона (стр. 106, 125)</div>
+                            <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                <input type="checkbox" class="mt-0.5" @bind="_ignoresArmor" />
+                                <span>Урон не снижается бронёй — магия, яд, утопление</span>
+                            </label>
+                            <div class="mt-1 flex items-center gap-2">
+                                <label class="text-xs text-gray-600">Броня преграды</label>
+                                <input type="number" min="0" @bind="_coverArmor"
+                                       class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none" />
+                                <span class="text-xs text-gray-400">при стрельбе сквозь укрытие: забор 1, кирпичная стенка 10</span>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-200 pt-2 mt-2">
+                            <div class="text-xs font-semibold text-gray-500 mb-1">Готовность цели (стр. 104)</div>
+                            <div class="space-y-1">
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.TargetReady)"
+                                           @onchange="() => SetSurprise(SurpriseMode.TargetReady)" />
+                                    <span>Цель начеку — сама выбирает уклонение или контратаку</span>
+                                </label>
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.AutoHit)"
+                                           @onchange="() => SetSurprise(SurpriseMode.AutoHit)" />
+                                    <span>Не готова, атака предрешена — попадание автоматическое, кроме краха
+                                          <span class="text-gray-400">(удар по голове незамеченным противником)</span></span>
+                                </label>
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.BonusDie)"
+                                           @onchange="() => SetSurprise(SurpriseMode.BonusDie)" />
+                                    <span>Не готова, исход не предрешён — бонусная кость
+                                          <span class="text-gray-400">(попытка вырвать оружие)</span></span>
+                                </label>
+                            </div>
+                        </div>
 
                         @if (!_isMelee)
                         {
@@ -250,59 +459,45 @@
                                         Стрельба в ближнем бою → +1 штрафная
                                     </label>
                                     <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                                        <input type="checkbox" @bind="_isMultipleShot" />
-                                        Серия выстрелов из пистолета → +1 штрафная
-                                    </label>
-                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                                         <input type="checkbox" @bind="_isReloadAndFire" />
                                         Зарядка + выстрел → +1 штрафная
                                     </label>
                                 </div>
 
-                                @{
-                                    var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
-                                    var netDice = autoBonus + _bonusDice - autoPenalty - _penaltyDice;
-                                }
-                                <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-1.5">
-                                    Итого: <strong class="text-green-700">+@(autoBonus + _bonusDice) бонусн.</strong>
-                                    / <strong class="text-red-700">−@(autoPenalty + _penaltyDice) штрафн.</strong>
-                                    @if (_selectedDefender != null && _selectedDefender.Build >= 4)
-                                    {
-                                        <span class="text-green-600"> (крупная цель)</span>
-                                    }
-                                    @if (_selectedDefender != null && _selectedDefender.Build <= -2)
-                                    {
-                                        <span class="text-red-600"> (мелкая цель)</span>
-                                    }
-                                </div>
                             </div>
                         }
                     </div>
                 </details>
 
                 <!-- Урон (показывается когда бросок введён и атака успешна) -->
-                @if (_attackerRoll.HasValue && _attackerSuccessLevel > SuccessLevel.Failure)
+                @if (_attackerRoll.HasValue && AttackConnects)
                 {
                     var option = _attackOptions[_selectedWeaponIndex];
                     bool isExtraordinary = _attackerSuccessLevel >= SuccessLevel.ExtremeSuccess;
                     bool isImpaling = CombatService.IsImpalingWeapon(option.Weapon ?? new Weapon { Name = option.Name, Type = WeaponType.Melee });
+                    var dbType = CombatService.ResolveDamageBonusType(_isMelee, option.Weapon?.DamageInfo?.GetDefaultDamage());
+                    var appliesDb = dbType != DamageBonusType.None && _selectedAttacker.DamageBonus != "0";
 
                     <div class="bg-gray-50 rounded-md border border-gray-100 p-3 mb-3">
                         <div class="text-xs font-semibold text-gray-600 mb-2">
                             Урон (@option.Damage
-                            @if (_selectedAttacker.DamageBonus != "0") { <span> + БкУ @_selectedAttacker.DamageBonus</span> })
+                            @if (appliesDb)
+                            {
+                                <span> + @(dbType == DamageBonusType.Half ? "половина Б.к.У." : "Б.к.У.") @_selectedAttacker.DamageBonus</span>
+                            })
                         </div>
 
                         @if (isExtraordinary)
                         {
                             var maxDmg = CombatService.MaximizeDiceFormula(option.Damage);
-                            var maxDb = _isMelee ? CombatService.MaximizeDiceFormula(_selectedAttacker.DamageBonus) : 0;
+                            var rawMaxDb = appliesDb ? CombatService.MaximizeDiceFormula(_selectedAttacker.DamageBonus) : 0;
+                            var maxDb = dbType == DamageBonusType.Half ? rawMaxDb / 2 : rawMaxDb;
                             <div class="text-xs text-green-700 mb-2">
                                 @(isImpaling ? "Проникающая рана" : "Чрезвычайный успех") — максимальный урон:
                                 <strong>@maxDmg@(maxDb != 0 ? $" + {maxDb}" : "")</strong>
                                 @if (isImpaling) { <span> + доп. бросок @option.Damage</span> }
                             </div>
-                            @if (isImpaling && _isMelee)
+                            @if (isImpaling)
                             {
                                 <div class="flex items-center gap-2 mb-1">
                                     <label class="text-xs text-gray-600 w-36 shrink-0">Доп. бросок (@option.Damage)</label>
@@ -324,10 +519,12 @@
                                        placeholder="рез." />
                                 <button @onclick="() => AutoRollDamage(DamageField.Weapon, option.Damage)" class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">🎲</button>
                             </div>
-                            @if (_isMelee && _selectedAttacker.DamageBonus != "0")
+                            @if (appliesDb)
                             {
                                 <div class="flex items-center gap-2 mb-1">
-                                    <label class="text-xs text-gray-600 w-36 shrink-0">БкУ (@_selectedAttacker.DamageBonus)</label>
+                                    <label class="text-xs text-gray-600 w-36 shrink-0">
+                                        @(dbType == DamageBonusType.Half ? "½ Б.к.У." : "Б.к.У.") (@_selectedAttacker.DamageBonus)
+                                    </label>
                                     <input type="number" value="@_damageBonusRoll"
                                            @oninput="e => OnDamageInput(e, DamageField.DamageBonus)"
                                            class="border border-primary-300 rounded-md px-2 py-1 text-xs w-20 focus:outline-none"
@@ -408,6 +605,8 @@
     // Броски кубиков
     private int? _attackerRoll;
     private int? _defenderRoll;
+    private DiceRollResult? _attackerRollDetail;
+    private DiceRollResult? _defenderRollDetail;
     private int? _weaponDamageRoll;
     private int? _damageBonusRoll;
     private int? _extraImpalingRoll;
@@ -421,8 +620,21 @@
     // Модификаторы
     private int _bonusDice;
     private int _penaltyDice;
-    private bool _surpriseAttack;
-    private bool _targetUnaware;
+    private int _defenderBonusDice;
+    private int _defenderPenaltyDice;
+    private SurpriseMode _surprise = SurpriseMode.TargetReady;
+
+    /// <summary>
+    /// Режим с учётом правила: автоматическое попадание недоступно для дистанционных атак.
+    /// </summary>
+    private SurpriseMode EffectiveSurprise =>
+        !_isMelee && _surprise == SurpriseMode.AutoHit ? SurpriseMode.BonusDie : _surprise;
+
+    private void SetSurprise(SurpriseMode mode)
+    {
+        _surprise = mode;
+        ResetRolls();
+    }
 
     // Модификаторы стрельбы (CoC 7e стр. 110–113)
     private bool _isPointBlank;
@@ -431,8 +643,11 @@
     private bool _isTargetTakingCover;
     private bool _isTargetBehindCover;
     private bool _isTargetFastMoving;
-    private bool _isMultipleShot;
+    private FiringMode _firingMode = FiringMode.Single;
+    private int _shotsInVolley = 3;
     private bool _isReloadAndFire;
+    private bool _ignoresArmor;
+    private int _coverArmor;
 
     // Ручной ввод ВЫН
     private int? _manualConRoll;
@@ -571,6 +786,10 @@
     {
         _attackerRoll = null;
         _defenderRoll = null;
+        _attackerRollDetail = null;
+        _defenderRollDetail = null;
+        _defenderBonusDice = 0;
+        _defenderPenaltyDice = 0;
         _weaponDamageRoll = null;
         _damageBonusRoll = null;
         _extraImpalingRoll = null;
@@ -586,8 +805,9 @@
         _isTargetTakingCover = false;
         _isTargetBehindCover = false;
         _isTargetFastMoving = false;
-        _isMultipleShot = false;
         _isReloadAndFire = false;
+        _ignoresArmor = false;
+        _coverArmor = 0;
     }
 
     private void OnRollInput(ChangeEventArgs e, bool isAttacker)
@@ -597,13 +817,15 @@
 
         if (isAttacker)
         {
+            // Хранитель ввёл итог своих физических костей — модификаторы он применил сам
             _attackerRoll = v;
-            var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
-            _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, eff);
+            _attackerRollDetail = null;
+            _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, _attackSkillValue);
         }
         else
         {
             _defenderRoll = v;
+            _defenderRollDetail = null;
             _defenderSuccessLevel = CombatService.CalculateSuccessLevel(v, _defenderSkillValue);
         }
     }
@@ -623,16 +845,112 @@
 
     private void AutoRollAttacker()
     {
-        _attackerRoll = CombatService.RollD100();
-        var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
-        _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, eff);
+        var mods = CurrentModifiers();
+        _attackerRollDetail = CombatService.RollD100(mods.BonusDice, mods.PenaltyDice);
+        _attackerRoll = _attackerRollDetail.Result;
+        _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, _attackSkillValue);
     }
 
     private void AutoRollDefender()
     {
-        _defenderRoll = CombatService.RollD100();
+        _defenderRollDetail = CombatService.RollD100(_defenderBonusDice, _defenderPenaltyDice);
+        _defenderRoll = _defenderRollDetail.Result;
         _defenderSuccessLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkillValue);
     }
+
+    /// <summary>
+    /// Модификаторы текущей атаки. Считаются сервисом, чтобы предпросмотр
+    /// и фактический бросок не расходились.
+    /// </summary>
+    /// <summary>
+    /// Уровень успеха, нужный для попадания: в ближнем бою обычный,
+    /// в дальнем — заданный дальностью (CoC 7e, стр. 110).
+    /// </summary>
+    private SuccessLevel RequiredLevel
+    {
+        get
+        {
+            if (_isMelee) return SuccessLevel.RegularSuccess;
+
+            var byRange = CombatService.GetRequiredLevelForRange(_rangeLevel);
+            var index = _firingMode == FiringMode.Volley ? _selectedAttacker?.AutofireChecksThisRound ?? 0 : 0;
+            return CombatService.EscalateAutofire(byRange, index).Required;
+        }
+    }
+
+    /// <summary>Сложность выросла выше критической — попадание невозможно (стр. 114).</summary>
+    private bool ShotIsImpossible =>
+        !_isMelee
+        && _firingMode == FiringMode.Volley
+        && CombatService.EscalateAutofire(
+               CombatService.GetRequiredLevelForRange(_rangeLevel),
+               _selectedAttacker?.AutofireChecksThisRound ?? 0).IsImpossible;
+
+    /// <summary>
+    /// Попадает ли атака: при автоматическом попадании промахом считается только крах,
+    /// иначе нужен уровень успеха, требуемый дальностью.
+    /// </summary>
+    private bool AttackConnects =>
+        EffectiveSurprise == SurpriseMode.AutoHit
+            ? _attackerSuccessLevel != SuccessLevel.Fumble
+            : _attackerSuccessLevel >= RequiredLevel;
+
+    /// <summary>Ёмкость магазина выбранного оружия, 0 — если её нет в данных.</summary>
+    private int AmmoCapacity =>
+        _selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count
+            ? CombatService.ParseAmmoCapacity(_attackOptions[_selectedWeaponIndex].Weapon?.Ammo)
+            : 0;
+
+    /// <summary>Сколько патронов уходит на текущую проверку атаки.</summary>
+    private int ShotsPerCheck => _firingMode == FiringMode.Volley ? Math.Max(1, _shotsInVolley) : 1;
+
+    private void SetFiringMode(FiringMode mode)
+    {
+        _firingMode = mode;
+        if (mode == FiringMode.Volley && _selectedAttacker != null)
+            _shotsInVolley = CombatService.GetVolleySize(_attackSkillValue);
+        ResetRolls();
+    }
+
+    /// <summary>Выбранное оружие заклинило — стрелять из него нельзя (стр. 113).</summary>
+    private bool WeaponIsJammed =>
+        _selectedAttacker is not null
+        && !string.IsNullOrEmpty(_selectedAttacker.JammedWeaponName)
+        && _selectedWeaponIndex >= 0
+        && _attackOptions[_selectedWeaponIndex].Name == _selectedAttacker.JammedWeaponName;
+
+    private int _repairSkill = 30;
+    private int? _repairRoll;
+    private string? _repairMessage;
+
+    private void RepairJam()
+    {
+        if (_selectedAttacker is null || !_repairRoll.HasValue) return;
+
+        var before = _selectedAttacker.JamRepairRoundsLeft;
+        var ok = CombatService.TryRepairJam(_selectedAttacker, _repairSkill, _repairRoll.Value);
+        var level = CombatService.CalculateSuccessLevel(_repairRoll.Value, _repairSkill);
+
+        _repairMessage = ok
+            ? string.IsNullOrEmpty(_selectedAttacker.JammedWeaponName)
+                ? $"{CombatService.GetSuccessLevelText(level)} — оружие починено."
+                : $"{CombatService.GetSuccessLevelText(level)} — осталось {_selectedAttacker.JamRepairRoundsLeft} из {before} раунд(ов)."
+            : $"{CombatService.GetSuccessLevelText(level)} — починить не удалось, попробуйте в следующем раунде.";
+
+        _repairRoll = null;
+    }
+
+    private void Reload()
+    {
+        var weapon = _selectedWeaponIndex >= 0 ? _attackOptions[_selectedWeaponIndex].Weapon : null;
+        if (weapon != null && _selectedAttacker != null)
+            CombatService.Reload(_selectedAttacker, weapon);
+    }
+
+    private AttackModifiers CurrentModifiers() =>
+        _selectedAttacker is null
+            ? AttackModifiers.None
+            : CombatService.CalculateAttackModifiers(BuildSetup(), _selectedAttacker, _selectedDefender);
 
     private void AutoRollDamage(DamageField field, string formula)
     {
@@ -656,53 +974,50 @@
             _defenderReaction);
     }
 
+    /// <summary>Почему атака сейчас невозможна: укрытие или израсходованные атаки за раунд.</summary>
+    private string? AttackBlockReason =>
+        _selectedAttacker is null ? null : CombatService.GetAttackBlockReason(_selectedAttacker);
+
     private bool CanResolve() =>
         _selectedAttacker != null && _selectedWeaponIndex >= 0
-        && (_selectedDefender != null || !_isMelee);
+        && AttackBlockReason is null
+        && (_selectedDefender != null || !_isMelee)
+        && !WeaponIsJammed
+        && !ShotIsImpossible
+        && (AmmoCapacity <= 0 || CombatService.GetAmmoLeft(_selectedAttacker, _attackOptions[_selectedWeaponIndex].Weapon) >= ShotsPerCheck);
 
-    private async Task ResolveAttack()
+    /// <summary>
+    /// Собирает настройку атаки из состояния панели. Используется и для предпросмотра
+    /// модификаторов, и для фактического разрешения атаки.
+    /// </summary>
+    private AttackSetup BuildSetup()
     {
-        if (_selectedAttacker == null || _selectedWeaponIndex < 0) return;
-        if (_isMelee && _selectedDefender == null) return;
+        var option = _selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count
+            ? _attackOptions[_selectedWeaponIndex]
+            : null;
 
-        var option = _attackOptions[_selectedWeaponIndex];
-        var hasNumericalSuperiority = _isMelee && _selectedDefender != null
-            && _selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound
-            && _selectedDefender.DefenseCountThisRound > 0;
-
-        // Для дальнего боя: суммируем ручные + авто-модификаторы стрельбы
-        int effectiveBonusDice, effectivePenaltyDice;
-        if (!_isMelee)
+        return new AttackSetup
         {
-            var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
-            effectiveBonusDice = _bonusDice + autoBonus;
-            effectivePenaltyDice = _penaltyDice + autoPenalty;
-        }
-        else
-        {
-            effectiveBonusDice = _bonusDice + (hasNumericalSuperiority ? 1 : 0);
-            effectivePenaltyDice = _penaltyDice;
-        }
-
-        var setup = new AttackSetup
-        {
-            AttackerId = _selectedAttacker.Id,
+            AttackerId = _selectedAttacker?.Id ?? Guid.Empty,
             DefenderId = _selectedDefender?.Id ?? Guid.Empty,
-            SelectedWeapon = option.Weapon,
-            CreatureAttackName = option.Weapon == null ? option.Name : null,
-            CreatureAttackDamage = option.Weapon == null ? option.Damage : null,
+            SelectedWeapon = option?.Weapon,
+            CreatureAttackName = option is { Weapon: null } ? option.Name : null,
+            CreatureAttackDamage = option is { Weapon: null } ? option.Damage : null,
             AttackSkillValue = _attackSkillValue,
             IsMelee = _isMelee,
             DefenderReaction = _defenderReaction,
             DefenderSkillValue = _defenderSkillValue,
             RangeLevel = _rangeLevel,
-            BonusDice = effectiveBonusDice,
-            PenaltyDice = effectivePenaltyDice,
-            IsSurpriseAttack = _surpriseAttack,
-            TargetUnawareMeansAutoSuccess = _targetUnaware,
+            BonusDice = _bonusDice,
+            PenaltyDice = _penaltyDice,
+            DefenderBonusDice = _defenderBonusDice,
+            DefenderPenaltyDice = _defenderPenaltyDice,
+            SurpriseMode = _surprise,
             CounterAttackDamageFormula = _counterDamageFormula,
             ManualAttackerRoll = _attackerRoll,
             ManualDefenderRoll = _defenderRoll,
+            AttackerRollDetail = _attackerRollDetail,
+            DefenderRollDetail = _defenderRollDetail,
             ManualWeaponDamageRoll = _weaponDamageRoll,
             ManualDamageBonusRoll = _damageBonusRoll,
             ManualExtraImpalingRoll = _extraImpalingRoll,
@@ -716,9 +1031,21 @@
             IsTargetTakingCover = _isTargetTakingCover,
             IsTargetBehindCover = _isTargetBehindCover,
             IsTargetFastMoving = _isTargetFastMoving,
-            IsMultipleShot = _isMultipleShot,
-            IsReloadAndFire = _isReloadAndFire
+            FiringMode = _firingMode,
+            AutofireCheckIndex = _selectedAttacker?.AutofireChecksThisRound ?? 0,
+            ShotsFired = ShotsPerCheck,
+            IsReloadAndFire = _isReloadAndFire,
+            IgnoresArmor = _ignoresArmor,
+            CoverArmor = _coverArmor
         };
+    }
+
+    private async Task ResolveAttack()
+    {
+        if (_selectedAttacker == null || _selectedWeaponIndex < 0) return;
+        if (_isMelee && _selectedDefender == null) return;
+
+        var setup = BuildSetup();
 
         var result = _isMelee
             ? CombatService.ResolveMeleeAttack(setup)
@@ -726,22 +1053,6 @@
 
         ResetRolls();
         await OnAttackResolved.InvokeAsync(result);
-    }
-
-    private (int bonus, int penalty) CalculateAutoFirearmModifiers()
-    {
-        int bonus = 0, penalty = 0;
-        if (_isPointBlank) bonus++;
-        if (_isAiming) bonus++;
-        if (_selectedDefender?.Build >= 4) bonus++;
-        if (_isTargetTakingCover) penalty++;
-        if (_isTargetBehindCover) penalty++;
-        if (_isTargetFastMoving) penalty++;
-        if (_isFiringIntoMelee) penalty++;
-        if (_isMultipleShot) penalty++;
-        if (_isReloadAndFire) penalty++;
-        if (_selectedDefender?.Build <= -2) penalty++;
-        return (bonus, penalty);
     }
 
     private static string GetLevelColor(SuccessLevel level) => level switch

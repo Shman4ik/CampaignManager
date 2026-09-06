@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Features.Combat.Model;
+﻿namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 /// <summary>
 /// Полный результат одного разрешённого боевого действия
@@ -17,6 +17,33 @@ public class CombatActionResult
     public int AttackerRoll { get; set; }
     public SuccessLevel AttackerSuccessLevel { get; set; }
 
+    /// <summary>Развёрнутый бросок атакующего с бонусными/штрафными костями.</summary>
+    public DiceRollResult? AttackerRollDetail { get; set; }
+
+    /// <summary>Какие модификаторы применялись к броску атакующего и почему.</summary>
+    public AttackModifiers Modifiers { get; set; } = AttackModifiers.None;
+
+    /// <summary>
+    /// Уровень успеха, необходимый для попадания. Для стрельбы задаётся дальностью
+    /// (стр. 110), в остальных случаях — обычный успех.
+    /// </summary>
+    public SuccessLevel RequiredSuccessLevel { get; set; } = SuccessLevel.RegularSuccess;
+
+    /// <summary>Дальность стрельбы, если это была дальняя атака.</summary>
+    public RangeLevel RangeLevel { get; set; } = RangeLevel.Base;
+
+    /// <summary>Была ли цель готова к атаке (стр. 104–105).</summary>
+    public SurpriseMode SurpriseMode { get; set; } = SurpriseMode.TargetReady;
+
+    /// <summary>
+    /// Сложность автоматической стрельбы поднялась выше критической — попадание
+    /// невозможно (стр. 114).
+    /// </summary>
+    public bool IsImpossibleShot { get; set; }
+
+    /// <summary>Сколько патронов израсходовано этой проверкой атаки.</summary>
+    public int ShotsFired { get; set; } = 1;
+
     // ── Защитник (для ближнего боя / opposed roll) ─────────────────────
     public Guid? DefenderId { get; set; }
     public string DefenderName { get; set; } = string.Empty;
@@ -24,6 +51,9 @@ public class CombatActionResult
     public int DefenderSkillValue { get; set; }
     public int DefenderRoll { get; set; }
     public SuccessLevel DefenderSuccessLevel { get; set; }
+
+    /// <summary>Развёрнутый бросок защитника с бонусными/штрафными костями.</summary>
+    public DiceRollResult? DefenderRollDetail { get; set; }
 
     // ── Исход ──────────────────────────────────────────────────────────
     public bool AttackerWins { get; set; }
@@ -42,6 +72,15 @@ public class CombatActionResult
     public bool IsInstantDeath { get; set; }  // Одним ударом ≥ макс. ПЗ
     public bool IsMalfunction { get; set; }   // Осечка / заклинило
     public string? MalfunctionMessage { get; set; }
+
+    /// <summary>Сколько раундов займёт починка заклинившего оружия (1d6, стр. 113).</summary>
+    public int JamRepairRounds { get; set; }
+
+    /// <summary>Крах при стрельбе в ближнем бою — пуля попала в союзника (стр. 112).</summary>
+    public bool HitAllyOnFumble { get; set; }
+
+    public Guid? HitAllyId { get; set; }
+    public string? HitAllyName { get; set; }
 
     // ── Эффекты на защитника ──────────────────────────────────────────
     public int DefenderHpBefore { get; set; }
@@ -79,7 +118,32 @@ public class CombatActionResult
     public int? SanityBefore { get; set; }
     public int? SanityAfter { get; set; }
     public int? SanityLoss { get; set; }
+
+    /// <summary>Крах в проверке Рассудка — теряется максимум пунктов (стр. 153).</summary>
+    public bool SanityFumble { get; set; }
+
+    /// <summary>Бросок ИНТ при потере 5+ пунктов за раз (стр. 153).</summary>
+    public int? IntelligenceRoll { get; set; }
+
+    /// <summary>Значение ИНТ, против которого шёл бросок.</summary>
+    public int? IntelligenceValue { get; set; }
+
+    /// <summary>
+    /// Временное безумие. Наступает при УСПЕХЕ проверки ИНТ: сыщик осознал ужас.
+    /// </summary>
     public bool? TriggeredTemporaryInsanity { get; set; }
+
+    /// <summary>Длительность временного безумия в часах (1d10).</summary>
+    public int? TemporaryInsanityHours { get; set; }
+
+    /// <summary>Бессрочное безумие: потеряно не менее ⅕ текущего рассудка за игровой день.</summary>
+    public bool TriggeredIndefiniteInsanity { get; set; }
+
+    /// <summary>Неизлечимое безумие: рассудок упал до нуля.</summary>
+    public bool TriggeredPermanentInsanity { get; set; }
+
+    /// <summary>Сколько рассудка цель потеряла за игровой день с учётом этой проверки.</summary>
+    public int? SanityLostToday { get; set; }
 
     // ── Описание результата ────────────────────────────────────────────
     public string Summary { get; set; } = string.Empty;

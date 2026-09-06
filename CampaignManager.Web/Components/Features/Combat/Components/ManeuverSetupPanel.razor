@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 @inject CombatService CombatService
@@ -7,7 +7,9 @@
     <h4 class="text-base font-semibold text-gray-900 mb-3">Боевой манёвр</h4>
 
     <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
-        Манёвр заменяет атаку. Позволяет: разоружить, сбить с ног, захватить, столкнуть, вырваться или создать помеху.
+        Манёвр заменяет атаку. Позволяет: разоружить, сбить с ног, захватить, столкнуть, вырваться
+        или создать помеху. У манёвра должна быть законченная цель, меняющая положение дел, —
+        «отвести руку» целью не считается (стр. 104).
     </div>
 
     <!-- Инициатор манёвра -->
@@ -26,13 +28,20 @@
 
     @if (_attacker != null)
     {
+        @if (CombatService.GetAttackBlockReason(_attacker) is { } blockReason)
+        {
+            <div class="mb-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                ⚠ @blockReason Манёвр заменяет атаку, поэтому тоже недоступен.
+            </div>
+        }
+
         <!-- Тип манёвра -->
         <div class="mb-3">
             <label class="block text-xs font-medium text-gray-600 mb-1">Манёвр</label>
             <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
                     value="@_maneuverType"
                     @onchange="OnManeuverTypeChanged">
-                @foreach (var mt in Enum.GetValues<ManeuverType>())
+                @foreach (var mt in AvailableManeuvers)
                 {
                     <option value="@mt">@CombatService.GetManeuverName(mt)</option>
                 }
@@ -65,7 +74,8 @@
             else if (_defender.Build - _attacker.Build >= 1)
             {
                 <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-3 text-xs text-yellow-800">
-                    ⚠ Цель крупнее (@FormatBuild(_defender.Build) vs @FormatBuild(_attacker.Build)): штрафная кость за каждое очко разности.
+                    ⚠ Цель крупнее (@FormatBuild(_defender.Build) vs @FormatBuild(_attacker.Build)):
+                    манёвр бросается с <strong>@CombatService.DescribeDice(BuildPenaltyDice, false)</strong>.
                 </div>
             }
 
@@ -121,6 +131,10 @@
                         {
                             <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_attackerLevel)">
                                 → @CombatService.GetSuccessLevelText(_attackerLevel)
+                                @if (_attackerRollDetail is { HasExtraDice: true })
+                                {
+                                    <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_attackerRollDetail)</span>
+                                }
                             </div>
                         }
                     </div>
@@ -140,6 +154,10 @@
                         {
                             <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_defenderLevel)">
                                 → @CombatService.GetSuccessLevelText(_defenderLevel)
+                                @if (_defenderRollDetail is { HasExtraDice: true })
+                                {
+                                    <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_defenderRollDetail)</span>
+                                }
                             </div>
                         }
                     </div>
@@ -183,6 +201,14 @@
 
     private int? _attackerRoll;
     private int? _defenderRoll;
+    private DiceRollResult? _attackerRollDetail;
+    private DiceRollResult? _defenderRollDetail;
+
+    /// <summary>Штрафные кости за разницу Комплекции (CoC 7e, стр. 103).</summary>
+    private int BuildPenaltyDice =>
+        _attacker is null || _defender is null
+            ? 0
+            : Math.Clamp(_defender.Build - _attacker.Build, 0, 2);
     private SuccessLevel _attackerLevel;
     private SuccessLevel _defenderLevel;
 
@@ -227,6 +253,8 @@
     {
         _attackerRoll = null;
         _defenderRoll = null;
+        _attackerRollDetail = null;
+        _defenderRollDetail = null;
         _attackerLevel = SuccessLevel.Failure;
         _defenderLevel = SuccessLevel.Failure;
     }
@@ -237,31 +265,45 @@
         v = Math.Clamp(v, 1, 100);
         if (isAttacker)
         {
+            // Хранитель ввёл итог своих физических костей — штрафные он применил сам
             _attackerRoll = v;
+            _attackerRollDetail = null;
             _attackerLevel = CombatService.CalculateSuccessLevel(v, _attackSkill);
         }
         else
         {
             _defenderRoll = v;
+            _defenderRollDetail = null;
             _defenderLevel = CombatService.CalculateSuccessLevel(v, _defenderSkill);
         }
     }
 
     private void AutoRollAttacker()
     {
-        _attackerRoll = CombatService.RollD100();
+        _attackerRollDetail = CombatService.RollD100(0, BuildPenaltyDice);
+        _attackerRoll = _attackerRollDetail.Result;
         _attackerLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, _attackSkill);
     }
 
     private void AutoRollDefender()
     {
-        _defenderRoll = CombatService.RollD100();
+        _defenderRollDetail = CombatService.RollD100(0, 0);
+        _defenderRoll = _defenderRollDetail.Result;
         _defenderLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkill);
     }
 
+    /// <summary>
+    /// Нокаут — необязательное правило, поэтому в списке он появляется только
+    /// когда Хранитель включил его в настройках боя (стр. 123).
+    /// </summary>
+    private IEnumerable<ManeuverType> AvailableManeuvers =>
+        Enum.GetValues<ManeuverType>()
+            .Where(mt => mt != ManeuverType.Knockout || CombatService.UseCinematicKnockout);
+
     private bool CanResolve() =>
         _attacker != null && _defender != null
-        && (_defender.Build - _attacker.Build) < 3;
+        && (_defender.Build - _attacker.Build) < 3
+        && CombatService.GetAttackBlockReason(_attacker) is null;
 
     private async Task ResolveManeuver()
     {
@@ -278,7 +320,9 @@
             AttackerBuild = _attacker.Build,
             DefenderBuild = _defender.Build,
             ManualAttackerRoll = _attackerRoll,
-            ManualDefenderRoll = _defenderRoll
+            ManualDefenderRoll = _defenderRoll,
+            AttackerRollDetail = _attackerRollDetail,
+            DefenderRollDetail = _defenderRollDetail
         };
 
         var result = CombatService.ResolveManeuver(setup);

@@ -1,7 +1,7 @@
 namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 /// <summary>
-/// DTO для настройки проверки рассудка
+/// DTO для настройки проверки рассудка (CoC 7e, глава 8)
 /// </summary>
 public class SanityCheckSetup
 {
@@ -19,7 +19,18 @@ public class SanityCheckSetup
     public string FailureLoss { get; set; } = "1D6";
 
     /// <summary>
-    /// Ручной ввод броска d100 (null = авторбросок)
+    /// Ручной ввод броска d100 (null = авторбросок).
+    /// Бонусные и штрафные кости к проверкам Рассудка не применяются (стр. 152).
     /// </summary>
     public int? ManualRoll { get; set; }
+
+    /// <summary>
+    /// Ручной ввод броска ИНТ при потере 5+ пунктов за раз (null = авторбросок).
+    /// </summary>
+    public int? ManualIntRoll { get; set; }
+
+    /// <summary>
+    /// Ручной бросок 1d10 на длительность временного безумия в часах (null = авторбросок).
+    /// </summary>
+    public int? ManualInsanityDurationRoll { get; set; }
 }

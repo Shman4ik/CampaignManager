@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
@@ -22,6 +22,21 @@ public sealed partial class CombatService
 
     public event Action? OnChange;
 
+    // ───────────────── Необязательные правила (стр. 122–123) ─────────────
+    // Книга помечает их как необязательные, поэтому по умолчанию выключены.
+
+    /// <summary>Определять очерёдность броском ЛВК, а не только по значению (стр. 122).</summary>
+    public bool UseInitiativeRolls { get; set; }
+
+    /// <summary>Разрешить «киношный» нокаут манёвром ударным оружием (стр. 123).</summary>
+    public bool UseCinematicKnockout { get; set; }
+
+    /// <summary>Разрешить тратить Удачу, чтобы не потерять сознание (стр. 123).</summary>
+    public bool UseLuckToStayConscious { get; set; }
+
+    /// <summary>Порядок инициативы определён броском и зафиксирован до конца боя.</summary>
+    public bool InitiativeRolled { get; private set; }
+
     // ───────────────────── Управление участниками ─────────────────────
 
     public void AddCombatant(Combatant combatant)
@@ -43,11 +58,105 @@ public sealed partial class CombatService
     /// </summary>
     public void SortByInitiative()
     {
+        // Порядок, определённый броском ЛВК, держится до конца боя (стр. 122)
+        if (UseInitiativeRolls && InitiativeRolled)
+        {
+            Combatants = Combatants
+                .OrderByDescending(c => c.InitiativeRollLevel)
+                .ThenByDescending(c => c.Initiative)
+                .ThenByDescending(c => Math.Max(c.FightingSkill, c.DodgeSkill))
+                .ToList();
+            NotifyStateChanged();
+            return;
+        }
+
         Combatants = Combatants
             .OrderByDescending(c => c.HasFirearmReady ? c.Initiative + 50 : c.Initiative)
             .ThenByDescending(c => Math.Max(c.FightingSkill, c.DodgeSkill))
             .ToList();
         NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Необязательное правило (стр. 122): все проходят проверку ЛВК, порядок задаётся
+    /// уровнем успеха, при равенстве — по ЛВК, затем по боевому навыку. Огнестрельное
+    /// на изготовку даёт бонусную кость. Критический успех — тактическое преимущество,
+    /// крах — пропуск хода. Полученный порядок держится до конца боя.
+    /// </summary>
+    public void RollInitiative()
+    {
+        foreach (var c in Combatants)
+        {
+            var roll = RollD100(c.HasFirearmReady ? 1 : 0, 0);
+            var level = CalculateSuccessLevel(roll.Result, c.Initiative);
+
+            c.InitiativeRoll = roll.Result;
+            c.InitiativeRollDetail = roll;
+            c.InitiativeRollLevel = (int)level;
+            c.HasTacticalAdvantage = level == SuccessLevel.CriticalSuccess;
+            c.SkipsTurnFromFumble = level == SuccessLevel.Fumble;
+        }
+
+        InitiativeRolled = true;
+        SortByInitiative();
+    }
+
+    /// <summary>Сбрасывает броски инициативы — например, при возврате к порядку по ЛВК.</summary>
+    public void ClearInitiativeRolls()
+    {
+        foreach (var c in Combatants)
+        {
+            c.InitiativeRoll = null;
+            c.InitiativeRollDetail = null;
+            c.InitiativeRollLevel = 0;
+            c.HasTacticalAdvantage = false;
+            c.SkipsTurnFromFumble = false;
+        }
+
+        InitiativeRolled = false;
+        SortByInitiative();
+    }
+
+    /// <summary>
+    /// Цена Удачи за то, чтобы остаться в сознании ещё на раунд: 1, 2, 4, 8…
+    /// Необязательное правило (стр. 123).
+    /// </summary>
+    public static int GetLuckCostToStayConscious(Combatant combatant) =>
+        combatant.LuckSpentToStayConscious == 0
+            ? 1
+            : (int)Math.Pow(2, CountLuckPayments(combatant));
+
+    private static int CountLuckPayments(Combatant combatant)
+    {
+        // Потрачено 1+2+4+…+2^(n-1) = 2^n − 1, значит n = log2(spent + 1)
+        var payments = 0;
+        var total = 0;
+        while (total < combatant.LuckSpentToStayConscious)
+        {
+            total += (int)Math.Pow(2, payments);
+            payments++;
+        }
+
+        return payments;
+    }
+
+    /// <summary>
+    /// Тратит Удачу, чтобы боец не потерял сознание до конца текущего раунда.
+    /// Возвращает false, если Удачи не хватает.
+    /// </summary>
+    public bool SpendLuckToStayConscious(Combatant combatant)
+    {
+        if (!UseLuckToStayConscious) return false;
+
+        var cost = GetLuckCostToStayConscious(combatant);
+        if (combatant.Luck < cost) return false;
+
+        combatant.Luck -= cost;
+        combatant.LuckSpentToStayConscious += cost;
+        combatant.IsUnconscious = false;
+
+        NotifyStateChanged();
+        return true;
     }
 
     public void NextTurn()
@@ -83,12 +192,15 @@ public sealed partial class CombatService
             c.HasActedThisRound = false;
             c.IsDelayed = false;
             c.HasTakenCover = false;
+            c.AutofireChecksThisRound = 0;
+            c.AttacksThisRound = 0;
 
-            // Если укрывался — теряет атаку в этом раунде
-            if (c.LostNextAttackFromCover)
-                c.LostNextAttackFromCover = false;
+            // Пропуск атаки за прошедший раунд больше не актуален
+            if (c.AttackBlockedInRound < CurrentRound)
+                c.AttackBlockedInRound = null;
 
-            // Если прицеливался — флаг сохраняется до использования
+            // Прицеливание сохраняется до выстрела; оно теряется, только если боец
+            // получил урон или переместился (стр. 111)
         }
     }
 
@@ -120,10 +232,11 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Возвращает список умирающих бойцов для проверок ВЫН в конце раунда.
+    /// Умирающие, которым нужна проверка ВЫН в конце раунда. Стабилизированные
+    /// первой помощью сюда не входят: они проверяются раз в час (стр. 118).
     /// </summary>
     public List<Combatant> GetDyingCombatants() =>
-        Combatants.Where(c => c.IsDying && !c.IsDead).ToList();
+        Combatants.Where(c => c.IsDying && !c.IsDead && !c.IsStabilized).ToList();
 
     public void SetCampaign(Guid campaignId)
     {
@@ -147,6 +260,47 @@ public sealed partial class CombatService
     public static int RollD100() => RandomNumberGenerator.GetInt32(1, 101);
 
     public static int RollDice(int sides) => RandomNumberGenerator.GetInt32(1, sides + 1);
+
+    /// <summary>
+    /// Бросок d100 с бонусными и штрафными костями (CoC 7e, стр. 89).
+    /// <para>
+    /// Бросается одна кость единиц и (1 + |нетто|) костей десятков. Из полученных
+    /// вариантов берётся наименьший при бонусных костях и наибольший при штрафных.
+    /// Одна бонусная кость отменяет одну штрафную. Комбинация «00» + «0» равна 100,
+    /// поэтому выбор делается по итоговому результату, а не по значению кости десятков.
+    /// </para>
+    /// </summary>
+    public static DiceRollResult RollD100(int bonusDice, int penaltyDice)
+    {
+        var net = Math.Max(0, bonusDice) - Math.Max(0, penaltyDice);
+        var extraDice = Math.Abs(net);
+
+        var units = RandomNumberGenerator.GetInt32(0, 10);
+
+        var candidates = new int[extraDice + 1];
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            var tens = RandomNumberGenerator.GetInt32(0, 10) * 10;
+            var value = tens + units;
+            candidates[i] = value == 0 ? 100 : value;
+        }
+
+        var result = net switch
+        {
+            > 0 => candidates.Min(),
+            < 0 => candidates.Max(),
+            _ => candidates[0]
+        };
+
+        return new DiceRollResult
+        {
+            Result = result,
+            Units = units,
+            Candidates = candidates,
+            BonusDice = net > 0 ? net : 0,
+            PenaltyDice = net < 0 ? -net : 0
+        };
+    }
 
     /// <summary>
     /// Парсит и бросает формулу урона: "1D6", "2D6+2", "1D8+1D6", "0", "+1D4", "-1"
@@ -294,14 +448,183 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Считает эффективное значение навыка с учётом дальности стрельбы.
+    /// Уровень успеха, необходимый для попадания на данной дальности (CoC 7e, стр. 110).
+    /// Дальность задаёт уровень сложности, а не урезает значение навыка.
     /// </summary>
-    public static int GetEffectiveSkillForRange(int baseSkill, RangeLevel range) => range switch
+    public static SuccessLevel GetRequiredLevelForRange(RangeLevel range) => range switch
+    {
+        RangeLevel.Long => SuccessLevel.HardSuccess,
+        RangeLevel.Extreme => SuccessLevel.ExtremeSuccess,
+        _ => SuccessLevel.RegularSuccess
+    };
+
+    /// <summary>
+    /// Порог броска для данной дальности — то же число, что и уровень сложности,
+    /// но в виде значения навыка. Нужно только для подписей в интерфейсе.
+    /// </summary>
+    public static int GetRollThresholdForRange(int baseSkill, RangeLevel range) => range switch
     {
         RangeLevel.Long => baseSkill / 2,
         RangeLevel.Extreme => baseSkill / 5,
         _ => baseSkill
     };
+
+    /// <summary>
+    /// Союзник стрелка на линии огня с наименьшей Удачей (стр. 112). Союзниками
+    /// считаются бойцы той же стороны, кроме самого стрелка и его цели.
+    /// </summary>
+    public Combatant? FindUnluckiestAlly(Combatant attacker, Combatant target) =>
+        Combatants
+            .Where(c => c.Id != attacker.Id && c.Id != target.Id && !c.IsDead && c.IsPlayer == attacker.IsPlayer)
+            .OrderBy(c => c.Luck)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// Попытка починить заклинившее оружие: одна за раунд, нужен успех Механики
+    /// или Стрельбы, всего требуется 1d6 раундов (стр. 113).
+    /// </summary>
+    public bool TryRepairJam(Combatant combatant, int skillValue, int roll)
+    {
+        if (string.IsNullOrEmpty(combatant.JammedWeaponName)) return false;
+
+        var level = CalculateSuccessLevel(roll, skillValue);
+        if (level < SuccessLevel.RegularSuccess)
+        {
+            NotifyStateChanged();
+            return false;
+        }
+
+        combatant.JamRepairRoundsLeft = Math.Max(0, combatant.JamRepairRoundsLeft - 1);
+        if (combatant.JamRepairRoundsLeft == 0)
+            combatant.JammedWeaponName = null;
+
+        NotifyStateChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Списывает израсходованные патроны. Ёмкость берётся из данных оружия,
+    /// пока в бойце нет записи об этом стволе.
+    /// </summary>
+    private static void SpendAmmo(Combatant attacker, AttackSetup setup)
+    {
+        var weapon = setup.SelectedWeapon;
+        if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return;
+
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return;
+
+        if (!attacker.AmmoLoaded.TryGetValue(weapon.Name, out var loaded))
+            loaded = capacity;
+
+        attacker.AmmoLoaded[weapon.Name] = Math.Max(0, loaded - Math.Max(1, setup.ShotsFired));
+    }
+
+    /// <summary>Ёмкость магазина из текстового поля оружия; 0, если разобрать не удалось.</summary>
+    public static int ParseAmmoCapacity(string? ammo)
+    {
+        if (string.IsNullOrWhiteSpace(ammo)) return 0;
+
+        var digits = new string(ammo.TakeWhile(char.IsDigit).ToArray());
+        if (digits.Length == 0)
+            digits = new string(ammo.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
+
+        return int.TryParse(digits, out var value) ? value : 0;
+    }
+
+    /// <summary>Сколько патронов осталось в оружии бойца.</summary>
+    public static int GetAmmoLeft(Combatant combatant, Weapon? weapon)
+    {
+        if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return 0;
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return 0;
+
+        return combatant.AmmoLoaded.TryGetValue(weapon.Name, out var loaded) ? loaded : capacity;
+    }
+
+    /// <summary>Перезарядка: магазин заполняется до ёмкости (стр. 111).</summary>
+    public void Reload(Combatant combatant, Weapon weapon)
+    {
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return;
+
+        combatant.AmmoLoaded[weapon.Name] = capacity;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Размер залпа при непрерывном огне: навык, делённый на 10, но не меньше трёх пуль
+    /// (CoC 7e, стр. 112).
+    /// </summary>
+    public static int GetVolleySize(int firearmSkill) => Math.Max(3, firearmSkill / 10);
+
+    /// <summary>
+    /// Нарастающая сложность проверок при автоматической стрельбе (стр. 114).
+    /// <para>
+    /// Первая проверка в раунде идёт как обычно. Каждая следующая добавляет штрафную
+    /// кость; когда штрафных костей набирается три, остаётся две, а уровень сложности
+    /// повышается на один: обычный → трудный → чрезвычайный → критический → невозможно.
+    /// </para>
+    /// </summary>
+    public static (SuccessLevel Required, bool IsImpossible, int ExtraPenaltyDice) EscalateAutofire(
+        SuccessLevel baseRequired, int checkIndex)
+    {
+        if (checkIndex <= 0) return (baseRequired, false, 0);
+
+        var extraPenalty = Math.Min(checkIndex, 2);
+        var levelsUp = Math.Max(0, checkIndex - 2);
+        var index = DifficultyIndex(baseRequired) + levelsUp;
+
+        return index >= 4
+            ? (SuccessLevel.CriticalSuccess, true, extraPenalty)
+            : (DifficultyFromIndex(index), false, extraPenalty);
+    }
+
+    private static int DifficultyIndex(SuccessLevel level) => level switch
+    {
+        SuccessLevel.HardSuccess => 1,
+        SuccessLevel.ExtremeSuccess => 2,
+        SuccessLevel.CriticalSuccess => 3,
+        _ => 0
+    };
+
+    private static SuccessLevel DifficultyFromIndex(int index) => index switch
+    {
+        1 => SuccessLevel.HardSuccess,
+        2 => SuccessLevel.ExtremeSuccess,
+        3 => SuccessLevel.CriticalSuccess,
+        _ => SuccessLevel.RegularSuccess
+    };
+
+    /// <summary>Название уровня сложности успеха для подписей.</summary>
+    public static string GetDifficultyName(SuccessLevel required) => required switch
+    {
+        SuccessLevel.HardSuccess => "трудный",
+        SuccessLevel.ExtremeSuccess => "чрезвычайный",
+        SuccessLevel.CriticalSuccess => "критический",
+        _ => "обычный"
+    };
+
+    /// <summary>Название уровня сложности для подписей: «трудный», «чрезвычайный».</summary>
+    public static string GetDifficultyName(RangeLevel range) => range switch
+    {
+        RangeLevel.Long => "трудный",
+        RangeLevel.Extreme => "чрезвычайный",
+        _ => "обычный"
+    };
+
+    /// <summary>
+    /// Определяет бросок: уже брошенный в панели используется как есть, ручной ввод
+    /// Хранителя — как есть (кости он бросил сам), иначе бросается автоматически
+    /// с учётом бонусных и штрафных костей.
+    /// </summary>
+    private static DiceRollResult RollFor(DiceRollResult? preRolled, int? manualRoll, int bonusDice, int penaltyDice)
+    {
+        if (preRolled is not null) return preRolled;
+        return manualRoll.HasValue
+            ? DiceRollResult.Plain(manualRoll.Value)
+            : RollD100(bonusDice, penaltyDice);
+    }
 
     /// <summary>
     /// Разрешение встречного броска. Возвращает true если атакующий побеждает.
@@ -346,40 +669,64 @@ public sealed partial class CombatService
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Безоружная атака"
         };
 
-        // Автоматические модификаторы: бонусная кость если цель повалена (CoC 7e опциональные правила)
-        if (defender.IsProne)
-            setup.BonusDice++;
+        // Бонусные и штрафные кости атакующего (ручные + автоматические)
+        var modifiers = CalculateAttackModifiers(setup, attacker, defender);
+        result.Modifiers = modifiers;
+
+        // Ход потрачен на атаку независимо от того, попадёт она или нет
+        RegisterAttack(attacker);
 
         // 1. Бросок атакующего (ручной или авто)
         result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
-        // 2. Бросок защитника (только если цель не застали врасплох)
+        // 2. Бросок защитника — только если цель начеку (стр. 104)
         result.DefenderSkillValue = setup.DefenderSkillValue;
+        var surprise = NormalizeSurprise(setup);
+        result.SurpriseMode = surprise;
 
-        if (setup.TargetUnawareMeansAutoSuccess)
+        if (surprise == SurpriseMode.TargetReady)
         {
-            // Внезапная атака: цель не уклоняется, атака проходит автоматически (кроме провала)
-            result.DefenderRoll = 0;
-            result.DefenderSuccessLevel = SuccessLevel.Failure;
+            result.DefenderRollDetail = RollFor(setup.DefenderRollDetail, setup.ManualDefenderRoll, setup.DefenderBonusDice, setup.DefenderPenaltyDice);
+            result.DefenderRoll = result.DefenderRollDetail.Result;
+            result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
         }
         else
         {
-            result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
-            result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
+            // Цель не готова: она не уклоняется и не контратакует
+            result.DefenderRoll = 0;
+            result.DefenderSuccessLevel = SuccessLevel.Failure;
         }
 
-        // 3. Атакующий провалил — промах
+        // 3. Автоматическое попадание: провалом считается только крах (стр. 105)
+        if (surprise == SurpriseMode.AutoHit)
+        {
+            if (result.AttackerSuccessLevel == SuccessLevel.Fumble)
+            {
+                result.AttackerWins = false;
+                result.DefenderHpAfter = defender.CurrentHitPoints;
+                result.Summary = $"{attacker.Name}: крах при внезапной атаке ({result.AttackerRoll})" +
+                                 $"{FormatRollDetail(result.AttackerRollDetail)} — даже застигнутая врасплох цель не пострадала.";
+                return result;
+            }
+
+            result.AttackerWins = true;
+            CalculateDamage(result, setup, attacker, defender);
+            return result;
+        }
+
+        // 4. Атакующий провалил — промах
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue}).";
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
-        // 4. Определяем победителя встречного броска
+        // 5. Определяем победителя встречного броска
         if (result.DefenderSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = true;
@@ -392,11 +739,14 @@ public sealed partial class CombatService
                 setup.DefenderReaction);
         }
 
-        // Отслеживаем защитные действия (для численного превосходства)
-        defender.HasDefendedThisRound = true;
-        defender.DefenseCountThisRound++;
+        // Численное превосходство считает только настоящие защитные действия (стр. 106)
+        if (surprise == SurpriseMode.TargetReady)
+        {
+            defender.HasDefendedThisRound = true;
+            defender.DefenseCountThisRound++;
+        }
 
-        // Если атакующий победил в рукопашной и цель в лежачем положении — сбрасываем прицеливание
+        // Прицеливание израсходовано
         if (attacker.IsAiming) attacker.IsAiming = false;
 
         if (!result.AttackerWins)
@@ -423,39 +773,197 @@ public sealed partial class CombatService
         return result;
     }
 
-    // ───────────────────── Модификаторы стрельбы (CoC 7e стр. 110–113) ─────
+    // ───────────────────── Модификаторы атаки (CoC 7e стр. 106, 110–113) ───
 
     /// <summary>
-    /// Подсчитывает бонусные и штрафные кости для дальней атаки по правилам CoC 7e.
-    /// Возвращает (bonusDice, penaltyDice).
+    /// Единый расчёт бонусных и штрафных костей для атаки. Используется и при
+    /// предпросмотре в панели, и при разрешении атаки, чтобы они не расходились.
+    /// К ручным костям Хранителя добавляются автоматические по правилам CoC 7e.
+    /// Взаимное погашение выполняется в <see cref="RollD100(int, int)"/>.
     /// </summary>
-    public static (int bonusDice, int penaltyDice) CalculateFirearmModifiers(AttackSetup setup, Combatant? attacker, Combatant? defender)
+    public static AttackModifiers CalculateAttackModifiers(AttackSetup setup, Combatant? attacker, Combatant? defender)
     {
-        int bonus = setup.BonusDice;
-        int penalty = setup.PenaltyDice;
+        var reasons = new List<string>();
+        var bonus = Math.Max(0, setup.BonusDice);
+        var penalty = Math.Max(0, setup.PenaltyDice);
 
-        // Бонусные кости
-        if (setup.IsPointBlank) bonus++;
-        if (setup.IsAiming) bonus++;
-        if (attacker?.IsAiming == true) bonus++; // Прицеливание через состояние бойца
-        if (defender != null && defender.Build >= 4) bonus++; // Крупная цель
+        if (bonus > 0) reasons.Add($"+{bonus} от Хранителя");
+        if (penalty > 0) reasons.Add($"−{penalty} от Хранителя");
 
-        // Поваленный состояние (CoC 7e, опциональные правила)
-        if (attacker?.IsProne == true) bonus++; // Стрельба из лежачего положения
+        // Цель не готова, но исход не предрешён — бонусная кость (стр. 105)
+        if (NormalizeSurprise(setup) == SurpriseMode.BonusDie)
+        {
+            bonus++;
+            reasons.Add("+1 цель застигнута врасплох");
+        }
 
-        // Штрафные кости
-        if (setup.IsTargetTakingCover) penalty++;
-        if (defender?.HasTakenCover == true) penalty++; // Цель укрылась (авто)
-        if (setup.IsTargetBehindCover) penalty++;
-        if (setup.IsTargetFastMoving) penalty++;
-        if (setup.IsFiringIntoMelee) penalty++;
-        if (setup.IsMultipleShot) penalty++;
-        if (setup.IsReloadAndFire) penalty++;
-        if (defender != null && defender.Build <= -2) penalty++; // Мелкая цель
-        if (defender?.IsProne == true && !setup.IsPointBlank) penalty++; // Цель лежит
+        if (setup.IsMelee)
+        {
+            // Поваленную цель проще пинать (стр. 113)
+            if (defender?.IsProne == true)
+            {
+                bonus++;
+                reasons.Add("+1 цель повалена");
+            }
 
-        return (bonus, penalty);
+            // Численное превосходство (стр. 106): цель уже израсходовала защитные действия
+            if (HasNumericalSuperiority(defender))
+            {
+                bonus++;
+                reasons.Add("+1 численное превосходство");
+            }
+        }
+        else
+        {
+            // ── Бонусные кости ──
+            if (setup.IsPointBlank)
+            {
+                bonus++;
+                reasons.Add("+1 стрельба в упор");
+            }
+
+            // Прицеливание учитывается один раз: из настройки или из состояния бойца
+            if (setup.IsAiming || attacker?.IsAiming == true)
+            {
+                bonus++;
+                reasons.Add("+1 прицеливание");
+            }
+
+            if (attacker?.IsProne == true)
+            {
+                bonus++;
+                reasons.Add("+1 стрельба лёжа");
+            }
+
+            if (defender is { Build: >= 4 })
+            {
+                bonus++;
+                reasons.Add("+1 крупная цель");
+            }
+
+            // ── Штрафные кости ──
+            // Укрытие от огня учитывается один раз: из настройки или из состояния цели
+            if (setup.IsTargetTakingCover || defender?.HasTakenCover == true)
+            {
+                penalty++;
+                reasons.Add("−1 цель укрылась от огня");
+            }
+
+            if (setup.IsTargetBehindCover)
+            {
+                penalty++;
+                reasons.Add("−1 частичное укрытие");
+            }
+
+            if (setup.IsTargetFastMoving)
+            {
+                penalty++;
+                reasons.Add("−1 быстро движущаяся цель");
+            }
+
+            if (setup.IsFiringIntoMelee)
+            {
+                penalty++;
+                reasons.Add("−1 стрельба в ближнем бою");
+            }
+
+            if (setup.IsMultipleShot)
+            {
+                penalty++;
+                reasons.Add("−1 серия выстрелов");
+            }
+
+            if (setup.IsReloadAndFire)
+            {
+                penalty++;
+                reasons.Add("−1 зарядка и выстрел");
+            }
+
+            if (defender is { Build: <= -2 })
+            {
+                penalty++;
+                reasons.Add("−1 мелкая цель");
+            }
+
+            if (defender?.IsProne == true && !setup.IsPointBlank)
+            {
+                penalty++;
+                reasons.Add("−1 цель лежит");
+            }
+
+            // Каждая следующая проверка автоматической стрельбы в раунде — штрафная кость (стр. 114)
+            if (setup.FiringMode == FiringMode.Volley && setup.AutofireCheckIndex > 0)
+            {
+                var autofirePenalty = Math.Min(setup.AutofireCheckIndex, 2);
+                penalty += autofirePenalty;
+                reasons.Add($"−{autofirePenalty} проверка №{setup.AutofireCheckIndex + 1} при автоматической стрельбе");
+            }
+        }
+
+        return new AttackModifiers(bonus, penalty, reasons);
     }
+
+    /// <summary>
+    /// Приводит режим внезапной атаки к допустимому: для дистанционной атаки
+    /// автоматическое попадание правилами не разрешено — «всегда нужно делать
+    /// бросок на попадание» (стр. 105), поэтому он понижается до бонусной кости.
+    /// </summary>
+    public static SurpriseMode NormalizeSurprise(AttackSetup setup) =>
+        setup is { IsMelee: false, SurpriseMode: SurpriseMode.AutoHit }
+            ? SurpriseMode.BonusDie
+            : setup.SurpriseMode;
+
+    /// <summary>
+    /// Может ли боец атаковать в этом раунде: укрытие от огня отнимает атаку,
+    /// а число атак за раунд ограничено (стр. 100, 111).
+    /// </summary>
+    public bool CanAttack(Combatant combatant) =>
+        combatant.AttackBlockedInRound != CurrentRound
+        && combatant.AttacksThisRound < Math.Max(1, combatant.AttacksPerRound);
+
+    /// <summary>Почему боец не может атаковать; null — может.</summary>
+    public string? GetAttackBlockReason(Combatant combatant)
+    {
+        if (combatant.AttackBlockedInRound == CurrentRound)
+            return $"{combatant.Name} укрывался от огня и теряет атаку в этом раунде (стр. 111). " +
+                   "До следующей атаки он может только уклоняться.";
+
+        var limit = Math.Max(1, combatant.AttacksPerRound);
+        if (combatant.AttacksThisRound >= limit)
+            return $"{combatant.Name} уже совершил все свои атаки за раунд ({combatant.AttacksThisRound} из {limit}).";
+
+        return null;
+    }
+
+    /// <summary>Записывает совершённое действие бойца в трекинг раунда.</summary>
+    private static void RegisterAttack(Combatant attacker)
+    {
+        attacker.HasActedThisRound = true;
+        attacker.AttacksThisRound++;
+    }
+
+    /// <summary>
+    /// Укрытие от огня: боец теряет следующую атаку — этого раунда, если ещё не
+    /// атаковал, иначе следующего (стр. 111).
+    /// </summary>
+    public void TakeCover(Combatant combatant)
+    {
+        combatant.HasTakenCover = true;
+        combatant.AttackBlockedInRound = combatant.AttacksThisRound == 0
+            ? CurrentRound
+            : CurrentRound + 1;
+
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Численное превосходство (стр. 106): цель уже уклонялась или контратаковала
+    /// столько раз, сколько у неё атак за раунд.
+    /// </summary>
+    public static bool HasNumericalSuperiority(Combatant? defender) =>
+        defender is not null
+        && defender.DefenseCountThisRound > 0
+        && defender.DefenseCountThisRound >= Math.Max(1, defender.AttacksPerRound);
 
     // ───────────────────── Разрешение дальнего боя ─────────────────────
 
@@ -468,8 +976,11 @@ public sealed partial class CombatService
         var attacker = Combatants.First(c => c.Id == setup.AttackerId);
         var defender = Combatants.First(c => c.Id == setup.DefenderId);
 
-        // Эффективное значение навыка с учётом дальности
-        int effectiveSkill = GetEffectiveSkillForRange(setup.AttackSkillValue, setup.RangeLevel);
+        // Дальность задаёт уровень сложности, а не урезает навык (стр. 110),
+        // а каждая следующая проверка автоматической стрельбы поднимает её выше (стр. 114)
+        var rangeLevel = GetRequiredLevelForRange(setup.RangeLevel);
+        var autofireIndex = setup.FiringMode == FiringMode.Volley ? setup.AutofireCheckIndex : 0;
+        var (requiredLevel, isImpossible, _) = EscalateAutofire(rangeLevel, autofireIndex);
 
         var result = new CombatActionResult
         {
@@ -484,9 +995,24 @@ public sealed partial class CombatService
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Дальняя атака"
         };
 
-        result.AttackerSkillValue = effectiveSkill;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
-        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, effectiveSkill);
+        // Бонусные и штрафные кости стрельбы (ручные + автоматические)
+        var modifiers = CalculateAttackModifiers(setup, attacker, defender);
+        result.Modifiers = modifiers;
+
+        // Патроны расходуются вне зависимости от исхода проверки
+        SpendAmmo(attacker, setup);
+        if (setup.FiringMode == FiringMode.Volley) attacker.AutofireChecksThisRound++;
+        RegisterAttack(attacker);
+
+        result.AttackerSkillValue = setup.AttackSkillValue;
+        result.RequiredSuccessLevel = requiredLevel;
+        result.IsImpossibleShot = isImpossible;
+        result.ShotsFired = setup.ShotsFired;
+        result.RangeLevel = setup.RangeLevel;
+        result.SurpriseMode = NormalizeSurprise(setup);
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
         if (setup.SelectedWeapon != null
@@ -498,17 +1024,54 @@ public sealed partial class CombatService
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
             attacker.JammedWeaponName = setup.SelectedWeapon.Name;
+            attacker.JamRepairRoundsLeft = RollDice(6);
+            result.JamRepairRounds = attacker.JamRepairRoundsLeft;
             result.MalfunctionMessage = $"Осечка! {setup.SelectedWeapon.Name} заклинило (бросок {result.AttackerRoll} ≥ {malfunctionValue}).";
-            result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Требуется ремонт (проверка Механики или Стрельбы, 1d6 раундов).";
+            result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Починка займёт " +
+                             $"{attacker.JamRepairRoundsLeft} боевых раунда(ов) и потребует успешной проверки " +
+                             "Механики или Стрельбы (стр. 113).";
             return result;
         }
 
-        // Дальний бой — без встречного броска
-        if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
+        // Сложность поднялась выше критической — попадание невозможно (стр. 114)
+        if (isImpossible)
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {effectiveSkill}).";
+            result.Summary = $"{attacker.Name}: проверка №{autofireIndex + 1} за раунд — сложность выросла " +
+                             $"выше критической, попадание невозможно (стр. 114).";
+            return result;
+        }
+
+        // Крах при стрельбе в ближнем бою — попадание в союзника (стр. 112)
+        if (result.AttackerSuccessLevel == SuccessLevel.Fumble && setup.IsFiringIntoMelee)
+        {
+            var ally = FindUnluckiestAlly(attacker, defender);
+            result.AttackerWins = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+            result.HitAllyOnFumble = true;
+            result.HitAllyId = ally?.Id;
+            result.HitAllyName = ally?.Name;
+            result.Summary = ally is null
+                ? $"{attacker.Name}: крах при стрельбе в ближнем бою ({result.AttackerRoll}). " +
+                  "Пуля ушла в союзника — выберите пострадавшего по наименьшей Удаче (стр. 112)."
+                : $"{attacker.Name}: крах при стрельбе в ближнем бою ({result.AttackerRoll}). " +
+                  $"Пуля попала в {ally.Name} — у него наименьшая Удача ({ally.Luck}) на линии огня (стр. 112). " +
+                  "Разыграйте урон отдельной атакой по нему.";
+            return result;
+        }
+
+        // Дальний бой — без встречного броска. Попадание требует уровня сложности по дальности.
+        if (result.AttackerSuccessLevel < requiredLevel)
+        {
+            result.AttackerWins = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+
+            var needed = requiredLevel == SuccessLevel.RegularSuccess
+                ? $"против {setup.AttackSkillValue}"
+                : $"нужен {GetDifficultyName(requiredLevel)} успех";
+
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll}, {needed}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
@@ -518,8 +1081,9 @@ public sealed partial class CombatService
         // Прицеливание использовано — сбросить флаг
         if (attacker.IsAiming) attacker.IsAiming = false;
 
-        // При сверхбольшой дальности проникающая рана только при 01
-        if (setup.RangeLevel == RangeLevel.Extreme && result.AttackerRoll != 1)
+        // При сверхбольшой дальности проникающая рана только при критическом успехе (стр. 110)
+        if (setup.RangeLevel == RangeLevel.Extreme
+            && result.AttackerSuccessLevel != SuccessLevel.CriticalSuccess)
         {
             result.IsImpalingWeapon = false;
         }
@@ -563,12 +1127,30 @@ public sealed partial class CombatService
             return result;
         }
 
+        // Манёвр заменяет атаку и тратит ход независимо от исхода
+        RegisterAttack(attacker);
+
+        // Разница Комплекции даёт штрафные кости: по одной за каждый пункт, максимум две (стр. 103)
+        var buildPenalty = Math.Clamp(buildDiff, 0, 2);
+        var reasons = new List<string>();
+        if (setup.BonusDice > 0) reasons.Add($"+{setup.BonusDice} от Хранителя");
+        if (setup.PenaltyDice > 0) reasons.Add($"−{setup.PenaltyDice} от Хранителя");
+        if (buildPenalty > 0) reasons.Add($"−{buildPenalty} разница Комплекции ({setup.AttackerBuild} против {setup.DefenderBuild})");
+
+        var modifiers = new AttackModifiers(
+            Math.Max(0, setup.BonusDice),
+            Math.Max(0, setup.PenaltyDice) + buildPenalty,
+            reasons);
+        result.Modifiers = modifiers;
+
         result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
         result.DefenderSkillValue = setup.DefenderSkillValue;
-        result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
+        result.DefenderRollDetail = RollFor(setup.DefenderRollDetail, setup.ManualDefenderRoll, setup.DefenderBonusDice, setup.DefenderPenaltyDice);
+        result.DefenderRoll = result.DefenderRollDetail.Result;
         result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
 
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
@@ -576,7 +1158,7 @@ public sealed partial class CombatService
             result.AttackerWins = false;
             result.ManeuverSucceeded = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался.";
+            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался ({result.AttackerRoll}/{result.AttackerSkillValue}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
@@ -598,21 +1180,51 @@ public sealed partial class CombatService
 
         result.DefenderHpAfter = defender.CurrentHitPoints;
 
+        var rollLine =
+            $"{attacker.Name}: {result.AttackerRoll}/{result.AttackerSkillValue} — " +
+            $"{GetSuccessLevelText(result.AttackerSuccessLevel)}{FormatRollDetail(result.AttackerRollDetail)}. " +
+            $"{defender.Name}: {result.DefenderRoll}/{result.DefenderSkillValue} — " +
+            $"{GetSuccessLevelText(result.DefenderSuccessLevel)}{FormatRollDetail(result.DefenderRollDetail)}.";
+
         if (result.ManeuverSucceeded)
         {
             result.Summary = $"{attacker.Name} успешно выполняет манёвр «{GetManeuverName(setup.ManeuverType)}» " +
-                             $"против {defender.Name}.";
+                             $"против {defender.Name}. {rollLine}";
         }
         else
         {
             result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался — " +
-                             $"{defender.Name} успешно защитился.";
+                             $"{defender.Name} успешно защитился. {rollLine}";
         }
 
         return result;
     }
 
     // ───────────────────── Расчёт урона ─────────────────────
+
+    /// <summary>
+    /// Определяет, как применяется бонус к урону (CoC 7e, стр. 106).
+    /// <para>
+    /// По умолчанию решает правило: ближний бой — полный Б.к.У., дистанционная
+    /// атака — без Б.к.У. Данные оружия могут переопределить это, явно указав
+    /// <see cref="DamageBonusType.Half"/> (лук, праща, метательное оружие) или
+    /// <see cref="DamageBonusType.Full"/>. Значение <see cref="DamageBonusType.None"/>
+    /// в данных совпадает со значением по умолчанию и потому не считается
+    /// переопределением — иначе у любого оружия с незаполненным DamageInfo
+    /// бонус к урону молча пропадал бы.
+    /// </para>
+    /// <para>
+    /// В <c>WeaponType</c> нет категории метательного оружия, поэтому половинный
+    /// Б.к.У. задаётся только через данные конкретного оружия.
+    /// </para>
+    /// </summary>
+    public static DamageBonusType ResolveDamageBonusType(bool isMelee, DamageExpression? damageExpr)
+    {
+        if (damageExpr is not null && damageExpr.DamageBonus != DamageBonusType.None)
+            return damageExpr.DamageBonus;
+
+        return isMelee ? DamageBonusType.Full : DamageBonusType.None;
+    }
 
     private static void CalculateDamage(CombatActionResult result, AttackSetup setup, Combatant attacker, Combatant defender)
     {
@@ -627,16 +1239,8 @@ public sealed partial class CombatService
             result.IsImpalingWeapon = IsImpalingWeapon(setup.SelectedWeapon);
         // Для дальнего боя IsImpalingWeapon устанавливается в ResolveRangedAttack
 
-        // Применяем Б.К.У. только если это ближний бой,
-        // ИЛИ если структурированная модель явно указывает тип бонуса
-        bool applyDamageBonus = setup.IsMelee;
-        DamageBonusType dbType = DamageBonusType.Full;
-        if (damageExpr is not null)
-        {
-            dbType = damageExpr.DamageBonus;
-            // Если в модели — None, не применяем Б.К.У. даже в ближнем бою
-            applyDamageBonus = damageExpr.DamageBonus != DamageBonusType.None;
-        }
+        var dbType = ResolveDamageBonusType(setup.IsMelee, damageExpr);
+        var applyDamageBonus = dbType != DamageBonusType.None;
 
         // Чрезвычайный урон: критический (01) или экстремальный (≤навык/5)
         // Правило: только при атаке в свой ход, НЕ при контратаке
@@ -683,14 +1287,19 @@ public sealed partial class CombatService
         // Итого до вычета брони
         result.RawDamage = Math.Max(0, result.DamageRolled + result.BonusDamage + result.ExtraDamage);
 
-        // Броня снижает урон
-        result.ArmorReduction = Math.Min(defender.Armor, result.RawDamage);
+        // Броня снижает урон, но не действует против магии, яда и утопления (стр. 106).
+        // При стрельбе сквозь укрытие добавляется броня преграды (стр. 125).
+        var effectiveArmor = setup.IgnoresArmor
+            ? 0
+            : defender.Armor + Math.Max(0, setup.CoverArmor);
+
+        result.ArmorReduction = Math.Min(effectiveArmor, result.RawDamage);
         result.TotalDamage = result.RawDamage - result.ArmorReduction;
 
         // ── Расчёт последствий урона ──
 
-        // Мгновенная смерть: один удар > макс ПЗ (CoC 7e стр. 117)
-        if (result.TotalDamage > defender.MaxHitPoints)
+        // Мгновенная смерть: один удар наносит урон, равный максимуму ПЗ или больше (стр. 118)
+        if (result.TotalDamage >= defender.MaxHitPoints)
         {
             result.IsInstantDeath = true;
             result.DefenderDead = true;
@@ -750,6 +1359,16 @@ public sealed partial class CombatService
         result.CounterArmorReduction = Math.Min(attacker.Armor, result.CounterRawDamage);
         result.CounterTotalDamage = result.CounterRawDamage - result.CounterArmorReduction;
 
+        // Мгновенная смерть от контратаки: урон одной атакой ≥ максимума ПЗ (стр. 118)
+        if (result.CounterTotalDamage >= attacker.MaxHitPoints)
+        {
+            result.AttackerDead = true;
+            result.AttackerHpAfter = 0;
+            result.Summary += $" {defender.Name} наносит {attacker.Name} {result.CounterTotalDamage} урона — " +
+                              $"это не меньше его максимума ПЗ ({attacker.MaxHitPoints}). {attacker.Name} убит мгновенно!";
+            return;
+        }
+
         int newHp = attacker.CurrentHitPoints - result.CounterTotalDamage;
         result.AttackerHpAfter = Math.Max(0, newHp);
 
@@ -783,7 +1402,7 @@ public sealed partial class CombatService
         if (result.AttackerTriggeredMajorWound)
         {
             var conRes = result.AttackerMajorWoundConRollSuccess ? "успех" : "провал";
-            result.Summary += $" Тяжёлая рана! Проверка ТЕЛ: {result.AttackerMajorWoundConRoll} — {conRes}.";
+            result.Summary += $" Серьёзная рана! Проверка ВЫН: {result.AttackerMajorWoundConRoll} — {conRes}.";
         }
         if (result.AttackerKnockedUnconscious) result.Summary += $" {attacker.Name} теряет сознание!";
         if (result.AttackerDying) result.Summary += $" {attacker.Name} при смерти!";
@@ -807,29 +1426,86 @@ public sealed partial class CombatService
             SanityBefore = target.CurrentSanity
         };
 
+        // Бонусные и штрафные кости к проверкам Рассудка не применяются (стр. 152)
         var roll = setup.ManualRoll ?? RollD100();
         result.AttackerRoll = roll;
         result.AttackerSkillValue = target.CurrentSanity;
+        result.AttackerSuccessLevel = CalculateSuccessLevel(roll, target.CurrentSanity);
 
-        var success = roll <= target.CurrentSanity;
-        result.AttackerSuccessLevel = success ? SuccessLevel.RegularSuccess : SuccessLevel.Failure;
+        var isFumble = result.AttackerSuccessLevel == SuccessLevel.Fumble;
+        var success = result.AttackerSuccessLevel >= SuccessLevel.RegularSuccess;
+        result.SanityFumble = isFumble;
 
-        var sanLoss = success
-            ? RollDiceFormula(setup.SuccessLoss)
-            : RollDiceFormula(setup.FailureLoss);
+        // Крах — теряется максимум возможных пунктов (стр. 153)
+        var sanLoss = isFumble
+            ? MaximizeDiceFormula(setup.FailureLoss)
+            : RollDiceFormula(success ? setup.SuccessLoss : setup.FailureLoss);
 
         result.SanityLoss = sanLoss;
-        result.SanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
+        var sanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
+        result.SanityAfter = sanityAfter;
 
+        var lostToday = target.SanityLostToday + sanLoss;
+        result.SanityLostToday = lostToday;
+
+        var notes = new List<string>();
+
+        // Потеря 5+ пунктов за раз — проверка ИНТ; безумие наступает при УСПЕХЕ (стр. 153)
         if (sanLoss >= 5)
-            result.TriggeredTemporaryInsanity = true;
+        {
+            var intRoll = setup.ManualIntRoll ?? RollD100();
+            result.IntelligenceRoll = intRoll;
+            result.IntelligenceValue = target.IntelligenceValue;
 
-        var successText = success ? "успех" : "неудача";
+            var realizedTheHorror = intRoll <= target.IntelligenceValue;
+            result.TriggeredTemporaryInsanity = realizedTheHorror;
+
+            if (realizedTheHorror)
+            {
+                result.TemporaryInsanityHours = setup.ManualInsanityDurationRoll ?? RollDice(10);
+                notes.Add($"Потеряно 5+ пунктов за раз. Проверка ИНТ: {intRoll}/{target.IntelligenceValue} — " +
+                          $"успех, сыщик осознал ужас. Временное безумие на {result.TemporaryInsanityHours} ч.");
+            }
+            else
+            {
+                notes.Add($"Потеряно 5+ пунктов за раз. Проверка ИНТ: {intRoll}/{target.IntelligenceValue} — " +
+                          "провал, рассудок отгородился от ужаса. Безумие не наступает.");
+            }
+        }
+
+        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 153)
+        if (target.CurrentSanity > 0 && lostToday * 5 >= target.CurrentSanity && !target.HasIndefiniteInsanity)
+        {
+            result.TriggeredIndefiniteInsanity = true;
+            notes.Add($"За игровой день потеряно {lostToday} из {target.CurrentSanity} — это не меньше ⅕. Бессрочное безумие.");
+        }
+
+        // Неизлечимое безумие при нулевом рассудке (стр. 153)
+        if (sanityAfter == 0)
+        {
+            result.TriggeredPermanentInsanity = true;
+            notes.Add($"{target.Name} теряет рассудок полностью — неизлечимое безумие, персонаж выбывает из игры.");
+        }
+
+        var successText = GetSuccessLevelText(result.AttackerSuccessLevel);
         result.Summary = $"{target.Name}: проверка рассудка — бросок {roll} против {target.CurrentSanity} ({successText}). " +
-                         $"Потеря: {sanLoss} ед." +
-                         (sanLoss >= 5 ? " Временное безумие!" : "");
+                         (isFumble ? $"Крах — максимальная потеря: {sanLoss} ед. " : $"Потеря: {sanLoss} ед. ") +
+                         $"РАС: {target.CurrentSanity}→{sanityAfter}." +
+                         (notes.Count > 0 ? " " + string.Join(" ", notes) : "");
 
         return result;
+    }
+
+    /// <summary>
+    /// Сбрасывает счётчик потерянного за день рассудка — вызывать, когда сыщики
+    /// добрались до безопасного места и игровой день закончился (стр. 153).
+    /// </summary>
+    public void StartNewGameDay()
+    {
+        foreach (var c in Combatants)
+            c.SanityLostToday = 0;
+
+        NotifyStateChanged();
     }
 
     // ───────────────────── Применение результата ─────────────────────
@@ -848,12 +1524,26 @@ public sealed partial class CombatService
             var defender = Combatants.FirstOrDefault(c => c.Id == result.DefenderId);
             if (defender != null)
             {
+                var tookDamage = result.DefenderHpAfter < result.DefenderHpBefore;
+
                 defender.CurrentHitPoints = result.DefenderHpAfter;
                 if (result.DefenderFallsProne) defender.IsProne = true;
                 if (result.DefenderKnockedUnconscious) defender.IsUnconscious = true;
                 if (result.TriggeredMajorWound) defender.HasMajorWound = true;
                 if (result.DefenderDying) defender.IsDying = true;
                 if (result.DefenderDead) defender.IsDead = true;
+
+                // Новое ранение — первую помощь можно пытаться оказать заново,
+                // а прежняя стабилизация утрачена (стр. 118)
+                if (tookDamage)
+                {
+                    defender.FirstAidAttempted = false;
+                    defender.IsStabilized = false;
+                    defender.TemporaryHitPoints = 0;
+
+                    // Получивший урон теряет преимущество от прицеливания (стр. 111)
+                    defender.IsAiming = false;
+                }
 
                 // Вырвался из захвата при манёвре
                 if (result.ActionType == CombatActionType.Maneuver && result.ManeuverSucceeded)
@@ -875,6 +1565,11 @@ public sealed partial class CombatService
                 if (result.AttackerTriggeredMajorWound) attacker.HasMajorWound = true;
                 if (result.AttackerDying) attacker.IsDying = true;
                 if (result.AttackerDead) attacker.IsDead = true;
+
+                attacker.FirstAidAttempted = false;
+                attacker.IsStabilized = false;
+                attacker.TemporaryHitPoints = 0;
+                attacker.IsAiming = false;
             }
         }
 
@@ -885,8 +1580,19 @@ public sealed partial class CombatService
             if (target != null)
             {
                 target.CurrentSanity = result.SanityAfter ?? target.CurrentSanity;
+                target.SanityLostToday = result.SanityLostToday ?? target.SanityLostToday;
+
                 if (result.TriggeredTemporaryInsanity == true)
+                {
                     target.HasTemporaryInsanity = true;
+                    target.TemporaryInsanityHours = result.TemporaryInsanityHours ?? 0;
+                }
+
+                if (result.TriggeredIndefiniteInsanity)
+                    target.HasIndefiniteInsanity = true;
+
+                if (result.TriggeredPermanentInsanity)
+                    target.HasPermanentInsanity = true;
 
                 // Синхронизация с исходным персонажем (для листа сыщика)
                 if (target.CharacterSource is { } src)
@@ -900,6 +1606,8 @@ public sealed partial class CombatService
                         src.State.HasTemporaryInsanity = true;
                         src.State.TemporaryInsanityStartedAt = DateTime.UtcNow;
                     }
+                    if (result.TriggeredIndefiniteInsanity)
+                        src.State.HasIndefiniteInsanity = true;
                 }
             }
         }
@@ -917,17 +1625,30 @@ public sealed partial class CombatService
             case ManeuverType.Push:
                 defender.IsProne = true;
                 break;
+
             case ManeuverType.Grapple:
                 defender.IsGrappled = true;
                 defender.GrappledBy = result.AttackerId;
                 break;
+
             case ManeuverType.BreakFree:
                 defender.IsGrappled = false;
                 defender.GrappledBy = null;
                 break;
+
             case ManeuverType.Disarm:
+                defender.IsDisarmed = true;
+                break;
+
             case ManeuverType.Disadvantage:
-                // Визуально — в журнале
+                // Правила не задают конкретный эффект — оставляем отметку Хранителю
+                defender.HasDisadvantage = true;
+                break;
+
+            case ManeuverType.Knockout:
+                // «Киношный» нокаут: 1 пункт урона и потеря сознания (стр. 123)
+                defender.CurrentHitPoints = Math.Max(0, defender.CurrentHitPoints - 1);
+                defender.IsUnconscious = true;
                 break;
         }
     }
@@ -1007,13 +1728,35 @@ public sealed partial class CombatService
     public static string GetSuccessLevelText(SuccessLevel level) => level switch
     {
         SuccessLevel.CriticalSuccess => "критический успех",
-        SuccessLevel.ExtremeSuccess => "экстремальный успех",
-        SuccessLevel.HardSuccess => "сложный успех",
+        SuccessLevel.ExtremeSuccess => "чрезвычайный успех",
+        SuccessLevel.HardSuccess => "трудный успех",
         SuccessLevel.RegularSuccess => "обычный успех",
-        SuccessLevel.Failure => "неудача",
-        SuccessLevel.Fumble => "провал",
+        SuccessLevel.Failure => "провал",
+        SuccessLevel.Fumble => "крах",
         _ => "неизвестно"
     };
+
+    /// <summary>
+    /// Короткая расшифровка броска с дополнительными костями, например
+    /// « [кости 24, 44 — бонусная]». Для броска без модификаторов возвращает пустую строку.
+    /// </summary>
+    public static string FormatRollDetail(DiceRollResult? detail)
+    {
+        if (detail is null || !detail.HasExtraDice) return string.Empty;
+
+        var kind = detail.BonusDice > 0
+            ? DiceWord(detail.BonusDice, "бонусная", "бонусные")
+            : DiceWord(detail.PenaltyDice, "штрафная", "штрафные");
+
+        return $" [кости {string.Join(", ", detail.Candidates)} — {kind}]";
+    }
+
+    private static string DiceWord(int count, string one, string many) =>
+        count == 1 ? $"{one} кость" : $"{count} {many} кости";
+
+    /// <summary>«1 бонусная кость», «2 штрафные кости» — для подписей в интерфейсе.</summary>
+    public static string DescribeDice(int count, bool isBonus) =>
+        isBonus ? DiceWord(count, "бонусная", "бонусные") : DiceWord(count, "штрафная", "штрафные");
 
     /// <summary>Возвращает название манёвра на русском.</summary>
     public static string GetManeuverName(ManeuverType type) => type switch
@@ -1024,6 +1767,7 @@ public sealed partial class CombatService
         ManeuverType.Push => "Толкнуть",
         ManeuverType.BreakFree => "Вырваться",
         ManeuverType.Disadvantage => "Невыгодное положение",
+        ManeuverType.Knockout => "Нокаут (необязательное правило)",
         _ => "Манёвр"
     };
 
@@ -1032,13 +1776,18 @@ public sealed partial class CombatService
         var parts = new List<string>();
 
         var atkLevel = GetSuccessLevelText(result.AttackerSuccessLevel);
-        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}.");
+        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}{FormatRollDetail(result.AttackerRollDetail)}.");
+
+        if (result.SurpriseMode == SurpriseMode.AutoHit)
+            parts.Add($"{result.DefenderName} застигнут врасплох — атака проходит автоматически.");
+        else if (result.SurpriseMode == SurpriseMode.BonusDie)
+            parts.Add($"{result.DefenderName} застигнут врасплох — не защищается.");
 
         if (result.ActionType == CombatActionType.MeleeAttack && result.DefenderId.HasValue && !result.DefenderSuccessLevel.Equals(SuccessLevel.Failure) || result.DefenderRoll > 0)
         {
             var defAction = result.DefenderReaction == CombatActionType.FightBack ? "ответный удар" : "уклонение";
             var defLevel = GetSuccessLevelText(result.DefenderSuccessLevel);
-            parts.Add($"{result.DefenderName} ({defAction}): {result.DefenderRoll}/{result.DefenderSkillValue} — {defLevel}.");
+            parts.Add($"{result.DefenderName} ({defAction}): {result.DefenderRoll}/{result.DefenderSkillValue} — {defLevel}{FormatRollDetail(result.DefenderRollDetail)}.");
         }
 
         if (result.AttackerWins && result.TotalDamage > 0)
@@ -1070,7 +1819,7 @@ public sealed partial class CombatService
             if (result.TriggeredMajorWound)
             {
                 var conRes = result.MajorWoundConRollSuccess ? "успех" : "провал";
-                parts.Add($"Серьёзная рана! ТЕЛ: {result.MajorWoundConRoll} — {conRes}. {result.DefenderName} падает.");
+                parts.Add($"Серьёзная рана! ВЫН: {result.MajorWoundConRoll} — {conRes}. {result.DefenderName} падает.");
             }
             if (result.DefenderKnockedUnconscious) parts.Add($"{result.DefenderName} теряет сознание!");
             if (result.DefenderDead) parts.Add($"{result.DefenderName} мёртв!");

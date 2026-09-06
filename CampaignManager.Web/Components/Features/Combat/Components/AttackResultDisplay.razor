@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 <div class="bg-white rounded-md shadow-md border-2 border-blue-200 p-4">
@@ -15,9 +15,16 @@
             <span class="font-semibold">@Result.DefenderName</span>
         </div>
         <div class="flex gap-3 mb-3">
-            @RollBadge(Result.AttackerName, Result.AttackerRoll, Result.AttackerSkillValue, Result.AttackerSuccessLevel)
-            @RollBadge(Result.DefenderName, Result.DefenderRoll, Result.DefenderSkillValue, Result.DefenderSuccessLevel)
+            @RollBadge(Result.AttackerName, Result.AttackerRoll, Result.AttackerSkillValue, Result.AttackerSuccessLevel, Result.AttackerRollDetail)
+            @RollBadge(Result.DefenderName, Result.DefenderRoll, Result.DefenderSkillValue, Result.DefenderSuccessLevel, Result.DefenderRollDetail)
         </div>
+        @if (Result.Modifiers.Reasons.Count > 0)
+        {
+            <div class="bg-gray-50 rounded-md px-3 py-2 mb-3 text-xs text-gray-600">
+                <span class="font-medium text-gray-700">Модификаторы:</span>
+                @string.Join(" · ", Result.Modifiers.Reasons)
+            </div>
+        }
         <div class="rounded-md p-3 mb-3 @(Result.ManeuverSucceeded ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200")">
             <div class="text-sm font-semibold @(Result.ManeuverSucceeded ? "text-green-800" : "text-red-800")">
                 @(Result.ManeuverSucceeded ? "Манёвр удался!" : "Манёвр не удался")
@@ -37,10 +44,39 @@
             <span class="font-semibold @GetLevelColor(Result.AttackerSuccessLevel)">
                 @CombatService.GetSuccessLevelText(Result.AttackerSuccessLevel)
             </span>
+            @if (Result.AttackerRollDetail is { HasExtraDice: true })
+            {
+                <span class="text-xs text-gray-500">@CombatService.FormatRollDetail(Result.AttackerRollDetail)</span>
+            }
+            @if (Result.ActionType == CombatActionType.RangedAttack && Result.RangeLevel != RangeLevel.Base)
+            {
+                <div class="text-xs text-gray-500 mt-0.5">
+                    @(Result.RangeLevel == RangeLevel.Long ? "Большая дальность" : "Сверхбольшая дальность"):
+                    для попадания нужен @CombatService.GetDifficultyName(Result.RangeLevel) успех.
+                </div>
+            }
         </div>
 
+        @if (Result.Modifiers.Reasons.Count > 0)
+        {
+            <div class="bg-gray-50 rounded-md px-3 py-2 mb-2 text-xs text-gray-600">
+                <span class="font-medium text-gray-700">Модификаторы:</span>
+                @string.Join(" · ", Result.Modifiers.Reasons)
+            </div>
+        }
+
         <!-- Бросок защитника -->
-        @if (Result.ActionType == CombatActionType.MeleeAttack && Result.DefenderId.HasValue)
+        @if (Result.SurpriseMode != SurpriseMode.TargetReady)
+        {
+            <div class="bg-amber-50 border border-amber-200 rounded-md p-3 mb-2 text-sm text-amber-800">
+                <span class="font-semibold">@Result.DefenderName</span> застигнут врасплох — не защищается.
+                @if (Result.SurpriseMode == SurpriseMode.AutoHit)
+                {
+                    <text>Атака проходит автоматически, промахом считается только крах.</text>
+                }
+            </div>
+        }
+        else if (Result.ActionType == CombatActionType.MeleeAttack && Result.DefenderId.HasValue)
         {
             <div class="bg-gray-50 rounded-md p-3 mb-2 text-sm">
                 <span class="font-semibold text-gray-900">@Result.DefenderName</span>
@@ -53,6 +89,10 @@
                 <span class="font-semibold @GetLevelColor(Result.DefenderSuccessLevel)">
                     @CombatService.GetSuccessLevelText(Result.DefenderSuccessLevel)
                 </span>
+                @if (Result.DefenderRollDetail is { HasExtraDice: true })
+                {
+                    <span class="text-xs text-gray-500">@CombatService.FormatRollDetail(Result.DefenderRollDetail)</span>
+                }
             </div>
         }
 
@@ -242,11 +282,15 @@
         _ => "text-gray-600"
     };
 
-    private RenderFragment RollBadge(string name, int roll, int skill, SuccessLevel level) =>
+    private RenderFragment RollBadge(string name, int roll, int skill, SuccessLevel level, DiceRollResult? detail = null) =>
         @<div class="bg-gray-50 rounded p-2 flex-1 text-xs">
             <div class="font-semibold text-gray-700">@name</div>
             <div class="mt-0.5">@roll / @skill</div>
             <div class="font-medium @GetLevelColor(level)">@CombatService.GetSuccessLevelText(level)</div>
+            @if (detail is { HasExtraDice: true })
+            {
+                <div class="text-gray-500">@CombatService.FormatRollDetail(detail)</div>
+            }
         </div>;
 }
 

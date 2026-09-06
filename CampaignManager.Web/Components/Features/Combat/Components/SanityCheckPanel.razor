@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 @inject CombatService CombatService
@@ -48,17 +48,63 @@
             <div class="bg-purple-50 border border-purple-200 rounded-md p-3 mb-3">
                 <div class="text-sm font-semibold @(_pendingSanityResult.AttackerSuccessLevel >= SuccessLevel.RegularSuccess ? "text-green-700" : "text-red-700")">
                     Бросок: @_pendingSanityResult.AttackerRoll против @_pendingSanityResult.AttackerSkillValue
-                    — @(_pendingSanityResult.AttackerSuccessLevel >= SuccessLevel.RegularSuccess ? "успех" : "неудача")
+                    — @CombatService.GetSuccessLevelText(_pendingSanityResult.AttackerSuccessLevel)
                 </div>
                 <div class="text-sm text-gray-700 mt-1">
                     Потеря рассудка: <span class="font-bold">@_pendingSanityResult.SanityLoss</span>
+                    @if (_pendingSanityResult.SanityFumble)
+                    {
+                        <span class="text-red-700"> — крах, максимум возможного</span>
+                    }
                 </div>
                 <div class="text-sm text-gray-600">
                     Рассудок: @_pendingSanityResult.SanityBefore → <span class="font-semibold">@_pendingSanityResult.SanityAfter</span>
                 </div>
+                @if (_pendingSanityResult.SanityLostToday is { } lostToday)
+                {
+                    <div class="text-xs text-gray-500">За игровой день потеряно: @lostToday</div>
+                }
+
+                @if (_pendingSanityResult.IntelligenceRoll is { } intRoll)
+                {
+                    <div class="mt-2 rounded border border-purple-200 bg-white p-2">
+                        <div class="text-xs font-semibold text-gray-700">
+                            Потеряно 5+ пунктов за раз — проверка ИНТ
+                        </div>
+                        <div class="text-sm text-gray-700">
+                            @intRoll против @_pendingSanityResult.IntelligenceValue —
+                            @if (_pendingSanityResult.TriggeredTemporaryInsanity == true)
+                            {
+                                <span class="font-semibold text-purple-700">успех: сыщик осознал ужас</span>
+                            }
+                            else
+                            {
+                                <span class="font-semibold text-green-700">провал: рассудок отгородился от ужаса</span>
+                            }
+                        </div>
+                        <div class="text-xs text-gray-500 mt-0.5">
+                            По правилам безумие наступает именно при успехе проверки ИНТ (стр. 153).
+                        </div>
+                    </div>
+                }
+
                 @if (_pendingSanityResult.TriggeredTemporaryInsanity == true)
                 {
-                    <div class="text-sm font-bold text-purple-700 mt-1">Временное безумие!</div>
+                    <div class="text-sm font-bold text-purple-700 mt-2">
+                        Временное безумие на @_pendingSanityResult.TemporaryInsanityHours ч.
+                    </div>
+                }
+                @if (_pendingSanityResult.TriggeredIndefiniteInsanity)
+                {
+                    <div class="text-sm font-bold text-purple-800 mt-1">
+                        Бессрочное безумие — за день потеряно не меньше ⅕ рассудка.
+                    </div>
+                }
+                @if (_pendingSanityResult.TriggeredPermanentInsanity)
+                {
+                    <div class="text-sm font-bold text-red-800 mt-1">
+                        Рассудок на нуле — неизлечимое безумие, персонаж выбывает из игры.
+                    </div>
                 }
 
                 <div class="flex gap-2 mt-3">
@@ -82,11 +128,14 @@
                 </div>
                 @if (_manualRoll.HasValue)
                 {
-                    var success = _manualRoll.Value <= _selectedTarget!.CurrentSanity;
-                    <div class="mt-0.5 ml-32 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
-                        → @(success ? "успех" : "неудача")
+                    var level = CombatService.CalculateSuccessLevel(_manualRoll.Value, _selectedTarget!.CurrentSanity);
+                    <div class="mt-0.5 ml-32 text-xs font-medium @(level >= SuccessLevel.RegularSuccess ? "text-green-700" : "text-red-700")">
+                        → @CombatService.GetSuccessLevelText(level)
                     </div>
                 }
+                <p class="mt-2 text-xs text-gray-400">
+                    Бонусные и штрафные кости к проверкам Рассудка не применяются (стр. 152).
+                </p>
             </div>
 
             <button type="button" class="cm-btn cm-btn-info w-full" @onclick="RollSanityCheck"><span>Проверка рассудка</span></button>
