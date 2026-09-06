@@ -37,10 +37,6 @@ dotnet ef database update --project CampaignManager.Web --context AppIdentityDbC
 
 ### Solution Structure
 
-- **CampaignManager.Web** — Main Blazor Server application
-- **CampaignManager.AppHost** — .NET Aspire orchestration (simple project reference)
-- **CampaignManager.ServiceDefaults** — Shared service config (OpenTelemetry, health checks, resilience)
-
 Solution file is `CampaignManager.slnx` (new XML format).
 
 ### Feature-Based Vertical Slicing
@@ -51,7 +47,7 @@ Each domain lives in `CampaignManager.Web/Components/Features/{FeatureName}/` wi
 - `Pages/` — Full Razor page views
 - `Services/` — Business logic and data access
 
-Features: Bestiary, Campaigns, Characters, Chase, Combat, Items, NPC, Scenarios, Skills, Spells, Weapons.
+Each feature folder has its own `CLAUDE.md` with that feature's services, models, and gotchas (entity relationships, cross-feature dependencies, deviations from the patterns below) — see "Documentation Conventions" below.
 
 ### Data Architecture
 
@@ -59,12 +55,6 @@ Features: Bestiary, Campaigns, Characters, Chase, Combat, Items, NPC, Scenarios,
 - **Base Entity**: All entities inherit `BaseDataBaseEntity` with `Id` (Guid v7), `CreatedAt`, `LastUpdated` — call `.Init()` on creation
 - **JSONB heavily used**: Character stats, creature characteristics, scenario data stored as JSONB columns. Be careful when changing model shapes — JSONB serialization is sensitive to schema changes.
 - **Factory pattern**: Always use `IDbContextFactory<AppDbContext>` with `await using var dbContext = await dbContextFactory.CreateDbContextAsync()` — DbContext is NOT thread-safe
-
-### Key Entity Relationships
-
-- **Campaign** → (N) **CampaignPlayer** → (N) **CharacterStorageDto** (character data as JSONB)
-- **Scenario** links to Campaign and contains NPCs via CharacterStorageDto
-- Independent entities: Creature, Item, Weapon, Spell, SkillModel
 
 ### API Endpoints
 
@@ -99,6 +89,8 @@ public sealed class FeatureService(
 ```
 
 Register as scoped in `Program.cs`: `builder.Services.AddScoped<FeatureService>();`
+
+Reference-data services (catalog features like Items, Skills, Spells, Weapons, Books, Bestiary) additionally inject `IMemoryCache cache` for read caching — follow that convention for new catalog-style services. Runtime resolution engines (`Combat/Services/CombatService`, `Chase/Services/ChaseService`) deliberately break this pattern — they're stateful, non-DI session services, not persistence CRUD; see their feature `CLAUDE.md` files before copying their shape elsewhere.
 
 ### C# Conventions
 
@@ -141,9 +133,6 @@ Register as scoped in `Program.cs`: `builder.Services.AddScoped<FeatureService>(
 
 ## External Services
 
-- **Minio**: Object storage for file management
-- **QuestPDF**: PDF generation for character sheets
-- **Markdig**: Markdown processing
 - **Russian localization**: `EnumExtensions.ToRussianString()` for weapon types, creature types, skill categories
 
 ## Key Files
@@ -154,3 +143,12 @@ Register as scoped in `Program.cs`: `builder.Services.AddScoped<FeatureService>(
 - `CampaignManager.Web/Model/BaseDataBaseEntity.cs` — Base entity with Guid v7
 - `CampaignManager.Web/Components/_Imports.razor` — Global using directives
 - `CampaignManager.Web/Components/Features/` — All feature vertical slices
+
+## Documentation Conventions
+
+This file is for conventions and patterns that apply across the whole app. **Feature-specific knowledge (a feature's services, models, entity relationships, cross-feature dependencies, or deviations from the patterns above) belongs in that feature's own `Components/Features/{FeatureName}/CLAUDE.md`, not here.**
+
+- Every feature under `Components/Features/` has a `CLAUDE.md` — it loads automatically only when you're working with files under that feature's directory.
+- Adding a feature-specific gotcha, model, or service to this root file instead of the feature's own file is the failure mode this rule exists to prevent — it bloats every session's context regardless of which feature is being touched.
+- When a feature gains a new service, model, or non-obvious relationship, update that feature's `CLAUDE.md`, not this one. Create the feature's `CLAUDE.md` if it doesn't exist yet.
+- When adding a brand-new feature folder, give it a `CLAUDE.md` from the start.
