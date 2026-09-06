@@ -77,6 +77,95 @@
                         </label>
                     </div>
                 </div>
+
+                @if (WeaponIsJammed)
+                {
+                    <div class="mb-3 rounded-md border border-red-300 bg-red-50 p-3">
+                        <div class="text-xs font-semibold text-red-800">
+                            @_selectedAttacker!.JammedWeaponName заклинило. Стрелять из него нельзя,
+                            пока оружие не починят: осталось @_selectedAttacker.JamRepairRoundsLeft раунд(ов)
+                            успешных проверок Механики или Стрельбы, по одной за раунд (стр. 113).
+                        </div>
+                        <div class="mt-2 flex items-center gap-2">
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="number" min="1" max="100" @bind="_repairSkill"
+                                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none" />
+                            <label class="text-xs text-gray-600">Бросок</label>
+                            <input type="number" min="1" max="100" @bind="_repairRoll"
+                                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none"
+                                   placeholder="1–100" />
+                            <button type="button" @onclick="RepairJam"
+                                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs text-gray-700">
+                                Чинить
+                            </button>
+                        </div>
+                        @if (_repairMessage is not null)
+                        {
+                            <div class="mt-1 text-xs text-gray-600">@_repairMessage</div>
+                        }
+                    </div>
+                }
+
+                <!-- Режим стрельбы (стр. 111–114) -->
+                <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Режим стрельбы</label>
+                    <div class="space-y-1">
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Single)"
+                                   @onchange="() => SetFiringMode(FiringMode.Single)" />
+                            Одиночный выстрел
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.PistolBurst)"
+                                   @onchange="() => SetFiringMode(FiringMode.PistolBurst)" />
+                            Серия из пистолета — отдельная проверка на выстрел, каждая со штрафной костью
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Volley)"
+                                   @onchange="() => SetFiringMode(FiringMode.Volley)" />
+                            Очередь или залп автоматического оружия
+                        </label>
+                    </div>
+
+                    @if (_firingMode == FiringMode.Volley && _selectedAttacker != null)
+                    {
+                        var checkNo = _selectedAttacker.AutofireChecksThisRound + 1;
+                        <div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
+                            Залп при непрерывном огне — <strong>@CombatService.GetVolleySize(_attackSkillValue) пуль</strong>
+                            (навык ÷ 10, минимум 3). Это <strong>проверка №@checkNo</strong> за раунд.
+                            @if (checkNo > 1)
+                            {
+                                <text>Каждая следующая проверка добавляет штрафную кость, после двух — поднимает сложность.</text>
+                            }
+                            <div class="mt-1 flex items-center gap-2">
+                                <label class="text-gray-600">Патронов в залпе</label>
+                                <input type="number" min="1" @bind="_shotsInVolley"
+                                       class="border border-primary-300 rounded px-2 py-0.5 w-16 focus:outline-none" />
+                            </div>
+                        </div>
+                    }
+
+                    @if (AmmoCapacity > 0 && _selectedAttacker != null)
+                    {
+                        var left = CombatService.GetAmmoLeft(_selectedAttacker, _attackOptions[_selectedWeaponIndex].Weapon);
+                        <div class="mt-2 flex items-center gap-2 text-xs">
+                            <span class="@(left < ShotsPerCheck ? "text-red-700 font-semibold" : "text-gray-600")">
+                                Патронов: @left / @AmmoCapacity
+                            </span>
+                            <button type="button" @onclick="Reload"
+                                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">
+                                Перезарядить
+                            </button>
+                            @if (left < ShotsPerCheck)
+                            {
+                                <span class="text-red-700">— не хватает патронов на эту проверку</span>
+                            }
+                        </div>
+                        <p class="mt-1 text-xs text-gray-400">
+                            Смена магазина занимает раунд, лента в пулемёт — два (стр. 111).
+                        </p>
+                    }
+                </div>
             }
 
             <!-- Цель -->
@@ -183,7 +272,7 @@
                 <div class="mb-3">
                     <div class="flex items-center gap-2">
                         <label class="text-xs font-medium text-gray-600 w-36 shrink-0">
-                            @_selectedAttacker.Name (d100)
+                            @_selectedAttacker!.Name (d100)
                         </label>
                         <input type="number" min="1" max="100"
                                value="@_attackerRoll"
@@ -200,14 +289,14 @@
                             {
                                 <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_attackerRollDetail)</span>
                             }
-                            @if (!_isMelee && _rangeLevel != RangeLevel.Base)
+                            @if (!_isMelee && RequiredLevel != SuccessLevel.RegularSuccess)
                             {
-                                var required = CombatService.GetRequiredLevelForRange(_rangeLevel);
+                                var required = RequiredLevel;
                                 <span>&#160;</span>
                                 <span class="font-normal @(_attackerSuccessLevel < required ? "text-red-600" : "text-green-700")">
                                     @(_attackerSuccessLevel < required
-                                        ? $"— для этой дальности нужен {CombatService.GetDifficultyName(_rangeLevel)} успех"
-                                        : "— дальности хватает")
+                                        ? $"— нужен {CombatService.GetDifficultyName(required)} успех"
+                                        : "— сложности хватает")
                                 </span>
                             }
                         </div>
@@ -347,10 +436,6 @@
                                     <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                                         <input type="checkbox" @bind="_isFiringIntoMelee" />
                                         Стрельба в ближнем бою → +1 штрафная
-                                    </label>
-                                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                                        <input type="checkbox" @bind="_isMultipleShot" />
-                                        Серия выстрелов из пистолета → +1 штрафная
                                     </label>
                                     <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                                         <input type="checkbox" @bind="_isReloadAndFire" />
@@ -537,7 +622,8 @@
     private bool _isTargetTakingCover;
     private bool _isTargetBehindCover;
     private bool _isTargetFastMoving;
-    private bool _isMultipleShot;
+    private FiringMode _firingMode = FiringMode.Single;
+    private int _shotsInVolley = 3;
     private bool _isReloadAndFire;
 
     // Ручной ввод ВЫН
@@ -696,7 +782,6 @@
         _isTargetTakingCover = false;
         _isTargetBehindCover = false;
         _isTargetFastMoving = false;
-        _isMultipleShot = false;
         _isReloadAndFire = false;
     }
 
@@ -756,8 +841,25 @@
     /// Уровень успеха, нужный для попадания: в ближнем бою обычный,
     /// в дальнем — заданный дальностью (CoC 7e, стр. 110).
     /// </summary>
-    private SuccessLevel RequiredLevel =>
-        _isMelee ? SuccessLevel.RegularSuccess : CombatService.GetRequiredLevelForRange(_rangeLevel);
+    private SuccessLevel RequiredLevel
+    {
+        get
+        {
+            if (_isMelee) return SuccessLevel.RegularSuccess;
+
+            var byRange = CombatService.GetRequiredLevelForRange(_rangeLevel);
+            var index = _firingMode == FiringMode.Volley ? _selectedAttacker?.AutofireChecksThisRound ?? 0 : 0;
+            return CombatService.EscalateAutofire(byRange, index).Required;
+        }
+    }
+
+    /// <summary>Сложность выросла выше критической — попадание невозможно (стр. 114).</summary>
+    private bool ShotIsImpossible =>
+        !_isMelee
+        && _firingMode == FiringMode.Volley
+        && CombatService.EscalateAutofire(
+               CombatService.GetRequiredLevelForRange(_rangeLevel),
+               _selectedAttacker?.AutofireChecksThisRound ?? 0).IsImpossible;
 
     /// <summary>
     /// Попадает ли атака: при автоматическом попадании промахом считается только крах,
@@ -767,6 +869,58 @@
         EffectiveSurprise == SurpriseMode.AutoHit
             ? _attackerSuccessLevel != SuccessLevel.Fumble
             : _attackerSuccessLevel >= RequiredLevel;
+
+    /// <summary>Ёмкость магазина выбранного оружия, 0 — если её нет в данных.</summary>
+    private int AmmoCapacity =>
+        _selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count
+            ? CombatService.ParseAmmoCapacity(_attackOptions[_selectedWeaponIndex].Weapon?.Ammo)
+            : 0;
+
+    /// <summary>Сколько патронов уходит на текущую проверку атаки.</summary>
+    private int ShotsPerCheck => _firingMode == FiringMode.Volley ? Math.Max(1, _shotsInVolley) : 1;
+
+    private void SetFiringMode(FiringMode mode)
+    {
+        _firingMode = mode;
+        if (mode == FiringMode.Volley && _selectedAttacker != null)
+            _shotsInVolley = CombatService.GetVolleySize(_attackSkillValue);
+        ResetRolls();
+    }
+
+    /// <summary>Выбранное оружие заклинило — стрелять из него нельзя (стр. 113).</summary>
+    private bool WeaponIsJammed =>
+        _selectedAttacker is not null
+        && !string.IsNullOrEmpty(_selectedAttacker.JammedWeaponName)
+        && _selectedWeaponIndex >= 0
+        && _attackOptions[_selectedWeaponIndex].Name == _selectedAttacker.JammedWeaponName;
+
+    private int _repairSkill = 30;
+    private int? _repairRoll;
+    private string? _repairMessage;
+
+    private void RepairJam()
+    {
+        if (_selectedAttacker is null || !_repairRoll.HasValue) return;
+
+        var before = _selectedAttacker.JamRepairRoundsLeft;
+        var ok = CombatService.TryRepairJam(_selectedAttacker, _repairSkill, _repairRoll.Value);
+        var level = CombatService.CalculateSuccessLevel(_repairRoll.Value, _repairSkill);
+
+        _repairMessage = ok
+            ? string.IsNullOrEmpty(_selectedAttacker.JammedWeaponName)
+                ? $"{CombatService.GetSuccessLevelText(level)} — оружие починено."
+                : $"{CombatService.GetSuccessLevelText(level)} — осталось {_selectedAttacker.JamRepairRoundsLeft} из {before} раунд(ов)."
+            : $"{CombatService.GetSuccessLevelText(level)} — починить не удалось, попробуйте в следующем раунде.";
+
+        _repairRoll = null;
+    }
+
+    private void Reload()
+    {
+        var weapon = _selectedWeaponIndex >= 0 ? _attackOptions[_selectedWeaponIndex].Weapon : null;
+        if (weapon != null && _selectedAttacker != null)
+            CombatService.Reload(_selectedAttacker, weapon);
+    }
 
     private AttackModifiers CurrentModifiers() =>
         _selectedAttacker is null
@@ -797,7 +951,10 @@
 
     private bool CanResolve() =>
         _selectedAttacker != null && _selectedWeaponIndex >= 0
-        && (_selectedDefender != null || !_isMelee);
+        && (_selectedDefender != null || !_isMelee)
+        && !WeaponIsJammed
+        && !ShotIsImpossible
+        && (AmmoCapacity <= 0 || CombatService.GetAmmoLeft(_selectedAttacker, _attackOptions[_selectedWeaponIndex].Weapon) >= ShotsPerCheck);
 
     /// <summary>
     /// Собирает настройку атаки из состояния панели. Используется и для предпросмотра
@@ -844,7 +1001,9 @@
             IsTargetTakingCover = _isTargetTakingCover,
             IsTargetBehindCover = _isTargetBehindCover,
             IsTargetFastMoving = _isTargetFastMoving,
-            IsMultipleShot = _isMultipleShot,
+            FiringMode = _firingMode,
+            AutofireCheckIndex = _selectedAttacker?.AutofireChecksThisRound ?? 0,
+            ShotsFired = ShotsPerCheck,
             IsReloadAndFire = _isReloadAndFire
         };
     }

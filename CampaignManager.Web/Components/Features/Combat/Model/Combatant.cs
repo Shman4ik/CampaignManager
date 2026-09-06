@@ -53,6 +53,12 @@ public class Combatant
     public int IntelligenceValue { get; set; }
 
     /// <summary>
+    /// Удача. При крахе стрельбы в ближнем бою пулю получает союзник с наименьшей
+    /// Удачей (стр. 112).
+    /// </summary>
+    public int Luck { get; set; }
+
+    /// <summary>
     /// Потеряно рассудка за текущий игровой день. Потеря не менее ⅕ текущего
     /// рассудка за день означает бессрочное безумие (стр. 153).
     /// </summary>
@@ -84,6 +90,18 @@ public class Combatant
     public bool HasActedThisRound { get; set; }    // Уже действовал в этом раунде
     public bool IsDelayed { get; set; }            // Отложил действие
     public string? JammedWeaponName { get; set; }  // Заклинившее оружие (название)
+
+    /// <summary>Сколько боевых раундов ещё займёт починка заклинившего оружия (1d6, стр. 113).</summary>
+    public int JamRepairRoundsLeft { get; set; }
+
+    /// <summary>
+    /// Сколько проверок атаки автоматическим оружием уже сделано в этом раунде.
+    /// Каждая следующая получает штрафную кость (стр. 114). Сбрасывается каждый раунд.
+    /// </summary>
+    public int AutofireChecksThisRound { get; set; }
+
+    /// <summary>Патронов в оружии, по названию оружия (стр. 111).</summary>
+    public Dictionary<string, int> AmmoLoaded { get; set; } = [];
 
     // Ссылки на исходные сущности
     public Character? CharacterSource { get; set; }
@@ -118,6 +136,7 @@ public class Combatant
         Build = buildValue;
         ConstitutionValue = character.Characteristics.Constitution.Regular;
         IntelligenceValue = character.Characteristics.Intelligence.Regular;
+        Luck = character.DerivedAttributes.Luck.Value;
 
         // Состояния из персонажа
         if (character.State != null)
@@ -153,6 +172,7 @@ public class Combatant
         DamageBonus = creature.CreatureCharacteristics.AverageBonusToHit;
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
         IntelligenceValue = creature.CreatureCharacteristics.Intelligence.Value;
+        Luck = creature.CreatureCharacteristics.Luck;
         Build = creature.CreatureCharacteristics.AverageComplexity;
         Armor = creature.CreatureCharacteristics.Armor;
 

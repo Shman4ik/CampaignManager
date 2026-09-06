@@ -83,6 +83,7 @@ public sealed partial class CombatService
             c.HasActedThisRound = false;
             c.IsDelayed = false;
             c.HasTakenCover = false;
+            c.AutofireChecksThisRound = 0;
 
             // Если укрывался — теряет атаку в этом раунде
             if (c.LostNextAttackFromCover)
@@ -355,6 +356,142 @@ public sealed partial class CombatService
         RangeLevel.Long => baseSkill / 2,
         RangeLevel.Extreme => baseSkill / 5,
         _ => baseSkill
+    };
+
+    /// <summary>
+    /// Союзник стрелка на линии огня с наименьшей Удачей (стр. 112). Союзниками
+    /// считаются бойцы той же стороны, кроме самого стрелка и его цели.
+    /// </summary>
+    public Combatant? FindUnluckiestAlly(Combatant attacker, Combatant target) =>
+        Combatants
+            .Where(c => c.Id != attacker.Id && c.Id != target.Id && !c.IsDead && c.IsPlayer == attacker.IsPlayer)
+            .OrderBy(c => c.Luck)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// Попытка починить заклинившее оружие: одна за раунд, нужен успех Механики
+    /// или Стрельбы, всего требуется 1d6 раундов (стр. 113).
+    /// </summary>
+    public bool TryRepairJam(Combatant combatant, int skillValue, int roll)
+    {
+        if (string.IsNullOrEmpty(combatant.JammedWeaponName)) return false;
+
+        var level = CalculateSuccessLevel(roll, skillValue);
+        if (level < SuccessLevel.RegularSuccess)
+        {
+            NotifyStateChanged();
+            return false;
+        }
+
+        combatant.JamRepairRoundsLeft = Math.Max(0, combatant.JamRepairRoundsLeft - 1);
+        if (combatant.JamRepairRoundsLeft == 0)
+            combatant.JammedWeaponName = null;
+
+        NotifyStateChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Списывает израсходованные патроны. Ёмкость берётся из данных оружия,
+    /// пока в бойце нет записи об этом стволе.
+    /// </summary>
+    private static void SpendAmmo(Combatant attacker, AttackSetup setup)
+    {
+        var weapon = setup.SelectedWeapon;
+        if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return;
+
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return;
+
+        if (!attacker.AmmoLoaded.TryGetValue(weapon.Name, out var loaded))
+            loaded = capacity;
+
+        attacker.AmmoLoaded[weapon.Name] = Math.Max(0, loaded - Math.Max(1, setup.ShotsFired));
+    }
+
+    /// <summary>Ёмкость магазина из текстового поля оружия; 0, если разобрать не удалось.</summary>
+    public static int ParseAmmoCapacity(string? ammo)
+    {
+        if (string.IsNullOrWhiteSpace(ammo)) return 0;
+
+        var digits = new string(ammo.TakeWhile(char.IsDigit).ToArray());
+        if (digits.Length == 0)
+            digits = new string(ammo.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
+
+        return int.TryParse(digits, out var value) ? value : 0;
+    }
+
+    /// <summary>Сколько патронов осталось в оружии бойца.</summary>
+    public static int GetAmmoLeft(Combatant combatant, Weapon? weapon)
+    {
+        if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return 0;
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return 0;
+
+        return combatant.AmmoLoaded.TryGetValue(weapon.Name, out var loaded) ? loaded : capacity;
+    }
+
+    /// <summary>Перезарядка: магазин заполняется до ёмкости (стр. 111).</summary>
+    public void Reload(Combatant combatant, Weapon weapon)
+    {
+        var capacity = ParseAmmoCapacity(weapon.Ammo);
+        if (capacity <= 0) return;
+
+        combatant.AmmoLoaded[weapon.Name] = capacity;
+        NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Размер залпа при непрерывном огне: навык, делённый на 10, но не меньше трёх пуль
+    /// (CoC 7e, стр. 112).
+    /// </summary>
+    public static int GetVolleySize(int firearmSkill) => Math.Max(3, firearmSkill / 10);
+
+    /// <summary>
+    /// Нарастающая сложность проверок при автоматической стрельбе (стр. 114).
+    /// <para>
+    /// Первая проверка в раунде идёт как обычно. Каждая следующая добавляет штрафную
+    /// кость; когда штрафных костей набирается три, остаётся две, а уровень сложности
+    /// повышается на один: обычный → трудный → чрезвычайный → критический → невозможно.
+    /// </para>
+    /// </summary>
+    public static (SuccessLevel Required, bool IsImpossible, int ExtraPenaltyDice) EscalateAutofire(
+        SuccessLevel baseRequired, int checkIndex)
+    {
+        if (checkIndex <= 0) return (baseRequired, false, 0);
+
+        var extraPenalty = Math.Min(checkIndex, 2);
+        var levelsUp = Math.Max(0, checkIndex - 2);
+        var index = DifficultyIndex(baseRequired) + levelsUp;
+
+        return index >= 4
+            ? (SuccessLevel.CriticalSuccess, true, extraPenalty)
+            : (DifficultyFromIndex(index), false, extraPenalty);
+    }
+
+    private static int DifficultyIndex(SuccessLevel level) => level switch
+    {
+        SuccessLevel.HardSuccess => 1,
+        SuccessLevel.ExtremeSuccess => 2,
+        SuccessLevel.CriticalSuccess => 3,
+        _ => 0
+    };
+
+    private static SuccessLevel DifficultyFromIndex(int index) => index switch
+    {
+        1 => SuccessLevel.HardSuccess,
+        2 => SuccessLevel.ExtremeSuccess,
+        3 => SuccessLevel.CriticalSuccess,
+        _ => SuccessLevel.RegularSuccess
+    };
+
+    /// <summary>Название уровня сложности успеха для подписей.</summary>
+    public static string GetDifficultyName(SuccessLevel required) => required switch
+    {
+        SuccessLevel.HardSuccess => "трудный",
+        SuccessLevel.ExtremeSuccess => "чрезвычайный",
+        SuccessLevel.CriticalSuccess => "критический",
+        _ => "обычный"
     };
 
     /// <summary>Название уровня сложности для подписей: «трудный», «чрезвычайный».</summary>
@@ -639,6 +776,14 @@ public sealed partial class CombatService
                 penalty++;
                 reasons.Add("−1 цель лежит");
             }
+
+            // Каждая следующая проверка автоматической стрельбы в раунде — штрафная кость (стр. 114)
+            if (setup.FiringMode == FiringMode.Volley && setup.AutofireCheckIndex > 0)
+            {
+                var autofirePenalty = Math.Min(setup.AutofireCheckIndex, 2);
+                penalty += autofirePenalty;
+                reasons.Add($"−{autofirePenalty} проверка №{setup.AutofireCheckIndex + 1} при автоматической стрельбе");
+            }
         }
 
         return new AttackModifiers(bonus, penalty, reasons);
@@ -674,8 +819,11 @@ public sealed partial class CombatService
         var attacker = Combatants.First(c => c.Id == setup.AttackerId);
         var defender = Combatants.First(c => c.Id == setup.DefenderId);
 
-        // Дальность задаёт уровень сложности, а не урезает навык (стр. 110)
-        var requiredLevel = GetRequiredLevelForRange(setup.RangeLevel);
+        // Дальность задаёт уровень сложности, а не урезает навык (стр. 110),
+        // а каждая следующая проверка автоматической стрельбы поднимает её выше (стр. 114)
+        var rangeLevel = GetRequiredLevelForRange(setup.RangeLevel);
+        var autofireIndex = setup.FiringMode == FiringMode.Volley ? setup.AutofireCheckIndex : 0;
+        var (requiredLevel, isImpossible, _) = EscalateAutofire(rangeLevel, autofireIndex);
 
         var result = new CombatActionResult
         {
@@ -694,8 +842,14 @@ public sealed partial class CombatService
         var modifiers = CalculateAttackModifiers(setup, attacker, defender);
         result.Modifiers = modifiers;
 
+        // Патроны расходуются вне зависимости от исхода проверки
+        SpendAmmo(attacker, setup);
+        if (setup.FiringMode == FiringMode.Volley) attacker.AutofireChecksThisRound++;
+
         result.AttackerSkillValue = setup.AttackSkillValue;
         result.RequiredSuccessLevel = requiredLevel;
+        result.IsImpossibleShot = isImpossible;
+        result.ShotsFired = setup.ShotsFired;
         result.RangeLevel = setup.RangeLevel;
         result.SurpriseMode = NormalizeSurprise(setup);
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
@@ -712,8 +866,40 @@ public sealed partial class CombatService
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
             attacker.JammedWeaponName = setup.SelectedWeapon.Name;
+            attacker.JamRepairRoundsLeft = RollDice(6);
+            result.JamRepairRounds = attacker.JamRepairRoundsLeft;
             result.MalfunctionMessage = $"Осечка! {setup.SelectedWeapon.Name} заклинило (бросок {result.AttackerRoll} ≥ {malfunctionValue}).";
-            result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Требуется ремонт (проверка Механики или Стрельбы, 1d6 раундов).";
+            result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Починка займёт " +
+                             $"{attacker.JamRepairRoundsLeft} боевых раунда(ов) и потребует успешной проверки " +
+                             "Механики или Стрельбы (стр. 113).";
+            return result;
+        }
+
+        // Сложность поднялась выше критической — попадание невозможно (стр. 114)
+        if (isImpossible)
+        {
+            result.AttackerWins = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+            result.Summary = $"{attacker.Name}: проверка №{autofireIndex + 1} за раунд — сложность выросла " +
+                             $"выше критической, попадание невозможно (стр. 114).";
+            return result;
+        }
+
+        // Крах при стрельбе в ближнем бою — попадание в союзника (стр. 112)
+        if (result.AttackerSuccessLevel == SuccessLevel.Fumble && setup.IsFiringIntoMelee)
+        {
+            var ally = FindUnluckiestAlly(attacker, defender);
+            result.AttackerWins = false;
+            result.DefenderHpAfter = defender.CurrentHitPoints;
+            result.HitAllyOnFumble = true;
+            result.HitAllyId = ally?.Id;
+            result.HitAllyName = ally?.Name;
+            result.Summary = ally is null
+                ? $"{attacker.Name}: крах при стрельбе в ближнем бою ({result.AttackerRoll}). " +
+                  "Пуля ушла в союзника — выберите пострадавшего по наименьшей Удаче (стр. 112)."
+                : $"{attacker.Name}: крах при стрельбе в ближнем бою ({result.AttackerRoll}). " +
+                  $"Пуля попала в {ally.Name} — у него наименьшая Удача ({ally.Luck}) на линии огня (стр. 112). " +
+                  "Разыграйте урон отдельной атакой по нему.";
             return result;
         }
 
@@ -723,10 +909,9 @@ public sealed partial class CombatService
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
 
-            var threshold = GetRollThresholdForRange(setup.AttackSkillValue, setup.RangeLevel);
-            var needed = setup.RangeLevel == RangeLevel.Base
+            var needed = requiredLevel == SuccessLevel.RegularSuccess
                 ? $"против {setup.AttackSkillValue}"
-                : $"нужен {GetDifficultyName(setup.RangeLevel)} успех — не выше {threshold}";
+                : $"нужен {GetDifficultyName(requiredLevel)} успех";
 
             result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll}, {needed}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;

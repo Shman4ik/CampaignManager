@@ -35,6 +35,15 @@ public class CombatActionResult
     /// <summary>Была ли цель готова к атаке (стр. 104–105).</summary>
     public SurpriseMode SurpriseMode { get; set; } = SurpriseMode.TargetReady;
 
+    /// <summary>
+    /// Сложность автоматической стрельбы поднялась выше критической — попадание
+    /// невозможно (стр. 114).
+    /// </summary>
+    public bool IsImpossibleShot { get; set; }
+
+    /// <summary>Сколько патронов израсходовано этой проверкой атаки.</summary>
+    public int ShotsFired { get; set; } = 1;
+
     // ── Защитник (для ближнего боя / opposed roll) ─────────────────────
     public Guid? DefenderId { get; set; }
     public string DefenderName { get; set; } = string.Empty;
@@ -63,6 +72,15 @@ public class CombatActionResult
     public bool IsInstantDeath { get; set; }  // Одним ударом ≥ макс. ПЗ
     public bool IsMalfunction { get; set; }   // Осечка / заклинило
     public string? MalfunctionMessage { get; set; }
+
+    /// <summary>Сколько раундов займёт починка заклинившего оружия (1d6, стр. 113).</summary>
+    public int JamRepairRounds { get; set; }
+
+    /// <summary>Крах при стрельбе в ближнем бою — пуля попала в союзника (стр. 112).</summary>
+    public bool HitAllyOnFumble { get; set; }
+
+    public Guid? HitAllyId { get; set; }
+    public string? HitAllyName { get; set; }
 
     // ── Эффекты на защитника ──────────────────────────────────────────
     public int DefenderHpBefore { get; set; }

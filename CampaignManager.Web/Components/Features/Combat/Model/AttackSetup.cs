@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Weapons.Model;
+﻿using CampaignManager.Web.Components.Features.Weapons.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Model;
 
@@ -124,8 +124,23 @@ public class AttackSetup
     /// <summary>Быстро движущаяся цель (СКО ≥8) → штрафная кость</summary>
     public bool IsTargetFastMoving { get; set; }
 
+    /// <summary>
+    /// Режим стрельбы. Серия из пистолета даёт штрафную кость на каждый выстрел,
+    /// залп автоматического оружия — нарастающий штраф по номеру проверки (стр. 111, 114).
+    /// </summary>
+    public FiringMode FiringMode { get; set; } = FiringMode.Single;
+
     /// <summary>Серия выстрелов из пистолета → штрафная кость</summary>
-    public bool IsMultipleShot { get; set; }
+    public bool IsMultipleShot => FiringMode == FiringMode.PistolBurst;
+
+    /// <summary>
+    /// Номер проверки атаки при автоматической стрельбе в этом раунде, начиная с нуля.
+    /// Каждая следующая проверка получает штрафную кость (стр. 114).
+    /// </summary>
+    public int AutofireCheckIndex { get; set; }
+
+    /// <summary>Сколько патронов уходит на эту проверку атаки.</summary>
+    public int ShotsFired { get; set; } = 1;
 
     /// <summary>Зарядка + выстрел в одном раунде → штрафная кость</summary>
     public bool IsReloadAndFire { get; set; }
