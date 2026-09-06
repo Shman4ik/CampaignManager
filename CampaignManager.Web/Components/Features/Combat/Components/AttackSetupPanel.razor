@@ -215,7 +215,7 @@
                 </div>
 
                 <!-- Бросок защитника (ближний бой) -->
-                @if (_isMelee && _selectedDefender != null && !_targetUnaware)
+                @if (_isMelee && _selectedDefender != null && EffectiveSurprise == SurpriseMode.TargetReady)
                 {
                     <div class="mb-3">
                         <div class="flex items-center gap-2">
@@ -241,10 +241,24 @@
                         }
                     </div>
                 }
-                @if (_targetUnaware)
+                @if (EffectiveSurprise != SurpriseMode.TargetReady)
                 {
                     <div class="mb-3 text-xs text-amber-700 bg-amber-50 rounded p-2">
-                        Цель не подозревает — бросок защитника не используется.
+                        @if (EffectiveSurprise == SurpriseMode.AutoHit)
+                        {
+                            <text>Цель застигнута врасплох: она не защищается, а атака проходит
+                            автоматически — промахом считается только крах.</text>
+                        }
+                        else
+                        {
+                            <text>Цель застигнута врасплох: она не защищается, атакующий получает
+                            бонусную кость.</text>
+                            @if (!_isMelee && _surprise == SurpriseMode.AutoHit)
+                            {
+                                <text> Для дистанционной атаки автоматическое попадание правилами
+                                не допускается (стр. 105), поэтому применена бонусная кость.</text>
+                            }
+                        }
                     </div>
                 }
 
@@ -279,14 +293,31 @@
                             Кости применяются к бросающимся автоматически. Если вы вводите результат
                             своих физических костей вручную, модификаторы уже должны быть в нём учтены.
                         </p>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="checkbox" @bind="_surpriseAttack" />
-                            Внезапная атака
-                        </label>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="checkbox" @bind="_targetUnaware" />
-                            Цель не подозревает (автопопадание, нет броска защиты)
-                        </label>
+                        <div class="border-t border-gray-200 pt-2 mt-2">
+                            <div class="text-xs font-semibold text-gray-500 mb-1">Готовность цели (стр. 104)</div>
+                            <div class="space-y-1">
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.TargetReady)"
+                                           @onchange="() => SetSurprise(SurpriseMode.TargetReady)" />
+                                    <span>Цель начеку — сама выбирает уклонение или контратаку</span>
+                                </label>
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.AutoHit)"
+                                           @onchange="() => SetSurprise(SurpriseMode.AutoHit)" />
+                                    <span>Не готова, атака предрешена — попадание автоматическое, кроме краха
+                                          <span class="text-gray-400">(удар по голове незамеченным противником)</span></span>
+                                </label>
+                                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                                    <input type="radio" name="surprise" class="mt-0.5"
+                                           checked="@(_surprise == SurpriseMode.BonusDie)"
+                                           @onchange="() => SetSurprise(SurpriseMode.BonusDie)" />
+                                    <span>Не готова, исход не предрешён — бонусная кость
+                                          <span class="text-gray-400">(попытка вырвать оружие)</span></span>
+                                </label>
+                            </div>
+                        </div>
 
                         @if (!_isMelee)
                         {
@@ -333,7 +364,7 @@
                 </details>
 
                 <!-- Урон (показывается когда бросок введён и атака успешна) -->
-                @if (_attackerRoll.HasValue && _attackerSuccessLevel >= RequiredLevel)
+                @if (_attackerRoll.HasValue && AttackConnects)
                 {
                     var option = _attackOptions[_selectedWeaponIndex];
                     bool isExtraordinary = _attackerSuccessLevel >= SuccessLevel.ExtremeSuccess;
@@ -485,8 +516,19 @@
     private int _penaltyDice;
     private int _defenderBonusDice;
     private int _defenderPenaltyDice;
-    private bool _surpriseAttack;
-    private bool _targetUnaware;
+    private SurpriseMode _surprise = SurpriseMode.TargetReady;
+
+    /// <summary>
+    /// Режим с учётом правила: автоматическое попадание недоступно для дистанционных атак.
+    /// </summary>
+    private SurpriseMode EffectiveSurprise =>
+        !_isMelee && _surprise == SurpriseMode.AutoHit ? SurpriseMode.BonusDie : _surprise;
+
+    private void SetSurprise(SurpriseMode mode)
+    {
+        _surprise = mode;
+        ResetRolls();
+    }
 
     // Модификаторы стрельбы (CoC 7e стр. 110–113)
     private bool _isPointBlank;
@@ -717,6 +759,15 @@
     private SuccessLevel RequiredLevel =>
         _isMelee ? SuccessLevel.RegularSuccess : CombatService.GetRequiredLevelForRange(_rangeLevel);
 
+    /// <summary>
+    /// Попадает ли атака: при автоматическом попадании промахом считается только крах,
+    /// иначе нужен уровень успеха, требуемый дальностью.
+    /// </summary>
+    private bool AttackConnects =>
+        EffectiveSurprise == SurpriseMode.AutoHit
+            ? _attackerSuccessLevel != SuccessLevel.Fumble
+            : _attackerSuccessLevel >= RequiredLevel;
+
     private AttackModifiers CurrentModifiers() =>
         _selectedAttacker is null
             ? AttackModifiers.None
@@ -774,8 +825,7 @@
             PenaltyDice = _penaltyDice,
             DefenderBonusDice = _defenderBonusDice,
             DefenderPenaltyDice = _defenderPenaltyDice,
-            IsSurpriseAttack = _surpriseAttack,
-            TargetUnawareMeansAutoSuccess = _targetUnaware,
+            SurpriseMode = _surprise,
             CounterAttackDamageFormula = _counterDamageFormula,
             ManualAttackerRoll = _attackerRoll,
             ManualDefenderRoll = _defenderRoll,

@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Features.Combat.Model;
+﻿namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 /// <summary>
 /// Полный результат одного разрешённого боевого действия
@@ -31,6 +31,9 @@ public class CombatActionResult
 
     /// <summary>Дальность стрельбы, если это была дальняя атака.</summary>
     public RangeLevel RangeLevel { get; set; } = RangeLevel.Base;
+
+    /// <summary>Была ли цель готова к атаке (стр. 104–105).</summary>
+    public SurpriseMode SurpriseMode { get; set; } = SurpriseMode.TargetReady;
 
     // ── Защитник (для ближнего боя / opposed roll) ─────────────────────
     public Guid? DefenderId { get; set; }

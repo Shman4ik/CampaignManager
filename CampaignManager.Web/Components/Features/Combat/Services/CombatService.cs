@@ -430,23 +430,42 @@ public sealed partial class CombatService
         result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
-        // 2. Бросок защитника (только если цель не застали врасплох)
+        // 2. Бросок защитника — только если цель начеку (стр. 104)
         result.DefenderSkillValue = setup.DefenderSkillValue;
+        var surprise = NormalizeSurprise(setup);
+        result.SurpriseMode = surprise;
 
-        if (setup.TargetUnawareMeansAutoSuccess)
-        {
-            // Внезапная атака: цель не уклоняется, атака проходит автоматически (кроме провала)
-            result.DefenderRoll = 0;
-            result.DefenderSuccessLevel = SuccessLevel.Failure;
-        }
-        else
+        if (surprise == SurpriseMode.TargetReady)
         {
             result.DefenderRollDetail = RollFor(setup.DefenderRollDetail, setup.ManualDefenderRoll, setup.DefenderBonusDice, setup.DefenderPenaltyDice);
             result.DefenderRoll = result.DefenderRollDetail.Result;
             result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
         }
+        else
+        {
+            // Цель не готова: она не уклоняется и не контратакует
+            result.DefenderRoll = 0;
+            result.DefenderSuccessLevel = SuccessLevel.Failure;
+        }
 
-        // 3. Атакующий провалил — промах
+        // 3. Автоматическое попадание: провалом считается только крах (стр. 105)
+        if (surprise == SurpriseMode.AutoHit)
+        {
+            if (result.AttackerSuccessLevel == SuccessLevel.Fumble)
+            {
+                result.AttackerWins = false;
+                result.DefenderHpAfter = defender.CurrentHitPoints;
+                result.Summary = $"{attacker.Name}: крах при внезапной атаке ({result.AttackerRoll})" +
+                                 $"{FormatRollDetail(result.AttackerRollDetail)} — даже застигнутая врасплох цель не пострадала.";
+                return result;
+            }
+
+            result.AttackerWins = true;
+            CalculateDamage(result, setup, attacker, defender);
+            return result;
+        }
+
+        // 4. Атакующий провалил — промах
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = false;
@@ -455,7 +474,7 @@ public sealed partial class CombatService
             return result;
         }
 
-        // 4. Определяем победителя встречного броска
+        // 5. Определяем победителя встречного броска
         if (result.DefenderSuccessLevel <= SuccessLevel.Failure)
         {
             result.AttackerWins = true;
@@ -468,9 +487,12 @@ public sealed partial class CombatService
                 setup.DefenderReaction);
         }
 
-        // Отслеживаем защитные действия (для численного превосходства)
-        defender.HasDefendedThisRound = true;
-        defender.DefenseCountThisRound++;
+        // Численное превосходство считает только настоящие защитные действия (стр. 106)
+        if (surprise == SurpriseMode.TargetReady)
+        {
+            defender.HasDefendedThisRound = true;
+            defender.DefenseCountThisRound++;
+        }
 
         // Если атакующий победил в рукопашной и цель в лежачем положении — сбрасываем прицеливание
         if (attacker.IsAiming) attacker.IsAiming = false;
@@ -515,6 +537,13 @@ public sealed partial class CombatService
 
         if (bonus > 0) reasons.Add($"+{bonus} от Хранителя");
         if (penalty > 0) reasons.Add($"−{penalty} от Хранителя");
+
+        // Цель не готова, но исход не предрешён — бонусная кость (стр. 105)
+        if (NormalizeSurprise(setup) == SurpriseMode.BonusDie)
+        {
+            bonus++;
+            reasons.Add("+1 цель застигнута врасплох");
+        }
 
         if (setup.IsMelee)
         {
@@ -615,6 +644,16 @@ public sealed partial class CombatService
     }
 
     /// <summary>
+    /// Приводит режим внезапной атаки к допустимому: для дистанционной атаки
+    /// автоматическое попадание правилами не разрешено — «всегда нужно делать
+    /// бросок на попадание» (стр. 105), поэтому он понижается до бонусной кости.
+    /// </summary>
+    public static SurpriseMode NormalizeSurprise(AttackSetup setup) =>
+        setup is { IsMelee: false, SurpriseMode: SurpriseMode.AutoHit }
+            ? SurpriseMode.BonusDie
+            : setup.SurpriseMode;
+
+    /// <summary>
     /// Численное превосходство (стр. 106): цель уже уклонялась или контратаковала
     /// столько раз, сколько у неё атак за раунд.
     /// </summary>
@@ -657,6 +696,7 @@ public sealed partial class CombatService
         result.AttackerSkillValue = setup.AttackSkillValue;
         result.RequiredSuccessLevel = requiredLevel;
         result.RangeLevel = setup.RangeLevel;
+        result.SurpriseMode = NormalizeSurprise(setup);
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
         result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
@@ -1282,6 +1322,11 @@ public sealed partial class CombatService
 
         var atkLevel = GetSuccessLevelText(result.AttackerSuccessLevel);
         parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}{FormatRollDetail(result.AttackerRollDetail)}.");
+
+        if (result.SurpriseMode == SurpriseMode.AutoHit)
+            parts.Add($"{result.DefenderName} застигнут врасплох — атака проходит автоматически.");
+        else if (result.SurpriseMode == SurpriseMode.BonusDie)
+            parts.Add($"{result.DefenderName} застигнут врасплох — не защищается.");
 
         if (result.ActionType == CombatActionType.MeleeAttack && result.DefenderId.HasValue && !result.DefenderSuccessLevel.Equals(SuccessLevel.Failure) || result.DefenderRoll > 0)
         {
