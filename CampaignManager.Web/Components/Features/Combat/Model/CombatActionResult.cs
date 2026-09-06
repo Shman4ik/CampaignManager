@@ -17,6 +17,12 @@ public class CombatActionResult
     public int AttackerRoll { get; set; }
     public SuccessLevel AttackerSuccessLevel { get; set; }
 
+    /// <summary>Развёрнутый бросок атакующего с бонусными/штрафными костями.</summary>
+    public DiceRollResult? AttackerRollDetail { get; set; }
+
+    /// <summary>Какие модификаторы применялись к броску атакующего и почему.</summary>
+    public AttackModifiers Modifiers { get; set; } = AttackModifiers.None;
+
     // ── Защитник (для ближнего боя / opposed roll) ─────────────────────
     public Guid? DefenderId { get; set; }
     public string DefenderName { get; set; } = string.Empty;
@@ -24,6 +30,9 @@ public class CombatActionResult
     public int DefenderSkillValue { get; set; }
     public int DefenderRoll { get; set; }
     public SuccessLevel DefenderSuccessLevel { get; set; }
+
+    /// <summary>Развёрнутый бросок защитника с бонусными/штрафными костями.</summary>
+    public DiceRollResult? DefenderRollDetail { get; set; }
 
     // ── Исход ──────────────────────────────────────────────────────────
     public bool AttackerWins { get; set; }

@@ -39,6 +39,15 @@ public class AttackSetup
     /// <summary>Результат d100 защитника (null = авторбросок)</summary>
     public int? ManualDefenderRoll { get; set; }
 
+    /// <summary>
+    /// Уже брошенные кости атакующего (панель бросает их заранее, чтобы показать результат).
+    /// Если задано, повторный бросок не выполняется.
+    /// </summary>
+    public DiceRollResult? AttackerRollDetail { get; set; }
+
+    /// <summary>Уже брошенные кости защитника.</summary>
+    public DiceRollResult? DefenderRollDetail { get; set; }
+
     /// <summary>Итог броска урона оружия (null = авторбросок). Не используется при чрезвычайном/крит. успехе.</summary>
     public int? ManualWeaponDamageRoll { get; set; }
 
@@ -59,11 +68,20 @@ public class AttackSetup
 
     // ── Модификаторы (бонусные / штрафные кости) ─────────────────────────
 
-    /// <summary>Число бонусных костей (0–2). Итоговые = max(0, BonusDice - PenaltyDice)</summary>
+    /// <summary>
+    /// Бонусные кости атакующего, назначенные Хранителем вручную.
+    /// Автоматические кости по правилам добавляет <c>CombatService.CalculateAttackModifiers</c>.
+    /// </summary>
     public int BonusDice { get; set; }
 
-    /// <summary>Число штрафных костей (0–2)</summary>
+    /// <summary>Штрафные кости атакующего, назначенные Хранителем вручную.</summary>
     public int PenaltyDice { get; set; }
+
+    /// <summary>Бонусные кости защитника (уклонение или контратака), назначаются вручную.</summary>
+    public int DefenderBonusDice { get; set; }
+
+    /// <summary>Штрафные кости защитника, назначаются вручную.</summary>
+    public int DefenderPenaltyDice { get; set; }
 
     // ── Особые условия ───────────────────────────────────────────────────
 

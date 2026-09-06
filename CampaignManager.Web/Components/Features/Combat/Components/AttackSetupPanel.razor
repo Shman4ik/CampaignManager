@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
 
@@ -95,7 +95,7 @@
             @if (_selectedDefender != null && _isMelee)
             {
                 <!-- Предупреждение о численном превосходстве -->
-                @if (_selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound && _selectedDefender.DefenseCountThisRound > 0)
+                @if (CombatService.HasNumericalSuperiority(_selectedDefender))
                 {
                     <div class="bg-yellow-50 border border-yellow-200 rounded-md p-2 mb-2 text-xs text-yellow-800">
                         ⚠ @_selectedDefender.Name уже защищался в этом раунде (@_selectedDefender.DefenseCountThisRound/@_selectedDefender.AttacksPerRound) — атакующий получает <strong>1 бонусную кость</strong>.
@@ -146,6 +146,38 @@
             <div class="border-t border-gray-200 pt-3 mt-3">
                 <div class="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Броски кубиков</div>
 
+                <!-- Итог модификаторов: виден всегда, чтобы бросок не был сюрпризом -->
+                @{
+                    var mods = CurrentModifiers();
+                }
+                @if (mods.BonusDice > 0 || mods.PenaltyDice > 0)
+                {
+                    <div class="mb-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+                        <div class="text-xs font-semibold text-gray-700">
+                            @if (mods.Net > 0)
+                            {
+                                <span class="text-green-700">@CombatService.DescribeDice(mods.Net, true) к броску атаки</span>
+                            }
+                            else if (mods.Net < 0)
+                            {
+                                <span class="text-red-700">@CombatService.DescribeDice(-mods.Net, false) к броску атаки</span>
+                            }
+                            else
+                            {
+                                <span class="text-gray-600">Кости взаимно погашены</span>
+                            }
+                            <span class="font-normal text-gray-400"> (+@mods.BonusDice / −@mods.PenaltyDice)</span>
+                        </div>
+                        <ul class="mt-1 space-y-0.5">
+                            @foreach (var reason in mods.Reasons)
+                            {
+                                <li class="text-xs text-gray-500">@reason</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+
                 <!-- Бросок атакующего -->
                 <div class="mb-3">
                     <div class="flex items-center gap-2">
@@ -163,6 +195,10 @@
                     {
                         <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_attackerSuccessLevel)">
                             → @CombatService.GetSuccessLevelText(_attackerSuccessLevel)
+                            @if (_attackerRollDetail is { HasExtraDice: true })
+                            {
+                                <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_attackerRollDetail)</span>
+                            }
                         </div>
                     }
                 </div>
@@ -186,6 +222,10 @@
                         {
                             <div class="mt-0.5 ml-36 text-xs font-medium @GetLevelColor(_defenderSuccessLevel)">
                                 → @CombatService.GetSuccessLevelText(_defenderSuccessLevel)
+                                @if (_defenderRollDetail is { HasExtraDice: true })
+                                {
+                                    <span class="ml-1 font-normal text-gray-500">@CombatService.FormatRollDetail(_defenderRollDetail)</span>
+                                }
                             </div>
                         }
                     </div>
@@ -211,6 +251,23 @@
                             <input type="number" min="0" max="2" @bind="_penaltyDice"
                                    class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
                         </div>
+                        @if (_isMelee && _selectedDefender != null)
+                        {
+                            <div class="flex items-center gap-3">
+                                <label class="text-xs text-gray-600 w-36 shrink-0">Бонусные защитнику</label>
+                                <input type="number" min="0" max="2" @bind="_defenderBonusDice"
+                                       class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <label class="text-xs text-gray-600 w-36 shrink-0">Штрафные защитнику</label>
+                                <input type="number" min="0" max="2" @bind="_defenderPenaltyDice"
+                                       class="border border-primary-300 rounded-md px-2 py-1 text-sm w-16 focus:outline-none" />
+                            </div>
+                        }
+                        <p class="text-xs text-gray-400">
+                            Кости применяются к бросающимся автоматически. Если вы вводите результат
+                            своих физических костей вручную, модификаторы уже должны быть в нём учтены.
+                        </p>
                         <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                             <input type="checkbox" @bind="_surpriseAttack" />
                             Внезапная атака
@@ -259,22 +316,6 @@
                                     </label>
                                 </div>
 
-                                @{
-                                    var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
-                                    var netDice = autoBonus + _bonusDice - autoPenalty - _penaltyDice;
-                                }
-                                <div class="mt-2 text-xs text-gray-600 bg-gray-50 rounded p-1.5">
-                                    Итого: <strong class="text-green-700">+@(autoBonus + _bonusDice) бонусн.</strong>
-                                    / <strong class="text-red-700">−@(autoPenalty + _penaltyDice) штрафн.</strong>
-                                    @if (_selectedDefender != null && _selectedDefender.Build >= 4)
-                                    {
-                                        <span class="text-green-600"> (крупная цель)</span>
-                                    }
-                                    @if (_selectedDefender != null && _selectedDefender.Build <= -2)
-                                    {
-                                        <span class="text-red-600"> (мелкая цель)</span>
-                                    }
-                                </div>
                             </div>
                         }
                     </div>
@@ -408,6 +449,8 @@
     // Броски кубиков
     private int? _attackerRoll;
     private int? _defenderRoll;
+    private DiceRollResult? _attackerRollDetail;
+    private DiceRollResult? _defenderRollDetail;
     private int? _weaponDamageRoll;
     private int? _damageBonusRoll;
     private int? _extraImpalingRoll;
@@ -421,6 +464,8 @@
     // Модификаторы
     private int _bonusDice;
     private int _penaltyDice;
+    private int _defenderBonusDice;
+    private int _defenderPenaltyDice;
     private bool _surpriseAttack;
     private bool _targetUnaware;
 
@@ -571,6 +616,10 @@
     {
         _attackerRoll = null;
         _defenderRoll = null;
+        _attackerRollDetail = null;
+        _defenderRollDetail = null;
+        _defenderBonusDice = 0;
+        _defenderPenaltyDice = 0;
         _weaponDamageRoll = null;
         _damageBonusRoll = null;
         _extraImpalingRoll = null;
@@ -597,13 +646,16 @@
 
         if (isAttacker)
         {
+            // Хранитель ввёл итог своих физических костей — модификаторы он применил сам
             _attackerRoll = v;
+            _attackerRollDetail = null;
             var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
             _attackerSuccessLevel = CombatService.CalculateSuccessLevel(v, eff);
         }
         else
         {
             _defenderRoll = v;
+            _defenderRollDetail = null;
             _defenderSuccessLevel = CombatService.CalculateSuccessLevel(v, _defenderSkillValue);
         }
     }
@@ -623,16 +675,28 @@
 
     private void AutoRollAttacker()
     {
-        _attackerRoll = CombatService.RollD100();
+        var mods = CurrentModifiers();
+        _attackerRollDetail = CombatService.RollD100(mods.BonusDice, mods.PenaltyDice);
+        _attackerRoll = _attackerRollDetail.Result;
         var eff = CombatService.GetEffectiveSkillForRange(_attackSkillValue, _rangeLevel);
         _attackerSuccessLevel = CombatService.CalculateSuccessLevel(_attackerRoll.Value, eff);
     }
 
     private void AutoRollDefender()
     {
-        _defenderRoll = CombatService.RollD100();
+        _defenderRollDetail = CombatService.RollD100(_defenderBonusDice, _defenderPenaltyDice);
+        _defenderRoll = _defenderRollDetail.Result;
         _defenderSuccessLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkillValue);
     }
+
+    /// <summary>
+    /// Модификаторы текущей атаки. Считаются сервисом, чтобы предпросмотр
+    /// и фактический бросок не расходились.
+    /// </summary>
+    private AttackModifiers CurrentModifiers() =>
+        _selectedAttacker is null
+            ? AttackModifiers.None
+            : CombatService.CalculateAttackModifiers(BuildSetup(), _selectedAttacker, _selectedDefender);
 
     private void AutoRollDamage(DamageField field, string formula)
     {
@@ -660,49 +724,39 @@
         _selectedAttacker != null && _selectedWeaponIndex >= 0
         && (_selectedDefender != null || !_isMelee);
 
-    private async Task ResolveAttack()
+    /// <summary>
+    /// Собирает настройку атаки из состояния панели. Используется и для предпросмотра
+    /// модификаторов, и для фактического разрешения атаки.
+    /// </summary>
+    private AttackSetup BuildSetup()
     {
-        if (_selectedAttacker == null || _selectedWeaponIndex < 0) return;
-        if (_isMelee && _selectedDefender == null) return;
+        var option = _selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count
+            ? _attackOptions[_selectedWeaponIndex]
+            : null;
 
-        var option = _attackOptions[_selectedWeaponIndex];
-        var hasNumericalSuperiority = _isMelee && _selectedDefender != null
-            && _selectedDefender.DefenseCountThisRound >= _selectedDefender.AttacksPerRound
-            && _selectedDefender.DefenseCountThisRound > 0;
-
-        // Для дальнего боя: суммируем ручные + авто-модификаторы стрельбы
-        int effectiveBonusDice, effectivePenaltyDice;
-        if (!_isMelee)
+        return new AttackSetup
         {
-            var (autoBonus, autoPenalty) = CalculateAutoFirearmModifiers();
-            effectiveBonusDice = _bonusDice + autoBonus;
-            effectivePenaltyDice = _penaltyDice + autoPenalty;
-        }
-        else
-        {
-            effectiveBonusDice = _bonusDice + (hasNumericalSuperiority ? 1 : 0);
-            effectivePenaltyDice = _penaltyDice;
-        }
-
-        var setup = new AttackSetup
-        {
-            AttackerId = _selectedAttacker.Id,
+            AttackerId = _selectedAttacker?.Id ?? Guid.Empty,
             DefenderId = _selectedDefender?.Id ?? Guid.Empty,
-            SelectedWeapon = option.Weapon,
-            CreatureAttackName = option.Weapon == null ? option.Name : null,
-            CreatureAttackDamage = option.Weapon == null ? option.Damage : null,
+            SelectedWeapon = option?.Weapon,
+            CreatureAttackName = option is { Weapon: null } ? option.Name : null,
+            CreatureAttackDamage = option is { Weapon: null } ? option.Damage : null,
             AttackSkillValue = _attackSkillValue,
             IsMelee = _isMelee,
             DefenderReaction = _defenderReaction,
             DefenderSkillValue = _defenderSkillValue,
             RangeLevel = _rangeLevel,
-            BonusDice = effectiveBonusDice,
-            PenaltyDice = effectivePenaltyDice,
+            BonusDice = _bonusDice,
+            PenaltyDice = _penaltyDice,
+            DefenderBonusDice = _defenderBonusDice,
+            DefenderPenaltyDice = _defenderPenaltyDice,
             IsSurpriseAttack = _surpriseAttack,
             TargetUnawareMeansAutoSuccess = _targetUnaware,
             CounterAttackDamageFormula = _counterDamageFormula,
             ManualAttackerRoll = _attackerRoll,
             ManualDefenderRoll = _defenderRoll,
+            AttackerRollDetail = _attackerRollDetail,
+            DefenderRollDetail = _defenderRollDetail,
             ManualWeaponDamageRoll = _weaponDamageRoll,
             ManualDamageBonusRoll = _damageBonusRoll,
             ManualExtraImpalingRoll = _extraImpalingRoll,
@@ -719,6 +773,14 @@
             IsMultipleShot = _isMultipleShot,
             IsReloadAndFire = _isReloadAndFire
         };
+    }
+
+    private async Task ResolveAttack()
+    {
+        if (_selectedAttacker == null || _selectedWeaponIndex < 0) return;
+        if (_isMelee && _selectedDefender == null) return;
+
+        var setup = BuildSetup();
 
         var result = _isMelee
             ? CombatService.ResolveMeleeAttack(setup)
@@ -726,22 +788,6 @@
 
         ResetRolls();
         await OnAttackResolved.InvokeAsync(result);
-    }
-
-    private (int bonus, int penalty) CalculateAutoFirearmModifiers()
-    {
-        int bonus = 0, penalty = 0;
-        if (_isPointBlank) bonus++;
-        if (_isAiming) bonus++;
-        if (_selectedDefender?.Build >= 4) bonus++;
-        if (_isTargetTakingCover) penalty++;
-        if (_isTargetBehindCover) penalty++;
-        if (_isTargetFastMoving) penalty++;
-        if (_isFiringIntoMelee) penalty++;
-        if (_isMultipleShot) penalty++;
-        if (_isReloadAndFire) penalty++;
-        if (_selectedDefender?.Build <= -2) penalty++;
-        return (bonus, penalty);
     }
 
     private static string GetLevelColor(SuccessLevel level) => level switch

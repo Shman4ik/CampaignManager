@@ -30,4 +30,25 @@ public class ManeuverSetup
 
     /// <summary>Ручной бросок защитника (null = авторбросок)</summary>
     public int? ManualDefenderRoll { get; set; }
+
+    /// <summary>
+    /// Бонусные кости атакующего, назначенные Хранителем вручную.
+    /// Штрафные кости за разницу Комплекции добавляются автоматически.
+    /// </summary>
+    public int BonusDice { get; set; }
+
+    /// <summary>Штрафные кости атакующего, назначенные Хранителем вручную.</summary>
+    public int PenaltyDice { get; set; }
+
+    /// <summary>Бонусные кости защитника, назначаются вручную.</summary>
+    public int DefenderBonusDice { get; set; }
+
+    /// <summary>Штрафные кости защитника, назначаются вручную.</summary>
+    public int DefenderPenaltyDice { get; set; }
+
+    /// <summary>Уже брошенные кости атакующего (если панель бросила их заранее).</summary>
+    public DiceRollResult? AttackerRollDetail { get; set; }
+
+    /// <summary>Уже брошенные кости защитника.</summary>
+    public DiceRollResult? DefenderRollDetail { get; set; }
 }

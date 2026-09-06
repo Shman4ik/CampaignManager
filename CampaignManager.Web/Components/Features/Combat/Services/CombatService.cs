@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
@@ -147,6 +147,47 @@ public sealed partial class CombatService
     public static int RollD100() => RandomNumberGenerator.GetInt32(1, 101);
 
     public static int RollDice(int sides) => RandomNumberGenerator.GetInt32(1, sides + 1);
+
+    /// <summary>
+    /// Бросок d100 с бонусными и штрафными костями (CoC 7e, стр. 89).
+    /// <para>
+    /// Бросается одна кость единиц и (1 + |нетто|) костей десятков. Из полученных
+    /// вариантов берётся наименьший при бонусных костях и наибольший при штрафных.
+    /// Одна бонусная кость отменяет одну штрафную. Комбинация «00» + «0» равна 100,
+    /// поэтому выбор делается по итоговому результату, а не по значению кости десятков.
+    /// </para>
+    /// </summary>
+    public static DiceRollResult RollD100(int bonusDice, int penaltyDice)
+    {
+        var net = Math.Max(0, bonusDice) - Math.Max(0, penaltyDice);
+        var extraDice = Math.Abs(net);
+
+        var units = RandomNumberGenerator.GetInt32(0, 10);
+
+        var candidates = new int[extraDice + 1];
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            var tens = RandomNumberGenerator.GetInt32(0, 10) * 10;
+            var value = tens + units;
+            candidates[i] = value == 0 ? 100 : value;
+        }
+
+        var result = net switch
+        {
+            > 0 => candidates.Min(),
+            < 0 => candidates.Max(),
+            _ => candidates[0]
+        };
+
+        return new DiceRollResult
+        {
+            Result = result,
+            Units = units,
+            Candidates = candidates,
+            BonusDice = net > 0 ? net : 0,
+            PenaltyDice = net < 0 ? -net : 0
+        };
+    }
 
     /// <summary>
     /// Парсит и бросает формулу урона: "1D6", "2D6+2", "1D8+1D6", "0", "+1D4", "-1"
@@ -304,6 +345,19 @@ public sealed partial class CombatService
     };
 
     /// <summary>
+    /// Определяет бросок: уже брошенный в панели используется как есть, ручной ввод
+    /// Хранителя — как есть (кости он бросил сам), иначе бросается автоматически
+    /// с учётом бонусных и штрафных костей.
+    /// </summary>
+    private static DiceRollResult RollFor(DiceRollResult? preRolled, int? manualRoll, int bonusDice, int penaltyDice)
+    {
+        if (preRolled is not null) return preRolled;
+        return manualRoll.HasValue
+            ? DiceRollResult.Plain(manualRoll.Value)
+            : RollD100(bonusDice, penaltyDice);
+    }
+
+    /// <summary>
     /// Разрешение встречного броска. Возвращает true если атакующий побеждает.
     /// Правила ничьей (CoC 7e стр. 101):
     ///   — при уклонении: ничья = победа защитника
@@ -346,13 +400,14 @@ public sealed partial class CombatService
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Безоружная атака"
         };
 
-        // Автоматические модификаторы: бонусная кость если цель повалена (CoC 7e опциональные правила)
-        if (defender.IsProne)
-            setup.BonusDice++;
+        // Бонусные и штрафные кости атакующего (ручные + автоматические)
+        var modifiers = CalculateAttackModifiers(setup, attacker, defender);
+        result.Modifiers = modifiers;
 
         // 1. Бросок атакующего (ручной или авто)
         result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
         // 2. Бросок защитника (только если цель не застали врасплох)
@@ -366,7 +421,8 @@ public sealed partial class CombatService
         }
         else
         {
-            result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
+            result.DefenderRollDetail = RollFor(setup.DefenderRollDetail, setup.ManualDefenderRoll, setup.DefenderBonusDice, setup.DefenderPenaltyDice);
+            result.DefenderRoll = result.DefenderRollDetail.Result;
             result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
         }
 
@@ -375,7 +431,7 @@ public sealed partial class CombatService
         {
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue}).";
+            result.Summary = $"{attacker.Name} промахивается ({result.AttackerRoll} против {result.AttackerSkillValue}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
@@ -423,39 +479,129 @@ public sealed partial class CombatService
         return result;
     }
 
-    // ───────────────────── Модификаторы стрельбы (CoC 7e стр. 110–113) ─────
+    // ───────────────────── Модификаторы атаки (CoC 7e стр. 106, 110–113) ───
 
     /// <summary>
-    /// Подсчитывает бонусные и штрафные кости для дальней атаки по правилам CoC 7e.
-    /// Возвращает (bonusDice, penaltyDice).
+    /// Единый расчёт бонусных и штрафных костей для атаки. Используется и при
+    /// предпросмотре в панели, и при разрешении атаки, чтобы они не расходились.
+    /// К ручным костям Хранителя добавляются автоматические по правилам CoC 7e.
+    /// Взаимное погашение выполняется в <see cref="RollD100(int, int)"/>.
     /// </summary>
-    public static (int bonusDice, int penaltyDice) CalculateFirearmModifiers(AttackSetup setup, Combatant? attacker, Combatant? defender)
+    public static AttackModifiers CalculateAttackModifiers(AttackSetup setup, Combatant? attacker, Combatant? defender)
     {
-        int bonus = setup.BonusDice;
-        int penalty = setup.PenaltyDice;
+        var reasons = new List<string>();
+        var bonus = Math.Max(0, setup.BonusDice);
+        var penalty = Math.Max(0, setup.PenaltyDice);
 
-        // Бонусные кости
-        if (setup.IsPointBlank) bonus++;
-        if (setup.IsAiming) bonus++;
-        if (attacker?.IsAiming == true) bonus++; // Прицеливание через состояние бойца
-        if (defender != null && defender.Build >= 4) bonus++; // Крупная цель
+        if (bonus > 0) reasons.Add($"+{bonus} от Хранителя");
+        if (penalty > 0) reasons.Add($"−{penalty} от Хранителя");
 
-        // Поваленный состояние (CoC 7e, опциональные правила)
-        if (attacker?.IsProne == true) bonus++; // Стрельба из лежачего положения
+        if (setup.IsMelee)
+        {
+            // Поваленную цель проще пинать (стр. 113)
+            if (defender?.IsProne == true)
+            {
+                bonus++;
+                reasons.Add("+1 цель повалена");
+            }
 
-        // Штрафные кости
-        if (setup.IsTargetTakingCover) penalty++;
-        if (defender?.HasTakenCover == true) penalty++; // Цель укрылась (авто)
-        if (setup.IsTargetBehindCover) penalty++;
-        if (setup.IsTargetFastMoving) penalty++;
-        if (setup.IsFiringIntoMelee) penalty++;
-        if (setup.IsMultipleShot) penalty++;
-        if (setup.IsReloadAndFire) penalty++;
-        if (defender != null && defender.Build <= -2) penalty++; // Мелкая цель
-        if (defender?.IsProne == true && !setup.IsPointBlank) penalty++; // Цель лежит
+            // Численное превосходство (стр. 106): цель уже израсходовала защитные действия
+            if (HasNumericalSuperiority(defender))
+            {
+                bonus++;
+                reasons.Add("+1 численное превосходство");
+            }
+        }
+        else
+        {
+            // ── Бонусные кости ──
+            if (setup.IsPointBlank)
+            {
+                bonus++;
+                reasons.Add("+1 стрельба в упор");
+            }
 
-        return (bonus, penalty);
+            // Прицеливание учитывается один раз: из настройки или из состояния бойца
+            if (setup.IsAiming || attacker?.IsAiming == true)
+            {
+                bonus++;
+                reasons.Add("+1 прицеливание");
+            }
+
+            if (attacker?.IsProne == true)
+            {
+                bonus++;
+                reasons.Add("+1 стрельба лёжа");
+            }
+
+            if (defender is { Build: >= 4 })
+            {
+                bonus++;
+                reasons.Add("+1 крупная цель");
+            }
+
+            // ── Штрафные кости ──
+            // Укрытие от огня учитывается один раз: из настройки или из состояния цели
+            if (setup.IsTargetTakingCover || defender?.HasTakenCover == true)
+            {
+                penalty++;
+                reasons.Add("−1 цель укрылась от огня");
+            }
+
+            if (setup.IsTargetBehindCover)
+            {
+                penalty++;
+                reasons.Add("−1 частичное укрытие");
+            }
+
+            if (setup.IsTargetFastMoving)
+            {
+                penalty++;
+                reasons.Add("−1 быстро движущаяся цель");
+            }
+
+            if (setup.IsFiringIntoMelee)
+            {
+                penalty++;
+                reasons.Add("−1 стрельба в ближнем бою");
+            }
+
+            if (setup.IsMultipleShot)
+            {
+                penalty++;
+                reasons.Add("−1 серия выстрелов");
+            }
+
+            if (setup.IsReloadAndFire)
+            {
+                penalty++;
+                reasons.Add("−1 зарядка и выстрел");
+            }
+
+            if (defender is { Build: <= -2 })
+            {
+                penalty++;
+                reasons.Add("−1 мелкая цель");
+            }
+
+            if (defender?.IsProne == true && !setup.IsPointBlank)
+            {
+                penalty++;
+                reasons.Add("−1 цель лежит");
+            }
+        }
+
+        return new AttackModifiers(bonus, penalty, reasons);
     }
+
+    /// <summary>
+    /// Численное превосходство (стр. 106): цель уже уклонялась или контратаковала
+    /// столько раз, сколько у неё атак за раунд.
+    /// </summary>
+    public static bool HasNumericalSuperiority(Combatant? defender) =>
+        defender is not null
+        && defender.DefenseCountThisRound > 0
+        && defender.DefenseCountThisRound >= Math.Max(1, defender.AttacksPerRound);
 
     // ───────────────────── Разрешение дальнего боя ─────────────────────
 
@@ -484,8 +630,13 @@ public sealed partial class CombatService
             WeaponName = setup.SelectedWeapon?.Name ?? setup.CreatureAttackName ?? "Дальняя атака"
         };
 
+        // Бонусные и штрафные кости стрельбы (ручные + автоматические)
+        var modifiers = CalculateAttackModifiers(setup, attacker, defender);
+        result.Modifiers = modifiers;
+
         result.AttackerSkillValue = effectiveSkill;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, effectiveSkill);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
@@ -563,12 +714,27 @@ public sealed partial class CombatService
             return result;
         }
 
+        // Разница Комплекции даёт штрафные кости: по одной за каждый пункт, максимум две (стр. 103)
+        var buildPenalty = Math.Clamp(buildDiff, 0, 2);
+        var reasons = new List<string>();
+        if (setup.BonusDice > 0) reasons.Add($"+{setup.BonusDice} от Хранителя");
+        if (setup.PenaltyDice > 0) reasons.Add($"−{setup.PenaltyDice} от Хранителя");
+        if (buildPenalty > 0) reasons.Add($"−{buildPenalty} разница Комплекции ({setup.AttackerBuild} против {setup.DefenderBuild})");
+
+        var modifiers = new AttackModifiers(
+            Math.Max(0, setup.BonusDice),
+            Math.Max(0, setup.PenaltyDice) + buildPenalty,
+            reasons);
+        result.Modifiers = modifiers;
+
         result.AttackerSkillValue = setup.AttackSkillValue;
-        result.AttackerRoll = setup.ManualAttackerRoll ?? RollD100();
+        result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
+        result.AttackerRoll = result.AttackerRollDetail.Result;
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, result.AttackerSkillValue);
 
         result.DefenderSkillValue = setup.DefenderSkillValue;
-        result.DefenderRoll = setup.ManualDefenderRoll ?? RollD100();
+        result.DefenderRollDetail = RollFor(setup.DefenderRollDetail, setup.ManualDefenderRoll, setup.DefenderBonusDice, setup.DefenderPenaltyDice);
+        result.DefenderRoll = result.DefenderRollDetail.Result;
         result.DefenderSuccessLevel = CalculateSuccessLevel(result.DefenderRoll, result.DefenderSkillValue);
 
         if (result.AttackerSuccessLevel <= SuccessLevel.Failure)
@@ -576,7 +742,7 @@ public sealed partial class CombatService
             result.AttackerWins = false;
             result.ManeuverSucceeded = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался.";
+            result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался ({result.AttackerRoll}/{result.AttackerSkillValue}){FormatRollDetail(result.AttackerRollDetail)}.";
             return result;
         }
 
@@ -598,15 +764,21 @@ public sealed partial class CombatService
 
         result.DefenderHpAfter = defender.CurrentHitPoints;
 
+        var rollLine =
+            $"{attacker.Name}: {result.AttackerRoll}/{result.AttackerSkillValue} — " +
+            $"{GetSuccessLevelText(result.AttackerSuccessLevel)}{FormatRollDetail(result.AttackerRollDetail)}. " +
+            $"{defender.Name}: {result.DefenderRoll}/{result.DefenderSkillValue} — " +
+            $"{GetSuccessLevelText(result.DefenderSuccessLevel)}{FormatRollDetail(result.DefenderRollDetail)}.";
+
         if (result.ManeuverSucceeded)
         {
             result.Summary = $"{attacker.Name} успешно выполняет манёвр «{GetManeuverName(setup.ManeuverType)}» " +
-                             $"против {defender.Name}.";
+                             $"против {defender.Name}. {rollLine}";
         }
         else
         {
             result.Summary = $"{attacker.Name}: манёвр «{GetManeuverName(setup.ManeuverType)}» не удался — " +
-                             $"{defender.Name} успешно защитился.";
+                             $"{defender.Name} успешно защитился. {rollLine}";
         }
 
         return result;
@@ -1015,6 +1187,28 @@ public sealed partial class CombatService
         _ => "неизвестно"
     };
 
+    /// <summary>
+    /// Короткая расшифровка броска с дополнительными костями, например
+    /// « [кости 24, 44 — бонусная]». Для броска без модификаторов возвращает пустую строку.
+    /// </summary>
+    public static string FormatRollDetail(DiceRollResult? detail)
+    {
+        if (detail is null || !detail.HasExtraDice) return string.Empty;
+
+        var kind = detail.BonusDice > 0
+            ? DiceWord(detail.BonusDice, "бонусная", "бонусные")
+            : DiceWord(detail.PenaltyDice, "штрафная", "штрафные");
+
+        return $" [кости {string.Join(", ", detail.Candidates)} — {kind}]";
+    }
+
+    private static string DiceWord(int count, string one, string many) =>
+        count == 1 ? $"{one} кость" : $"{count} {many} кости";
+
+    /// <summary>«1 бонусная кость», «2 штрафные кости» — для подписей в интерфейсе.</summary>
+    public static string DescribeDice(int count, bool isBonus) =>
+        isBonus ? DiceWord(count, "бонусная", "бонусные") : DiceWord(count, "штрафная", "штрафные");
+
     /// <summary>Возвращает название манёвра на русском.</summary>
     public static string GetManeuverName(ManeuverType type) => type switch
     {
@@ -1032,13 +1226,13 @@ public sealed partial class CombatService
         var parts = new List<string>();
 
         var atkLevel = GetSuccessLevelText(result.AttackerSuccessLevel);
-        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}.");
+        parts.Add($"{result.AttackerName} атакует ({result.WeaponName}): {result.AttackerRoll}/{result.AttackerSkillValue} — {atkLevel}{FormatRollDetail(result.AttackerRollDetail)}.");
 
         if (result.ActionType == CombatActionType.MeleeAttack && result.DefenderId.HasValue && !result.DefenderSuccessLevel.Equals(SuccessLevel.Failure) || result.DefenderRoll > 0)
         {
             var defAction = result.DefenderReaction == CombatActionType.FightBack ? "ответный удар" : "уклонение";
             var defLevel = GetSuccessLevelText(result.DefenderSuccessLevel);
-            parts.Add($"{result.DefenderName} ({defAction}): {result.DefenderRoll}/{result.DefenderSkillValue} — {defLevel}.");
+            parts.Add($"{result.DefenderName} ({defAction}): {result.DefenderRoll}/{result.DefenderSkillValue} — {defLevel}{FormatRollDetail(result.DefenderRollDetail)}.");
         }
 
         if (result.AttackerWins && result.TotalDamage > 0)
