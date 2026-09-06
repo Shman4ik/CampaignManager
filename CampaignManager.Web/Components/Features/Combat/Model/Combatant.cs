@@ -25,6 +25,22 @@ public class Combatant
     public bool IsUnconscious { get; set; }
     public bool HasMajorWound { get; set; }
     public bool IsDying { get; set; }
+
+    /// <summary>
+    /// Умирающего стабилизировали успешной Первой помощью: он получил 1 временный ПЗ,
+    /// проверки ВЫН делаются раз в час, а не каждый раунд. Отметку «При смерти»
+    /// снимает только последующая Медицина (стр. 118).
+    /// </summary>
+    public bool IsStabilized { get; set; }
+
+    /// <summary>Временные ПЗ от Первой помощи умирающему (стр. 118).</summary>
+    public int TemporaryHitPoints { get; set; }
+
+    /// <summary>
+    /// Первую помощь по текущему ранению уже пытались оказать. Повторная проверка
+    /// правилами не допускается; сбрасывается при получении нового урона (стр. 118).
+    /// </summary>
+    public bool FirstAidAttempted { get; set; }
     public bool IsDead { get; set; }
     public bool HasTemporaryInsanity { get; set; }
     public bool HasIndefiniteInsanity { get; set; }

@@ -7,8 +7,10 @@
     <h4 class="text-base font-semibold text-gray-900 mb-3">Первая помощь</h4>
 
     <div class="bg-green-50 border border-green-200 rounded-md p-2 mb-3 text-xs text-green-800">
-        CoC 7e: Первая помощь в бою — успешная проверка возвращает 1 ОЗ.
-        При смерти: останавливает умирание, но не восстанавливает здоровье.
+        CoC 7e стр. 118: помощь нужно оказать в течение часа после ранения, и проверка
+        выполняется только один раз — повторные считаются повторной проверкой. Успех
+        возвращает 1 ОЗ. Умирающему успех даёт 1 <strong>временный</strong> ПЗ и
+        стабилизацию; снять отметку «При смерти» может только последующая Медицина.
     </div>
 
     <!-- Целитель -->
@@ -34,7 +36,7 @@
                     value="@_targetId"
                     @onchange="OnTargetChanged">
                 <option value="">— Выберите —</option>
-                @foreach (var c in Combatants.Where(c => !c.IsDead && c.CurrentHitPoints < c.MaxHitPoints))
+                @foreach (var c in Combatants.Where(c => !c.IsDead && (c.CurrentHitPoints < c.MaxHitPoints || c.IsDying)))
                 {
                     <option value="@c.Id">@c.Name (ОЗ: @c.CurrentHitPoints / @c.MaxHitPoints@(c.IsDying ? " — ПРИ СМЕРТИ" : ""))</option>
                 }
@@ -44,11 +46,27 @@
         @if (_target != null)
         {
             // Отображаем состояние цели
-            @if (_target.IsDying)
+            @if (_target.IsDying && !_target.IsStabilized)
             {
                 <div class="bg-red-50 border border-red-300 rounded-md p-2 mb-3 text-xs text-red-800">
-                    ⚠ @_target.Name при смерти! Успешная первая помощь остановит умирание,
-                    но не восстановит ОЗ. Также требуется проверка ВЫН для стабилизации.
+                    ⚠ @_target.Name при смерти. Успех даёт 1 временный ПЗ и стабилизацию:
+                    проверки ВЫН станут почасовыми вместо ежераундовых. Отметку «При смерти»
+                    снимет только последующая проверка Медицины.
+                </div>
+            }
+            else if (_target.IsStabilized)
+            {
+                <div class="bg-amber-50 border border-amber-300 rounded-md p-2 mb-3 text-xs text-amber-800">
+                    @_target.Name уже стабилизирован (1 временный ПЗ). Дальше нужна Медицина —
+                    она снимет отметку «При смерти» и восстановит 1d3 ОЗ.
+                </div>
+            }
+
+            @if (_target.FirstAidAttempted)
+            {
+                <div class="bg-gray-100 border border-gray-300 rounded-md p-2 mb-3 text-xs text-gray-700">
+                    Первую помощь по этому ранению уже пытались оказать. Повторная проверка
+                    правилами не допускается — помочь сможет только Медицина или новое ранение.
                 </div>
             }
 
@@ -73,9 +91,9 @@
                 </div>
                 @if (_roll.HasValue)
                 {
-                    var success = _roll.Value <= _firstAidSkill;
-                    <div class="mt-1 ml-36 text-xs font-medium @(success ? "text-green-700" : "text-red-700")">
-                        → @(_roll.Value) / @_firstAidSkill — @(success ? "успех!" : "провал")
+                    var level = CombatService.CalculateSuccessLevel(_roll.Value, _firstAidSkill);
+                    <div class="mt-1 ml-36 text-xs font-medium @(level >= SuccessLevel.RegularSuccess ? "text-green-700" : "text-red-700")">
+                        → @(_roll.Value) / @_firstAidSkill — @CombatService.GetSuccessLevelText(level)
                     </div>
                 }
             </div>
@@ -83,14 +101,18 @@
             <!-- Предпросмотр результата -->
             @if (_roll.HasValue)
             {
-                var success = _roll.Value <= _firstAidSkill;
+                var level = CombatService.CalculateSuccessLevel(_roll.Value, _firstAidSkill);
+                var success = level >= SuccessLevel.RegularSuccess;
                 <div class="bg-@(success ? "green" : "red")-50 border border-@(success ? "green" : "red")-200 rounded-md p-3 mb-3">
                     @if (success)
                     {
                         @if (_target.IsDying)
                         {
-                            <div class="text-sm font-semibold text-green-700">✓ Умирание остановлено</div>
-                            <div class="text-xs text-gray-600 mt-0.5">@_target.Name стабилизирован (ОЗ не восстанавливаются)</div>
+                            <div class="text-sm font-semibold text-green-700">✓ Состояние стабилизировано</div>
+                            <div class="text-xs text-gray-600 mt-0.5">
+                                @_target.Name получает 1 временный ПЗ. Проверки ВЫН — раз в час.
+                                Отметка «При смерти» останется до успешной Медицины.
+                            </div>
                         }
                         else
                         {
@@ -100,12 +122,15 @@
                     else
                     {
                         <div class="text-sm font-semibold text-red-700">✗ Первая помощь не удалась</div>
+                        <div class="text-xs text-gray-600 mt-0.5">
+                            Повторить проверку по этому ранению нельзя — запишите попытку и переходите к Медицине.
+                        </div>
                     }
                 </div>
 
                 <div class="flex gap-2">
-                    <button type="button" class="cm-btn cm-btn-primary w-full" @onclick="Apply" disabled="@(!success)">
-                        <span>Применить</span>
+                    <button type="button" class="cm-btn cm-btn-primary w-full" @onclick="Apply">
+                        <span>@(success ? "Применить" : "Записать неудачу")</span>
                     </button>
                     <button type="button" class="cm-btn cm-btn-secondary w-full" @onclick="Reset">
                         <span>Сброс</span>
@@ -171,20 +196,31 @@
 
     private async Task Apply()
     {
-        if (_target == null || !_roll.HasValue) return;
-        var success = _roll.Value <= _firstAidSkill;
-        if (!success) return;
+        if (_target == null || _healer == null || !_roll.HasValue) return;
+
+        var level = CombatService.CalculateSuccessLevel(_roll.Value, _firstAidSkill);
+        var success = level >= SuccessLevel.RegularSuccess;
 
         var wasDying = _target.IsDying;
         var hpBefore = _target.CurrentHitPoints;
 
-        if (wasDying)
+        // Проверка выполняется один раз на ранение — фиксируем и успех, и неудачу (стр. 118)
+        _target.FirstAidAttempted = true;
+
+        if (success)
         {
-            _target.IsDying = false; // стабилизация
-        }
-        else
-        {
-            _target.CurrentHitPoints = Math.Min(_target.CurrentHitPoints + 1, _target.MaxHitPoints);
+            if (wasDying)
+            {
+                // Умирающему первая помощь даёт 1 временный ПЗ и стабилизацию.
+                // Отметку «При смерти» снимает только последующая Медицина.
+                _target.IsStabilized = true;
+                _target.TemporaryHitPoints = 1;
+                _target.CurrentHitPoints = Math.Max(_target.CurrentHitPoints, 1);
+            }
+            else
+            {
+                _target.CurrentHitPoints = Math.Min(_target.CurrentHitPoints + 1, _target.MaxHitPoints);
+            }
         }
 
         var logEntry = new CombatActionResult
@@ -199,15 +235,28 @@
             DefenderHpAfter = _target.CurrentHitPoints,
             AttackerRoll = _roll.Value,
             AttackerSkillValue = _firstAidSkill,
-            AttackerSuccessLevel = SuccessLevel.RegularSuccess,
-            AttackerWins = true,
-            Summary = wasDying
-                ? $"{_healer.Name} оказывает первую помощь {_target.Name}: бросок {_roll.Value}/{_firstAidSkill} — успех. Умирание остановлено."
-                : $"{_healer.Name} оказывает первую помощь {_target.Name}: бросок {_roll.Value}/{_firstAidSkill} — успех. +1 ОЗ ({hpBefore}→{_target.CurrentHitPoints})."
+            AttackerSuccessLevel = level,
+            AttackerWins = success,
+            Summary = BuildSummary(success, wasDying, hpBefore)
         };
 
         await OnFirstAidApplied.InvokeAsync((_target, wasDying, logEntry));
         Reset();
+    }
+
+    private string BuildSummary(bool success, bool wasDying, int hpBefore)
+    {
+        var head = $"{_healer!.Name} оказывает первую помощь {_target!.Name}: " +
+                   $"бросок {_roll!.Value}/{_firstAidSkill} — " +
+                   CombatService.GetSuccessLevelText(CombatService.CalculateSuccessLevel(_roll.Value, _firstAidSkill)) + ".";
+
+        if (!success)
+            return head + " Повторная проверка по этому ранению не допускается.";
+
+        return wasDying
+            ? head + $" {_target.Name} стабилизирован: 1 временный ПЗ, проверки ВЫН раз в час. " +
+                     "Отметка «При смерти» снимается только Медициной."
+            : head + $" +1 ОЗ ({hpBefore}→{_target.CurrentHitPoints}).";
     }
 
     private void Reset()

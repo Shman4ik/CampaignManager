@@ -120,10 +120,11 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Возвращает список умирающих бойцов для проверок ВЫН в конце раунда.
+    /// Умирающие, которым нужна проверка ВЫН в конце раунда. Стабилизированные
+    /// первой помощью сюда не входят: они проверяются раз в час (стр. 118).
     /// </summary>
     public List<Combatant> GetDyingCombatants() =>
-        Combatants.Where(c => c.IsDying && !c.IsDead).ToList();
+        Combatants.Where(c => c.IsDying && !c.IsDead && !c.IsStabilized).ToList();
 
     public void SetCampaign(Guid campaignId)
     {
@@ -1172,12 +1173,23 @@ public sealed partial class CombatService
             var defender = Combatants.FirstOrDefault(c => c.Id == result.DefenderId);
             if (defender != null)
             {
+                var tookDamage = result.DefenderHpAfter < result.DefenderHpBefore;
+
                 defender.CurrentHitPoints = result.DefenderHpAfter;
                 if (result.DefenderFallsProne) defender.IsProne = true;
                 if (result.DefenderKnockedUnconscious) defender.IsUnconscious = true;
                 if (result.TriggeredMajorWound) defender.HasMajorWound = true;
                 if (result.DefenderDying) defender.IsDying = true;
                 if (result.DefenderDead) defender.IsDead = true;
+
+                // Новое ранение — первую помощь можно пытаться оказать заново,
+                // а прежняя стабилизация утрачена (стр. 118)
+                if (tookDamage)
+                {
+                    defender.FirstAidAttempted = false;
+                    defender.IsStabilized = false;
+                    defender.TemporaryHitPoints = 0;
+                }
 
                 // Вырвался из захвата при манёвре
                 if (result.ActionType == CombatActionType.Maneuver && result.ManeuverSucceeded)
@@ -1199,6 +1211,10 @@ public sealed partial class CombatService
                 if (result.AttackerTriggeredMajorWound) attacker.HasMajorWound = true;
                 if (result.AttackerDying) attacker.IsDying = true;
                 if (result.AttackerDead) attacker.IsDead = true;
+
+                attacker.FirstAidAttempted = false;
+                attacker.IsStabilized = false;
+                attacker.TemporaryHitPoints = 0;
             }
         }
 
