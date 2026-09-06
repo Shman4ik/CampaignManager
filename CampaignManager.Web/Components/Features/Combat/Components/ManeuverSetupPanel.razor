@@ -7,7 +7,9 @@
     <h4 class="text-base font-semibold text-gray-900 mb-3">Боевой манёвр</h4>
 
     <div class="bg-blue-50 border border-blue-200 rounded-md p-2 mb-3 text-xs text-blue-800">
-        Манёвр заменяет атаку. Позволяет: разоружить, сбить с ног, захватить, столкнуть, вырваться или создать помеху.
+        Манёвр заменяет атаку. Позволяет: разоружить, сбить с ног, захватить, столкнуть, вырваться
+        или создать помеху. У манёвра должна быть законченная цель, меняющая положение дел, —
+        «отвести руку» целью не считается (стр. 104).
     </div>
 
     <!-- Инициатор манёвра -->
@@ -39,7 +41,7 @@
             <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
                     value="@_maneuverType"
                     @onchange="OnManeuverTypeChanged">
-                @foreach (var mt in Enum.GetValues<ManeuverType>())
+                @foreach (var mt in AvailableManeuvers)
                 {
                     <option value="@mt">@CombatService.GetManeuverName(mt)</option>
                 }
@@ -289,6 +291,14 @@
         _defenderRoll = _defenderRollDetail.Result;
         _defenderLevel = CombatService.CalculateSuccessLevel(_defenderRoll.Value, _defenderSkill);
     }
+
+    /// <summary>
+    /// Нокаут — необязательное правило, поэтому в списке он появляется только
+    /// когда Хранитель включил его в настройках боя (стр. 123).
+    /// </summary>
+    private IEnumerable<ManeuverType> AvailableManeuvers =>
+        Enum.GetValues<ManeuverType>()
+            .Where(mt => mt != ManeuverType.Knockout || CombatService.UseCinematicKnockout);
 
     private bool CanResolve() =>
         _attacker != null && _defender != null

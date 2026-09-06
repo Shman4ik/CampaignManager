@@ -1,4 +1,4 @@
-@page "/combat"
+﻿@page "/combat"
 @rendermode InteractiveServer
 @attribute [Authorize]
 
@@ -74,6 +74,57 @@ else
                 </button>
             </div>
         </div>
+
+        <!-- Необязательные правила (стр. 122–123) -->
+        <details class="border-t border-gray-200 px-4 py-2">
+            <summary class="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700">
+                Необязательные правила
+            </summary>
+            <div class="mt-2 space-y-2 pb-1">
+                <p class="text-xs text-gray-400">
+                    Книга помечает эти правила как необязательные, поэтому по умолчанию они выключены.
+                </p>
+
+                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                    <input type="checkbox" class="mt-0.5" checked="@CombatService.UseInitiativeRolls"
+                           @onchange="ToggleInitiativeRolls" />
+                    <span>
+                        Броски на инициативу (стр. 122): очерёдность по уровню успеха проверки ЛВК,
+                        огнестрельное на изготовку даёт бонусную кость, 01 — тактическое преимущество,
+                        крах — пропуск хода. Порядок держится до конца боя.
+                    </span>
+                </label>
+
+                @if (CombatService.UseInitiativeRolls)
+                {
+                    <div class="flex items-center gap-2 pl-6">
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RollInitiative">
+                            <span>@(CombatService.InitiativeRolled ? "Перебросить инициативу" : "Бросить инициативу")</span>
+                        </button>
+                        @if (CombatService.InitiativeRolled)
+                        {
+                            <span class="text-xs text-gray-500">Порядок зафиксирован</span>
+                        }
+                    </div>
+                }
+
+                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                    <input type="checkbox" class="mt-0.5" @bind="CombatService.UseCinematicKnockout" />
+                    <span>
+                        «Киношный» нокаут (стр. 123): манёвр ударным оружием отправляет противника
+                        в беспамятство при 1 пункте урона.
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                    <input type="checkbox" class="mt-0.5" @bind="CombatService.UseLuckToStayConscious" />
+                    <span>
+                        Удача против потери сознания (стр. 123): 1 пункт за текущий раунд,
+                        дальше цена удваивается — 2, 4, 8…
+                    </span>
+                </label>
+            </div>
+        </details>
     </div>
 
     <!-- Колонки -->
@@ -506,6 +557,15 @@ else
     }
 
     private void SortInitiative() => CombatService.SortByInitiative();
+
+    private void ToggleInitiativeRolls(ChangeEventArgs e)
+    {
+        CombatService.UseInitiativeRolls = e.Value is true;
+        if (!CombatService.UseInitiativeRolls)
+            CombatService.ClearInitiativeRolls();
+    }
+
+    private void RollInitiative() => CombatService.RollInitiative();
     private void ResetCombat() => CombatService.ResetCombat();
 
     private void HandleAttackResolved(CombatActionResult result)

@@ -72,6 +72,11 @@ public class Combatant
     public string DamageBonus { get; set; } = "0";
     public int Build { get; set; }
     public int ConstitutionValue { get; set; }
+
+    /// <summary>
+    /// Броня: вычитается из физического урона, но не снижает урон от магии,
+    /// яда и утопления (стр. 106).
+    /// </summary>
     public int Armor { get; set; }
 
     // Тактические состояния
@@ -79,8 +84,40 @@ public class Combatant
     public bool IsGrappled { get; set; }   // В захвате
     public Guid? GrappledBy { get; set; }  // Кто держит
 
+    /// <summary>Оружие выбито удачным манёвром «Разоружить» (стр. 103).</summary>
+    public bool IsDisarmed { get; set; }
+
+    /// <summary>
+    /// Поставлен в невыгодное положение манёвром. Правила не задают точный эффект —
+    /// это отметка для Хранителя, который сам решает, какую кость выдать (стр. 103).
+    /// </summary>
+    public bool HasDisadvantage { get; set; }
+
+    /// <summary>
+    /// Сколько Удачи уже потрачено, чтобы не потерять сознание. Цена удваивается
+    /// каждый раунд: 1, 2, 4, 8… Необязательное правило (стр. 123).
+    /// </summary>
+    public int LuckSpentToStayConscious { get; set; }
+
     // Трекинг раунда
     public bool HasFirearmReady { get; set; }     // Огнестрельное на изготовку (+50 к ЛВК)
+
+    // ── Броски на инициативу (необязательное правило, стр. 122) ──────────
+
+    /// <summary>Результат проверки ЛВК на инициативу.</summary>
+    public int? InitiativeRoll { get; set; }
+
+    /// <summary>Кости этой проверки — огнестрельное на изготовку даёт бонусную.</summary>
+    public DiceRollResult? InitiativeRollDetail { get; set; }
+
+    /// <summary>Уровень успеха проверки ЛВК; по нему строится очерёдность.</summary>
+    public int InitiativeRollLevel { get; set; }
+
+    /// <summary>Выпало 01 — тактическое преимущество или бонусная кость к первой атаке.</summary>
+    public bool HasTacticalAdvantage { get; set; }
+
+    /// <summary>Крах в проверке ЛВК — боец пропускает ход.</summary>
+    public bool SkipsTurnFromFumble { get; set; }
     public bool HasDefendedThisRound { get; set; } // Уже защищался в этом раунде
     public int DefenseCountThisRound { get; set; } // Число защитных действий за раунд
     public int AttacksPerRound { get; set; } = 1;  // Число атак за раунд (существа)

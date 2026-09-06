@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Features.Combat.Model;
+﻿namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 /// <summary>
 /// Тип боевого манёвра (CoC 7e, стр. 103)
@@ -20,6 +20,12 @@ public enum ManeuverType
     /// <summary>Вырваться из захвата — схваченный персонаж пытается вырваться</summary>
     BreakFree,
 
-    /// <summary>Поставить в невыгодное положение — штрафная кость к будущим действиям противника</summary>
-    Disadvantage
+    /// <summary>Поставить в невыгодное положение — Хранитель решает, чем это обернётся</summary>
+    Disadvantage,
+
+    /// <summary>
+    /// «Киношный» нокаут ударным оружием: успех отправляет противника в
+    /// беспамятство при 1 пункте урона. Необязательное правило (стр. 123).
+    /// </summary>
+    Knockout
 }

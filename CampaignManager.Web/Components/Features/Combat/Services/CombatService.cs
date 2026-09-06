@@ -22,6 +22,21 @@ public sealed partial class CombatService
 
     public event Action? OnChange;
 
+    // ───────────────── Необязательные правила (стр. 122–123) ─────────────
+    // Книга помечает их как необязательные, поэтому по умолчанию выключены.
+
+    /// <summary>Определять очерёдность броском ЛВК, а не только по значению (стр. 122).</summary>
+    public bool UseInitiativeRolls { get; set; }
+
+    /// <summary>Разрешить «киношный» нокаут манёвром ударным оружием (стр. 123).</summary>
+    public bool UseCinematicKnockout { get; set; }
+
+    /// <summary>Разрешить тратить Удачу, чтобы не потерять сознание (стр. 123).</summary>
+    public bool UseLuckToStayConscious { get; set; }
+
+    /// <summary>Порядок инициативы определён броском и зафиксирован до конца боя.</summary>
+    public bool InitiativeRolled { get; private set; }
+
     // ───────────────────── Управление участниками ─────────────────────
 
     public void AddCombatant(Combatant combatant)
@@ -43,11 +58,105 @@ public sealed partial class CombatService
     /// </summary>
     public void SortByInitiative()
     {
+        // Порядок, определённый броском ЛВК, держится до конца боя (стр. 122)
+        if (UseInitiativeRolls && InitiativeRolled)
+        {
+            Combatants = Combatants
+                .OrderByDescending(c => c.InitiativeRollLevel)
+                .ThenByDescending(c => c.Initiative)
+                .ThenByDescending(c => Math.Max(c.FightingSkill, c.DodgeSkill))
+                .ToList();
+            NotifyStateChanged();
+            return;
+        }
+
         Combatants = Combatants
             .OrderByDescending(c => c.HasFirearmReady ? c.Initiative + 50 : c.Initiative)
             .ThenByDescending(c => Math.Max(c.FightingSkill, c.DodgeSkill))
             .ToList();
         NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Необязательное правило (стр. 122): все проходят проверку ЛВК, порядок задаётся
+    /// уровнем успеха, при равенстве — по ЛВК, затем по боевому навыку. Огнестрельное
+    /// на изготовку даёт бонусную кость. Критический успех — тактическое преимущество,
+    /// крах — пропуск хода. Полученный порядок держится до конца боя.
+    /// </summary>
+    public void RollInitiative()
+    {
+        foreach (var c in Combatants)
+        {
+            var roll = RollD100(c.HasFirearmReady ? 1 : 0, 0);
+            var level = CalculateSuccessLevel(roll.Result, c.Initiative);
+
+            c.InitiativeRoll = roll.Result;
+            c.InitiativeRollDetail = roll;
+            c.InitiativeRollLevel = (int)level;
+            c.HasTacticalAdvantage = level == SuccessLevel.CriticalSuccess;
+            c.SkipsTurnFromFumble = level == SuccessLevel.Fumble;
+        }
+
+        InitiativeRolled = true;
+        SortByInitiative();
+    }
+
+    /// <summary>Сбрасывает броски инициативы — например, при возврате к порядку по ЛВК.</summary>
+    public void ClearInitiativeRolls()
+    {
+        foreach (var c in Combatants)
+        {
+            c.InitiativeRoll = null;
+            c.InitiativeRollDetail = null;
+            c.InitiativeRollLevel = 0;
+            c.HasTacticalAdvantage = false;
+            c.SkipsTurnFromFumble = false;
+        }
+
+        InitiativeRolled = false;
+        SortByInitiative();
+    }
+
+    /// <summary>
+    /// Цена Удачи за то, чтобы остаться в сознании ещё на раунд: 1, 2, 4, 8…
+    /// Необязательное правило (стр. 123).
+    /// </summary>
+    public static int GetLuckCostToStayConscious(Combatant combatant) =>
+        combatant.LuckSpentToStayConscious == 0
+            ? 1
+            : (int)Math.Pow(2, CountLuckPayments(combatant));
+
+    private static int CountLuckPayments(Combatant combatant)
+    {
+        // Потрачено 1+2+4+…+2^(n-1) = 2^n − 1, значит n = log2(spent + 1)
+        var payments = 0;
+        var total = 0;
+        while (total < combatant.LuckSpentToStayConscious)
+        {
+            total += (int)Math.Pow(2, payments);
+            payments++;
+        }
+
+        return payments;
+    }
+
+    /// <summary>
+    /// Тратит Удачу, чтобы боец не потерял сознание до конца текущего раунда.
+    /// Возвращает false, если Удачи не хватает.
+    /// </summary>
+    public bool SpendLuckToStayConscious(Combatant combatant)
+    {
+        if (!UseLuckToStayConscious) return false;
+
+        var cost = GetLuckCostToStayConscious(combatant);
+        if (combatant.Luck < cost) return false;
+
+        combatant.Luck -= cost;
+        combatant.LuckSpentToStayConscious += cost;
+        combatant.IsUnconscious = false;
+
+        NotifyStateChanged();
+        return true;
     }
 
     public void NextTurn()
@@ -1178,8 +1287,13 @@ public sealed partial class CombatService
         // Итого до вычета брони
         result.RawDamage = Math.Max(0, result.DamageRolled + result.BonusDamage + result.ExtraDamage);
 
-        // Броня снижает урон
-        result.ArmorReduction = Math.Min(defender.Armor, result.RawDamage);
+        // Броня снижает урон, но не действует против магии, яда и утопления (стр. 106).
+        // При стрельбе сквозь укрытие добавляется броня преграды (стр. 125).
+        var effectiveArmor = setup.IgnoresArmor
+            ? 0
+            : defender.Armor + Math.Max(0, setup.CoverArmor);
+
+        result.ArmorReduction = Math.Min(effectiveArmor, result.RawDamage);
         result.TotalDamage = result.RawDamage - result.ArmorReduction;
 
         // ── Расчёт последствий урона ──
@@ -1511,17 +1625,30 @@ public sealed partial class CombatService
             case ManeuverType.Push:
                 defender.IsProne = true;
                 break;
+
             case ManeuverType.Grapple:
                 defender.IsGrappled = true;
                 defender.GrappledBy = result.AttackerId;
                 break;
+
             case ManeuverType.BreakFree:
                 defender.IsGrappled = false;
                 defender.GrappledBy = null;
                 break;
+
             case ManeuverType.Disarm:
+                defender.IsDisarmed = true;
+                break;
+
             case ManeuverType.Disadvantage:
-                // Визуально — в журнале
+                // Правила не задают конкретный эффект — оставляем отметку Хранителю
+                defender.HasDisadvantage = true;
+                break;
+
+            case ManeuverType.Knockout:
+                // «Киношный» нокаут: 1 пункт урона и потеря сознания (стр. 123)
+                defender.CurrentHitPoints = Math.Max(0, defender.CurrentHitPoints - 1);
+                defender.IsUnconscious = true;
                 break;
         }
     }
@@ -1640,6 +1767,7 @@ public sealed partial class CombatService
         ManeuverType.Push => "Толкнуть",
         ManeuverType.BreakFree => "Вырваться",
         ManeuverType.Disadvantage => "Невыгодное положение",
+        ManeuverType.Knockout => "Нокаут (необязательное правило)",
         _ => "Манёвр"
     };
 

@@ -1,4 +1,7 @@
 ﻿@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+
+@inject CombatService CombatService
 
 <div class="bg-white rounded-md shadow-sm border border-gray-200 p-3 mb-2 border-l-4 @(IsActive ? "border-l-blue-500" : "border-l-transparent")
             @(Combatant.IsDead ? "opacity-50" : "")">
@@ -17,7 +20,18 @@
                 }
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
-                ИН: @(Combatant.HasFirearmReady ? Combatant.Initiative + 50 : Combatant.Initiative) &middot; ЛВК: @Combatant.Dexterity
+                @if (CombatService.UseInitiativeRolls && Combatant.InitiativeRoll is { } initRoll)
+                {
+                    <text>Инициатива: @initRoll / @Combatant.Initiative — @CombatService.GetSuccessLevelText((SuccessLevel)Combatant.InitiativeRollLevel)</text>
+                    @if (Combatant.InitiativeRollDetail is { HasExtraDice: true })
+                    {
+                        <text> @CombatService.FormatRollDetail(Combatant.InitiativeRollDetail)</text>
+                    }
+                }
+                else
+                {
+                    <text>ИН: @(Combatant.HasFirearmReady ? Combatant.Initiative + 50 : Combatant.Initiative) &middot; ЛВК: @Combatant.Dexterity</text>
+                }
                 @if (Combatant.Armor > 0) { <span> &middot; Броня: @Combatant.Armor</span> }
                 @if (Combatant.Build != 0) { <span> &middot; Комп: @(Combatant.Build > 0 ? "+" : "")@Combatant.Build</span> }
                 @if (Combatant.DefenseCountThisRound > 0)
@@ -74,6 +88,32 @@
                 <span class="bg-amber-600 text-white text-xs px-1.5 py-0.5 rounded font-medium"
                       title="Укрывался от огня и теряет атаку (стр. 111)">
                     Без атаки в раунде @Combatant.AttackBlockedInRound
+                </span>
+            }
+            @if (Combatant.IsDisarmed && !Combatant.IsDead)
+            {
+                <span class="bg-yellow-600 text-white text-xs px-1.5 py-0.5 rounded font-medium"
+                      title="Оружие выбито манёвром (стр. 103)">Разоружён</span>
+            }
+            @if (Combatant.HasDisadvantage && !Combatant.IsDead)
+            {
+                <span class="bg-yellow-700 text-white text-xs px-1.5 py-0.5 rounded font-medium"
+                      title="Правила не задают точный эффект — Хранитель сам решает, какую кость выдать (стр. 103)">
+                    Невыгодное положение
+                </span>
+            }
+            @if (Combatant.HasTacticalAdvantage && !Combatant.IsDead)
+            {
+                <span class="bg-emerald-600 text-white text-xs px-1.5 py-0.5 rounded font-medium"
+                      title="01 в проверке инициативы: тактическое преимущество или бонусная кость к первой атаке (стр. 122)">
+                    Преимущество
+                </span>
+            }
+            @if (Combatant.SkipsTurnFromFumble && !Combatant.IsDead)
+            {
+                <span class="bg-rose-700 text-white text-xs px-1.5 py-0.5 rounded font-medium"
+                      title="Крах в проверке инициативы — боец пропускает ход (стр. 122)">
+                    Пропуск хода
                 </span>
             }
             @if (Combatant.IsStabilized && !Combatant.IsDead)
@@ -179,7 +219,26 @@
                 <div class="h-1.5 rounded-full bg-purple-500 transition-all" style="width: @GetSanityPercent()%"></div>
             </div>
         </div>
+
+        <!-- Броня (стр. 106) -->
+        <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-600 font-medium" title="Вычитается из физического урона, но не из урона от магии, яда и утопления (стр. 106)">Броня</span>
+            <div class="flex items-center gap-1">
+                <button @onclick="() => AdjustArmor(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 text-xs flex items-center justify-center">−</button>
+                <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.Armor</span>
+                <button @onclick="() => AdjustArmor(1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-green-100 text-gray-600 hover:text-green-600 text-xs flex items-center justify-center">+</button>
+            </div>
+        </div>
     </div>
+
+    @if (CanSpendLuck)
+    {
+        <button type="button" @onclick="SpendLuck"
+                class="mt-2 w-full rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100">
+            Остаться в сознании за @CombatService.GetLuckCostToStayConscious(Combatant) Удачи
+            (осталось @Combatant.Luck)
+        </button>
+    }
 
     <!-- Оружие / Атаки (свёрнуты по умолчанию) -->
     @if (HasActions())
@@ -255,6 +314,18 @@
     private void ToggleAiming() => Combatant.IsAiming = !Combatant.IsAiming;
     private void ToggleUnconscious() => Combatant.IsUnconscious = !Combatant.IsUnconscious;
 
+    /// <summary>Можно ли предложить трату Удачи, чтобы остаться в сознании (стр. 123).</summary>
+    private bool CanSpendLuck =>
+        CombatService.UseLuckToStayConscious
+        && Combatant.IsUnconscious
+        && !Combatant.IsDead
+        && Combatant.Luck >= CombatService.GetLuckCostToStayConscious(Combatant);
+
+    private void SpendLuck() => CombatService.SpendLuckToStayConscious(Combatant);
+
+    private void AdjustArmor(int delta) =>
+        Combatant.Armor = Math.Max(0, Combatant.Armor + delta);
+
     private bool HasAnyState() =>
         Combatant.IsUnconscious || Combatant.HasMajorWound || Combatant.IsDying || Combatant.IsDead
         || Combatant.HasTemporaryInsanity || Combatant.HasIndefiniteInsanity
@@ -263,7 +334,9 @@
         || Combatant.JammedWeaponName != null
         || Combatant.IsStabilized
         || Combatant.AttackBlockedInRound.HasValue
-        || Combatant.AttacksPerRound > 1;
+        || Combatant.AttacksPerRound > 1
+        || Combatant.IsDisarmed || Combatant.HasDisadvantage
+        || Combatant.HasTacticalAdvantage || Combatant.SkipsTurnFromFumble;
 
     private bool HasActions() =>
         (Combatant.CharacterSource?.Weapons.Count > 0)
