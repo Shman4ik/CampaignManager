@@ -1,6 +1,8 @@
 @using CampaignManager.Web.Components.Features.Chase.Model
 @using CampaignManager.Web.Components.Features.Chase.Services
 
+@inject ChaseService ChaseService
+
 <div class="bg-white rounded-md shadow-sm border border-gray-200 p-3 mb-2 border-l-4
             @(IsActive ? "border-l-accent-500" : "border-l-transparent")
             @(!Participant.IsActive ? "opacity-50" : "")">
@@ -21,6 +23,14 @@
                 {
                     <span class="bg-accent-100 text-accent-700 text-xs px-1.5 py-0.5 rounded font-medium">Игрок</span>
                 }
+                @if (Participant.IsPassenger)
+                {
+                    <span class="bg-secondary-100 text-secondary-700 text-xs px-1.5 py-0.5 rounded font-medium">Пассажир</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Participant.RouteLabel))
+                {
+                    <span class="bg-gray-100 text-gray-700 text-xs px-1.5 py-0.5 rounded font-medium">@Participant.RouteLabel</span>
+                }
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
                 @if (Participant.IsInVehicle)
@@ -29,7 +39,7 @@
                 }
                 else
                 {
-                    <span>Пешком (СКО: @Participant.MovementRate)</span>
+                    <span>@ModeLabel (СКО: @Participant.BaseMov)</span>
                 }
                 @if (Participant.SpeedCheckCompleted)
                 {
@@ -63,6 +73,43 @@
             @if (Participant.IsEliminated)
             {
                 <span class="bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-medium">Выбыл</span>
+            }
+            @if (Participant.IsOutOfChase)
+            {
+                <span class="bg-gray-500 text-white text-xs px-1.5 py-0.5 rounded font-medium"
+                      title="Преследователь медленнее самого медленного убегающего — в погоне не учитывается (стр. 140)">
+                    Не в погоне
+                </span>
+            }
+        </div>
+    }
+
+    <!-- Транспорт: Комплекция как прочность (стр. 136) -->
+    @if (Participant.IsInVehicle && Participant.VehicleBuild > 0)
+    {
+        <div class="mb-2">
+            <div class="flex items-center justify-between text-xs mb-0.5">
+                <span class="text-gray-600 font-medium">
+                    Комплекция транспорта
+                    @if (Participant.VehicleArmor > 0)
+                    {
+                        <span class="text-gray-400">· броня @Participant.VehicleArmor</span>
+                    }
+                </span>
+                <span class="text-gray-900 font-semibold">
+                    @Participant.VehicleCurrentBuild.ToString("0.#") / @Participant.VehicleBuild.ToString("0.#")
+                    @if (Participant.VehicleDamageCarry > 0)
+                    {
+                        <span class="text-gray-400 font-normal">(+@Participant.VehicleDamageCarry)</span>
+                    }
+                </span>
+            </div>
+            <div class="bg-gray-200 rounded-full h-1.5">
+                <div class="h-1.5 rounded-full transition-all @GetBuildBarColor()" style="width: @GetBuildPercent()%"></div>
+            </div>
+            @if (Participant.IsVehicleWrecked)
+            {
+                <p class="text-xs text-error-600 mt-0.5">Транспорт разбит — Комплекция на нуле.</p>
             }
         </div>
     }
@@ -119,6 +166,63 @@
                        value="@Participant.CurrentLocation"
                        @onchange="HandleLocationChange" />
             </div>
+
+            <!-- Транспорт из таблицы V (стр. 143) -->
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-600 shrink-0">Транспорт:</label>
+                <select class="text-xs border border-gray-200 rounded pl-1.5 pr-6 py-1 flex-1 min-w-0"
+                        value="@(Participant.IsInVehicle ? Participant.VehicleName : "")"
+                        @onchange="HandleVehicleChange">
+                    <option value="">Пешком</option>
+                    @foreach (var category in ChaseReference.VehicleCategories)
+                    {
+                        <optgroup label="@category">
+                            @foreach (var vehicle in ChaseReference.Vehicles.Where(v => v.Category == category))
+                            {
+                                <option value="@vehicle.Name">
+                                    @vehicle.Name — СКО @vehicle.Speed, Компл. @vehicle.Build.ToString("0.#")
+                                </option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+            </div>
+
+            @if (!Participant.IsInVehicle)
+            {
+                <!-- Способ передвижения (стр. 141) -->
+                <div class="flex items-center gap-2">
+                    <label class="text-xs text-gray-600 shrink-0">Способ:</label>
+                    <select class="text-xs border border-gray-200 rounded pl-1.5 pr-6 py-1" value="@Participant.Mode"
+                            @onchange="HandleModeChange">
+                        <option value="@MovementMode.OnFoot">Пешком</option>
+                        <option value="@MovementMode.Swimming">Вплавь</option>
+                        <option value="@MovementMode.Flying">По воздуху</option>
+                    </select>
+                    @if (Participant.Mode != MovementMode.OnFoot)
+                    {
+                        <input type="number" min="0" placeholder="своя СКО"
+                               class="text-xs border border-gray-200 rounded px-1.5 py-1 w-20"
+                               value="@Participant.NativeModeSpeed"
+                               @onchange="HandleNativeSpeedChange"
+                               title="0 — своей СКО для способа нет, берётся половина обычной" />
+                    }
+                </div>
+            }
+
+            <div class="flex items-center gap-2 flex-wrap">
+                <label class="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                    <input type="checkbox" class="rounded border-gray-300" checked="@Participant.IsPassenger"
+                           @onchange="HandlePassengerChange" />
+                    Пассажир
+                </label>
+                <label class="text-xs text-gray-600">Маршрут:</label>
+                <input type="text" placeholder="общий"
+                       class="text-xs border border-gray-200 rounded px-1.5 py-1 w-20"
+                       value="@Participant.RouteLabel"
+                       @onchange="HandleRouteChange"
+                       title="Разные метки — разные, независимо отслеживаемые погони (стр. 142)" />
+            </div>
         </div>
     }
 </div>
@@ -138,7 +242,7 @@
         Participant.CurrentHitPoints = Math.Clamp(Participant.CurrentHitPoints + delta, 0, Participant.MaxHitPoints);
 
     private bool HasAnyState() =>
-        Participant.IsCaught || Participant.HasEscaped || Participant.IsEliminated;
+        Participant.IsCaught || Participant.HasEscaped || Participant.IsEliminated || Participant.IsOutOfChase;
 
     private double GetHpPercent() => Participant.MaxHitPoints > 0
         ? Math.Max(0, (double)Participant.CurrentHitPoints / Participant.MaxHitPoints * 100) : 0;
@@ -162,4 +266,59 @@
         if (int.TryParse(e.Value?.ToString(), out var loc))
             await OnLocationChanged.InvokeAsync((Participant.Id, loc));
     }
+
+    private string ModeLabel => Participant.Mode switch
+    {
+        MovementMode.Swimming => "Вплавь",
+        MovementMode.Flying => "По воздуху",
+        _ => "Пешком"
+    };
+
+    private double GetBuildPercent() => Participant.VehicleBuild > 0
+        ? Math.Max(0, Participant.VehicleCurrentBuild / Participant.VehicleBuild * 100) : 0;
+
+    private string GetBuildBarColor()
+    {
+        var pct = GetBuildPercent();
+        if (pct > 50) return "bg-accent-500";
+        if (pct > 25) return "bg-warning-500";
+        return "bg-error-500";
+    }
+
+    private void HandleVehicleChange(ChangeEventArgs e)
+    {
+        var name = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ChaseService.RemoveVehicle(Participant.Id);
+            return;
+        }
+
+        var template = ChaseReference.FindVehicle(name);
+        if (template is not null)
+            ChaseService.SetVehicleFromTemplate(Participant.Id, template);
+    }
+
+    private void HandleModeChange(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<MovementMode>(e.Value?.ToString(), out var mode))
+            ChaseService.ChangeMovementMode(Participant.Id, mode, Participant.NativeModeSpeed);
+    }
+
+    private void HandleNativeSpeedChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var speed))
+            ChaseService.ChangeMovementMode(Participant.Id, Participant.Mode, Math.Max(0, speed));
+    }
+
+    private void HandlePassengerChange(ChangeEventArgs e)
+    {
+        var isPassenger = e.Value is bool b && b;
+        var carrier = ChaseService.Participants
+            .FirstOrDefault(p => p.IsInVehicle && p.Id != Participant.Id);
+        ChaseService.SetPassenger(Participant.Id, isPassenger, carrier?.Id);
+    }
+
+    private void HandleRouteChange(ChangeEventArgs e) =>
+        ChaseService.SetRoute(Participant.Id, e.Value?.ToString());
 }

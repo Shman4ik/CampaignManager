@@ -3,10 +3,86 @@
 Chase-scene resolution per Call of Cthulhu 7e rules (Chapter 7).
 
 ## Key Services
-- `ChaseService` — **not** the standard DI/DbContextFactory pattern (see root `CLAUDE.md` "Service Pattern"). It's a stateful, in-memory session service holding `Phase`, `Participants`, `Locations`, `CurrentRound`, `CurrentTurnIndex`, `ChaseLog`. The Keeper enters all dice results manually — the service never rolls dice itself.
+- `ChaseService` (`sealed partial class`) — **not** the standard DI/DbContextFactory pattern (see root `CLAUDE.md` "Service Pattern"). It's a stateful, in-memory session service holding `Phase`, `Participants`, `Locations`, `CurrentRound`, `CurrentTurnIndex`, `ChaseLog`. The Keeper enters all dice results manually — the service never rolls dice itself. Split across `ChaseService.cs` (части 1–4) и `ChaseService.Rules.cs` (столкновения транспорта и часть 5) — проверяй оба файла, прежде чем считать, что метода нет.
+- `ChaseSessionService` — обычный CRUD-сервис по шаблону из корневого CLAUDE.md. Хранит сцену в `games."ChaseSessions"` (JSONB, уникальный индекс по паре Хранитель + кампания).
+
+## Персистентность
+`ChaseService` живёт в circuit, поэтому сама по себе погоня не переживает ни обновление вкладки,
+ни обрыв связи — на планшете за столом это происходит регулярно. Поэтому:
+- `CreateSnapshot()` / `RestoreSnapshot()` сериализуют **всё** состояние, включая `CharacterSource`
+  и `CreatureSource` внутри участников (иначе после восстановления перестаёт работать автоподстановка
+  значений навыков).
+- Страница сохраняет снапшот в `OnAfterRenderAsync` по флагу `_pendingSave`, который взводит подписка
+  на `ChaseService.OnChange`. Сохранять из фонового таймера не нужно — рендер и так происходит
+  после каждого изменения.
+- Добавил новое поле в состояние погони — добавь его в `ChaseSnapshot`, `CreateSnapshot` и
+  `RestoreSnapshot`, иначе оно молча потеряется при переподключении.
+- «Сбросить погоню» удаляет и сохранённую сцену.
 
 ## Key Models
-- `ChaseParticipant`, `ChaseLocation`, `ChaseActionResult`.
+- `ChaseParticipant`, `ChaseLocation`, `ChaseActionResult`, `ChaseSnapshot`, `ChaseSessionDto`.
+- `ChaseReference` — статические данные из книги: таблица V «Транспортные средства» (стр. 143),
+  таблица III «Другие виды урона» (стр. 122), таблица VI «Столкновения транспорта» (стр. 145),
+  типовые ПЗ преград и списки примеров помех и преград. Новые справочные значения из книги — сюда,
+  а не в разметку компонентов.
+
+## Разрешение действий — обязательный контракт
+`Resolve*` / `MoveForward` / `RecordOtherAction` — **чистые функции**: считают бросок и заполняют
+`ChaseActionResult`, но не трогают ни `Participants`, ни `Locations`, ни `ChaseLog`. Всё состояние
+меняет единственный метод `ApplyResult`, он же пишет в журнал и вызывает `RefreshChaseState`.
+Новое действие добавлять по той же схеме, иначе журнал начнёт двоиться, а «Отменить» в панели
+предпросмотра перестанет работать (страница держит результат в `PendingResult` до подтверждения).
+Что именно применяется, `ApplyResult` берёт из полей результата:
+- `ActorMovementActionsSpent` — списывается с исполнителя;
+- `MovementActionsLost` + `HpAfter` — достаются **цели** (`TargetId`), а если её нет — исполнителю;
+- `BarrierLocation` + `BarrierHpAfter` — урон преграде (при 0 ПЗ она сама станет помехой-обломками);
+- `LocationAfter` — новая локация исполнителя.
+
+Действия, которые применяются сразу и мимо `ApplyResult` (проверка скорости, пропуск хода,
+`MarkCaught`), обязаны выставлять `IsApplied = true` — это защита от повторного применения.
+
+## Правила, где легко ошибиться
+- **Помехи и преграды лежат в СЛЕДУЮЩЕЙ локации.** Номер локации передаётся в `ResolveHazard` /
+  `ResolveBarrier` / `AttemptDestroyBarrier` параметром — не выводить его из `CurrentLocation` внутри сервиса.
+- **Помеха всегда пропускает дальше** (стр. 133): и успех, и провал двигают участника в следующую
+  локацию, провал добавляет урон и 1d3 потерянных действий. Преграда при провале оставляет на месте.
+- **Совпадение локаций — это не поимка** (стр. 135). Оно лишь открывает ближний бой и манёвр;
+  `IsCaught` выставляет только Хранитель через `MarkCaught`. Автоматически фиксируется только побег.
+- **Огнестрел бьёт на любую дистанцию** (стр. 136) — цель стрельбы не обязана быть в той же локации.
+  Стрельба стоя стоит 1 действие, на ходу — 0 действий и штрафную кость.
+- **Стартовая расстановка** (стр. 130): преследователи на локации 1, жертвы на `1 + StartGap`,
+  где `StartGap` — 1 или 2. Делает `SetupTrack` / `ApplyDefaultPositions`; локации нумеруются с 1, не с 0.
+- **Самая медленная СКО считается без пассажиров и без слишком медленных преследователей** (стр. 140):
+  преследователь со СКО ниже самой медленной жертвы получает `IsOutOfChase` и выпадает из `IsActive`.
+  Единственная точка расчёта — `RecalculateChaseSpeeds()`; не считать `MinAdjustedMov` вручную.
+- **Комплекция в погоне — это Комплекция транспорта, если участник за рулём** (`EffectiveBuild`).
+  Урон транспорту снимает Комплекцию не сразу: каждые полные 10 пунктов — 1 Комплекции,
+  остаток копится в `VehicleDamageCarry`.
+- **Пассажиры** (стр. 139) не проходят проверку скорости и не получают действий перемещения,
+  но ходят в общем порядке ЛВК. `CalculateMovementActions` обрабатывает их отдельной веткой.
+- **Поимка и побег — не одно и то же по механике.** Побег фиксируется автоматически; поимка,
+  укрытие (`ResolveHide`) и потеря следа (`ResolveTrackingCheck`) идут через `RemovesActorFromChase`
+  или `MarkCaught`.
+
+## Оформление страницы
+Раскладка повторяет `Combat/Pages/CombatHelperPage.razor` — контейнер `max-w-7xl mx-auto px-4 py-6`,
+панель раунда карточкой `cm-card mb-4` со скрываемым журналом, необязательные правила в `<details>`
+внутри неё. Расхождения между двумя помощниками нужно исправлять, а не плодить.
+
+**Одно намеренное расхождение: журнал лежит внизу на всю ширину (`col-span-12`), а не в правой
+колонке, как в бою.** Рабочая область — участники `lg:col-span-4` плюс трасса и действия
+`lg:col-span-8`. Причина в длине записей: строка вроде «Артур таранит Вампира (Вождение) — бросок 30
+против 50 (обычный успех). Урон 27 (5d10): Комплекция цели −2. Отдача 13: своя Комплекция −1» в колонке
+шириной 230px (портрет iPad) разворачивается на десяток строк, а на полной ширине занимает одну.
+Живой результат действия Хранитель и так видит в карточке предпросмотра в центре, поэтому журнал —
+это история, а не оперативный индикатор. Не возвращать его в колонку ради симметрии с боем.
+
+Новый `ChaseActionType` обязательно добавить во все три словаря `ChaseLog` (`GetBorderColor`,
+`GetActionColor`, `GetActionLabel`) — иначе запись молча останется без подписи.
+
+Проверять изменения обязательно на iPad Pro M2 (1366×1024 и 1024×1366) — см. корневой `CLAUDE.md`,
+раздел «Target device». На этой странице кнопок действий больше десятка, поэтому ряд действий
+всегда `flex-wrap`, а панели ввода — `grid-cols-2`, чтобы в портретной ориентации ничего не уезжало.
 
 ## Notes
 - If you're extending chase resolution, follow the existing stateful-service shape rather than converting it to the DbContextFactory CRUD pattern — it mirrors `Combat/CLAUDE.md`'s `CombatService`, which has the same deliberate deviation.

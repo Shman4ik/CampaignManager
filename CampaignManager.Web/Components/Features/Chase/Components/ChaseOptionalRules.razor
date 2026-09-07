@@ -1,0 +1,211 @@
+@using CampaignManager.Web.Components.Features.Chase.Model
+@using CampaignManager.Web.Components.Features.Chase.Services
+
+@inject ChaseService ChaseService
+
+@* Необязательные правила погони (часть 5, стр. 137). Как и в бою, по умолчанию выключены. *@
+<details class="border-t border-gray-200 px-4 py-2">
+    <summary class="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700">
+        Необязательные правила
+    </summary>
+    <div class="mt-2 space-y-3 pb-1">
+        <p class="text-xs text-gray-400">
+            Книга помечает эти правила как необязательные, поэтому по умолчанию они выключены.
+        </p>
+
+        <!-- Случайные помехи (стр. 137) -->
+        <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+            <input type="checkbox" class="mt-0.5" @bind="ChaseService.UseRandomHazards" />
+            <span>
+                Случайные помехи (стр. 137): бросок 1d100 на локацию — 01–59 чисто, ≥60 обычная,
+                ≥85 трудная, ≥96 чрезвычайная. Тяжёлая дорога даёт штрафную кость, свободная автострада — бонусную.
+            </span>
+        </label>
+
+        @if (ChaseService.UseRandomHazards)
+        {
+            <div class="flex flex-wrap items-end gap-2 pl-6">
+                <div>
+                    <label class="text-xs text-gray-500 block">Локация</label>
+                    <input type="number" min="1" @bind="_hazardLocation"
+                           class="w-16 text-sm border border-gray-300 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block">Бросок d100</label>
+                    <input type="number" min="1" max="100" @bind="_hazardRoll" placeholder="авто"
+                           class="w-20 text-sm border border-gray-300 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block">Кость за дорогу</label>
+                    <select @bind="_roadDie" class="text-sm border border-gray-300 rounded px-2 py-1">
+                        <option value="0">без модификатора</option>
+                        <option value="1">бонусная (свободная трасса)</option>
+                        <option value="-1">штрафная (сложная дорога)</option>
+                    </select>
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RollRandomHazard">
+                    <span>Бросить</span>
+                </button>
+            </div>
+        }
+
+        <!-- Внезапные помехи (стр. 137) -->
+        <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+            <input type="checkbox" class="mt-0.5" @bind="ChaseService.UseSuddenHazards" />
+            <span>
+                Внезапные помехи (стр. 137): общая проверка Удачи. Успех — помеху размещают игроки,
+                провал — Хранитель. Право объявления чередуется, дважды подряд одна сторона не объявляет.
+            </span>
+        </label>
+
+        @if (ChaseService.UseSuddenHazards)
+        {
+            <div class="flex flex-wrap items-end gap-2 pl-6">
+                <span class="text-xs text-gray-500 pb-1.5">
+                    Очередь объявлять:
+                    <span class="font-medium text-accent-700">
+                        @(ChaseService.SuddenHazardIsPlayersTurn ? "игроки" : "Хранитель")
+                    </span>
+                </span>
+                <div>
+                    <label class="text-xs text-gray-500 block">Общая Удача</label>
+                    <input type="number" min="1" max="99" @bind="_luckValue"
+                           class="w-20 text-sm border border-gray-300 rounded px-2 py-1" />
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block">Бросок d100</label>
+                    <input type="number" min="1" max="100" @bind="_luckRoll" placeholder="авто"
+                           class="w-20 text-sm border border-gray-300 rounded px-2 py-1" />
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RollSuddenHazard">
+                    <span>Проверка Удачи</span>
+                </button>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="PassTurn">
+                    <span>Передать очередь</span>
+                </button>
+            </div>
+        }
+
+        <!-- Педаль в пол (стр. 137) -->
+        <label class="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+            <input type="checkbox" class="mt-0.5" @bind="ChaseService.UseFloorIt" />
+            <span>
+                «Педаль в пол» (стр. 137): транспорт проезжает 2–5 локаций за одно действие перемещения.
+                2–3 локации дают одну штрафную кость ко всем помехам на пути, 4–5 — две.
+                Заявляется до перемещения и не отменяется.
+            </span>
+        </label>
+
+        <!-- Встречная проверка ЛВК при равной инициативе (стр. 131) -->
+        @if (_dexterityTies.Count > 0)
+        {
+            <div class="border-t border-gray-200 pt-2">
+                <p class="text-xs text-gray-700 mb-1">
+                    Равная ЛВК — по правилам порядок решает встречная проверка ЛВК (стр. 131).
+                </p>
+                @foreach (var (first, second) in _dexterityTies)
+                {
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                        <span class="text-xs text-gray-500">
+                            @first.Name и @second.Name — ЛВК @first.Dexterity
+                        </span>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                @onclick="() => ResolveTie(first.Id, second.Id)">
+                            <span>Бросить встречную ЛВК</span>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Бегство с места событий (стр. 142) -->
+        <div class="border-t border-gray-200 pt-2">
+            <p class="text-xs text-gray-700 mb-1">
+                Бегство с места событий (стр. 142): правилами погони можно просто отсчитать,
+                сколько локаций участник покроет за отведённое время.
+            </p>
+            <div class="flex flex-wrap items-end gap-2">
+                <div>
+                    <label class="text-xs text-gray-500 block">Кто</label>
+                    <select @bind="_fleeParticipantId" class="text-sm border border-gray-300 rounded px-2 py-1">
+                        <option value="">— выберите —</option>
+                        @foreach (var p in ChaseService.Participants.Where(p => p.IsActive))
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block">Раундов</label>
+                    <input type="number" min="1" max="50" @bind="_fleeRounds"
+                           class="w-16 text-sm border border-gray-300 rounded px-2 py-1" />
+                </div>
+                <span class="text-xs text-gray-600 pb-1.5">
+                    @if (Guid.TryParse(_fleeParticipantId, out var fleeId))
+                    {
+                        <span class="font-medium text-accent-700">
+                            @ChaseService.LocationsText(ChaseService.GetLocationsCoveredIn(fleeId, _fleeRounds))
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="text-gray-400">выберите участника</span>
+                    }
+                </span>
+            </div>
+        </div>
+    </div>
+</details>
+
+@code {
+    private int _hazardLocation = 1;
+    private int _hazardRoll;
+    private int _roadDie;
+    private int _luckValue = 50;
+    private int _luckRoll;
+
+    private void RollRandomHazard()
+    {
+        var bonus = _roadDie > 0 ? 1 : 0;
+        var penalty = _roadDie < 0 ? 1 : 0;
+        var result = ChaseService.RollRandomHazard(
+            _hazardRoll > 0 ? _hazardRoll : null, bonus, penalty, _hazardLocation);
+
+        ChaseService.LogExternalResult(result);
+        _hazardRoll = 0;
+    }
+
+    private void RollSuddenHazard()
+    {
+        var result = ChaseService.ResolveSuddenHazard(_luckValue, _luckRoll > 0 ? _luckRoll : null);
+        ChaseService.LogExternalResult(result);
+        ChaseService.PassSuddenHazardTurn();
+        _luckRoll = 0;
+    }
+
+    private void PassTurn() => ChaseService.PassSuddenHazardTurn();
+
+    private string _fleeParticipantId = "";
+    private int _fleeRounds = 3;
+
+    /// <summary>Пары соседей по порядку ходов с одинаковой ЛВК — им нужна встречная проверка (стр. 131).</summary>
+    private List<(ChaseParticipant First, ChaseParticipant Second)> _dexterityTies
+    {
+        get
+        {
+            var active = ChaseService.Participants.Where(p => p.IsActive).ToList();
+            var ties = new List<(ChaseParticipant, ChaseParticipant)>();
+
+            for (var i = 0; i + 1 < active.Count; i++)
+            {
+                if (active[i].Dexterity == active[i + 1].Dexterity)
+                    ties.Add((active[i], active[i + 1]));
+            }
+
+            return ties;
+        }
+    }
+
+    private void ResolveTie(Guid firstId, Guid secondId) =>
+        ChaseService.ResolveDexterityTie(firstId, secondId, null, null);
+}

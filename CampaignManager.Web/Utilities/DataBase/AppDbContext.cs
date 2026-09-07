@@ -1,6 +1,7 @@
 ﻿using CampaignManager.Web.Components.Features.Admin.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Books.Model;
+using CampaignManager.Web.Components.Features.Chase.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Items.Model;
@@ -45,6 +46,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // LLM Knowledge Base
     public DbSet<LlmKnowledgeEntry> LlmKnowledgeEntries { get; set; } = null!;
+
+    // Сохранённые сцены погони
+    public DbSet<ChaseSessionDto> ChaseSessions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -307,6 +311,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             entity.HasIndex(e => new { e.EntityType, e.EntityId, e.CreatedAt })
                 .IsDescending(false, false, true);
+        });
+
+        // ChaseSession Configuration
+        modelBuilder.Entity<ChaseSessionDto>(entity =>
+        {
+            entity.ToTable("ChaseSessions");
+            entity.Property(e => e.KeeperEmail).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.State).HasColumnType("jsonb");
+            entity.HasIndex(e => new { e.KeeperEmail, e.CampaignId }).IsUnique();
         });
     }
 }

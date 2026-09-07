@@ -1,10 +1,18 @@
 @using CampaignManager.Web.Components.Features.Chase.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
-<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4 h-full">
-    <h3 class="text-lg font-semibold text-gray-900 mb-3">Журнал погони</h3>
+@* Журнал лежит под рабочей областью на всю ширину: в узкой колонке записи
+   разворачивались на десяток строк, а на планшете это съедало полэкрана. *@
+<div class="bg-white rounded-md shadow-sm border border-gray-200 p-4">
+    <div class="flex items-baseline justify-between mb-3">
+        <h3 class="text-lg font-semibold text-gray-900">Журнал погони</h3>
+        @if (LogEntries.Count > 0)
+        {
+            <span class="text-xs text-gray-400">записей: @LogEntries.Count</span>
+        }
+    </div>
 
-    <div class="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+    <div class="max-h-[34vh] overflow-y-auto space-y-2 pr-1">
         @if (LogEntries.Count == 0)
         {
             <p class="text-sm text-gray-400 text-center py-4">Журнал пуст</p>
@@ -13,23 +21,36 @@
         {
             @foreach (var entry in LogEntries)
             {
-                <div class="border-l-4 @GetBorderColor(entry) bg-gray-50 rounded-r-md p-3">
-                    <div class="flex items-center gap-2 mb-1">
+                @* На широкой полосе метки и текст умещаются в одну строку *@
+                <div class="border-l-4 @GetBorderColor(entry) bg-gray-50 rounded-r-md px-3 py-2
+                            flex flex-col sm:flex-row sm:items-baseline gap-x-3 gap-y-1">
+                    <div class="flex items-center gap-2 shrink-0">
                         <span class="inline-block bg-primary-100 text-primary-800 text-xs font-medium rounded px-1.5 py-0.5">
                             Р.@entry.Round
                         </span>
-                        <span class="text-xs text-gray-400">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                        <span class="text-xs text-gray-400 tabular-nums">@entry.Timestamp.ToString("HH:mm:ss")</span>
                         <span class="text-xs font-medium @GetActionColor(entry)">@GetActionLabel(entry)</span>
                     </div>
-                    <p class="text-sm text-gray-700 leading-snug">@entry.Summary</p>
-                    @if (entry.BonusDiceUsed > 0)
-                    {
-                        <p class="text-xs text-accent-600 mt-0.5">Бонусных костей: @entry.BonusDiceUsed</p>
-                    }
-                    @if (entry.MovementActionsLost > 0)
-                    {
-                        <p class="text-xs text-error-600 mt-0.5">Потеряно действий: @entry.MovementActionsLost</p>
-                    }
+                    <div class="min-w-0">
+                        <p class="text-sm text-gray-700 leading-snug">@entry.Summary</p>
+                        @if (entry.BonusDiceUsed > 0 || entry.PenaltyDice > 0)
+                        {
+                            <p class="text-xs mt-0.5">
+                                @if (entry.BonusDiceUsed > 0)
+                                {
+                                    <span class="text-accent-600">Бонусных костей: @entry.BonusDiceUsed</span>
+                                }
+                                @if (entry.BonusDiceUsed > 0 && entry.PenaltyDice > 0)
+                                {
+                                    <span class="text-gray-400"> · </span>
+                                }
+                                @if (entry.PenaltyDice > 0)
+                                {
+                                    <span class="text-warning-700">Штрафных костей: @entry.PenaltyDice</span>
+                                }
+                            </p>
+                        }
+                    </div>
                 </div>
             }
         }
@@ -55,6 +76,26 @@
         ChaseActionType.CaughtEvent => "border-l-error-700",
         ChaseActionType.EscapedEvent => "border-l-success-700",
         ChaseActionType.Other => "border-l-gray-400",
+
+        // Насилие
+        ChaseActionType.VehicleCollision => entry.IsSuccess ? "border-l-error-500" : "border-l-gray-400",
+        ChaseActionType.TyreShot => entry.IsSuccess ? "border-l-error-500" : "border-l-gray-400",
+
+        // Препятствия и потеря контроля
+        ChaseActionType.DriverControlCheck => entry.IsSuccess ? "border-l-success-500" : "border-l-warning-500",
+        ChaseActionType.RandomHazardRoll => "border-l-warning-500",
+        ChaseActionType.SuddenHazard => "border-l-warning-500",
+        ChaseActionType.CreateObstacle => entry.IsSuccess ? "border-l-warning-500" : "border-l-gray-400",
+
+        // Движение
+        ChaseActionType.FloorIt => "border-l-accent-400",
+        ChaseActionType.ModeChange => "border-l-accent-400",
+        ChaseActionType.JoinChase => "border-l-accent-400",
+
+        // Исход погони
+        ChaseActionType.TrackingCheck => entry.IsSuccess ? "border-l-accent-400" : "border-l-success-700",
+        ChaseActionType.HideAttempt => entry.IsSuccess ? "border-l-success-700" : "border-l-gray-400",
+
         _ => "border-l-gray-300"
     };
 
@@ -72,6 +113,22 @@
         ChaseActionType.CaughtEvent => "text-error-700",
         ChaseActionType.EscapedEvent => "text-success-700",
         ChaseActionType.Other => "text-gray-600",
+
+        ChaseActionType.VehicleCollision => "text-error-600",
+        ChaseActionType.TyreShot => "text-error-600",
+
+        ChaseActionType.DriverControlCheck => "text-warning-600",
+        ChaseActionType.RandomHazardRoll => "text-warning-600",
+        ChaseActionType.SuddenHazard => "text-warning-600",
+        ChaseActionType.CreateObstacle => "text-warning-600",
+
+        ChaseActionType.FloorIt => "text-accent-600",
+        ChaseActionType.ModeChange => "text-accent-600",
+        ChaseActionType.JoinChase => "text-accent-600",
+
+        ChaseActionType.TrackingCheck => entry.IsSuccess ? "text-accent-600" : "text-success-700",
+        ChaseActionType.HideAttempt => entry.IsSuccess ? "text-success-700" : "text-gray-600",
+
         _ => "text-gray-600"
     };
 
@@ -89,6 +146,19 @@
         ChaseActionType.CaughtEvent => "Пойман!",
         ChaseActionType.EscapedEvent => "Сбежал!",
         ChaseActionType.Other => "Действие",
-        _ => ""
+
+        ChaseActionType.VehicleCollision => "Таран",
+        ChaseActionType.TyreShot => "По шинам",
+        ChaseActionType.DriverControlCheck => "Управление",
+        ChaseActionType.FloorIt => "Разгон",
+        ChaseActionType.RandomHazardRoll => "Случайная помеха",
+        ChaseActionType.SuddenHazard => "Внезапная помеха",
+        ChaseActionType.TrackingCheck => "Поиск следа",
+        ChaseActionType.HideAttempt => "Укрытие",
+        ChaseActionType.CreateObstacle => "Заслон",
+        ChaseActionType.ModeChange => "Смена способа",
+        ChaseActionType.JoinChase => "Присоединение",
+
+        _ => "Действие"
     };
 }

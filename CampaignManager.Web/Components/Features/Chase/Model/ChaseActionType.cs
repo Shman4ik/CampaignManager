@@ -13,5 +13,20 @@ public enum ChaseActionType
     SkipAction,
     CaughtEvent,
     EscapedEvent,
-    Other
+    Other,
+
+    // Часть 4 — столкновения транспорта
+    VehicleCollision,
+    TyreShot,
+    DriverControlCheck,
+
+    // Часть 5 — необязательные правила
+    FloorIt,
+    RandomHazardRoll,
+    SuddenHazard,
+    TrackingCheck,
+    HideAttempt,
+    CreateObstacle,
+    ModeChange,
+    JoinChase
 }

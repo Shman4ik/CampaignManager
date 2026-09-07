@@ -267,6 +267,7 @@ builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<SkillService>();
 builder.Services.AddScoped<CombatService>();
 builder.Services.AddScoped<ChaseService>();
+builder.Services.AddScoped<CampaignManager.Web.Components.Features.Chase.Services.ChaseSessionService>();
 
 // Register Admin and Wiki services
 builder.Services.AddScoped<AdminService>();

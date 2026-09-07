@@ -16,7 +16,10 @@
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Utilities.Services
 
+@implements IDisposable
+
 @inject ChaseService ChaseService
+@inject ChaseSessionService ChaseSessionService
 @inject CreatureService CreatureService
 @inject CampaignService CampaignService
 @inject IdentityService IdentityService
@@ -43,6 +46,22 @@
 else
 {
 <div class="max-w-7xl mx-auto px-4 py-6">
+    @if (_wasRestored)
+    {
+        <div class="cm-card mb-4 border-accent-200">
+            <div class="cm-card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span class="text-sm text-gray-700">
+                    <i class="fa-solid fa-clock-rotate-left text-accent-600 mr-1"></i>
+                    Восстановлена сохранённая погоня: раунд @ChaseService.CurrentRound,
+                    участников @ChaseService.Participants.Count.
+                </span>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0" @onclick="DismissRestoreNotice">
+                    <span>Понятно</span>
+                </button>
+            </div>
+        </div>
+    }
+
     <!-- Панель раундов (только в активной фазе) -->
     @if (ChaseService.Phase == ChasePhase.Active)
     {
@@ -51,6 +70,9 @@ else
             <div class="cm-card-body flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div class="flex items-center gap-4 flex-wrap">
                     <span class="text-sm font-semibold text-gray-800">Раунд: @ChaseService.CurrentRound</span>
+                    <span class="text-sm text-gray-500">
+                        Ход: @(ChaseService.CurrentTurnIndex + 1) / @Math.Max(1, ChaseService.Participants.Count(p => p.IsActive))
+                    </span>
                     @if (activeP is not null)
                     {
                         <span class="text-sm font-medium text-accent-700">→ @activeP.Name</span>
@@ -63,15 +85,20 @@ else
                         <span class="text-sm font-bold text-success-700">Погоня завершена!</span>
                     }
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 flex-wrap">
                     <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="NextTurn">
                         <span>Следующий ход</span>
                     </button>
                     <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="NextRound">
                         <span>Следующий раунд</span>
                     </button>
+                    <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ToggleChaseLog">
+                        <span>@(_showChaseLog ? "Скрыть журнал" : "Журнал погони")</span>
+                    </button>
                 </div>
             </div>
+
+            <ChaseOptionalRules />
         </div>
     }
 
@@ -79,7 +106,7 @@ else
     <div class="grid grid-cols-12 gap-4">
 
         <!-- Левая: Участники + Добавление -->
-        <div class="col-span-12 lg:col-span-3 space-y-3">
+        <div class="col-span-12 lg:col-span-4 space-y-3">
             <!-- Список участников -->
             <div class="cm-card">
                 <div class="cm-card-header">
@@ -107,14 +134,24 @@ else
                 </div>
             </div>
 
-            <!-- Добавить участника (только в Setup) -->
-            @if (ChaseService.Phase == ChasePhase.Setup)
+            <!-- Добавить участника: до старта и по ходу погони (стр. 140) -->
+            @if (ChaseService.Phase is ChasePhase.Setup or ChasePhase.Active)
             {
                 <div class="cm-card">
                     <div class="cm-card-header">
-                        <span class="cm-section-title">Добавить участника</span>
+                        <span class="cm-section-title">
+                            @(ChaseService.Phase == ChasePhase.Active ? "Присоединить к погоне" : "Добавить участника")
+                        </span>
                     </div>
                     <div class="cm-card-body">
+                        @if (ChaseService.Phase == ChasePhase.Active)
+                        {
+                            <p class="text-xs text-gray-500 mb-2">
+                                Присоединившийся встаёт в порядок ходов по ЛВК, а действия перемещения
+                                пересчитываются для всех. Преследователь медленнее самого медленного
+                                убегающего в погоне не учитывается.
+                            </p>
+                        }
                         <!-- Роль при добавлении -->
                         <div class="flex gap-1 mb-2">
                             <button @onclick='() => _addRole = ChaseRole.Prey'
@@ -127,22 +164,23 @@ else
                             </button>
                         </div>
 
-                        <!-- Транспорт -->
+                        <!-- Транспорт из таблицы V (стр. 143) -->
                         <div class="mb-2">
-                            <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                                <input type="checkbox" @bind="_addInVehicle"
-                                       class="rounded border-gray-300 text-accent-600 focus:ring-accent-500" />
-                                В транспорте
-                            </label>
-                            @if (_addInVehicle)
-                            {
-                                <div class="flex gap-2 mt-1">
-                                    <input type="text" @bind="_addVehicleName" placeholder="Ford Model T"
-                                           class="text-xs border border-gray-200 rounded px-2 py-1 flex-1" />
-                                    <input type="number" @bind="_addVehicleSpeed" placeholder="СКО"
-                                           class="text-xs border border-gray-200 rounded px-2 py-1 w-16" />
-                                </div>
-                            }
+                            <label class="text-xs text-gray-600 block mb-1">Транспорт</label>
+                            <select @bind="_addVehicleName" class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                                <option value="">Пешком</option>
+                                @foreach (var category in ChaseReference.VehicleCategories)
+                                {
+                                    <optgroup label="@category">
+                                        @foreach (var vehicle in ChaseReference.Vehicles.Where(v => v.Category == category))
+                                        {
+                                            <option value="@vehicle.Name">
+                                                @vehicle.Name — СКО @vehicle.Speed, Компл. @vehicle.Build.ToString("0.#")
+                                            </option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
                         </div>
 
                         <!-- Вкладки -->
@@ -209,12 +247,39 @@ else
         </div>
 
         <!-- Центральная колонка -->
-        <div class="col-span-12 lg:col-span-6 space-y-3">
+        <div class="col-span-12 lg:col-span-8 space-y-3">
 
             <!-- Трасса -->
             <ChaseTrack Locations="ChaseService.Locations"
                         Participants="ChaseService.Participants"
                         ActiveParticipantId="@(ChaseService.GetActiveParticipant()?.Id)" />
+
+            <!-- Контакт: преследователь настиг жертву. Это ещё не поимка (стр. 135) -->
+            @if (ChaseService.Phase == ChasePhase.Active && ChaseService.HasContact())
+            {
+                <div class="cm-card border-error-200">
+                    <div class="cm-card-body space-y-2">
+                        @foreach (var prey in ChaseService.Participants.Where(p => p.Role == ChaseRole.Prey && p.IsActive))
+                        {
+                            var catchers = ChaseService.GetPursuersInContactWith(prey);
+                            if (catchers.Count == 0) { continue; }
+
+                            <div class="flex items-center justify-between gap-3 flex-wrap">
+                                <div class="text-sm text-gray-700">
+                                    <i class="fa-solid fa-hand-fist text-error-600 mr-1"></i>
+                                    <span class="font-medium">@prey.Name</span> настигнут на локации @prey.CurrentLocation
+                                    (@string.Join(", ", catchers.Select(c => c.Name))).
+                                    <span class="text-gray-500">Доступны ближний бой и боевой манёвр — поимку объявляет Хранитель.</span>
+                                </div>
+                                <button type="button" class="cm-btn cm-btn-error cm-btn-sm shrink-0"
+                                        @onclick="() => MarkCaught((prey.Id, catchers[0].Id))">
+                                    <span>Объявить пойманным</span>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
 
             <!-- Фаза Setup: настройка трассы -->
             @if (ChaseService.Phase == ChasePhase.Setup)
@@ -224,14 +289,23 @@ else
                         <span class="cm-section-title">Настройка трассы</span>
                     </div>
                     <div class="cm-card-body">
-                        <div class="flex items-center gap-3 mb-4">
+                        <div class="flex items-center gap-3 mb-2 flex-wrap">
                             <label class="text-sm text-gray-600">Количество локаций:</label>
                             <input type="number" min="3" max="30" @bind="_trackLength"
                                    class="text-sm border border-gray-200 rounded px-2 py-1 w-20" />
+                            <label class="text-sm text-gray-600">Стартовый отрыв жертвы:</label>
+                            <select @bind="_startGap" class="text-sm border border-gray-200 rounded px-2 py-1">
+                                <option value="2">2 локации</option>
+                                <option value="1">1 локация</option>
+                            </select>
                             <button @onclick="SetupTrack" class="cm-btn cm-btn-primary cm-btn-sm">
                                 Создать трассу
                             </button>
                         </div>
+                        <p class="text-xs text-gray-400 mb-4">
+                            Преследователи встают на локацию 1, жертвы — на @(1 + _startGap).
+                            По правилам дистанция в начале погони не должна превышать две локации.
+                        </p>
 
                         @if (ChaseService.Locations.Any())
                         {
@@ -270,27 +344,87 @@ else
             {
                 @if (ChaseService.PendingResult is not null)
                 {
+                    var pending = ChaseService.PendingResult;
                     <div class="cm-card">
                         <div class="cm-card-header">
-                            <span class="cm-section-title">Результат действия</span>
+                            <span class="cm-section-title">Результат действия — предпросмотр</span>
                         </div>
                         <div class="cm-card-body">
                             <div class="bg-gray-50 rounded-md p-3 mb-3">
-                                <p class="text-sm text-gray-700">@ChaseService.PendingResult.Summary</p>
-                                @if (ChaseService.PendingResult.Roll > 0)
+                                <p class="text-sm text-gray-700">@pending.Summary</p>
+                                @if (pending.Roll > 0)
                                 {
                                     <p class="text-xs text-gray-500 mt-1">
-                                        Бросок: @ChaseService.PendingResult.Roll против @ChaseService.PendingResult.SkillValue
+                                        Бросок: @pending.Roll против @pending.SkillValue
                                     </p>
                                 }
-                                @if (ChaseService.PendingResult.DamageDealt > 0)
+                                @if (pending.LocationBefore is not null && pending.LocationAfter != pending.LocationBefore)
+                                {
+                                    <p class="text-xs text-accent-600 mt-1">
+                                        Локация: @pending.LocationBefore → @pending.LocationAfter
+                                    </p>
+                                }
+                                @if (pending.ActorMovementActionsSpent > 0)
+                                {
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        Тратит действий перемещения: @pending.ActorMovementActionsSpent
+                                    </p>
+                                }
+                                @if (pending.MovementActionsLost > 0)
+                                {
+                                    <p class="text-xs text-warning-700 mt-1">
+                                        @(pending.TargetName ?? pending.ParticipantName) теряет действий: @pending.MovementActionsLost
+                                    </p>
+                                }
+                                @if (pending.DamageDealt > 0)
                                 {
                                     <p class="text-xs text-error-600 mt-1">
-                                        Урон: @ChaseService.PendingResult.DamageDealt
-                                        (ОЗ: @ChaseService.PendingResult.HpBefore → @ChaseService.PendingResult.HpAfter)
+                                        Урон @(pending.TargetName ?? pending.ParticipantName): @pending.DamageDealt
+                                        @if (pending.HpBefore.HasValue)
+                                        {
+                                            <span>(ОЗ: @pending.HpBefore → @pending.HpAfter)</span>
+                                        }
+                                    </p>
+                                }
+                                @if (pending.TargetBuildLoss > 0)
+                                {
+                                    <p class="text-xs text-error-600 mt-1">
+                                        Комплекция @(pending.TargetName ?? pending.ParticipantName):
+                                        −@pending.TargetBuildLoss
+                                        @if (pending.TargetVehicleDamage > 0)
+                                        {
+                                            <span class="text-gray-500">(остаток урона: @pending.TargetVehicleDamage)</span>
+                                        }
+                                    </p>
+                                }
+                                @if (pending.ActorBuildLoss > 0)
+                                {
+                                    <p class="text-xs text-warning-700 mt-1">
+                                        Отдача — Комплекция @pending.ParticipantName: −@pending.ActorBuildLoss
+                                    </p>
+                                }
+                                @if (pending.PenaltyDice > 0)
+                                {
+                                    <p class="text-xs text-warning-700 mt-1">
+                                        Штрафных костей: @pending.PenaltyDice
+                                    </p>
+                                }
+                                @if (pending.RemovesActorFromChase)
+                                {
+                                    <p class="text-xs text-gray-700 mt-1">
+                                        @pending.ParticipantName выбывает из погони.
+                                    </p>
+                                }
+                                @if (pending.BarrierDamageDealt > 0)
+                                {
+                                    <p class="text-xs text-accent-600 mt-1">
+                                        Урон преграде: @pending.BarrierDamageDealt (ПЗ осталось: @pending.BarrierHpAfter)
                                     </p>
                                 }
                             </div>
+                            <p class="text-xs text-gray-400 mb-2">
+                                Ничего ещё не изменилось — «Отменить» вернёт всё как было.
+                            </p>
                             <div class="flex gap-2">
                                 <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ApplyPendingResult">
                                     <span>Применить</span>
@@ -333,10 +467,13 @@ else
             }
         </div>
 
-        <!-- Правая: Журнал -->
-        <div class="col-span-12 lg:col-span-3">
-            <ChaseLog LogEntries="ChaseService.ChaseLog" />
-        </div>
+        <!-- Журнал — под рабочей областью, на всю ширину -->
+        @if (_showChaseLog)
+        {
+            <div class="col-span-12">
+                <ChaseLog LogEntries="ChaseService.ChaseLog" />
+            </div>
+        }
     </div>
 </div>
 }
@@ -345,10 +482,14 @@ else
     private bool _isKeeper;
     private string _showAddMode = "characters";
     private ChaseRole _addRole = ChaseRole.Prey;
-    private bool _addInVehicle;
     private string _addVehicleName = "";
-    private int _addVehicleSpeed;
     private int _trackLength = 10;
+    private int _startGap = 2;
+    private bool _pendingSave;
+    private bool _saveEnabled;
+    private bool _wasRestored;
+    private Guid? _restoredCampaignId;
+    private bool _showChaseLog = true;
     private Campaign? _selectedCampaign;
     private List<Character>? _availableCharacters;
     private List<Creature>? _availableCreatures;
@@ -356,33 +497,59 @@ else
     protected override async Task OnInitializedAsync()
     {
         _isKeeper = await IdentityService.IsKeeper();
+        if (!_isKeeper) return;
 
-        if (_isKeeper)
+        ChaseService.OnChange += HandleChaseChanged;
+        _availableCreatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
+
+        // Восстановить сцену после обрыва соединения или перезагрузки вкладки
+        if (!ChaseService.HasContent())
         {
-            ChaseService.OnChange += StateHasChanged;
-            _availableCreatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
+            var saved = await ChaseSessionService.LoadLatestAsync();
+            if (saved is { } session && (session.Snapshot.Participants.Count > 0 || session.Snapshot.Locations.Count > 0))
+            {
+                ChaseService.RestoreSnapshot(session.Snapshot);
+                _restoredCampaignId = session.CampaignId;
+                _wasRestored = true;
+
+                if (session.CampaignId is { } campaignId)
+                    await LoadCampaignCharactersAsync(campaignId);
+            }
         }
+
+        _saveEnabled = true;
     }
 
     public void Dispose()
     {
-        ChaseService.OnChange -= StateHasChanged;
+        ChaseService.OnChange -= HandleChaseChanged;
     }
+
+    private void HandleChaseChanged()
+    {
+        _pendingSave = true;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_saveEnabled || !_pendingSave) return;
+        _pendingSave = false;
+        await ChaseSessionService.SaveAsync(CurrentCampaignId, ChaseService.CreateSnapshot());
+    }
+
+    private Guid? CurrentCampaignId => _selectedCampaign?.Id ?? _restoredCampaignId;
 
     private async Task HandleCampaignSelected(Campaign? campaign)
     {
         _selectedCampaign = campaign;
+        _wasRestored = false;
 
         if (campaign is not null)
         {
+            _restoredCampaignId = null;
             ChaseService.SetCampaign(campaign.Id);
-
-            var fullCampaign = await CampaignService.GetCampaignWithCharactersAsync(campaign.Id);
-            _availableCharacters = fullCampaign?.Players
-                .SelectMany(p => p.Characters)
-                .Where(c => c.Status == CharacterStatus.Active)
-                .Select(c => c.Character)
-                .ToList() ?? [];
+            await LoadCampaignCharactersAsync(campaign.Id);
         }
         else
         {
@@ -392,27 +559,45 @@ else
         StateHasChanged();
     }
 
-    private void AddCharacter(Character character)
+    private async Task LoadCampaignCharactersAsync(Guid campaignId)
     {
-        var participant = new ChaseParticipant(character) { Role = _addRole };
-        if (_addInVehicle && !string.IsNullOrWhiteSpace(_addVehicleName))
-        {
-            participant.IsInVehicle = true;
-            participant.VehicleName = _addVehicleName;
-            participant.VehicleSpeed = _addVehicleSpeed;
-        }
-        ChaseService.AddParticipant(participant);
+        var fullCampaign = await CampaignService.GetCampaignWithCharactersAsync(campaignId);
+        _availableCharacters = fullCampaign?.Players
+            .SelectMany(p => p.Characters)
+            .Where(c => c.Status == CharacterStatus.Active)
+            .Select(c => c.Character)
+            .ToList() ?? [];
     }
 
-    private void AddMonster(Creature creature)
+    private void AddCharacter(Character character) =>
+        AddParticipant(new ChaseParticipant(character) { Role = _addRole });
+
+    private void AddMonster(Creature creature) =>
+        AddParticipant(new ChaseParticipant(creature) { Role = _addRole });
+
+    private void AddParticipant(ChaseParticipant participant)
     {
-        var participant = new ChaseParticipant(creature) { Role = _addRole };
-        if (_addInVehicle && !string.IsNullOrWhiteSpace(_addVehicleName))
+        var template = ChaseReference.FindVehicle(_addVehicleName);
+        if (template is not null)
         {
             participant.IsInVehicle = true;
-            participant.VehicleName = _addVehicleName;
-            participant.VehicleSpeed = _addVehicleSpeed;
+            participant.VehicleName = template.Name;
+            participant.VehicleSpeed = template.Speed;
+            participant.VehicleBuild = template.Build;
+            participant.VehicleCurrentBuild = template.Build;
+            participant.VehicleArmor = template.Armor;
+            participant.VehicleSkillName = template.SkillName;
         }
+
+        // Погоня уже идёт — новый участник проходит проверку скорости и меняет расклад (стр. 140)
+        if (ChaseService.Phase == ChasePhase.Active)
+        {
+            ChaseService.JoinChase(participant, participant.Role == ChaseRole.Prey
+                ? ChaseService.Locations.Count
+                : 1);
+            return;
+        }
+
         ChaseService.AddParticipant(participant);
     }
 
@@ -425,7 +610,10 @@ else
     private void HandleLocationChanged((Guid id, int location) args) =>
         ChaseService.SetParticipantLocation(args.id, args.location);
 
-    private void SetupTrack() => ChaseService.SetupTrack(_trackLength);
+    private void SetupTrack() => ChaseService.SetupTrack(_trackLength, _startGap);
+
+    private void MarkCaught((Guid preyId, Guid? catcherId) args) =>
+        ChaseService.MarkCaught(args.preyId, args.catcherId);
 
     private void HandleLocationUpdated(ChaseLocation location) =>
         ChaseService.UpdateLocation(location.Number, location);
@@ -435,6 +623,10 @@ else
     private void HandleChaseStarted() => StateHasChanged();
 
     private void HandlePreyEscaped() => StateHasChanged();
+
+    private void ToggleChaseLog() => _showChaseLog = !_showChaseLog;
+
+    private void DismissRestoreNotice() => _wasRestored = false;
 
     private void NextTurn() => ChaseService.NextTurn();
 
@@ -451,5 +643,13 @@ else
 
     private void CancelPendingResult() => ChaseService.CancelPendingResult();
 
-    private void ResetChase() => ChaseService.ResetChase();
+    private async Task ResetChase()
+    {
+        var campaignId = CurrentCampaignId;
+        ChaseService.ResetChase();
+        _wasRestored = false;
+        _restoredCampaignId = null;
+        _pendingSave = false;
+        await ChaseSessionService.DeleteAsync(campaignId);
+    }
 }
