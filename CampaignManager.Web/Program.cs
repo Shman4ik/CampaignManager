@@ -372,10 +372,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
-app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.UseOutputCache();
+
+// Файлы из wwwroot отдаём через .NET 10 static assets: у каждого появляется URL с
+// content-хешем, поэтому после деплоя браузер забирает новый CSS, а не старый из кеша.
+// Вызов обязан идти до MapRazorComponents — оттуда берётся манифест для @Assets[...].
+app.MapStaticAssets();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
