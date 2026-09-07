@@ -373,6 +373,23 @@ public partial class CharacterPage
         RecalculateDerivedAttributes();
     }
 
+    /// <summary>
+    ///     Два навыка тянут за собой остальной лист: Уклонение зеркалится в боевые параметры,
+    ///     а Мифы Ктулху задают максимум Рассудка.
+    /// </summary>
+    private void HandleSkillValueEdited(Skill skill)
+    {
+        if (Character is null)
+            return;
+
+        if (skill.Name is "Уклонение")
+            DerivedAttributeRules.SyncDodgeFromSkill(Character);
+        else if (skill.Name is not "Мифы Ктулху")
+            return;
+
+        RecalculateDerivedAttributes();
+    }
+
     private void RecalculateDerivedAttributes()
     {
         if (Character is null)

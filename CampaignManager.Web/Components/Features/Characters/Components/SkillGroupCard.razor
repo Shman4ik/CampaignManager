@@ -1,4 +1,5 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Skills.Model
 @using CampaignManager.Web.Components.Features.Skills.Services
 @inject SkillService SkillService
@@ -27,7 +28,7 @@
             @* Ungrouped skills *@
             @foreach (var skill in ungrouped)
             {
-                <div class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
+                <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                      data-testid="@($"skill-row-{skill.Name}")">
                     <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                         <button @onclick="@(() => RemoveSkill(skill))"
@@ -84,7 +85,7 @@
                 @* Modified specializations rendered as regular skill rows *@
                 @foreach (var skill in modifiedSpecs)
                 {
-                    <div class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
+                    <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                          data-testid="@($"skill-row-{skill.Name}")">
                         <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                             <button @onclick="@(() => RemoveSkill(skill))"
@@ -102,9 +103,11 @@
                                     <span class="font-medium break-normal">@skill.Name</span>
                                 }
                                 <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
-                                @if (SpecializationHasBonus(skill, allInGroup))
+                                @{ var specBonus = SpecializationRules.BonusFor(skill, allInGroup, specGroup.Key); }
+                                @if (specBonus > 0)
                                 {
-                                    <span class="spec-bonus-badge" title="Другая специализация достигла порога — +10 бонус">+10</span>
+                                    <span class="spec-bonus-badge"
+                                          title="Смежная специализация перешла порог — этот навык поднимается на @specBonus (но не выше самого порога)">+@specBonus</span>
                                 }
                             </div>
                         </div>
@@ -161,6 +164,9 @@
 
 @code {
     [Parameter] public required SkillGroup Group { get; set; }
+
+    /// <summary>Значение навыка отредактировали — лист может пересчитать зависящее от него.</summary>
+    [Parameter] public EventCallback<Skill> OnSkillValueEdited { get; set; }
 
     private SkillPicker? _picker;
 
@@ -227,16 +233,19 @@
         }
     }
 
-    private void OnSkillValueChanged(Skill skill, ChangeEventArgs args)
+    private async Task OnSkillValueChanged(Skill skill, ChangeEventArgs args)
     {
-        if (args.Value != null && int.TryParse(args.Value.ToString(), out var newValue))
-        {
-            skill.Value.Regular = newValue;
-            skill.Value.UpdateDerived();
-        }
+        if (args.Value is null || !int.TryParse(args.Value.ToString(), out var newValue))
+            return;
+
+        skill.Value.Regular = newValue;
+        skill.Value.UpdateDerived();
+
+        // Уклонение дублируется в боевых параметрах листа — странице нужно узнать о правке.
+        await OnSkillValueEdited.InvokeAsync(skill);
     }
 
-    private void OnSpecValueChanged(SpecializationGroup.SkillChangeArgs args) =>
+    private Task OnSpecValueChanged(SpecializationGroup.SkillChangeArgs args) =>
         OnSkillValueChanged(args.Skill, args.Args);
 
     private void OnSpecUsedChanged(SpecializationGroup.SkillChangeArgs args) =>
@@ -262,17 +271,5 @@
         return false;
     }
 
-    private static bool SpecializationHasBonus(Skill skill, List<Skill> allInGroup)
-    {
-        if (allInGroup.Count < 2)
-            return false;
-        int maxOther = allInGroup
-            .Where(s => !ReferenceEquals(s, skill))
-            .Select(s => s.Value.Regular)
-            .DefaultIfEmpty(0)
-            .Max();
-        return (maxOther >= 90 && skill.Value.Regular < 90) ||
-               (maxOther >= 50 && skill.Value.Regular < 50);
-    }
 
 }

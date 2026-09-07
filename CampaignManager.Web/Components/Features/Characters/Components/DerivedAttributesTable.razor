@@ -1,4 +1,5 @@
 ﻿@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
 <table class="w-full text-xs">
     <thead>
     <tr class="border-b border-gray-300">
@@ -19,11 +20,12 @@
             </td>
             <td class="py-1 px-0.5">
                 <div class="flex items-center gap-0.5">
-                    <button type="button" @onclick="() => { attr.Attribute.Value--; }"
+                    <button type="button" @onclick="() => AdjustAttribute(attr, -1)"
                             class="w-5 h-6 flex items-center justify-center text-sm font-bold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-gray-600 transition-colors leading-none flex-shrink-0">−</button>
                     <input type="number" class="@inputClass min-w-0"
-                           @bind="attr.Attribute.Value"/>
-                    <button type="button" @onclick="() => { attr.Attribute.Value++; }"
+                           value="@attr.Attribute.Value"
+                           @onchange="@(e => SetAttribute(attr, e))"/>
+                    <button type="button" @onclick="() => AdjustAttribute(attr, 1)"
                             class="w-5 h-6 flex items-center justify-center text-sm font-bold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-gray-600 transition-colors leading-none flex-shrink-0">+</button>
                 </div>
             </td>
@@ -44,22 +46,91 @@
     </tbody>
 </table>
 
-@code {
-    [Parameter] public required DerivedAttributes Attributes { get; set; }
+@* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой (стр. 117) *@
+<div class="mt-1.5 pt-1.5 border-t border-gray-200">
+    <div class="flex items-center gap-1 flex-wrap">
+        <label for="wound-damage" class="text-[10px] text-gray-500 uppercase font-semibold">Урон</label>
+        <input id="wound-damage" type="number" min="1" class="cm-input-sm !w-14" @bind="_damage" @bind:event="oninput"/>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ApplyDamage">Нанести</button>
+        <span class="text-[10px] text-gray-500">серьёзная рана с @_majorWoundThreshold</span>
+    </div>
+    @if (_lastHitWasMajor)
+    {
+        <div class="mt-1 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-[11px] text-orange-800">
+            ⚠ Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает,
+            нужна проверка ВЫН, иначе он теряет сознание.
+        </div>
+    }
+</div>
 
-    private record AttributeRow(string Label, string ColorClass, AttributeWithMaxValue Attribute);
+@code {
+    [Parameter] public required Character Character { get; set; }
+
+    /// <summary>
+    ///     Урон меняет отметки состояния, а они рисуются соседним компонентом — просим родителя перерисоваться.
+    /// </summary>
+    [Parameter] public EventCallback OnConditionsChanged { get; set; }
+
+    private DerivedAttributes Attributes => Character.DerivedAttributes;
+
+    private record AttributeRow(string Label, string ColorClass, AttributeWithMaxValue Attribute, bool IsHitPoints);
 
     private List<AttributeRow> _attributeRows = [];
+    private int _damage = 1;
+    private bool _lastHitWasMajor;
+    private int _majorWoundThreshold;
 
     protected override void OnParametersSet()
     {
         _attributeRows =
         [
-            new("ПЗ", "red", Attributes.HitPoints),
-            new("ПМ", "blue", Attributes.MagicPoints),
-            new("Рассудок", "purple", Attributes.Sanity),
-            new("Удача", "green", Attributes.Luck)
+            new("ПЗ", "red", Attributes.HitPoints, true),
+            new("ПМ", "blue", Attributes.MagicPoints, false),
+            new("Рассудок", "purple", Attributes.Sanity, false),
+            new("Удача", "green", Attributes.Luck, false)
         ];
+
+        _majorWoundThreshold = WoundRules.MajorWoundThreshold(Attributes.HitPoints.MaxValue);
+    }
+
+    private async Task ApplyDamage()
+    {
+        if (_damage <= 0)
+            return;
+
+        _lastHitWasMajor = WoundRules.ApplyDamage(Character, _damage);
+        await OnConditionsChanged.InvokeAsync();
+    }
+
+    private Task AdjustAttribute(AttributeRow row, int delta)
+    {
+        row.Attribute.Value += delta;
+        return AfterAttributeChange(row);
+    }
+
+    private Task SetAttribute(AttributeRow row, ChangeEventArgs args)
+    {
+        if (args.Value is null || !int.TryParse(args.Value.ToString(), out var value))
+            return Task.CompletedTask;
+
+        row.Attribute.Value = value;
+        return AfterAttributeChange(row);
+    }
+
+    /// <summary>
+    ///     Правка ПЗ вручную тоже меняет состояние: 0 ПЗ без серьёзной раны — без сознания,
+    ///     с раной — при смерти; выше нуля сыщик снова на ногах (стр. 118).
+    /// </summary>
+    private async Task AfterAttributeChange(AttributeRow row)
+    {
+        if (!row.IsHitPoints)
+            return;
+
+        if (row.Attribute.Value > 0)
+            _lastHitWasMajor = false;
+
+        WoundRules.UpdateConsciousness(Character);
+        await OnConditionsChanged.InvokeAsync();
     }
 
     private static int GetPercentage(AttributeWithMaxValue attr)

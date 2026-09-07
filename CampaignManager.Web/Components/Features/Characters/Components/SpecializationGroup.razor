@@ -1,4 +1,5 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
 
 <div class="spec-group">
     <div class="spec-group-header" @onclick="@(() => _isExpanded = !_isExpanded)">
@@ -12,8 +13,10 @@
     {
         @foreach (var skill in Skills)
         {
-            var showBonus = ShouldShowBonus(skill);
-            <div class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
+            var bonus = SpecializationRules.BonusFor(skill, AllGroupSkills, ParentSkillName);
+            @* Без @key Blazor переиспользует поле ввода соседнего навыка, когда список
+               перетасовывается (навык уехал в «изменённые») — и показывает чужое значение. *@
+            <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
                 <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                     <button @onclick="@(() => OnRemove.InvokeAsync(skill))"
                             class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
@@ -29,9 +32,10 @@
                             <span class="font-medium break-normal">@skill.Name</span>
                         }
                         <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
-                        @if (showBonus)
+                        @if (bonus > 0)
                         {
-                            <span class="spec-bonus-badge" title="Другая специализация достигла порога — +10 бонус">+10</span>
+                            <span class="spec-bonus-badge"
+                                  title="Смежная специализация перешла порог — этот навык поднимается на @bonus (но не выше самого порога)">+@bonus</span>
                         }
                     </div>
                 </div>
@@ -70,29 +74,4 @@
     public record SkillChangeArgs(Skill Skill, ChangeEventArgs Args);
 
     private bool _isExpanded;
-
-    /// <summary>
-    /// Returns true if a skill should show the +10 bonus badge.
-    /// CoC 7e rule: when any specialization reaches 50%+, others below 50% get +10.
-    /// When any reaches 90%+, those below 90% get +10.
-    /// </summary>
-    private bool ShouldShowBonus(Skill skill)
-    {
-        if (AllGroupSkills.Count < 2)
-            return false;
-
-        // Highest threshold that any OTHER skill in the group has crossed
-        int maxOther = AllGroupSkills
-            .Where(s => !ReferenceEquals(s, skill))
-            .Select(s => s.Value.Regular)
-            .DefaultIfEmpty(0)
-            .Max();
-
-        if (maxOther >= 90 && skill.Value.Regular < 90)
-            return true;
-        if (maxOther >= 50 && skill.Value.Regular < 50)
-            return true;
-
-        return false;
-    }
 }
