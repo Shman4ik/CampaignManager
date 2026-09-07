@@ -13,8 +13,24 @@ public sealed class AdminService(
     IdentityService identityService,
     ILogger<AdminService> logger)
 {
+    /// <summary>
+    ///     Administrator-only operations must not rely on page-level [Authorize] alone: the service is the
+    ///     last line of defence if a caller is ever added outside the admin pages.
+    /// </summary>
+    private async Task EnsureAdministratorAsync(string operation)
+    {
+        if (await identityService.IsAdministrator())
+            return;
+
+        var email = await identityService.GetCurrentUserEmailAsync();
+        logger.LogWarning("Denied administrator operation {Operation} for {Email}", operation, email ?? "<anonymous>");
+        throw new UnauthorizedAccessException($"Операция '{operation}' доступна только администратору");
+    }
+
     public async Task<(List<ApplicationUser> Users, int TotalCount)> ListUsersAsync(string? search, int page, int pageSize = 20)
     {
+        await EnsureAdministratorAsync("просмотр пользователей");
+
         try
         {
             await using var db = await identityDbContextFactory.CreateDbContextAsync();
@@ -45,6 +61,8 @@ public sealed class AdminService(
 
     public async Task<bool> SetUserRoleAsync(string email, PlayerRole role)
     {
+        await EnsureAdministratorAsync("изменение роли пользователя");
+
         try
         {
             await using var db = await identityDbContextFactory.CreateDbContextAsync();
@@ -65,6 +83,8 @@ public sealed class AdminService(
 
     public async Task<List<KeeperApplication>> ListApplicationsAsync(KeeperApplicationStatus? status = null)
     {
+        await EnsureAdministratorAsync("просмотр заявок");
+
         try
         {
             await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -127,9 +147,11 @@ public sealed class AdminService(
 
     public async Task<bool> ApproveAsync(Guid id)
     {
+        await EnsureAdministratorAsync("одобрение заявки");
+
         try
         {
-            var reviewerEmail = identityService.GetCurrentUserEmail();
+            var reviewerEmail = await identityService.GetCurrentUserEmailAsync();
             await using var db = await dbContextFactory.CreateDbContextAsync();
 
             var application = await db.KeeperApplications.FindAsync(id);
@@ -157,9 +179,11 @@ public sealed class AdminService(
 
     public async Task<bool> RejectAsync(Guid id, string? comment = null)
     {
+        await EnsureAdministratorAsync("отклонение заявки");
+
         try
         {
-            var reviewerEmail = identityService.GetCurrentUserEmail();
+            var reviewerEmail = await identityService.GetCurrentUserEmailAsync();
             await using var db = await dbContextFactory.CreateDbContextAsync();
 
             var application = await db.KeeperApplications.FindAsync(id);
@@ -185,6 +209,9 @@ public sealed class AdminService(
 
     public async Task<int> GetPendingApplicationsCountAsync()
     {
+        if (!await identityService.IsAdministrator())
+            return 0;
+
         try
         {
             await using var db = await dbContextFactory.CreateDbContextAsync();
@@ -194,22 +221,6 @@ public sealed class AdminService(
         {
             logger.LogError(ex, "Error counting pending applications");
             return 0;
-        }
-    }
-
-    public async Task<bool> HasPendingApplicationAsync(string email)
-    {
-        try
-        {
-            await using var db = await dbContextFactory.CreateDbContextAsync();
-            return await db.KeeperApplications
-                .AnyAsync(a => a.UserEmail.ToLower() == email.ToLower()
-                               && a.Status == KeeperApplicationStatus.Pending);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error checking pending application for {Email}", email);
-            return false;
         }
     }
 }

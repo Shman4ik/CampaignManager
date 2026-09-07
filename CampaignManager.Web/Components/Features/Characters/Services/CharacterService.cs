@@ -16,14 +16,61 @@ public sealed class CharacterService(
     IMemoryCache cache)
 {
     private const string PublishedScenariosCacheKey = "PublishedScenarios";
+
+    /// <summary>
+    ///     What a caller wants to do with a stored character.
+    /// </summary>
+    private enum CharacterAccess
+    {
+        Read,
+        Write
+    }
+
+    /// <summary>
+    ///     Checks whether the current user may read or modify a character occupying the given player slot.
+    ///     A character bound to a campaign player belongs to that player and to the keeper of their campaign.
+    ///     An unbound row (NPC or pregen template) is shared library content: anyone signed in may read it,
+    ///     only keepers may change it. Administrators may do everything.
+    /// </summary>
+    private async Task<bool> CanAccessCharacterAsync(AppDbContext dbContext, Guid? campaignPlayerId, CharacterAccess access)
+    {
+        var userEmail = await identityService.GetCurrentUserEmailAsync();
+        if (string.IsNullOrEmpty(userEmail))
+            return false;
+
+        var role = await identityService.GetCurrentUserRole();
+        if (role is PlayerRole.Administrator)
+            return true;
+
+        if (campaignPlayerId is null)
+            return access is CharacterAccess.Read || role is PlayerRole.GameMaster;
+
+        var owner = await dbContext.CampaignPlayers
+            .Where(p => p.Id == campaignPlayerId.Value)
+            .Select(p => new { p.PlayerEmail, p.Campaign.KeeperEmail })
+            .FirstOrDefaultAsync();
+
+        if (owner is null)
+            return false;
+
+        return string.Equals(owner.PlayerEmail, userEmail, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(owner.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId, CharacterStatus status = CharacterStatus.Active)
     {
         try
         {
-            var userId = identityService.GetCurrentUserEmail();
+            var userId = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userId))
                 throw new UnauthorizedAccessException("User must be authenticated to create a character");
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            // A character may only be attached to a player slot the caller actually controls, and only a
+            // keeper may add unbound rows (NPC and pregen templates) to the shared library.
+            if (!await CanAccessCharacterAsync(dbContext, campaignPlayerId, CharacterAccess.Write))
+                throw new UnauthorizedAccessException("Недостаточно прав для создания этого персонажа");
+
             // Если ID не установлен, генерируем новый
             if (character.Id == Guid.Empty)
                 character.Id = Guid.CreateVersion7();
@@ -69,44 +116,53 @@ public sealed class CharacterService(
     }
 
     /// <summary>
-    ///     Gets all non-template characters.
+    ///     Loads a character by id. Returns null when it does not exist or the current user has no access
+    ///     to it — the caller cannot tell the two apart, which is deliberate.
     /// </summary>
-    /// <returns>A list of all characters.</returns>
-    public async Task<List<Character>> GetAllCharactersAsync()
-    {
-        try
-        {
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var characterDtos = await dbContext.CharacterStorage
-                .Where(c => c.Status != CharacterStatus.Template)
-                .ToListAsync();
-
-            return characterDtos.Select(dto => dto.Character).ToList();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving all characters");
-            return [];
-        }
-    }
-
     public async Task<CharacterStorageDto?> GetCharacterByIdAsync(Guid id)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.CharacterStorage.FindAsync(id);
+        var character = await dbContext.CharacterStorage.FindAsync(id);
+        if (character is null)
+            return null;
+
+        if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Read))
+        {
+            logger.LogWarning("Denied read access to character {CharacterId}", id);
+            return null;
+        }
+
+        return character;
     }
 
+    /// <summary>
+    ///     Loads a campaign player slot. Only the player themselves, the keeper of that campaign and
+    ///     administrators may see it.
+    /// </summary>
     public async Task<CampaignPlayer?> GetCampaignPlayerAsync(Guid id)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.CampaignPlayers.FindAsync(id);
+        var player = await dbContext.CampaignPlayers
+            .Include(p => p.Campaign)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (player is null)
+            return null;
+
+        if (!await CanAccessCharacterAsync(dbContext, id, CharacterAccess.Read))
+        {
+            logger.LogWarning("Denied access to campaign player {CampaignPlayerId}", id);
+            return null;
+        }
+
+        return player;
     }
 
     public async Task UpdateCharacterAsync(Character character)
     {
         try
         {
-            var userEmail = identityService.GetCurrentUserEmail();
+            var userEmail = await identityService.GetCurrentUserEmailAsync();
             logger.LogInformation("Attempting to update character {CharacterId} by user {UserEmail}", character.Id, userEmail);
 
             if (string.IsNullOrEmpty(userEmail))
@@ -119,6 +175,12 @@ public sealed class CharacterService(
             {
                 logger.LogWarning("Character {CharacterId} not found during update", character.Id);
                 throw new KeyNotFoundException($"Character with ID {character.Id} not found");
+            }
+
+            if (!await CanAccessCharacterAsync(dbContext, storageDto.CampaignPlayerId, CharacterAccess.Write))
+            {
+                logger.LogWarning("Denied write access to character {CharacterId}", character.Id);
+                throw new UnauthorizedAccessException("Недостаточно прав для изменения этого персонажа");
             }
 
             storageDto.LastUpdated = DateTime.UtcNow;
@@ -138,14 +200,9 @@ public sealed class CharacterService(
     {
         try
         {
-            var userEmail = identityService.GetCurrentUserEmail();
+            var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to change character status");
-
-            // Check if user has permission to change character status (Admin or GameMaster)
-            var isKeeper = await identityService.IsKeeper();
-            if (!isKeeper)
-                throw new UnauthorizedAccessException("Only administrators and game masters can change character status");
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -155,6 +212,13 @@ public sealed class CharacterService(
                 .FirstOrDefaultAsync(c => c.Id == characterId);
 
             if (character == null) throw new KeyNotFoundException($"Character with ID {characterId} not found");
+
+            // Being a keeper somewhere is not enough — it has to be this character's campaign.
+            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
+            {
+                logger.LogWarning("Denied status change on character {CharacterId}", characterId);
+                throw new UnauthorizedAccessException("Недостаточно прав для изменения статуса этого персонажа");
+            }
 
             // Если устанавливаем статус Active, деактивируем остальных персонажей этого игрока в этой кампании
             if (newStatus == CharacterStatus.Active)
@@ -220,7 +284,7 @@ public sealed class CharacterService(
     {
         try
         {
-            var userEmail = identityService.GetCurrentUserEmail();
+            var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to create a template with scenario link");
 
@@ -233,6 +297,9 @@ public sealed class CharacterService(
 
             if (character is null)
                 throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+
+            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
+                throw new UnauthorizedAccessException("Недостаточно прав для привязки этого персонажа к сценарию");
 
             // Create scenario-bound copy.
             character.Init();
@@ -297,6 +364,12 @@ public sealed class CharacterService(
         var character = await dbContext.CharacterStorage.FindAsync(characterId);
         if (character is null)
             throw new KeyNotFoundException($"Character with ID {characterId} not found");
+
+        if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
+        {
+            logger.LogWarning("Denied NPC role change on character {CharacterId}", characterId);
+            throw new UnauthorizedAccessException("Недостаточно прав для изменения роли этого NPC");
+        }
 
         character.NpcRole = role;
         character.LastUpdated = DateTime.UtcNow;
@@ -451,7 +524,7 @@ public sealed class CharacterService(
     {
         try
         {
-            var userEmail = identityService.GetCurrentUserEmail();
+            var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to unlink a character template from a scenario");
 
@@ -463,6 +536,12 @@ public sealed class CharacterService(
 
             if (character == null)
                 throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+
+            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
+            {
+                logger.LogWarning("Denied unlink of character {CharacterId} from its scenario", characterId);
+                throw new UnauthorizedAccessException("Недостаточно прав для отвязки этого персонажа от сценария");
+            }
 
             // Unlink the character template from the scenario
             character.ScenarioId = null;

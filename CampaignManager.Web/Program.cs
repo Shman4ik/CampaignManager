@@ -70,6 +70,20 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
 builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
     options.UseNpgsql(dataSource));
 
+// Google reports email_verified as a JSON boolean, but has historically also sent it as a string.
+static bool IsEmailVerified(System.Text.Json.JsonElement payload)
+{
+    if (!payload.TryGetProperty("email_verified", out var verified))
+        return false;
+
+    return verified.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.String => bool.TryParse(verified.GetString(), out var parsed) && parsed,
+        _ => false
+    };
+}
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -80,7 +94,9 @@ builder.Services.AddAuthentication(options =>
     {
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.Cookie.SameSite = SameSiteMode.None;
+        // Lax is enough for the Google redirect flow (top-level GET callback) and keeps the browser's
+        // built-in CSRF protection: with None the auth cookie rides along on every cross-site request.
+        options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true; // Mark as essential for GDPR compliance
         options.Cookie.Name = ".CampaignManager.Auth"; // Explicit cookie name
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
@@ -96,7 +112,8 @@ builder.Services.AddAuthentication(options =>
         options.ClaimActions.MapJsonKey("urn:google:image", "picture");
         options.SaveTokens = true;
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.CorrelationCookie.SameSite = SameSiteMode.None;
+        // The Google callback is a top-level GET redirect, so Lax cookies are sent back as expected.
+        options.CorrelationCookie.SameSite = SameSiteMode.Lax;
         options.CorrelationCookie.IsEssential = true;
         options.CorrelationCookie.Name = ".CampaignManager.Correlation";
 
@@ -148,6 +165,15 @@ builder.Services.AddAuthentication(options =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
             var email = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+            // Every authorization decision in this app keys off the email (whitelist, admin bootstrap,
+            // campaign ownership), so an unverified address must never be accepted.
+            if (email is null || !IsEmailVerified(context.User))
+            {
+                logger.LogWarning("Access denied for {Email}: Google did not report a verified email.", email ?? "<no email>");
+                context.Fail("Access denied: the Google account email is not verified, so this account is not authorized.");
+                return;
+            }
 
             var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
             var allowedEmails = config.GetSection("Authorization:AllowedEmails").Get<string[]>() ?? [];
