@@ -11,7 +11,7 @@ public static class SanityRules
     private const string MythosSkillName = "Мифы Ктулху";
 
     /// <summary>
-    ///     Максимум Рассудка = 99 − значение навыка "Мифы Ктулху" (стр. 55).
+    ///     Максимум Рассудка = 99 − значение навыка "Мифы Ктулху" (стр. 63 и 152).
     /// </summary>
     public static int ComputeMaxSanity(Character character)
     {
@@ -32,12 +32,14 @@ public static class SanityRules
     }
 
     /// <summary>
-    ///     Порог для проверки на бессрочное безумие — 1/5 от текущего Рассудка (стр. 106).
+    ///     Порог для проверки на бессрочное безумие — 1/5 от текущего Рассудка, потерянные
+    ///     за один игровой день (стр. 153).
     /// </summary>
     public static int IndefiniteInsanityThreshold(int currentSanity) => currentSanity / 5;
 
     /// <summary>
-    ///     Триггер на проверку ИНТ → временное безумие (стр. 79).
+    ///     Триггер на проверку ИНТ → временное безумие: 5 и более пунктов, потерянных
+    ///     по одной и той же причине (стр. 152).
     /// </summary>
     public const int TemporaryInsanityThreshold = 5;
 }

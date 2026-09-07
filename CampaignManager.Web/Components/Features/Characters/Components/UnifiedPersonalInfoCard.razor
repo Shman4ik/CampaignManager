@@ -20,9 +20,10 @@
                              OnValueChanged="@(v => Character.PersonalInfo.Occupation = v)"/>
 
                 <div class="grid grid-cols-2 gap-x-2">
-                    <CustomInput Label="Возраст" Type="number" Value="@Character.PersonalInfo.Age.ToString()" 
+                    @* Возраст меняет Скорость, поэтому после него нужен тот же пересчёт, что и после характеристики *@
+                    <CustomInput Label="Возраст" Type="number" Value="@Character.PersonalInfo.Age.ToString()"
                                  LabelClass="min-w-[50px] text-xs" ContainerClass="flex items-center gap-1"
-                                 OnValueChanged="@(v => Character.PersonalInfo.Age = int.TryParse(v, out var age) ? age : 0)"/>
+                                 OnValueChanged="@OnAgeChanged"/>
 
                     <CustomInput Label="Пол" Value="@Character.PersonalInfo.Gender" 
                                  LabelClass="min-w-[30px] text-xs" ContainerClass="flex items-center gap-1"
@@ -92,4 +93,13 @@
     [Parameter] public CharacterStorageDto? CharacterStorageDto { get; set; }
     [Parameter] public EventCallback<CharacterStatus> OnStatusUpdated { get; set; }
     [Parameter] public EventCallback<AttributeValue> OnCharacteristicUpdate { get; set; }
+
+    /// <summary>Просьба к странице пересчитать вторичные атрибуты (используется правкой возраста).</summary>
+    [Parameter] public EventCallback OnDerivedChanged { get; set; }
+
+    private async Task OnAgeChanged(string value)
+    {
+        Character.PersonalInfo.Age = int.TryParse(value, out var age) ? age : 0;
+        await OnDerivedChanged.InvokeAsync();
+    }
 }

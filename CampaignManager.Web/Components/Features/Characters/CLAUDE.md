@@ -7,7 +7,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `CreateCharacterAsync` требует явный `CharacterKind` и ровно одного владельца
   (`campaignPlayerId` / `campaignId` / `scenarioId` — или ничего, тогда НПС попадает в общую
   библиотеку). Списки: `GetNpcsAsync`, `GetPregenTemplatesAsync`, `GetScenarioPregensAsync`.
-- `CharacterGenerationService(SkillService skillService)` — stateless random-generation logic; no `DbContextFactory` (it doesn't persist anything itself).
+- `CharacterGenerationService(SkillService skillService)` — stateless random-generation logic; no `DbContextFactory` (it doesn't persist anything itself). Финансы считает по эпохе: у 1920-х и современности разные столбцы таблицы II «Наличные и активы».
+- `DerivedAttributeRules` (static) — **единственное** место, где живут формулы вторичных атрибутов
+  (ПЗ, ПМ, Рассудок, потолок Удачи, СКО, Комплексия, БкУ, Уклонение). И генератор, и лист персонажа
+  считают через него: `InitializeNewSheet` — для чистого/сгенерированного листа, `Recalculate` — после
+  правки характеристики или возраста на странице. Не дублировать эти формулы на месте: именно из-за
+  этого отредактированный вручную лист раньше расходился с правилами.
+- `SanityRules` (static) — максимум Рассудка и пороги безумия.
 - `OccupationService(dbContextFactory, IMemoryCache, logger)` — occupation catalog (skill point formulas, tags).
 - `LlmCharacterValidationService(llmClientFactory, IOptions<LlmValidationOptions>, dbContextFactory, identityService, ...)` — uses an LLM to validate/sanity-check generated or edited characters against CoC 7e rules.
 
@@ -21,6 +27,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `LlmKnowledgeEntry : BaseDataBaseEntity` — knowledge base entries fed to the LLM validation service.
 
 ## Notes
+- Потолок Удачи всегда 99, а не стартовый бросок (стр. 93): начальное значение дальше нигде не
+  используется, а Удача растёт в фазу развития. Старые листы правит `NormalizeLuckCap` при открытии.
+- Два порога безумия считаются по разным окнам и хранятся в разных полях `CharacterState`:
+  `LastSanityLoss` — потеря от одной причины (≥5 → проверка ИНТ, стр. 152),
+  `SanityLossEpisode` — накопленная за игровой день (≥1/5 текущего Рассудка → бессрочное, стр. 153).
+  Складывать их в один счётчик нельзя: два провала по 3 не дают проверку ИНТ.
+  Имя `SanityLossEpisode` оставлено ради уже сохранённых JSONB-листов.
 - Идентификатор строки и `Character.Id` внутри JSONB всегда равны. Их расхождение раньше приводило
   к тому, что сохранение листа создавало новую строку вместо обновления, поэтому и
   `CreateCharacterAsync`, и `CopyPregenToScenarioAsync` выставляют оба.
