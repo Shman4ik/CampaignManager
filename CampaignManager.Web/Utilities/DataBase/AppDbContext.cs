@@ -31,6 +31,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Scenario Management DbSets
     public DbSet<Scenario> Scenarios { get; set; } = null!;
+    public DbSet<ScenarioNpc> ScenarioNpcs { get; set; } = null!;
     public DbSet<Creature> Creatures { get; set; } = null!;
     public DbSet<Item> Items { get; set; } = null!;
     public DbSet<Occupation> Occupations { get; set; } = null!;
@@ -96,23 +97,34 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(c => c.CampaignPlayerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // Связь со сценарием (шаблоны персонажей, привязанные к сценарию)
+            // Связь со сценарием — только преген, созданный для этого сценария.
+            // НПС попадают в сценарий через ScenarioNpc, а не этим ключом.
             entity.HasOne(c => c.Scenario)
-                .WithMany(s => s.Npcs)
+                .WithMany(s => s.Pregens)
                 .HasForeignKey(c => c.ScenarioId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Кампания-владелец НПС. Удалили кампанию — НПС не пропадает, а возвращается
+            // в общую библиотеку.
+            entity.HasOne(c => c.Campaign)
+                .WithMany()
+                .HasForeignKey(c => c.CampaignId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
 
             // Индекс для быстрого поиска персонажей по игроку в кампании
             entity.HasIndex(c => c.CampaignPlayerId);
 
+            // Списки НПС и прегенов строятся по виду персонажа
+            entity.HasIndex(c => c.Kind);
+
             // Сохранение статуса в виде строки в базе данных
             entity.Property(c => c.Status)
                 .HasConversion<string>();
 
-            entity.Property(c => c.NpcRole)
-                .HasConversion<string>()
-                .HasDefaultValue(NpcRole.Neutral);
+            entity.Property(c => c.Kind)
+                .HasConversion<string>();
 
             // Используем JSONB для хранения данных персонажа
             entity.Property(c => c.Character)
@@ -218,6 +230,31 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(s => s.CampaignId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Занятость НПС в сценарии: сценарий + лист персонажа, роль и количество на связи
+        modelBuilder.Entity<ScenarioNpc>(entity =>
+        {
+            entity.ToTable("ScenarioNpcs");
+
+            entity.HasOne(sn => sn.Scenario)
+                .WithMany(s => s.Cast)
+                .HasForeignKey(sn => sn.ScenarioId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(sn => sn.Character)
+                .WithMany(c => c.ScenarioCasts)
+                .HasForeignKey(sn => sn.CharacterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Один НПС занят в сценарии один раз: несколько одинаковых задаёт Count
+            entity.HasIndex(sn => new { sn.ScenarioId, sn.CharacterId }).IsUnique();
+
+            entity.Property(sn => sn.Role)
+                .HasConversion<string>();
+
+            entity.Property(sn => sn.Count)
+                .HasDefaultValue(1);
         });
         // Creature Configuration
         modelBuilder.Entity<Creature>(entity =>

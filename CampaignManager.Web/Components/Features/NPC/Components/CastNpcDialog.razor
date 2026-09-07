@@ -1,0 +1,143 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Extensions
+
+@inject ScenarioService ScenarioService
+@inject NavigationManager NavigationManager
+
+@* Занимает НПС в сценарии. Лист персонажа не копируется — создаётся только связь,
+   поэтому правки НПС видны сразу во всех сценариях, где он занят. *@
+
+<div class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium text-gray-900">НПС в сценарии</h3>
+            <button type="button" @onclick="OnCancel" class="text-gray-400 hover:text-gray-600 p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <p class="text-sm text-gray-500 mb-4">
+            «@CharacterName» появится в выбранном сценарии. Лист остаётся один: правки увидят
+            все сценарии, где он занят.
+        </p>
+
+        @if (_isLoading)
+        {
+            <div class="flex justify-center p-4">
+                <LoadingIndicator/>
+            </div>
+        }
+        else if (_scenarios.Count == 0)
+        {
+            <div class="text-center text-gray-500 my-4">
+                <p>Нет доступных сценариев.</p>
+                <Button OnClick="CreateNewScenario" Variant="info" Size="sm" AdditionalClasses="mt-2">
+                    Создать новый сценарий
+                </Button>
+            </div>
+        }
+        else
+        {
+            <div class="mb-4">
+                <label for="scenarioSelect" class="block text-sm font-medium text-gray-700 mb-1">Сценарий</label>
+                <select @bind="_selectedScenarioId" id="scenarioSelect" class="cm-input">
+                    <option value="">— Выберите сценарий —</option>
+                    @foreach (var scenario in _scenarios)
+                    {
+                        <option value="@scenario.Id">@scenario.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                    <label for="roleSelect" class="block text-sm font-medium text-gray-700 mb-1">Роль</label>
+                    <select @bind="_role" id="roleSelect" class="cm-input">
+                        @foreach (var role in Enum.GetValues<NpcRole>())
+                        {
+                            <option value="@role">@role.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="countInput" class="block text-sm font-medium text-gray-700 mb-1">Сколько</label>
+                    <input type="number" id="countInput" min="1" max="20" @bind="_count" class="cm-input"/>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="mb-4 p-3 bg-error-50 text-error-700 rounded-md text-sm">
+                @_errorMessage
+            </div>
+        }
+
+        <div class="flex justify-end gap-2">
+            <Button OnClick="OnCancel" Variant="secondary" Size="sm">Отмена</Button>
+            @if (_scenarios.Count > 0)
+            {
+                <Button OnClick="SaveAsync" Variant="info" Size="sm" IsDisabled="@(!IsFormValid)">Добавить</Button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Лист НПС, который занимаем в сценарии.</summary>
+    [Parameter] public required Guid CharacterId { get; set; }
+
+    /// <summary>Имя НПС — для подписи диалога.</summary>
+    [Parameter] public string CharacterName { get; set; } = "";
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private List<Scenario> _scenarios = [];
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private string _selectedScenarioId = "";
+    private NpcRole _role = NpcRole.Neutral;
+    private int _count = 1;
+
+    private bool IsFormValid => Guid.TryParse(_selectedScenarioId, out _) && _count >= 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _scenarios = await ScenarioService.GetAllScenariosAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Ошибка при загрузке сценариев: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!IsFormValid) return;
+
+        _errorMessage = null;
+
+        var added = await ScenarioService.AddNpcToScenarioAsync(
+            Guid.Parse(_selectedScenarioId), CharacterId, _role, _count);
+
+        if (!added)
+        {
+            _errorMessage = "Не удалось добавить НПС в сценарий.";
+            return;
+        }
+
+        await OnSaved.InvokeAsync();
+    }
+
+    private void CreateNewScenario() => NavigationManager.NavigateTo("/scenarios/create");
+}

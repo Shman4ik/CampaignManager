@@ -3,6 +3,7 @@ using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Components;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
+using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Layout.Services;
@@ -27,16 +28,44 @@ public partial class CharacterPage
     [Inject] private LlmCharacterValidationService LlmService { get; set; } = default!;
     [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private LastCharacterService LastCharacterService { get; set; } = default!;
+    [Inject] private ScenarioService ScenarioService { get; set; } = default!;
 
     [Parameter] public Guid? CharacterId { get; set; }
+
+    /// <summary>Кампания из маршрута: создаём лист игрока в этой кампании.</summary>
     [Parameter] public Guid? CampaignId { get; set; }
 
-    // Determine if we're in NPC creation mode based on the URL segment after CampaignId
-    [Parameter] public string? Npc { get; set; }
+    /// <summary>Вид создаваемого персонажа из маршрута: <c>npc</c> или <c>pregen</c>.</summary>
+    [Parameter] public string? Kind { get; set; }
 
-    [SupplyParameterFromQuery] public Guid? ScenarioId { get; set; }
-    private bool IsTemplate => Npc is "template" or "pregen";
-    private bool IsNpc => Npc is "npc" or "template" || Character?.CharacterType == CharacterType.NonPlayerCharacter;
+    /// <summary>Сценарий, куда персонаж попадёт сразу после создания.</summary>
+    [SupplyParameterFromQuery(Name = "scenarioId")] public Guid? ScenarioId { get; set; }
+
+    /// <summary>Кампания-владелец нового НПС; пусто — общая библиотека.</summary>
+    [SupplyParameterFromQuery(Name = "campaignId")] public Guid? OwnerCampaignId { get; set; }
+
+    /// <summary>Вид, который получит новый лист. «template» оставлен ради старых ссылок.</summary>
+    private CharacterKind CreationKind => Kind switch
+    {
+        "npc" or "template" => CharacterKind.Npc,
+        "pregen" => CharacterKind.Pregen,
+        _ => CharacterKind.PlayerCharacter
+    };
+
+    /// <summary>Вид открытого листа: у существующего берём из базы, у нового — из маршрута.</summary>
+    private CharacterKind CurrentKind => CharacterStorageDto?.Kind ?? CreationKind;
+
+    private bool IsNpc => CurrentKind is CharacterKind.Npc;
+
+    private string NewCharacterTitle => CreationKind switch
+    {
+        CharacterKind.Npc => "Новый НПС",
+        CharacterKind.Pregen => "Новый преген",
+        _ => "Новый персонаж"
+    };
+
+    /// <summary>Выбор владельца показываем только при создании НПС.</summary>
+    private bool ShowOwnerPicker => CharacterStorageDto is null && CreationKind is CharacterKind.Npc && _isKeeper;
 
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
@@ -51,6 +80,8 @@ public partial class CharacterPage
     private bool _showGenerateModal;
     private bool _isKeeper;
     private LlmSuggestionsModal? _llmModal;
+    private List<Campaign> _keeperCampaigns = [];
+    private string _ownerCampaignId = "";
 
     // Section visibility state
     private readonly Dictionary<string, bool> _sectionVisibility = new()
@@ -82,6 +113,13 @@ public partial class CharacterPage
         {
             _isLoading = true;
             _isKeeper = await IdentityService.IsKeeper();
+
+            if (_isKeeper && CharacterId is null)
+            {
+                _keeperCampaigns = await CampaignService.GetKeeperCampaignsAsync();
+                _ownerCampaignId = OwnerCampaignId?.ToString() ?? "";
+            }
+
             await LoadCharacterDataAsync();
         }
         catch (Exception ex)
@@ -124,7 +162,7 @@ public partial class CharacterPage
 
             if (CharacterStorageDto?.CampaignPlayerId is not null)
                 CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
-            else if (CampaignPlayer is null && CampaignId.HasValue && !IsNpc)
+            else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
                 CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
         }
         catch (Exception ex)
@@ -141,7 +179,7 @@ public partial class CharacterPage
         {
             PersonalInfo = new PersonalInfo
             {
-                PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown"
+                PlayerName = PlayerNameForSheet
             },
             Characteristics = new Characteristics(),
             Skills = skills,
@@ -150,10 +188,16 @@ public partial class CharacterPage
             Equipment = new Equipment(),
             Finances = new Finances(),
             Weapons = new List<Weapon>(),
-            Notes = string.Empty,
-            CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter
+            Notes = string.Empty
         };
     }
+
+    /// <summary>Подпись «чей это лист»: у НПС игрока нет.</summary>
+    private string PlayerNameForSheet => CurrentKind switch
+    {
+        CharacterKind.Npc => "НПС",
+        _ => CampaignPlayer?.PlayerName ?? "Unknown"
+    };
 
     private async Task SaveCharacterAsync()
     {
@@ -167,51 +211,49 @@ public partial class CharacterPage
         {
             if (string.IsNullOrWhiteSpace(Character.PersonalInfo.Name))
             {
-                Character.PersonalInfo.Name = IsNpc ? "Безымянный NPC" : "Безымянный";
-                ShowNotification($"Имя {(IsNpc ? "NPC" : "персонажа")} не было указано, установлено '{Character.PersonalInfo.Name}'.", "warning");
+                Character.PersonalInfo.Name = IsNpc ? "Безымянный НПС" : "Безымянный";
+                ShowNotification($"Имя {(IsNpc ? "НПС" : "персонажа")} не было указано, установлено '{Character.PersonalInfo.Name}'.", "warning");
             }
 
-            // Ensure character type is set correctly
-            Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
-            Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "Unknown";
+            Character.PersonalInfo.PlayerName = PlayerNameForSheet;
 
-            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character.Id == CharacterId.Value)
+            // Существующий лист узнаём по загруженной строке, а не по совпадению
+            // идентификаторов: раньше их расхождение молча создавало дубликат.
+            if (CharacterStorageDto is not null)
             {
                 await CharacterService.UpdateCharacterAsync(Character);
-                ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно обновлен!", "success");
+                ShowNotification($"{KindLabel} успешно обновлён!", "success");
+                return;
             }
-            else
+
+            Guid? ownerCampaignId = CreationKind is CharacterKind.Npc && Guid.TryParse(_ownerCampaignId, out var chosen)
+                ? chosen
+                : null;
+
+            var created = await CharacterService.CreateCharacterAsync(
+                Character,
+                CreationKind,
+                CampaignPlayer?.Id,
+                ownerCampaignId,
+                CreationKind is CharacterKind.Pregen ? ScenarioId : null);
+
+            Character.Id = created.Id;
+            CharacterId = created.Id;
+            CharacterStorageDto = created;
+
+            // НПС появляется в сценарии связью — копия листа больше не создаётся.
+            if (CreationKind is CharacterKind.Npc && ScenarioId is { } scenarioId)
+                await ScenarioService.AddNpcToScenarioAsync(scenarioId, created.Id);
+
+            if (ScenarioId is { } targetScenarioId && CreationKind is not CharacterKind.PlayerCharacter)
             {
-                Character.Id = Guid.Empty;
-                var createdCharacter = await CharacterService.CreateCharacterAsync(
-                    Character,
-                    CampaignPlayer?.Id,
-                    IsTemplate ? CharacterStatus.Template : CharacterStatus.Active);
-
-                if (createdCharacter.Id != Guid.Empty)
-                {
-                    Character.Id = createdCharacter.Id;
-                    CharacterId = createdCharacter.Id;
-
-                    // If created from scenario, link to it and redirect back
-                    if (ScenarioId.HasValue && ScenarioId.Value != Guid.Empty)
-                    {
-                        await CharacterService.SaveCharacterTemplateWithScenarioAsync(
-                            createdCharacter.Id, ScenarioId.Value);
-                        ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} создан и привязан к сценарию!", "success");
-                        NavigationManager.NavigateTo($"/scenarios/{ScenarioId.Value}", replace: true);
-                    }
-                    else
-                    {
-                        ShowNotification($"{(IsNpc ? "NPC" : "Персонаж")} успешно создан!", "success");
-                        NavigationManager.NavigateTo($"/character/{createdCharacter.Id}", replace: true);
-                    }
-                }
-                else
-                {
-                    ShowNotification($"Ошибка: Не удалось получить ID созданного {(IsNpc ? "NPC" : "персонажа")}.", "error");
-                }
+                ShowNotification($"{KindLabel} создан и добавлен в сценарий!", "success");
+                NavigationManager.NavigateTo($"/scenarios/{targetScenarioId}", replace: true);
+                return;
             }
+
+            ShowNotification($"{KindLabel} успешно создан!", "success");
+            NavigationManager.NavigateTo($"/character/{created.Id}", replace: true);
         }
         catch (Exception ex)
         {
@@ -223,6 +265,14 @@ public partial class CharacterPage
             _isBusy = false;
         }
     }
+
+    /// <summary>Как называть лист в сообщениях.</summary>
+    private string KindLabel => CurrentKind switch
+    {
+        CharacterKind.Npc => "НПС",
+        CharacterKind.Pregen => "Преген",
+        _ => "Персонаж"
+    };
 
     private void ShowNotification(string message, string type)
     {
@@ -271,8 +321,7 @@ public partial class CharacterPage
         Character = result.Character;
         _generationLog = result.Log;
 
-        Character.PersonalInfo.PlayerName = IsNpc ? "NPC" : CampaignPlayer?.PlayerName ?? "No name";
-        Character.CharacterType = IsNpc ? CharacterType.NonPlayerCharacter : CharacterType.PlayerCharacter;
+        Character.PersonalInfo.PlayerName = PlayerNameForSheet;
     }
 
     private async Task ScrollToSection(string sectionId, bool navMenuOpen = false)

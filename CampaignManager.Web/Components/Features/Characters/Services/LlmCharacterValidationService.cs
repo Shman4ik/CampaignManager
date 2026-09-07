@@ -190,7 +190,6 @@ public sealed class LlmCharacterValidationService(
                 - Сохрани ВСЕ поля оригинального персонажа. Не удаляй поля, группы навыков, навыки.
                 - Применяй ТОЛЬКО те изменения, которые описаны в рекомендациях.
                 - Поле "id" должно остаться неизменным: "{original.Id}".
-                - Поле "characterType" должно остаться неизменным: {(int)original.CharacterType}.
                 - Все группы навыков (skillGroups) должны быть сохранены. Не удаляй и не переименовывай группы.
                 - Количество навыков в каждой группе должно быть >= исходному.
                 """),
@@ -256,7 +255,6 @@ public sealed class LlmCharacterValidationService(
     {
         // Preserve identity fields
         updated.Id = original.Id;
-        updated.CharacterType = original.CharacterType;
 
         // Validate skill groups integrity
         if (original.Skills.SkillGroups is { Count: > 0 })

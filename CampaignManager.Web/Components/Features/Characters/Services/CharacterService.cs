@@ -57,12 +57,23 @@ public sealed class CharacterService(
                || string.Equals(owner.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<Character> CreateCharacterAsync(Character character, Guid? campaignPlayerId, CharacterStatus status = CharacterStatus.Active)
+    /// <summary>
+    ///     Создаёт лист персонажа. Вид (<paramref name="kind" />) и владелец задаются явно —
+    ///     ровно один из <paramref name="campaignPlayerId" />, <paramref name="campaignId" />,
+    ///     <paramref name="scenarioId" /> или ни одного (НПС в общей библиотеке).
+    /// </summary>
+    public async Task<CharacterStorageDto> CreateCharacterAsync(
+        Character character,
+        CharacterKind kind,
+        Guid? campaignPlayerId = null,
+        Guid? campaignId = null,
+        Guid? scenarioId = null,
+        CharacterStatus status = CharacterStatus.Active)
     {
         try
         {
-            var userId = await identityService.GetCurrentUserEmailAsync();
-            if (string.IsNullOrEmpty(userId))
+            var userEmail = await identityService.GetCurrentUserEmailAsync();
+            if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to create a character");
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
@@ -71,25 +82,25 @@ public sealed class CharacterService(
             if (!await CanAccessCharacterAsync(dbContext, campaignPlayerId, CharacterAccess.Write))
                 throw new UnauthorizedAccessException("Недостаточно прав для создания этого персонажа");
 
-            // Если ID не установлен, генерируем новый
-            if (character.Id == Guid.Empty)
-                character.Id = Guid.CreateVersion7();
-
-            // Создаем DTO для хранения с дублированием ключевых полей
             CharacterStorageDto storageDto = new()
             {
                 CharacterName = character.PersonalInfo.Name,
                 Character = character,
+                Kind = kind,
                 CampaignPlayerId = campaignPlayerId,
+                CampaignId = campaignId,
+                ScenarioId = scenarioId,
                 Status = status
             };
-            // Инициализируем базовые поля сущности
             storageDto.Init();
-            storageDto.Id = character.Id;
+
+            // Идентификатор строки и идентификатор внутри JSONB всегда совпадают: их
+            // расхождение раньше приводило к тому, что правка листа создавала новую строку.
+            character.Id = storageDto.Id;
             dbContext.CharacterStorage.Add(storageDto);
 
             // Находим и деактивируем все активные персонажи этого игрока в этой кампании
-            if (campaignPlayerId.HasValue)
+            if (campaignPlayerId.HasValue && status == CharacterStatus.Active)
             {
                 var existingActiveCharacters = await dbContext.CharacterStorage
                     .Where(c => c.CampaignPlayerId == campaignPlayerId && c.Status == CharacterStatus.Active)
@@ -104,9 +115,11 @@ public sealed class CharacterService(
             }
 
             await dbContext.SaveChangesAsync();
+            cache.Remove(PublishedScenariosCacheKey);
 
-            logger.LogInformation("Character {CharacterId} created by user {UserEmail}", character.Id, userId);
-            return character;
+            logger.LogInformation(
+                "Character {CharacterId} ({Kind}) created by user {UserEmail}", storageDto.Id, kind, userEmail);
+            return storageDto;
         }
         catch (Exception ex)
         {
@@ -220,8 +233,9 @@ public sealed class CharacterService(
                 throw new UnauthorizedAccessException("Недостаточно прав для изменения статуса этого персонажа");
             }
 
-            // Если устанавливаем статус Active, деактивируем остальных персонажей этого игрока в этой кампании
-            if (newStatus == CharacterStatus.Active)
+            // Если устанавливаем статус Active, деактивируем остальных персонажей этого игрока в этой кампании.
+            // Библиотечных НПС и прегенов это не касается — они ничей слот не занимают.
+            if (newStatus == CharacterStatus.Active && character.CampaignPlayerId.HasValue)
             {
                 var otherActiveCharacters = await dbContext.CharacterStorage
                     .Where(c => c.CampaignPlayerId == character.CampaignPlayerId
@@ -253,128 +267,169 @@ public sealed class CharacterService(
     }
 
     /// <summary>
-    ///     Gets all character templates (CharacterStorageDto with Status = CharacterStatus.Template)
+    ///     НПС, доступные Хранителю: общая библиотека плюс НПС конкретной кампании.
     /// </summary>
-    /// <returns>A list of character templates</returns>
-    public async Task<List<CharacterStorageDto>> GetAllCharacterTemplatesAsync()
+    /// <param name="campaignId">
+    ///     Кампания, чьих НПС нужно добавить к библиотечным. <c>null</c> — без фильтра по владельцу,
+    ///     то есть все НПС (так их показывает страница списка НПС).
+    /// </param>
+    /// <param name="includeArchived">Показать и архивные листы.</param>
+    public async Task<List<CharacterStorageDto>> GetNpcsAsync(Guid? campaignId = null, bool includeArchived = false)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.CharacterStorage
-                .Where(c => c.Status == CharacterStatus.Template)
+            var query = dbContext.CharacterStorage
+                .Where(c => c.Kind == CharacterKind.Npc);
+
+            if (campaignId.HasValue)
+                query = query.Where(c => c.CampaignId == null || c.CampaignId == campaignId.Value);
+
+            if (!includeArchived)
+                query = query.Where(c => c.Status != CharacterStatus.Archived);
+
+            return await query
                 .OrderBy(c => c.CharacterName)
                 .ToListAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error retrieving character templates");
+            logger.LogError(ex, "Error retrieving NPCs for campaign {CampaignId}", campaignId);
             return [];
         }
     }
 
     /// <summary>
-    ///     Creates a copy of an existing character template and links it to a scenario
+    ///     Преген-заготовки: листы, ещё не отданные ни одному сценарию.
     /// </summary>
-    /// <param name="characterId">ID of the character template to copy</param>
-    /// <param name="scenarioId">ID of the scenario to link the template to</param>
-    /// <param name="npcRole">Role of the NPC in the scenario</param>
-    /// <returns>The newly created character template with scenario link</returns>
-    public async Task<CharacterStorageDto> SaveCharacterTemplateWithScenarioAsync(Guid characterId, Guid scenarioId, NpcRole npcRole = NpcRole.Neutral)
+    public async Task<List<CharacterStorageDto>> GetPregenTemplatesAsync(bool includeArchived = false)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var query = dbContext.CharacterStorage
+                .Where(c => c.Kind == CharacterKind.Pregen && c.ScenarioId == null);
+
+            if (!includeArchived)
+                query = query.Where(c => c.Status != CharacterStatus.Archived);
+
+            return await query
+                .OrderBy(c => c.CharacterName)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving pregen templates");
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Прегены, принадлежащие сценарию (ростер ваншота).
+    /// </summary>
+    public async Task<List<CharacterStorageDto>> GetScenarioPregensAsync(Guid scenarioId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.CharacterStorage
+                .Where(c => c.ScenarioId == scenarioId
+                            && c.Kind == CharacterKind.Pregen
+                            && c.Status != CharacterStatus.Archived)
+                .OrderBy(c => c.CharacterName)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving pregens for scenario {ScenarioId}", scenarioId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Копирует преген-заготовку в сценарий. Копия здесь осмысленна и потому оставлена
+    ///     явной: преген расходуется — его бронирует игрок, — поэтому каждому ваншоту нужен
+    ///     свой лист. НПС, в отличие от прегена, не копируется никогда
+    ///     (см. <c>ScenarioService.AddNpcToScenarioAsync</c>).
+    /// </summary>
+    public async Task<CharacterStorageDto> CopyPregenToScenarioAsync(Guid pregenId, Guid scenarioId)
     {
         try
         {
             var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
-                throw new UnauthorizedAccessException("User must be authenticated to create a template with scenario link");
+                throw new UnauthorizedAccessException("User must be authenticated to add a pregen to a scenario");
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
-            // Load template as detached entity so we can persist it as a new row.
-            var character = await dbContext.CharacterStorage
+            var source = await dbContext.CharacterStorage
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == characterId && c.Status == CharacterStatus.Template);
+                .FirstOrDefaultAsync(c => c.Id == pregenId && c.Kind == CharacterKind.Pregen);
 
-            if (character is null)
-                throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+            if (source is null)
+                throw new KeyNotFoundException($"Pregen with ID {pregenId} not found");
 
-            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
-                throw new UnauthorizedAccessException("Недостаточно прав для привязки этого персонажа к сценарию");
+            if (!await CanAccessCharacterAsync(dbContext, source.CampaignPlayerId, CharacterAccess.Write))
+                throw new UnauthorizedAccessException("Недостаточно прав для добавления прегена в сценарий");
 
-            // Create scenario-bound copy.
-            character.Init();
-            character.Status = CharacterStatus.Active;
-            character.ScenarioId = scenarioId;
-            character.Scenario = null;
-            character.CampaignPlayerId = null;
-            character.CampaignPlayer = null;
-            character.NpcRole = npcRole;
+            source.Init();
+            source.Status = CharacterStatus.Active;
+            source.ScenarioId = scenarioId;
+            source.Scenario = null;
+            source.CampaignPlayerId = null;
+            source.CampaignPlayer = null;
+            source.CampaignId = null;
+            source.Campaign = null;
+            source.ScenarioCasts = [];
+            // Идентификатор внутри JSONB должен совпадать с идентификатором новой строки,
+            // иначе правка копии создаст ещё одну строку вместо обновления.
+            source.Character.Id = source.Id;
 
-            dbContext.CharacterStorage.Add(character);
+            dbContext.CharacterStorage.Add(source);
             await dbContext.SaveChangesAsync();
 
             cache.Remove(PublishedScenariosCacheKey);
 
             logger.LogInformation(
-                "Character template {TemplateId} copied to scenario {ScenarioId} as character {CharacterId} by user {UserEmail}",
-                characterId,
-                scenarioId,
-                character.Id,
-                userEmail);
-            return character;
+                "Pregen {PregenId} copied to scenario {ScenarioId} as {CharacterId} by {UserEmail}",
+                pregenId, scenarioId, source.Id, userEmail);
+            return source;
         }
         catch (Exception ex)
         {
-            logger.LogError(
-                ex,
-                "Error creating character template from template {TemplateId} for scenario {ScenarioId}",
-                characterId,
-                scenarioId);
+            logger.LogError(ex, "Error copying pregen {PregenId} to scenario {ScenarioId}", pregenId, scenarioId);
             throw;
         }
     }
 
     /// <summary>
-    ///     Gets all character templates linked to a specific scenario
+    ///     Переносит НПС между общей библиотекой и кампанией.
     /// </summary>
-    /// <param name="scenarioId">ID of the scenario</param>
-    /// <returns>A list of character templates linked to the specified scenario</returns>
-    public async Task<List<CharacterStorageDto>> GetCharacterTemplatesByScenarioIdAsync(Guid scenarioId)
-    {
-        try
-        {
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-
-            // Get character templates that are linked to the specified scenario
-            return await dbContext.CharacterStorage
-                .Where(c => c.ScenarioId == scenarioId)
-                .OrderBy(c => c.CharacterName)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving character templates for scenario {ScenarioId}", scenarioId);
-            return [];
-        }
-    }
-
-    public async Task UpdateNpcRoleAsync(Guid characterId, NpcRole role)
+    /// <param name="characterId">Лист НПС.</param>
+    /// <param name="campaignId">Кампания-владелец или <c>null</c>, чтобы вернуть НПС в библиотеку.</param>
+    public async Task MoveNpcToCampaignAsync(Guid characterId, Guid? campaignId)
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         var character = await dbContext.CharacterStorage.FindAsync(characterId);
         if (character is null)
             throw new KeyNotFoundException($"Character with ID {characterId} not found");
 
+        if (character.Kind != CharacterKind.Npc)
+            throw new InvalidOperationException("Владельца можно менять только у НПС");
+
         if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
         {
-            logger.LogWarning("Denied NPC role change on character {CharacterId}", characterId);
-            throw new UnauthorizedAccessException("Недостаточно прав для изменения роли этого NPC");
+            logger.LogWarning("Denied owner change on character {CharacterId}", characterId);
+            throw new UnauthorizedAccessException("Недостаточно прав для изменения владельца этого НПС");
         }
 
-        character.NpcRole = role;
+        character.CampaignId = campaignId;
         character.LastUpdated = DateTime.UtcNow;
         await dbContext.SaveChangesAsync();
+
+        logger.LogInformation("NPC {CharacterId} moved to campaign {CampaignId}", characterId, campaignId);
     }
+
 
     /// <summary>
     ///     Reserves a pregen character for the current user: the pregen template is transformed into the
@@ -406,7 +461,7 @@ public sealed class CharacterService(
             throw new InvalidOperationException("Этот персонаж уже забронирован");
         if (pregen.ScenarioId is null || pregen.Scenario is null)
             throw new InvalidOperationException("Персонаж не привязан к сценарию");
-        if (pregen.Character?.CharacterType != CharacterType.PlayerCharacter)
+        if (pregen.Kind != CharacterKind.Pregen)
             throw new InvalidOperationException("Этот персонаж не является играбельным");
 
         Guid campaignId;
@@ -516,49 +571,50 @@ public sealed class CharacterService(
     }
 
     /// <summary>
-    ///     Unlinks a character template from a scenario
+    ///     Убирает преген из сценария. Забронированный игроком преген не трогаем — сначала
+    ///     его должен освободить игрок или Хранитель (<see cref="ReleasePregenAsync" />).
+    ///     Лист не удаляется, а уходит в архив, поэтому «удалил и потерял навсегда» больше нет.
     /// </summary>
-    /// <param name="characterId">ID of the character template to unlink</param>
-    /// <returns>True if successful, false otherwise</returns>
-    public async Task<bool> UnlinkCharacterTemplateFromScenarioAsync(Guid characterId)
+    public async Task<bool> RemovePregenFromScenarioAsync(Guid pregenId)
     {
         try
         {
             var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
-                throw new UnauthorizedAccessException("User must be authenticated to unlink a character template from a scenario");
+                throw new UnauthorizedAccessException("User must be authenticated to remove a pregen from a scenario");
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
-            // Get the character template
-            var character = await dbContext.CharacterStorage
-                .FirstOrDefaultAsync(c => c.Id == characterId);
+            var pregen = await dbContext.CharacterStorage
+                .FirstOrDefaultAsync(c => c.Id == pregenId);
 
-            if (character == null)
-                throw new KeyNotFoundException($"Character template with ID {characterId} not found");
+            if (pregen is null)
+                throw new KeyNotFoundException($"Pregen with ID {pregenId} not found");
 
-            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
+            if (!await CanAccessCharacterAsync(dbContext, pregen.CampaignPlayerId, CharacterAccess.Write))
             {
-                logger.LogWarning("Denied unlink of character {CharacterId} from its scenario", characterId);
-                throw new UnauthorizedAccessException("Недостаточно прав для отвязки этого персонажа от сценария");
+                logger.LogWarning("Denied removal of pregen {CharacterId} from its scenario", pregenId);
+                throw new UnauthorizedAccessException("Недостаточно прав для изменения этого персонажа");
             }
 
-            // Unlink the character template from the scenario
-            character.ScenarioId = null;
-            character.Scenario = null;
-            character.LastUpdated = DateTime.UtcNow;
+            if (pregen.CampaignPlayerId.HasValue)
+                throw new InvalidOperationException("Преген забронирован игроком — сначала освободите его");
 
-            dbContext.Update(character);
+            pregen.ScenarioId = null;
+            pregen.Scenario = null;
+            pregen.Status = CharacterStatus.Archived;
+            pregen.LastUpdated = DateTime.UtcNow;
+
             await dbContext.SaveChangesAsync();
 
             cache.Remove(PublishedScenariosCacheKey);
 
-            logger.LogInformation("Character template {CharacterId} unlinked from scenario by user {UserEmail}", characterId, userEmail);
+            logger.LogInformation("Pregen {CharacterId} removed from scenario by user {UserEmail}", pregenId, userEmail);
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error unlinking character template {CharacterId} from scenario", characterId);
+            logger.LogError(ex, "Error removing pregen {CharacterId} from its scenario", pregenId);
             return false;
         }
     }

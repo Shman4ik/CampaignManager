@@ -25,6 +25,10 @@ Chase-scene resolution per Call of Cthulhu 7e rules (Chapter 7).
 
 ## Key Models
 - `ChaseParticipant`, `ChaseLocation`, `ChaseActionResult`, `ChaseSnapshot`, `ChaseSessionDto`.
+- Участники добавляются общим с боем списком `Combat/Components/ParticipantPicker.razor`
+  (`DetailMode="speed"`), поэтому в погоню можно взять и НПС сценария, и НПС библиотеки, а не только
+  персонажей кампании и бестиарий. `ChaseParticipant.Id` — идентификатор участника, а не листа
+  (лист — в `SourceCharacterId`), иначе двое одинаковых преследователей сливаются в одного.
 - `ChaseReference` — статические данные из книги: таблица V «Транспортные средства» (стр. 143),
   таблица III «Другие виды урона» (стр. 122), таблица VI «Столкновения транспорта» (стр. 145),
   типовые ПЗ преград и списки примеров помех и преград. Новые справочные значения из книги — сюда,

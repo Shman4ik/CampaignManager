@@ -1,29 +1,28 @@
-﻿@page "/npcs"
-@using CampaignManager.Web.Components.Features.Characters.Services
+@page "/npcs"
+@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
-@using CampaignManager.Web.Extensions
-@using CampaignManager.Web.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.NPC.Components
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 
 @inject CharacterService CharacterService
+@inject CampaignService CampaignService
+@inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
 @inject IdentityService IdentityService
 @rendermode InteractiveServer
 
-<PageTitle>Управление шаблонами персонажей</PageTitle>
+<PageTitle>НПС и прегены</PageTitle>
 
-<PageHeader Title="Шаблоны персонажей">
+<PageHeader Title="НПС и прегены">
     <Actions>
         @if (_isKeeper)
         {
-            <Button OnClick="CreateNewPregen" Variant="success" Icon="fa-user-plus">
-                Добавить преген
-            </Button>
-            <Button OnClick="CreateNewTemplate" Variant="info" Icon="fa-plus">
-                Добавить NPC
-            </Button>
+            <Button OnClick="CreateNpc" Variant="info" Icon="fa-masks-theater">Добавить НПС</Button>
+            <Button OnClick="CreatePregen" Variant="success" Icon="fa-user-plus">Добавить прегена</Button>
         }
     </Actions>
 </PageHeader>
@@ -38,274 +37,229 @@
 }
 else
 {
-<div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="max-w-7xl mx-auto px-4 py-6">
 
-    @if (!string.IsNullOrEmpty(_notification.Message))
-    {
-        <div class="mb-4">
-            <NotificationAlert Type="@_notification.Type" Message="@_notification.Message" OnClose="ClearNotification"/>
-        </div>
-    }
-
-    @if (_isLoading)
-    {
-        <div class="flex justify-center p-12">
-            <LoadingIndicator/>
-        </div>
-    }
-    else if (_characterTemplates == null || !_characterTemplates.Any())
-    {
-        <div class="bg-gray-50 border border-gray-200 text-gray-700 px-6 py-8 rounded-lg text-center">
-            <div class="mb-3">
-                <i class="fa-solid fa-users-slash text-4xl text-gray-400"></i>
+        @if (!string.IsNullOrEmpty(_notificationMessage))
+        {
+            <div class="mb-4">
+                <NotificationAlert Type="@_notificationType" Message="@_notificationMessage" OnClose="ClearNotification"/>
             </div>
-            <h3 class="text-lg font-medium text-gray-800 mb-2">Нет доступных шаблонов</h3>
-            <p class="text-gray-600 mb-4">Создайте свой первый шаблон персонажа</p>
-            <Button OnClick="CreateNewTemplate" Variant="info" Icon="fa-plus">
-                Добавить шаблон
-            </Button>
-        </div>
-    }
-    else
-    {
-        <!-- Tab filter for Pregens vs NPCs -->
-        <div class="border-b border-gray-200 mb-6">
-            <nav class="flex gap-1 -mb-px">
+        }
+
+        <div class="border-b border-gray-200 mb-4">
+            <nav class="flex flex-wrap gap-1 -mb-px">
                 <button type="button"
-                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "all" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
-                        @onclick='() => _activeTab = "all"'>
-                    Все (@_characterTemplates.Count)
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_tab == "npc" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _tab = "npc"'>
+                    <i class="fa-solid fa-masks-theater mr-1"></i> НПС (@_npcs.Count)
                 </button>
                 <button type="button"
-                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "pregens" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
-                        @onclick='() => _activeTab = "pregens"'>
-                    <i class="fa-solid fa-user mr-1"></i> Преген-персонажи (@_pregens.Count)
-                </button>
-                <button type="button"
-                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_activeTab == "npcs" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
-                        @onclick='() => _activeTab = "npcs"'>
-                    <i class="fa-solid fa-masks-theater mr-1"></i> NPC (@_npcs.Count)
+                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_tab == "pregen" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
+                        @onclick='() => _tab = "pregen"'>
+                    <i class="fa-solid fa-user mr-1"></i> Прегены (@_pregens.Count)
                 </button>
             </nav>
         </div>
 
-        @if (_activeTab == "npcs")
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+            <input type="text" class="cm-input max-w-xs" placeholder="Поиск по имени..."
+                   @bind="_search" @bind:event="oninput"/>
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" checked="@_showArchived" @onchange="ToggleArchived"/>
+                Показывать архив
+            </label>
+        </div>
+
+        @if (_isLoading)
         {
-            <div class="flex gap-2 mb-4">
-                <button type="button"
-                        class="px-3 py-1 text-xs font-medium rounded-full transition-colors @(_roleFilter is null ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")"
-                        @onclick="() => _roleFilter = null">
-                    Все роли
-                </button>
-                @foreach (var role in Enum.GetValues<NpcRole>())
+            <div class="flex justify-center p-12">
+                <LoadingIndicator/>
+            </div>
+        }
+        else if (Visible.Count == 0)
+        {
+            <EmptyState Title="@(_tab == "npc" ? "Нет НПС" : "Нет прегенов")"
+                        Message="Создайте первого — он появится в библиотеке и будет доступен во всех сценариях."
+                        IconClass="fa-users-slash"/>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var character in Visible)
                 {
-                    <button type="button"
-                            class="px-3 py-1 text-xs font-medium rounded-full transition-colors @(_roleFilter == role ? "bg-gray-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")"
-                            @onclick="() => _roleFilter = role">
-                        @role.ToRussianString()
-                    </button>
+                    <CharacterSummaryCard Character="character"
+                                          OwnerLabel="@OwnerLabel(character)"
+                                          ScenarioNames="@ScenarioNamesFor(character)"
+                                          OnCast="@(_tab == "npc" ? OnCastCallback : default)"
+                                          OnRemove="@(character.Status == CharacterStatus.Archived ? default : OnArchiveCallback)"
+                                          OnRestore="@(character.Status == CharacterStatus.Archived ? OnRestoreCallback : default)"/>
                 }
             </div>
         }
+    </div>
 
-        <!-- Card Grid View -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            @foreach (var template in FilteredTemplates)
-            {
-                <CharacterTemplateCard
-                    Template="@template"
-                    OnDelete="@(async (template) => await ConfirmDeleteTemplate(template))"
-                    OnLinkToScenario="@(async (template) => await ShowLinkToScenarioDialog(template))"/>
-            }
-        </div>
+    <ConfirmationModal IsVisible="_showArchiveConfirmation"
+                       OnConfirm="ArchiveAsync"
+                       OnCancel="CancelArchive"
+                       Title="Отправить в архив"
+                       Message="@($"Отправить «{_pendingArchive?.CharacterName}» в архив? Лист останется доступен во вкладке архива.")"
+                       ConfirmText="В архив"
+                       IconType="warning"
+                       WarningText=""/>
 
-        @if (!FilteredTemplates.Any())
-        {
-            <div class="bg-gray-50 border border-gray-200 text-gray-700 px-6 py-8 rounded-lg text-center mt-4">
-                <p class="text-gray-600">Нет шаблонов в этой категории</p>
-            </div>
-        }
+    @if (_castTarget is not null)
+    {
+        <CastNpcDialog CharacterId="_castTarget.Id"
+                       CharacterName="@_castTarget.CharacterName"
+                       OnCancel="CloseCastDialog"
+                       OnSaved="HandleCastSaved"/>
     }
-</div>
-
-<ConfirmationModal IsVisible="_showDeleteConfirmation"
-                   OnConfirm="DeleteTemplate"
-                   OnCancel="CancelDelete"
-                   Title="Подтверждение удаления"
-                   Message="@($"Вы уверены, что хотите удалить шаблон \"{_templateToDelete?.CharacterName}\"? Это действие нельзя отменить.")"
-                   ConfirmText="Удалить"
-                   IconType="error"
-                   WarningText="" />
-
-@if (_showLinkDialog && _templateToLink != null)
-{
-    <LinkToScenarioDialog
-        CharacterTemplateId="@_templateToLink.Id"
-        OnCancel="@CloseLinkDialog"
-        OnSave="@SaveCharacterTemplateWithScenario"/>
-}
 }
 
 @code {
-    private List<CharacterStorageDto>? _characterTemplates;
-    private List<CharacterStorageDto> _pregens = [];
-    private List<CharacterStorageDto> _npcs = [];
-    private bool _isLoading = true;
     private bool _isKeeper;
-    private bool _showDeleteConfirmation = false;
-    private CharacterStorageDto? _templateToDelete;
-    private string _activeTab = "all";
-    private NpcRole? _roleFilter;
+    private bool _isLoading = true;
+    private string _tab = "npc";
+    private string _search = "";
+    private bool _showArchived;
 
-    private IEnumerable<CharacterStorageDto> FilteredTemplates => _activeTab switch
-    {
-        "pregens" => _pregens,
-        "npcs" => _roleFilter.HasValue
-            ? _npcs.Where(t => t.NpcRole == _roleFilter.Value)
-            : _npcs,
-        _ => _characterTemplates ?? []
-    };
+    private List<CharacterStorageDto> _npcs = [];
+    private List<CharacterStorageDto> _pregens = [];
+    private Dictionary<Guid, List<string>> _scenarioNames = [];
+    private Dictionary<Guid, string> _campaignNames = [];
 
-    // Link to scenario dialog
-    private bool _showLinkDialog = false;
-    private CharacterStorageDto? _templateToLink;
+    private CharacterStorageDto? _pendingArchive;
+    private bool _showArchiveConfirmation;
+    private CharacterStorageDto? _castTarget;
 
-    private struct Notification
-    {
-        public string Type { get; set; }
-        public string Message { get; set; }
-    }
+    private string? _notificationMessage;
+    private string _notificationType = "success";
 
-    private Notification _notification;
+    private EventCallback<CharacterStorageDto> OnCastCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, ShowCastDialog);
+    private EventCallback<CharacterStorageDto> OnArchiveCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, ConfirmArchive);
+    private EventCallback<CharacterStorageDto> OnRestoreCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, RestoreAsync);
+
+    private List<CharacterStorageDto> Visible =>
+        (_tab == "npc" ? _npcs : _pregens)
+        .Where(c => string.IsNullOrWhiteSpace(_search)
+                    || c.CharacterName.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .ToList();
 
     protected override async Task OnInitializedAsync()
     {
         _isKeeper = await IdentityService.IsKeeper();
-        await LoadTemplatesAsync();
+        if (_isKeeper)
+            await LoadAsync();
+        else
+            _isLoading = false;
     }
 
-    private async Task LoadTemplatesAsync()
+    private async Task LoadAsync()
     {
         _isLoading = true;
 
         try
         {
-            // Load all character templates
-            _characterTemplates = await CharacterService.GetAllCharacterTemplatesAsync();
-            _pregens = _characterTemplates
-                .Where(t => t.Character?.CharacterType == CharacterType.PlayerCharacter)
-                .ToList();
-            _npcs = _characterTemplates
-                .Where(t => t.Character?.CharacterType == CharacterType.NonPlayerCharacter)
-                .ToList();
+            _npcs = await CharacterService.GetNpcsAsync(null, _showArchived);
+            _pregens = await CharacterService.GetPregenTemplatesAsync(_showArchived);
+            _scenarioNames = await ScenarioService.GetNpcScenarioNamesAsync();
+
+            var campaigns = await CampaignService.GetKeeperCampaignsAsync();
+            _campaignNames = campaigns.ToDictionary(c => c.Id, c => c.Name);
         }
         catch (Exception ex)
         {
-            _notification = new Notification
-            {
-                Type = "error",
-                Message = $"Ошибка при загрузке шаблонов персонажей: {ex.Message}"
-            };
+            ShowNotification($"Ошибка при загрузке: {ex.Message}", "error");
         }
         finally
         {
             _isLoading = false;
-            StateHasChanged();
         }
     }
 
-    private void CreateNewTemplate()
+    private string OwnerLabel(CharacterStorageDto character) =>
+        character.CampaignId is { } campaignId && _campaignNames.TryGetValue(campaignId, out var name)
+            ? $"Кампания: {name}"
+            : character.CampaignId is not null
+                ? "Кампания"
+                : "Библиотека";
+
+    private IReadOnlyList<string> ScenarioNamesFor(CharacterStorageDto character) =>
+        _scenarioNames.TryGetValue(character.Id, out var names) ? names : [];
+
+    private async Task ToggleArchived(ChangeEventArgs e)
     {
-        NavigationManager.NavigateTo("/character/create/template");
+        _showArchived = e.Value is true;
+        await LoadAsync();
     }
 
-    private void CreateNewPregen()
+    private void CreateNpc() => NavigationManager.NavigateTo("/character/create/npc");
+
+    private void CreatePregen() => NavigationManager.NavigateTo("/character/create/pregen");
+
+    private void ConfirmArchive(CharacterStorageDto character)
     {
-        NavigationManager.NavigateTo("/character/create/pregen");
+        _pendingArchive = character;
+        _showArchiveConfirmation = true;
     }
 
-    private void EditTemplate(Guid id)
+    private void CancelArchive()
     {
-        NavigationManager.NavigateTo($"/character/{id}");
+        _pendingArchive = null;
+        _showArchiveConfirmation = false;
     }
 
-    private async Task ConfirmDeleteTemplate(CharacterStorageDto template)
+    private async Task ArchiveAsync()
     {
-        _templateToDelete = template;
-        _showDeleteConfirmation = true;
-        await Task.CompletedTask;
-    }
-
-    private void CancelDelete()
-    {
-        _templateToDelete = null;
-        _showDeleteConfirmation = false;
-    }
-
-    private async Task DeleteTemplate()
-    {
-        if (_templateToDelete == null)
-            return;
+        if (_pendingArchive is null) return;
 
         try
         {
-            await CharacterService.SetCharacterStatusAsync(_templateToDelete.Id, CharacterStatus.Archived);
-
-            _notification = new Notification
-            {
-                Type = "success",
-                Message = $"Шаблон \"{_templateToDelete.CharacterName}\" успешно удален"
-            };
-
-            await LoadTemplatesAsync();
+            await CharacterService.SetCharacterStatusAsync(_pendingArchive.Id, CharacterStatus.Archived);
+            ShowNotification($"«{_pendingArchive.CharacterName}» отправлен в архив", "success");
+            await LoadAsync();
         }
         catch (Exception ex)
         {
-            _notification = new Notification
-            {
-                Type = "error",
-                Message = $"Ошибка при удалении шаблона: {ex.Message}"
-            };
+            ShowNotification($"Ошибка при архивировании: {ex.Message}", "error");
         }
         finally
         {
-            _showDeleteConfirmation = false;
-            _templateToDelete = null;
+            _pendingArchive = null;
+            _showArchiveConfirmation = false;
         }
     }
 
-    private void ClearNotification()
+    private async Task RestoreAsync(CharacterStorageDto character)
     {
-        _notification = new Notification();
-        StateHasChanged();
-    }
-
-    // Show dialog to link character to scenario
-    private async Task ShowLinkToScenarioDialog(CharacterStorageDto characterStorage)
-    {
-        _templateToLink = characterStorage;
-        _showLinkDialog = true;
-        await Task.CompletedTask;
-    }
-
-    // Close the link dialog
-    private void CloseLinkDialog()
-    {
-        _showLinkDialog = false;
-        _templateToLink = null;
-    }
-
-    // Save character template with scenario link
-    private async Task SaveCharacterTemplateWithScenario()
-    {
-        _notification = new Notification
+        try
         {
-            Type = "success",
-            Message = "Персонаж успешно привязан к сценарию"
-        };
-
-        CloseLinkDialog();
-        await LoadTemplatesAsync();
+            await CharacterService.SetCharacterStatusAsync(character.Id, CharacterStatus.Active);
+            ShowNotification($"«{character.CharacterName}» возвращён из архива", "success");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowNotification($"Ошибка при восстановлении: {ex.Message}", "error");
+        }
     }
 
+    private void ShowCastDialog(CharacterStorageDto character) => _castTarget = character;
+
+    private void CloseCastDialog() => _castTarget = null;
+
+    private async Task HandleCastSaved()
+    {
+        _castTarget = null;
+        ShowNotification("НПС добавлен в сценарий", "success");
+        await LoadAsync();
+    }
+
+    private void ShowNotification(string message, string type)
+    {
+        _notificationMessage = message;
+        _notificationType = type;
+    }
+
+    private void ClearNotification() => _notificationMessage = null;
 }

@@ -1,15 +1,11 @@
 ﻿namespace CampaignManager.Web.Components.Features.Characters.Model;
 
 /// <summary>
-///     Статус персонажа в кампании
+///     Состояние листа персонажа. Не описывает принадлежность — для этого есть
+///     <see cref="CharacterKind" />.
 /// </summary>
 public enum CharacterStatus
 {
-    /// <summary>
-    /// Персонаж создан как шаблон для сюжетов
-    /// </summary>
-    Template,
-
     /// <summary>
     ///     Активный персонаж, используемый в игре
     /// </summary>

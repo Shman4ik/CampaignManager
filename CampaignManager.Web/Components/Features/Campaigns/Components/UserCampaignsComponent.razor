@@ -1,8 +1,11 @@
 @using CampaignManager.Web.Components.Features.Campaigns.Models
 @using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
 @inject CampaignService CampaignService
+@inject CharacterService CharacterService
 @inject IdentityService UserInformationService
 @inject NavigationManager NavigationManager
 
@@ -34,7 +37,7 @@
             {
                 var isKeeper = CurrentUserId == campaign.KeeperEmail;
                 var userCharacter = GetUserCharacter(campaign);
-                var npcs = isKeeper && _isKeeper ? GetCampaignNpcs(campaign) : [];
+                var npcs = isKeeper && _isKeeper ? GetCampaignNpcs(campaign.Id) : [];
 
                 <div class="cm-card campaign-card">
                     <div class="campaign-card-header">
@@ -113,6 +116,9 @@
     private string? CurrentUserId;
     private bool _isKeeper;
 
+    /// <summary>НПС по кампаниям, где текущий пользователь — Хранитель.</summary>
+    private readonly Dictionary<Guid, List<CharacterStorageDto>> _campaignNpcs = [];
+
     protected override async Task OnInitializedAsync()
     {
         CurrentUserId = UserInformationService.GetCurrentUserEmail();
@@ -120,6 +126,15 @@
         {
             UserCampaigns = await CampaignService.GetUserCampaignsAsync();
             _isKeeper = await UserInformationService.IsKeeper();
+
+            if (_isKeeper)
+            {
+                foreach (var campaign in UserCampaigns?.Where(c => c.KeeperEmail == CurrentUserId) ?? [])
+                {
+                    var npcs = await CharacterService.GetNpcsAsync(campaign.Id);
+                    _campaignNpcs[campaign.Id] = npcs.Where(n => n.CampaignId == campaign.Id).ToList();
+                }
+            }
         }
     }
 
@@ -130,11 +145,11 @@
             .Where(p => p.Status == CharacterStatus.Active)
             .SingleOrDefault();
 
-    private List<CharacterStorageDto> GetCampaignNpcs(Campaign campaign) =>
-        campaign.Players?
-            .SelectMany(p => p.Characters ?? [])
-            .Where(c => c.Character.CharacterType == CharacterType.NonPlayerCharacter)
-            .ToList() ?? [];
+    /// <summary>
+    ///     НПС кампании — отдельные листы с <c>CampaignId</c>, а не персонажи в слотах игроков.
+    /// </summary>
+    private List<CharacterStorageDto> GetCampaignNpcs(Guid campaignId) =>
+        _campaignNpcs.TryGetValue(campaignId, out var npcs) ? npcs : [];
 
     private void EditCharacter(Guid characterId) =>
         NavigationManager.NavigateTo($"/character/{characterId}");
@@ -143,5 +158,5 @@
         NavigationManager.NavigateTo($"/character/create/{campaignId}");
 
     private void AddNpc(Guid campaignId) =>
-        NavigationManager.NavigateTo($"/character/create/{campaignId}/npc");
+        NavigationManager.NavigateTo($"/character/create/npc?campaignId={campaignId}");
 }

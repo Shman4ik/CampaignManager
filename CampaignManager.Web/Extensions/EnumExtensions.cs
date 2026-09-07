@@ -1,6 +1,7 @@
 ﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Books.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 
@@ -90,6 +91,22 @@ public static class EnumExtensions
             _ => role.ToString()
         };
     }
+
+    public static string ToRussianString(this CharacterKind kind) => kind switch
+    {
+        CharacterKind.PlayerCharacter => "Персонаж игрока",
+        CharacterKind.Pregen => "Преген",
+        CharacterKind.Npc => "НПС",
+        _ => kind.ToString()
+    };
+
+    public static string ToRussianString(this CombatSide side) => side switch
+    {
+        CombatSide.Party => "отряд",
+        CombatSide.Enemy => "противник",
+        CombatSide.Neutral => "нейтральный",
+        _ => side.ToString()
+    };
 
     public static string ToRussianString(this BookType type) => type switch
     {
