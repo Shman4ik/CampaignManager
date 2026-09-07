@@ -5,7 +5,7 @@ WORKDIR /app
 EXPOSE 8080
 
 # Install Node.js for Tailwind CSS compilation via multi-stage copy
-FROM node:24-slim AS node
+FROM node:26-slim AS node
 
 # This stage is used to build and publish the service project
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
