@@ -17,9 +17,11 @@
         var barColor = pct <= 25 ? "bg-red-600" : pct <= 50 ? "bg-yellow-500" : "bg-purple-500";
         var mythos = SanityRules.GetMythosValue(Character);
         var indefThreshold = SanityRules.IndefiniteInsanityThreshold(current);
-        var episode = Character.State.SanityLossEpisode;
-        var triggersTemp = episode >= SanityRules.TemporaryInsanityThreshold;
-        var triggersIndef = episode >= indefThreshold && episode > 0;
+        var dayLoss = Character.State.SanityLossEpisode;
+        var lastLoss = Character.State.LastSanityLoss;
+        // Два разных правила с разными окнами: ИНТ — по одной причине, бессрочное — за игровой день.
+        var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
+        var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
     }
 
     <!-- Текущий / Максимум -->
@@ -61,28 +63,38 @@
         <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 10))">−1d10</button>
     </div>
 
-    <!-- Эпизод -->
+    <!-- Потери: по одной причине и за игровой день -->
     <div class="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
-        <div class="flex items-center justify-between mb-1">
-            <span class="text-xs font-semibold text-gray-600 uppercase">Эпизод потери</span>
-            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ResetEpisode">
-                <i class="fa-solid fa-rotate-left mr-1"></i>Новый эпизод
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <span class="text-xs font-semibold text-gray-600 uppercase">Потери рассудка</span>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ResetDay">
+                <i class="fa-solid fa-rotate-left mr-1"></i>Новый день
             </button>
         </div>
         <div class="text-sm text-gray-700">
-            Накоплено в текущем эпизоде: <span class="font-bold text-gray-900">@episode</span>
+            За игровой день: <span class="font-bold text-gray-900">@dayLoss</span>
             <span class="text-xs text-gray-500">(порог бессрочного: @indefThreshold)</span>
+        </div>
+        <div class="text-sm text-gray-700">
+            От последней причины: <span class="font-bold text-gray-900">@lastLoss</span>
+            <span class="text-xs text-gray-500">(порог проверки ИНТ: @SanityRules.TemporaryInsanityThreshold)</span>
         </div>
         @if (triggersTemp)
         {
             <div class="mt-2 px-2 py-1 bg-purple-50 border border-purple-200 rounded text-xs text-purple-800">
-                ⚠ ≥5 пунктов за один эпизод — пройдите проверку <strong>ИНТ</strong>: при успехе сыщик впадает во временное безумие (1d10 часов).
+                <div>
+                    ⚠ Потеряно @lastLoss пунктов по одной причине — пройдите проверку <strong>ИНТ</strong>:
+                    при успехе сыщик впадает во временное безумие (1d10 часов).
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mt-1.5" @onclick="ClearLastLoss">
+                    Проверка пройдена
+                </button>
             </div>
         }
         @if (triggersIndef)
         {
             <div class="mt-2 px-2 py-1 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-                ⚠ Потеряно ≥1/5 от текущего Рассудка за день — <strong>бессрочное безумие</strong>.
+                ⚠ Потеряно ≥1/5 от текущего Рассудка за игровой день — <strong>бессрочное безумие</strong>.
             </div>
         }
     </div>
@@ -209,6 +221,9 @@
     private void ApplyManualLoss() => ApplyLoss(Math.Max(1, _manualAmount));
     private void ApplyManualHeal() => ApplyHeal(Math.Max(1, _manualAmount));
 
+    /// <summary>
+    ///     Одно нажатие — одна причина: и бросок кубика, и ручная сумма считаются единой потерей.
+    /// </summary>
     private void ApplyLoss(int amount)
     {
         var maxSan = SanityRules.ComputeMaxSanity(Character);
@@ -217,6 +232,7 @@
         var actualLoss = current - newVal;
         Character.DerivedAttributes.Sanity.Value = newVal;
         Character.State.SanityLossEpisode += actualLoss;
+        Character.State.LastSanityLoss = actualLoss;
     }
 
     private void ApplyHeal(int amount)
@@ -225,7 +241,13 @@
         Character.DerivedAttributes.Sanity.Value = Math.Min(maxSan, Character.DerivedAttributes.Sanity.Value + amount);
     }
 
-    private void ResetEpisode() => Character.State.SanityLossEpisode = 0;
+    private void ResetDay()
+    {
+        Character.State.SanityLossEpisode = 0;
+        Character.State.LastSanityLoss = 0;
+    }
+
+    private void ClearLastLoss() => Character.State.LastSanityLoss = 0;
 
     private void ToggleTemporary(bool v)
     {

@@ -71,8 +71,8 @@ public sealed class CharacterGenerationService(SkillService skillService)
         // 8. Биография
         GenerateBiography(character, log);
 
-        // 9. Финансы по таблице «Наличные и активы»
-        CalculateFinances(character, log);
+        // 9. Финансы по таблице «Наличные и активы» — у 1920-х и современности свои столбцы
+        CalculateFinances(character, era, log);
 
         return new GenerationResult
         {
@@ -372,42 +372,37 @@ public sealed class CharacterGenerationService(SkillService skillService)
     {
         log.Add("Производные", "--- Расчёт производных характеристик ---");
 
-        // Хиты: (ТЕЛ + ВЫН) / 10
-        var hp = (character.Characteristics.Size.Regular + character.Characteristics.Constitution.Regular) / 10;
-        character.DerivedAttributes.HitPoints = new AttributeWithMaxValue(hp, hp);
+        // Возраст нужен для Скорости, поэтому он должен стоять на листе до пересчёта.
+        character.PersonalInfo.Age = age;
+
+        // Хиты, магия, скорость, комплексия, БкУ и уклонение — по общим правилам главы 3.
+        DerivedAttributeRules.InitializeNewSheet(character);
+
+        var hp = character.DerivedAttributes.HitPoints.MaxValue;
         log.Add("Производные", "Очки здоровья = (ТЕЛ + ВЫН) / 10",
             result: hp,
             details: $"({character.Characteristics.Size.Regular} + {character.Characteristics.Constitution.Regular}) / 10 = {hp}");
 
-        // Магия: МОЩ / 5
-        var mp = character.Characteristics.Power.Regular / 5;
-        character.DerivedAttributes.MagicPoints = new AttributeWithMaxValue(mp, mp);
+        var mp = character.DerivedAttributes.MagicPoints.MaxValue;
         log.Add("Производные", "Очки магии = МОЩ / 5",
             result: mp,
             details: $"{character.Characteristics.Power.Regular} / 5 = {mp}");
 
-        // Рассудок = МОЩ
-        var sanity = character.Characteristics.Power.Regular;
-        character.DerivedAttributes.Sanity = new AttributeWithMaxValue(sanity, 99);
-        log.Add("Производные", "Рассудок = МОЩ", result: sanity);
+        log.Add("Производные", "Рассудок = МОЩ", result: character.DerivedAttributes.Sanity.Value);
 
-        // Удача: 3d6 × 5
+        // Удача: 3d6 × 5. Потолок — 99, а не выпавшее значение: Удача растёт по ходу игры (стр. 93).
         var luck = RollLuck(age, log);
-        character.DerivedAttributes.Luck = new AttributeWithMaxValue(luck, luck);
+        character.DerivedAttributes.Luck = new AttributeWithMaxValue(luck, DerivedAttributeRules.MaxLuck);
 
-        // Скорость (c учётом возраста)
-        var move = CalculateMoveRate(character, age);
-        character.PersonalInfo.MoveSpeed = move;
+        var move = character.PersonalInfo.MoveSpeed;
         log.Add("Производные", "Скорость передвижения", result: move,
             details: age >= 40
                 ? $"СИЛ={character.Characteristics.Strength.Regular}, ЛВК={character.Characteristics.Dexterity.Regular}, ТЕЛ={character.Characteristics.Size.Regular}, возраст {age} (–{(age - 40) / 10 + 1} за возраст)"
                 : $"СИЛ={character.Characteristics.Strength.Regular}, ЛВК={character.Characteristics.Dexterity.Regular}, ТЕЛ={character.Characteristics.Size.Regular}");
 
-        // Телосложение и бонус к урону
-        CalculateBuildAndDamageBonus(character, log);
+        log.Add("Производные", $"Комплекция={character.PersonalInfo.Build}, Бонус к урону={character.PersonalInfo.DamageBonus}",
+            details: $"СИЛ + ТЕЛ = {character.Characteristics.Strength.Regular + character.Characteristics.Size.Regular}");
 
-        // Уклонение = ЛВК / 2
-        character.PersonalInfo.Dodge = character.Characteristics.Dexterity.Regular / 2;
         log.Add("Производные", "Уклонение = ЛВК / 2", result: character.PersonalInfo.Dodge);
     }
 
@@ -440,50 +435,6 @@ public sealed class CharacterGenerationService(SkillService skillService)
         return (d1 + d2 + d3) * 5;
     }
 
-    private static int CalculateMoveRate(Character character, int age)
-    {
-        var str = character.Characteristics.Strength.Regular;
-        var dex = character.Characteristics.Dexterity.Regular;
-        var siz = character.Characteristics.Size.Regular;
-
-        int baseMove;
-        if (str < siz && dex < siz) baseMove = 7;
-        else if (str > siz && dex > siz) baseMove = 9;
-        else baseMove = 8;
-
-        // CoC 7e: –1 скорость за каждое десятилетие свыше 40
-        if (age >= 40)
-        {
-            var decades = (age - 40) / 10 + 1;
-            baseMove = Math.Max(1, baseMove - decades);
-        }
-
-        return baseMove;
-    }
-
-    private static void CalculateBuildAndDamageBonus(Character character, CharacterGenerationLog log)
-    {
-        var sum = character.Characteristics.Strength.Regular + character.Characteristics.Size.Regular;
-
-        var (build, dmg) = sum switch
-        {
-            >= 2 and <= 64 => ("-2", "-2"),
-            >= 65 and <= 84 => ("-1", "-1"),
-            >= 85 and <= 124 => ("0", "0"),
-            >= 125 and <= 164 => ("1", "+1D4"),
-            >= 165 and <= 204 => ("2", "+1D6"),
-            >= 205 and <= 284 => ("3", "+2D6"),
-            >= 285 and <= 364 => ("4", "+3D6"),
-            >= 365 and <= 444 => ("5", "+4D6"),
-            _ => ($"{(sum - 365) / 80 + 5}", $"+{(sum - 365) / 80 + 4}D6")
-        };
-
-        character.PersonalInfo.Build = build;
-        character.PersonalInfo.DamageBonus = dmg;
-        log.Add("Производные", $"Комплекция={build}, Бонус к урону={dmg}",
-            details: $"СИЛ + ТЕЛ = {sum}");
-    }
-
     #endregion
 
     #region Навыки
@@ -496,14 +447,9 @@ public sealed class CharacterGenerationService(SkillService skillService)
         // 1. Установить базовые значения Уклонения и Родного языка
         log.Add("Навыки", "--- Установка базовых значений навыков ---");
 
-        var dodge = allSkills.FirstOrDefault(s => s.Name == "Уклонение");
-        if (dodge is not null)
-        {
-            dodge.Value.Regular = character.Characteristics.Dexterity.Regular / 2;
-            dodge.Value.UpdateDerived();
-            character.PersonalInfo.Dodge = dodge.Value.Regular;
-            log.Add("Навыки", "Уклонение = ЛВК / 2", result: dodge.Value.Regular);
-        }
+        // Навыки появились только сейчас, поэтому уклонение раскладываем по обоим местам здесь.
+        DerivedAttributeRules.ApplyDodge(character, DerivedAttributeRules.ComputeDodge(character.Characteristics));
+        log.Add("Навыки", "Уклонение = ЛВК / 2", result: character.PersonalInfo.Dodge);
 
         var ownLang = allSkills.FirstOrDefault(s => s.Name == "Языки (родной)");
         if (ownLang is not null)
@@ -874,9 +820,12 @@ public sealed class CharacterGenerationService(SkillService skillService)
 
     #region Финансы
 
-    private void CalculateFinances(Character character, CharacterGenerationLog log)
+    private void CalculateFinances(Character character, Eras? era, CharacterGenerationLog log)
     {
-        log.Add("Финансы", "--- Расчёт финансов (1920-е) ---");
+        // Современность считаем только когда эпоха названа и она не классическая:
+        // у смешанной кампании (обе эпохи) деньги оставляем по 1920-м.
+        var isModern = era is { } e && e.HasFlag(Eras.Modern) && !e.HasFlag(Eras.Classic);
+        log.Add("Финансы", $"--- Расчёт финансов ({(isModern ? "наше время" : "1920-е")}) ---");
 
         var creditRatingSkill = character.Skills.SkillGroups
             .SelectMany(g => g.Skills)
@@ -884,19 +833,30 @@ public sealed class CharacterGenerationService(SkillService skillService)
 
         var cr = creditRatingSkill?.Value.Regular ?? 0;
 
-        var (cash, assets, pocket) = cr switch
-        {
-            0 => ("0.50", "нет", "0.50"),
-            >= 1 and <= 9 => ($"{cr * 1}", $"{cr * 10}", "2"),
-            >= 10 and <= 49 => ($"{cr * 2}", $"{cr * 50}", "10"),
-            >= 50 and <= 89 => ($"{cr * 5}", $"{cr * 500}", "50"),
-            >= 90 and <= 98 => ($"{cr * 20}", $"{cr * 2000}", "250"),
-            _ => ("50000", "5000000+", "5000")
-        };
+        // Таблица II «Наличные и активы» (стр. 45).
+        var (cash, assets, pocket) = isModern
+            ? cr switch
+            {
+                <= 0 => ("10", "нет", "10"),
+                <= 9 => ($"{cr * 20}", $"{cr * 200}", "40"),
+                <= 49 => ($"{cr * 40}", $"{cr * 1000}", "200"),
+                <= 89 => ($"{cr * 100}", $"{cr * 10000}", "1000"),
+                <= 98 => ($"{cr * 400}", $"{cr * 40000}", "5000"),
+                _ => ("1000000", "100000000+", "100000")
+            }
+            : cr switch
+            {
+                <= 0 => ("0.50", "нет", "0.50"),
+                <= 9 => ($"{cr * 1}", $"{cr * 10}", "2"),
+                <= 49 => ($"{cr * 2}", $"{cr * 50}", "10"),
+                <= 89 => ($"{cr * 5}", $"{cr * 500}", "50"),
+                <= 98 => ($"{cr * 20}", $"{cr * 2000}", "250"),
+                _ => ("50000", "5000000+", "5000")
+            };
 
         character.Finances.Cash = $"${cash}";
         character.Finances.PocketMoney = $"${pocket}";
-        character.Finances.Assets = [$"${assets}"];
+        character.Finances.Assets = [assets is "нет" ? assets : $"${assets}"];
 
         log.Add("Финансы", $"Средства: {cr}%",
             details: $"Наличные: ${cash}, Активы: ${assets}, Карманные: ${pocket}");

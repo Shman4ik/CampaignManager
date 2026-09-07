@@ -160,6 +160,10 @@ public partial class CharacterPage
                 Character = await CreateNewCharacterTemplateAsync();
             }
 
+            // Старые листы хранят потолок Удачи равным стартовому броску — правим при открытии.
+            if (Character is not null)
+                DerivedAttributeRules.NormalizeLuckCap(Character);
+
             if (CharacterStorageDto?.CampaignPlayerId is not null)
                 CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
             else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
@@ -175,7 +179,7 @@ public partial class CharacterPage
     private async Task<Character> CreateNewCharacterTemplateAsync()
     {
         var skills = await SkillService.BuildDefaultSkillsModelAsync(CampaignEra);
-        return new Character
+        var character = new Character
         {
             PersonalInfo = new PersonalInfo
             {
@@ -190,6 +194,11 @@ public partial class CharacterPage
             Weapons = new List<Weapon>(),
             Notes = string.Empty
         };
+
+        // Чистый лист тоже обязан быть валидным: ПЗ/ПМ/Рассудок, СКО, комплексия, БкУ и уклонение
+        // выводятся из характеристик, а не остаются нулями до первой правки.
+        DerivedAttributeRules.InitializeNewSheet(character);
+        return character;
     }
 
     /// <summary>Подпись «чей это лист»: у НПС игрока нет.</summary>
@@ -354,9 +363,22 @@ public partial class CharacterPage
         }
     }
 
+    /// <summary>
+    ///     Правка характеристики тянет за собой все вторичные атрибуты (глава 3), иначе лист
+    ///     после ручного редактирования перестаёт сходиться с правилами.
+    /// </summary>
     private void UpdateCharacteristic(AttributeValue value)
     {
         value.UpdateDerived();
+        RecalculateDerivedAttributes();
+    }
+
+    private void RecalculateDerivedAttributes()
+    {
+        if (Character is null)
+            return;
+
+        DerivedAttributeRules.Recalculate(Character);
         StateHasChanged();
     }
 
