@@ -107,23 +107,47 @@ public static class AccountEndpoints
     /// <returns>
     /// <list type="bullet">
     /// <item><description>302 Found - Redirect to specified return URL</description></item>
+    /// <item><description>400 Bad Request - Request was initiated from another site</description></item>
     /// </list>
     /// </returns>
     /// <response code="302">Redirects to the specified return URL after successful logout</response>
+    /// <response code="400">Cross-site logout request was rejected</response>
     /// <remarks>
     /// This endpoint clears the authentication cookie and signs out the user from the application.
+    /// The return URL is validated the same way as on login, so it can only point back at this host.
     /// Note: This does not revoke the Google OAuth tokens or sign out from Google accounts.
     /// </remarks>
-    private static async Task<RedirectHttpResult> HandleLogout(
+    private static async Task<Results<RedirectHttpResult, BadRequest<string>>> HandleLogout(
         string? returnUrl,
         HttpContext httpContext)
     {
-        AuthenticationProperties properties = new() { RedirectUri = returnUrl ?? "/" };
+        // A cross-site navigation to this endpoint is never a legitimate flow, only a CSRF logout.
+        if (!IsSameSiteRequest(httpContext))
+            return TypedResults.BadRequest("Cross-site logout requests are not allowed");
+
+        // Same validation as the login endpoint: without it this is an open redirect off our domain.
+        var normalizedReturnUrl = NormalizeReturnUrl(returnUrl, httpContext);
+
+        AuthenticationProperties properties = new() { RedirectUri = normalizedReturnUrl };
 
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
 
         // Using TypedResults.Redirect for consistency
-        return TypedResults.Redirect(returnUrl ?? "/");
+        return TypedResults.Redirect(normalizedReturnUrl);
+    }
+
+    /// <summary>
+    /// Rejects requests initiated from another site, using the Sec-Fetch-Site hint browsers send on
+    /// every navigation. Requests without the header (older browsers, direct calls) are allowed through.
+    /// </summary>
+    private static bool IsSameSiteRequest(HttpContext httpContext)
+    {
+        var fetchSite = httpContext.Request.Headers["Sec-Fetch-Site"].ToString();
+        if (string.IsNullOrEmpty(fetchSite))
+            return true;
+
+        // "none" = typed in the address bar or a bookmark; "same-origin"/"same-site" = our own pages.
+        return fetchSite is "none" or "same-origin" or "same-site";
     }
 
     /// <summary>
