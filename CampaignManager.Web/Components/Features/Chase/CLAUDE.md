@@ -12,6 +12,10 @@ Chase-scene resolution per Call of Cthulhu 7e rules (Chapter 7).
 - `CreateSnapshot()` / `RestoreSnapshot()` сериализуют **всё** состояние, включая `CharacterSource`
   и `CreatureSource` внутри участников (иначе после восстановления перестаёт работать автоподстановка
   значений навыков).
+- Свойство `PersistedState` помечено `[PersistentState]`, сервис зарегистрирован через
+  `RegisterPersistentService` в `Program.cs`: при паузе и возобновлении circuit сцена возвращается
+  сразу, без обращения к базе (см. корневой `CLAUDE.md`, «Circuit State Persistence»).
+  `ChaseSessionService` остаётся долговременным хранилищем — оно переживает и перезагрузку вкладки.
 - Страница сохраняет снапшот в `OnAfterRenderAsync` по флагу `_pendingSave`, который взводит подписка
   на `ChaseService.OnChange`. Сохранять из фонового таймера не нужно — рендер и так происходит
   после каждого изменения.

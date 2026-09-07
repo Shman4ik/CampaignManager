@@ -130,6 +130,31 @@ Practical rules that follow from it:
 `mcp__Claude_Browser__resize_window` with `{width: 1366, height: 1024}` (and then `1024×1366`) is how to
 check this; reset with `preset: "desktop"` when done.
 
+## Circuit State Persistence
+
+Blazor Server keeps page state in a server-side circuit, so a dropped connection, a backgrounded
+iPad tab, or a deployment would otherwise wipe whatever the Keeper had on screen. The app opts into
+the .NET 10 circuit persistence stack:
+
+- `[PersistentState]` on a **public** property is what gets saved and restored. A service opts in by
+  being registered with `RegisterPersistentService<T>(RenderMode.InteractiveServer)` in `Program.cs`
+  (`CombatService` and `ChaseService` today). The getter runs when the circuit is paused, the setter
+  when it resumes — expose **one snapshot property** per service rather than marking every field.
+- The persisted value must be JSON-serializable: plain POCOs, no cycles, no lazy EF navigations.
+- Retention is configured on `CircuitOptions` (`PersistedCircuitInMemoryMaxRetained`,
+  `PersistedCircuitInMemoryRetentionPeriod`). That state lives in the server's memory and does **not**
+  survive a process restart.
+- Surviving a restart relies on pausing circuits *before* shutdown: `Utilities/Circuits` asks every
+  connected tab to call `Blazor.pauseCircuit()` from `IHostedService.StopAsync`, which moves the state
+  into the browser. Data Protection keys are stored in PostgreSQL, so the new instance can unprotect
+  what the browser sends back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
+- Client side: `wwwroot/js/circuit-persistence.js` pauses on tab hide and retries resume with backoff.
+  The (Russian) reconnect dialog is `#components-reconnect-modal` in `App.razor` plus
+  `wwwroot/css/reconnect.css` — the `components-reconnect-*` class names come from the framework,
+  don't rename them.
+- Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
+  otherwise it silently disappears on resume.
+
 ### Design System Colors
 
 - **Primary**: Slate/graphite gray (#64748B) — headings, nav, buttons

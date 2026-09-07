@@ -5,6 +5,19 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 ## Key Services
 - `CombatService` (`sealed partial class`) — **not** the standard DI/DbContextFactory pattern (see root `CLAUDE.md` "Service Pattern"). It's a stateful, in-memory session service holding `Combatants`, `CurrentRound`, `CurrentTurnIndex`, `CombatLog`. Split across partial-class files — check for siblings before assuming `CombatService.cs` is the whole implementation.
 
+## Персистентность
+`CombatService` живёт в circuit, поэтому сам по себе бой не переживает ни обрыв связи, ни уход
+вкладки в фон — на планшете за столом это происходит регулярно. Поэтому:
+- `CreateSnapshot()` / `RestoreSnapshot()` (`CombatService.State.cs`) сериализуют состояние боя,
+  включая `CharacterSource` и `CreatureSource` внутри участников.
+- Свойство `PersistedState` помечено `[PersistentState]`, сервис зарегистрирован через
+  `RegisterPersistentService` в `Program.cs` — Blazor сам сохраняет снапшот при паузе circuit
+  и возвращает его при возобновлении (см. корневой `CLAUDE.md`, «Circuit State Persistence»).
+- Добавил поле в состояние боя — добавь его в `CombatSnapshot`, `CreateSnapshot` и
+  `RestoreSnapshot`, иначе оно молча потеряется при переподключении.
+- В отличие от погони, бой **не** сохраняется в базу: он переживает переподключение и деплой,
+  но не полную перезагрузку вкладки.
+
 ## Key Models
 - `Combatant`, `CombatActionResult`, and per-action setup types: `AttackSetup`, `ManeuverSetup`, `FleeSetup`, `CoverSetup`, `SanityCheckSetup`.
 
