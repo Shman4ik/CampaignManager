@@ -61,7 +61,7 @@ else
                 <span class="text-sm text-gray-500">Ход: @(CombatService.CurrentTurnIndex + 1) / @Math.Max(1, CombatService.Combatants.Count)</span>
                 @if (CombatService.GetActiveCombatant() != null)
                 {
-                    <span class="text-sm font-medium text-blue-700">
+                    <span class="text-sm font-medium text-accent-700">
                         → @CombatService.GetActiveCombatant()!.Name
                     </span>
                 }
@@ -163,23 +163,11 @@ else
                 </div>
                 <div class="cm-card-body">
                     <div class="flex flex-wrap gap-1 mb-2">
-                        <button @onclick='() => _showAddMode = "characters"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Персонажи
-                        </button>
-                        <button @onclick='() => _showAddMode = "creatures"'
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                            Существа
-                        </button>
-                        @if (_selectedScenario != null)
+                        @foreach (var (mode, label) in AddModes)
                         {
-                            <button @onclick='() => _showAddMode = "scenario-npcs"'
-                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-npcs" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                                НПС
-                            </button>
-                            <button @onclick='() => _showAddMode = "scenario-creatures"'
-                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "scenario-creatures" ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                                Монстры сцен.
+                            <button @onclick="() => _showAddMode = mode"
+                                    class="px-2 py-1 text-xs rounded font-medium border transition-colors @(_showAddMode == mode ? "bg-accent-50 text-accent-800 border-accent-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100")">
+                                @label
                             </button>
                         }
                     </div>
@@ -208,7 +196,7 @@ else
                             {
                                 @foreach (var chara in _availableCharacters)
                                 {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
                                          @onclick="() => AddCharacter(chara)">
                                         <span class="text-gray-800">@chara.PersonalInfo.Name</span>
                                         <span class="text-xs text-gray-400">ЛВК @chara.Characteristics.Dexterity.Regular</span>
@@ -226,7 +214,7 @@ else
                             {
                                 @foreach (var npc in _scenarioNpcs)
                                 {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-purple-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
                                          @onclick="() => AddNpc(npc)">
                                         <span class="text-gray-800">@npc.CharacterName</span>
                                         <span class="text-xs text-gray-400">ЛВК @npc.Character.Characteristics.Dexterity.Regular</span>
@@ -244,7 +232,7 @@ else
                             {
                                 @foreach (var monster in _scenarioCreatures)
                                 {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-orange-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
                                          @onclick="() => AddMonster(monster)">
                                         <span class="text-gray-800">@monster.Name</span>
                                         <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
@@ -265,7 +253,7 @@ else
                                     : _availableCreatures.Where(c => c.Name.Contains(_creatureSearch, StringComparison.OrdinalIgnoreCase)).ToList();
                                 @foreach (var monster in filtered)
                                 {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-red-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
+                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
                                          @onclick="() => AddMonster(monster)">
                                         <span class="text-gray-800">@monster.Name</span>
                                         <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
@@ -295,51 +283,26 @@ else
                     <!-- Активный боец (контекст) -->
                     @if (CombatService.GetActiveCombatant() is { } active)
                     {
-                        <div class="flex items-center gap-2 mb-3 px-2 py-1.5 bg-blue-50 rounded-md border border-blue-100">
-                            <span class="text-xs text-blue-500 font-medium">Ход:</span>
-                            <span class="text-sm font-bold text-blue-800">@active.Name</span>
+                        <div class="flex items-center gap-2 mb-3 px-2 py-1.5 bg-accent-50 rounded-md border border-accent-100">
+                            <span class="text-xs text-accent-600 font-medium">Ход:</span>
+                            <span class="text-sm font-bold text-accent-800">@active.Name</span>
                             <span class="text-xs text-gray-500">ОЗ @active.CurrentHitPoints/@active.MaxHitPoints</span>
                             @if (active.IsDying)
                             {
-                                <span class="text-xs font-bold text-red-600 ml-auto">⚠ ПРИ СМЕРТИ</span>
+                                <span class="text-xs font-bold text-error-600 ml-auto"><i class="fa-solid fa-triangle-exclamation mr-1"></i>ПРИ СМЕРТИ</span>
                             }
                         </div>
                     }
 
-                    <!-- Вкладки -->
+                    <!-- Вкладки: единый приглушённый акцент, различает иконка и подпись -->
                     <div class="flex flex-wrap gap-1 mb-4 border-b border-gray-200 pb-2">
-                        <button @onclick='() => _activeTab = "attack"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "attack" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            ⚔ Атака
-                        </button>
-                        <button @onclick='() => _activeTab = "maneuver"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "maneuver" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🤼 Манёвр
-                        </button>
-                        <button @onclick='() => _activeTab = "cover"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "cover" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🛡 Укрытие
-                        </button>
-                        <button @onclick='() => _activeTab = "flee"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "flee" ? "bg-blue-100 text-blue-800 border border-blue-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🏃 Бегство
-                        </button>
-                        <button @onclick='() => _activeTab = "firstaid"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "firstaid" ? "bg-green-100 text-green-800 border border-green-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🩹 Первая помощь
-                        </button>
-                        <button @onclick='() => _activeTab = "medicine"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "medicine" ? "bg-green-100 text-green-800 border border-green-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            💊 Медицина
-                        </button>
-                        <button @onclick='() => _activeTab = "sanity"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "sanity" ? "bg-purple-100 text-purple-800 border border-purple-200" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🧠 Рассудок
-                        </button>
-                        <button @onclick='() => _activeTab = "dice"'
-                                class="px-2.5 py-1 text-xs rounded font-medium transition-colors @(_activeTab == "dice" ? "bg-gray-200 text-gray-800 border border-gray-300" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
-                            🎲 Кубики
-                        </button>
+                        @foreach (var (id, icon, label) in Tabs)
+                        {
+                            <button @onclick="() => _activeTab = id"
+                                    class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded font-medium border transition-colors @(_activeTab == id ? "bg-accent-50 text-accent-800 border-accent-200" : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100")">
+                                <i class="fa-solid @icon @(_activeTab == id ? "text-accent-600" : "text-gray-400")"></i>@label
+                            </button>
+                        }
                     </div>
 
                     @{ var activeId = CombatService.GetActiveCombatant()?.Id; }
@@ -410,6 +373,37 @@ else
 }
 
 @code {
+    /// <summary>Источники участников: значение <c>_showAddMode</c> и подпись кнопки.</summary>
+    private static readonly (string Mode, string Label)[] CampaignAddModes =
+    [
+        ("characters", "Персонажи"),
+        ("creatures", "Существа")
+    ];
+
+    private static readonly (string Mode, string Label)[] ScenarioAddModes =
+    [
+        ("characters", "Персонажи"),
+        ("creatures", "Существа"),
+        ("scenario-npcs", "НПС"),
+        ("scenario-creatures", "Монстры сцен.")
+    ];
+
+    private (string Mode, string Label)[] AddModes =>
+        _selectedScenario is null ? CampaignAddModes : ScenarioAddModes;
+
+    /// <summary>Вкладки действий: идентификатор, иконка Font Awesome, подпись.</summary>
+    private static readonly (string Id, string Icon, string Label)[] Tabs =
+    [
+        ("attack", "fa-khanda", "Атака"),
+        ("maneuver", "fa-hand-fist", "Манёвр"),
+        ("cover", "fa-shield-halved", "Укрытие"),
+        ("flee", "fa-person-running", "Бегство"),
+        ("firstaid", "fa-kit-medical", "Первая помощь"),
+        ("medicine", "fa-stethoscope", "Медицина"),
+        ("sanity", "fa-brain", "Рассудок"),
+        ("dice", "fa-dice-d20", "Кубики")
+    ];
+
     private bool _isKeeper;
     private string _showAddMode = "characters";
     private string _activeTab = "attack";
