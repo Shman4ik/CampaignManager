@@ -127,19 +127,19 @@ public static class DerivedAttributeRules
     }
 
     /// <summary>
-    ///     Уклонение живёт в двух местах — в боевых параметрах и в навыке. Держим их одинаковыми:
-    ///     разойдясь, они дают на листе два разных шанса уклониться.
+    ///     Уклонение живёт в двух местах: навык (туда игрок вкладывает пункты) и боевой параметр,
+    ///     который читает боёвка (<c>Combatant</c>). Хозяин — навык, боевой параметр только зеркалит его;
+    ///     разойдясь, они давали на листе два разных шанса уклониться.
     /// </summary>
     public static void ApplyDodge(Character character, int dodge)
     {
-        character.PersonalInfo.Dodge = dodge;
-
-        var skill = character.Skills.SkillGroups
-            .SelectMany(g => g.Skills)
-            .FirstOrDefault(s => string.Equals(s.Name, "Уклонение", StringComparison.Ordinal));
+        var skill = FindDodgeSkill(character);
 
         if (skill is null)
+        {
+            character.PersonalInfo.Dodge = dodge;
             return;
+        }
 
         // Вложенные пункты не трогаем: навык мог быть поднят выше базы за счёт очков.
         if (skill.Value.Regular < dodge)
@@ -150,6 +150,21 @@ public static class DerivedAttributeRules
 
         character.PersonalInfo.Dodge = skill.Value.Regular;
     }
+
+    /// <summary>
+    ///     Переносит текущее значение навыка Уклонение в боевые параметры — после правки навыка на листе.
+    /// </summary>
+    public static void SyncDodgeFromSkill(Character character)
+    {
+        var skill = FindDodgeSkill(character);
+        if (skill is not null)
+            character.PersonalInfo.Dodge = skill.Value.Regular;
+    }
+
+    public static Skill? FindDodgeSkill(Character character) =>
+        character.Skills.SkillGroups
+            .SelectMany(g => g.Skills)
+            .FirstOrDefault(s => string.Equals(s.Name, "Уклонение", StringComparison.Ordinal));
 
     private static IEnumerable<AttributeValue> EnumerateCharacteristics(Characteristics c)
     {

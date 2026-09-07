@@ -13,7 +13,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   считают через него: `InitializeNewSheet` — для чистого/сгенерированного листа, `Recalculate` — после
   правки характеристики или возраста на странице. Не дублировать эти формулы на месте: именно из-за
   этого отредактированный вручную лист раньше расходился с правилами.
-- `SanityRules` (static) — максимум Рассудка и пороги безумия.
+- `SanityRules` (static) — максимум Рассудка, пороги безумия, начисление навыка Мифов за
+  связанное с ними безумие (`RecordMythosInsanity`).
+- `WoundRules` (static) — порог серьёзной раны (≥ половины максимума ПЗ) и вывод состояния
+  «без сознания» / «при смерти» из нуля ПЗ.
+- `SpecializationRules` (static) — бонус +10 смежным специализациям. Список навыков, где
+  специализации делятся прогрессом, закрытый (Ближний бой, Стрельба, Языки, Выживание) —
+  книга прямо противопоставляет им Науку, так что вешать бонус на любую группу нельзя.
 - `OccupationService(dbContextFactory, IMemoryCache, logger)` — occupation catalog (skill point formulas, tags).
 - `LlmCharacterValidationService(llmClientFactory, IOptions<LlmValidationOptions>, dbContextFactory, identityService, ...)` — uses an LLM to validate/sanity-check generated or edited characters against CoC 7e rules.
 
@@ -34,6 +40,12 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `SanityLossEpisode` — накопленная за игровой день (≥1/5 текущего Рассудка → бессрочное, стр. 153).
   Складывать их в один счётчик нельзя: два провала по 3 не дают проверку ИНТ.
   Имя `SanityLossEpisode` оставлено ради уже сохранённых JSONB-листов.
+- Уклонение хранится дважды: навык (хозяин, туда вкладывают пункты) и `PersonalInfo.Dodge`,
+  который читает боёвка (`Combat/Model/Combatant`). На листе поле «Укло.» только зеркалит навык;
+  правка навыка синхронизирует его через `HandleSkillValueEdited`.
+- Строки навыков размечены `@key="skill"`. Без него Blazor переиспользует поле ввода соседнего
+  навыка, когда список перетасовывается (навык уехал из свёрнутой группы в «изменённые»),
+  и показывает Хранителю чужое значение.
 - Идентификатор строки и `Character.Id` внутри JSONB всегда равны. Их расхождение раньше приводило
   к тому, что сохранение листа создавало новую строку вместо обновления, поэтому и
   `CreateCharacterAsync`, и `CopyPregenToScenarioAsync` выставляют оба.

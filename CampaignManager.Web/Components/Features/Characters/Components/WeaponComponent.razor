@@ -19,6 +19,7 @@
                         <tr class="bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <th class="px-3 py-2"></th>
                             <th class="px-3 py-2">Название</th>
+                            <th class="px-3 py-2">%</th>
                             <th class="px-3 py-2">Урон</th>
                             <th class="px-3 py-2">Дальность</th>
                             <th class="px-3 py-2">Атаки</th>
@@ -43,9 +44,29 @@
                                     <input type="text" @bind="weapon.Name" @onclick:stopPropagation
                                            class="cm-input-sm !text-left !p-1"/>
                                 </td>
+                                @* Шанс попадания — значение навыка оружия, а не отдельное поле листа *@
                                 <td class="px-3 py-2 whitespace-nowrap">
-                                    <input type="text" @bind="weapon.Damage" @onclick:stopPropagation
-                                           class="cm-input-sm !text-left !p-1"/>
+                                    @{ var chance = SkillChance(weapon); }
+                                    @if (chance is { } value)
+                                    {
+                                        <span class="font-semibold text-gray-800" title="@weapon.Skill">@value</span>
+                                        <span class="text-gray-400 text-xs">/@(value / 2)/@(value / 5)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-400 text-xs" title="Навык не найден среди навыков сыщика">—</span>
+                                    }
+                                </td>
+                                <td class="px-3 py-2 whitespace-nowrap">
+                                    <div class="flex items-center gap-1">
+                                        <input type="text" @bind="weapon.Damage" @onclick:stopPropagation
+                                               class="cm-input-sm !text-left !p-1"/>
+                                        @if (DamageBonusFor(weapon) is { } bonus)
+                                        {
+                                            <span class="text-xs text-gray-500 whitespace-nowrap"
+                                                  title="Бонус к урону прибавляется в ближнем бою; к огнестрельному оружию он не применяется (стр. 31)">@bonus</span>
+                                        }
+                                    </div>
                                 </td>
                                 <td class="px-3 py-2 whitespace-nowrap">
                                     <input type="text" @bind="weapon.Range" @onclick:stopPropagation
@@ -74,7 +95,7 @@
                             @if (expandedWeaponId == weapon.Id)
                             {
                                 <tr>
-                                    <td colspan="6" class="px-3 py-2 bg-gray-50">
+                                    <td colspan="7" class="px-3 py-2 bg-gray-50">
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-2">
                                             <div>
                                                 <label class="block text-xs text-gray-500 mb-1">Навык</label>
@@ -162,9 +183,30 @@
                             </div>
 
                             <!-- Basic weapon info (always visible on mobile) -->
-                            <div class="px-3 py-2 grid grid-cols-3 gap-2 border-b border-gray-200">
+                            <div class="px-3 py-2 grid grid-cols-4 gap-2 border-b border-gray-200">
                                 <div>
-                                    <label class="block text-xs text-gray-500">Урон</label>
+                                    <label class="block text-xs text-gray-500">%</label>
+                                    @{ var mobileChance = SkillChance(weapon); }
+                                    <div class="py-1 text-sm">
+                                        @if (mobileChance is { } mobileValue)
+                                        {
+                                            <span class="font-semibold text-gray-800">@mobileValue</span>
+                                            <span class="text-gray-400 text-xs">/@(mobileValue / 2)/@(mobileValue / 5)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-gray-400 text-xs">—</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-gray-500">
+                                        Урон
+                                        @if (DamageBonusFor(weapon) is { } mobileBonus)
+                                        {
+                                            <span class="text-gray-400">@mobileBonus</span>
+                                        }
+                                    </label>
                                     <input type="text" @bind="weapon.Damage" @onclick:stopPropagation
                                            class="cm-input-sm !text-left !p-1"/>
                                 </div>
@@ -355,6 +397,46 @@
     {
         await base.OnInitializedAsync();
         allWeapons = await WeaponService.GetAllWeaponsAsync();
+    }
+
+    /// <summary>
+    ///     Шанс попадания берём из навыка сыщика, а не из отдельного поля: иначе на листе
+    ///     появляется второй, ни с чем не связанный процент. Null — навык у персонажа не найден.
+    /// </summary>
+    private int? SkillChance(Weapon weapon)
+    {
+        if (string.IsNullOrWhiteSpace(weapon.Skill))
+            return null;
+
+        var skills = Character.Skills.SkillGroups.SelectMany(g => g.Skills).ToList();
+
+        var exact = skills.FirstOrDefault(s => string.Equals(s.Name, weapon.Skill, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null)
+            return exact.Value.Regular;
+
+        // Каталог оружия и каталог навыков расходятся в написании специализаций
+        // («Стрельба (пистолет)» против «Пистолет»), поэтому пробуем вхождение.
+        var partial = skills.FirstOrDefault(s =>
+            s.Name.Contains(weapon.Skill, StringComparison.OrdinalIgnoreCase) ||
+            weapon.Skill.Contains(s.Name, StringComparison.OrdinalIgnoreCase));
+
+        return partial?.Value.Regular;
+    }
+
+    /// <summary>
+    ///     Бонус к урону прибавляется только в ближнем бою: к огнестрельному оружию он
+    ///     не применяется (стр. 31). Null — показывать нечего.
+    /// </summary>
+    private string? DamageBonusFor(Weapon weapon)
+    {
+        if (weapon.Type is not WeaponType.Melee)
+            return null;
+
+        var bonus = Character.PersonalInfo.DamageBonus;
+        if (string.IsNullOrWhiteSpace(bonus) || bonus is "0" or "нет")
+            return null;
+
+        return bonus.StartsWith('-') ? bonus : $"+{bonus.TrimStart('+')}";
     }
 
     private void ToggleWeaponDetails(Weapon weapon)

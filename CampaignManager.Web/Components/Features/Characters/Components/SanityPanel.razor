@@ -22,6 +22,15 @@
         // Два разных правила с разными окнами: ИНТ — по одной причине, бессрочное — за игровой день.
         var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
         var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
+        var permanentlyInsane = SanityRules.IsPermanentlyInsane(Character);
+    }
+
+    @if (permanentlyInsane)
+    {
+        <div class="mb-3 px-3 py-2 bg-red-100 border border-red-300 rounded-md text-sm text-red-900">
+            <i class="fa-solid fa-skull mr-1"></i>
+            Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 153).
+        </div>
     }
 
     <!-- Текущий / Максимум -->
@@ -127,13 +136,26 @@
         </label>
     </div>
 
-    <!-- Счётчик Мифа-безумий -->
-    <div class="mb-4 flex items-center gap-2 text-sm">
-        <span class="text-gray-700">Случаев безумия от Мифов:</span>
-        <button type="button" class="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200" @onclick="() => Character.State.MythosInsanityCount = Math.Max(0, Character.State.MythosInsanityCount - 1)">−</button>
-        <span class="font-bold text-gray-900 w-6 text-center">@Character.State.MythosInsanityCount</span>
-        <button type="button" class="px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200" @onclick="() => Character.State.MythosInsanityCount++">+</button>
-        <span class="text-xs text-gray-500">(1-й: +5 к Мифам, далее: +1)</span>
+    <!-- Безумие от Мифов: счётчик и начисление навыка -->
+    <div class="mb-4">
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="text-gray-700">Случаев безумия от Мифов:</span>
+            <span class="font-bold text-gray-900">@Character.State.MythosInsanityCount</span>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RecordMythosInsanity">
+                <i class="fa-solid fa-plus mr-1"></i>Записать (+@NextMythosGain к Мифам)
+            </button>
+            @if (Character.State.MythosInsanityCount > 0)
+            {
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="UndoMythosInsanity"
+                        title="Ошиблись — откатить последний случай">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            }
+        </div>
+        <p class="text-xs text-gray-500 mt-1">
+            Первый случай даёт +5 к навыку «Мифы Ктулху», каждый следующий +1 (стр. 160–161);
+            максимум Рассудка падает вместе с этим.
+        </p>
     </div>
 
     <!-- Фобии и мании -->
@@ -248,6 +270,32 @@
     }
 
     private void ClearLastLoss() => Character.State.LastSanityLoss = 0;
+
+    private int NextMythosGain => Character.State.MythosInsanityCount == 0 ? 5 : 1;
+
+    private void RecordMythosInsanity() => SanityRules.RecordMythosInsanity(Character);
+
+    /// <summary>Откат случайного нажатия: снимаем ровно ту прибавку, которую дал последний случай.</summary>
+    private void UndoMythosInsanity()
+    {
+        if (Character.State.MythosInsanityCount == 0)
+            return;
+
+        var gain = Character.State.MythosInsanityCount == 1 ? 5 : 1;
+        Character.State.MythosInsanityCount--;
+
+        var mythos = Character.Skills.SkillGroups
+            .SelectMany(g => g.Skills)
+            .FirstOrDefault(s => s.Name == "Мифы Ктулху");
+
+        if (mythos is not null)
+        {
+            mythos.Value.Regular = Math.Max(0, mythos.Value.Regular - gain);
+            mythos.Value.UpdateDerived();
+        }
+
+        Character.DerivedAttributes.Sanity.MaxValue = SanityRules.ComputeMaxSanity(Character);
+    }
 
     private void ToggleTemporary(bool v)
     {

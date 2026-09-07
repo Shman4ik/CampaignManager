@@ -19,17 +19,7 @@ public static class SanityRules
         return Math.Max(0, AbsoluteMaxSanity - mythos);
     }
 
-    public static int GetMythosValue(Character character)
-    {
-        foreach (var group in character.Skills.SkillGroups)
-        foreach (var skill in group.Skills)
-        {
-            if (string.Equals(skill.Name, MythosSkillName, StringComparison.Ordinal))
-                return skill.Value.Regular;
-        }
-
-        return 0;
-    }
+    public static int GetMythosValue(Character character) => FindMythosSkill(character)?.Value.Regular ?? 0;
 
     /// <summary>
     ///     Порог для проверки на бессрочное безумие — 1/5 от текущего Рассудка, потерянные
@@ -42,4 +32,40 @@ public static class SanityRules
     ///     по одной и той же причине (стр. 152).
     /// </summary>
     public const int TemporaryInsanityThreshold = 5;
+
+    /// <summary>
+    ///     Рассудок упал до нуля — сыщик неизлечимо безумен и выбывает из игры (стр. 153).
+    ///     Отдельного флага не держим: это ровно "Рассудок = 0".
+    /// </summary>
+    public static bool IsPermanentlyInsane(Character character) =>
+        character.DerivedAttributes.Sanity.Value <= 0;
+
+    /// <summary>
+    ///     Записывает случай безумия, связанного с Мифами: первый даёт +5 к навыку "Мифы Ктулху",
+    ///     каждый следующий +1 (стр. 160–161). Максимум Рассудка при этом падает.
+    /// </summary>
+    public static int RecordMythosInsanity(Character character)
+    {
+        var gain = character.State.MythosInsanityCount == 0 ? 5 : 1;
+        character.State.MythosInsanityCount++;
+
+        var mythos = FindMythosSkill(character);
+        if (mythos is not null)
+        {
+            mythos.Value.Regular = Math.Min(99, mythos.Value.Regular + gain);
+            mythos.Value.UpdateDerived();
+        }
+
+        // Новый максимум может оказаться ниже текущего Рассудка — прижимаем.
+        var max = ComputeMaxSanity(character);
+        character.DerivedAttributes.Sanity.MaxValue = max;
+        character.DerivedAttributes.Sanity.Value = Math.Min(character.DerivedAttributes.Sanity.Value, max);
+
+        return gain;
+    }
+
+    private static Skill? FindMythosSkill(Character character) =>
+        character.Skills.SkillGroups
+            .SelectMany(g => g.Skills)
+            .FirstOrDefault(s => string.Equals(s.Name, MythosSkillName, StringComparison.Ordinal));
 }
