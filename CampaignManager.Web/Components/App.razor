@@ -25,6 +25,8 @@
     <!-- Design System -->
     <link href="css/design-system.css" rel="stylesheet"/>
     <link href="css/markdown-styles.css" rel="stylesheet"/>
+    <!-- Диалог переподключения circuit -->
+    <link href="css/reconnect.css" rel="stylesheet"/>
     <!-- CSS Isolation Bundle - Scoped component styles -->
     <link href="@Assets["CampaignManager.Web.styles.css"]" rel="stylesheet"/>
     <HeadOutlet/>
@@ -53,8 +55,64 @@
     </Router>
 </CascadingAuthenticationState>
 
+<!--
+    Диалог переподключения. id обязателен: по нему Blazor находит элемент и вместо
+    стандартного англоязычного оверлея переключает на нём классы состояния
+    (components-reconnect-show / -retrying / -paused / -failed / -resume-failed / -rejected).
+    Логика пауз и возобновления — в js/circuit-persistence.js, стили — в css/reconnect.css.
+-->
+<div id="components-reconnect-modal" class="cm-reconnect">
+    <div class="cm-reconnect__dialog" role="alertdialog" aria-live="assertive">
+        <div class="cm-reconnect__spinner" aria-hidden="true"></div>
+
+        <p class="cm-reconnect__text cm-reconnect__text--retrying">
+            <span class="cm-reconnect__title">Связь с сервером потеряна</span>
+            Восстанавливаем соединение — открытая сцена сохранена.
+            <span class="cm-reconnect__attempt cm-reconnect__hint">
+                Попытка <span id="components-reconnect-current-attempt"></span>
+                из <span id="components-reconnect-max-retries"></span>,
+                следующая через <span id="components-seconds-to-next-attempt"></span> с
+            </span>
+        </p>
+
+        <p class="cm-reconnect__text cm-reconnect__text--paused">
+            <span class="cm-reconnect__title">Сессия приостановлена</span>
+            Состояние сохранено в браузере. Продолжим с того же места, как только сервер ответит.
+        </p>
+
+        <p class="cm-reconnect__text cm-reconnect__text--failed">
+            <span class="cm-reconnect__title">Не удалось переподключиться</span>
+            Сервер не отвечает или был перезапущен.
+        </p>
+
+        <p class="cm-reconnect__text cm-reconnect__text--resume-failed">
+            <span class="cm-reconnect__title">Не удалось продолжить сессию</span>
+            Сохранённое состояние больше недоступно — придётся перезагрузить страницу.
+            <span class="cm-reconnect__hint">Бой и погоня восстановятся из сохранённой сцены.</span>
+        </p>
+
+        <p class="cm-reconnect__text cm-reconnect__text--rejected">
+            <span class="cm-reconnect__title">Соединение закрыто сервером</span>
+            Перезагрузите страницу, чтобы продолжить работу.
+        </p>
+
+        <div class="cm-reconnect__actions">
+            <button id="cm-reconnect-resume" type="button" class="cm-btn cm-btn-primary cm-btn-sm">
+                <span>Продолжить</span>
+            </button>
+            <button id="cm-reconnect-retry" type="button" class="cm-btn cm-btn-secondary cm-btn-sm">
+                <span>Повторить</span>
+            </button>
+            <button id="cm-reconnect-reload" type="button" class="cm-btn cm-btn-secondary cm-btn-sm">
+                <span>Перезагрузить страницу</span>
+            </button>
+        </div>
+    </div>
+</div>
+
 <script src="_framework/blazor.web.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/character-page.js"></script>
+<script src="/js/circuit-persistence.js"></script>
 </body>
 </html>

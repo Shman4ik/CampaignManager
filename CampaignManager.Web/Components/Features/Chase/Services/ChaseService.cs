@@ -1,6 +1,7 @@
-using CampaignManager.Web.Components.Features.Chase.Model;
+﻿using CampaignManager.Web.Components.Features.Chase.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Combat.Services;
+using Microsoft.AspNetCore.Components;
 
 namespace CampaignManager.Web.Components.Features.Chase.Services;
 
@@ -23,6 +24,23 @@ public sealed partial class ChaseService
     public event Action? OnChange;
 
     // ───────────────────── Сохранение и восстановление ─────────────────────
+
+    /// <summary>
+    /// Точка, за которую Blazor держит состояние погони (см. корневой CLAUDE.md, «Circuit State Persistence»).
+    /// Геттер вызывается при постановке circuit на паузу, сеттер — при возобновлении, поэтому
+    /// сцена возвращается сразу, без обращения к базе. Долговременное хранение остаётся
+    /// за <see cref="ChaseSessionService"/>.
+    /// </summary>
+    [PersistentState]
+    public ChaseSnapshot? PersistedState
+    {
+        get => HasContent() ? CreateSnapshot() : null;
+        set
+        {
+            if (value is not null)
+                RestoreSnapshot(value);
+        }
+    }
 
     public ChaseSnapshot CreateSnapshot() => new()
     {

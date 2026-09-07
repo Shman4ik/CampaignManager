@@ -13,6 +13,7 @@ using CampaignManager.Web.Components.Features.Chase.Services;
 using CampaignManager.Web.Components.Features.Combat.Services;
 using CampaignManager.Web.Components.Features.Wiki.Services;
 using CampaignManager.Web.Utilities.Api;
+using CampaignManager.Web.Utilities.Circuits;
 using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.DataBase.Interceptors;
@@ -21,6 +22,7 @@ using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -32,7 +34,12 @@ builder.AddServiceDefaults();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    // Состояние этих сервисов Blazor сохраняет при паузе circuit и возвращает при
+    // возобновлении — бой и погоня переживают обрыв связи, сон планшета и деплой.
+    // Восстанавливается всё, что помечено [PersistentState].
+    .RegisterPersistentService<CombatService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer)
+    .RegisterPersistentService<ChaseService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer);
 
 // Configure SignalR with increased message size limits
 builder.Services.AddSignalR(options =>
@@ -53,6 +60,11 @@ builder.Services.AddServerSideBlazor(options =>
     options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
     options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(2);
     options.MaxBufferedUnacknowledgedRenderBatches = 20; // Increase buffer for large updates
+
+    // Сохранение circuit (.NET 10): состояние вытесненного circuit держится в памяти, пока
+    // вкладка не вернётся. Игровая сессия за столом длиннее стандартных двух часов.
+    options.PersistedCircuitInMemoryMaxRetained = 500;
+    options.PersistedCircuitInMemoryRetentionPeriod = TimeSpan.FromHours(6);
 });
 
 // Use data source mapping instead of global type mapper (fixing obsolete warning)
@@ -317,6 +329,12 @@ builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.LastCh
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+
+// Пауза circuit'ов при остановке приложения: состояние уезжает в браузер и возвращается
+// на новый экземпляр после деплоя (см. Utilities/Circuits).
+builder.Services.AddSingleton<ActiveCircuitTracker>();
+builder.Services.AddScoped<CircuitHandler, ShutdownPauseCircuitHandler>();
+builder.Services.AddHostedService<CircuitShutdownPauseService>();
 
 // Persist Data Protection keys to PostgreSQL so they survive container restarts and work across replicas
 builder.Services.AddDataProtection()

@@ -1,0 +1,149 @@
+/*
+ * Диалог переподключения Blazor.
+ *
+ * Blazor находит элемент по id #components-reconnect-modal и переключает на нём классы
+ * состояния: components-reconnect-show / -retrying / -paused / -failed / -resume-failed /
+ * -rejected / -hide. Всю разметку и стили при этом отдаёт нам (App.razor), стандартный
+ * англоязычный оверлей не показывается.
+ *
+ * Файл лежит рядом с design-system.css, а не в App.razor.css: диалог живёт вне дерева
+ * компонентов и должен оставаться видимым, даже когда circuit уже мёртв.
+ */
+
+.cm-reconnect {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: var(--cm-overlay, rgba(0, 0, 0, 0.5));
+}
+
+/* Показываем оверлей в любом состоянии, кроме «спрятан» */
+.cm-reconnect.components-reconnect-show,
+.cm-reconnect.components-reconnect-retrying,
+.cm-reconnect.components-reconnect-paused,
+.cm-reconnect.components-reconnect-failed,
+.cm-reconnect.components-reconnect-resume-failed,
+.cm-reconnect.components-reconnect-rejected {
+    display: flex;
+}
+
+.cm-reconnect.components-reconnect-hide {
+    display: none;
+}
+
+.cm-reconnect__dialog {
+    max-width: 30rem;
+    width: 100%;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    background-color: #ffffff;
+    color: var(--cm-text-foreground, #0f172a);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+.cm-reconnect__title {
+    display: block;
+    margin: 0 0 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.cm-reconnect__text {
+    display: none;
+    margin: 0;
+    line-height: 1.5;
+    color: var(--color-primary-700, #334155);
+}
+
+.cm-reconnect__hint {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--color-primary-500, #64748B);
+}
+
+/* Какой текст показывать в каком состоянии */
+.components-reconnect-show .cm-reconnect__text--retrying,
+.components-reconnect-retrying .cm-reconnect__text--retrying,
+.components-reconnect-paused .cm-reconnect__text--paused,
+.components-reconnect-failed .cm-reconnect__text--failed,
+.components-reconnect-resume-failed .cm-reconnect__text--resume-failed,
+.components-reconnect-rejected .cm-reconnect__text--rejected {
+    display: block;
+}
+
+/* Счётчик попыток осмысленен только между попытками переподключения */
+.cm-reconnect__attempt {
+    display: none;
+}
+
+.components-reconnect-retrying .cm-reconnect__attempt {
+    display: block;
+}
+
+/* Индикатор крутится, только пока мы действительно чего-то ждём */
+.cm-reconnect__spinner {
+    display: none;
+    width: 2rem;
+    height: 2rem;
+    margin: 0 auto 1rem;
+    border: 3px solid var(--color-primary-200, #E2E8F0);
+    border-top-color: var(--color-primary-600, #475569);
+    border-radius: 50%;
+    animation: cm-reconnect-spin 900ms linear infinite;
+}
+
+.components-reconnect-show .cm-reconnect__spinner,
+.components-reconnect-retrying .cm-reconnect__spinner,
+.components-reconnect-paused .cm-reconnect__spinner {
+    display: block;
+}
+
+@keyframes cm-reconnect-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cm-reconnect__spinner {
+        animation: none;
+    }
+}
+
+.cm-reconnect__actions {
+    display: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+}
+
+/* Ряд кнопок появляется только там, где есть что нажать */
+.components-reconnect-paused .cm-reconnect__actions,
+.components-reconnect-failed .cm-reconnect__actions,
+.components-reconnect-resume-failed .cm-reconnect__actions,
+.components-reconnect-rejected .cm-reconnect__actions {
+    display: flex;
+}
+
+/* Кнопки прячем по id: он перебивает display из .cm-btn без !important */
+#cm-reconnect-resume,
+#cm-reconnect-retry,
+#cm-reconnect-reload {
+    display: none;
+}
+
+.components-reconnect-paused #cm-reconnect-resume,
+.components-reconnect-resume-failed #cm-reconnect-resume,
+.components-reconnect-failed #cm-reconnect-retry,
+.components-reconnect-failed #cm-reconnect-reload,
+.components-reconnect-resume-failed #cm-reconnect-reload,
+.components-reconnect-rejected #cm-reconnect-reload {
+    display: inline-flex;
+}
