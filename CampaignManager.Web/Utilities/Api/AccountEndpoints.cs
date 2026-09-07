@@ -173,7 +173,11 @@ public static class AccountEndpoints
 
         if (Uri.TryCreate(returnUrl, UriKind.Relative, out var relativeUri))
         {
-            return relativeUri.OriginalString.StartsWith('/') ? relativeUri.OriginalString : "/" + relativeUri.OriginalString;
+            var path = relativeUri.OriginalString.StartsWith('/')
+                ? relativeUri.OriginalString
+                : "/" + relativeUri.OriginalString;
+
+            return IsSameHostPath(path) ? path : "/";
         }
 
         if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var absoluteUri))
@@ -187,10 +191,26 @@ public static class AccountEndpoints
                     pathAndQuery += absoluteUri.Fragment;
                 }
 
-                return pathAndQuery;
+                return IsSameHostPath(pathAndQuery) ? pathAndQuery : "/";
             }
         }
 
         return "/";
     }
+
+    /// <summary>
+    /// Проверяет, что путь ведёт на наш же хост. «/foo» — ведёт, а «//evil.com» и «/\evil.com»
+    /// браузер считает адресом с указанием чужого хоста, хотя формально это относительные URL.
+    /// </summary>
+    private static bool IsSameHostPath(string path)
+    {
+        if (path.Length < 2) return true;
+
+        // Обратный слэш браузеры приводят к прямому уже после чтения заголовка, поэтому
+        // сравниваем и раскодированный вид: «/%5Cevil.com» не должен пролезать следом.
+        return !StartsWithHostMarker(path) && !StartsWithHostMarker(Uri.UnescapeDataString(path));
+    }
+
+    private static bool StartsWithHostMarker(string path) =>
+        path.Length >= 2 && path[0] is '/' or '\\' && path[1] is '/' or '\\';
 }
