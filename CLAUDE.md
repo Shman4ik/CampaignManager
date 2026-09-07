@@ -33,6 +33,61 @@ dotnet ef database update --project CampaignManager.Web --context AppIdentityDbC
 
 **No test projects exist** in this solution.
 
+## Работа в контейнере Claude Code on the web
+
+В удалённом контейнере .NET SDK по умолчанию нет, а `dot.net` / `builds.dotnet.microsoft.com`
+закрыты egress-политикой (`curl` получает 403 от прокси) — скрипт `dotnet-install.sh` там не качается.
+Ставить надо из репозитория Ubuntu, где .NET 10 уже есть:
+
+```bash
+apt-get update                                  # без этого dotnet-sdk-10.0 не виден
+DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-10.0
+dotnet --version                                # 10.0.111 на noble-updates
+```
+
+`apt-get update` ругается на недоступные PPA (deadsnakes, ondrej) — это не мешает,
+нужные индексы (`archive.ubuntu.com`, `packages.microsoft.com`) забираются.
+`nuget.org` доступен, поэтому `dotnet restore` и `dotnet tool install` работают.
+
+Дальше всё как обычно, с двумя оговорками:
+
+```bash
+dotnet build                                    # Tailwind собирается тем же таргетом, npx доступен
+
+# EF: design-time поднимает Program.cs целиком, поэтому без строки подключения
+# падает с «Value cannot be null. (Parameter 'Host')» — достаточно любой валидной
+dotnet tool install --global dotnet-ef && export PATH="$PATH:/root/.dotnet/tools"
+export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=campaignmanager;Username=postgres;Password=postgres"
+dotnet ef migrations has-pending-model-changes --project CampaignManager.Web --context AppDbContext
+```
+
+PostgreSQL 16 в контейнере уже установлен, только не запущен — на нём можно прогнать миграции
+на живой базе и проверить перенос данных:
+
+```bash
+service postgresql start
+su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres';\""
+su postgres -c "createdb campaignmanager"
+dotnet ef database update --project CampaignManager.Web --context AppDbContext
+dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
+```
+
+Запуск приложения: без Google OAuth **каждый** запрос отдаёт 500
+(`ArgumentException: The value cannot be an empty string. (Parameter 'ClientId')` из
+middleware аутентификации, ещё до роутинга) — это не поломка кода, а пустая конфигурация.
+Хватает пустышек:
+
+```bash
+export Authentication__Google__ClientId=dummy-client-id
+export Authentication__Google__ClientSecret=dummy-client-secret
+dotnet CampaignManager.Web/bin/Debug/net10.0/CampaignManager.Web.dll --urls http://127.0.0.1:5199
+```
+
+`dotnet run` берёт URL из `launchSettings.json` (https://localhost:8080) и игнорирует
+`ASPNETCORE_URLS`, поэтому для смоук-теста удобнее запускать собранную dll с `--urls`.
+Страницы под `[Authorize]` без залогиненного пользователя отдают 302 на логин — это
+ожидаемо; для проверки рендера годится `/`.
+
 ## Architecture
 
 ### Solution Structure
