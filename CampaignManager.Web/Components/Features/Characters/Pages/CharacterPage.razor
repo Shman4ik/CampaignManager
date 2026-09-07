@@ -1,13 +1,13 @@
 ﻿@page "/character/create/{CampaignId:guid}"
-@page "/character/create/{CampaignId:guid}/{npc}"
-@page "/character/create/{npc}"
+@page "/character/create/{Kind}"
 @page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Components
+@using CampaignManager.Web.Extensions
 @attribute [Authorize]
 @rendermode InteractiveServer
 
-<PageTitle>@(Character?.PersonalInfo.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))</PageTitle>
+<PageTitle>@(Character?.PersonalInfo.Name ?? NewCharacterTitle)</PageTitle>
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
@@ -17,11 +17,11 @@
                 <div class="flex justify-between items-center w-full">
                     <div class="flex items-center gap-2 min-w-0 flex-1">
                         <h3 class="char-header-name truncate">
-                            @(Character?.PersonalInfo.Name ?? (IsNpc ? "Новый NPC" : "Новый персонаж"))
+                            @(Character?.PersonalInfo.Name ?? NewCharacterTitle)
                         </h3>
-                        @if (IsNpc)
+                        @if (CurrentKind is not CharacterKind.PlayerCharacter)
                         {
-                            <span class="ml-2 text-xs px-2 py-0.5 bg-purple-600 text-white rounded-full font-medium flex-shrink-0">NPC</span>
+                            <span class="ml-2 text-xs px-2 py-0.5 bg-primary-600 text-white rounded-full font-medium flex-shrink-0">@CurrentKind.ToRussianString()</span>
                         }
                     </div>
                     <!-- Redesigned adaptive navigation menu -->
@@ -121,6 +121,31 @@
             {
                 <NotificationAlert Type="@_notification.Type" Message="@_notification.Message"
                                    OnClose="ClearNotification"/>
+            }
+
+            @* Куда попадёт новый НПС — спрашиваем здесь, а не отдельным диалогом после создания *@
+            @if (ShowOwnerPicker)
+            {
+                <div class="cm-card mb-4">
+                    <div class="cm-card-body flex flex-wrap items-end gap-3">
+                        <div>
+                            <label for="npcOwner" class="block text-xs text-gray-600 mb-1">Кому принадлежит НПС</label>
+                            <select id="npcOwner" class="cm-input min-w-[220px]" @bind="_ownerCampaignId">
+                                <option value="">Общая библиотека</option>
+                                @foreach (var campaign in _keeperCampaigns)
+                                {
+                                    <option value="@campaign.Id">@campaign.Name</option>
+                                }
+                            </select>
+                        </div>
+                        @if (ScenarioId is not null)
+                        {
+                            <p class="text-xs text-gray-500 pb-2">
+                                После сохранения НПС сразу появится в сценарии.
+                            </p>
+                        }
+                    </div>
+                </div>
             }
 
             @if (_isLoading)

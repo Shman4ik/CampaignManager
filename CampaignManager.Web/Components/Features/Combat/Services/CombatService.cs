@@ -475,7 +475,7 @@ public sealed partial class CombatService
     /// </summary>
     public Combatant? FindUnluckiestAlly(Combatant attacker, Combatant target) =>
         Combatants
-            .Where(c => c.Id != attacker.Id && c.Id != target.Id && !c.IsDead && c.IsPlayer == attacker.IsPlayer)
+            .Where(c => c.Id != attacker.Id && c.Id != target.Id && !c.IsDead && c.Side == attacker.Side)
             .OrderBy(c => c.Luck)
             .FirstOrDefault();
 

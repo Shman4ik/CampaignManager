@@ -1,0 +1,154 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Extensions
+@inject NavigationManager NavigationManager
+
+@* Карточка листа НПС или прегена. Одна и та же и в библиотеке, и в сценарии:
+   отличаются только переданные обработчики. *@
+
+<div class="bg-white shadow-md rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300">
+    <div class="p-4 sm:p-6">
+        <div class="flex justify-between items-start gap-2 mb-2">
+            <h2 class="text-xl font-semibold min-w-0 break-words">@Character.CharacterName</h2>
+            <div class="flex flex-wrap justify-end gap-1 shrink-0">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => Edit()">
+                    <i class="fa-solid fa-pen"></i><span>Изменить</span>
+                </button>
+                @if (OnCast.HasDelegate)
+                {
+                    <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="() => OnCast.InvokeAsync(Character)">
+                        <i class="fa-solid fa-link"></i><span>В сценарий</span>
+                    </button>
+                }
+                @if (OnRemove.HasDelegate)
+                {
+                    <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="() => OnRemove.InvokeAsync(Character)">
+                        <i class="fa-solid fa-trash"></i><span>@RemoveLabel</span>
+                    </button>
+                }
+                @if (OnRestore.HasDelegate)
+                {
+                    <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="() => OnRestore.InvokeAsync(Character)">
+                        <i class="fa-solid fa-rotate-left"></i><span>Вернуть</span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <!-- Вид, владелец, занятость -->
+        <div class="flex flex-wrap gap-1.5 mb-3">
+            <Badge Variant="@(Character.Kind == CharacterKind.Npc ? "error" : "info")" Size="sm" Rounded="full" WithBorder="false">
+                <i class="fa-solid @(Character.Kind == CharacterKind.Npc ? "fa-masks-theater" : "fa-user") mr-1"></i>@Character.Kind.ToRussianString()
+            </Badge>
+
+            @if (!string.IsNullOrEmpty(OwnerLabel))
+            {
+                <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">@OwnerLabel</Badge>
+            }
+
+            @if (Character.Status == CharacterStatus.Archived)
+            {
+                <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">Архив</Badge>
+            }
+
+            @if (!string.IsNullOrEmpty(Character.Character.PersonalInfo.Occupation))
+            {
+                <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">@Character.Character.PersonalInfo.Occupation</Badge>
+            }
+
+            @if (Character.Character.PersonalInfo.Age > 0)
+            {
+                <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">@Character.Character.PersonalInfo.Age лет</Badge>
+            }
+
+            @foreach (var scenarioName in ScenarioNames)
+            {
+                <Badge Variant="success" Size="sm" Rounded="full" WithBorder="false">
+                    <i class="fa-solid fa-scroll mr-1"></i>@scenarioName
+                </Badge>
+            }
+        </div>
+
+        @* Роль и количество — свойства появления НПС в сценарии, а не самого листа *@
+        @if (OnCastChanged.HasDelegate)
+        {
+            <div class="flex flex-wrap items-end gap-2 mb-3">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Роль в сценарии</label>
+                    <select value="@Role" @onchange="HandleRoleChanged"
+                            class="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-accent-500">
+                        @foreach (var role in Enum.GetValues<NpcRole>())
+                        {
+                            <option value="@role">@role.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Сколько</label>
+                    <input type="number" min="1" max="20" value="@Count" @onchange="HandleCountChanged"
+                           class="w-20 text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-accent-500"/>
+                </div>
+            </div>
+        }
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4 text-sm">
+            @if (!string.IsNullOrEmpty(Character.Character.PersonalInfo.Gender))
+            {
+                <div><span class="font-semibold">Пол:</span> @Character.Character.PersonalInfo.Gender</div>
+            }
+            @if (!string.IsNullOrEmpty(Character.Character.PersonalInfo.Residence))
+            {
+                <div><span class="font-semibold">Место жительства:</span> @Character.Character.PersonalInfo.Residence</div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(Character.Character.Backstory))
+        {
+            <div class="w-full mt-4 text-gray-700 text-sm overflow-y-auto pr-2 custom-scrollbar" style="max-height: 100px;">
+                <h3 class="font-semibold mb-1 text-sm">Предыстория:</h3>
+                @Character.Character.Backstory
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public required CharacterStorageDto Character { get; set; }
+
+    /// <summary>Кому принадлежит лист: библиотека, кампания или сценарий.</summary>
+    [Parameter] public string? OwnerLabel { get; set; }
+
+    /// <summary>Сценарии, в которых НПС уже занят.</summary>
+    [Parameter] public IReadOnlyList<string> ScenarioNames { get; set; } = [];
+
+    /// <summary>Роль в текущем сценарии — только для карточки внутри сценария.</summary>
+    [Parameter] public NpcRole Role { get; set; } = NpcRole.Neutral;
+
+    /// <summary>Сколько таких НПС выходит в текущем сценарии.</summary>
+    [Parameter] public int Count { get; set; } = 1;
+
+    /// <summary>Подпись кнопки удаления: «Архив» в библиотеке, «Убрать» в сценарии.</summary>
+    [Parameter] public string RemoveLabel { get; set; } = "Архив";
+
+    [Parameter] public EventCallback<CharacterStorageDto> OnRemove { get; set; }
+
+    [Parameter] public EventCallback<CharacterStorageDto> OnRestore { get; set; }
+
+    [Parameter] public EventCallback<CharacterStorageDto> OnCast { get; set; }
+
+    /// <summary>Изменили роль или количество НПС в сценарии.</summary>
+    [Parameter] public EventCallback<(CharacterStorageDto Character, NpcRole Role, int Count)> OnCastChanged { get; set; }
+
+    private void Edit() => NavigationManager.NavigateTo($"/character/{Character.Id}");
+
+    private async Task HandleRoleChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<NpcRole>(e.Value?.ToString(), out var role))
+            await OnCastChanged.InvokeAsync((Character, role, Count));
+    }
+
+    private async Task HandleCountChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var count) && count >= 1)
+            await OnCastChanged.InvokeAsync((Character, Role, count));
+    }
+}

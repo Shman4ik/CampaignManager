@@ -6,6 +6,10 @@ namespace CampaignManager.Web.Components.Features.Chase.Model;
 
 public class ChaseParticipant
 {
+    /// <summary>
+    ///     Идентификатор участника погони, а не листа персонажа: двух одинаковых
+    ///     преследователей из одного листа надо различать.
+    /// </summary>
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
     public ChaseRole Role { get; set; }
@@ -107,6 +111,12 @@ public class ChaseParticipant
     public Character? CharacterSource { get; set; }
     public Creature? CreatureSource { get; set; }
 
+    /// <summary>Лист персонажа, с которого снят участник.</summary>
+    public Guid? SourceCharacterId { get; set; }
+
+    /// <summary>Существо, с которого снят участник.</summary>
+    public Guid? SourceCreatureId { get; set; }
+
     public bool IsActive => !IsEliminated && !HasEscaped && !IsCaught && !IsOutOfChase;
 
     /// <summary>Участник ходит в порядке ЛВК, но действий перемещения у пассажира нет (стр. 139).</summary>
@@ -114,11 +124,13 @@ public class ChaseParticipant
 
     public ChaseParticipant() { }
 
-    public ChaseParticipant(Character character)
+    public ChaseParticipant(Character character, bool isPlayer = true, string? nameSuffix = null)
     {
-        Id = character.Id;
-        Name = character.PersonalInfo.Name;
-        IsPlayer = true;
+        Name = string.IsNullOrEmpty(nameSuffix)
+            ? character.PersonalInfo.Name
+            : $"{character.PersonalInfo.Name} {nameSuffix}";
+        IsPlayer = isPlayer;
+        SourceCharacterId = character.Id;
         CharacterSource = character;
 
         MovementRate = character.PersonalInfo.MoveSpeed;
@@ -133,11 +145,11 @@ public class ChaseParticipant
             BuildValue = build;
     }
 
-    public ChaseParticipant(Creature creature)
+    public ChaseParticipant(Creature creature, string? nameSuffix = null)
     {
-        Id = Guid.NewGuid();
-        Name = creature.Name;
+        Name = string.IsNullOrEmpty(nameSuffix) ? creature.Name : $"{creature.Name} {nameSuffix}";
         IsPlayer = false;
+        SourceCreatureId = creature.Id;
         CreatureSource = creature;
 
         MovementRate = creature.CreatureCharacteristics.Speed;

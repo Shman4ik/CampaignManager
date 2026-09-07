@@ -121,7 +121,7 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
                     <LocationDetail Location="_selectedLocation"
                                     ScenarioCreatures="_scenario.ScenarioCreatures"
                                     ScenarioItems="_scenario.ScenarioItems"
-                                    Npcs="_characterTemplates"
+                                    Npcs="_locationCharacters"
                                     Handouts="_scenario.Handouts"/>
                 }
             </div>
@@ -345,7 +345,7 @@ else
                     <div class="flex justify-between items-center">
                         <h2 class="text-lg font-semibold text-red-800">
                             <i class="fa-solid fa-masks-theater mr-2"></i>НПС сценария
-                            <span class="text-sm font-normal text-red-600 ml-1">(@_scenarioNpcs.Count)</span>
+                            <span class="text-sm font-normal text-red-600 ml-1">(@_cast.Count)</span>
                         </h2>
                         <div class="flex gap-1">
                             <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewNpc">
@@ -358,18 +358,21 @@ else
                     </div>
                 </div>
                 <div class="p-4">
-                    @if (_scenarioNpcs.Count == 0)
+                    @if (_cast.Count == 0)
                     {
                         <p class="cm-empty">Нет НПС в сценарии.</p>
                     }
                     else
                     {
                         <div class="space-y-4">
-                            @foreach (var template in _scenarioNpcs)
+                            @foreach (var entry in _cast.Where(c => c.Character is not null))
                             {
-                                <CharacterTemplateCard Template="template"
-                                                      OnDelete="RemoveCharacterTemplate"
-                                                      OnRoleChanged="HandleNpcRoleChanged"/>
+                                <CharacterSummaryCard Character="@(entry.Character!)"
+                                                      Role="entry.Role"
+                                                      Count="entry.Count"
+                                                      RemoveLabel="Убрать"
+                                                      OnRemove="RemoveNpcFromScenario"
+                                                      OnCastChanged="HandleCastChanged"/>
                             }
                         </div>
                     }
@@ -402,9 +405,12 @@ else
                     else
                     {
                         <div class="space-y-4">
-                            @foreach (var template in _scenarioPregens)
+                            @foreach (var pregen in _scenarioPregens)
                             {
-                                <CharacterTemplateCard Template="template" OnDelete="RemoveCharacterTemplate"/>
+                                <CharacterSummaryCard Character="pregen"
+                                                      OwnerLabel="@(pregen.CampaignPlayerId is null ? "Свободен" : "Забронирован")"
+                                                      RemoveLabel="Убрать"
+                                                      OnRemove="RemovePregenFromScenario"/>
                             }
                         </div>
                     }
@@ -551,14 +557,14 @@ else
 <!-- Add NPC Modal (filtered to NonPlayerCharacter) -->
 <AddNpcModal @ref="_addNpcModal"
              ScenarioId="Id"
-             FilterByType="CharacterType.NonPlayerCharacter"
-             OnNpcAdded="HandleNpcAdded"/>
+             Kind="CharacterKind.Npc"
+             OnAdded="HandleCastAdded"/>
 
 <!-- Add Pregen Modal (filtered to PlayerCharacter) -->
 <AddNpcModal @ref="_addPregenModal"
              ScenarioId="Id"
-             FilterByType="CharacterType.PlayerCharacter"
-             OnNpcAdded="HandleNpcAdded"/>
+             Kind="CharacterKind.Pregen"
+             OnAdded="HandleCastAdded"/>
 
 <!-- Add Creature Modal -->
 <AddCreatureModal @ref="_addCreatureModal"
@@ -591,13 +597,15 @@ else
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
-    private List<CharacterStorageDto> _characterTemplates = [];
+    /// <summary>Состав НПС сценария: связи, а не копии листов.</summary>
+    private List<ScenarioNpc> _cast = [];
 
-    private List<CharacterStorageDto> _scenarioNpcs =>
-        _characterTemplates.Where(t => t.Character?.CharacterType == CharacterType.NonPlayerCharacter).ToList();
+    /// <summary>Прегены, принадлежащие сценарию.</summary>
+    private List<CharacterStorageDto> _scenarioPregens = [];
 
-    private List<CharacterStorageDto> _scenarioPregens =>
-        _characterTemplates.Where(t => t.Character?.CharacterType == CharacterType.PlayerCharacter).ToList();
+    /// <summary>Листы персонажей сценария для ссылок из локаций.</summary>
+    private List<CharacterStorageDto> _locationCharacters =>
+        [.. _cast.Where(c => c.Character is not null).Select(c => c.Character!), .. _scenarioPregens];
 
     // Play mode state
     private Guid? _selectedLocationId;
@@ -634,12 +642,14 @@ else
             _loading = true;
 
             var scenarioTask = ScenarioService.GetScenarioByIdAsync(Id);
-            var templatesTask = CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+            var castTask = ScenarioService.GetScenarioCastAsync(Id);
+            var pregensTask = CharacterService.GetScenarioPregensAsync(Id);
 
-            await Task.WhenAll(scenarioTask, templatesTask);
+            await Task.WhenAll(scenarioTask, castTask, pregensTask);
 
             _scenario = scenarioTask.Result;
-            _characterTemplates = templatesTask.Result;
+            _cast = castTask.Result;
+            _scenarioPregens = pregensTask.Result;
 
             if (_scenario?.Journal is not null)
             {
@@ -761,16 +771,30 @@ else
         }
     }
 
-    private async Task RemoveCharacterTemplate(CharacterStorageDto template)
+    private async Task RemoveNpcFromScenario(CharacterStorageDto character)
     {
         try
         {
-            await CharacterService.UnlinkCharacterTemplateFromScenarioAsync(template.Id);
-            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+            // Удаляется только участие в сценарии — лист остаётся в библиотеке.
+            await ScenarioService.RemoveNpcFromScenarioAsync(Id, character.Id);
+            _cast = await ScenarioService.GetScenarioCastAsync(Id);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error removing character template {TemplateId} from scenario {ScenarioId}", template.Id, Id);
+            Logger.LogError(ex, "Error removing NPC {CharacterId} from scenario {ScenarioId}", character.Id, Id);
+        }
+    }
+
+    private async Task RemovePregenFromScenario(CharacterStorageDto pregen)
+    {
+        try
+        {
+            await CharacterService.RemovePregenFromScenarioAsync(pregen.Id);
+            _scenarioPregens = await CharacterService.GetScenarioPregensAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error removing pregen {CharacterId} from scenario {ScenarioId}", pregen.Id, Id);
         }
     }
 
@@ -852,9 +876,10 @@ else
         }
     }
 
-    private async Task HandleNpcAdded(CharacterStorageDto _)
+    private async Task HandleCastAdded()
     {
-        _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+        _cast = await ScenarioService.GetScenarioCastAsync(Id);
+        _scenarioPregens = await CharacterService.GetScenarioPregensAsync(Id);
     }
 
     private async Task ShowAddNpcModal()
@@ -879,22 +904,22 @@ else
         await _addPregenModal.Show();
     }
 
-    private async Task HandleNpcRoleChanged((CharacterStorageDto Template, NpcRole Role) args)
+    private async Task HandleCastChanged((CharacterStorageDto Character, NpcRole Role, int Count) args)
     {
         try
         {
-            await CharacterService.UpdateNpcRoleAsync(args.Template.Id, args.Role);
-            _characterTemplates = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(Id);
+            await ScenarioService.UpdateScenarioNpcAsync(Id, args.Character.Id, args.Role, args.Count);
+            _cast = await ScenarioService.GetScenarioCastAsync(Id);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error updating NPC role for {TemplateId}", args.Template.Id);
+            Logger.LogError(ex, "Error updating NPC {CharacterId} in scenario {ScenarioId}", args.Character.Id, Id);
         }
     }
 
     private void CreateNewNpc()
     {
-        NavigationManager.NavigateTo($"/character/create/template?scenarioId={Id}");
+        NavigationManager.NavigateTo($"/character/create/npc?scenarioId={Id}");
     }
 
     private void CreateNewPregen()

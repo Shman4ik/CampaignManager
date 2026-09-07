@@ -6,13 +6,11 @@
 @using CampaignManager.Web.Components.Features.Chase.Services
 @using CampaignManager.Web.Components.Features.Chase.Model
 @using CampaignManager.Web.Components.Features.Chase.Components
-@using CampaignManager.Web.Components.Features.Characters.Services
-@using CampaignManager.Web.Components.Features.Characters.Model
-@using CampaignManager.Web.Components.Features.Bestiary.Services
-@using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Campaigns.Models
-@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Combat.Components
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Utilities.Services
 
@@ -20,8 +18,7 @@
 
 @inject ChaseService ChaseService
 @inject ChaseSessionService ChaseSessionService
-@inject CreatureService CreatureService
-@inject CampaignService CampaignService
+@inject ScenarioService ScenarioService
 @inject IdentityService IdentityService
 
 <PageTitle>Помощник погони</PageTitle>
@@ -31,6 +28,12 @@
         @if (_isKeeper)
         {
             <CampaignSelector OnCampaignSelected="HandleCampaignSelected" />
+            @if (_selectedCampaign is not null && _campaignScenarios.Count > 0)
+            {
+                <ScenarioSelector Scenarios="_campaignScenarios"
+                                  SelectedScenarioId="_selectedScenario?.Id"
+                                  OnScenarioSelected="HandleScenarioSelected" />
+            }
         }
     </Actions>
 </PageHeader>
@@ -183,60 +186,10 @@ else
                             </select>
                         </div>
 
-                        <!-- Вкладки -->
-                        <div class="flex gap-1 mb-2">
-                            <button @onclick='() => _showAddMode = "characters"'
-                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "characters" ? "bg-accent-100 text-accent-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                                Персонажи
-                            </button>
-                            <button @onclick='() => _showAddMode = "creatures"'
-                                    class="px-2 py-1 text-xs rounded font-medium transition-colors @(_showAddMode == "creatures" ? "bg-error-100 text-error-700" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
-                                Существа
-                            </button>
-                        </div>
-
-                        <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
-                            @if (_showAddMode == "characters")
-                            {
-                                @if (_availableCharacters is null)
-                                {
-                                    <p class="cm-empty">@(_selectedCampaign is null ? "Выберите кампанию" : "Загрузка...")</p>
-                                }
-                                else if (!_availableCharacters.Any())
-                                {
-                                    <p class="cm-empty">Нет персонажей</p>
-                                }
-                                else
-                                {
-                                    @foreach (var chara in _availableCharacters)
-                                    {
-                                        <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                             @onclick="() => AddCharacter(chara)">
-                                            <span class="text-gray-800">@chara.PersonalInfo.Name</span>
-                                            <span class="text-xs text-gray-400">СКО @chara.PersonalInfo.MoveSpeed</span>
-                                        </div>
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                @if (_availableCreatures is null)
-                                {
-                                    <p class="cm-empty">Загрузка...</p>
-                                }
-                                else
-                                {
-                                    @foreach (var monster in _availableCreatures)
-                                    {
-                                        <div class="flex justify-between items-center px-2 py-1.5 hover:bg-error-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                             @onclick="() => AddMonster(monster)">
-                                            <span class="text-gray-800">@monster.Name</span>
-                                            <span class="text-xs text-gray-400">СКО @monster.CreatureCharacteristics.Speed</span>
-                                        </div>
-                                    }
-                                }
-                            }
-                        </div>
+                        <ParticipantPicker CampaignId="CurrentCampaignId"
+                                           ScenarioId="_selectedScenario?.Id"
+                                           DetailMode="speed"
+                                           OnPick="HandleParticipantPicked" />
                     </div>
                 </div>
             }
@@ -480,7 +433,6 @@ else
 
 @code {
     private bool _isKeeper;
-    private string _showAddMode = "characters";
     private ChaseRole _addRole = ChaseRole.Prey;
     private string _addVehicleName = "";
     private int _trackLength = 10;
@@ -491,8 +443,8 @@ else
     private Guid? _restoredCampaignId;
     private bool _showChaseLog = true;
     private Campaign? _selectedCampaign;
-    private List<Character>? _availableCharacters;
-    private List<Creature>? _availableCreatures;
+    private List<Scenario> _campaignScenarios = [];
+    private Scenario? _selectedScenario;
 
     protected override async Task OnInitializedAsync()
     {
@@ -500,7 +452,6 @@ else
         if (!_isKeeper) return;
 
         ChaseService.OnChange += HandleChaseChanged;
-        _availableCreatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
 
         // Восстановить сцену после обрыва соединения или перезагрузки вкладки
         if (!ChaseService.HasContent())
@@ -513,7 +464,7 @@ else
                 _wasRestored = true;
 
                 if (session.CampaignId is { } campaignId)
-                    await LoadCampaignCharactersAsync(campaignId);
+                    _campaignScenarios = await ScenarioService.GetCampaignScenariosAsync(campaignId);
             }
         }
 
@@ -543,37 +494,50 @@ else
     private async Task HandleCampaignSelected(Campaign? campaign)
     {
         _selectedCampaign = campaign;
+        _selectedScenario = null;
+        _campaignScenarios = [];
         _wasRestored = false;
 
         if (campaign is not null)
         {
             _restoredCampaignId = null;
             ChaseService.SetCampaign(campaign.Id);
-            await LoadCampaignCharactersAsync(campaign.Id);
-        }
-        else
-        {
-            _availableCharacters = null;
+            _campaignScenarios = await ScenarioService.GetCampaignScenariosAsync(campaign.Id);
+            _selectedScenario = _campaignScenarios.MaxBy(s => s.LastUpdated);
         }
 
         StateHasChanged();
     }
 
-    private async Task LoadCampaignCharactersAsync(Guid campaignId)
+    private void HandleScenarioSelected(Scenario? scenario)
     {
-        var fullCampaign = await CampaignService.GetCampaignWithCharactersAsync(campaignId);
-        _availableCharacters = fullCampaign?.Players
-            .SelectMany(p => p.Characters)
-            .Where(c => c.Status == CharacterStatus.Active)
-            .Select(c => c.Character)
-            .ToList() ?? [];
+        _selectedScenario = scenario;
+        StateHasChanged();
     }
 
-    private void AddCharacter(Character character) =>
-        AddParticipant(new ChaseParticipant(character) { Role = _addRole });
+    /// <summary>
+    /// Добавляет выбранного участника в выбранной роли. Состав сценария может отдать
+    /// сразу несколько одинаковых НПС — они получают номера.
+    /// </summary>
+    private void HandleParticipantPicked(ParticipantOption option)
+    {
+        var count = Math.Max(1, option.Count);
 
-    private void AddMonster(Creature creature) =>
-        AddParticipant(new ChaseParticipant(creature) { Role = _addRole });
+        for (var i = 0; i < count; i++)
+        {
+            var suffix = count > 1 ? $"#{i + 1}" : null;
+
+            if (option.Character is { } character)
+            {
+                var isPlayer = option.SourceKind is ParticipantSourceKind.CampaignCharacter;
+                AddParticipant(new ChaseParticipant(character, isPlayer, suffix) { Role = _addRole });
+            }
+            else if (option.Creature is { } creature)
+            {
+                AddParticipant(new ChaseParticipant(creature, suffix) { Role = _addRole });
+            }
+        }
+    }
 
     private void AddParticipant(ChaseParticipant participant)
     {

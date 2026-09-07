@@ -1,0 +1,259 @@
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Extensions
+
+@inject CampaignService CampaignService
+@inject ScenarioService ScenarioService
+@inject CharacterService CharacterService
+@inject CreatureService CreatureService
+
+@* Единый список участников: персонажи кампании, НПС сценария, НПС библиотеки, монстры
+   сценария и бестиарий в одном месте. Раньше это были четыре вкладки с разной семантикой. *@
+
+<div class="space-y-2">
+    <input type="text"
+           class="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
+           placeholder="Поиск участника..."
+           @bind="_search"
+           @bind:event="oninput" />
+
+    <div class="flex flex-wrap gap-1">
+        @foreach (var (kind, label) in Filters)
+        {
+            <button type="button"
+                    class="px-2 py-1 text-xs rounded font-medium border transition-colors @(_filter == kind ? "bg-accent-50 text-accent-800 border-accent-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100")"
+                    @onclick="() => _filter = kind">
+                @label
+            </button>
+        }
+    </div>
+
+    <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
+        @if (_isLoading)
+        {
+            <p class="cm-empty">Загрузка...</p>
+        }
+        else if (Filtered.Count == 0)
+        {
+            <p class="cm-empty">@EmptyText</p>
+        }
+        else
+        {
+            @foreach (var option in Filtered)
+            {
+                <button type="button"
+                        class="w-full flex justify-between items-center gap-2 px-2 py-2 hover:bg-accent-50 text-sm border-b border-gray-50 last:border-0 text-left"
+                        @onclick="() => OnPick.InvokeAsync(option)">
+                    <span class="min-w-0">
+                        <span class="text-gray-800">@option.Name</span>
+                        @if (option.Count > 1)
+                        {
+                            <span class="text-xs text-gray-500 ml-1">&times;@option.Count</span>
+                        }
+                        <span class="block text-xs text-gray-400">@SourceLabel(option.SourceKind) &middot; @option.Side.ToRussianString()</span>
+                    </span>
+                    <span class="text-xs text-gray-400 whitespace-nowrap">@option.Detail</span>
+                </button>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Кампания, чьи персонажи и НПС доступны. Без неё остаётся только бестиарий.</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    /// <summary>Сценарий, из которого берутся занятые НПС, прегены и монстры.</summary>
+    [Parameter] public Guid? ScenarioId { get; set; }
+
+    /// <summary>Что показывать в правой колонке: ЛВК для боя, СКО для погони.</summary>
+    [Parameter] public string DetailMode { get; set; } = "dex";
+
+    [Parameter] public EventCallback<ParticipantOption> OnPick { get; set; }
+
+    private static readonly (ParticipantSourceKind? Kind, string Label)[] Filters =
+    [
+        (null, "Все"),
+        (ParticipantSourceKind.CampaignCharacter, "Персонажи"),
+        (ParticipantSourceKind.ScenarioNpc, "НПС сценария"),
+        (ParticipantSourceKind.LibraryNpc, "НПС"),
+        (ParticipantSourceKind.ScenarioCreature, "Монстры сцен."),
+        (ParticipantSourceKind.BestiaryCreature, "Бестиарий")
+    ];
+
+    private List<ParticipantOption> _options = [];
+    private bool _isLoading = true;
+    private string _search = "";
+    private ParticipantSourceKind? _filter;
+    private Guid? _loadedCampaignId;
+    private Guid? _loadedScenarioId;
+    private bool _loadedOnce;
+
+    private string EmptyText => CampaignId is null
+        ? "Выберите кампанию — или найдите существо поиском"
+        : "Ничего не найдено";
+
+    /// <summary>
+    /// Бестиарий (сотни существ) показывается только по своей вкладке или по поиску: иначе он
+    /// топит в себе людей этой игры, ради которых список и открывают.
+    /// </summary>
+    private bool ShowBestiary => _filter is ParticipantSourceKind.BestiaryCreature
+                                 || !string.IsNullOrWhiteSpace(_search);
+
+    private List<ParticipantOption> Filtered =>
+        _options
+            .Where(o => _filter is null
+                        || o.SourceKind == _filter
+                        || (_filter is ParticipantSourceKind.CampaignCharacter
+                            && o.SourceKind is ParticipantSourceKind.ScenarioPregen))
+            .Where(o => ShowBestiary || o.SourceKind is not ParticipantSourceKind.BestiaryCreature)
+            .Where(o => string.IsNullOrWhiteSpace(_search)
+                        || o.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedOnce && _loadedCampaignId == CampaignId && _loadedScenarioId == ScenarioId)
+            return;
+
+        _loadedCampaignId = CampaignId;
+        _loadedScenarioId = ScenarioId;
+        _loadedOnce = true;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        List<ParticipantOption> options = [];
+
+        try
+        {
+            if (CampaignId is { } campaignId)
+            {
+                var campaign = await CampaignService.GetCampaignWithCharactersAsync(campaignId);
+                if (campaign is not null)
+                {
+                    options.AddRange(campaign.Players
+                        .SelectMany(p => p.Characters)
+                        .Where(c => c.Status == CharacterStatus.Active)
+                        .Select(c => new ParticipantOption
+                        {
+                            Name = c.CharacterName,
+                            SourceKind = ParticipantSourceKind.CampaignCharacter,
+                            Character = c.Character,
+                            Side = CombatSide.Party,
+                            Detail = CharacterDetail(c.Character)
+                        }));
+                }
+            }
+
+            var castCharacterIds = new HashSet<Guid>();
+
+            if (ScenarioId is { } scenarioId)
+            {
+                var cast = await ScenarioService.GetScenarioCastAsync(scenarioId);
+                foreach (var entry in cast)
+                {
+                    if (entry.Character is null) continue;
+                    castCharacterIds.Add(entry.CharacterId);
+                    options.Add(new ParticipantOption
+                    {
+                        Name = entry.Character.CharacterName,
+                        SourceKind = ParticipantSourceKind.ScenarioNpc,
+                        Character = entry.Character.Character,
+                        Side = SideFromRole(entry.Role),
+                        Count = entry.Count,
+                        Detail = CharacterDetail(entry.Character.Character)
+                    });
+                }
+
+                var pregens = await CharacterService.GetScenarioPregensAsync(scenarioId);
+                options.AddRange(pregens
+                    .Where(p => p.CampaignPlayerId is null)
+                    .Select(p => new ParticipantOption
+                    {
+                        Name = p.CharacterName,
+                        SourceKind = ParticipantSourceKind.ScenarioPregen,
+                        Character = p.Character,
+                        Side = CombatSide.Party,
+                        Detail = CharacterDetail(p.Character)
+                    }));
+
+                var scenario = await ScenarioService.GetScenarioByIdAsync(scenarioId);
+                if (scenario is not null)
+                {
+                    options.AddRange(scenario.ScenarioCreatures.Select(c => new ParticipantOption
+                    {
+                        Name = c.Name,
+                        SourceKind = ParticipantSourceKind.ScenarioCreature,
+                        Creature = c,
+                        Side = CombatSide.Enemy,
+                        Detail = CreatureDetail(c)
+                    }));
+                }
+            }
+
+            if (CampaignId is not null)
+            {
+                var npcs = await CharacterService.GetNpcsAsync(CampaignId);
+                options.AddRange(npcs
+                    .Where(n => !castCharacterIds.Contains(n.Id))
+                    .Select(n => new ParticipantOption
+                    {
+                        Name = n.CharacterName,
+                        SourceKind = ParticipantSourceKind.LibraryNpc,
+                        Character = n.Character,
+                        Side = CombatSide.Neutral,
+                        Detail = CharacterDetail(n.Character)
+                    }));
+            }
+
+            var creatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
+            options.AddRange(creatures.Select(c => new ParticipantOption
+            {
+                Name = c.Name,
+                SourceKind = ParticipantSourceKind.BestiaryCreature,
+                Creature = c,
+                Side = CombatSide.Enemy,
+                Detail = CreatureDetail(c)
+            }));
+
+            _options = options;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static CombatSide SideFromRole(NpcRole role) => role switch
+    {
+        NpcRole.Ally => CombatSide.Party,
+        NpcRole.Enemy => CombatSide.Enemy,
+        _ => CombatSide.Neutral
+    };
+
+    private string CharacterDetail(Character character) => DetailMode == "speed"
+        ? $"СКО {character.PersonalInfo.MoveSpeed}"
+        : $"ЛВК {character.Characteristics.Dexterity.Regular}";
+
+    private string CreatureDetail(Creature creature) => DetailMode == "speed"
+        ? $"СКО {creature.CreatureCharacteristics.Speed}"
+        : $"ЛВК {creature.CreatureCharacteristics.Dexterity.Value}";
+
+    private static string SourceLabel(ParticipantSourceKind kind) => kind switch
+    {
+        ParticipantSourceKind.CampaignCharacter => "Персонаж игрока",
+        ParticipantSourceKind.ScenarioNpc => "НПС сценария",
+        ParticipantSourceKind.LibraryNpc => "НПС",
+        ParticipantSourceKind.ScenarioPregen => "Преген сценария",
+        ParticipantSourceKind.ScenarioCreature => "Монстр сценария",
+        _ => "Бестиарий"
+    };
+}

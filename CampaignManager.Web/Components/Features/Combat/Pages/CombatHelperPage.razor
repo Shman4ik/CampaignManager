@@ -6,22 +6,14 @@
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Components
-@using CampaignManager.Web.Components.Features.Characters.Services
-@using CampaignManager.Web.Components.Features.Characters.Model
-@using CampaignManager.Web.Components.Features.Bestiary.Services
-@using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Campaigns.Models
-@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Utilities.Services
 
 @inject CombatService CombatService
-@inject CreatureService CreatureService
-@inject CampaignService CampaignService
 @inject ScenarioService ScenarioService
-@inject CharacterService CharacterService
 @inject IdentityService IdentityService
 @implements IDisposable
 
@@ -162,106 +154,9 @@ else
                     <span class="cm-section-title">Добавить участника</span>
                 </div>
                 <div class="cm-card-body">
-                    <div class="flex flex-wrap gap-1 mb-2">
-                        @foreach (var (mode, label) in AddModes)
-                        {
-                            <button @onclick="() => _showAddMode = mode"
-                                    class="px-2 py-1 text-xs rounded font-medium border transition-colors @(_showAddMode == mode ? "bg-accent-50 text-accent-800 border-accent-200" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100")">
-                                @label
-                            </button>
-                        }
-                    </div>
-
-                    @if (_showAddMode == "creatures")
-                    {
-                        <input type="text"
-                               class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500"
-                               placeholder="Поиск существа..."
-                               @bind="_creatureSearch"
-                               @bind:event="oninput" />
-                    }
-
-                    <div class="max-h-[25vh] overflow-y-auto border border-gray-100 rounded-md">
-                        @if (_showAddMode == "characters")
-                        {
-                            @if (_availableCharacters == null)
-                            {
-                                <p class="cm-empty">@(_selectedCampaign == null ? "Выберите кампанию" : "Загрузка...")</p>
-                            }
-                            else if (!_availableCharacters.Any())
-                            {
-                                <p class="cm-empty">Нет персонажей</p>
-                            }
-                            else
-                            {
-                                @foreach (var chara in _availableCharacters)
-                                {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddCharacter(chara)">
-                                        <span class="text-gray-800">@chara.PersonalInfo.Name</span>
-                                        <span class="text-xs text-gray-400">ЛВК @chara.Characteristics.Dexterity.Regular</span>
-                                    </div>
-                                }
-                            }
-                        }
-                        else if (_showAddMode == "scenario-npcs")
-                        {
-                            @if (!_scenarioNpcs.Any())
-                            {
-                                <p class="cm-empty">Нет НПС в сценарии</p>
-                            }
-                            else
-                            {
-                                @foreach (var npc in _scenarioNpcs)
-                                {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddNpc(npc)">
-                                        <span class="text-gray-800">@npc.CharacterName</span>
-                                        <span class="text-xs text-gray-400">ЛВК @npc.Character.Characteristics.Dexterity.Regular</span>
-                                    </div>
-                                }
-                            }
-                        }
-                        else if (_showAddMode == "scenario-creatures")
-                        {
-                            @if (!_scenarioCreatures.Any())
-                            {
-                                <p class="cm-empty">Нет монстров в сценарии</p>
-                            }
-                            else
-                            {
-                                @foreach (var monster in _scenarioCreatures)
-                                {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddMonster(monster)">
-                                        <span class="text-gray-800">@monster.Name</span>
-                                        <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
-                                    </div>
-                                }
-                            }
-                        }
-                        else
-                        {
-                            @if (_availableCreatures == null)
-                            {
-                                <p class="cm-empty">Загрузка...</p>
-                            }
-                            else
-                            {
-                                var filtered = string.IsNullOrWhiteSpace(_creatureSearch)
-                                    ? _availableCreatures
-                                    : _availableCreatures.Where(c => c.Name.Contains(_creatureSearch, StringComparison.OrdinalIgnoreCase)).ToList();
-                                @foreach (var monster in filtered)
-                                {
-                                    <div class="flex justify-between items-center px-2 py-1.5 hover:bg-accent-50 cursor-pointer text-sm border-b border-gray-50 last:border-0"
-                                         @onclick="() => AddMonster(monster)">
-                                        <span class="text-gray-800">@monster.Name</span>
-                                        <span class="text-xs text-gray-400">ЛВК @monster.CreatureCharacteristics.Dexterity.Value</span>
-                                    </div>
-                                }
-                            }
-                        }
-                    </div>
+                    <ParticipantPicker CampaignId="CurrentCampaignId"
+                                       ScenarioId="_selectedScenario?.Id"
+                                       OnPick="HandleParticipantPicked" />
                 </div>
             </div>
 
@@ -373,24 +268,6 @@ else
 }
 
 @code {
-    /// <summary>Источники участников: значение <c>_showAddMode</c> и подпись кнопки.</summary>
-    private static readonly (string Mode, string Label)[] CampaignAddModes =
-    [
-        ("characters", "Персонажи"),
-        ("creatures", "Существа")
-    ];
-
-    private static readonly (string Mode, string Label)[] ScenarioAddModes =
-    [
-        ("characters", "Персонажи"),
-        ("creatures", "Существа"),
-        ("scenario-npcs", "НПС"),
-        ("scenario-creatures", "Монстры сцен.")
-    ];
-
-    private (string Mode, string Label)[] AddModes =>
-        _selectedScenario is null ? CampaignAddModes : ScenarioAddModes;
-
     /// <summary>Вкладки действий: идентификатор, иконка Font Awesome, подпись.</summary>
     private static readonly (string Id, string Icon, string Label)[] Tabs =
     [
@@ -405,97 +282,66 @@ else
     ];
 
     private bool _isKeeper;
-    private string _showAddMode = "characters";
     private string _activeTab = "attack";
     private bool _showDyingModal;
     private List<Combatant> _dyingCombatants = [];
     private bool _showCombatLog;
     private Campaign? _selectedCampaign;
-    private List<Character>? _availableCharacters;
-    private List<Creature>? _availableCreatures;
-    private string _creatureSearch = "";
     private List<Scenario> _campaignScenarios = [];
     private Scenario? _selectedScenario;
-    private List<CharacterStorageDto> _scenarioNpcs = [];
-    private List<ScenarioCreature> _scenarioCreatures = [];
+
+    /// <summary>Кампания боя: выбранная сейчас или та, что вернулась вместе с восстановленным боем.</summary>
+    private Guid? CurrentCampaignId => _selectedCampaign?.Id ?? CombatService.SelectedCampaignId;
 
     protected override async Task OnInitializedAsync()
     {
         CombatService.OnChange += StateHasChanged;
         _isKeeper = await IdentityService.IsKeeper();
-
-        if (_isKeeper)
-        {
-            _availableCreatures = await CreatureService.GetAllCreaturesAsync("", null, 1, 200);
-        }
     }
 
     private async Task HandleCampaignSelected(Campaign? campaign)
     {
         _selectedCampaign = campaign;
         _selectedScenario = null;
-        _scenarioNpcs = [];
-        _scenarioCreatures = [];
+        _campaignScenarios = [];
 
-        if (campaign != null)
+        if (campaign is not null)
         {
             CombatService.SetCampaign(campaign.Id);
-
-            var fullCampaign = await CampaignService.GetCampaignWithCharactersAsync(campaign.Id);
-            _availableCharacters = fullCampaign?.Players
-                .SelectMany(p => p.Characters)
-                .Where(c => c.Status == CharacterStatus.Active)
-                .Select(c => c.Character)
-                .ToList() ?? [];
-
             _campaignScenarios = await ScenarioService.GetCampaignScenariosAsync(campaign.Id);
 
             var latestScenario = _campaignScenarios.MaxBy(s => s.LastUpdated);
-            if (latestScenario != null)
-                await HandleScenarioSelected(latestScenario);
-        }
-        else
-        {
-            _availableCharacters = null;
-            _campaignScenarios = [];
+            if (latestScenario is not null)
+                _selectedScenario = latestScenario;
         }
 
         StateHasChanged();
     }
 
-    private async Task HandleScenarioSelected(Scenario? scenario)
+    private void HandleScenarioSelected(Scenario? scenario)
     {
         _selectedScenario = scenario;
-        _scenarioNpcs = [];
-        _scenarioCreatures = [];
-
-        if (scenario != null)
-        {
-            _scenarioNpcs = await CharacterService.GetCharacterTemplatesByScenarioIdAsync(scenario.Id);
-
-            var full = await ScenarioService.GetScenarioByIdAsync(scenario.Id);
-            if (full is not null)
-                _scenarioCreatures = [.. full.ScenarioCreatures];
-        }
-
         StateHasChanged();
     }
 
-    private void AddCharacter(Character character)
+    /// <summary>
+    /// Добавляет выбранного участника. Состав сценария может отдать сразу нескольких
+    /// одинаковых НПС — они получают номера, чтобы Хранитель их различал.
+    /// </summary>
+    private void HandleParticipantPicked(ParticipantOption option)
     {
-        CombatService.AddCombatant(new Combatant(character));
-        CombatService.SortByInitiative();
-    }
+        var count = Math.Max(1, option.Count);
 
-    private void AddNpc(CharacterStorageDto npc)
-    {
-        CombatService.AddCombatant(new Combatant(npc.Character));
-        CombatService.SortByInitiative();
-    }
+        for (var i = 0; i < count; i++)
+        {
+            var suffix = count > 1 ? $"#{i + 1}" : null;
 
-    private void AddMonster(Creature creature)
-    {
-        CombatService.AddCombatant(new Combatant(creature));
+            if (option.Character is { } character)
+                CombatService.AddCombatant(new Combatant(character, option.Side, suffix));
+            else if (option.Creature is { } creature)
+                CombatService.AddCombatant(new Combatant(creature, option.Side, suffix));
+        }
+
         CombatService.SortByInitiative();
     }
 

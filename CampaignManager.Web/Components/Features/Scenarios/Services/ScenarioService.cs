@@ -1,4 +1,5 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Services;
+using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
@@ -67,7 +68,7 @@ public sealed class ScenarioService(
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             scenarios = await dbContext.Scenarios
-                .Include(s => s.Npcs)
+                .Include(s => s.Pregens)
                 .ThenInclude(n => n.CampaignPlayer)
                 .Where(s => s.IsPublished)
                 .OrderBy(s => s.ScheduledDate)
@@ -116,7 +117,9 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
-                .Include(s => s.Npcs)
+                .Include(s => s.Cast)
+                .ThenInclude(sn => sn.Character)
+                .Include(s => s.Pregens)
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
         catch (Exception ex)
@@ -258,7 +261,7 @@ public sealed class ScenarioService(
 
             // Get the template scenario with all related entities
             var template = await dbContext.Scenarios
-                .Include(s => s.Npcs)
+                .Include(s => s.Cast)
                 .FirstOrDefaultAsync(s => s.Id == templateId && s.IsTemplate);
 
             if (template is null) return null;
@@ -402,6 +405,22 @@ public sealed class ScenarioService(
                     .ToList();
             }
 
+            // Состав НПС переносится связями: листы остаются общими, поэтому ссылки
+            // NpcIds в локациях остаются валидными и после копирования сценария.
+            foreach (var cast in template.Cast)
+            {
+                ScenarioNpc copy = new()
+                {
+                    ScenarioId = newScenario.Id,
+                    CharacterId = cast.CharacterId,
+                    Role = cast.Role,
+                    Count = cast.Count,
+                    Notes = cast.Notes
+                };
+                copy.Init();
+                dbContext.Add(copy);
+            }
+
             await dbContext.SaveChangesAsync();
 
             return newScenario;
@@ -411,6 +430,169 @@ public sealed class ScenarioService(
             logger.LogError(ex, "Error creating scenario from template {TemplateId} for campaign {CampaignId}",
                 templateId, campaignId);
             return null;
+        }
+    }
+
+    /// <summary>
+    ///     Состав НПС сценария вместе с листами персонажей.
+    /// </summary>
+    public async Task<List<ScenarioNpc>> GetScenarioCastAsync(Guid scenarioId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.ScenarioNpcs
+                .Include(sn => sn.Character)
+                .Where(sn => sn.ScenarioId == scenarioId)
+                .OrderBy(sn => sn.Character!.CharacterName)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving cast for scenario {ScenarioId}", scenarioId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Занимает НПС в сценарии. Лист персонажа не копируется: правки НПС видны во всех
+    ///     сценариях, где он занят. Повторный вызов обновляет роль и количество.
+    /// </summary>
+    public async Task<bool> AddNpcToScenarioAsync(Guid scenarioId, Guid characterId, NpcRole role = NpcRole.Neutral, int count = 1)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var existing = await dbContext.ScenarioNpcs
+                .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
+
+            if (existing is not null)
+            {
+                existing.Role = role;
+                existing.Count = Math.Max(1, count);
+                existing.LastUpdated = DateTime.UtcNow;
+            }
+            else
+            {
+                ScenarioNpc cast = new()
+                {
+                    ScenarioId = scenarioId,
+                    CharacterId = characterId,
+                    Role = role,
+                    Count = Math.Max(1, count)
+                };
+                cast.Init();
+                dbContext.ScenarioNpcs.Add(cast);
+            }
+
+            await dbContext.SaveChangesAsync();
+            cache.Remove(PublishedCacheKey);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error adding NPC {CharacterId} to scenario {ScenarioId}", characterId, scenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Меняет роль и количество НПС в сценарии.
+    /// </summary>
+    public async Task<bool> UpdateScenarioNpcAsync(Guid scenarioId, Guid characterId, NpcRole role, int count)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var cast = await dbContext.ScenarioNpcs
+                .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
+
+            if (cast is null) return false;
+
+            cast.Role = role;
+            cast.Count = Math.Max(1, count);
+            cast.LastUpdated = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating NPC {CharacterId} in scenario {ScenarioId}", characterId, scenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Убирает НПС из сценария. Удаляется только связь — сам лист остаётся в библиотеке
+    ///     или в кампании.
+    /// </summary>
+    public async Task<bool> RemoveNpcFromScenarioAsync(Guid scenarioId, Guid characterId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var cast = await dbContext.ScenarioNpcs
+                .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
+
+            if (cast is null) return false;
+
+            dbContext.ScenarioNpcs.Remove(cast);
+            await dbContext.SaveChangesAsync();
+            cache.Remove(PublishedCacheKey);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error removing NPC {CharacterId} from scenario {ScenarioId}", characterId, scenarioId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Названия сценариев, в которых занят каждый НПС: идентификатор листа → названия.
+    ///     Нужен спискам НПС, чтобы Хранитель видел, где персонаж уже задействован.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<string>>> GetNpcScenarioNamesAsync()
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var rows = await dbContext.ScenarioNpcs
+                .Select(sn => new { sn.CharacterId, ScenarioName = sn.Scenario!.Name })
+                .ToListAsync();
+
+            return rows
+                .GroupBy(r => r.CharacterId)
+                .ToDictionary(g => g.Key, g => g.Select(r => r.ScenarioName).OrderBy(n => n).ToList());
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving NPC usage across scenarios");
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Сценарии, в которых занят этот НПС.
+    /// </summary>
+    public async Task<List<Scenario>> GetScenariosWithNpcAsync(Guid characterId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await dbContext.ScenarioNpcs
+                .Where(sn => sn.CharacterId == characterId)
+                .Select(sn => sn.Scenario!)
+                .OrderBy(s => s.Name)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving scenarios for NPC {CharacterId}", characterId);
+            return [];
         }
     }
 

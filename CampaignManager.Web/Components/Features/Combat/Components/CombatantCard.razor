@@ -1,5 +1,6 @@
 ﻿@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Extensions
 
 @inject CombatService CombatService
 
@@ -10,14 +11,7 @@
         <div>
             <div class="flex items-center gap-2">
                 <h4 class="font-semibold text-gray-900 text-sm">@Combatant.Name</h4>
-                @if (Combatant.IsPlayer)
-                {
-                    <span class="bg-accent-100 text-accent-700 text-xs px-1.5 py-0.5 rounded font-medium">Игрок</span>
-                }
-                else
-                {
-                    <span class="bg-error-100 text-error-700 text-xs px-1.5 py-0.5 rounded font-medium">Существо</span>
-                }
+                <span class="@SideBadgeClass text-xs px-1.5 py-0.5 rounded font-medium">@Combatant.Side.ToRussianString()</span>
             </div>
             <div class="text-xs text-gray-500 mt-0.5">
                 @if (CombatService.UseInitiativeRolls && Combatant.InitiativeRoll is { } initRoll)
@@ -302,6 +296,14 @@
     private const string BadgeGood = $"{BadgeBase} bg-success-100 text-success-800 border-success-200";
     private const string BadgeImpaired = $"{BadgeBase} bg-warning-100 text-warning-800 border-warning-200";
     private const string BadgeCritical = $"{BadgeBase} bg-error-100 text-error-800 border-error-200";
+
+    /// <summary>Метка стороны участника. Классы литеральные — Tailwind не видит интерполяцию.</summary>
+    private string SideBadgeClass => Combatant.Side switch
+    {
+        CombatSide.Party => "bg-accent-100 text-accent-700",
+        CombatSide.Enemy => "bg-error-100 text-error-700",
+        _ => "bg-primary-100 text-primary-700"
+    };
     private const string BadgeCover = $"{BadgeBase} bg-accent-100 text-accent-800 border-accent-200";
     private const string BadgeInsanity = $"{BadgeBase} bg-secondary-100 text-secondary-800 border-secondary-200";
 

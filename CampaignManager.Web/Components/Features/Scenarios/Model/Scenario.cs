@@ -69,9 +69,15 @@ public sealed class Scenario : BaseDataBaseEntity, INamedEntity
     public Campaign? Campaign { get; set; }
 
     /// <summary>
-    ///     Collection of NPCs in this scenario
+    ///     НПС, занятые в этом сценарии. Связь, а не копии листов: один и тот же НПС
+    ///     может быть занят в нескольких сценариях, роль и количество хранятся на связи.
     /// </summary>
-    public ICollection<CharacterStorageDto> Npcs { get; set; } = [];
+    public ICollection<ScenarioNpc> Cast { get; set; } = [];
+
+    /// <summary>
+    ///     Преген-персонажи, созданные для этого сценария (ростер ваншота).
+    /// </summary>
+    public ICollection<CharacterStorageDto> Pregens { get; set; } = [];
 
     /// <summary>
     ///     Collection of creatures in this scenario

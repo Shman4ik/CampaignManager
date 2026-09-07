@@ -27,17 +27,22 @@
                    class="cm-input"/>
         </div>
 
-        @if (FilterByType == CharacterType.NonPlayerCharacter)
+        @if (Kind == CharacterKind.Npc)
         {
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Роль НПС</label>
-                <select @bind="_selectedRole"
-                        class="cm-input">
-                    @foreach (var role in Enum.GetValues<NpcRole>())
-                    {
-                        <option value="@role">@role.ToRussianString()</option>
-                    }
-                </select>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Роль НПС</label>
+                    <select @bind="_selectedRole" class="cm-input">
+                        @foreach (var role in Enum.GetValues<NpcRole>())
+                        {
+                            <option value="@role">@role.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Сколько</label>
+                    <input type="number" min="1" max="20" @bind="_count" class="cm-input"/>
+                </div>
             </div>
         }
 
@@ -45,7 +50,7 @@
             @if (!FilteredNpcs.Any())
             {
                 <div class="text-center p-4 text-gray-500">
-                    Нет доступных шаблонов.
+                    Нет доступных персонажей.
                 </div>
             }
             else
@@ -58,14 +63,9 @@
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-2">
                                 <h3 class="font-medium">@npc.CharacterName</h3>
-                                @if (npc.Character?.CharacterType == CharacterType.NonPlayerCharacter)
-                                {
-                                    <Badge Variant="error" Size="sm" Rounded="full" WithBorder="false">НПС</Badge>
-                                }
-                                else
-                                {
-                                    <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">Преген</Badge>
-                                }
+                                <Badge Variant="@(npc.Kind == CharacterKind.Npc ? "error" : "info")" Size="sm" Rounded="full" WithBorder="false">
+                                    @npc.Kind.ToRussianString()
+                                </Badge>
                             </div>
                             <Button OnClick="() => SelectNpc(npc)" Variant="info" Size="sm">
                                 Выбрать
@@ -88,50 +88,42 @@
     </ChildContent>
     <FooterContent>
 		<Button OnClick="Hide" Variant="secondary">Отмена</Button>
-		<Button OnClick="AddNpcToScenario" Variant="info" IsDisabled="@(_selectedNpc == null)">Добавить</Button>
+		<Button OnClick="AddToScenarioAsync" Variant="info" IsDisabled="@(_selectedNpc is null)">Добавить</Button>
     </FooterContent>
 </Modal>
 
 @code {
     [Parameter] public Guid ScenarioId { get; set; }
-    [Parameter] public EventCallback<CharacterStorageDto> OnNpcAdded { get; set; }
-    [Parameter] public CharacterType? FilterByType { get; set; }
+
+    /// <summary>Что добавляем: НПС занимается связью, преген копируется в сценарий.</summary>
+    [Parameter] public CharacterKind Kind { get; set; } = CharacterKind.Npc;
+
+    [Parameter] public EventCallback OnAdded { get; set; }
 
     [Inject] private CharacterService CharacterService { get; set; } = null!;
+    [Inject] private ScenarioService ScenarioService { get; set; } = null!;
+    [Inject] private ILogger<AddNpcModal> Logger { get; set; } = null!;
 
     private bool _isVisible;
     private string _searchTerm = string.Empty;
-    private List<CharacterStorageDto> _availableNpcs = [];
+    private List<CharacterStorageDto> _available = [];
     private CharacterStorageDto? _selectedNpc;
     private string? _errorMessage;
     private NpcRole _selectedRole = NpcRole.Neutral;
+    private int _count = 1;
 
-    private string ModalTitle => FilterByType switch
+    private string ModalTitle => Kind switch
     {
-        CharacterType.NonPlayerCharacter => "Добавить НПС в сценарий",
-        CharacterType.PlayerCharacter => "Добавить преген-персонажа в сценарий",
+        CharacterKind.Npc => "Добавить НПС в сценарий",
+        CharacterKind.Pregen => "Добавить преген-персонажа в сценарий",
         _ => "Добавить персонажа в сценарий"
     };
 
-    private IEnumerable<CharacterStorageDto> FilteredNpcs
-    {
-        get
-        {
-            IEnumerable<CharacterStorageDto> result = _availableNpcs;
-
-            if (FilterByType.HasValue)
-            {
-                result = result.Where(n => n.Character?.CharacterType == FilterByType.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(_searchTerm))
-            {
-                result = result.Where(n => n.CharacterName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
-            }
-
-            return result.Take(10);
-        }
-    }
+    private IEnumerable<CharacterStorageDto> FilteredNpcs =>
+        _available
+            .Where(n => string.IsNullOrWhiteSpace(_searchTerm)
+                        || n.CharacterName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            .Take(10);
 
     public async Task Show()
     {
@@ -139,8 +131,9 @@
         _searchTerm = string.Empty;
         _errorMessage = null;
         _selectedRole = NpcRole.Neutral;
+        _count = 1;
 
-        await LoadAvailableNpcs();
+        await LoadAvailableAsync();
 
         _isVisible = true;
         await InvokeAsync(StateHasChanged);
@@ -152,48 +145,55 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private void SelectNpc(CharacterStorageDto npc)
-    {
-        _selectedNpc = npc;
-    }
+    private void SelectNpc(CharacterStorageDto npc) => _selectedNpc = npc;
 
-    private async Task LoadAvailableNpcs()
+    private async Task LoadAvailableAsync()
     {
         try
         {
-            _availableNpcs = await CharacterService.GetAllCharacterTemplatesAsync();
+            _available = Kind is CharacterKind.Npc
+                ? await CharacterService.GetNpcsAsync()
+                : await CharacterService.GetPregenTemplatesAsync();
             _errorMessage = null;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading NPCs: {ex.Message}");
-            _availableNpcs = [];
-            _errorMessage = "Не удалось загрузить шаблоны персонажей. Попробуйте еще раз.";
+            Logger.LogError(ex, "Error loading characters for scenario {ScenarioId}", ScenarioId);
+            _available = [];
+            _errorMessage = "Не удалось загрузить персонажей. Попробуйте ещё раз.";
         }
     }
 
-    private async Task AddNpcToScenario()
+    private async Task AddToScenarioAsync()
     {
         if (_selectedNpc is null)
         {
-            _errorMessage = "Выберите шаблон персонажа перед добавлением.";
+            _errorMessage = "Выберите персонажа перед добавлением.";
             return;
         }
 
         try
         {
-            var addedNpc = await CharacterService.SaveCharacterTemplateWithScenarioAsync(
-                _selectedNpc.Id, ScenarioId, _selectedRole);
-            await OnNpcAdded.InvokeAsync(addedNpc);
+            if (Kind is CharacterKind.Npc)
+            {
+                // Лист не копируется: НПС занимается в сценарии связью.
+                await ScenarioService.AddNpcToScenarioAsync(ScenarioId, _selectedNpc.Id, _selectedRole, _count);
+            }
+            else
+            {
+                // Преген расходуется игроком, поэтому сценарию нужна собственная копия листа.
+                await CharacterService.CopyPregenToScenarioAsync(_selectedNpc.Id, ScenarioId);
+            }
+
+            await OnAdded.InvokeAsync();
             _errorMessage = null;
             Hide();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error adding NPC to scenario: {ex.Message}");
-            _errorMessage = "Не удалось добавить шаблон персонажа в сценарий.";
+            Logger.LogError(ex, "Error adding character {CharacterId} to scenario {ScenarioId}", _selectedNpc.Id, ScenarioId);
+            _errorMessage = "Не удалось добавить персонажа в сценарий.";
             await InvokeAsync(StateHasChanged);
         }
     }
-
 }

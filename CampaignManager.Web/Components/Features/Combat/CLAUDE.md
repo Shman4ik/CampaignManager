@@ -20,6 +20,23 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 
 ## Key Models
 - `Combatant`, `CombatActionResult`, and per-action setup types: `AttackSetup`, `ManeuverSetup`, `FleeSetup`, `CoverSetup`, `SanityCheckSetup`.
+- `CombatSide` (`Party` / `Enemy` / `Neutral`) — сторона участника. Заменяет прежний флаг
+  «игрок / существо»: союзный НПС теперь стоит рядом с отрядом, и правило шальной пули
+  (`FindUnluckiestAlly`, стр. 112) ищет союзника по стороне, а не по «это лист игрока».
+  Сторона берётся из роли НПС в сценарии (`NpcRole.Ally → Party`, `Enemy → Enemy`, иначе `Neutral`).
+- `ParticipantOption` / `ParticipantSourceKind` — строка списка «добавить участника»: несёт исходную
+  сущность, сторону и количество, поэтому годится и бою, и погоне.
+
+## Добавление участников
+`Components/ParticipantPicker.razor` — **единственный** список участников, общий с погоней
+(`Chase/Pages/ChaseHelperPage.razor` использует его же с `DetailMode="speed"`). Он сам грузит все
+источники по `CampaignId` и `ScenarioId`: персонажей кампании, состав НПС сценария, свободных
+прегенов сценария, НПС библиотеки и кампании, монстров сценария и бестиарий. Новый источник
+добавлять в него, а не отдельной вкладкой на странице.
+
+`Combatant.Id` — идентификатор участника боя, а не листа персонажа: у двух громил из одного листа
+он разный (иначе путаются захват, удаление и «чей ход»), а сам лист лежит в `SourceCharacterId`.
+Состав сценария с `Count > 1` добавляется сразу пачкой, участники получают номера `#1`, `#2`.
 
 ## Notes
 - Same deliberate deviation from the CRUD service template as `Chase/CLAUDE.md`'s `ChaseService` — both are runtime resolution engines, not persistence services.

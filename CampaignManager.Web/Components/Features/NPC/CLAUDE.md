@@ -1,10 +1,25 @@
 # NPC Feature
 
-UI-only feature — there is no `NPC/Model` or `NPC/Services`. It presents and links NPCs, which are just regular `Character`/`CharacterStorageDto` records (see `Characters/CLAUDE.md`) attached to a `Scenario.Npcs` collection (see `Scenarios/CLAUDE.md`).
+Библиотека НПС и преген-заготовок Хранителя. Своих моделей и сервисов у фичи нет: листы —
+это `CharacterStorageDto` (см. `Characters/CLAUDE.md`), участие НПС в сценарии — `ScenarioNpc`
+(см. `Scenarios/CLAUDE.md`).
 
 ## Key Components
-- `NpcListPage.razor` — listing/browsing page.
-- `CharacterTemplateCard.razor`, `LinkToScenarioDialog.razor` — reused to create/attach an NPC character to a scenario.
+- `NpcListPage.razor` (`/npcs`) — списки НПС и прегенов, поиск, архив. Только для Хранителя.
+- `CharacterSummaryCard.razor` — карточка листа. Одна и та же в библиотеке и в сценарии;
+  что она умеет, задаётся переданными обработчиками (`OnCast`, `OnRemove`, `OnRestore`,
+  `OnCastChanged`), а не отдельными вариантами компонента.
+- `CastNpcDialog.razor` — занять НПС в сценарии: сценарий, роль, количество.
+
+## Главное правило
+**НПС не копируется.** Один лист живёт в библиотеке (`CampaignId is null`) или в кампании
+(`CampaignId`), а в сценариях появляется связями `ScenarioNpc`. Правка листа сразу видна во всех
+сценариях, где НПС занят. Копия осталась ровно одна и осознанно —
+`CharacterService.CopyPregenToScenarioAsync`: преген расходуется игроком при брони, поэтому
+каждому ваншоту нужен собственный лист.
 
 ## Notes
-- When looking for "NPC data model," look in `Characters/Model/Character.cs` and `Scenarios/Model/Scenario.cs` (`Npcs` property), not here.
+- Роль (`NpcRole`) и количество принадлежат **появлению** НПС в сценарии, а не листу: они лежат
+  в `ScenarioNpc`, потому что в разных сценариях один и тот же НПС бывает и союзником, и врагом.
+- «Удалить» в библиотеке — это архив (`CharacterStatus.Archived`), а не `DELETE`. Архив
+  показывается галочкой на странице; безвозвратно листы отсюда не пропадают.

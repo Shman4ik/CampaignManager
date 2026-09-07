@@ -5,6 +5,10 @@ namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 public class Combatant
 {
+    /// <summary>
+    ///     Идентификатор именно этого участника боя, а не листа персонажа: двух громил из
+    ///     одного листа надо различать, иначе захват и удаление путают их между собой.
+    /// </summary>
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
     public int Dexterity { get; set; }
@@ -19,7 +23,10 @@ public class Combatant
     public int MaxSanity { get; set; }
     public int CurrentSanity { get; set; }
 
-    public bool IsPlayer { get; set; }
+    /// <summary>
+    ///     Сторона в бою. Союзный НПС стоит рядом с отрядом, а не среди монстров.
+    /// </summary>
+    public CombatSide Side { get; set; } = CombatSide.Enemy;
 
     // Состояния
     public bool IsUnconscious { get; set; }
@@ -153,12 +160,21 @@ public class Combatant
     public Character? CharacterSource { get; set; }
     public Creature? CreatureSource { get; set; }
 
+    /// <summary>Лист персонажа, с которого снят участник (для переноса урона в лист).</summary>
+    public Guid? SourceCharacterId { get; set; }
+
+    /// <summary>Существо бестиария или сценария, с которого снят участник.</summary>
+    public Guid? SourceCreatureId { get; set; }
+
     public Combatant() { }
 
-    public Combatant(Character character)
+    public Combatant(Character character, CombatSide side = CombatSide.Party, string? nameSuffix = null)
     {
-        Id = character.Id;
-        Name = character.PersonalInfo.Name;
+        Name = string.IsNullOrEmpty(nameSuffix)
+            ? character.PersonalInfo.Name
+            : $"{character.PersonalInfo.Name} {nameSuffix}";
+        SourceCharacterId = character.Id;
+        Side = side;
         Dexterity = character.Characteristics.Dexterity.Regular;
         Initiative = character.Characteristics.Dexterity.Regular;
 
@@ -171,7 +187,6 @@ public class Combatant
         MaxSanity = character.DerivedAttributes.Sanity.MaxValue;
         CurrentSanity = character.DerivedAttributes.Sanity.Value;
 
-        IsPlayer = character.CharacterType != CharacterType.NonPlayerCharacter;
         CharacterSource = character;
 
         // Боевые характеристики
@@ -195,10 +210,11 @@ public class Combatant
         }
     }
 
-    public Combatant(Creature creature)
+    public Combatant(Creature creature, CombatSide side = CombatSide.Enemy, string? nameSuffix = null)
     {
-        Id = Guid.NewGuid();
-        Name = creature.Name;
+        Name = string.IsNullOrEmpty(nameSuffix) ? creature.Name : $"{creature.Name} {nameSuffix}";
+        SourceCreatureId = creature.Id;
+        Side = side;
         Dexterity = creature.CreatureCharacteristics.Dexterity.Value;
         Initiative = creature.CreatureCharacteristics.Initiative;
 
@@ -211,7 +227,6 @@ public class Combatant
         MaxSanity = creature.CreatureCharacteristics.Power.Value;
         CurrentSanity = creature.CreatureCharacteristics.Power.Value;
 
-        IsPlayer = false;
         CreatureSource = creature;
 
         // Боевые характеристики существа
