@@ -109,6 +109,27 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
 - Shared components in `Components/Shared/`: Badge, Modal, ConfirmationModal, NotificationAlert, SaveButton, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
 
+### Target device: iPad Pro M2
+
+**The primary device for this app is an iPad Pro M2 — it's what the Keeper actually runs at the table.**
+Any UI change must be checked at that viewport in the browser preview before it's called done, not only
+at desktop width:
+
+- **Landscape 1366×1024** — the main orientation at the table. Check this one first.
+- **Portrait 1024×1366** — Tailwind's `lg:` breakpoint is exactly 1024px, so a three-column
+  `lg:col-span-*` grid switches to its widest layout right at portrait width and columns get very tight.
+  Verify nothing clips, and that no control ends up narrower than a comfortable tap target.
+
+Practical rules that follow from it:
+- Tap targets: buttons and checkboxes need real padding — `cm-btn-sm` is the floor, not `text-xs` bare links.
+- Never rely on `title=` tooltips to carry information: there's no hover on a touch screen.
+- Wide content (tracks, tables, timelines) scrolls inside its own `overflow-x-auto` container so the page
+  body never scrolls sideways.
+- Prefer `flex-wrap` on button rows — an unwrapped row of six actions overflows in portrait.
+
+`mcp__Claude_Browser__resize_window` with `{width: 1366, height: 1024}` (and then `1024×1366`) is how to
+check this; reset with `preset: "desktop"` when done.
+
 ### Design System Colors
 
 - **Primary**: Slate/graphite gray (#64748B) — headings, nav, buttons

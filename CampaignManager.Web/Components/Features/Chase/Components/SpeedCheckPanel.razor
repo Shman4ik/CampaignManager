@@ -9,20 +9,18 @@
     <div>
         <h3 class="text-base font-semibold text-gray-800 mb-1">Проверка скорости</h3>
         <p class="text-xs text-gray-500">
-            Каждый участник бросает ВЫН (пешком) или Вождение (транспорт).
+            Каждый участник бросает ВЫН (пешком или на мускульной тяге) или навык управления транспортом.
             Чрезвычайный успех: СКО +1. Провал: СКО −1.
+            Пассажиры проверку не проходят и в списке не показаны (стр. 139).
         </p>
     </div>
 
     <!-- Таблица участников -->
     <div class="space-y-3">
-        @foreach (var participant in ChaseService.Participants)
+        @foreach (var participant in ChaseService.Participants.Where(p => !p.IsPassenger))
         {
-            var skillName = participant.IsInVehicle ? "Вождение" : "ВЫН";
-            var skillValue = participant.IsInVehicle
-                ? (participant.DrivingSkill > 0 ? participant.DrivingSkill : 20)
-                : participant.ConstitutionValue;
-            var baseMov = participant.IsInVehicle ? participant.VehicleSpeed : participant.MovementRate;
+            var (skillName, skillValue) = ChaseService.GetSpeedCheckSkill(participant);
+            var baseMov = participant.BaseMov;
 
             <div @key="participant.Id" class="border border-gray-200 rounded-md p-3 @(participant.SpeedCheckCompleted ? "bg-success-50 border-success-200" : "bg-white")">
                 <div class="flex items-center justify-between gap-4">
@@ -97,10 +95,27 @@
             {
                 <!-- Таблица скорректированных СКО -->
                 <div class="mt-2 text-xs text-gray-600 space-y-0.5">
-                    @foreach (var p in ChaseService.Participants.OrderByDescending(p => p.AdjustedMov))
+                    @{
+                        var slowestPrey = ChaseService.Participants
+                            .Where(p => p.Role == ChaseRole.Prey && !p.IsPassenger)
+                            .Select(p => p.AdjustedMov)
+                            .DefaultIfEmpty(0)
+                            .Min();
+                    }
+                    @foreach (var p in ChaseService.Participants.Where(x => !x.IsPassenger).OrderByDescending(p => p.AdjustedMov))
                     {
-                        <div class="flex justify-between">
-                            <span>@p.Name (@ChaseService.GetRoleText(p.Role))</span>
+                        var tooSlow = p.Role == ChaseRole.Pursuer && slowestPrey > 0 && p.AdjustedMov < slowestPrey;
+                        <div class="flex justify-between @(tooSlow ? "text-gray-400" : "")">
+                            <span>
+                                @p.Name (@ChaseService.GetRoleText(p.Role))
+                                @if (tooSlow)
+                                {
+                                    <span class="text-gray-400"
+                                          title="Преследователь медленнее самого медленного убегающего — в погоне не учитывается (стр. 140)">
+                                        — не учитывается
+                                    </span>
+                                }
+                            </span>
                             <span class="font-mono font-semibold">СКО @p.AdjustedMov</span>
                         </div>
                     }

@@ -11,10 +11,50 @@ public class ChaseParticipant
     public ChaseRole Role { get; set; }
     public bool IsPlayer { get; set; }
 
-    // Транспорт
+    // Транспорт (таблица V, стр. 143)
     public bool IsInVehicle { get; set; }
     public string? VehicleName { get; set; }
     public int VehicleSpeed { get; set; }
+
+    /// <summary>Комплекция транспорта: и число костей 1d10 урона, и его «прочность» (стр. 136).</summary>
+    public double VehicleBuild { get; set; }
+    public double VehicleCurrentBuild { get; set; }
+
+    /// <summary>Броня транспорта — защищает водителя и пассажиров (стр. 139).</summary>
+    public int VehicleArmor { get; set; }
+
+    /// <summary>Навык управления: Вождение автомобиля, Пилотирование, Верховая езда, тяжёлые машины.</summary>
+    public string? VehicleSkillName { get; set; }
+
+    /// <summary>Накопленный урон транспорта: каждые полные 10 пунктов снимают 1 Комплекции (стр. 136).</summary>
+    public int VehicleDamageCarry { get; set; }
+
+    /// <summary>Число лопнувших шин (стр. 139) — каждая уже снята с Комплекции.</summary>
+    public int BurstTyres { get; set; }
+
+    // Пассажиры (стр. 139): не проходят проверку скорости и не имеют действий перемещения
+    public bool IsPassenger { get; set; }
+    public Guid? CarrierId { get; set; }
+
+    /// <summary>Штурман снял штрафную кость со следующего разгона (стр. 139).</summary>
+    public bool HasNavigatorAssist { get; set; }
+
+    // Способ передвижения (стр. 141)
+    public MovementMode Mode { get; set; } = MovementMode.OnFoot;
+
+    /// <summary>Отдельная СКО для плавания или полёта. 0 — своей нет, значит половина обычной СКО.</summary>
+    public int NativeModeSpeed { get; set; }
+
+    /// <summary>
+    /// Маршрут при разделении погони (стр. 142). Пусто — все бегут вместе;
+    /// разные метки означают отдельные, независимо отслеживаемые погони.
+    /// </summary>
+    public string? RouteLabel { get; set; }
+
+    /// <summary>
+    /// Преследователь медленнее самого медленного убегающего — в погоне не учитывается (стр. 140).
+    /// </summary>
+    public bool IsOutOfChase { get; set; }
 
     // Характеристики
     public int MovementRate { get; set; }
@@ -29,7 +69,27 @@ public class ChaseParticipant
     // Проверка скорости
     public int MovModifier { get; set; } // +1/0/-1 от проверки скорости
     public bool SpeedCheckCompleted { get; set; }
-    public int AdjustedMov => (IsInVehicle ? VehicleSpeed : MovementRate) + MovModifier;
+
+    /// <summary>
+    /// Базовая СКО с учётом способа передвижения (стр. 141): транспорт — своя СКО;
+    /// плавание или полёт — отдельная СКО, если она есть, иначе половина обычной.
+    /// </summary>
+    public int BaseMov => IsInVehicle
+        ? VehicleSpeed
+        : Mode switch
+        {
+            MovementMode.OnFoot => MovementRate,
+            _ when NativeModeSpeed > 0 => NativeModeSpeed,
+            _ => MovementRate / 2
+        };
+
+    public int AdjustedMov => Math.Max(0, BaseMov + MovModifier);
+
+    /// <summary>Комплекция для боевых манёвров и тарана: у транспорта своя (стр. 136).</summary>
+    public double EffectiveBuild => IsInVehicle ? VehicleCurrentBuild : BuildValue;
+
+    /// <summary>Транспорт разрушен, когда Комплекция опустилась до нуля.</summary>
+    public bool IsVehicleWrecked => IsInVehicle && VehicleCurrentBuild <= 0;
 
     // Экономика действий перемещения
     public int TotalMovementActions { get; set; }
@@ -47,7 +107,10 @@ public class ChaseParticipant
     public Character? CharacterSource { get; set; }
     public Creature? CreatureSource { get; set; }
 
-    public bool IsActive => !IsEliminated && !HasEscaped && !IsCaught;
+    public bool IsActive => !IsEliminated && !HasEscaped && !IsCaught && !IsOutOfChase;
+
+    /// <summary>Участник ходит в порядке ЛВК, но действий перемещения у пассажира нет (стр. 139).</summary>
+    public bool HasMovementActions => !IsPassenger;
 
     public ChaseParticipant() { }
 

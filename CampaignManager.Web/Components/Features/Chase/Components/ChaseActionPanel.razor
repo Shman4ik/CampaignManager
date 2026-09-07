@@ -19,10 +19,21 @@
     }
     else
     {
-        var nextLocation = ChaseService.GetLocation(ActiveParticipant.CurrentLocation + 1);
+        var nextLocationNumber = ActiveParticipant.CurrentLocation + 1;
+        var nextLocation = ChaseService.GetLocation(nextLocationNumber);
         var hasBlockingBarrier = nextLocation?.HasBarrier == true && !nextLocation.IsBarrierDestroyed;
         var nextHasHazard = nextLocation?.HasHazard == true;
         var targets = ChaseService.GetParticipantsAtLocation(ActiveParticipant.CurrentLocation, ActiveParticipant.Id);
+        // Огнестрел бьёт на любую дистанцию — цель не обязана быть в той же локации (стр. 136)
+        var rangedTargets = ChaseService.Participants
+            .Where(p => p.IsActive && p.Id != ActiveParticipant.Id)
+            .ToList();
+        var hasMovementAction = ActiveParticipant.MovementActionsRemaining > 0;
+        var vehicleTargets = targets.Where(p => p.IsInVehicle).ToList();
+        var vehicleTargetsAnywhere = rangedTargets.Where(p => p.IsInVehicle).ToList();
+        var driverCandidates = ChaseService.Participants
+            .Where(p => p.IsActive && p.IsInVehicle && p.Id != ActiveParticipant.Id)
+            .ToList();
 
         <div class="space-y-4">
             <!-- Заголовок участника -->
@@ -119,7 +130,7 @@
                             </button>
                         }
                     }
-                    @if (targets.Count > 0)
+                    @if (targets.Count > 0 && hasMovementAction)
                     {
                         <button type="button"
                                 class="cm-btn cm-btn-error cm-btn-sm @(_selectedAction == ActionMode.Melee ? "ring-2 ring-error-400" : "")"
@@ -127,18 +138,86 @@
                             <span><i class="fa-solid fa-khanda mr-1"></i>Ближний бой</span>
                         </button>
                         <button type="button"
-                                class="cm-btn cm-btn-error cm-btn-sm @(_selectedAction == ActionMode.Ranged ? "ring-2 ring-error-400" : "")"
-                                @onclick='() => SelectAction(ActionMode.Ranged)'>
-                            <span><i class="fa-solid fa-gun mr-1"></i>Стрельба</span>
-                        </button>
-                        <button type="button"
                                 class="cm-btn cm-btn-secondary cm-btn-sm @(_selectedAction == ActionMode.Maneuver ? "ring-2 ring-secondary-400" : "")"
                                 @onclick='() => SelectAction(ActionMode.Maneuver)'>
                             <span><i class="fa-solid fa-hand-fist mr-1"></i>Манёвр</span>
                         </button>
                     }
+                    @if (rangedTargets.Count > 0)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-error cm-btn-sm @(_selectedAction == ActionMode.Ranged ? "ring-2 ring-error-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Ranged)'>
+                            <span><i class="fa-solid fa-gun mr-1"></i>Стрельба</span>
+                        </button>
+                    }
+                    @if (ChaseService.UseFloorIt && ActiveParticipant.IsInVehicle && hasMovementAction)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-warning cm-btn-sm @(_selectedAction == ActionMode.FloorIt ? "ring-2 ring-warning-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.FloorIt)'>
+                            <span><i class="fa-solid fa-gauge-high mr-1"></i>Педаль в пол</span>
+                        </button>
+                    }
+                    @if (vehicleTargets.Count > 0 && hasMovementAction && ActiveParticipant.IsInVehicle)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-error cm-btn-sm @(_selectedAction == ActionMode.Ram ? "ring-2 ring-error-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Ram)'>
+                            <span><i class="fa-solid fa-car-burst mr-1"></i>Таран</span>
+                        </button>
+                    }
+                    @if (vehicleTargetsAnywhere.Count > 0)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-error cm-btn-sm @(_selectedAction == ActionMode.Tyres ? "ring-2 ring-error-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Tyres)'>
+                            <span><i class="fa-solid fa-crosshairs mr-1"></i>По шинам</span>
+                        </button>
+                    }
+                    @if (ActiveParticipant.Role == ChaseRole.Prey && hasMovementAction)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-secondary cm-btn-sm @(_selectedAction == ActionMode.Hide ? "ring-2 ring-secondary-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Hide)'>
+                            <span><i class="fa-solid fa-user-secret mr-1"></i>Спрятаться</span>
+                        </button>
+                    }
+                    @if (ActiveParticipant.Role == ChaseRole.Pursuer && hasMovementAction)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-secondary cm-btn-sm @(_selectedAction == ActionMode.Track ? "ring-2 ring-secondary-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Track)'>
+                            <span><i class="fa-solid fa-shoe-prints mr-1"></i>Искать след</span>
+                        </button>
+                    }
+                    <button type="button"
+                            class="cm-btn cm-btn-secondary cm-btn-sm @(_selectedAction == ActionMode.CreateObstacle ? "ring-2 ring-secondary-400" : "")"
+                            @onclick='() => SelectAction(ActionMode.CreateObstacle)'>
+                        <span><i class="fa-solid fa-dumpster mr-1"></i>Создать помеху</span>
+                    </button>
+                    @if (ActiveParticipant.IsInVehicle)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-secondary cm-btn-sm @(_selectedAction == ActionMode.DriverControl ? "ring-2 ring-secondary-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.DriverControl)'>
+                            <span><i class="fa-solid fa-steering-wheel mr-1"></i>Удержать управление</span>
+                        </button>
+                    }
+                    @if (ActiveParticipant.IsPassenger && driverCandidates.Count > 0)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-info cm-btn-sm @(_selectedAction == ActionMode.Navigate ? "ring-2 ring-accent-400" : "")"
+                                @onclick='() => SelectAction(ActionMode.Navigate)'>
+                            <span><i class="fa-solid fa-map mr-1"></i>Штурман</span>
+                        </button>
+                    }
+
                     @if (_selectedAction == ActionMode.None)
                     {
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="DelayAction">
+                            <span>Отложить действие</span>
+                        </button>
                         <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="SkipTurn">
                             <span>Пропустить ход</span>
                         </button>
@@ -222,6 +301,46 @@
                         Участник всё равно проходит через помеху.
                     </div>
                     <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-600">
+                                Тяжесть последствий
+                                @if (ActiveParticipant.IsInVehicle)
+                                {
+                                    <span class="text-gray-400">— таблица VI «Столкновения транспорта»</span>
+                                }
+                                else
+                                {
+                                    <span class="text-gray-400">— таблица III «Другие виды урона»</span>
+                                }
+                            </label>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                @if (ActiveParticipant.IsInVehicle)
+                                {
+                                    @foreach (var tier in ChaseReference.CrashTiers)
+                                    {
+                                        <button type="button" @onclick="() => PickCrash(tier)"
+                                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(_crashTier == tier.Name ? "bg-warning-100 text-warning-800" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                            @tier.Name (@tier.BuildLossFormula)
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    @foreach (var tier in ChaseReference.DamageTiers)
+                                    {
+                                        <button type="button" @onclick="() => PickDamage(tier)"
+                                                class="px-2 py-1 text-xs rounded font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                title="@tier.Examples">
+                                            @tier.Name (@tier.Formula)
+                                        </button>
+                                    }
+                                }
+                            </div>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Хранитель может не бросать, а взять типовое значение: мелкая авария при обычной
+                                помехе, средняя при трудной, серьёзная при чрезвычайной.
+                            </p>
+                        </div>
                         <div>
                             <label class="text-xs text-gray-600">Урон при провале (если провал)</label>
                             <input type="number" min="0" @bind="_damageRoll" placeholder="0"
@@ -290,8 +409,14 @@
                         (ПЗ: @nextLocation.BarrierCurrentHitPoints / @nextLocation.BarrierHitPoints)
                     </div>
                     <p class="text-xs text-warning-700">
-                        Комплекция участника (@ActiveParticipant.BuildValue) × 1d10.
-                        Введите результат броска 1d10 или суммарный урон.
+                        @if (ActiveParticipant.IsInVehicle)
+                        {
+                            <span>Транспорт наносит 1d10 урона за каждый пункт Комплекции (@Math.Max(1, ActiveParticipant.BuildValue) × 1d10). Введите суммарный урон.</span>
+                        }
+                        else
+                        {
+                            <span>Пешеход бьёт преграду вручную — урон задаёт Хранитель (в примере из книги это 1d3). Введите суммарный урон.</span>
+                        }
                     </p>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -347,6 +472,41 @@
                             <input type="number" min="0" @bind="_damageRoll" placeholder="0"
                                    class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
                         </div>
+                        <div class="col-span-2 border-t border-error-200 pt-2">
+                            <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                                <input type="checkbox" @bind="_useDefence" class="rounded border-gray-300" />
+                                Цель отвечает — контратака или уклонение
+                            </label>
+                            <p class="text-xs text-gray-400 mt-0.5">
+                                Правила требуют давать эту возможность всегда, сколько бы действий
+                                перемещения у цели ни оставалось.
+                            </p>
+                        </div>
+                        @if (_useDefence)
+                        {
+                            <div>
+                                <label class="text-xs text-gray-600">Реакция</label>
+                                <select @bind="_defenceIsFightBack" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                    <option value="false">Уклонение — ничья за защитника</option>
+                                    <option value="true">Контратака — ничья за атакующего</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Навык защиты</label>
+                                <input type="text" @bind="_defenceSkillName" placeholder="Уклонение"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Значение навыка</label>
+                                <input type="number" @bind="_defenceValue"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Бросок защиты d100</label>
+                                <input type="number" min="1" max="100" @bind="_defenceRoll" placeholder="01–100"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                        }
                     </div>
                     <div class="flex gap-2">
                         <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="ExecuteMelee"
@@ -370,7 +530,7 @@
                             <label class="text-xs text-gray-600">Цель</label>
                             <select @bind="_targetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
                                 <option value="">— выберите цель —</option>
-                                @foreach (var t in ChaseService.Participants.Where(p => p.IsActive && p.Id != ActiveParticipant.Id))
+                                @foreach (var t in rangedTargets)
                                 {
                                     <option value="@t.Id">@t.Name (лок. @t.CurrentLocation)</option>
                                 }
@@ -397,13 +557,17 @@
                                    class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
                         </div>
                         <div class="col-span-2">
-                            <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                                <input type="checkbox" @bind="_stoppedToShoot"
+                            <label class="flex items-center gap-2 text-xs text-gray-700 @(hasMovementAction ? "cursor-pointer" : "opacity-50")">
+                                <input type="checkbox" @bind="_stoppedToShoot" disabled="@(!hasMovementAction)"
                                        class="rounded border-gray-300" />
                                 Стоя на месте (−1 действие, без штрафной кости)
                             </label>
                             <p class="text-xs text-gray-400 mt-0.5">
-                                На ходу — 0 действий, штрафная кость учитывается Хранителем в броске
+                                На ходу — 0 действий, штрафная кость учитывается Хранителем в броске.
+                                @if (!hasMovementAction)
+                                {
+                                    <span class="text-warning-600">Действий перемещения не осталось — только стрельба на ходу.</span>
+                                }
                             </p>
                         </div>
                     </div>
@@ -476,6 +640,450 @@
                 </div>
             }
 
+            <!-- Панель: Педаль в пол (стр. 137) -->
+            @if (_selectedAction == ActionMode.FloorIt)
+            {
+                <div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-warning-800">Разгон — 1 действие перемещения</div>
+                    <p class="text-xs text-warning-700">
+                        Заявляется до перемещения и не отменяется: транспорт проедет всё намеченное,
+                        если только не провалит проверку помехи по пути.
+                        @if (ActiveParticipant.HasNavigatorAssist)
+                        {
+                            <span class="font-medium"> Штурман снимет одну штрафную кость.</span>
+                        }
+                    </p>
+                    <div>
+                        <label class="text-xs text-gray-600">Локаций за одно действие</label>
+                        <select @bind="_boostLocations" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                            <option value="2">2 локации — 1 штрафная кость</option>
+                            <option value="3">3 локации — 1 штрафная кость</option>
+                            <option value="4">4 локации — 2 штрафные кости</option>
+                            <option value="5">5 локаций — 2 штрафные кости</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="ExecuteFloorIt">
+                            <span>Разогнаться</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Таран (стр. 136) -->
+            @if (_selectedAction == ActionMode.Ram)
+            {
+                <div class="bg-error-50 border border-error-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-error-800">
+                        Таран — транспорт как оружие, 1d10 за каждый пункт Комплекции
+                        (@ActiveParticipant.EffectiveBuild.ToString("0.#") → @(Math.Max(1, (int)Math.Round(ActiveParticipant.EffectiveBuild)))d10)
+                    </div>
+                    <p class="text-xs text-error-700">
+                        Атакующий получает половину нанесённого урона, но не больше исходной Комплекции цели.
+                        Каждые полные 10 пунктов урона снимают 1 Комплекции.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-600">Цель</label>
+                            <select @bind="_targetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="">— выберите цель —</option>
+                                @foreach (var t in vehicleTargets)
+                                {
+                                    <option value="@t.Id">@t.Name — @t.VehicleName (Комплекция @t.VehicleCurrentBuild.ToString("0.#"))</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="text" @bind="_skillName" placeholder="Вождение автомобиля"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Значение навыка</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Суммарный урон (если попадание)</label>
+                            <input type="number" min="0" @bind="_damageRoll" placeholder="авто"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="ExecuteRam"
+                                disabled="@string.IsNullOrEmpty(_targetId)">
+                            <span>Таранить</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Стрельба по шинам (стр. 139) -->
+            @if (_selectedAction == ActionMode.Tyres)
+            {
+                <div class="bg-error-50 border border-error-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-error-800">Стрельба по шинам</div>
+                    <p class="text-xs text-error-700">
+                        Шина — маленькая цель: одна штрафная кость. Броня 3, повреждает только проникающее
+                        оружие; 2 пункта после брони — шина лопнула и Комплекция транспорта падает на 1.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-600">Цель</label>
+                            <select @bind="_targetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="">— выберите цель —</option>
+                                @foreach (var t in vehicleTargetsAnywhere)
+                                {
+                                    <option value="@t.Id">@t.Name — @t.VehicleName (лок. @t.CurrentLocation)</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="text" @bind="_skillName" placeholder="Стрельба"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Значение навыка</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100 (со штрафной костью)</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Урон до брони</label>
+                            <input type="number" min="0" @bind="_damageRoll" placeholder="авто"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="ExecuteTyres"
+                                disabled="@string.IsNullOrEmpty(_targetId)">
+                            <span>Стрелять</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Спрятаться (стр. 139) -->
+            @if (_selectedAction == ActionMode.Hide)
+            {
+                <div class="bg-secondary-50 border border-secondary-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-secondary-800">Спрятаться — 1 действие перемещения</div>
+                    <p class="text-xs text-secondary-700">
+                        Пешком — Скрытность. На транспорте нужна совместная проверка Скрытности и Вождения:
+                        результат должен быть ниже обоих навыков. Хороший отрыв и обилие укрытий — повод
+                        дать бонусные кости.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-gray-600">Скрытность</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        @if (ActiveParticipant.IsInVehicle)
+                        {
+                            <div>
+                                <label class="text-xs text-gray-600">Вождение</label>
+                                <input type="number" @bind="_secondSkillValue"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                        }
+                        <div>
+                            <label class="text-xs text-gray-600">Сложность</label>
+                            <select @bind="_difficulty" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="1">Обычная</option>
+                                <option value="2">Сложная</option>
+                                <option value="3">Экстремальная</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бонусных костей</label>
+                            <select @bind="_bonusDice" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="0">0</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ExecuteHide">
+                            <span>Спрятаться</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Искать след (стр. 139) -->
+            @if (_selectedAction == ActionMode.Track)
+            {
+                <div class="bg-secondary-50 border border-secondary-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-secondary-800">Не потерять след — 1 действие перемещения</div>
+                    <p class="text-xs text-secondary-700">
+                        Когда преследователь больше не видит, куда побежала жертва, Хранитель назначает
+                        проверку Чтения следов. Провал — погоня для этого преследователя окончена.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="text" @bind="_skillName" placeholder="Чтение следов"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Значение навыка</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Сложность</label>
+                            <select @bind="_difficulty" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="1">Обычная</option>
+                                <option value="2">Сложная</option>
+                                <option value="3">Экстремальная</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ExecuteTrack">
+                            <span>Искать</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Создать помеху (стр. 141) -->
+            @if (_selectedAction == ActionMode.CreateObstacle)
+            {
+                <div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-warning-800">Задержать преследователей</div>
+                    <p class="text-xs text-warning-700">
+                        Запереть дверь на засов — одно действие без проверки. Запереть Взломом — полный раунд
+                        и успешная проверка. Придвинуть шкаф — проверка СИЛ и действие. Опрокинуть прилавок —
+                        одно действие.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-600">Что делает</label>
+                            <input type="text" @bind="_obstacleDescription" placeholder="Опрокидывает прилавок с фруктами"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Локация</label>
+                            <input type="number" min="1" max="@Locations.Count" @bind="_obstacleLocation"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Тип</label>
+                            <select @bind="_obstacleIsBarrier" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="false">Помеха — замедляет</option>
+                                <option value="true">Преграда — не пускает</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Сложность препятствия</label>
+                            <select @bind="_difficulty" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="1">Обычная</option>
+                                <option value="2">Сложная</option>
+                                <option value="3">Экстремальная</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Стоит действий перемещения</label>
+                            <select @bind="_obstacleCost" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="0">0 — бесплатно</option>
+                                <option value="1">1 действие</option>
+                                <option value="2">Полный раунд</option>
+                            </select>
+                        </div>
+                        @if (_obstacleIsBarrier)
+                        {
+                            <div>
+                                <label class="text-xs text-gray-600">Прочность преграды (ПЗ)</label>
+                                <select @bind="_obstacleHitPoints" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                    <option value="0">нельзя разрушить</option>
+                                    @foreach (var preset in ChaseReference.BarrierPresets)
+                                    {
+                                        <option value="@preset.HitPoints">@preset.Name — @preset.HitPoints</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        <div>
+                            <label class="text-xs text-gray-600">Навык исполнителя (необязательно)</label>
+                            <input type="text" @bind="_skillName" placeholder="СИЛ / Взлом"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Значение навыка</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="ExecuteCreateObstacle">
+                            <span>Перекрыть</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Удержать управление (стр. 139) -->
+            @if (_selectedAction == ActionMode.DriverControl)
+            {
+                <div class="bg-error-50 border border-error-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-error-800">Серьёзная рана у водителя</div>
+                    <p class="text-xs text-error-700">
+                        Водитель, получивший серьёзную рану и оставшийся в сознании, немедленно проходит
+                        проверку как при трудной помехе. Потерявший сознание теряет управление автоматически.
+                    </p>
+                    <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                        <input type="checkbox" @bind="_driverUnconscious" class="rounded border-gray-300" />
+                        Водитель без сознания — управление потеряно автоматически
+                    </label>
+                    <div class="grid grid-cols-2 gap-3">
+                        @if (!_driverUnconscious)
+                        {
+                            <div>
+                                <label class="text-xs text-gray-600">Навык</label>
+                                <input type="text" @bind="_skillName" placeholder="Вождение автомобиля"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Значение навыка</label>
+                                <input type="number" @bind="_skillValue"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-600">Бросок d100</label>
+                                <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                            </div>
+                        }
+                        <div>
+                            <label class="text-xs text-gray-600">Авария при провале (таблица VI)</label>
+                            <select @bind="_crashTier" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                @foreach (var tier in ChaseReference.CrashTiers)
+                                {
+                                    <option value="@tier.Name">@tier.Name — @tier.BuildLossFormula Комплекции</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Потеря Комплекции</label>
+                            <input type="number" min="0" @bind="_buildLossRoll" placeholder="авто"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Потерянных действий 1d3</label>
+                            <input type="number" min="0" max="3" @bind="_lostActionsRoll" placeholder="авто"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Урон водителю</label>
+                            <input type="number" min="0" @bind="_damageRoll" placeholder="0"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="ExecuteDriverControl">
+                            <span>Проверить</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- Панель: Штурман (стр. 139) -->
+            @if (_selectedAction == ActionMode.Navigate)
+            {
+                <div class="bg-accent-50 border border-accent-200 rounded-md p-3 space-y-3">
+                    <div class="text-sm font-medium text-accent-800">Помощь с навигацией</div>
+                    <p class="text-xs text-accent-700">
+                        Пассажир следит за картой и подсказывает, как обходить помехи. При успехе следующий
+                        разгон водителя получает на одну штрафную кость меньше.
+                    </p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="text-xs text-gray-600">Водитель</label>
+                            <select @bind="_targetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                                <option value="">— выберите водителя —</option>
+                                @foreach (var t in driverCandidates)
+                                {
+                                    <option value="@t.Id">@t.Name — @t.VehicleName</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Навык</label>
+                            <input type="text" @bind="_skillName" placeholder="Внимание / Ориентирование"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Значение навыка</label>
+                            <input type="number" @bind="_skillValue"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Бросок d100</label>
+                            <input type="number" min="1" max="100" @bind="_roll" placeholder="01–100"
+                                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ExecuteNavigate"
+                                disabled="@string.IsNullOrEmpty(_targetId)">
+                            <span>Подсказать маршрут</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAction">
+                            <span>Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            }
+
             <!-- Кнопки завершения (когда выбрано действие) -->
             @if (_selectedAction != ActionMode.None)
             {
@@ -497,7 +1105,11 @@
     [Parameter] public List<ChaseLocation> Locations { get; set; } = [];
     [Parameter] public EventCallback<ChaseActionResult> OnActionResolved { get; set; }
 
-    private enum ActionMode { None, Move, Hazard, Barrier, Destroy, Melee, Ranged, Maneuver }
+    private enum ActionMode
+    {
+        None, Move, Hazard, Barrier, Destroy, Melee, Ranged, Maneuver,
+        FloorIt, Ram, Tyres, Hide, Track, CreateObstacle, DriverControl, Navigate
+    }
 
     private ActionMode _selectedAction = ActionMode.None;
     private string _skillName = "";
@@ -508,6 +1120,26 @@
     private int _lostActionsRoll;
     private string _targetId = "";
     private bool _stoppedToShoot = true;
+
+    // Часть 4–5
+    private int _secondSkillValue;
+    private int _difficulty = 1;
+    private int _boostLocations = 2;
+    private string _obstacleDescription = "";
+    private int _obstacleLocation = 1;
+    private bool _obstacleIsBarrier;
+    private int _obstacleHitPoints;
+    private int _obstacleCost = 1;
+    private bool _driverUnconscious;
+    private string _crashTier = "Средняя авария";
+    private int _buildLossRoll;
+
+    // Ответ цели в ближнем бою (стр. 136)
+    private bool _useDefence;
+    private string _defenceSkillName = "";
+    private int _defenceValue;
+    private int _defenceRoll;
+    private bool _defenceIsFightBack;
 
     protected override void OnParametersSet()
     {
@@ -547,6 +1179,16 @@
         _damageRoll = 0;
         _lostActionsRoll = 0;
         _targetId = "";
+        _buildLossRoll = 0;
+        _useDefence = false;
+        _defenceValue = 0;
+        _defenceRoll = 0;
+        _defenceSkillName = "";
+        _obstacleLocation = ActiveParticipant?.CurrentLocation ?? 1;
+
+        // Остановиться для выстрела можно, только если есть действие перемещения (стр. 139)
+        if (mode == ActionMode.Ranged)
+            _stoppedToShoot = ActiveParticipant?.MovementActionsRemaining > 0;
     }
 
     private void CancelAction()
@@ -569,7 +1211,7 @@
         if (ActiveParticipant is null) return;
         var skill = string.IsNullOrWhiteSpace(_skillName) ? "Навык" : _skillName;
         var result = ChaseService.ResolveHazard(
-            ActiveParticipant.Id, skill, _skillValue,
+            ActiveParticipant.Id, ActiveParticipant.CurrentLocation + 1, skill, _skillValue,
             _roll > 0 ? _roll : null,
             _bonusDice,
             _damageRoll > 0 ? _damageRoll : null,
@@ -583,7 +1225,7 @@
         if (ActiveParticipant is null) return;
         var skill = string.IsNullOrWhiteSpace(_skillName) ? "Навык" : _skillName;
         var result = ChaseService.ResolveBarrier(
-            ActiveParticipant.Id, skill, _skillValue,
+            ActiveParticipant.Id, ActiveParticipant.CurrentLocation + 1, skill, _skillValue,
             _roll > 0 ? _roll : null);
         CancelAction();
         await OnActionResolved.InvokeAsync(result);
@@ -593,7 +1235,7 @@
     {
         if (ActiveParticipant is null) return;
         var result = ChaseService.AttemptDestroyBarrier(
-            ActiveParticipant.Id,
+            ActiveParticipant.Id, ActiveParticipant.CurrentLocation + 1,
             _damageRoll > 0 ? _damageRoll : null);
         CancelAction();
         await OnActionResolved.InvokeAsync(result);
@@ -607,7 +1249,11 @@
             ActiveParticipant.Id, targetId,
             skill, _skillValue,
             _roll > 0 ? _roll : null,
-            _damageRoll > 0 ? _damageRoll : null);
+            _damageRoll > 0 ? _damageRoll : null,
+            _useDefence ? (string.IsNullOrWhiteSpace(_defenceSkillName) ? null : _defenceSkillName) : null,
+            _useDefence ? _defenceValue : 0,
+            _useDefence && _defenceRoll > 0 ? _defenceRoll : null,
+            _useDefence && _defenceIsFightBack);
         CancelAction();
         await OnActionResolved.InvokeAsync(result);
     }
@@ -638,6 +1284,135 @@
             _damageRoll > 0 ? _damageRoll : null);
         CancelAction();
         await OnActionResolved.InvokeAsync(result);
+    }
+
+    private void PickDamage(DamageTier tier) =>
+        _damageRoll = CombatService.RollDiceFormula(tier.Formula);
+
+    private void PickCrash(CrashTier tier)
+    {
+        _crashTier = tier.Name;
+        _buildLossRoll = CombatService.RollDiceFormula(tier.BuildLossFormula);
+    }
+
+    private async Task ExecuteFloorIt()
+    {
+        if (ActiveParticipant is null) return;
+        var result = ChaseService.ResolveFloorIt(ActiveParticipant.Id, _boostLocations);
+        CancelAction();
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteRam()
+    {
+        if (ActiveParticipant is null || !Guid.TryParse(_targetId, out var targetId)) return;
+        var skill = string.IsNullOrWhiteSpace(_skillName) ? "Вождение автомобиля" : _skillName;
+        var result = ChaseService.ResolveVehicleCollision(
+            ActiveParticipant.Id, targetId, skill, _skillValue,
+            _roll > 0 ? _roll : null,
+            _damageRoll > 0 ? _damageRoll : null);
+        CancelAction();
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteTyres()
+    {
+        if (ActiveParticipant is null || !Guid.TryParse(_targetId, out var targetId)) return;
+        var skill = string.IsNullOrWhiteSpace(_skillName) ? "Стрельба" : _skillName;
+        var result = ChaseService.ResolveTyreShot(
+            ActiveParticipant.Id, targetId, skill, _skillValue,
+            _roll > 0 ? _roll : null,
+            _damageRoll > 0 ? _damageRoll : null);
+        CancelAction();
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteHide()
+    {
+        if (ActiveParticipant is null) return;
+        var driving = ActiveParticipant.IsInVehicle && _secondSkillValue > 0 ? _secondSkillValue : (int?)null;
+        var result = ChaseService.ResolveHide(
+            ActiveParticipant.Id, _skillValue, driving, _difficulty, _bonusDice,
+            _roll > 0 ? _roll : null);
+        CancelAction();
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteTrack()
+    {
+        if (ActiveParticipant is null) return;
+        var skill = string.IsNullOrWhiteSpace(_skillName) ? "Чтение следов" : _skillName;
+        var result = ChaseService.ResolveTrackingCheck(
+            ActiveParticipant.Id, skill, _skillValue, _difficulty,
+            _roll > 0 ? _roll : null);
+        CancelAction();
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteCreateObstacle()
+    {
+        if (ActiveParticipant is null) return;
+
+        var description = string.IsNullOrWhiteSpace(_obstacleDescription)
+            ? "перекрывает дорогу"
+            : _obstacleDescription;
+
+        var obstacle = new ChaseLocation { Number = _obstacleLocation };
+        if (_obstacleIsBarrier)
+        {
+            obstacle.HasBarrier = true;
+            obstacle.BarrierName = description;
+            obstacle.BarrierDifficulty = _difficulty;
+            obstacle.BarrierHitPoints = _obstacleHitPoints;
+            obstacle.BarrierCurrentHitPoints = _obstacleHitPoints;
+        }
+        else
+        {
+            obstacle.HasHazard = true;
+            obstacle.HazardName = description;
+            obstacle.HazardDifficulty = _difficulty;
+            obstacle.HazardDamageFormula = "1D3";
+        }
+
+        var result = ChaseService.CreateObstacle(
+            ActiveParticipant.Id, _obstacleLocation, obstacle, description, _obstacleCost,
+            string.IsNullOrWhiteSpace(_skillName) ? null : _skillName, _skillValue,
+            _roll > 0 ? _roll : null);
+
+        CancelAction();
+        _obstacleDescription = "";
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private async Task ExecuteDriverControl()
+    {
+        if (ActiveParticipant is null) return;
+        var skill = string.IsNullOrWhiteSpace(_skillName) ? "Вождение автомобиля" : _skillName;
+        var result = ChaseService.ResolveDriverControlCheck(
+            ActiveParticipant.Id, skill, _skillValue,
+            _roll > 0 ? _roll : null,
+            _driverUnconscious, _crashTier,
+            _buildLossRoll > 0 ? _buildLossRoll : null,
+            _damageRoll > 0 ? _damageRoll : null,
+            _lostActionsRoll > 0 ? _lostActionsRoll : null);
+        CancelAction();
+        _driverUnconscious = false;
+        await OnActionResolved.InvokeAsync(result);
+    }
+
+    private void ExecuteNavigate()
+    {
+        if (ActiveParticipant is null || !Guid.TryParse(_targetId, out var driverId)) return;
+        var skill = string.IsNullOrWhiteSpace(_skillName) ? "Внимание" : _skillName;
+        ChaseService.ResolveNavigatorAssist(
+            ActiveParticipant.Id, driverId, skill, _skillValue, _roll > 0 ? _roll : null);
+        CancelAction();
+    }
+
+    private void DelayAction()
+    {
+        if (ActiveParticipant is null) return;
+        ChaseService.DelayAction(ActiveParticipant.Id);
     }
 
     private void SkipTurn()

@@ -64,6 +64,36 @@
                            placeholder="0 = нельзя разрушить"
                            class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
                 </div>
+                <div class="col-span-2">
+                    <label class="text-xs text-gray-600">Типовые преграды (стр. 136)</label>
+                    <select value="" @onchange="e => ApplyBarrierPreset(e.Value?.ToString())"
+                            class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                        <option value="">— выбрать из книги —</option>
+                        @foreach (var preset in ChaseReference.BarrierPresets)
+                        {
+                            <option value="@preset.Name">@preset.Name — @preset.HitPoints ПЗ</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-span-2">
+                    <label class="text-xs text-gray-600">Примеры преград</label>
+                    <select value="" @onchange="e => UseBarrierExample(e.Value?.ToString())"
+                            class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                        <option value="">— подставить название —</option>
+                        <optgroup label="Пешком">
+                            @foreach (var example in ChaseReference.BarrierExamplesOnFoot)
+                            {
+                                <option value="@example">@example</option>
+                            }
+                        </optgroup>
+                        <optgroup label="Автопогоня">
+                            @foreach (var example in ChaseReference.BarrierExamplesDriving)
+                            {
+                                <option value="@example">@example</option>
+                            }
+                        </optgroup>
+                    </select>
+                </div>
             </div>
         </div>
     }
@@ -106,6 +136,34 @@
                     <input type="text" value="@Location.HazardDamageFormula" @onchange="e => UpdateHazardDamageFormula(e.Value?.ToString())"
                            placeholder="1D6"
                            class="w-full text-xs border border-gray-200 rounded px-2 py-1" />
+                    <div class="flex flex-wrap gap-1 mt-1">
+                        @foreach (var tier in ChaseReference.DamageTiers)
+                        {
+                            <button type="button" @onclick="() => UseDamageTier(tier)" title="@tier.Examples"
+                                    class="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
+                                @tier.Name @tier.Formula
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="col-span-2">
+                    <label class="text-xs text-gray-600">Примеры помех (стр. 133)</label>
+                    <select value="" @onchange="e => UseHazardExample(e.Value?.ToString())"
+                            class="w-full text-xs border border-gray-200 rounded px-2 py-1">
+                        <option value="">— подставить название —</option>
+                        <optgroup label="Пешком">
+                            @foreach (var example in ChaseReference.HazardExamplesOnFoot)
+                            {
+                                <option value="@example">@example</option>
+                            }
+                        </optgroup>
+                        <optgroup label="Автопогоня">
+                            @foreach (var example in ChaseReference.HazardExamplesDriving)
+                            {
+                                <option value="@example">@example</option>
+                            }
+                        </optgroup>
+                    </select>
                 </div>
             </div>
         </div>
@@ -141,4 +199,35 @@
     private async Task UpdateHazardSkillValue(string? v) { if (int.TryParse(v, out var val)) { Location.HazardSkillValue = val; await NotifyUpdate(); } }
     private async Task UpdateHazardDifficulty(string? v) { if (int.TryParse(v, out var val)) { Location.HazardDifficulty = val; await NotifyUpdate(); } }
     private async Task UpdateHazardDamageFormula(string? v) { Location.HazardDamageFormula = v; await NotifyUpdate(); }
+
+    private async Task ApplyBarrierPreset(string? presetName)
+    {
+        var preset = ChaseReference.BarrierPresets.FirstOrDefault(p => p.Name == presetName);
+        if (preset is null) return;
+
+        Location.BarrierName = preset.Name;
+        Location.BarrierHitPoints = preset.HitPoints;
+        Location.BarrierCurrentHitPoints = preset.HitPoints;
+        await NotifyUpdate();
+    }
+
+    private async Task UseBarrierExample(string? example)
+    {
+        if (string.IsNullOrWhiteSpace(example)) return;
+        Location.BarrierName = example;
+        await NotifyUpdate();
+    }
+
+    private async Task UseHazardExample(string? example)
+    {
+        if (string.IsNullOrWhiteSpace(example)) return;
+        Location.HazardName = example;
+        await NotifyUpdate();
+    }
+
+    private async Task UseDamageTier(DamageTier tier)
+    {
+        Location.HazardDamageFormula = tier.Formula;
+        await NotifyUpdate();
+    }
 }
