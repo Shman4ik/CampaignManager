@@ -23,7 +23,7 @@
 
 @if (!_isKeeper)
 {
-    <div class="max-w-7xl mx-auto px-4 py-6">
+    <div class="cm-page">
         <Alert Type="error" Title="Доступ запрещён">
             Эта страница доступна только для Хранителя.
         </Alert>
@@ -39,16 +39,11 @@ else
 }
 else if (_scenario is null)
 {
-    <div class="max-w-7xl mx-auto px-4 py-6">
-        <div class="cm-card">
-            <div class="cm-card-body text-center">
-                <h2 class="cm-h2 mb-4">Сценарий не найден</h2>
-                <p class="cm-empty">Запрошенный сценарий не найден.</p>
-                <button type="button" class="cm-btn cm-btn-info mt-4" @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))">
-                    <span>К сценариям</span>
-                </button>
-            </div>
-        </div>
+    <div class="cm-page">
+        <Alert Type="error" Title="Сценарий не найден">
+            <p class="mb-3">Запрошенный сценарий не найден.</p>
+            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm"><span>К сценариям</span></a>
+        </Alert>
     </div>
 }
 else if (_viewMode == "play" && _scenario.Locations.Count > 0)
@@ -56,28 +51,24 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
     <!-- Play Mode: Three-panel layout -->
     <div class="flex flex-col h-screen">
         <!-- Top toolbar -->
-        <div class="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-            <div class="flex items-center gap-3">
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))">
-                    <i class="fas fa-arrow-left"></i>
-                </button>
-                <h1 class="text-lg font-bold text-gray-800 truncate">@_scenario.Name</h1>
-                @if (!string.IsNullOrEmpty(_scenario.Era))
-                {
-                    <span class="text-sm text-gray-500">@_scenario.Era</span>
-                }
-            </div>
-            <div class="flex items-center gap-2">
+        <div class="page-topbar">
+            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <span class="page-topbar-title truncate">@_scenario.Name</span>
+            @if (!string.IsNullOrEmpty(_scenario.Era))
+            {
+                <span class="cm-empty">@_scenario.Era</span>
+            }
+            <div class="flex items-center gap-2 ml-auto">
                 <button type="button"
                         class="cm-btn cm-btn-secondary cm-btn-sm"
                         @onclick='() => _viewMode = "overview"'>
                     <i class="fas fa-th-large mr-1"></i> Обзор
                 </button>
-                <button type="button"
-                        class="cm-btn cm-btn-info cm-btn-sm"
-                        @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/edit"))">
+                <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
                     <i class="fas fa-edit mr-1"></i> Редактировать
-                </button>
+                </a>
             </div>
         </div>
 
@@ -99,7 +90,7 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
                         @if (!string.IsNullOrEmpty(_scenario.Description))
                         {
                             <div class="mb-6">
-                                <h2 class="text-xl font-semibold mb-2">Описание</h2>
+                                <div class="cm-section-header"><span class="cm-section-title">Описание</span></div>
                                 <div class="bg-gray-50 p-4 rounded-lg">
                                     <p class="text-gray-700">@_scenario.Description</p>
                                 </div>
@@ -108,7 +99,7 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
                         @if (!string.IsNullOrEmpty(_scenario.Journal))
                         {
                             <div class="mb-6">
-                                <h2 class="text-xl font-semibold mb-2">Журнал</h2>
+                                <div class="cm-section-header"><span class="cm-section-title">Журнал</span></div>
                                 <div class="bg-gray-50 p-4 rounded-lg markdown-content">
                                     @((MarkupString)_markdownHtml)
                                 </div>
@@ -151,36 +142,32 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
 else
 {
     <!-- Overview Mode: Original card-based layout -->
-    <div class="max-w-7xl mx-auto px-4 py-6">
-        <div class="flex justify-between items-center mb-6">
-            <div>
-                <button type="button" class="cm-btn cm-btn-secondary" @onclick="@(() => NavigationManager.NavigateTo("/scenarios"))">
-                    <i class="fas fa-arrow-left"></i> <span>Сценарии</span>
+    <PageHeader Title="@_scenario.Name">
+        <Actions>
+            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm">
+                <i class="fas fa-arrow-left"></i> <span>Сценарии</span>
+            </a>
+            @if (_scenario.Locations.Count > 0)
+            {
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick='() => _viewMode = "play"'>
+                    <i class="fas fa-map-marked-alt"></i> <span>Режим игры</span>
                 </button>
-            </div>
-            <div class="flex gap-2">
-                @if (_scenario.Locations.Count > 0)
-                {
-                    <button type="button" class="cm-btn cm-btn-success" @onclick='() => _viewMode = "play"'>
-                        <i class="fas fa-map-marked-alt"></i> <span>Режим игры</span>
-                    </button>
-                }
-                <button type="button" class="cm-btn cm-btn-info" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{Id}/edit"))">
-                    <i class="fas fa-edit"></i> <span>Редактировать</span>
+            }
+            @if (_scenario.IsTemplate)
+            {
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowUseCampaignModal">
+                    <i class="fas fa-clipboard"></i> <span>Добавить в кампанию</span>
                 </button>
-                @if (_scenario.IsTemplate)
-                {
-                    <button type="button" class="cm-btn cm-btn-success" @onclick="ShowUseCampaignModal">
-                        <i class="fas fa-clipboard"></i> <span>Добавить в кампанию</span>
-                    </button>
-                }
-            </div>
-        </div>
+            }
+            <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
+                <i class="fas fa-edit"></i> <span>Редактировать</span>
+            </a>
+        </Actions>
+    </PageHeader>
 
-        <div class="cm-card mb-8">
+    <div class="cm-page">
+        <div class="cm-card cm-section">
             <div class="cm-card-body">
-                <h1 class="cm-h2 mb-4">@_scenario.Name</h1>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div>
                         @if (!string.IsNullOrEmpty(_scenario.Era))
@@ -218,12 +205,11 @@ else
                 </div>
 
                 <!-- Анонс ваншота -->
-                <div class="mb-6 bg-white border border-gray-200 rounded-md p-4 shadow-sm">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-xl font-semibold flex items-center gap-2">
-                            <i class="fa-solid fa-bullhorn text-accent-600"></i>
-                            Анонс ваншота
-                        </h2>
+                <div class="cm-card cm-section">
+                    <div class="cm-card-header">
+                        <span class="cm-card-title">
+                            <i class="fa-solid fa-bullhorn mr-2"></i>Анонс ваншота
+                        </span>
                         @if (_scenario.IsPublished)
                         {
                             <Badge Variant="success" Size="sm" Rounded="full">Опубликован</Badge>
@@ -234,27 +220,26 @@ else
                         }
                     </div>
 
-                    <div class="space-y-3">
+                    <div class="cm-card-body space-y-3">
                         <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" @bind="_scenario.IsPublished"
-                                   class="w-4 h-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"/>
-                            <span class="text-sm font-medium text-gray-700">Показывать на главной странице</span>
+                            <input type="checkbox" @bind="_scenario.IsPublished" class="cm-checkbox"/>
+                            <span class="cm-field-label mb-0">Показывать на главной странице</span>
                         </label>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Дата и время проведения</label>
+                            <label class="cm-field-label">Дата и время проведения</label>
                             <input type="datetime-local" value="@FormatScheduledDateForInput(_scenario.ScheduledDate)"
                                    @onchange="OnScheduledDateChanged"
-                                   class="w-full md:w-auto px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"/>
+                                   class="cm-input w-full md:w-auto"/>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">
-                                Текст анонса <span class="text-gray-500 font-normal">(поддерживается markdown)</span>
+                            <label class="cm-field-label">
+                                Текст анонса <span class="cm-field-hint">(поддерживается markdown)</span>
                             </label>
                             <textarea @bind="_scenario.AnnouncementText" rows="4"
                                       placeholder="Короткий маркетинговый текст для главной страницы — о чём игра, атмосфера, триггеры..."
-                                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"></textarea>
+                                      class="cm-input w-full"></textarea>
                         </div>
 
                         @if (!string.IsNullOrEmpty(_announcementSaveMessage))
@@ -270,20 +255,22 @@ else
                     </div>
                 </div>
 
-                <div class="mb-6">
-                    <h2 class="text-xl font-semibold mb-2">Описание</h2>
-                    <div class="bg-gray-50 p-4 rounded-lg">
-                        <p class="text-gray-700">
-                            @(_scenario.Description ?? "Описание отсутствует.")
-                        </p>
+                <div class="cm-section">
+                    <div class="cm-section-header">
+                        <span class="cm-section-title">Описание</span>
                     </div>
+                    <p class="cm-text-muted">
+                        @(_scenario.Description ?? "Описание отсутствует.")
+                    </p>
                 </div>
 
                 @if (!string.IsNullOrEmpty(_scenario.Journal))
                 {
-                    <div class="mb-6">
-                        <h2 class="text-xl font-semibold mb-2">Журнал</h2>
-                        <div class="bg-gray-50 p-4 rounded-lg markdown-content">
+                    <div class="cm-section">
+                        <div class="cm-section-header">
+                            <span class="cm-section-title">Журнал</span>
+                        </div>
+                        <div class="markdown-content">
                             @((MarkupString)_markdownHtml)
                         </div>
                     </div>
@@ -292,8 +279,10 @@ else
                 <!-- Structured content summary -->
                 @if (_scenario.Locations.Count > 0 || _scenario.KeyFacts.Count > 0 || _scenario.Handouts.Count > 0)
                 {
-                    <div class="border-t border-gray-200 pt-6 mt-6">
-                        <h2 class="text-xl font-semibold mb-4">Структурированный контент</h2>
+                    <div class="cm-section cm-section-divided">
+                        <div class="cm-section-header">
+                            <span class="cm-section-title">Структурированный контент</span>
+                        </div>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             @if (_scenario.Locations.Count > 0)
                             {
@@ -341,23 +330,21 @@ else
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             <!-- NPC Section -->
             <div class="cm-card">
-                <div class="bg-red-50 px-6 py-4 border-b border-red-200">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-red-800">
-                            <i class="fa-solid fa-masks-theater mr-2"></i>НПС сценария
-                            <span class="text-sm font-normal text-red-600 ml-1">(@_cast.Count)</span>
-                        </h2>
-                        <div class="flex gap-1">
-                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewNpc">
-                                <i class="fas fa-plus"></i> <span>Создать</span>
-                            </button>
-                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddNpcModal">
-                                <i class="fas fa-link"></i> <span>Из шаблонов</span>
-                            </button>
-                        </div>
+                <div class="cm-card-header">
+                    <span class="cm-card-title">
+                        <i class="fa-solid fa-masks-theater mr-2"></i>НПС сценария
+                        <span class="cm-card-count">@_cast.Count</span>
+                    </span>
+                    <div class="flex gap-1 flex-shrink-0">
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="CreateNewNpc">
+                            <i class="fas fa-plus"></i> <span>Создать</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddNpcModal">
+                            <i class="fas fa-link"></i> <span>Из шаблонов</span>
+                        </button>
                     </div>
                 </div>
-                <div class="p-4">
+                <div class="cm-card-body">
                     @if (_cast.Count == 0)
                     {
                         <p class="cm-empty">Нет НПС в сценарии.</p>
@@ -381,23 +368,21 @@ else
 
             <!-- Pregen Characters Section -->
             <div class="cm-card">
-                <div class="bg-blue-50 px-6 py-4 border-b border-blue-200">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold text-blue-800">
-                            <i class="fa-solid fa-user mr-2"></i>Преген-персонажи
-                            <span class="text-sm font-normal text-blue-600 ml-1">(@_scenarioPregens.Count)</span>
-                        </h2>
-                        <div class="flex gap-1">
-                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="CreateNewPregen">
-                                <i class="fas fa-plus"></i> <span>Создать</span>
-                            </button>
-                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddPregenModal">
-                                <i class="fas fa-link"></i> <span>Из шаблонов</span>
-                            </button>
-                        </div>
+                <div class="cm-card-header">
+                    <span class="cm-card-title">
+                        <i class="fa-solid fa-user mr-2"></i>Преген-персонажи
+                        <span class="cm-card-count">@_scenarioPregens.Count</span>
+                    </span>
+                    <div class="flex gap-1 flex-shrink-0">
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="CreateNewPregen">
+                            <i class="fas fa-plus"></i> <span>Создать</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ShowAddPregenModal">
+                            <i class="fas fa-link"></i> <span>Из шаблонов</span>
+                        </button>
                     </div>
                 </div>
-                <div class="p-4">
+                <div class="cm-card-body">
                     @if (_scenarioPregens.Count == 0)
                     {
                         <p class="cm-empty">Нет преген-персонажей.</p>
@@ -421,15 +406,13 @@ else
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Creatures Section -->
             <div class="cm-card">
-                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold">Существа</h2>
-                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddCreatureModal">
-                            <i class="fas fa-plus"></i> <span>Добавить</span>
-                        </button>
-                    </div>
+                <div class="cm-card-header">
+                    <span class="cm-card-title">Существа</span>
+                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="ShowAddCreatureModal">
+                        <i class="fas fa-plus"></i> <span>Добавить</span>
+                    </button>
                 </div>
-                <div class="p-4">
+                <div class="cm-card-body">
                     @if (_scenario.ScenarioCreatures.Count == 0)
                     {
                         <p class="cm-empty">Нет добавленных существ.</p>
@@ -454,8 +437,8 @@ else
                                             }
                                         </div>
                                         <div class="flex gap-1 flex-shrink-0">
-                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditCreatureModal(sc))"><i class="fas fa-edit"></i></button>
-                                            <button type="button" class="cm-btn cm-btn-danger cm-btn-sm" title="Удалить" @onclick="@(() => RemoveCreature(sc))"><i class="fas fa-trash"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditCreatureModal(sc))"><i class="fas fa-edit"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-error cm-btn-sm" title="Удалить" @onclick="@(() => RemoveCreature(sc))"><i class="fas fa-trash"></i></button>
                                         </div>
                                     </div>
                                 </div>
@@ -467,15 +450,13 @@ else
 
             <!-- Items Section -->
             <div class="cm-card">
-                <div class="bg-gray-100 px-6 py-4 border-b border-gray-200">
-                    <div class="flex justify-between items-center">
-                        <h2 class="text-lg font-semibold">Предметы</h2>
-                        <button type="button" class="cm-btn cm-btn-info cm-btn-sm" @onclick="ShowAddItemModal">
-                            <i class="fas fa-plus"></i> <span>Добавить</span>
-                        </button>
-                    </div>
+                <div class="cm-card-header">
+                    <span class="cm-card-title">Предметы</span>
+                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="ShowAddItemModal">
+                        <i class="fas fa-plus"></i> <span>Добавить</span>
+                    </button>
                 </div>
-                <div class="p-4">
+                <div class="cm-card-body">
                     @if (_scenario.ScenarioItems.Count == 0)
                     {
                         <p class="cm-empty">Нет добавленных предметов.</p>
@@ -503,8 +484,8 @@ else
                                             }
                                         </div>
                                         <div class="flex gap-1 flex-shrink-0">
-                                            <button type="button" class="cm-btn cm-btn-info cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditItemModal(si))"><i class="fas fa-edit"></i></button>
-                                            <button type="button" class="cm-btn cm-btn-danger cm-btn-sm" title="Удалить" @onclick="@(() => RemoveItem(si))"><i class="fas fa-trash"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditItemModal(si))"><i class="fas fa-edit"></i></button>
+                                            <button type="button" class="cm-btn cm-btn-error cm-btn-sm" title="Удалить" @onclick="@(() => RemoveItem(si))"><i class="fas fa-trash"></i></button>
                                         </div>
                                     </div>
                                 </div>

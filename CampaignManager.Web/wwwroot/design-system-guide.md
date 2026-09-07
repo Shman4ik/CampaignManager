@@ -46,6 +46,66 @@ h1–h3: serif font (RPG book style). h4–h6: sans-serif. All have responsive s
 
 Usage: `<h1 class="cm-h1">Title</h1>`
 
+## Page Shell
+
+Every routable page has the same three-part shell — the main page (`Components/Pages/Home.razor`)
+is the reference:
+
+```razor
+<PageTitle>Кампании</PageTitle>
+
+<PageHeader Title="Кампании">
+    <Actions>
+        <button class="cm-btn cm-btn-primary cm-btn-sm">…</button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    …
+</div>
+```
+
+- `PageHeader` is the 56px sticky topbar. Every page has one, including info pages. Page-level
+  actions go in its `Actions` slot — never floating in the body — and are always `cm-btn-sm`
+  (the topbar is only 56px tall).
+- `cm-page` is the content container: full width, 20px padding. Do **not** use
+  `max-w-*` + `mx-auto` here — those are flex items of a column flex container, so `mx-auto`
+  disables stretch and collapses sparse pages to their content width.
+- Inside, group content with `cm-section` + `cm-section-header` > `cm-section-title`
+  (the small uppercase label), and put content in `cm-card` > `cm-card-header` /
+  `cm-card-body` / `cm-card-footer`.
+
+| Class | Use |
+|-------|-----|
+| cm-page | Page content container, directly under `<PageHeader>` |
+| cm-section | Vertical group; `cm-section-divided` adds a top rule |
+| cm-section-title | Small uppercase group label (inside `cm-section-header`) |
+| cm-card-title | Card heading (inside `cm-card-header`) |
+| cm-card-count | Count pill after a card title |
+| cm-count-badge | Attention count on a button or nav item |
+| cm-field-label | Form field label; `cm-field-hint` for the "(optional)" part |
+| cm-checkbox | Checkbox |
+| cm-text-muted | Secondary body copy inside cards |
+| cm-table | Data tables (catalogues, admin lists) |
+
+## Button Semantics
+
+Colour carries meaning; do not pick it for variety.
+
+| Intent | Class |
+|--------|-------|
+| The page's or dialog's main action (save, submit, create, current page) | `cm-btn-primary` |
+| Everything neutral (back, cancel, toggle, secondary nav) | `cm-btn-secondary` |
+| Row/card edit action | `cm-btn-outline-primary` |
+| Row/card destructive action, reset | `cm-btn-outline-error` |
+| Irreversible destructive confirmation inside a dialog | `cm-btn-error` |
+| Approving someone else's request | `cm-btn-success` |
+
+`cm-btn-info` (blue) is **not** for ordinary actions — it used to be scattered across submit
+buttons and made the same action look different on every page. Blue stays for informational
+`Badge`/`Alert`. Row actions always carry a text label, never a bare icon: there is no hover
+tooltip on the iPad this app targets.
+
 ## CSS Button Classes
 
 Base `cm-btn` (44px, font-weight 600, rounded-lg) + variant. All have hover/active/disabled states.

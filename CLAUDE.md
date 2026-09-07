@@ -164,6 +164,25 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
 - Shared components in `Components/Shared/`: Badge, Modal, ConfirmationModal, NotificationAlert, SaveButton, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
 
+#### Page shell — the same on every page
+
+Every routable page is `<PageHeader Title="…">` (with page-level actions in its `Actions` slot)
+followed by one `<div class="cm-page">`. `Components/Pages/Home.razor` is the reference; the info
+pages, the character sheet and the scenario detail page all use it too. Inside, group with
+`cm-section` + `cm-section-title` and `cm-card` + `cm-card-header`/`-body`/`-footer`.
+
+- **Never** wrap page content in `max-w-*` + `mx-auto`. `page-with-sidebar` is a column flex
+  container, so `mx-auto` on a flex item disables stretch and collapses the page to its content
+  width — that is why sparse pages used to render as a narrow centred column.
+- Buttons carry meaning by colour: `primary` = the one main action, `secondary` = neutral,
+  `outline-primary`/`outline-error` = row edit/delete, `error` = destructive confirmation in a
+  dialog, `success` = approving someone's request. `cm-btn-info` is not for buttons.
+- Header actions are always `cm-btn-sm` — the topbar is 56px tall.
+- Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
+  **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
+  `cm-btn-error` and `<Button Variant="error">` render different reds.
+- Full details and the class inventory: `wwwroot/design-system-guide.md`.
+
 ### Target device: iPad Pro M2
 
 **The primary device for this app is an iPad Pro M2 — it's what the Keeper actually runs at the table.**
