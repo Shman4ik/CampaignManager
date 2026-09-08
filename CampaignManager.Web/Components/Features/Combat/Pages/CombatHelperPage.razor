@@ -156,6 +156,8 @@ else
                 <div class="cm-card-body">
                     <ParticipantPicker CampaignId="CurrentCampaignId"
                                        ScenarioId="_selectedScenario?.Id"
+                                       UsedCharacterIds="UsedCharacterIds"
+                                       UsedLabel="уже в бою"
                                        OnPick="HandleParticipantPicked" />
                 </div>
             </div>
@@ -330,6 +332,10 @@ else
     /// </summary>
     private void HandleParticipantPicked(ParticipantOption option)
     {
+        // Лист персонажа выставляется один раз: второй «Хелен Райт» — это тот же лист,
+        // и урон, захват и состояния у них разъезжаются. Существ это не касается.
+        if (option.Character is { } picked && UsedCharacterIds.Contains(picked.Id)) return;
+
         var count = Math.Max(1, option.Count);
 
         for (var i = 0; i < count; i++)
@@ -344,6 +350,13 @@ else
 
         CombatService.SortByInitiative();
     }
+
+    /// <summary>Листы, уже выставленные в бой: их строки в списке участников гасятся.</summary>
+    private HashSet<Guid> UsedCharacterIds =>
+        CombatService.Combatants
+            .Where(c => c.SourceCharacterId is not null)
+            .Select(c => c.SourceCharacterId!.Value)
+            .ToHashSet();
 
     private void RemoveCombatant(Combatant combatant)
     {
