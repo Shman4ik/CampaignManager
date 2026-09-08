@@ -44,6 +44,8 @@
                 Is1920FilterChanged="@((bool b) => { is1920Filter = b; ApplyFilters(); })"
                 IsModernFilter="@isModernFilter"
                 IsModernFilterChanged="@((bool b) => { isModernFilter = b; ApplyFilters(); })"
+                RareOnlyFilter="@rareOnlyFilter"
+                RareOnlyFilterChanged="@((bool b) => { rareOnlyFilter = b; ApplyFilters(); })"
                 OnFiltersChanged="@ApplyFilters" />
         </ChildContent>
     </FilterPanel>
@@ -154,6 +156,7 @@
     private WeaponType? selectedTypeFilter;
     private bool is1920Filter = true;
     private bool isModernFilter;
+    private bool rareOnlyFilter;
 
     // Modal visibility flags
     private bool showModal;
@@ -212,6 +215,7 @@
         selectedTypeFilter = null;
         is1920Filter = true;
         isModernFilter = false;
+        rareOnlyFilter = false;
         currentPage = 1;
         ApplyFilters();
     }
@@ -244,6 +248,7 @@
             Skill = weapon.Skill,
             Is1920 = weapon.Is1920,
             IsModern = weapon.IsModern,
+            IsRare = weapon.IsRare,
             IsImpaling = weapon.IsImpaling,
             Damage = weapon.Damage,
             DamageInfo = weapon.DamageInfo,
@@ -362,6 +367,12 @@
         if (is1920Filter || isModernFilter)
         {
             query = query.Where(w => (is1920Filter && w.Is1920) || (isModernFilter && w.IsModern));
+        }
+
+        // Редкость — отдельный признак: «1920-е, редко» это эпоха плюс редкость
+        if (rareOnlyFilter)
+        {
+            query = query.Where(w => w.IsRare);
         }
 
         // Apply sorting
