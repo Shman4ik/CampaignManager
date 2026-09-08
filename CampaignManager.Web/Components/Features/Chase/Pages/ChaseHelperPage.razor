@@ -1,4 +1,4 @@
-@page "/chase"
+﻿@page "/chase"
 @rendermode InteractiveServer
 @attribute [Authorize]
 
@@ -189,6 +189,8 @@ else
                         <ParticipantPicker CampaignId="CurrentCampaignId"
                                            ScenarioId="_selectedScenario?.Id"
                                            DetailMode="speed"
+                                           UsedCharacterIds="UsedCharacterIds"
+                                           UsedLabel="уже в погоне"
                                            OnPick="HandleParticipantPicked" />
                     </div>
                 </div>
@@ -521,6 +523,10 @@ else
     /// </summary>
     private void HandleParticipantPicked(ParticipantOption option)
     {
+        // Один лист — один участник погони, иначе у двух «копий» разъезжаются
+        // положение и состояние. Существ это не касается.
+        if (option.Character is { } picked && UsedCharacterIds.Contains(picked.Id)) return;
+
         var count = Math.Max(1, option.Count);
 
         for (var i = 0; i < count; i++)
@@ -538,6 +544,13 @@ else
             }
         }
     }
+
+    /// <summary>Листы, уже участвующие в погоне: их строки в списке участников гасятся.</summary>
+    private HashSet<Guid> UsedCharacterIds =>
+        ChaseService.Participants
+            .Where(p => p.SourceCharacterId is not null)
+            .Select(p => p.SourceCharacterId!.Value)
+            .ToHashSet();
 
     private void AddParticipant(ChaseParticipant participant)
     {

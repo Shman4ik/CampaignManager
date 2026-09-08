@@ -1015,18 +1015,17 @@ public sealed partial class CombatService
         result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
-        if (setup.SelectedWeapon != null
-            && !string.IsNullOrWhiteSpace(setup.SelectedWeapon.Malfunction)
-            && int.TryParse(setup.SelectedWeapon.Malfunction, out var malfunctionValue)
+        if (setup.SelectedWeapon is { } firedWeapon
+            && TryGetMalfunctionThreshold(firedWeapon, out var malfunctionValue)
             && result.AttackerRoll >= malfunctionValue)
         {
             result.IsMalfunction = true;
             result.AttackerWins = false;
             result.DefenderHpAfter = defender.CurrentHitPoints;
-            attacker.JammedWeaponName = setup.SelectedWeapon.Name;
+            attacker.JammedWeaponName = firedWeapon.Name;
             attacker.JamRepairRoundsLeft = RollDice(6);
             result.JamRepairRounds = attacker.JamRepairRoundsLeft;
-            result.MalfunctionMessage = $"Осечка! {setup.SelectedWeapon.Name} заклинило (бросок {result.AttackerRoll} ≥ {malfunctionValue}).";
+            result.MalfunctionMessage = $"Осечка! {firedWeapon.Name} заклинило (бросок {result.AttackerRoll} ≥ {malfunctionValue}).";
             result.Summary = $"{attacker.Name}: {result.MalfunctionMessage} Починка займёт " +
                              $"{attacker.JamRepairRoundsLeft} боевых раунда(ов) и потребует успешной проверки " +
                              "Механики или Стрельбы (стр. 113).";
@@ -1672,25 +1671,87 @@ public sealed partial class CombatService
     // ───────────────────── Вспомогательные методы ─────────────────────
 
     /// <summary>
-    /// Поиск значения навыка персонажа по имени (частичное совпадение).
+    /// Поиск значения навыка персонажа по имени. Названия из каталога оружия сокращены
+    /// («Стрельба (П)»), а в листе записаны полностью («Стрельба (пистолет)»), поэтому
+    /// сравниваются база и специализация по отдельности (см. <see cref="SkillNameMatcher"/>).
     /// </summary>
     public static int FindSkillValue(Character character, string skillName)
     {
-        if (character.Skills?.SkillGroups == null) return 0;
+        if (character.Skills?.SkillGroups is null || string.IsNullOrWhiteSpace(skillName)) return 0;
 
-        foreach (var group in character.Skills.SkillGroups)
+        var skills = character.Skills.SkillGroups
+            .SelectMany(g => g.Skills)
+            .Select(s => (Skill: s, Name: SkillNameMatcher.Parse(s.Name)))
+            .ToList();
+
+        // Точное совпадение всего названия — самый надёжный случай
+        foreach (var (skill, _) in skills)
         {
-            foreach (var skill in group.Skills)
+            if (SkillNameMatcher.FullNameEquals(skill.Name, skillName)) return skill.Value.Regular;
+        }
+
+        var target = SkillNameMatcher.Parse(skillName);
+        var sameBase = skills.Where(s => s.Name.Base == target.Base).ToList();
+
+        // Базы не совпали дословно — пробуем по словам: «Вождение» из правил погони
+        // это «Вождение автомобиля» в листе
+        if (sameBase.Count == 0)
+        {
+            return skills
+                .Where(s => SkillNameMatcher.BaseMatches(s.Name.Base, target.Base))
+                .Select(s => s.Skill.Value.Regular)
+                .FirstOrDefault();
+        }
+
+        // Навык без уточнения: «Ближний бой» у оружия — это «Ближний бой (драка)» в листе
+        var specialization = target.Specialization
+                             ?? SkillNameMatcher.DefaultSpecializationFor(target.Base);
+
+        if (specialization is not null)
+        {
+            foreach (var (skill, name) in sameBase)
             {
-                if (skill.Name.Equals(skillName, StringComparison.OrdinalIgnoreCase)
-                    || skill.Name.Contains(skillName, StringComparison.OrdinalIgnoreCase))
-                {
+                if (SkillNameMatcher.SpecializationMatches(name.Specialization, specialization))
                     return skill.Value.Regular;
-                }
             }
         }
 
-        return 0;
+        // Специализации в листе нет — берём базовый навык без уточнения, если он записан
+        return sameBase
+            .Where(s => s.Name.Specialization is null)
+            .Select(s => s.Skill.Value.Regular)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Порог осечки оружия (стр. 113): бросок ≥ порога — оружие заклинило.
+    /// В листах он записан по-разному: числом («100»), по-процентному («00» — это 100
+    /// на процентных костях) или пустой строкой, если осечки у оружия нет.
+    /// Возвращает false, когда порога нет или он вне 1–100: иначе «0» из листа означал бы,
+    /// что оружие клинит при любом броске.
+    /// </summary>
+    public static bool TryGetMalfunctionThreshold(Weapon? weapon, out int threshold)
+    {
+        threshold = 0;
+
+        var raw = weapon?.Malfunction?.Trim();
+        if (string.IsNullOrEmpty(raw)) return false;
+
+        var digits = new string(raw.Where(char.IsDigit).ToArray());
+        if (digits.Length == 0) return false;
+
+        // «00» на процентных костях — это 100; одиночный «0» — незаполненное поле
+        if (digits.All(d => d == '0'))
+        {
+            if (digits.Length < 2) return false;
+            threshold = 100;
+            return true;
+        }
+
+        if (!int.TryParse(digits, out var value) || value is < 1 or > 100) return false;
+
+        threshold = value;
+        return true;
     }
 
     /// <summary>

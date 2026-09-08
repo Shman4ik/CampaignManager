@@ -27,6 +27,18 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 - `ParticipantOption` / `ParticipantSourceKind` — строка списка «добавить участника»: несёт исходную
   сущность, сторону и количество, поэтому годится и бою, и погоне.
 
+## Названия навыков и осечка
+- `CombatService.FindSkillValue` + `SkillNameMatcher` — каталог оружия хранит навык сокращённо
+  («Стрельба (П)», «Стрельба (В/Д)», «Ближний бой (Гаррота)»), лист сыщика — полностью
+  («Стрельба (пистолет)», «Стрельба (винт./дроб.)», «Ближний бой (удавка)»). Сравнение строк «в лоб»
+  давало 0 у любого стрелка, поэтому база и специализация сравниваются отдельно, с таблицей
+  сокращений и совпадением слов по префиксу. Новое сокращение — в `SpecializationAliases`,
+  а не в `FindSkillValue`.
+- `CombatService.TryGetMalfunctionThreshold` — порог осечки (стр. 113) в листах записан
+  и числом («100»), и по-процентному («00» — это 100 на процентных костях), и пустой строкой.
+  `int.Parse` на «00» давал 0, и оружие клинило при любом броске. Порог вне 1–100 считается
+  отсутствующим.
+
 ## Добавление участников
 `Components/ParticipantPicker.razor` — **единственный** список участников, общий с погоней
 (`Chase/Pages/ChaseHelperPage.razor` использует его же с `DetailMode="speed"`). Он сам грузит все
@@ -37,6 +49,12 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 `Combatant.Id` — идентификатор участника боя, а не листа персонажа: у двух громил из одного листа
 он разный (иначе путаются захват, удаление и «чей ход»), а сам лист лежит в `SourceCharacterId`.
 Состав сценария с `Count > 1` добавляется сразу пачкой, участники получают номера `#1`, `#2`.
+
+Один лист персонажа выставляется в бой **один раз**: страница отдаёт списку `UsedCharacterIds`
+(по `SourceCharacterId` участников), строка такого листа гаснет с подписью «уже в бою», а
+`HandleParticipantPicked` дополнительно отсекает повтор. Существа дублируются свободно — трёх
+одинаковых глубоководных Хранитель ставит одним и тем же выбором. Погоня делает то же самое
+со своими `Participants`.
 
 ## Notes
 - Same deliberate deviation from the CRUD service template as `Chase/CLAUDE.md`'s `ChaseService` — both are runtime resolution engines, not persistence services.

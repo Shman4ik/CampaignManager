@@ -1,4 +1,4 @@
-@using CampaignManager.Web.Components.Features.Bestiary.Model
+﻿@using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Services
 @using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Services
@@ -46,8 +46,10 @@
         {
             @foreach (var option in Filtered)
             {
+                var isUsed = IsUsed(option);
                 <button type="button"
-                        class="w-full flex justify-between items-center gap-2 px-2 py-2 hover:bg-accent-50 text-sm border-b border-gray-50 last:border-0 text-left"
+                        disabled="@isUsed"
+                        class="w-full flex justify-between items-center gap-2 px-2 py-2 text-sm border-b border-gray-50 last:border-0 text-left @(isUsed ? "opacity-50 cursor-not-allowed" : "hover:bg-accent-50")"
                         @onclick="() => OnPick.InvokeAsync(option)">
                     <span class="min-w-0">
                         <span class="text-gray-800">@option.Name</span>
@@ -57,7 +59,7 @@
                         }
                         <span class="block text-xs text-gray-400">@SourceLabel(option.SourceKind) &middot; @option.Side.ToRussianString()</span>
                     </span>
-                    <span class="text-xs text-gray-400 whitespace-nowrap">@option.Detail</span>
+                    <span class="text-xs text-gray-400 whitespace-nowrap">@(isUsed ? UsedLabel : option.Detail)</span>
                 </button>
             }
         }
@@ -76,6 +78,16 @@
 
     [Parameter] public EventCallback<ParticipantOption> OnPick { get; set; }
 
+    /// <summary>
+    /// Листы персонажей, уже взятые в бой или погоню. Один и тот же сыщик или НПС не может
+    /// участвовать дважды, поэтому его строка гасится; существа дублируются свободно —
+    /// трёх одинаковых глубоководных Хранитель выставляет одним и тем же выбором.
+    /// </summary>
+    [Parameter] public IReadOnlyCollection<Guid> UsedCharacterIds { get; set; } = [];
+
+    /// <summary>Подпись в строке уже добавленного персонажа.</summary>
+    [Parameter] public string UsedLabel { get; set; } = "уже добавлен";
+
     private static readonly (ParticipantSourceKind? Kind, string Label)[] Filters =
     [
         (null, "Все"),
@@ -93,6 +105,10 @@
     private Guid? _loadedCampaignId;
     private Guid? _loadedScenarioId;
     private bool _loadedOnce;
+
+    /// <summary>Лист уже в бою — повторно его брать нельзя (существ это не касается).</summary>
+    private bool IsUsed(ParticipantOption option) =>
+        option.Character is { } character && UsedCharacterIds.Contains(character.Id);
 
     private string EmptyText => CampaignId is null
         ? "Выберите кампанию — или найдите существо поиском"
