@@ -142,6 +142,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(w => w.Name).IsUnique();
             entity.Property(w => w.IsImpaling)
                 .HasDefaultValue(false);
+            entity.Property(w => w.IsRare)
+                .HasDefaultValue(false)
+                .HasComment("Редкое оружие: колонка «Встречается» таблицы XVII");
             entity.Property(w => w.DamageInfo)
                 .HasColumnType("jsonb")
                 .HasComment("Структурированная информация об уроне (авто-парсинг поля Damage)");

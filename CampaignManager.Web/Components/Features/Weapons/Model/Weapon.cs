@@ -44,6 +44,13 @@ public class Weapon : BaseDataBaseEntity, INamedEntity
     public bool IsModern { get; set; }
 
     /// <summary>
+    ///     Редкое оружие: устаревший образец, запрещённое или коллекционное (колонка
+    ///     «Встречается» таблицы XVII). Ортогонально эпохе: «1920-е, редко» — это
+    ///     <see cref="Is1920" /> вместе с этим флагом.
+    /// </summary>
+    public bool IsRare { get; set; }
+
+    /// <summary>
     ///     Урон, наносимый оружием
     /// </summary>
     [Required]

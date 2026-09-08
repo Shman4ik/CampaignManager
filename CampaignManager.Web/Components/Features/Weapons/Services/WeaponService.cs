@@ -13,17 +13,28 @@ public sealed class WeaponService(
 {
     private const string WeaponsKey = "AllWeapons";
 
+    /// <summary>Типы оружия дальнего боя — всё, кроме холодного.</summary>
+    private static readonly HashSet<WeaponType> RangeTypes =
+    [
+        WeaponType.Pistols,
+        WeaponType.Rifles,
+        WeaponType.Shotguns,
+        WeaponType.AssaultRifles,
+        WeaponType.SubmachineGuns,
+        WeaponType.MachineGuns,
+        WeaponType.ExplosivesAndHeavyWeapons,
+        WeaponType.Other
+    ];
+
+    /// <summary>
+    ///     Всё оружие дальнего боя. Фильтр применяется в памяти к общему списку:
+    ///     <see cref="WeaponType" /> — не набор флагов, поэтому объединить типы в одно
+    ///     значение нельзя (см. комментарий у перечисления).
+    /// </summary>
     public async Task<List<Weapon>> GetAllRangeWeaponsAsync()
     {
-        return await GetAllWeaponsAsync(
-            WeaponType.Pistols |
-            WeaponType.Rifles |
-            WeaponType.Shotguns |
-            WeaponType.AssaultRifles |
-            WeaponType.SubmachineGuns |
-            WeaponType.MachineGuns |
-            WeaponType.ExplosivesAndHeavyWeapons |
-            WeaponType.Other);
+        var weapons = await GetAllWeaponsAsync();
+        return weapons.Where(w => RangeTypes.Contains(w.Type)).ToList();
     }
 
     public async Task<List<Weapon>> GetAllWeaponsAsync(WeaponType? type = null)
