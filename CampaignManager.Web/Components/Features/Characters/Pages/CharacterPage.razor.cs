@@ -78,6 +78,7 @@ public partial class CharacterPage
     private CharacterGenerationLog? _generationLog;
     private bool _showGenerationLog = true;
     private bool _showGenerateModal;
+    private bool _showDevelopmentPhase;
     private bool _isKeeper;
     private LlmSuggestionsModal? _llmModal;
     private List<Campaign> _keeperCampaigns = [];
@@ -397,6 +398,27 @@ public partial class CharacterPage
 
         DerivedAttributeRules.Recalculate(Character);
         StateHasChanged();
+    }
+
+    /// <summary>
+    ///     Столбец таблицы II «Наличные и активы»: современность считаем только когда эпоха
+    ///     названа и она не классическая — как при генерации персонажа.
+    /// </summary>
+    private bool IsModernEra =>
+        CampaignEra is { } era && era.HasFlag(Eras.Modern) && !era.HasFlag(Eras.Classic);
+
+    private void OpenDevelopmentPhase() => _showDevelopmentPhase = true;
+
+    private void CloseDevelopmentPhase() => _showDevelopmentPhase = false;
+
+    /// <summary>
+    ///     Фаза закончена: отметки стёрты внутри модалки, здесь пересчитываем производные
+    ///     значения — навыки могли вырасти, а вместе с ними Уклонение и максимум Рассудка.
+    /// </summary>
+    private void HandleDevelopmentPhaseFinished()
+    {
+        RecalculateDerivedAttributes();
+        ShowNotification("Фаза развития завершена, отметки навыков стёрты. Не забудьте сохранить лист.", "success");
     }
 
     private void ResetUsedSkills()

@@ -833,26 +833,12 @@ public sealed class CharacterGenerationService(SkillService skillService)
 
         var cr = creditRatingSkill?.Value.Regular ?? 0;
 
-        // Таблица II «Наличные и активы» (стр. 45).
-        var (cash, assets, pocket) = isModern
-            ? cr switch
-            {
-                <= 0 => ("10", "нет", "10"),
-                <= 9 => ($"{cr * 20}", $"{cr * 200}", "40"),
-                <= 49 => ($"{cr * 40}", $"{cr * 1000}", "200"),
-                <= 89 => ($"{cr * 100}", $"{cr * 10000}", "1000"),
-                <= 98 => ($"{cr * 400}", $"{cr * 40000}", "5000"),
-                _ => ("1000000", "100000000+", "100000")
-            }
-            : cr switch
-            {
-                <= 0 => ("0.50", "нет", "0.50"),
-                <= 9 => ($"{cr * 1}", $"{cr * 10}", "2"),
-                <= 49 => ($"{cr * 2}", $"{cr * 50}", "10"),
-                <= 89 => ($"{cr * 5}", $"{cr * 500}", "50"),
-                <= 98 => ($"{cr * 20}", $"{cr * 2000}", "250"),
-                _ => ("50000", "5000000+", "5000")
-            };
+        // Таблица II «Наличные и активы» (стр. 45) целиком лежит в FinanceRules —
+        // по ней же фаза развития пересчитывает деньги при смене Средств.
+        var tier = FinanceRules.GetTier(cr, isModern);
+        var cash = tier.CashText;
+        var assets = tier.AssetsText;
+        var pocket = tier.PocketMoneyText;
 
         character.Finances.Cash = $"${cash}";
         character.Finances.PocketMoney = $"${pocket}";

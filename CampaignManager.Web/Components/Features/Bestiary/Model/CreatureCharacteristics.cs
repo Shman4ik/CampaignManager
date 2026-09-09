@@ -92,4 +92,11 @@ public class CreatureCharacteristics
     ///     Удача
     /// </summary>
     public int Luck { get; set; }
+
+    /// <summary>
+    ///     Потеря рассудка при встрече, как в бестиарии: «успех/провал», например «0/1d6».
+    ///     Из провальной части выводится предел привыкания к ужасному (стр. 167):
+    ///     больше этого сыщик за данный вид тварей не потеряет.
+    /// </summary>
+    public string SanityLoss { get; set; } = string.Empty;
 }

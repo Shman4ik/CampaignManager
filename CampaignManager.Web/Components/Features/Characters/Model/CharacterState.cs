@@ -56,4 +56,10 @@ public class CharacterState
     ///     Первый случай даёт +5 к навыку Мифов, каждый следующий +1 (стр. 284).
     /// </summary>
     public int MythosInsanityCount { get; set; }
+
+    /// <summary>
+    ///     Привыкание к ужасному (стр. 167): накопленная потеря рассудка за каждый вид тварей.
+    ///     Фаза развития снижает каждое значение на 1.
+    /// </summary>
+    public List<MythosHabituation> MythosHabituations { get; set; } = [];
 }

@@ -1,0 +1,240 @@
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@inject CreatureService CreatureService
+
+<div class="mythos-habituation">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h6 class="text-xs font-semibold text-gray-600 uppercase">Привыкание к ужасному</h6>
+        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="StartAdd">
+            <i class="fa-solid fa-plus mr-1"></i>Тварь
+        </button>
+    </div>
+
+    <p class="text-xs text-gray-500 mb-2">
+        Набрав предел, сыщик перестаёт терять рассудок за этот вид; фаза развития снижает
+        накопленное на 1 (стр. 167).
+    </p>
+
+    @if (_adding)
+    {
+        <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
+            @* cm-input-sm центрирует текст — он для числовых полей, поиску нужен обычный ввод *@
+            <input type="text" class="cm-input w-full mb-1"
+                   placeholder="Найти существо в бестиарии…"
+                   @bind="_search" @bind:event="oninput" @bind:after="SearchAsync" />
+
+            @if (_searching)
+            {
+                <div class="text-xs text-gray-500 py-1">Ищем…</div>
+            }
+            else if (_found.Count > 0)
+            {
+                <div class="max-h-40 overflow-y-auto divide-y divide-blue-100 mb-1">
+                    @foreach (var creature in _found)
+                    {
+                        var loss = creature.CreatureCharacteristics.SanityLoss;
+                        var max = SanityLossFormula.MaxLoss(loss);
+                        <button type="button"
+                                class="w-full text-left px-2 py-1.5 hover:bg-blue-100 rounded flex items-center justify-between gap-2"
+                                @onclick="() => AddFromBestiary(creature)">
+                            <span class="text-sm text-gray-900 truncate">@creature.Name</span>
+                            <span class="text-xs @(max > 0 ? "text-gray-500" : "text-amber-600") flex-shrink-0">
+                                @(max > 0 ? $"{loss} → предел {max}" : "потеря не указана")
+                            </span>
+                        </button>
+                    }
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(_search))
+            {
+                <div class="text-xs text-gray-500 py-1">В бестиарии ничего не нашлось.</div>
+            }
+
+            <div class="flex flex-wrap gap-1">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                        disabled="@string.IsNullOrWhiteSpace(_search)"
+                        @onclick="AddManually">
+                    Завести «@_search» вручную
+                </button>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAdd">Отмена</button>
+            </div>
+        </div>
+    }
+
+    @if (Character.State.MythosHabituations.Count == 0)
+    {
+        <div class="text-xs text-gray-400 italic">Нет записей</div>
+    }
+    else
+    {
+        <div class="divide-y divide-gray-100 border border-gray-200 rounded-md">
+            @foreach (var entry in Character.State.MythosHabituations.OrderBy(h => h.CreatureName, StringComparer.CurrentCulture))
+            {
+                @* Одна плотная строка на вид тварей: имя, счётчик, кнопки потери, удаление *@
+                <div @key="entry"
+                     class="hab-row @(entry.IsHabituated ? "hab-row-done" : "")">
+                    <span class="hab-name">
+                        @if (entry.CreatureId is { } id)
+                        {
+                            <a href="@($"/bestiary/creatures/edit/{id}")" class="hover:underline">@entry.CreatureName</a>
+                        }
+                        else
+                        {
+                            @entry.CreatureName
+                        }
+                        @if (!string.IsNullOrWhiteSpace(entry.SanityLossFormula))
+                        {
+                            <span class="hab-formula">@entry.SanityLossFormula</span>
+                        }
+                    </span>
+
+                    <span class="hab-count">
+                        потеряно <span class="font-bold text-gray-800">@entry.LostSanity</span><span class="text-gray-400">из</span>
+                        <input type="number" min="0" max="99"
+                               value="@entry.MaxLoss"
+                               @onchange="@(e => SetMaxLoss(entry, e))"
+                               aria-label="@($"Предел потери за {entry.CreatureName}")"
+                               class="hab-limit" />
+                    </span>
+
+                    @if (entry.IsHabituated)
+                    {
+                        <span class="hab-done"><i class="fa-solid fa-shield-halved mr-1"></i>привык</span>
+                    }
+                    else
+                    {
+                        @* Минус в подписи — кнопка отнимает рассудок, как и кубики выше в панели *@
+                        <span class="hab-actions">
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    aria-label="@($"Отнять 1 рассудка за {entry.CreatureName}")"
+                                    @onclick="() => LoseAsync(entry, 1)">−1</button>
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    aria-label="@($"Отнять 1d6 рассудка за {entry.CreatureName}")"
+                                    @onclick="() => LoseAsync(entry, Dice.Roll(1, 6))">−1d6</button>
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    aria-label="@($"Отнять 1d10 рассудка за {entry.CreatureName}")"
+                                    @onclick="() => LoseAsync(entry, Dice.Roll(1, 10))">−1d10</button>
+                        </span>
+                    }
+
+                    <button type="button" class="hab-remove"
+                            aria-label="@($"Убрать {entry.CreatureName}")"
+                            @onclick="() => Character.State.MythosHabituations.Remove(entry)">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required Character Character { get; set; }
+
+    /// <summary>
+    ///     Саму потерю рассудка списывает панель Рассудка — там же считаются пороги безумия.
+    ///     Здесь только предел привыкания.
+    /// </summary>
+    [Parameter] public EventCallback<int> OnSanityLoss { get; set; }
+
+    private bool _adding;
+    private string _search = "";
+    private bool _searching;
+    private List<Creature> _found = [];
+
+    private void StartAdd()
+    {
+        _adding = true;
+        _search = "";
+        _found = [];
+    }
+
+    private void CancelAdd()
+    {
+        _adding = false;
+        _search = "";
+        _found = [];
+    }
+
+    private async Task SearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+        {
+            _found = [];
+            return;
+        }
+
+        _searching = true;
+        try
+        {
+            _found = await CreatureService.GetAllCreaturesAsync(_search.Trim(), null, 1, 10);
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private void AddFromBestiary(Creature creature)
+    {
+        var formula = creature.CreatureCharacteristics.SanityLoss;
+        Add(creature.Id, creature.Name, SanityLossFormula.MaxLoss(formula),
+            string.IsNullOrWhiteSpace(formula) ? null : formula);
+    }
+
+    private void AddManually()
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+            return;
+
+        Add(null, _search.Trim(), 0, null);
+    }
+
+    private void Add(Guid? creatureId, string name, int maxLoss, string? formula)
+    {
+        var existing = Character.State.MythosHabituations
+            .FirstOrDefault(h => string.Equals(h.CreatureName, name, StringComparison.CurrentCultureIgnoreCase));
+
+        if (existing is not null)
+        {
+            // Повторное добавление того же вида не заводит второй счётчик — только уточняет предел.
+            existing.CreatureId ??= creatureId;
+            existing.SanityLossFormula ??= formula;
+            if (maxLoss > 0)
+                existing.MaxLoss = maxLoss;
+        }
+        else
+        {
+            Character.State.MythosHabituations.Add(new MythosHabituation
+            {
+                CreatureId = creatureId,
+                CreatureName = name,
+                MaxLoss = maxLoss,
+                SanityLossFormula = formula
+            });
+        }
+
+        CancelAdd();
+    }
+
+    private void SetMaxLoss(MythosHabituation entry, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+            entry.MaxLoss = Math.Clamp(value, 0, 99);
+    }
+
+    /// <summary>
+    ///     Списывает потерю, но не больше остатка: за предел этот вид рассудка уже не отнимает.
+    /// </summary>
+    private async Task LoseAsync(MythosHabituation entry, int amount)
+    {
+        var actual = entry.MaxLoss > 0 ? Math.Min(amount, entry.Remaining) : amount;
+        if (actual <= 0)
+            return;
+
+        entry.LostSanity += actual;
+        await OnSanityLoss.InvokeAsync(actual);
+    }
+}
