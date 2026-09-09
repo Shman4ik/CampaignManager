@@ -79,6 +79,17 @@
             </div>
         }
 
+        <!-- Full width skills section -->
+        @if (Creature.Skills.Count > 0)
+        {
+            <div class="w-full mt-4">
+                <h3 class="font-medium mb-1 text-sm font-semibold">Навыки:</h3>
+                <div class="text-sm text-gray-700">
+                    @string.Join(", ", Creature.Skills.Select(FormatSkill))
+                </div>
+            </div>
+        }
+
         <!-- Full width attacks section -->
         @if (Creature.Attacks.Count > 0)
         {
@@ -87,12 +98,15 @@
                 <div class="text-sm text-gray-700 space-y-1">
                     @foreach (var attack in Creature.Attacks)
                     {
+                        @* Строка как в книге: «Ближний бой 60% (30/12), урон 2d6 + БкУ» (стр. 278) *@
                         <div class="mb-1">
-                            <span class="font-semibold">@attack.Name:</span>
-                            <span class="text-gray-600">@(attack.IsMelee ? "Ближний бой" : "Дальний бой") @attack.SkillValue%, урон @attack.DamageFormula</span>
-                            @if (attack.AttacksPerRound > 1)
+                            <span class="font-semibold">@attack.Name</span>
+                            <span class="text-gray-600">
+                                @attack.SkillValue% (@(attack.SkillValue / 2)/@(attack.SkillValue / 5)), урон @FormatDamage(attack)
+                            </span>
+                            @if (attack.Kind is not CreatureAttackKind.Melee)
                             {
-                                <span class="text-gray-500">(@attack.AttacksPerRound ат./раунд)</span>
+                                <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">@KindLabel(attack.Kind)</Badge>
                             }
                             @if (!string.IsNullOrEmpty(attack.Description))
                             {
@@ -124,19 +138,67 @@
             ("ЛВК", c.Dexterity?.Value, c.Dexterity?.DiceRoll),
             ("ИНТ", c.Intelligence?.Value, c.Intelligence?.DiceRoll),
             ("МОЩ", c.Power?.Value, c.Power?.DiceRoll),
-            ("НАР", c.Appearance?.Value, c.Appearance?.DiceRoll),
-            ("ОБР", c.Education?.Value, c.Education?.DiceRoll),
-            ("Инициатива", c.Initiative, null),
-            ("БкУ", c.AverageBonusToHit, null),
-            ("Комплекция", c.AverageComplexity, null),
-            ("Скорость", c.Speed, null),
             ("ПЗ", c.HealPoint, null),
             ("ПМ", c.ManaPoint, null),
-            ("Броня", c.Armor, null),
-            ("Уклонение", c.DodgeSkill, null),
-            ("Потеря РАС", c.SanityLoss, null)
+            ("Ср. бонус к урону", NullIfEmpty(c.AverageDamageBonus), null),
+            ("Ср. Комплекция", c.AverageComplexity, null),
+            ("Скорость", FormatSpeed(c), null),
+            ("Атак за раунд", FormatAttacksPerRound(c), null),
+            ("Броня", FormatArmor(c), null),
+            ("Уклонение", c.DodgeSkill > 0 ? $"{c.DodgeSkill}%" : null, null),
+            ("Потеря рассудка", NullIfEmpty(c.SanityLoss), null)
         ];
         base.OnParametersSet(); // Ensure base method is called
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static string FormatSkill(CreatureSkill skill) =>
+        string.IsNullOrWhiteSpace(skill.Note)
+            ? $"{skill.Name} {skill.Value}%"
+            : $"{skill.Name} {skill.Value}% ({skill.Note})";
+
+    private static string KindLabel(CreatureAttackKind kind) => kind switch
+    {
+        CreatureAttackKind.Ranged => "дальний бой",
+        CreatureAttackKind.Maneuver => "манёвр",
+        CreatureAttackKind.Special => "особая",
+        _ => "ближний бой"
+    };
+
+    // «урон равен БкУ» книга печатает именно так — своих костей у такой атаки нет (стр. 306).
+    private static string FormatDamage(CreatureAttack attack) => attack.DamageBonus switch
+    {
+        CreatureDamageBonusMode.OnlyBonus => "равен БкУ",
+        CreatureDamageBonusMode.Full => $"{attack.DamageFormula} + БкУ",
+        CreatureDamageBonusMode.Half => $"{attack.DamageFormula} + ½ БкУ",
+        _ => attack.DamageFormula
+    };
+
+    // Книга пишет скорость по способам передвижения: «8 / плавание 10», «6 / полёт 20» (стр. 280).
+    private static string? FormatSpeed(CreatureCharacteristics c)
+    {
+        if (!string.IsNullOrWhiteSpace(c.SpeedNote)) return c.SpeedNote;
+        if (c.Speed <= 0 && c.SwimSpeed is null && c.FlySpeed is null) return null;
+
+        var parts = new List<string> { c.Speed.ToString() };
+        if (c.SwimSpeed is { } swim) parts.Add($"плавание {swim}");
+        if (c.FlySpeed is { } fly) parts.Add($"полёт {fly}");
+        return string.Join(" / ", parts);
+    }
+
+    private static string? FormatAttacksPerRound(CreatureCharacteristics c) =>
+        string.IsNullOrWhiteSpace(c.AttacksPerRoundNote)
+            ? (c.AttacksPerRound > 0 ? c.AttacksPerRound.ToString() : null)
+            : $"{c.AttacksPerRound} ({c.AttacksPerRoundNote})";
+
+    // «Броня: нет» у книги часто идёт вместе с оговоркой, которая и есть настоящая защита,
+    // поэтому ноль без примечания показываем как «нет», а не прячем (стр. 280).
+    private static string? FormatArmor(CreatureCharacteristics c)
+    {
+        var note = string.IsNullOrWhiteSpace(c.ArmorNote) ? null : c.ArmorNote;
+        if (c.Armor > 0) return note is null ? $"{c.Armor}" : $"{c.Armor} — {note}";
+        return note ?? "нет";
     }
 
     private string GetImageUrl(string? imageUrl)

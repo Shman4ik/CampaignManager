@@ -70,13 +70,12 @@ public sealed class CreatureService(
 
         if (result?.CreatureCharacteristics != null)
         {
-            result.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
             result.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
             result.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
             result.CreatureCharacteristics.Strength ??= new CreatureCharacteristicModel();
             result.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
             result.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
-            result.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
+            result.CreatureCharacteristics.Power ??= new CreatureCharacteristicModel();
         }
 
         return result;

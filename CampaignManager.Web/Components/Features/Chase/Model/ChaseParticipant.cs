@@ -158,6 +158,6 @@ public class ChaseParticipant
         MaxHitPoints = creature.CreatureCharacteristics.HealPoint;
         CurrentHitPoints = creature.CreatureCharacteristics.HealPoint;
         BuildValue = creature.CreatureCharacteristics.AverageComplexity;
-        LuckValue = creature.CreatureCharacteristics.Luck;
+        // Удачу книга у чудовищ не печатает, поэтому она остаётся нулевой.
     }
 }

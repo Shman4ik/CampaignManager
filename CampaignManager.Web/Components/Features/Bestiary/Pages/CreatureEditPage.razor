@@ -149,13 +149,6 @@
                            class="cm-input w-full mt-1"/>
                 </div>
                 <div>
-                    <label class="cm-field-label">Наружность</label>
-                    <input type="number" @bind="creature.CreatureCharacteristics.Appearance.Value"
-                           class="cm-input w-full"/>
-                    <input type="text" @bind="creature.CreatureCharacteristics.Appearance.DiceRoll" placeholder="2d6+1"
-                           class="cm-input w-full mt-1"/>
-                </div>
-                <div>
                     <label class="cm-field-label">Мощь</label>
                     <input type="number" @bind="creature.CreatureCharacteristics.Power.Value"
                            class="cm-input w-full"/>
@@ -169,24 +162,12 @@
                     <input type="text" @bind="creature.CreatureCharacteristics.Size.DiceRoll" placeholder="2d6+1"
                            class="cm-input w-full mt-1"/>
                 </div>
-                <div>
-                    <label class="cm-field-label">Образование</label>
-                    <input type="number" @bind="creature.CreatureCharacteristics.Education.Value"
-                           class="cm-input w-full"/>
-                    <input type="text" @bind="creature.CreatureCharacteristics.Education.DiceRoll" placeholder="2d6+1"
-                           class="cm-input w-full mt-1"/>
-                </div>
             </div>
 
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-6">
                 <div>
-                    <label class="cm-field-label">Инициатива</label>
-                    <input type="number" @bind="creature.CreatureCharacteristics.Initiative"
-                           class="cm-input w-full"/>
-                </div>
-                <div>
                     <label class="cm-field-label">Ср. бонус к урону</label>
-                    <input type="text" @bind="creature.CreatureCharacteristics.AverageBonusToHit"
+                    <input type="text" @bind="creature.CreatureCharacteristics.AverageDamageBonus"
                            class="cm-input w-full"/>
                 </div>
                 <div>
@@ -200,6 +181,26 @@
                            class="cm-input w-full"/>
                 </div>
                 <div>
+                    <label class="cm-field-label">Плавание</label>
+                    <input type="number" @bind="creature.CreatureCharacteristics.SwimSpeed"
+                           placeholder="—" class="cm-input w-full"/>
+                    <p class="text-xs text-gray-500 mt-0.5">Пусто — половина обычной (стр. 141).</p>
+                </div>
+                <div>
+                    <label class="cm-field-label">Полёт</label>
+                    <input type="number" @bind="creature.CreatureCharacteristics.FlySpeed"
+                           placeholder="—" class="cm-input w-full"/>
+                    <p class="text-xs text-gray-500 mt-0.5">Пусто — полёт недоступен.</p>
+                </div>
+                <div>
+                    <label class="cm-field-label">Атак за раунд</label>
+                    <input type="number" min="1" @bind="creature.CreatureCharacteristics.AttacksPerRound"
+                           class="cm-input w-full"/>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        Столько же защит за раунд без бонусной кости врагам (стр. 279).
+                    </p>
+                </div>
+                <div>
                     <label class="cm-field-label">ПЗ</label>
                     <input type="number" @bind="creature.CreatureCharacteristics.HealPoint"
                            class="cm-input w-full"/>
@@ -207,11 +208,6 @@
                 <div>
                     <label class="cm-field-label">ПМ</label>
                     <input type="number" @bind="creature.CreatureCharacteristics.ManaPoint"
-                           class="cm-input w-full"/>
-                </div>
-                <div>
-                    <label class="cm-field-label">Комплекция</label>
-                    <input type="number" @bind="creature.CreatureCharacteristics.Constitutions"
                            class="cm-input w-full"/>
                 </div>
                 <div>
@@ -225,11 +221,6 @@
                            class="cm-input w-full"/>
                 </div>
                 <div>
-                    <label class="cm-field-label">Удача</label>
-                    <input type="number" @bind="creature.CreatureCharacteristics.Luck"
-                           class="cm-input w-full"/>
-                </div>
-                <div>
                     <label class="cm-field-label">Потеря рассудка</label>
                     <input type="text" @bind="creature.CreatureCharacteristics.SanityLoss"
                            placeholder="0/1d6"
@@ -239,6 +230,59 @@
                         к ужасному: @(SanityLossFormula.MaxLoss(creature.CreatureCharacteristics.SanityLoss)) пунктов.
                     </p>
                 </div>
+            </div>
+
+            @* Строки статблока, которые книга печатает словами, а не числом *@
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label class="cm-field-label">Броня словами</label>
+                    <input type="text" @bind="creature.CreatureCharacteristics.ArmorNote"
+                           placeholder="огнестрел наносит минимальный урон" class="cm-input w-full"/>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        «Броня: нет» у книги часто идёт с оговоркой — она и есть настоящая защита.
+                    </p>
+                </div>
+                <div>
+                    <label class="cm-field-label">Оговорка к числу атак</label>
+                    <input type="text" @bind="creature.CreatureCharacteristics.AttacksPerRoundNote"
+                           placeholder="максимум 1 укус за раунд" class="cm-input w-full"/>
+                </div>
+                <div>
+                    <label class="cm-field-label">Скорость словами</label>
+                    <input type="text" @bind="creature.CreatureCharacteristics.SpeedNote"
+                           placeholder="перекатывание 10" class="cm-input w-full"/>
+                </div>
+            </div>
+
+            <div class="cm-section-header"><span class="cm-section-title">Навыки</span></div>
+            <div class="mb-6 space-y-2">
+                @foreach (var skill in skills)
+                {
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-2 border rounded-lg">
+                        <div class="md:col-span-4">
+                            <label class="cm-field-label">Название</label>
+                            <input type="text" @bind="skill.Name" placeholder="Скрытность" class="cm-input w-full"/>
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="cm-field-label">%</label>
+                            <input type="number" min="1" max="100" @bind="skill.Value" class="cm-input w-full"/>
+                        </div>
+                        <div class="md:col-span-5">
+                            <label class="cm-field-label">Уточнение</label>
+                            <input type="text" @bind="skill.Note" placeholder="в воде 80%" class="cm-input w-full"/>
+                        </div>
+                        <div class="md:col-span-1 flex justify-end">
+                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
+                                    aria-label="@($"Удалить навык {skill.Name}")" @onclick="() => RemoveSkill(skill)">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                }
+                <button type="button" class="cm-btn cm-btn-success cm-btn-sm mt-2" @onclick="AddSkill">
+                    <i class="fas fa-plus"></i>
+                    <span>Добавить навык</span>
+                </button>
             </div>
 
             <div class="cm-section-header"><span class="cm-section-title">Атаки</span></div>
@@ -265,18 +309,26 @@
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div>
-                                <label class="block text-xs font-medium text-gray-600">Тип</label>
-                                <select value="@GetAttackType(attack)"
-                                        @onchange="e => SetAttackType(attack, e.Value?.ToString())"
+                                <label class="block text-xs font-medium text-gray-600">Вид</label>
+                                <select value="@attack.Kind"
+                                        @onchange="e => SetAttackKind(attack, e.Value?.ToString())"
                                         class="cm-input w-full">
-                                    <option value="melee">Ближний бой</option>
-                                    <option value="ranged">Дальний бой</option>
+                                    <option value="@CreatureAttackKind.Melee">Ближний бой</option>
+                                    <option value="@CreatureAttackKind.Ranged">Дальний бой</option>
+                                    <option value="@CreatureAttackKind.Maneuver">Манёвр</option>
+                                    <option value="@CreatureAttackKind.Special">Особая</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-gray-600">Атак за раунд</label>
-                                <input type="number" @bind="attack.AttacksPerRound" min="1"
-                                       class="cm-input w-full"/>
+                                <label class="block text-xs font-medium text-gray-600">Бонус к урону</label>
+                                <select value="@attack.DamageBonus"
+                                        @onchange="e => SetDamageBonus(attack, e.Value?.ToString())"
+                                        class="cm-input w-full">
+                                    <option value="@CreatureDamageBonusMode.None">не добавляется</option>
+                                    <option value="@CreatureDamageBonusMode.Full">+ БкУ</option>
+                                    <option value="@CreatureDamageBonusMode.Half">+ ½ БкУ</option>
+                                    <option value="@CreatureDamageBonusMode.OnlyBonus">урон равен БкУ</option>
+                                </select>
                             </div>
                             <div class="md:col-span-2 flex items-end gap-2">
                                 <div class="flex-1">
@@ -345,14 +397,13 @@
             Dexterity = new CreatureCharacteristicModel(),
             Intelligence = new CreatureCharacteristicModel(),
             Constitution = new CreatureCharacteristicModel(),
-            Appearance = new CreatureCharacteristicModel(),
             Power = new CreatureCharacteristicModel(),
-            Size = new CreatureCharacteristicModel(),
-            Education = new CreatureCharacteristicModel()
+            Size = new CreatureCharacteristicModel()
         }
     };
 
     private List<CreatureAttack> attacks = [];
+    private List<CreatureSkill> skills = [];
     private List<DictionaryEntry> specialAbilities = new();
     private bool isLoading = true;
     private string pageTitle = "Новое существо";
@@ -393,6 +444,7 @@
                 creature = existingCreature;
                 EnsureCreatureCharacteristicsInitialized();
                 attacks = creature.Attacks?.ToList() ?? [];
+                skills = creature.Skills?.ToList() ?? [];
 
                 specialAbilities = creature.SpecialAbilities?.Select(kv =>
                                        new DictionaryEntry { KeyText = kv.Key, ValueText = kv.Value }).ToList()
@@ -421,10 +473,8 @@
                     Dexterity = new CreatureCharacteristicModel(),
                     Intelligence = new CreatureCharacteristicModel(),
                     Constitution = new CreatureCharacteristicModel(),
-                    Appearance = new CreatureCharacteristicModel(),
-                    Power = new CreatureCharacteristicModel(),
-                    Size = new CreatureCharacteristicModel(),
-                    Education = new CreatureCharacteristicModel()
+                            Power = new CreatureCharacteristicModel(),
+                    Size = new CreatureCharacteristicModel()
                 }
             };
             EnsureCreatureCharacteristicsInitialized();
@@ -445,10 +495,8 @@
         creature.CreatureCharacteristics.Dexterity ??= new CreatureCharacteristicModel();
         creature.CreatureCharacteristics.Intelligence ??= new CreatureCharacteristicModel();
         creature.CreatureCharacteristics.Constitution ??= new CreatureCharacteristicModel();
-        creature.CreatureCharacteristics.Appearance ??= new CreatureCharacteristicModel();
         creature.CreatureCharacteristics.Power ??= new CreatureCharacteristicModel();
         creature.CreatureCharacteristics.Size ??= new CreatureCharacteristicModel();
-        creature.CreatureCharacteristics.Education ??= new CreatureCharacteristicModel();
     }
 
     private async Task RefreshDisplayImageUrlAsync()
@@ -510,10 +558,29 @@
         }
     }
 
-    private static string GetAttackType(CreatureAttack attack) => attack.IsMelee ? "melee" : "ranged";
+    private static void SetAttackKind(CreatureAttack attack, string? value)
+    {
+        if (Enum.TryParse<CreatureAttackKind>(value, out var kind))
+            attack.Kind = kind;
+    }
 
-    private static void SetAttackType(CreatureAttack attack, string? value) =>
-        attack.IsMelee = value != "ranged";
+    private static void SetDamageBonus(CreatureAttack attack, string? value)
+    {
+        if (Enum.TryParse<CreatureDamageBonusMode>(value, out var mode))
+            attack.DamageBonus = mode;
+    }
+
+    private void AddSkill()
+    {
+        skills.Add(new CreatureSkill());
+        StateHasChanged();
+    }
+
+    private void RemoveSkill(CreatureSkill item)
+    {
+        skills.Remove(item);
+        StateHasChanged();
+    }
 
     private void AddAttack()
     {
@@ -546,6 +613,10 @@
             EnsureCreatureCharacteristicsInitialized();
             creature.Attacks = attacks
                 .Where(a => !string.IsNullOrWhiteSpace(a.Name))
+                .ToList();
+
+            creature.Skills = skills
+                .Where(sk => !string.IsNullOrWhiteSpace(sk.Name))
                 .ToList();
 
             creature.SpecialAbilities = specialAbilities
