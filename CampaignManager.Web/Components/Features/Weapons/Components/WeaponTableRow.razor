@@ -1,5 +1,6 @@
 ﻿@using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Components.Features.Weapons.Services
 @namespace CampaignManager.Web.Components.Features.Weapons.Components
 
 <tr class="@(IsExpanded ? "bg-primary-50" : "hover:bg-gray-50") transition-all duration-200 cursor-pointer active:bg-gray-100"
@@ -15,7 +16,7 @@
         <span>@Weapon.Damage</span>
         @if (Weapon.DamageInfo?.IsParsed == false)
         {
-            <span class="ml-1 text-xs text-amber-500" title="Формула урона не распознана">⚠️</span>
+            <span class="ml-1 text-xs text-amber-700">⚠️ формула не распознана</span>
         }
     </td>
     <td class="px-4 sm:px-6 py-4">
@@ -42,31 +43,51 @@
     </td>
     <td class="px-4 sm:px-6 py-4 text-gray-600">
         <div class="text-sm space-y-1.5">
-            <div class="flex gap-2">
-                <span class="font-semibold text-gray-700">Дист:</span> 
-                <span>@Weapon.Range</span>
+            <div class="flex flex-wrap gap-2">
+                <span class="font-semibold text-gray-700">Дист:</span>
+                <span>@WeaponStatsReader.RangeDisplay(Weapon)</span>
+                @if (!WeaponStatsReader.Range(Weapon).IsParsed)
+                {
+                    <span class="text-xs text-amber-700">не распознано</span>
+                }
             </div>
-            <div class="flex gap-2">
-                <span class="font-semibold text-gray-700">Атаки:</span> 
-                <span>@Weapon.Attacks</span>
+            <div class="flex flex-wrap gap-2">
+                <span class="font-semibold text-gray-700">Атаки:</span>
+                <span>@WeaponStatsReader.AttacksDisplay(Weapon)</span>
+                @if (!WeaponStatsReader.Attacks(Weapon).IsParsed)
+                {
+                    <span class="text-xs text-amber-700">не распознано</span>
+                }
             </div>
             @if (!string.IsNullOrEmpty(Weapon.Ammo))
             {
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <span class="font-semibold text-gray-700">Патроны:</span>
                     <span>@Weapon.Ammo</span>
+                    @if (WeaponStatsReader.AmmoCapacity(Weapon) is { } capacity)
+                    {
+                        <span class="text-xs text-gray-500">магазин на @capacity</span>
+                    }
                 </div>
             }
             @if (!string.IsNullOrEmpty(Weapon.Malfunction))
             {
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <span class="font-semibold text-gray-700">Осечка:</span>
-                    <span>@Weapon.Malfunction</span>
+                    @if (WeaponStatsReader.TryMalfunctionThreshold(Weapon, out var threshold))
+                    {
+                        <span>при броске ≥ @threshold</span>
+                    }
+                    else
+                    {
+                        <span>@Weapon.Malfunction</span>
+                        <span class="text-xs text-amber-700">не распознано</span>
+                    }
                 </div>
             }
             @if (!string.IsNullOrEmpty(Weapon.Cost))
             {
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <span class="font-semibold text-gray-700">Цена:</span>
                     <span>@Weapon.Cost</span>
                 </div>
@@ -115,10 +136,15 @@
                     <div class="space-y-1">
                         <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Дальность</h5>
                         <p class="text-base font-medium text-gray-900">@Weapon.Range</p>
+                        @if (WeaponStatsReader.BaseRangeMeters(Weapon) is { } meters)
+                        {
+                            <p class="text-sm text-gray-500">Базовая @meters м, большая @(meters * 2) м, сверхбольшая @(meters * 4) м</p>
+                        }
                     </div>
                     <div class="space-y-1">
                         <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Атаки</h5>
                         <p class="text-base font-medium text-gray-900">@Weapon.Attacks</p>
+                        <p class="text-sm text-gray-500">@WeaponStatsReader.AttacksDisplay(Weapon)</p>
                     </div>
                     @if (!string.IsNullOrEmpty(Weapon.Cost))
                     {

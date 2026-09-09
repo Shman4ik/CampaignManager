@@ -2,6 +2,7 @@
 @using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
+@using CampaignManager.Web.Components.Features.Weapons.Services
 @using CampaignManager.Web.Model
 
 @inject CombatService CombatService
@@ -67,23 +68,29 @@
             {
                 <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Дальность</label>
-                    <div class="flex gap-2">
-                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Base)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Base)" />
-                            <span>Обычная — обычный успех (@_attackSkillValue)</span>
+                            <span>Обычная — обычный успех (@_attackSkillValue)@RangeHint(1)</span>
                         </label>
-                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Long)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Long)" />
-                            <span>Большая — трудный успех (@(_attackSkillValue / 2))</span>
+                            <span>Большая — трудный успех (@(_attackSkillValue / 2))@RangeHint(2)</span>
                         </label>
-                        <label class="flex items-center gap-1 text-xs cursor-pointer">
+                        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
                             <input type="radio" name="range" checked="@(_rangeLevel == RangeLevel.Extreme)"
                                    @onchange="() => SetRangeLevel(RangeLevel.Extreme)" />
-                            <span>Сверхбольшая — чрезвычайный успех (@(_attackSkillValue / 5))</span>
+                            <span>Сверхбольшая — чрезвычайный успех (@(_attackSkillValue / 5))@RangeHint(4)</span>
                         </label>
                     </div>
+                    @if (SelectedWeapon is { } rangeWeapon && BaseRangeMeters is null)
+                    {
+                        <p class="mt-1 text-xs text-gray-400">
+                            Базовая дальность не разобрана: в данных оружия «@rangeWeapon.Range».
+                        </p>
+                    }
                 </div>
 
                 @if (WeaponIsJammed)
@@ -118,22 +125,37 @@
                 <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Режим стрельбы</label>
                     <div class="space-y-1">
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                        <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
                             <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Single)"
                                    @onchange="() => SetFiringMode(FiringMode.Single)" />
                             Одиночный выстрел
                         </label>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.PistolBurst)"
-                                   @onchange="() => SetFiringMode(FiringMode.PistolBurst)" />
-                            Серия из пистолета — отдельная проверка на выстрел, каждая со штрафной костью
-                        </label>
-                        <label class="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Volley)"
-                                   @onchange="() => SetFiringMode(FiringMode.Volley)" />
-                            Очередь или залп автоматического оружия
-                        </label>
+                        @if (AllowsMultipleShots)
+                        {
+                            <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
+                                <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.PistolBurst)"
+                                       @onchange="() => SetFiringMode(FiringMode.PistolBurst)" />
+                                Серия из пистолета — отдельная проверка на выстрел, каждая со штрафной костью
+                                (не больше @MaxShotsPerRound за раунд)
+                            </label>
+                        }
+                        @if (AllowsVolley)
+                        {
+                            <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
+                                <input type="radio" name="firingMode" checked="@(_firingMode == FiringMode.Volley)"
+                                       @onchange="() => SetFiringMode(FiringMode.Volley)" />
+                                @VolleyModeLabel
+                            </label>
+                        }
                     </div>
+
+                    @if (!AllowsMultipleShots && !AllowsVolley && SelectedWeapon is { } singleShotWeapon)
+                    {
+                        <p class="mt-1 text-xs text-gray-400">
+                            @singleShotWeapon.Name: @WeaponStatsReader.AttacksDisplay(singleShotWeapon) —
+                            других режимов огня у этого оружия нет.
+                        </p>
+                    }
 
                     @if (_firingMode == FiringMode.Volley && _selectedAttacker != null)
                     {
@@ -689,7 +711,7 @@
                     Damage = w.Damage,
                     Weapon = w,
                     IsMelee = w.Type == WeaponType.Melee,
-                    SkillValue = CombatService.FindSkillValue(_selectedAttacker.CharacterSource, w.Skill)
+                    SkillValue = CombatService.FindSkillValue(_selectedAttacker.CharacterSource, w)
                 });
             }
         }
@@ -742,6 +764,8 @@
             _attackSkillValue = option.SkillValue;
             _rangeLevel = RangeLevel.Base;
         }
+
+        ClampFiringModeToWeapon();
     }
 
     private void OnDefenderChanged(ChangeEventArgs e)
@@ -896,13 +920,54 @@
             ? _attackerSuccessLevel != SuccessLevel.Fumble
             : _attackerSuccessLevel >= RequiredLevel;
 
-    /// <summary>Ёмкость магазина выбранного оружия, 0 — если её нет в данных.</summary>
-    private int AmmoCapacity =>
+    /// <summary>Выбранное оружие, если оно есть.</summary>
+    private Weapon? SelectedWeapon =>
         _selectedWeaponIndex >= 0 && _selectedWeaponIndex < _attackOptions.Count
-            ? CombatService.ParseAmmoCapacity(_attackOptions[_selectedWeaponIndex].Weapon?.Ammo)
-            : 0;
+            ? _attackOptions[_selectedWeaponIndex].Weapon
+            : null;
 
-    /// <summary>Сколько патронов уходит на текущую проверку атаки.</summary>
+    /// <summary>Ёмкость магазина выбранного оружия, 0 — если её нет в данных.</summary>
+    private int AmmoCapacity => WeaponStatsReader.AmmoCapacity(SelectedWeapon) ?? 0;
+
+    /// <summary>Базовая дальность выбранного оружия в метрах; null — её нет в данных.</summary>
+    private int? BaseRangeMeters => WeaponStatsReader.BaseRangeMeters(SelectedWeapon);
+
+    /// <summary>Разобранное число атак выбранного оружия.</summary>
+    private WeaponAttacksInfo SelectedAttacks => WeaponStatsReader.Attacks(SelectedWeapon);
+
+    /// <summary>
+    /// Предел выстрелов за раунд: «1 (3)» — три. Без разобранного значения предел не
+    /// известен, и панель не ограничивает Хранителя.
+    /// </summary>
+    private int MaxShotsPerRound => WeaponStatsReader.MaxShotsPerRound(SelectedWeapon) ?? 1;
+
+    /// <summary>Оружие умеет стрелять сериями: «1 (3)», «1 или 2».</summary>
+    private bool AllowsMultipleShots => MaxShotsPerRound > 1;
+
+    /// <summary>Оружие умеет вести непрерывный огонь или стрелять очередями.</summary>
+    private bool AllowsVolley => SelectedAttacks is { AllowsFullAuto: true } or { AllowsBurst: true };
+
+    /// <summary>Подпись режима залпа — очередь фиксированной длины или непрерывный огонь.</summary>
+    private string VolleyModeLabel => SelectedAttacks switch
+    {
+        { AllowsFullAuto: true, AllowsBurst: true, BurstSize: { } size } =>
+            $"Очередь по {size} или непрерывный огонь",
+        { AllowsFullAuto: true } => "Непрерывный огонь",
+        { AllowsBurst: true, BurstSize: { } size } => $"Очередь по {size}",
+        _ => "Очередь или залп автоматического оружия"
+    };
+
+    /// <summary>
+    /// Дальность в метрах для переключателя: базовая, вдвое и вчетверо больше (стр. 108).
+    /// Пусто, если базовой дальности в данных оружия нет.
+    /// </summary>
+    private string RangeHint(int multiplier) =>
+        BaseRangeMeters is { } meters ? $" — до {meters * multiplier} м" : string.Empty;
+
+    /// <summary>
+    /// Сколько патронов уходит на текущую проверку атаки. Серия и залп ограничены
+    /// пределом выстрелов за раунд, если он известен.
+    /// </summary>
     private int ShotsPerCheck => _firingMode == FiringMode.Volley ? Math.Max(1, _shotsInVolley) : 1;
 
     private void SetFiringMode(FiringMode mode)
@@ -911,6 +976,16 @@
         if (mode == FiringMode.Volley && _selectedAttacker != null)
             _shotsInVolley = CombatService.GetVolleySize(_attackSkillValue);
         ResetRolls();
+    }
+
+    /// <summary>
+    /// Режим огня, недоступный выбранному оружию, сбрасывается на одиночный выстрел:
+    /// иначе после смены ствола панель осталась бы в режиме, которого у него нет.
+    /// </summary>
+    private void ClampFiringModeToWeapon()
+    {
+        if (_firingMode == FiringMode.PistolBurst && !AllowsMultipleShots) _firingMode = FiringMode.Single;
+        if (_firingMode == FiringMode.Volley && !AllowsVolley) _firingMode = FiringMode.Single;
     }
 
     /// <summary>Выбранное оружие заклинило — стрелять из него нельзя (стр. 113).</summary>

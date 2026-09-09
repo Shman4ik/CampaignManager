@@ -108,4 +108,54 @@ public class Weapon : BaseDataBaseEntity, INamedEntity
     ///     Хранится в БД как JSONB.
     /// </summary>
     public WeaponDamageInfo? DamageInfo { get; set; }
+
+    /// <summary>
+    ///     Структурированная дальность, полученная разбором поля <see cref="Range" />.
+    ///     Null — разбор ещё не выполнялся; потребители читают через <c>WeaponStatsReader</c>.
+    ///     Хранится в БД как JSONB.
+    /// </summary>
+    public WeaponRangeInfo? RangeInfo { get; set; }
+
+    /// <summary>
+    ///     Структурированное число атак, полученное разбором поля <see cref="Attacks" />.
+    ///     Хранится в БД как JSONB.
+    /// </summary>
+    public WeaponAttacksInfo? AttacksInfo { get; set; }
+
+    /// <summary>
+    ///     Структурированный боезапас, полученный разбором поля <see cref="Ammo" />.
+    ///     Хранится в БД как JSONB.
+    /// </summary>
+    public WeaponAmmoInfo? AmmoInfo { get; set; }
+
+    /// <summary>
+    ///     Структурированная стоимость, полученная разбором поля <see cref="Cost" />.
+    ///     Хранится в БД как JSONB.
+    /// </summary>
+    public WeaponCostInfo? CostInfo { get; set; }
+
+    /// <summary>
+    ///     Порог осечки числом (стр. 113): бросок ≥ порога — оружие заклинило.
+    ///     Null — осечки у оружия нет. Разобран из <see cref="Malfunction" />, где
+    ///     то же значение записано текстом («100», «00», пустая строка).
+    /// </summary>
+    public int? MalfunctionThreshold { get; set; }
+
+    /// <summary>
+    ///     Идентификатор навыка из справочника <c>games."Skills"</c>.
+    ///     <para>
+    ///         Внешнего ключа и навигационного свойства намеренно нет: этот же тип лежит
+    ///         внутри JSONB листов персонажей, где ограничение всё равно не действует,
+    ///         а удаление навыка не должно ронять каталог оружия. Каноническое имя
+    ///         продолжает храниться денормализованно в <see cref="Skill" />.
+    ///     </para>
+    /// </summary>
+    public Guid? SkillId { get; set; }
+
+    /// <summary>
+    ///     Ссылка на каталожную запись, с которой снята эта копия.
+    ///     Заполнена только у копии в листе персонажа; у самой каталожной строки — null.
+    ///     Самодельное оружие Хранителя также несёт null.
+    /// </summary>
+    public Guid? CatalogWeaponId { get; set; }
 }

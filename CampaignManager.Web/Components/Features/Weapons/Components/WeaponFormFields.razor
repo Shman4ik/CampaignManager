@@ -1,7 +1,10 @@
 ﻿@using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Utilities.Services
+@using CampaignManager.Web.Components.Features.Skills.Model
+@using CampaignManager.Web.Components.Features.Skills.Services
 @namespace CampaignManager.Web.Components.Features.Weapons.Components
+@inject SkillService SkillService
 
 <EditForm Model="Weapon" OnValidSubmit="OnValidSubmit" Id="@FormId">
     <DataAnnotationsValidator/>
@@ -30,9 +33,34 @@
 
         <div class="space-y-2">
             <label for="weaponSkill" class="block text-sm font-semibold text-gray-700">Навык</label>
-            <InputText id="weaponSkill" @bind-Value="Weapon.Skill"
-                       class="cm-input"/>
+            @if (_skills.Count > 0)
+            {
+                <select id="weaponSkill" class="cm-input"
+                        value="@Weapon.Skill" @onchange="OnSkillChanged">
+                    <option value="">— Не выбран —</option>
+                    @foreach (var skill in _skills)
+                    {
+                        <option value="@skill.Name">@skill.Name</option>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Weapon.Skill) && !_skills.Any(s => s.Name == Weapon.Skill))
+                    {
+                        <option value="@Weapon.Skill">@Weapon.Skill — нет в справочнике</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <InputText id="weaponSkill" @bind-Value="Weapon.Skill"
+                           class="cm-input"/>
+            }
             <ValidationMessage For="@(() => Weapon.Skill)" class="text-red-600 text-sm font-medium"/>
+            @if (!string.IsNullOrWhiteSpace(Weapon.Skill) && Weapon.SkillId is null)
+            {
+                <p class="text-xs text-amber-700 flex items-center gap-1">
+                    <span>⚠️</span>
+                    <span>Навыка нет в справочнике — в бою он будет искаться по названию.</span>
+                </p>
+            }
         </div>
 
         <div class="space-y-2">
@@ -61,37 +89,42 @@
 
         <div class="space-y-2">
             <label for="weaponRange" class="block text-sm font-semibold text-gray-700">Дистанция</label>
-            <InputText id="weaponRange" @bind-Value="Weapon.Range"
+            <InputText id="weaponRange" @bind-Value="Weapon.Range" @bind-Value:after="OnStatsChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Range)" class="text-red-600 text-sm font-medium"/>
+            @RecognitionHint(_rangeHint)
         </div>
 
         <div class="space-y-2">
             <label for="weaponAttacks" class="block text-sm font-semibold text-gray-700">Атаки</label>
-            <InputText id="weaponAttacks" @bind-Value="Weapon.Attacks"
+            <InputText id="weaponAttacks" @bind-Value="Weapon.Attacks" @bind-Value:after="OnStatsChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Attacks)" class="text-red-600 text-sm font-medium"/>
+            @RecognitionHint(_attacksHint)
         </div>
 
         <div class="space-y-2">
             <label for="weaponCost" class="block text-sm font-semibold text-gray-700">Стоимость</label>
-            <InputText id="weaponCost" @bind-Value="Weapon.Cost"
+            <InputText id="weaponCost" @bind-Value="Weapon.Cost" @bind-Value:after="OnStatsChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Cost)" class="text-red-600 text-sm font-medium"/>
+            @RecognitionHint(_costHint)
         </div>
 
         <div class="space-y-2">
             <label for="weaponAmmo" class="block text-sm font-semibold text-gray-700">Боеприпасы</label>
-            <InputText id="weaponAmmo" @bind-Value="Weapon.Ammo"
+            <InputText id="weaponAmmo" @bind-Value="Weapon.Ammo" @bind-Value:after="OnStatsChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Ammo)" class="text-red-600 text-sm font-medium"/>
+            @RecognitionHint(_ammoHint)
         </div>
 
         <div class="space-y-2">
             <label for="weaponMalfunction" class="block text-sm font-semibold text-gray-700">Осечка</label>
-            <InputText id="weaponMalfunction" @bind-Value="Weapon.Malfunction"
+            <InputText id="weaponMalfunction" @bind-Value="Weapon.Malfunction" @bind-Value:after="OnStatsChanged"
                        class="cm-input"/>
             <ValidationMessage For="@(() => Weapon.Malfunction)" class="text-red-600 text-sm font-medium"/>
+            @RecognitionHint(_malfunctionHint)
         </div>
 
         <div class="space-y-2 p-4 bg-gray-50 rounded-lg">
@@ -137,18 +170,50 @@
     </div>
 </EditForm>
 
+@* Плашка разбора под строковым полем: зелёная — что удалось понять, жёлтая — что нет *@
+@code {
+    private RenderFragment RecognitionHint(Hint? hint) => builder =>
+    {
+        if (hint is not { } value) return;
+
+        builder.OpenElement(0, "p");
+        builder.AddAttribute(1, "class", value.IsParsed
+            ? "text-xs text-green-700 flex items-center gap-1"
+            : "text-xs text-amber-700 flex items-center gap-1");
+        builder.AddContent(2, value.IsParsed ? $"\u2713 Распознано: {value.Text}" : $"\u26A0 Не распознано: {value.Text}");
+        builder.CloseElement();
+    };
+}
+
 @code {
     [Parameter] public Weapon Weapon { get; set; } = new();
     [Parameter] public EventCallback OnValidSubmit { get; set; }
     [Parameter] public string FormId { get; set; } = "weapon-form";
 
     private WeaponDamageInfo? _damageInfo;
+    private List<SkillModel> _skills = [];
+
+    /// <summary>Что удалось понять в строковом поле: подпись и признак успеха.</summary>
+    private readonly record struct Hint(bool IsParsed, string Text);
+
+    private Hint? _rangeHint;
+    private Hint? _attacksHint;
+    private Hint? _ammoHint;
+    private Hint? _costHint;
+    private Hint? _malfunctionHint;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _skills = await SkillService.GetAllSkillsUnpagedAsync();
+    }
 
     protected override void OnParametersSet()
     {
-        // Парсим введённое значение при отображении формы редактирования
+        // Парсим введённые значения при отображении формы редактирования
         if (!string.IsNullOrWhiteSpace(Weapon.Damage))
             _damageInfo = DamageFormulaParser.Parse(Weapon.Damage);
+
+        RefreshStatsHints();
     }
 
     private void OnDamageChanged()
@@ -159,5 +224,110 @@
 
         // Обновляем DamageInfo на оружии при каждом изменении текста
         Weapon.DamageInfo = _damageInfo;
+    }
+
+    /// <summary>
+    ///     Строковые поля и их разобранные копии обновляются вместе, иначе на листе
+    ///     останется старый разбор, а Хранитель будет видеть новый текст.
+    /// </summary>
+    private void OnStatsChanged()
+    {
+        Weapon.RangeInfo = WeaponStatsParser.ParseRange(Weapon.Range);
+        Weapon.AttacksInfo = WeaponStatsParser.ParseAttacks(Weapon.Attacks);
+        Weapon.AmmoInfo = WeaponStatsParser.ParseAmmo(Weapon.Ammo);
+        Weapon.CostInfo = WeaponStatsParser.ParseCost(Weapon.Cost);
+        Weapon.MalfunctionThreshold = WeaponStatsParser.ParseMalfunction(Weapon.Malfunction);
+
+        RefreshStatsHints();
+    }
+
+    private void OnSkillChanged(ChangeEventArgs e)
+    {
+        Weapon.Skill = e.Value?.ToString() ?? string.Empty;
+        Weapon.SkillId = _skills.FirstOrDefault(s => s.Name == Weapon.Skill)?.Id;
+    }
+
+    private void RefreshStatsHints()
+    {
+        var range = WeaponStatsParser.ParseRange(Weapon.Range);
+        _rangeHint = string.IsNullOrWhiteSpace(Weapon.Range)
+            ? null
+            : new Hint(range.IsParsed, range switch
+            {
+                { Kind: WeaponRangeKind.Touch } => "ближний бой",
+                { Kind: WeaponRangeKind.Emplaced } => "закладка на месте",
+                { Kind: WeaponRangeKind.StrengthThrow, ThrowDivisor: { } divisor } => $"бросок на СИЛ / {divisor} м",
+                { Kind: WeaponRangeKind.RangeBands, Bands: { } bands } => $"пороги {string.Join(" / ", bands)} м",
+                { Kind: WeaponRangeKind.Meters, BaseMeters: { } meters } => $"базовая {meters} м",
+                _ => "дальности нет"
+            });
+
+        var attacks = WeaponStatsParser.ParseAttacks(Weapon.Attacks);
+        _attacksHint = string.IsNullOrWhiteSpace(Weapon.Attacks)
+            ? null
+            : new Hint(attacks.IsParsed, DescribeAttacks(attacks));
+
+        var ammo = WeaponStatsParser.ParseAmmo(Weapon.Ammo);
+        _ammoHint = string.IsNullOrWhiteSpace(Weapon.Ammo)
+            ? null
+            : new Hint(ammo.IsParsed, DescribeAmmo(ammo));
+
+        var cost = WeaponStatsParser.ParseCost(Weapon.Cost);
+        _costHint = string.IsNullOrWhiteSpace(Weapon.Cost)
+            ? null
+            : new Hint(cost.IsParsed, DescribeCost(cost));
+
+        var threshold = WeaponStatsParser.ParseMalfunction(Weapon.Malfunction);
+        _malfunctionHint = string.IsNullOrWhiteSpace(Weapon.Malfunction)
+            ? null
+            : new Hint(threshold is not null,
+                threshold is { } value ? $"осечка при броске ≥ {value}" : "порог не распознан");
+    }
+
+    private static string DescribeAttacks(WeaponAttacksInfo attacks)
+    {
+        List<string> parts = [];
+
+        if (attacks.RoundsPerAttack is > 1)
+            parts.Add($"1 выстрел в {attacks.RoundsPerAttack} раунда");
+        else if (attacks.ShotsPerRound is { } shots)
+            parts.Add(attacks.MaxShotsPerRound is { } max && max != shots
+                ? $"{shots} за раунд, до {max} на скорость"
+                : $"{shots} за раунд");
+
+        if (attacks.AllowsBurst) parts.Add($"очередь по {attacks.BurstSize}");
+        if (attacks.AllowsFullAuto) parts.Add("непрерывный огонь");
+        if (attacks.IsSingleUse) parts.Add("одноразовое");
+
+        return parts.Count == 0 ? "атак нет" : string.Join(", ", parts);
+    }
+
+    private static string DescribeAmmo(WeaponAmmoInfo ammo)
+    {
+        if (ammo.IsBeltFed) return "автоподача";
+        if (ammo.IsSuppliedSeparately) return "боеприпас отдельно";
+        if (ammo.IsSingleUse) return "одноразовое";
+
+        if (ammo.CapacityOptions is { Count: > 1 } options)
+            return $"магазины на {string.Join(" / ", options)}";
+
+        return ammo.Capacity is { } capacity ? $"магазин на {capacity}" : "боезапаса нет";
+    }
+
+    private static string DescribeCost(WeaponCostInfo cost)
+    {
+        List<string> parts = [];
+
+        if (cost.Cost1920 is { } old1920)
+            parts.Add($"1920-е: {(cost.IsApproximate1920 ? "от " : "")}${old1920:0.##}");
+        else if (cost.Unavailable1920)
+            parts.Add("в 1920-е не продавалось");
+
+        if (cost.CostModern is { } modern)
+            parts.Add($"сейчас: {(cost.IsApproximateModern ? "от " : "")}${modern:0.##}");
+        else if (cost.UnavailableModern)
+            parts.Add("сейчас не продаётся");
+
+        return parts.Count == 0 ? "цены нет" : string.Join(", ", parts);
     }
 }
