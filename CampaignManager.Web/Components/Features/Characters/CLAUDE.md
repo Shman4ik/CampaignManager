@@ -15,6 +15,15 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   этого отредактированный вручную лист раньше расходился с правилами.
 - `SanityRules` (static) — максимум Рассудка, пороги безумия, начисление навыка Мифов за
   связанное с ними безумие (`RecordMythosInsanity`).
+- `DevelopmentPhaseRules` (static) — **единственное** место, где живёт фаза развития сыщиков
+  (стр. 92–94, 164–167): проверки опыта по отмеченным навыкам, +2d6 Рассудка за навык,
+  дошедший до 90%, восстановление Удачи, награда Хранителя, самолечение с ключевой связью,
+  варианты «занятия и Средства» и снижение привыкания к ужасному. Модалка только показывает
+  результат — считать проценты на месте нельзя.
+- `FinanceRules` (static) — таблица II «Наличные и активы» (стр. 45) в одном месте: по ней
+  считает деньги и `CharacterGenerationService`, и пересчёт Средств в фазе развития.
+  Столбец выбирает `isModern` (эпоха названа и она не классическая — как при генерации).
+- `Dice` (static) — 1d100, NdM и бросок с бонусной костью (меньший из двух десятков).
 - `WoundRules` (static) — порог серьёзной раны (≥ половины максимума ПЗ) и вывод состояния
   «без сознания» / «при смерти» из нуля ПЗ.
 - `SpecializationRules` (static) — бонус +10 смежным специализациям. Список навыков, где
@@ -51,6 +60,17 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `CreateCharacterAsync`, и `CopyPregenToScenarioAsync` выставляют оба.
 - Копия листа делается ровно в одном месте — `CopyPregenToScenarioAsync` (преген расходуется
   бронью). НПС в сценарий не копируется: там связь `ScenarioNpc`, см. `Scenarios/CLAUDE.md`.
+- Фаза развития живёт в модалке `DevelopmentPhaseModal` (кнопка в шапке секции «Навыки»).
+  Список отмеченных навыков она снимает **один раз на открытие**: пока Хранитель бросает кости,
+  состав таблицы не должен меняться под руками. Отметки стираются только кнопкой
+  «Стереть отметки и завершить» — соседняя «Сбросить» осталась ручной аварийной кнопкой.
+- Мифы Ктулху и Средства не отмечают галочкой (стр. 92) — `DevelopmentPhaseRules.CanBeChecked`,
+  и `SkillGroupCard` вместо чекбокса рисует для них пустое место.
+- `CharacterState.MythosHabituations` — привыкание к ужасному (стр. 167): накопленная потеря
+  рассудка по видам тварей. Записи ведёт `MythosHabituationPanel` внутри `SanityPanel`;
+  вид подтягивается из бестиария, предел — из `CreatureCharacteristics.SanityLoss` через
+  `Bestiary/Services/SanityLossFormula`. Сама потеря рассудка списывается через колбэк
+  в `SanityPanel`: пороги безумия считаются только там.
 - `Characters/Model/Skill.cs` (a character's own skill *value*) is a different type from `Skills/Model/SkillModel.cs` (the master skill catalog) — don't confuse the two when searching for "Skill".
 - Same pattern for `Weapon`/`Spell`: the character holds `List<Weapon>`/`List<Spell>` referencing the catalog types defined in the `Weapons`/`Spells` features.
 - `Character.Weapons` — это **копии** каталожных записей, а не сами записи: у копии свой
