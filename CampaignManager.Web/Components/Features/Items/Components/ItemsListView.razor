@@ -1,0 +1,170 @@
+@using CampaignManager.Web.Components.Features.Items.Model
+@using CampaignManager.Web.Components.Features.Items.Services
+@using CampaignManager.Web.Components.Shared
+@namespace CampaignManager.Web.Components.Features.Items.Components
+
+<div class="cm-card overflow-hidden">
+    @* Таблица — от md (768) и шире; уже — карточки.
+       Четыре колонки помещаются и в портрет iPad (1024), поэтому порог здесь ниже,
+       чем у каталога оружия: там колонок девять и таблица требует xl.
+       Раскрытая строка не повторяет колонки — в ней только то, чего в них нет. *@
+    <div class="hidden md:block overflow-x-auto it-table">
+        <table class="cm-table">
+            <thead>
+            <tr>
+                <SortableTableHeader Title="Название" FieldName="@nameof(Item.Name)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <SortableTableHeader Title="Тип" FieldName="@nameof(Item.Type)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <th>Описание</th>
+                <th><span class="sr-only">Действия</span></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in Items)
+            {
+                <tr class="@(ExpandedItemId == item.Id ? "it-row-open" : null) cursor-pointer"
+                    @onclick="() => OnToggleExpand.InvokeAsync(item)">
+                    <td>
+                        <div class="flex items-center gap-1.5">
+                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            <span class="font-semibold text-gray-900">@item.Name</span>
+                            @if (ShowEra)
+                            {
+                                <Badge Variant="secondary" Size="sm" Rounded="md">@ItemEraText.Describe(item.Era)</Badge>
+                            }
+                        </div>
+                    </td>
+                    <td class="text-primary-500">@TypeOrDash(item)</td>
+                    <td class="it-desc text-primary-500">@item.Description</td>
+                    <td @onclick:stopPropagation="true">
+                        <div class="flex justify-end gap-1">
+                            <button type="button" aria-label="Изменить: @item.Name"
+                                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
+                                    @onclick="() => OnEdit.InvokeAsync(item)">
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button type="button" aria-label="Удалить: @item.Name"
+                                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
+                                    @onclick="() => OnDelete.InvokeAsync(item)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+
+                @if (ExpandedItemId == item.Id)
+                {
+                    <tr class="it-details">
+                        <td colspan="4">
+                            <div class="flex flex-wrap gap-x-8 gap-y-1.5 text-primary-600">
+                                @if (!ShowEra)
+                                {
+                                    <div>
+                                        <span class="it-label">Эпоха</span>
+                                        @ItemEraText.Describe(item.Era)
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(item.ImageUrl))
+                                {
+                                    <div class="basis-full">
+                                        <span class="it-label">Изображение</span>
+                                        <img src="@item.ImageUrl" alt="@item.Name" class="it-image" />
+                                    </div>
+                                }
+                                @if (!HasDetails(item))
+                                {
+                                    <div class="text-primary-400">Всё об этом предмете уже показано в строке.</div>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+
+    @* Карточки ниже md: название, тип и начало описания в строке, остальное — по раскрытию. *@
+    <div class="divide-y divide-primary-100 md:hidden">
+        @foreach (var item in Items)
+        {
+            <div class="px-3 py-2">
+                <div class="flex items-start gap-2">
+                    <div class="min-w-0 flex-1 cursor-pointer" @onclick="() => OnToggleExpand.InvokeAsync(item)">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            <span class="font-semibold text-gray-900">@item.Name</span>
+                            @if (ShowEra)
+                            {
+                                <Badge Variant="secondary" Size="sm" Rounded="md">@ItemEraText.Describe(item.Era)</Badge>
+                            }
+                        </div>
+                        <div class="ml-4 mt-0.5 text-xs text-primary-500 @(ExpandedItemId == item.Id ? null : "truncate")">
+                            <span>@TypeOrDash(item)</span>
+                            @if (!string.IsNullOrEmpty(item.Description))
+                            {
+                                <span class="mx-1 text-primary-300">·</span>
+                                <span class="@(ExpandedItemId == item.Id ? "whitespace-pre-wrap" : null)">@item.Description</span>
+                            }
+                        </div>
+                    </div>
+                    <button type="button" aria-label="Изменить: @item.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
+                            @onclick="() => OnEdit.InvokeAsync(item)">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" aria-label="Удалить: @item.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
+                            @onclick="() => OnDelete.InvokeAsync(item)">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+
+                @if (ExpandedItemId == item.Id)
+                {
+                    <dl class="it-card-details">
+                        @if (!ShowEra)
+                        {
+                            <dt>Эпоха</dt>
+                            <dd>@ItemEraText.Describe(item.Era)</dd>
+                        }
+                        @if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            <dt>Изображение</dt>
+                            <dd><img src="@item.ImageUrl" alt="@item.Name" class="it-image" /></dd>
+                        }
+                        @if (!HasDetails(item))
+                        {
+                            <dt class="col-span-2 font-normal normal-case tracking-normal">Всё об этом предмете уже показано в строке.</dt>
+                        }
+                    </dl>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public IEnumerable<Item> Items { get; set; } = [];
+    [Parameter] public Guid? ExpandedItemId { get; set; }
+
+    /// <summary>Показывать метку эпохи в строке: смысл есть, только когда список не сужен до одной эпохи.</summary>
+    [Parameter] public bool ShowEra { get; set; }
+
+    [Parameter] public string? CurrentSortField { get; set; }
+    [Parameter] public bool SortAscending { get; set; }
+    [Parameter] public EventCallback<string> OnSortChanged { get; set; }
+
+    [Parameter] public EventCallback<Item> OnEdit { get; set; }
+    [Parameter] public EventCallback<Item> OnDelete { get; set; }
+    [Parameter] public EventCallback<Item> OnToggleExpand { get; set; }
+
+    private static string TypeOrDash(Item item) => string.IsNullOrEmpty(item.Type) ? "—" : item.Type;
+
+    // Описание в раскрытии не повторяется: открытая строка просто перестаёт его обрезать.
+    // Здесь — только то, чего в строке нет вообще.
+    private bool HasDetails(Item item) => !ShowEra || !string.IsNullOrEmpty(item.ImageUrl);
+}

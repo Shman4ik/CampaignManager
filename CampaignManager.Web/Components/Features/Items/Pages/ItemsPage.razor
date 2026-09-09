@@ -1,4 +1,5 @@
 ﻿@page "/items"
+@using CampaignManager.Web.Components.Features.Items.Components
 @using CampaignManager.Web.Components.Features.Items.Model
 @attribute [Authorize]
 @rendermode InteractiveServer
@@ -20,206 +21,78 @@
         <ActionButtons>
             @if (isSearchPanelVisible)
             {
-                <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm text-xs" @onclick="ResetFilters">
+                <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="ResetFilters">
                     <i class="fas fa-undo-alt"></i>
                     <span>Сбросить</span>
                 </button>
             }
         </ActionButtons>
         <ChildContent>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <div class="flex-grow">
-                    <label for="itemSearch" class="cm-field-label">Поиск</label>
-                    <div class="relative">
-                        <input type="text" id="itemSearch" @bind="searchQuery"
-                               @bind:event="oninput"
-                               @onkeyup="@(() => ApplyFilters())"
-                               placeholder="Поиск предметов..."
-                               class="cm-input w-full pl-8"/>
-                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                            <i class="fas fa-search text-gray-400 text-xs"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="w-full sm:w-48">
-                    <label for="itemType" class="cm-field-label">Тип предмета</label>
-                    <select id="itemType" @bind="selectedType" @bind:event="onchange"
-                            class="cm-input w-full">
-                        <option value="">Все типы</option>
-                        @if (itemTypes != null)
+            @* Поиск, тип и два флажка — одной строкой: в портрете она переносится,
+               в ландшафте занимает одну полосу вместо трёх. *@
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <input type="text" id="itemSearch"
+                       value="@searchQuery"
+                       @oninput="HandleSearchInput"
+                       placeholder="Поиск предметов..."
+                       class="min-w-[12rem] flex-1 rounded border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm transition-colors hover:border-primary-400 hover:bg-white focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500/25" />
+
+                <select id="itemType" @onchange="HandleTypeChanged"
+                        class="rounded border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm transition-colors hover:border-primary-400 hover:bg-white focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500/25">
+                    <option value="">Все типы</option>
+                    @if (itemTypes is not null)
+                    {
+                        @foreach (var type in itemTypes)
                         {
-                            @foreach (var type in itemTypes)
-                            {
-                                <option value="@type">@type</option>
-                            }
+                            <option value="@type" selected="@(selectedType == type)">@type</option>
                         }
-                    </select>
-                </div>
-            </div>
-            <div class="mt-2">
-                <label class="cm-field-label">Эпоха</label>
-                <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-                    <div class="flex items-center">
-                        <input type="checkbox" id="era1920s" @bind="is1920Filter"
-                               @bind:event="onchange"
-                               class="cm-checkbox mr-1"/>
-                        <label for="era1920s" class="text-sm text-gray-700">1920s</label>
-                    </div>
-                    <div class="flex items-center">
-                        <input type="checkbox" id="eraModern" @bind="isModernFilter" @bind:event="onchange"
-                               class="cm-checkbox mr-1"/>
-                        <label for="eraModern" class="text-sm text-gray-700">Modern</label>
-                    </div>
+                    }
+                </select>
+
+                <div class="flex flex-wrap items-center gap-x-4">
+                    <label for="era1920s" class="flex min-h-[36px] cursor-pointer items-center gap-2">
+                        <input type="checkbox" id="era1920s" checked="@is1920Filter"
+                               @onchange="SetEra1920"
+                               class="h-5 w-5 rounded border-primary-300 accent-accent-500" />
+                        <span class="text-sm text-primary-700">1920-е</span>
+                    </label>
+                    <label for="eraModern" class="flex min-h-[36px] cursor-pointer items-center gap-2">
+                        <input type="checkbox" id="eraModern" checked="@isModernFilter"
+                               @onchange="SetEraModern"
+                               class="h-5 w-5 rounded border-primary-300 accent-accent-500" />
+                        <span class="text-sm text-primary-700">Наши дни</span>
+                    </label>
                 </div>
             </div>
         </ChildContent>
     </FilterPanel>
 
-    @if (paginatedItems.Count() == 0)
+    @if (!paginatedItems.Any())
     {
-        <div class="cm-card">
-            <div class="cm-card-body text-center">
-                <div class="flex flex-col items-center justify-center py-6">
-                    <div class="rounded-full bg-gray-100 p-3 mb-4">
-                        <i class="fas fa-search text-gray-400 text-2xl"></i>
-                    </div>
-                    <p class="cm-empty">
-                        Предметы не найдены. Попробуйте изменить параметры фильтра.
-                    </p>
-                </div>
-            </div>
-        </div>
+        <EmptyState
+            Title="Предметы не найдены"
+            Message="Попробуйте изменить параметры фильтра или добавить новый предмет."
+            IconClass="fa-search" />
     }
     else
     {
-        <div class="cm-card">
-            <!-- Таблица для средних и больших экранов с компактными ячейками -->
-            <div class="block overflow-x-auto">
-                <table class="cm-table">
-                    <thead>
-                    <tr>
-                        <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
-                            @onclick="() => ToggleSort(nameof(Item.Name))">
-                            <div class="flex items-center justify-between">
-                                <span>Название</span>
-                                <i class="fas @GetSortIcon(nameof(Item.Name)) text-gray-400 ml-2"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
-                            @onclick="() => ToggleSort(nameof(Item.Type))">
-                            <div class="flex items-center justify-between">
-                                <span>Тип</span>
-                                <i class="fas @GetSortIcon(nameof(Item.Type)) text-gray-400 ml-2"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 py-3 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-100 transition-colors"
-                            @onclick="() => ToggleSort(nameof(Item.Era))">
-                            <div class="flex items-center justify-between">
-                                <span>Эпоха</span>
-                                <i class="fas @GetSortIcon(nameof(Item.Era)) text-gray-400 ml-2"></i>
-                            </div>
-                        </th>
-                        <th class="px-4 py-3 text-left font-medium text-gray-700">Описание</th>
-                        <th class="px-4 py-3 text-center font-medium text-gray-700">Действия</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var item in paginatedItems)
-                    {
-                        <tr class="hover:bg-gray-50 transition-colors cursor-pointer"
-                            @onclick="() => ToggleItemDetails(item)">
-                            <td class="px-4 py-3 font-medium text-gray-900">@item.Name</td>
-                            <td class="px-4 py-3 text-gray-700">
-                                @if (!string.IsNullOrEmpty(item.Type))
-                                {
-                                    <Badge Variant="primary" Size="sm" Rounded="md" WithBorder="false">
-                                        @item.Type
-                                    </Badge>
-                                }
-                                else
-                                {
-                                    <span class="text-gray-400 text-xs">Не указан</span>
-                                }
-                            </td>
-                            <td class="px-4 py-3 text-gray-700">
-                                <Badge Variant="secondary" Size="sm" Rounded="md" WithBorder="false">
-                                    @GetEraDisplay(item.Era)
-                                </Badge>
-                            </td>
-                            <td class="px-4 py-3 text-gray-600">
-                                @if (!string.IsNullOrEmpty(item.Description))
-                                {
-                                    <span class="line-clamp-2">@item.Description</span>
-                                }
-                                else
-                                {
-                                    <span class="text-gray-400 text-xs">Нет описания</span>
-                                }
-                            </td>
-                            <td class="px-4 py-3 text-center">
-                                <div class="flex gap-1 justify-center" @onclick:stopPropagation="true">
-                                    <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm text-xs shadow-none border-0" @onclick="() => ShowEditModal(item)">
-                                        <i class="fas fa-edit"></i>
-                                        <span>Изменить</span>
-                                    </button>
-                                    <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm text-xs shadow-none border-0" @onclick="() => ShowDeleteModal(item)">
-                                        <i class="fas fa-trash-alt"></i>
-                                        <span>Удалить</span>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        @if (expandedItemId == item.Id)
-                        {
-                            <tr class="bg-gray-50">
-                                <td colspan="5" class="px-4 py-4">
-                                    <div class="bg-white rounded-lg p-4 border border-gray-200">
-                                        <h4 class="font-semibold text-gray-900 mb-2">Подробная информация</h4>
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <h5 class="font-medium text-gray-700 mb-1">Название:</h5>
-                                                <p class="text-gray-600">@item.Name</p>
-                                            </div>
-                                            <div>
-                                                <h5 class="font-medium text-gray-700 mb-1">Тип:</h5>
-                                                <p class="text-gray-600">@(item.Type ?? "Не указан")</p>
-                                            </div>
-                                            <div>
-                                                <h5 class="font-medium text-gray-700 mb-1">Эпоха:</h5>
-                                                <p class="text-gray-600">@GetEraDisplay(item.Era)</p>
-                                            </div>
-                                            @if (!string.IsNullOrEmpty(item.ImageUrl))
-                                            {
-                                                <div>
-                                                    <h5 class="font-medium text-gray-700 mb-1">Изображение:</h5>
-                                                    <img src="@item.ImageUrl" alt="@item.Name"
-                                                         class="max-w-xs rounded border">
-                                                </div>
-                                            }
-                                        </div>
-                                        @if (!string.IsNullOrEmpty(item.Description))
-                                        {
-                                            <div class="mt-4">
-                                                <h5 class="font-medium text-gray-700 mb-1">Описание:</h5>
-                                                <p class="text-gray-600 whitespace-pre-wrap">@item.Description</p>
-                                            </div>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                        }
-                    }
-                    </tbody>
-                </table>
-            </div>
+        <ItemsListView
+            Items="@paginatedItems"
+            ExpandedItemId="@expandedItemId"
+            ShowEra="@showEra"
+            CurrentSortField="@sortField"
+            SortAscending="@sortAscending"
+            OnSortChanged="ToggleSort"
+            OnEdit="ShowEditModal"
+            OnDelete="ShowDeleteModal"
+            OnToggleExpand="ToggleItemDetails" />
 
-            <Pagination CurrentPage="currentPage"
-                        TotalPages="totalPages"
-                        TotalItems="filteredItems.Count()"
-                        ItemsPerPage="itemsPerPage"
-                        ItemsLabel="предметов"
-                        OnPageChanged="GoToPage"/>
-        </div>
+        <Pagination CurrentPage="currentPage"
+                    TotalPages="totalPages"
+                    TotalItems="filteredItems.Count()"
+                    ItemsPerPage="itemsPerPage"
+                    ItemsLabel="предметов"
+                    OnPageChanged="GoToPage" />
     }
 </div>
 
@@ -261,12 +134,12 @@
                         <div class="flex items-center">
                             <input type="checkbox" id="edit-era1920s" @bind="editItem1920"
                                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
-                            <label for="edit-era1920s" class="ml-2 block text-sm text-gray-700">1920s</label>
+                            <label for="edit-era1920s" class="ml-2 block text-sm text-gray-700">1920-е</label>
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" id="edit-eraModern" @bind="editItemModern"
                                    class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"/>
-                            <label for="edit-eraModern" class="ml-2 block text-sm text-gray-700">Modern</label>
+                            <label for="edit-eraModern" class="ml-2 block text-sm text-gray-700">Наши дни</label>
                         </div>
                     </div>
                 </div>
