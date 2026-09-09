@@ -53,6 +53,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   бронью). НПС в сценарий не копируется: там связь `ScenarioNpc`, см. `Scenarios/CLAUDE.md`.
 - `Characters/Model/Skill.cs` (a character's own skill *value*) is a different type from `Skills/Model/SkillModel.cs` (the master skill catalog) — don't confuse the two when searching for "Skill".
 - Same pattern for `Weapon`/`Spell`: the character holds `List<Weapon>`/`List<Spell>` referencing the catalog types defined in the `Weapons`/`Spells` features.
+- `Character.Weapons` — это **копии** каталожных записей, а не сами записи: у копии свой
+  `Id` и обязательный `CatalogWeaponId` (у самодельного оружия Хранителя он `null`).
+  Копию делает `WeaponFactory.CopyForCharacter`; отдать в лист каталожный экземпляр нельзя —
+  он лежит в общем `IMemoryCache` внутри `WeaponService`, и правка патронов на листе
+  меняла бы справочник у всех пользователей. См. `Weapons/CLAUDE.md`.
+- Числа из оружия (ёмкость магазина, порог осечки, дальность, число атак) читаются через
+  `WeaponStatsReader`, а не из строковых полей: старые копии в JSONB несут только текст.
 
 ## Authorization
 - `CharacterService.CanAccessCharacterAsync(dbContext, campaignPlayerId, access)` is the single access rule for

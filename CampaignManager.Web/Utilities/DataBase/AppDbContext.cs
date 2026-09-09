@@ -148,6 +148,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(w => w.DamageInfo)
                 .HasColumnType("jsonb")
                 .HasComment("Структурированная информация об уроне (авто-парсинг поля Damage)");
+            entity.Property(w => w.RangeInfo)
+                .HasColumnType("jsonb")
+                .HasComment("Структурированная дальность (авто-парсинг поля Range)");
+            entity.Property(w => w.AttacksInfo)
+                .HasColumnType("jsonb")
+                .HasComment("Структурированное число атак (авто-парсинг поля Attacks)");
+            entity.Property(w => w.AmmoInfo)
+                .HasColumnType("jsonb")
+                .HasComment("Структурированный боезапас (авто-парсинг поля Ammo)");
+            entity.Property(w => w.CostInfo)
+                .HasColumnType("jsonb")
+                .HasComment("Структурированная стоимость (авто-парсинг поля Cost)");
+            entity.Property(w => w.MalfunctionThreshold)
+                .HasComment("Порог осечки числом (авто-парсинг поля Malfunction)");
+            // Внешнего ключа у SkillId нет намеренно: тот же тип лежит в JSONB листов,
+            // где ограничение не действует, а удаление навыка не должно ронять каталог.
+            entity.Property(w => w.SkillId)
+                .HasComment("Навык из справочника Skills; без FK — см. Weapon.SkillId");
+            entity.Property(w => w.CatalogWeaponId)
+                .HasComment("Заполнено только у копии в листе персонажа; у каталожной строки — null");
         });
 
         // Настройка заклинаний

@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
+using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Services;
@@ -503,16 +504,15 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Списывает израсходованные патроны. Ёмкость берётся из данных оружия,
-    /// пока в бойце нет записи об этом стволе.
+    /// Списывает израсходованные патроны. Ёмкость берётся из данных оружия
+    /// (<see cref="WeaponStatsReader" />), пока в бойце нет записи об этом стволе.
     /// </summary>
     private static void SpendAmmo(Combatant attacker, AttackSetup setup)
     {
         var weapon = setup.SelectedWeapon;
         if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return;
 
-        var capacity = ParseAmmoCapacity(weapon.Ammo);
-        if (capacity <= 0) return;
+        if (WeaponStatsReader.AmmoCapacity(weapon) is not { } capacity) return;
 
         if (!attacker.AmmoLoaded.TryGetValue(weapon.Name, out var loaded))
             loaded = capacity;
@@ -520,24 +520,11 @@ public sealed partial class CombatService
         attacker.AmmoLoaded[weapon.Name] = Math.Max(0, loaded - Math.Max(1, setup.ShotsFired));
     }
 
-    /// <summary>Ёмкость магазина из текстового поля оружия; 0, если разобрать не удалось.</summary>
-    public static int ParseAmmoCapacity(string? ammo)
-    {
-        if (string.IsNullOrWhiteSpace(ammo)) return 0;
-
-        var digits = new string(ammo.TakeWhile(char.IsDigit).ToArray());
-        if (digits.Length == 0)
-            digits = new string(ammo.SkipWhile(c => !char.IsDigit(c)).TakeWhile(char.IsDigit).ToArray());
-
-        return int.TryParse(digits, out var value) ? value : 0;
-    }
-
-    /// <summary>Сколько патронов осталось в оружии бойца.</summary>
+    /// <summary>Сколько патронов осталось в оружии бойца; 0 — оружие без магазина.</summary>
     public static int GetAmmoLeft(Combatant combatant, Weapon? weapon)
     {
         if (weapon is null || string.IsNullOrWhiteSpace(weapon.Name)) return 0;
-        var capacity = ParseAmmoCapacity(weapon.Ammo);
-        if (capacity <= 0) return 0;
+        if (WeaponStatsReader.AmmoCapacity(weapon) is not { } capacity) return 0;
 
         return combatant.AmmoLoaded.TryGetValue(weapon.Name, out var loaded) ? loaded : capacity;
     }
@@ -545,8 +532,7 @@ public sealed partial class CombatService
     /// <summary>Перезарядка: магазин заполняется до ёмкости (стр. 111).</summary>
     public void Reload(Combatant combatant, Weapon weapon)
     {
-        var capacity = ParseAmmoCapacity(weapon.Ammo);
-        if (capacity <= 0) return;
+        if (WeaponStatsReader.AmmoCapacity(weapon) is not { } capacity) return;
 
         combatant.AmmoLoaded[weapon.Name] = capacity;
         NotifyStateChanged();
@@ -1016,7 +1002,7 @@ public sealed partial class CombatService
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
         if (setup.SelectedWeapon is { } firedWeapon
-            && TryGetMalfunctionThreshold(firedWeapon, out var malfunctionValue)
+            && WeaponStatsReader.TryMalfunctionThreshold(firedWeapon, out var malfunctionValue)
             && result.AttackerRoll >= malfunctionValue)
         {
             result.IsMalfunction = true;
@@ -1671,6 +1657,31 @@ public sealed partial class CombatService
     // ───────────────────── Вспомогательные методы ─────────────────────
 
     /// <summary>
+    /// Значение навыка, которым персонаж владеет этим оружием.
+    /// <para>
+    /// Сначала пробуется <see cref="Weapon.SkillId" /> — точная ссылка на справочник,
+    /// проставленная у каталожного оружия и у копий, снятых с каталога. Оторванные копии
+    /// и оружие, заведённое Хранителем руками, ссылки не несут: для них остаётся разбор
+    /// имени (см. <see cref="FindSkillValue(Character, string)" />).
+    /// </para>
+    /// </summary>
+    public static int FindSkillValue(Character character, Weapon? weapon)
+    {
+        if (weapon is null) return 0;
+
+        if (weapon.SkillId is { } skillId && character.Skills?.SkillGroups is not null)
+        {
+            var byId = character.Skills.SkillGroups
+                .SelectMany(g => g.Skills)
+                .FirstOrDefault(s => s.SkillModelId == skillId);
+
+            if (byId is not null) return byId.Value.Regular;
+        }
+
+        return FindSkillValue(character, weapon.Skill);
+    }
+
+    /// <summary>
     /// Поиск значения навыка персонажа по имени. Названия из каталога оружия сокращены
     /// («Стрельба (П)»), а в листе записаны полностью («Стрельба (пистолет)»), поэтому
     /// сравниваются база и специализация по отдельности (см. <see cref="SkillNameMatcher"/>).
@@ -1721,37 +1732,6 @@ public sealed partial class CombatService
             .Where(s => s.Name.Specialization is null)
             .Select(s => s.Skill.Value.Regular)
             .FirstOrDefault();
-    }
-
-    /// <summary>
-    /// Порог осечки оружия (стр. 113): бросок ≥ порога — оружие заклинило.
-    /// В листах он записан по-разному: числом («100»), по-процентному («00» — это 100
-    /// на процентных костях) или пустой строкой, если осечки у оружия нет.
-    /// Возвращает false, когда порога нет или он вне 1–100: иначе «0» из листа означал бы,
-    /// что оружие клинит при любом броске.
-    /// </summary>
-    public static bool TryGetMalfunctionThreshold(Weapon? weapon, out int threshold)
-    {
-        threshold = 0;
-
-        var raw = weapon?.Malfunction?.Trim();
-        if (string.IsNullOrEmpty(raw)) return false;
-
-        var digits = new string(raw.Where(char.IsDigit).ToArray());
-        if (digits.Length == 0) return false;
-
-        // «00» на процентных костях — это 100; одиночный «0» — незаполненное поле
-        if (digits.All(d => d == '0'))
-        {
-            if (digits.Length < 2) return false;
-            threshold = 100;
-            return true;
-        }
-
-        if (!int.TryParse(digits, out var value) || value is < 1 or > 100) return false;
-
-        threshold = value;
-        return true;
     }
 
     /// <summary>

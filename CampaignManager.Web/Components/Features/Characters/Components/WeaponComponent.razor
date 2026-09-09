@@ -1,6 +1,7 @@
-@using CampaignManager.Web.Components.Features.Characters.Model
+﻿@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Components.Features.Weapons.Services
+@using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Extensions
 @inject WeaponService WeaponService
 
@@ -405,22 +406,54 @@
     /// </summary>
     private int? SkillChance(Weapon weapon)
     {
+        var skills = Character.Skills.SkillGroups.SelectMany(g => g.Skills).ToList();
+
+        // Копия, снятая с каталога, несёт точную ссылку на навык — этого достаточно
+        if (weapon.SkillId is { } skillId)
+        {
+            var byId = skills.FirstOrDefault(s => s.SkillModelId == skillId);
+            if (byId is not null) return byId.Value.Regular;
+        }
+
         if (string.IsNullOrWhiteSpace(weapon.Skill))
             return null;
 
-        var skills = Character.Skills.SkillGroups.SelectMany(g => g.Skills).ToList();
-
-        var exact = skills.FirstOrDefault(s => string.Equals(s.Name, weapon.Skill, StringComparison.OrdinalIgnoreCase));
+        var exact = skills.FirstOrDefault(s => SkillNameMatcher.FullNameEquals(s.Name, weapon.Skill));
         if (exact is not null)
             return exact.Value.Regular;
 
-        // Каталог оружия и каталог навыков расходятся в написании специализаций
-        // («Стрельба (пистолет)» против «Пистолет»), поэтому пробуем вхождение.
-        var partial = skills.FirstOrDefault(s =>
-            s.Name.Contains(weapon.Skill, StringComparison.OrdinalIgnoreCase) ||
-            weapon.Skill.Contains(s.Name, StringComparison.OrdinalIgnoreCase));
+        // Оружие, заведённое руками, и оторванные копии несут свободную строку:
+        // база и специализация сравниваются по отдельности («Ближний бой» у оружия —
+        // это «Ближний бой (драка)» на листе). Вхождение подстроки для этого не годилось:
+        // «Стрельба (П)» не содержит «Стрельба (пистолет)» и наоборот.
+        var target = SkillNameMatcher.Parse(weapon.Skill);
+        var specialization = target.Specialization
+                             ?? SkillNameMatcher.DefaultSpecializationFor(target.Base);
 
-        return partial?.Value.Regular;
+        var candidates = skills
+            .Select(s => (Skill: s, Name: SkillNameMatcher.Parse(s.Name)))
+            .Where(s => s.Name.Base == target.Base)
+            .ToList();
+
+        if (candidates.Count == 0)
+            return skills
+                .Select(s => (Skill: s, Name: SkillNameMatcher.Parse(s.Name)))
+                .Where(s => SkillNameMatcher.BaseMatches(s.Name.Base, target.Base))
+                .Select(s => (int?)s.Skill.Value.Regular)
+                .FirstOrDefault();
+
+        if (specialization is not null)
+        {
+            var matched = candidates.FirstOrDefault(
+                c => SkillNameMatcher.SpecializationMatches(c.Name.Specialization, specialization));
+
+            if (matched.Skill is not null) return matched.Skill.Value.Regular;
+        }
+
+        return candidates
+            .Where(c => c.Name.Specialization is null)
+            .Select(c => (int?)c.Skill.Value.Regular)
+            .FirstOrDefault();
     }
 
     /// <summary>
@@ -499,9 +532,14 @@
         suggestedWeapons = query.Take(5).ToList();
     }
 
+    /// <summary>
+    ///     Выбор подсказки из каталога. В лист кладётся <b>копия</b>: сам экземпляр
+    ///     лежит в общем для всех пользователей <c>IMemoryCache</c> внутри
+    ///     <c>WeaponService</c>, и правка патронов на листе меняла бы справочник у всех.
+    /// </summary>
     private void SelectWeapon(Weapon weapon)
     {
-        newWeapon = weapon;
+        newWeapon = WeaponFactory.CopyForCharacter(weapon);
         suggestedWeapons.Clear();
     }
 
@@ -509,6 +547,13 @@
     {
         if (string.IsNullOrWhiteSpace(newWeapon.Name))
             return;
+
+        // Оружие, набранное руками, приходит сюда без Id — раньше такие копии
+        // оседали в листе с нулевым Guid и сливались друг с другом в бою
+        if (newWeapon.Id == Guid.Empty)
+            newWeapon.Init();
+
+        WeaponFactory.FillParsedStats(newWeapon);
         Character.Weapons.Add(newWeapon);
 
         newWeapon = new Weapon();
