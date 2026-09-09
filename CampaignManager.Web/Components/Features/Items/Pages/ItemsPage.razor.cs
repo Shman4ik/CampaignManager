@@ -32,7 +32,7 @@ public partial class ItemsPage
     // Filtered list based on search query and other filters
     private IQueryable<Item> filteredItems => FilterItems(); // Pagination properties
     private int currentPage = 1;
-    private int itemsPerPage = 20;
+    private int itemsPerPage = 25;
     private int totalPages => (int)Math.Ceiling((double)filteredItems.Count() / itemsPerPage);
     private IEnumerable<Item> paginatedItems => filteredItems.Skip((currentPage - 1) * itemsPerPage).Take(itemsPerPage);
 
@@ -47,7 +47,10 @@ public partial class ItemsPage
     private string? selectedType;
     private bool is1920Filter = true;
     private bool isModernFilter = false;
-    private readonly Dictionary<string, string> columnFilters = new();
+
+    // Метка эпохи в строке различает предметы, только когда список не сужен до одной
+    // эпохи: при фильтре «1920-е» её несёт каждая строка и она превращается в шум.
+    private bool showEra => is1920Filter == isModernFilter;
 
     // Modal visibility flags
     private bool showModal;
@@ -124,14 +127,6 @@ public partial class ItemsPage
         currentPage = 1; // Reset to first page when sorting
     }
 
-    private string GetSortIcon(string field)
-    {
-        if (sortField != field)
-            return "fa-sort";
-
-        return sortAscending ? "fa-sort-up" : "fa-sort-down";
-    }
-
     // Toggle item details
     private void ToggleItemDetails(Item item)
     {
@@ -145,38 +140,38 @@ public partial class ItemsPage
         }
     }
 
-    // Reset all filters to their default state
+    // Сброс возвращает то же состояние, с которым страница открывается.
     private void ResetFilters()
     {
         searchQuery = string.Empty;
         selectedType = null;
         is1920Filter = true;
-        isModernFilter = true;
-        columnFilters.Clear();
-        currentPage = 1;
-
-        // Apply filters to update the UI
+        isModernFilter = false;
         ApplyFilters();
     }
 
-    // Handle column header filter change
-    private void OnColumnHeaderFilterChanged(ChangeEventArgs e, string columnName)
+    private void HandleSearchInput(ChangeEventArgs e)
     {
-        var value = e.Value?.ToString() ?? "";
+        searchQuery = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
 
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            if (columnFilters.ContainsKey(columnName))
-            {
-                columnFilters.Remove(columnName);
-            }
-        }
-        else
-        {
-            columnFilters[columnName] = value;
-        }
+    private void HandleTypeChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        selectedType = string.IsNullOrWhiteSpace(value) ? null : value;
+        ApplyFilters();
+    }
 
-        currentPage = 1; // Reset to first page when filtering
+    private void SetEra1920(ChangeEventArgs e)
+    {
+        is1920Filter = e.Value is true;
+        ApplyFilters();
+    }
+
+    private void SetEraModern(ChangeEventArgs e)
+    {
+        isModernFilter = e.Value is true;
         ApplyFilters();
     }
 
@@ -362,19 +357,6 @@ public partial class ItemsPage
             query = query.Where(i => (i.Era & Eras.Classic) != 0 || (i.Era & Eras.Modern) != 0);
         }
 
-        // Apply column header filters
-        foreach (var filter in columnFilters)
-        {
-            if (filter.Key == "Name" && !string.IsNullOrWhiteSpace(filter.Value))
-            {
-                query = query.Where(i => i.Name != null && i.Name.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
-            }
-            else if (filter.Key == "Type" && !string.IsNullOrWhiteSpace(filter.Value))
-            {
-                query = query.Where(i => i.Type != null && i.Type.Contains(filter.Value, StringComparison.OrdinalIgnoreCase));
-            }
-        }
-
         // Apply sorting
         if (!string.IsNullOrEmpty(sortField))
         {
@@ -385,9 +367,6 @@ public partial class ItemsPage
                     break;
                 case nameof(Item.Type):
                     query = sortAscending ? query.OrderBy(i => i.Type) : query.OrderByDescending(i => i.Type);
-                    break;
-                case nameof(Item.Era):
-                    query = sortAscending ? query.OrderBy(i => i.Era) : query.OrderByDescending(i => i.Era);
                     break;
                 default:
                     query = query.OrderBy(i => i.Name);
@@ -402,19 +381,4 @@ public partial class ItemsPage
         return query;
     }
 
-    private string GetEraDisplay(Eras era)
-    {
-        if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
-            return "1920s & Modern";
-        if ((era & Eras.Classic) != 0)
-            return "1920s";
-        if ((era & Eras.Modern) != 0)
-            return "Modern";
-        return "Unknown";
-    }
-
-    private void ToggleSearchPanel()
-    {
-        isSearchPanelVisible = !isSearchPanelVisible;
-    }
 }

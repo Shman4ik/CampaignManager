@@ -1,0 +1,123 @@
+/* Плотность каталога оружия.
+
+   Отступы ячеек заданы здесь, а не утилитами Tailwind в разметке: селектор
+   `.cm-table td` из design-system.css (0,1,1) перебивает одиночный класс `.py-1` (0,1,0),
+   а `.wt-table[b-…] td` — уже (0,2,1) и выигрывает.
+
+   ::deep обязателен: строки рендерит дочерний WeaponTableRow, атрибута области
+   видимости этого компонента на них нет. */
+
+/* Шапка и колонка названия закреплены.
+
+   `position: sticky` считает от ближайшего скроллпорта, а он здесь — сама .wt-table:
+   `overflow-x: auto` переводит и overflow-y в auto. Без max-height контейнер тянется
+   под содержимое, скроллить в нём нечего и ничего не прилипает — поэтому высота задана.
+   Заодно фильтры и пагинация перестают уезжать: на iPad прокручиваются только строки.
+
+   border-collapse гасит границы у прилипших ячеек, поэтому нижняя линия строки
+   в первой колонке нарисована тенью.
+
+   21.5rem — это занятое помимо строк: шапка приложения с заголовком страницы (224px)
+   плюс пагинация с нижним отступом (118px) в ландшафте iPad. Подобрано замером, чтобы
+   страница целиком не прокручивалась: две полосы прокрутки сразу хуже одной. */
+.wt-table {
+    max-height: calc(100vh - 21.5rem);
+    max-height: calc(100dvh - 21.5rem);
+}
+
+.wt-table ::deep thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.wt-table ::deep thead th:first-child {
+    z-index: 3;
+}
+
+/* Раскрытие занимает всю строку целиком — закреплять в нём нечего. */
+.wt-table ::deep th:first-child,
+.wt-table ::deep tr:not(.wt-details) > td:first-child {
+    position: sticky;
+    left: 0;
+    box-shadow: inset 0 -1px 0 var(--color-primary-100);
+}
+
+/* Прилипшая ячейка обязана быть непрозрачной, иначе сквозь неё поедут соседние
+   колонки, и её фон должен повторять состояние строки. Специфичность здесь выше,
+   чем у `.cm-table tr:hover td`, поэтому порядок внутри блока и решает: открытая
+   строка идёт после ховера, чтобы accent не сменился на primary под пальцем. */
+.wt-table ::deep tbody tr:not(.wt-details) > td:first-child {
+    background: white;
+}
+
+.wt-table ::deep tbody tr:not(.wt-details):hover > td:first-child {
+    background: var(--color-primary-50);
+}
+
+.wt-table ::deep tbody tr.wt-row-open > td:first-child {
+    background: var(--color-accent-50);
+}
+
+.wt-table ::deep th,
+.wt-table ::deep td {
+    padding: 0.3125rem 0.5rem;
+    white-space: nowrap;
+}
+
+.wt-table ::deep th {
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+}
+
+/* Название — единственная колонка, которой позволено тянуться и переноситься. */
+.wt-table ::deep th:first-child,
+.wt-table ::deep td:first-child {
+    width: 100%;
+    white-space: normal;
+}
+
+/* accent, а не primary-50: на primary-50 строка сливалась бы с ховером соседей. */
+.wt-table ::deep .wt-row-open > td,
+.wt-table ::deep .wt-details > td {
+    background: var(--color-accent-50);
+}
+
+.wt-table ::deep .wt-details > td {
+    padding: 0.5rem 0.75rem 0.75rem 1.75rem;
+    white-space: normal;
+    font-size: 0.75rem;
+}
+
+.wt-table ::deep .wt-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-primary-400);
+}
+
+/* Раскрытая карточка на узком экране: подпись слева, значение справа. */
+.wt-card-details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.125rem 0.75rem;
+    margin: 0.5rem 0 0.25rem 1rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-primary-100);
+    font-size: 0.75rem;
+}
+
+.wt-card-details dt {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-primary-400);
+    white-space: nowrap;
+}
+
+.wt-card-details dd {
+    margin: 0;
+    color: var(--color-primary-700);
+}
