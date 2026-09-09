@@ -1,203 +1,138 @@
 ﻿@using CampaignManager.Web.Components.Features.Weapons.Model
 @using CampaignManager.Web.Components.Features.Weapons.Components
+@using CampaignManager.Web.Components.Features.Weapons.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
 @namespace CampaignManager.Web.Components.Features.Weapons.Components
 
 <div class="cm-card overflow-hidden">
-    <!-- Desktop Table View - Hidden on tablet/mobile; show only on xl+ -->
-    <div class="hidden xl:block overflow-x-auto">
+    @* Таблица — от lg (1024, портрет iPad) и шире; уже — карточки.
+       Колонки таблицы XVII идут отдельными столбцами, поэтому раскрытая строка
+       не повторяет их, а показывает только то, чего в колонках нет. *@
+    <div class="hidden lg:block overflow-x-auto wt-table">
         <table class="cm-table">
             <thead>
             <tr>
-                <SortableTableHeader 
-                    Title="Название" 
-                    FieldName="@nameof(Weapon.Name)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-                
-                <SortableTableHeader 
-                    Title="Тип" 
-                    FieldName="@nameof(Weapon.Type)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-                
-                <SortableTableHeader 
-                    Title="Навык" 
-                    FieldName="@nameof(Weapon.Skill)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-                
-                <SortableTableHeader 
-                    Title="Урон" 
-                    FieldName="@nameof(Weapon.Damage)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-                
-                <SortableTableHeader 
-                    Title="Эпоха" 
-                    FieldName="@nameof(Weapon.Is1920)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-                
-                <th class="px-4 sm:px-6 py-4 text-left font-semibold text-gray-700">Характеристики</th>
-                <th class="px-4 sm:px-6 py-4 text-center font-semibold text-gray-700">Действия</th>
+                <SortableTableHeader Title="Название" FieldName="@nameof(Weapon.Name)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <SortableTableHeader Title="Тип" FieldName="@nameof(Weapon.Type)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <SortableTableHeader Title="Навык" FieldName="@nameof(Weapon.Skill)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <SortableTableHeader Title="Урон" FieldName="@nameof(Weapon.Damage)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                <th>Дист.</th>
+                <th>Атаки</th>
+                <th>Боезапас</th>
+                <th>Осечка</th>
+                <th>Цена</th>
+                <th><span class="sr-only">Действия</span></th>
             </tr>
             </thead>
             <tbody>
             @foreach (var weapon in Weapons)
             {
-                <WeaponTableRow 
-                    Weapon="@weapon"
-                    IsExpanded="@(ExpandedWeaponId == weapon.Id)"
-                    OnEdit="OnEdit"
-                    OnDelete="OnDelete"
-                    OnToggleExpand="() => OnToggleExpand.InvokeAsync(weapon)" />
+                <WeaponTableRow Weapon="@weapon"
+                                IsExpanded="@(ExpandedWeaponId == weapon.Id)"
+                                ShowEra="@ShowEra"
+                                OnEdit="OnEdit"
+                                OnDelete="OnDelete"
+                                OnToggleExpand="() => OnToggleExpand.InvokeAsync(weapon)" />
             }
             </tbody>
         </table>
     </div>
 
-    <!-- Mobile/Tablet Card View - Visible below xl -->
-    <div class="xl:hidden">
-        <div class="divide-y divide-gray-200">
-            @foreach (var weapon in Weapons)
-            {
-                <div class="bg-white">
-                    <!-- Card Header - Always visible -->
-                    <div class="p-4 flex justify-between items-start gap-3 cursor-pointer active:bg-gray-50"
-                         @onclick="() => OnToggleExpand.InvokeAsync(weapon)">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-2 mb-2">
-                                <button @onclick:stopPropagation="true" 
-                                        @onclick="() => OnToggleExpand.InvokeAsync(weapon)"
-                                        class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded transition-colors">
-                                    <i class="fas @(ExpandedWeaponId == weapon.Id ? "fa-chevron-up" : "fa-chevron-down")"></i>
-                                </button>
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="font-semibold text-gray-900 text-base truncate">@weapon.Name</h3>
-                                </div>
-                            </div>
-                            
-                            <div class="ml-10">
-                                <div class="text-sm text-gray-900 font-medium flex flex-wrap items-center gap-2">
-                                    <span>@weapon.Skill</span>
-                                    <span class="text-gray-400">•</span>
-                                    <span>@weapon.Damage</span>
-                                    @if (weapon.DamageInfo?.IsParsed == false)
-                                    {
-                                        <span class="text-xs text-amber-500" title="Формула урона не распознана">⚠️</span>
-                                    }
-                                </div>
-                            </div>
+    @* Карточки ниже lg: имя и четыре самых нужных числа в строке, остальное — по раскрытию. *@
+    <div class="lg:hidden divide-y divide-primary-100">
+        @foreach (var weapon in Weapons)
+        {
+            <div class="px-3 py-2">
+                <div class="flex items-start gap-2">
+                    <div class="flex-1 min-w-0 cursor-pointer" @onclick="() => OnToggleExpand.InvokeAsync(weapon)">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <i class="fas @(ExpandedWeaponId == weapon.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            <span class="font-semibold text-gray-900">@weapon.Name</span>
+                            @if (weapon.IsRare)
+                            {
+                                <Badge Variant="warning" Size="sm" Rounded="md">редк.</Badge>
+                            }
+                            @if (weapon.IsImpaling)
+                            {
+                                <Badge Variant="warning" Size="sm" Rounded="md">пронз.</Badge>
+                            }
+                        </div>
+                        <div class="mt-0.5 ml-4 flex flex-wrap items-center gap-x-1.5 text-xs text-primary-500">
+                            <span>@weapon.Type.ToRussianString()</span>
+                            <span class="text-primary-300">·</span>
+                            <span class="tabular-nums font-medium text-gray-900">@weapon.Damage</span>
+                            <span class="text-primary-300">·</span>
+                            <span class="tabular-nums">@WeaponStatsReader.RangeDisplay(weapon)</span>
+                            <span class="text-primary-300">·</span>
+                            <span class="tabular-nums">@WeaponStatsReader.AttacksDisplay(weapon)</span>
                         </div>
                     </div>
-
-                    <!-- Action Buttons - Always visible -->
-                    <div class="px-4 pb-4 ml-10">
-                        <div class="flex gap-2">
-                            <button @onclick:stopPropagation="true" 
-                                    @onclick="() => OnEdit.InvokeAsync(weapon)"
-                                    class="cm-btn cm-btn-outline-primary cm-btn-sm flex-1">
-                                <i class="fas fa-edit"></i>
-                                <span>Изменить</span>
-                            </button>
-                            <button @onclick:stopPropagation="true" 
-                                    @onclick="() => OnDelete.InvokeAsync(weapon)"
-                                    class="cm-btn cm-btn-outline-error cm-btn-sm flex-1">
-                                <i class="fas fa-trash-alt"></i>
-                                <span>Удалить</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Expandable Details -->
-                    @if (ExpandedWeaponId == weapon.Id)
-                    {
-                        <div class="px-4 pb-4 ml-10 pt-2 border-t border-gray-200">
-                            <div class="bg-gray-50 rounded-lg p-3">
-                                <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                                    <div>
-                                        <div class="text-xs font-semibold text-gray-500 uppercase">Дистанция</div>
-                                        <div class="text-gray-900">@weapon.Range</div>
-                                    </div>
-                                    <div>
-                                        <div class="text-xs font-semibold text-gray-500 uppercase">Атаки</div>
-                                        <div class="text-gray-900">@weapon.Attacks</div>
-                                    </div>
-
-                                    <div>
-                                        <div class="text-xs font-semibold text-gray-500 uppercase">Тип/Эпоха</div>
-                                        <div class="flex flex-wrap items-center gap-2 mt-0.5">
-                                            <Badge Variant="primary" Size="sm" Rounded="md">@weapon.Type.ToRussianString()</Badge>
-                                            @if (weapon.Is1920)
-                                            {
-                                                <Badge Variant="secondary" Size="sm" Rounded="md">1920-е</Badge>
-                                            }
-                                            @if (weapon.IsModern)
-                                            {
-                                                <Badge Variant="secondary" Size="sm" Rounded="md">Наши дни</Badge>
-                                            }
-                                            @if (weapon.IsRare)
-                                            {
-                                                <Badge Variant="warning" Size="sm" Rounded="md">Редкое</Badge>
-                                            }
-                                            @if (weapon.IsImpaling)
-                                            {
-                                                <Badge Variant="warning" Size="sm" Rounded="md">Проникающее</Badge>
-                                            }
-                                        </div>
-                                    </div>
-
-                                    @if (!string.IsNullOrEmpty(weapon.Cost))
-                                    {
-                                        <div>
-                                            <div class="text-xs font-semibold text-gray-500 uppercase">Стоимость</div>
-                                            <div class="text-gray-900">@weapon.Cost</div>
-                                        </div>
-                                    }
-
-                                    @if (!string.IsNullOrEmpty(weapon.Ammo))
-                                    {
-                                        <div>
-                                            <div class="text-xs font-semibold text-gray-500 uppercase">Боеприпасы</div>
-                                            <div class="text-gray-900">@weapon.Ammo</div>
-                                        </div>
-                                    }
-
-                                    @if (!string.IsNullOrEmpty(weapon.Malfunction))
-                                    {
-                                        <div>
-                                            <div class="text-xs font-semibold text-gray-500 uppercase">Осечка</div>
-                                            <div class="text-gray-900">@weapon.Malfunction</div>
-                                        </div>
-                                    }
-
-                                    @if (!string.IsNullOrEmpty(weapon.Notes))
-                                    {
-                                        <div class="col-span-2">
-                                            <div class="text-xs font-semibold text-gray-500 uppercase">Примечания</div>
-                                            <div class="text-gray-700 whitespace-pre-wrap">@weapon.Notes</div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
+                    <button type="button" aria-label="Изменить: @weapon.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
+                            @onclick="() => OnEdit.InvokeAsync(weapon)">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" aria-label="Удалить: @weapon.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
+                            @onclick="() => OnDelete.InvokeAsync(weapon)">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
                 </div>
-            }
-        </div>
+
+                @if (ExpandedWeaponId == weapon.Id)
+                {
+                    <dl class="wt-card-details">
+                        <dt>Навык</dt>
+                        <dd>@weapon.Skill</dd>
+                        @if (WeaponStatsReader.Ammo(weapon) is { RawText.Length: > 0 } ammo)
+                        {
+                            <dt>Боезапас</dt>
+                            <dd>@ammo.RawText</dd>
+                        }
+                        @if (WeaponStatsReader.TryMalfunctionThreshold(weapon, out var threshold))
+                        {
+                            <dt>Осечка</dt>
+                            <dd>при броске ≥ @threshold</dd>
+                        }
+                        @if (WeaponStatsReader.Cost(weapon) is { RawText.Length: > 0 } cost)
+                        {
+                            <dt>Цена</dt>
+                            <dd>@cost.RawText</dd>
+                        }
+                        @if (WeaponStatsReader.BaseRangeMeters(weapon) is { } meters)
+                        {
+                            <dt>Дальность</dt>
+                            <dd>базовая @meters м · большая @(meters * 2) м · сверхбольшая @(meters * 4) м</dd>
+                        }
+                        <dt>Встречается</dt>
+                        <dd>@WeaponEraText.Describe(weapon)</dd>
+                        @if (!string.IsNullOrEmpty(weapon.Notes))
+                        {
+                            <dt>Примечания</dt>
+                            <dd class="whitespace-pre-wrap">@weapon.Notes</dd>
+                        }
+                    </dl>
+                }
+            </div>
+        }
     </div>
 </div>
 
 @code {
     [Parameter] public IEnumerable<Weapon> Weapons { get; set; } = Enumerable.Empty<Weapon>();
     [Parameter] public Guid? ExpandedWeaponId { get; set; }
+
+    /// <summary>Показывать метки эпохи в строке: смысл есть, только когда список не сужен до одной эпохи.</summary>
+    [Parameter] public bool ShowEra { get; set; }
 
     [Parameter] public string? CurrentSortField { get; set; }
     [Parameter] public bool SortAscending { get; set; }
