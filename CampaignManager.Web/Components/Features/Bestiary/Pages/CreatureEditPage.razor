@@ -375,6 +375,30 @@
                     <span>Добавить особое умение</span>
                 </button>
             </div>
+
+            @* Текст статблока в том виде, в каком его залили из книги. Поля выше разобраны
+               именно из него, поэтому он остаётся под рукой для сверки, но не редактируется:
+               источник правды — разобранные поля. *@
+            @if (creature.CombatDescriptions.Count > 0)
+            {
+                <details class="mt-6 border border-gray-200 rounded-lg">
+                    <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-gray-700">
+                        Исходный текст из книги (@creature.CombatDescriptions.Count @Plural(creature.CombatDescriptions.Count))
+                    </summary>
+                    <div class="px-3 pb-3 pt-1 text-sm text-gray-600 space-y-1.5">
+                        <p class="text-xs text-gray-500">
+                            Поля выше разобраны из этих строк. Правьте поля — здесь только сверка.
+                        </p>
+                        @foreach (var line in creature.CombatDescriptions.OrderBy(kv => kv.Key, StringComparer.CurrentCulture))
+                        {
+                            <div>
+                                <span class="font-semibold text-gray-800">@line.Key:</span>
+                                <span>@line.Value</span>
+                            </div>
+                        }
+                    </div>
+                </details>
+            }
             </div>
         </div>
     }
@@ -569,6 +593,14 @@
         if (Enum.TryParse<CreatureDamageBonusMode>(value, out var mode))
             attack.DamageBonus = mode;
     }
+
+    private static string Plural(int count) =>
+        (count % 10, count % 100) switch
+        {
+            (1, not 11) => "строка",
+            (2 or 3 or 4, not (12 or 13 or 14)) => "строки",
+            _ => "строк"
+        };
 
     private void AddSkill()
     {
