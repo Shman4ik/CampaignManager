@@ -6,10 +6,12 @@
 @namespace CampaignManager.Web.Components.Features.Weapons.Components
 
 <div class="cm-card overflow-hidden">
-    @* Таблица — от lg (1024, портрет iPad) и шире; уже — карточки.
+    @* Таблица — от xl (1280) и шире; уже — карточки.
+       Порог именно xl, а не lg: девять колонок требуют ~1130px, портрет iPad (1024)
+       их не вмещает, и таблица там уезжала вбок вместе с кнопками строки.
        Колонки таблицы XVII идут отдельными столбцами, поэтому раскрытая строка
        не повторяет их, а показывает только то, чего в колонках нет. *@
-    <div class="hidden lg:block overflow-x-auto wt-table">
+    <div class="hidden xl:block overflow-x-auto wt-table">
         <table class="cm-table">
             <thead>
             <tr>
@@ -17,9 +19,6 @@
                                      CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
                                      OnSortChanged="OnSortChanged" />
                 <SortableTableHeader Title="Тип" FieldName="@nameof(Weapon.Type)"
-                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
-                                     OnSortChanged="OnSortChanged" />
-                <SortableTableHeader Title="Навык" FieldName="@nameof(Weapon.Skill)"
                                      CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
                                      OnSortChanged="OnSortChanged" />
                 <SortableTableHeader Title="Урон" FieldName="@nameof(Weapon.Damage)"
@@ -47,8 +46,8 @@
         </table>
     </div>
 
-    @* Карточки ниже lg: имя и четыре самых нужных числа в строке, остальное — по раскрытию. *@
-    <div class="lg:hidden divide-y divide-primary-100">
+    @* Карточки ниже xl: имя и четыре самых нужных числа в строке, остальное — по раскрытию. *@
+    <div class="xl:hidden divide-y divide-primary-100">
         @foreach (var weapon in Weapons)
         {
             <div class="px-3 py-2">
@@ -69,11 +68,29 @@
                         <div class="mt-0.5 ml-4 flex flex-wrap items-center gap-x-1.5 text-xs text-primary-500">
                             <span>@weapon.Type.ToRussianString()</span>
                             <span class="text-primary-300">·</span>
-                            <span class="tabular-nums font-medium text-gray-900">@weapon.Damage</span>
+                            <span class="tabular-nums font-medium text-gray-900">
+                                @weapon.Damage
+                                @if (weapon.DamageInfo?.IsParsed == false)
+                                {
+                                    <UnparsedMark />
+                                }
+                            </span>
                             <span class="text-primary-300">·</span>
-                            <span class="tabular-nums">@WeaponStatsReader.RangeDisplay(weapon)</span>
+                            <span class="tabular-nums">
+                                @WeaponStatsReader.RangeDisplay(weapon)
+                                @if (!WeaponStatsReader.Range(weapon).IsParsed)
+                                {
+                                    <UnparsedMark />
+                                }
+                            </span>
                             <span class="text-primary-300">·</span>
-                            <span class="tabular-nums">@WeaponStatsReader.AttacksDisplay(weapon)</span>
+                            <span class="tabular-nums">
+                                @WeaponStatsReader.AttacksDisplay(weapon)
+                                @if (!WeaponStatsReader.Attacks(weapon).IsParsed)
+                                {
+                                    <UnparsedMark />
+                                }
+                            </span>
                         </div>
                     </div>
                     <button type="button" aria-label="Изменить: @weapon.Name"
@@ -102,6 +119,11 @@
                         {
                             <dt>Осечка</dt>
                             <dd>при броске ≥ @threshold</dd>
+                        }
+                        else if (!string.IsNullOrEmpty(weapon.Malfunction))
+                        {
+                            <dt>Осечка</dt>
+                            <dd>@weapon.Malfunction<UnparsedMark /></dd>
                         }
                         @if (WeaponStatsReader.Cost(weapon) is { RawText.Length: > 0 } cost)
                         {
