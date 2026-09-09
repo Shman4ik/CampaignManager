@@ -1,5 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
@@ -1211,6 +1213,20 @@ public sealed partial class CombatService
         return isMelee ? DamageBonusType.Full : DamageBonusType.None;
     }
 
+    /// <summary>
+    /// То же для атаки существа: у статблока режим написан прямо в строке урона
+    /// («урон 2d3 + ½ БкУ» у акулы, «урон равен БкУ» у шоггота, стр. 278), поэтому
+    /// правило «ближний бой — полный Б.к.У.» здесь не гадает, а читает данные.
+    /// «Равен БкУ» — тоже полный бонус: своих костей у такой атаки нет, и формула урона
+    /// у неё «0», так что весь итог складывается из одного бонуса.
+    /// </summary>
+    private static DamageBonusType ResolveCreatureDamageBonusType(CreatureDamageBonusMode mode) => mode switch
+    {
+        CreatureDamageBonusMode.Full or CreatureDamageBonusMode.OnlyBonus => DamageBonusType.Full,
+        CreatureDamageBonusMode.Half => DamageBonusType.Half,
+        _ => DamageBonusType.None
+    };
+
     private static void CalculateDamage(CombatActionResult result, AttackSetup setup, Combatant attacker, Combatant defender)
     {
         var damageFormula = setup.SelectedWeapon?.Damage ?? setup.CreatureAttackDamage ?? "1D3";
@@ -1224,7 +1240,9 @@ public sealed partial class CombatService
             result.IsImpalingWeapon = IsImpalingWeapon(setup.SelectedWeapon);
         // Для дальнего боя IsImpalingWeapon устанавливается в ResolveRangedAttack
 
-        var dbType = ResolveDamageBonusType(setup.IsMelee, damageExpr);
+        var dbType = setup.CreatureDamageBonus is { } creatureMode
+            ? ResolveCreatureDamageBonusType(creatureMode)
+            : ResolveDamageBonusType(setup.IsMelee, damageExpr);
         var applyDamageBonus = dbType != DamageBonusType.None;
 
         // Чрезвычайный урон: критический (01) или экстремальный (≤навык/5)
@@ -1420,11 +1438,36 @@ public sealed partial class CombatService
         var isFumble = result.AttackerSuccessLevel == SuccessLevel.Fumble;
         var success = result.AttackerSuccessLevel >= SuccessLevel.RegularSuccess;
         result.SanityFumble = isFumble;
+        string? notesFromHabituation = null;
 
         // Крах — теряется максимум возможных пунктов (стр. 153)
         var sanLoss = isFumble
             ? MaximizeDiceFormula(setup.FailureLoss)
             : RollDiceFormula(success ? setup.SuccessLoss : setup.FailureLoss);
+
+        result.SanitySourceCreatureId = setup.SourceCreatureId;
+        result.SanitySourceCreatureName = setup.SourceCreatureName;
+        result.SanitySourceFormula = setup.SourceSanityLossFormula;
+
+        // Привыкание к ужасному (стр. 167): набрав предел, сыщик перестаёт терять
+        // рассудок за этот вид тварей, сколько бы их ни увидел.
+        if (setup.SourceCreatureName is { } speciesName && target.CharacterSource is { } sheet)
+        {
+            var entry = FindHabituation(sheet, speciesName);
+            if (entry is { MaxLoss: > 0 })
+            {
+                var allowed = Math.Min(sanLoss, entry.Remaining);
+                if (allowed < sanLoss)
+                {
+                    result.SanityCappedByHabituation = true;
+                    notesFromHabituation = allowed == 0
+                        ? $"{speciesName}: сыщик привык, рассудок больше не теряется (стр. 167)."
+                        : $"{speciesName}: до предела привыкания оставалось {entry.Remaining} — " +
+                          $"потеря урезана с {sanLoss} до {allowed} (стр. 167).";
+                    sanLoss = allowed;
+                }
+            }
+        }
 
         result.SanityLoss = sanLoss;
         var sanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
@@ -1434,6 +1477,8 @@ public sealed partial class CombatService
         result.SanityLostToday = lostToday;
 
         var notes = new List<string>();
+        if (notesFromHabituation is not null)
+            notes.Add(notesFromHabituation);
 
         // Потеря 5+ пунктов за раз — проверка ИНТ; безумие наступает при УСПЕХЕ (стр. 153)
         if (sanLoss >= 5)
@@ -1593,6 +1638,8 @@ public sealed partial class CombatService
                     }
                     if (result.TriggeredIndefiniteInsanity)
                         src.State.HasIndefiniteInsanity = true;
+
+                    RecordHabituation(src, result);
                 }
             }
         }
@@ -1600,6 +1647,52 @@ public sealed partial class CombatService
         CombatLog.Insert(0, result);
         PendingResult = null;
         NotifyStateChanged();
+    }
+
+    /// <summary>
+    ///     Запись привыкания к ужасному по виду тварей. Ищется по имени, а не по
+    ///     идентификатору: одну и ту же тварь Хранитель мог завести на листе руками,
+    ///     до того как она появилась в бестиарии.
+    /// </summary>
+    private static MythosHabituation? FindHabituation(Character sheet, string speciesName) =>
+        sheet.State?.MythosHabituations
+            .FirstOrDefault(h => string.Equals(h.CreatureName, speciesName,
+                StringComparison.CurrentCultureIgnoreCase));
+
+    /// <summary>
+    ///     Складывает потерю рассудка в счётчик привыкания на листе (стр. 167). Счётчик
+    ///     ведётся по виду тварей, а не по конкретной особи: сотня Глубоководных отнимает
+    ///     столько же, сколько один.
+    /// </summary>
+    private static void RecordHabituation(Character sheet, CombatActionResult result)
+    {
+        if (result.SanitySourceCreatureName is not { } speciesName || sheet.State is null)
+            return;
+
+        var loss = result.SanityLoss ?? 0;
+        var entry = FindHabituation(sheet, speciesName);
+
+        if (entry is null)
+        {
+            entry = new MythosHabituation
+            {
+                CreatureId = result.SanitySourceCreatureId,
+                CreatureName = speciesName,
+                MaxLoss = SanityLossFormula.MaxLoss(result.SanitySourceFormula),
+                SanityLossFormula = result.SanitySourceFormula
+            };
+            sheet.State.MythosHabituations.Add(entry);
+        }
+        else
+        {
+            entry.CreatureId ??= result.SanitySourceCreatureId;
+            entry.SanityLossFormula ??= result.SanitySourceFormula;
+            if (entry.MaxLoss == 0)
+                entry.MaxLoss = SanityLossFormula.MaxLoss(result.SanitySourceFormula);
+        }
+
+        if (loss > 0)
+            entry.LostSanity += loss;
     }
 
     private static void ApplyManeuverEffect(CombatActionResult result, Combatant defender)

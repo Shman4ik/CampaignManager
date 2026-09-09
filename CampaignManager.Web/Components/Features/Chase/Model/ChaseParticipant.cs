@@ -49,6 +49,20 @@ public class ChaseParticipant
     /// <summary>Отдельная СКО для плавания или полёта. 0 — своей нет, значит половина обычной СКО.</summary>
     public int NativeModeSpeed { get; set; }
 
+    /// <summary>Скорость плавания из статблока существа, если книга указала её отдельно.</summary>
+    public int? SwimSpeed { get; set; }
+
+    /// <summary>Скорость полёта из статблока существа, если книга указала её отдельно.</summary>
+    public int? FlySpeed { get; set; }
+
+    /// <summary>Своя СКО для способа передвижения, если она известна из статблока.</summary>
+    public int? NativeSpeedFor(MovementMode mode) => mode switch
+    {
+        MovementMode.Swimming => SwimSpeed,
+        MovementMode.Flying => FlySpeed,
+        _ => null
+    };
+
     /// <summary>
     /// Маршрут при разделении погони (стр. 142). Пусто — все бегут вместе;
     /// разные метки означают отдельные, независимо отслеживаемые погони.
@@ -84,6 +98,9 @@ public class ChaseParticipant
         {
             MovementMode.OnFoot => MovementRate,
             _ when NativeModeSpeed > 0 => NativeModeSpeed,
+            // «6 / полёт 20» из статблока: своя СКО для способа, если Хранитель
+            // не задал её вручную. Половина обычной — только когда своей нет.
+            _ when NativeSpeedFor(Mode) is > 0 => NativeSpeedFor(Mode)!.Value,
             _ => MovementRate / 2
         };
 
@@ -158,6 +175,8 @@ public class ChaseParticipant
         MaxHitPoints = creature.CreatureCharacteristics.HealPoint;
         CurrentHitPoints = creature.CreatureCharacteristics.HealPoint;
         BuildValue = creature.CreatureCharacteristics.AverageComplexity;
+        SwimSpeed = creature.CreatureCharacteristics.SwimSpeed;
+        FlySpeed = creature.CreatureCharacteristics.FlySpeed;
         // Удачу книга у чудовищ не печатает, поэтому она остаётся нулевой.
     }
 }

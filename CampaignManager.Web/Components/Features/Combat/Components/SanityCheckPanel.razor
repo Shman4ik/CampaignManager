@@ -1,4 +1,5 @@
-﻿@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 
 @inject CombatService CombatService
@@ -24,6 +25,31 @@
     {
         <div class="mb-2 text-sm text-gray-600">
             Текущий рассудок: <span class="font-semibold text-gray-900">@_selectedTarget.CurrentSanity / @_selectedTarget.MaxSanity</span>
+        </div>
+
+        @* Источник ужаса. Потеря рассудка напечатана у каждой твари в бестиарии,
+           и из неё же выводится предел привыкания (стр. 167), поэтому формулы не
+           набиваются руками, а подставляются вместе с видом. *@
+        <div class="mb-3">
+            <label class="block text-xs font-medium text-gray-600 mb-1">При виде кого</label>
+            <select class="border border-primary-300 rounded-md px-2 py-1.5 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                    value="@_selectedSourceId"
+                    @onchange="OnSourceChanged">
+                <option value="">— своя формула —</option>
+                @foreach (var c in HorrorSources)
+                {
+                    <option value="@c.Id">@c.Name@(string.IsNullOrWhiteSpace(c.CreatureSource!.CreatureCharacteristics.SanityLoss) ? "" : $" ({c.CreatureSource.CreatureCharacteristics.SanityLoss})")</option>
+                }
+            </select>
+            @if (_selectedSource?.CreatureSource is { } src)
+            {
+                var max = SanityLossFormula.MaxLoss(src.CreatureCharacteristics.SanityLoss);
+                <p class="mt-0.5 text-xs @(max > 0 ? "text-gray-500" : "text-warning-600")">
+                    @(max > 0
+                        ? $"Предел привыкания за этот вид: {max} пунктов (стр. 167)."
+                        : "Потеря рассудка у существа не заполнена — привыкание не посчитается.")
+                </p>
+            }
         </div>
 
         <!-- Потеря при успехе -->
@@ -63,6 +89,13 @@
                 @if (_pendingSanityResult.SanityLostToday is { } lostToday)
                 {
                     <div class="text-xs text-gray-500">За игровой день потеряно: @lostToday</div>
+                }
+                @if (_pendingSanityResult.SanityCappedByHabituation)
+                {
+                    <div class="text-xs text-success-700 mt-1">
+                        <i class="fa-solid fa-shield-halved mr-1"></i>
+                        Привыкание к ужасному: потеря урезана пределом за этот вид (стр. 167).
+                    </div>
                 }
 
                 @if (_pendingSanityResult.IntelligenceRoll is { } intRoll)
@@ -151,6 +184,31 @@
     private Combatant? _selectedTarget;
     private string _successLoss = "0";
     private string _failureLoss = "1D6";
+    private string _selectedSourceId = "";
+    private Combatant? _selectedSource;
+
+    /// <summary>Участники боя, снятые с бестиария: только у них есть напечатанная потеря рассудка.</summary>
+    private IEnumerable<Combatant> HorrorSources =>
+        Combatants.Where(c => c.CreatureSource is not null);
+
+    private void OnSourceChanged(ChangeEventArgs e)
+    {
+        _selectedSourceId = e.Value?.ToString() ?? "";
+        _selectedSource = Guid.TryParse(_selectedSourceId, out var id)
+            ? Combatants.FirstOrDefault(c => c.Id == id)
+            : null;
+        _pendingSanityResult = null;
+
+        // «0/1d6» → успех 0, провал 1d6. Пустая запись оставляет то, что уже введено.
+        var formula = _selectedSource?.CreatureSource?.CreatureCharacteristics.SanityLoss;
+        if (string.IsNullOrWhiteSpace(formula)) return;
+
+        var slash = formula.IndexOf('/');
+        if (slash < 0) return;
+
+        _successLoss = formula[..slash].Trim();
+        _failureLoss = formula[(slash + 1)..].Trim();
+    }
     private CombatActionResult? _pendingSanityResult;
     private int? _manualRoll;
 
@@ -187,7 +245,10 @@
             CurrentSanity = _selectedTarget.CurrentSanity,
             SuccessLoss = _successLoss,
             FailureLoss = _failureLoss,
-            ManualRoll = _manualRoll
+            ManualRoll = _manualRoll,
+            SourceCreatureId = _selectedSource?.CreatureSource?.Id,
+            SourceCreatureName = _selectedSource?.CreatureSource?.Name,
+            SourceSanityLossFormula = _selectedSource?.CreatureSource?.CreatureCharacteristics.SanityLoss
         };
 
         _pendingSanityResult = CombatService.ResolveSanityCheck(setup);
