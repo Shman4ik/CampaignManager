@@ -1,54 +1,46 @@
 @using CampaignManager.Web.Components.Features.Books.Model
+@using CampaignManager.Web.Components.Features.Books.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
 @namespace CampaignManager.Web.Components.Features.Books.Components
 
-<tr class="@(IsExpanded ? "bg-primary-50" : "hover:bg-gray-50") transition-all duration-200 cursor-pointer active:bg-gray-100"
-    @onclick="ToggleExpand">
-    <td class="px-4 sm:px-6 py-4 font-semibold text-gray-900">
-        <div class="flex items-center gap-3">
-            <button type="button"
-                    class="w-8 h-8 flex items-center justify-center text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded-lg transition-colors"
-                    @onclick:stopPropagation="true"
-                    @onclick="ToggleExpand">
-                <i class="fas @(IsExpanded ? "fa-chevron-up" : "fa-chevron-down")"></i>
-            </button>
-            <span>@Book.Name</span>
+<tr class="@(IsExpanded ? "bk-row-open" : null) cursor-pointer" @onclick="ToggleExpand">
+    <td>
+        <div class="flex items-center gap-1.5">
+            <i class="fas @(IsExpanded ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+            <span class="font-semibold text-gray-900">@Book.Name</span>
+            @if (ShowType)
+            {
+                <Badge Variant="@(Book.BookType == BookType.MythosBook ? "error" : "secondary")" Size="sm" Rounded="md">
+                    @BookTypeText.Short(Book.BookType)
+                </Badge>
+            }
         </div>
     </td>
-    <td class="px-4 sm:px-6 py-4">
-        <Badge Variant="@(Book.BookType == BookType.MythosBook ? "error" : "secondary")">
-            @Book.BookType.ToRussianString()
-        </Badge>
-    </td>
-    <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">@(!string.IsNullOrWhiteSpace(Book.Language) ? Book.Language : "—")</td>
-    <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">@(!string.IsNullOrWhiteSpace(Book.Year) ? Book.Year : "—")</td>
-    <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">@(!string.IsNullOrWhiteSpace(Book.Author) ? Book.Author : "—")</td>
-    <td class="px-4 sm:px-6 py-4 text-gray-700 font-medium">
-        @if (Book.BookType == BookType.MythosBook && Book.MythosRating.HasValue)
-        {
-            <span>ЗМ @Book.MythosRating</span>
-        }
-        else if (Book.BookType == BookType.OccultBook && Book.OccultismBonus.HasValue)
-        {
-            <span>+@(Book.OccultismBonus)%</span>
-        }
-        else
-        {
-            <span>—</span>
-        }
-    </td>
-    <td class="px-4 sm:px-6 py-4 text-center" @onclick:stopPropagation="true">
-        <div class="flex flex-col sm:flex-row gap-2 justify-center">
-            <button @onclick="() => OnEdit.InvokeAsync(Book)"
-                    class="min-h-[44px] px-4 py-2 text-primary-600 hover:text-primary-800 bg-primary-50 hover:bg-primary-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-primary-200">
-                <i class="fas fa-edit"></i>
-                <span>Изменить</span>
+    <td class="bk-clip text-primary-500">@Dash(Book.Language)</td>
+    <td class="bk-clip text-primary-500">@Dash(Book.Author)</td>
+    <td class="tabular-nums">@Dash(Book.SanityLoss)</td>
+    @if (ShowMythos)
+    {
+        <td class="tabular-nums">@Plus(Book.CthulhuMythosInitial)</td>
+        <td class="tabular-nums">@Plus(Book.CthulhuMythosFull)</td>
+        <td class="tabular-nums font-medium text-gray-900">@(Book.MythosRating?.ToString() ?? "—")</td>
+    }
+    @if (ShowOccultism)
+    {
+        <td class="tabular-nums">@(Book.OccultismBonus.HasValue ? $"+{Book.OccultismBonus}%" : "—")</td>
+    }
+    <td @onclick:stopPropagation="true">
+        <div class="flex justify-end gap-1">
+            <button type="button" aria-label="Изменить: @Book.Name"
+                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
+                    @onclick="() => OnEdit.InvokeAsync(Book)">
+                <i class="fas fa-pen"></i>
             </button>
-            <button @onclick="() => OnDelete.InvokeAsync(Book)"
-                    class="min-h-[44px] px-4 py-2 text-error-600 hover:text-error-800 bg-error-50 hover:bg-error-100 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 border border-error-200">
+            <button type="button" aria-label="Удалить: @Book.Name"
+                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
+                    @onclick="() => OnDelete.InvokeAsync(Book)">
                 <i class="fas fa-trash-alt"></i>
-                <span>Удалить</span>
             </button>
         </div>
     </td>
@@ -56,98 +48,73 @@
 
 @if (IsExpanded)
 {
-    <tr class="bg-gradient-to-r from-gray-50 to-white border-t-2 border-primary-200 book-expand-row">
-        <td colspan="7" class="px-4 sm:px-6 py-6">
-            <div class="bg-white rounded-xl p-6 shadow-inner border-2 border-gray-100 space-y-6">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Название</h5>
-                        <p class="text-base font-medium text-gray-900">@Book.Name</p>
+    @* Колонки строки здесь не повторяются — только то, чего в них нет. *@
+    <tr class="bk-details">
+        <td colspan="@ColumnCount">
+            <div class="flex flex-wrap gap-x-8 gap-y-1.5 text-primary-600">
+                @if (!ShowType)
+                {
+                    <div>
+                        <span class="bk-label">Категория</span>
+                        @Book.BookType.ToRussianString()
                     </div>
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Категория</h5>
-                        <p class="text-base font-medium text-gray-900">@Book.BookType.ToRussianString()</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(Book.Year))
+                {
+                    <div>
+                        <span class="bk-label">Год / век</span>
+                        @Book.Year
                     </div>
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Язык</h5>
-                        <p class="text-base font-medium text-gray-900">@(!string.IsNullOrWhiteSpace(Book.Language) ? Book.Language : "—")</p>
+                }
+                @if (Book.StudyWeeks.HasValue)
+                {
+                    <div>
+                        <span class="bk-label">Полное изучение</span>
+                        @Book.StudyWeeks нед.
                     </div>
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Год / век</h5>
-                        <p class="text-base font-medium text-gray-900">@(!string.IsNullOrWhiteSpace(Book.Year) ? Book.Year : "—")</p>
-                    </div>
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Автор</h5>
-                        <p class="text-base font-medium text-gray-900">@(!string.IsNullOrWhiteSpace(Book.Author) ? Book.Author : "—")</p>
-                    </div>
-                    <div class="space-y-1">
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Потеря рассудка</h5>
-                        <p class="text-base font-medium text-gray-900">@(!string.IsNullOrWhiteSpace(Book.SanityLoss) ? Book.SanityLoss : "—")</p>
-                    </div>
-
-                    @if (Book.BookType == BookType.MythosBook)
-                    {
-                        <div class="space-y-1">
-                            <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">МКН (начальное)</h5>
-                            <p class="text-base font-medium text-gray-900">@(Book.CthulhuMythosInitial.HasValue ? $"+{Book.CthulhuMythosInitial}" : "—")</p>
-                        </div>
-                        <div class="space-y-1">
-                            <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">МКП (полное)</h5>
-                            <p class="text-base font-medium text-gray-900">@(Book.CthulhuMythosFull.HasValue ? $"+{Book.CthulhuMythosFull}" : "—")</p>
-                        </div>
-                        <div class="space-y-1">
-                            <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Значение Мифов</h5>
-                            <p class="text-base font-medium text-gray-900">@(Book.MythosRating.HasValue ? Book.MythosRating.ToString() : "—")</p>
-                        </div>
-                    }
-
-                    @if (Book.BookType == BookType.OccultBook && Book.OccultismBonus.HasValue)
-                    {
-                        <div class="space-y-1">
-                            <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Бонус к оккультизму</h5>
-                            <p class="text-base font-medium text-gray-900">+@(Book.OccultismBonus)%</p>
-                        </div>
-                    }
-
-                    @if (Book.StudyWeeks.HasValue)
-                    {
-                        <div class="space-y-1">
-                            <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Время изучения</h5>
-                            <p class="text-base font-medium text-gray-900">@Book.StudyWeeks нед.</p>
-                        </div>
-                    }
-                </div>
-
+                }
                 @if (Book.AlternativeNames.Count > 0)
                 {
-                    <div>
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Альтернативные названия</h5>
-                        <div class="flex flex-wrap gap-2">
+                    <div class="basis-full">
+                        <span class="bk-label">Другие названия</span>
+                        <span class="flex flex-wrap gap-1">
                             @foreach (var altName in Book.AlternativeNames)
                             {
-                                <Badge Variant="secondary">@altName</Badge>
+                                <Badge Variant="secondary" Size="sm" Rounded="md">@altName</Badge>
                             }
-                        </div>
+                        </span>
                     </div>
                 }
-
                 @if (Book.PossibleSpells.Count > 0)
                 {
-                    <div>
-                        <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Возможные заклинания</h5>
-                        <div class="flex flex-wrap gap-2">
+                    <div class="basis-full">
+                        <span class="bk-label">Возможные заклинания</span>
+                        <span class="flex flex-wrap gap-1">
                             @foreach (var spell in Book.PossibleSpells)
                             {
-                                <Badge Variant="primary">@spell</Badge>
+                                <Badge Variant="primary" Size="sm" Rounded="md">@spell</Badge>
                             }
-                        </div>
+                        </span>
                     </div>
                 }
-
-                <div>
-                    <h5 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Описание</h5>
-                    <p class="text-base text-gray-700 whitespace-pre-wrap leading-relaxed">@Book.Description</p>
-                </div>
+                @if (!string.IsNullOrWhiteSpace(Book.Description))
+                {
+                    <div class="basis-full">
+                        <span class="bk-label">Описание</span>
+                        <span class="whitespace-pre-wrap">@Book.Description</span>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Book.ImageUrl))
+                {
+                    <div class="basis-full">
+                        <span class="bk-label">Обложка</span>
+                        <img src="@Book.ImageUrl" alt="@Book.Name" class="bk-image" />
+                    </div>
+                }
+                @if (!HasDetails)
+                {
+                    <div class="text-primary-400">Всё об этой книге уже показано в строке.</div>
+                }
             </div>
         </td>
     </tr>
@@ -156,12 +123,35 @@
 @code {
     [Parameter] public Book Book { get; set; } = new() { Name = string.Empty, BookType = BookType.MythosBook };
     [Parameter] public bool IsExpanded { get; set; }
+
+    /// <summary>Показывать метку категории: смысл есть, только когда список не сужен до одной категории.</summary>
+    [Parameter] public bool ShowType { get; set; }
+
+    /// <summary>Колонки МКН / МКП / ЗМ: у книг по оккультизму они пусты всегда.</summary>
+    [Parameter] public bool ShowMythos { get; set; } = true;
+
+    /// <summary>Колонка «+Оккультизм»: у книг Мифов она пуста всегда.</summary>
+    [Parameter] public bool ShowOccultism { get; set; } = true;
+
     [Parameter] public EventCallback<Book> OnEdit { get; set; }
     [Parameter] public EventCallback<Book> OnDelete { get; set; }
     [Parameter] public EventCallback OnToggleExpand { get; set; }
 
-    private Task ToggleExpand()
-    {
-        return OnToggleExpand.InvokeAsync();
-    }
+    // Название, язык, автор, рассудок, действия — всегда; остальное по флагам.
+    private int ColumnCount => 5 + (ShowMythos ? 3 : 0) + (ShowOccultism ? 1 : 0);
+
+    private bool HasDetails =>
+        !ShowType ||
+        !string.IsNullOrWhiteSpace(Book.Year) ||
+        Book.StudyWeeks.HasValue ||
+        Book.AlternativeNames.Count > 0 ||
+        Book.PossibleSpells.Count > 0 ||
+        !string.IsNullOrWhiteSpace(Book.Description) ||
+        !string.IsNullOrWhiteSpace(Book.ImageUrl);
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string Plus(int? value) => value.HasValue ? $"+{value}" : "—";
+
+    private Task ToggleExpand() => OnToggleExpand.InvokeAsync();
 }
