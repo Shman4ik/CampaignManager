@@ -1,0 +1,165 @@
+/* Плотность каталога книг — устроена так же, как у оружия
+   (`Features/Weapons/Components/WeaponsListView.razor.css`), различия только в наборе
+   колонок. Отступы ячеек заданы здесь, а не утилитами Tailwind в разметке: селектор
+   `.cm-table td` из design-system.css (0,1,1) перебивает одиночный класс `.py-1` (0,1,0),
+   а `.bk-table[b-…] td` — уже (0,2,1) и выигрывает.
+
+   ::deep обязателен: строки рендерит дочерний BookTableRow, атрибута области
+   видимости этого компонента на них нет. */
+
+/* Шапка и колонка названия закреплены.
+
+   `position: sticky` считает от ближайшего скроллпорта, а он здесь — сама .bk-table:
+   `overflow-x: auto` переводит и overflow-y в auto. Без max-height контейнер тянется
+   под содержимое, скроллить в нём нечего и ничего не прилипает — поэтому высота задана.
+   Заодно фильтры и пагинация перестают уезжать: прокручиваются только строки.
+
+   border-collapse гасит границы у прилипших ячеек, поэтому нижняя линия строки
+   в первой колонке нарисована тенью.
+
+   21.5rem — занятое помимо строк: шапка приложения с заголовком и фильтрами плюс
+   пагинация с нижним отступом. Обвязка страницы здесь та же, что у каталогов оружия
+   и предметов, поэтому и число то же. */
+.bk-table {
+    max-height: calc(100vh - 21.5rem);
+    max-height: calc(100dvh - 21.5rem);
+}
+
+.bk-table ::deep thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.bk-table ::deep thead th:first-child {
+    z-index: 3;
+}
+
+/* Раскрытие занимает всю строку целиком — закреплять в нём нечего. */
+.bk-table ::deep th:first-child,
+.bk-table ::deep tr:not(.bk-details) > td:first-child {
+    position: sticky;
+    left: 0;
+    box-shadow: inset 0 -1px 0 var(--color-primary-100);
+}
+
+/* Прилипшая ячейка обязана быть непрозрачной, иначе сквозь неё поедут соседние
+   колонки, и её фон должен повторять состояние строки. Специфичность здесь выше,
+   чем у `.cm-table tr:hover td`, поэтому порядок внутри блока и решает: открытая
+   строка идёт после ховера, чтобы accent не сменился на primary под пальцем. */
+.bk-table ::deep tbody tr:not(.bk-details) > td:first-child {
+    background: white;
+}
+
+.bk-table ::deep tbody tr:not(.bk-details):hover > td:first-child {
+    background: var(--color-primary-50);
+}
+
+.bk-table ::deep tbody tr.bk-row-open > td:first-child {
+    background: var(--color-accent-50);
+}
+
+.bk-table ::deep th,
+.bk-table ::deep td {
+    padding: 0.3125rem 0.5rem;
+    white-space: nowrap;
+}
+
+.bk-table ::deep th {
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+}
+
+/* Ширины заданы долями, а не абсолютом: тянуться хотят все три текстовые колонки
+   сразу, а `max-width: 0` у обрезаемых снимает их собственный минимум. С `width: 100%`
+   у названия (как у каталога оружия, где текстовая колонка одна) язык и автор
+   схлопывались до «Англи…» и «Ремигиу…» — замерено в ландшафте iPad. */
+.bk-table ::deep th:first-child,
+.bk-table ::deep tr:not(.bk-details) > td:first-child {
+    width: 34%;
+    white-space: normal;
+}
+
+/* Язык и автор — свободный текст: обрезаем многоточием, иначе «Клубный перевод
+   Лоуренса Уилсона» растаскивает таблицу за край экрана. `max-width: 0` — тот самый
+   приём, без которого ellipsis при `table-layout: auto` не срабатывает. */
+.bk-table ::deep .bk-clip {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bk-table ::deep th:nth-child(2),
+.bk-table ::deep tr:not(.bk-details) > td:nth-child(2) {
+    width: 10%;
+}
+
+.bk-table ::deep th:nth-child(3),
+.bk-table ::deep tr:not(.bk-details) > td:nth-child(3) {
+    width: 16%;
+}
+
+/* Открытая строка перестаёт обрезать язык и автора: полное значение видно на месте,
+   повторять его отдельным блоком в раскрытии незачем. */
+.bk-table ::deep tr.bk-row-open > .bk-clip {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+/* accent, а не primary-50: на primary-50 строка сливалась бы с ховером соседей. */
+.bk-table ::deep .bk-row-open > td,
+.bk-table ::deep .bk-details > td {
+    background: var(--color-accent-50);
+}
+
+.bk-table ::deep .bk-details > td {
+    padding: 0.5rem 0.75rem 0.75rem 1.75rem;
+    white-space: normal;
+    font-size: 0.75rem;
+}
+
+.bk-table ::deep .bk-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-primary-400);
+}
+
+/* Раскрытая карточка на узком экране: подпись слева, значение справа. */
+.bk-card-details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.125rem 0.75rem;
+    margin: 0.5rem 0 0.25rem 1rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-primary-100);
+    font-size: 0.75rem;
+}
+
+.bk-card-details dt {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-primary-400);
+    white-space: nowrap;
+}
+
+.bk-card-details dd {
+    margin: 0;
+    color: var(--color-primary-700);
+}
+
+/* Обложка приходит по чужому URL — ограничиваем и высотой тоже, иначе одна строка
+   раскрытия занимает весь экран. Селектор задвоен: в карточке обложку рисует этот
+   компонент, в раскрытой строке — дочерний BookTableRow, до которого достаёт только ::deep. */
+.bk-table ::deep .bk-image,
+.bk-image {
+    max-width: 12rem;
+    max-height: 16rem;
+    margin-top: 0.25rem;
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+}

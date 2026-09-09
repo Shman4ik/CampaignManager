@@ -1,147 +1,116 @@
 @using CampaignManager.Web.Components.Features.Spells.Model
-@using CampaignManager.Web.Components.Features.Spells.Components
 @using CampaignManager.Web.Components.Shared
 @namespace CampaignManager.Web.Components.Features.Spells.Components
 
 <div class="cm-card overflow-hidden">
-    <!-- Desktop Table View -->
-    <div class="hidden xl:block overflow-x-auto">
+    @* Таблица — от lg (1024) и шире; уже — карточки.
+       Колонок здесь пять, а не девять, как у оружия, поэтому портрет iPad их вмещает.
+       Стоимость и время сотворения — длинный свободный текст: в строке они обрезаны
+       многоточием и разворачиваются на месте, а раскрытие их не повторяет. *@
+    <div class="hidden lg:block overflow-x-auto sp-table">
         <table class="cm-table">
             <thead>
             <tr>
-                <SortableTableHeader
-                    Title="Название"
-                    FieldName="@nameof(Spell.Name)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-
-                <SortableTableHeader
-                    Title="Тип"
-                    FieldName="@nameof(Spell.SpellType)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-
-                <SortableTableHeader
-                    Title="Стоимость"
-                    FieldName="@nameof(Spell.Cost)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-
-                <SortableTableHeader
-                    Title="Время сотворения"
-                    FieldName="@nameof(Spell.CastingTime)"
-                    CurrentSortField="@CurrentSortField"
-                    SortAscending="@SortAscending"
-                    OnSortChanged="OnSortChanged" />
-
-                <th class="px-4 sm:px-6 py-4 text-center font-semibold text-gray-700">Действия</th>
+                <SortableTableHeader Title="Название" FieldName="@nameof(Spell.Name)"
+                                     CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                     OnSortChanged="OnSortChanged" />
+                @if (ShowType)
+                {
+                    <SortableTableHeader Title="Тип" FieldName="@nameof(Spell.SpellType)"
+                                         CurrentSortField="@CurrentSortField" SortAscending="@SortAscending"
+                                         OnSortChanged="OnSortChanged" />
+                }
+                <th>Стоимость</th>
+                <th>Время сотворения</th>
+                <th><span class="sr-only">Действия</span></th>
             </tr>
             </thead>
             <tbody>
             @foreach (var spell in Spells)
             {
-                <SpellTableRow
-                    Spell="@spell"
-                    IsExpanded="@(ExpandedSpellId == spell.Id)"
-                    OnEdit="OnEdit"
-                    OnDelete="OnDelete"
-                    OnToggleExpand="() => OnToggleExpand.InvokeAsync(spell)" />
+                <SpellTableRow Spell="@spell"
+                               IsExpanded="@(ExpandedSpellId == spell.Id)"
+                               ShowType="@ShowType"
+                               OnEdit="OnEdit"
+                               OnDelete="OnDelete"
+                               OnToggleExpand="() => OnToggleExpand.InvokeAsync(spell)" />
             }
             </tbody>
         </table>
     </div>
 
-    <!-- Mobile & Tablet Card View -->
-    <div class="xl:hidden">
-        <div class="divide-y divide-gray-200">
-            @foreach (var spell in Spells)
-            {
-                <div class="bg-white">
-                    <div class="p-4 flex justify-between items-start gap-3 cursor-pointer active:bg-gray-50"
-                         @onclick="() => OnToggleExpand.InvokeAsync(spell)">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-start gap-2 mb-2">
-                                <button @onclick:stopPropagation="true"
-                                        @onclick="() => OnToggleExpand.InvokeAsync(spell)"
-                                        class="flex-shrink-0 w-8 h-8 flex items-center justify-center text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded transition-colors">
-                                    <i class="fas @(ExpandedSpellId == spell.Id ? "fa-chevron-up" : "fa-chevron-down")"></i>
-                                </button>
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="font-semibold text-gray-900 text-base truncate">@spell.Name</h3>
-                                    <div class="text-sm text-gray-600 mt-1">
-                                        @(string.IsNullOrWhiteSpace(spell.SpellType) ? "—" : spell.SpellType)
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="ml-10 text-sm text-gray-700 flex flex-wrap gap-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-semibold text-gray-500">Стоимость:</span>
-                                    <span>@(!string.IsNullOrWhiteSpace(spell.Cost) ? spell.Cost : "—")</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-semibold text-gray-500">Время:</span>
-                                    <span>@(!string.IsNullOrWhiteSpace(spell.CastingTime) ? spell.CastingTime : "—")</span>
-                                </div>
-                            </div>
+    @* Карточки ниже lg: название, тип и стоимость в строке, остальное — по раскрытию. *@
+    <div class="divide-y divide-primary-100 lg:hidden">
+        @foreach (var spell in Spells)
+        {
+            <div class="px-3 py-2">
+                <div class="flex items-start gap-2">
+                    <div class="min-w-0 flex-1 cursor-pointer" @onclick="() => OnToggleExpand.InvokeAsync(spell)">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <i class="fas @(ExpandedSpellId == spell.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            <span class="font-semibold text-gray-900">@spell.Name</span>
+                        </div>
+                        <div class="ml-4 mt-0.5 text-xs text-primary-500 @(ExpandedSpellId == spell.Id ? null : "truncate")">
+                            @if (ShowType)
+                            {
+                                <span>@Dash(spell.SpellType)</span>
+                                <span class="mx-1 text-primary-300">·</span>
+                            }
+                            <span>@Dash(spell.Cost)</span>
+                            <span class="mx-1 text-primary-300">·</span>
+                            <span>@Dash(spell.CastingTime)</span>
                         </div>
                     </div>
-
-                    <div class="px-4 pb-4 ml-10">
-                        <div class="flex gap-2">
-                            <button @onclick:stopPropagation="true"
-                                    @onclick="() => OnEdit.InvokeAsync(spell)"
-                                    class="cm-btn cm-btn-outline-primary cm-btn-sm flex-1">
-                                <i class="fas fa-edit"></i>
-                                <span>Изменить</span>
-                            </button>
-                            <button @onclick:stopPropagation="true"
-                                    @onclick="() => OnDelete.InvokeAsync(spell)"
-                                    class="cm-btn cm-btn-outline-error cm-btn-sm flex-1">
-                                <i class="fas fa-trash-alt"></i>
-                                <span>Удалить</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    @if (ExpandedSpellId == spell.Id)
-                    {
-                        <div class="px-4 pb-4 ml-10 pt-2 border-t border-gray-200">
-                            <div class="bg-gray-50 rounded-lg p-4 space-y-4 text-sm">
-                                <div class="grid grid-cols-1 gap-3">
-                                    <div>
-                                        <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Описание</div>
-                                        <div class="text-gray-700 whitespace-pre-wrap leading-relaxed">@spell.Description</div>
-                                    </div>
-
-                                    @if (spell.AlternativeNames.Count > 0)
-                                    {
-                                        <div>
-                                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Альтернативные названия</div>
-                                            <div class="flex flex-wrap gap-2">
-                                                @foreach (var altName in spell.AlternativeNames)
-                                                {
-                                                    <Badge Variant="secondary" Size="sm" Rounded="md">@altName</Badge>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
+                    <button type="button" aria-label="Изменить: @spell.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
+                            @onclick="() => OnEdit.InvokeAsync(spell)">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button type="button" aria-label="Удалить: @spell.Name"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
+                            @onclick="() => OnDelete.InvokeAsync(spell)">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
                 </div>
-            }
-        </div>
+
+                @if (ExpandedSpellId == spell.Id)
+                {
+                    <dl class="sp-card-details">
+                        @if (!ShowType)
+                        {
+                            <dt>Тип</dt>
+                            <dd>@Dash(spell.SpellType)</dd>
+                        }
+                        @if (spell.AlternativeNames.Count > 0)
+                        {
+                            <dt>Другие названия</dt>
+                            <dd>
+                                <span class="flex flex-wrap gap-1">
+                                    @foreach (var altName in spell.AlternativeNames)
+                                    {
+                                        <Badge Variant="secondary" Size="sm" Rounded="md">@altName</Badge>
+                                    }
+                                </span>
+                            </dd>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(spell.Description))
+                        {
+                            <dt>Описание</dt>
+                            <dd class="whitespace-pre-wrap">@spell.Description</dd>
+                        }
+                    </dl>
+                }
+            </div>
+        }
     </div>
 </div>
 
 @code {
-    [Parameter] public IEnumerable<Spell> Spells { get; set; } = Enumerable.Empty<Spell>();
+    [Parameter] public IEnumerable<Spell> Spells { get; set; } = [];
     [Parameter] public Guid? ExpandedSpellId { get; set; }
+
+    /// <summary>Колонка типа: смысл есть, только когда список не сужен фильтром до одного типа.</summary>
+    [Parameter] public bool ShowType { get; set; } = true;
 
     [Parameter] public string? CurrentSortField { get; set; }
     [Parameter] public bool SortAscending { get; set; } = true;
@@ -150,4 +119,6 @@
     [Parameter] public EventCallback<Spell> OnEdit { get; set; }
     [Parameter] public EventCallback<Spell> OnDelete { get; set; }
     [Parameter] public EventCallback<Spell> OnToggleExpand { get; set; }
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 }
