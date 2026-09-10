@@ -139,7 +139,6 @@ Each feature folder has its own `CLAUDE.md` with that feature's services, models
 Uses minimal APIs (not controllers), mapped in `Utilities/Api/`:
 - `AccountEndpoints.cs` — `/api/account/login`, `/api/account/logout`
 - `MinioApi.cs` — File storage
-- `CharacterMigrationApi.cs` — Character migration
 
 Swagger available at `/swagger`.
 
