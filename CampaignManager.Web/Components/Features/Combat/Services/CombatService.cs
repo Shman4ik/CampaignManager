@@ -1840,6 +1840,22 @@ public sealed partial class CombatService
     };
 
     /// <summary>
+    /// Цвет уровня успеха для подписей в панелях боя и погони. Держится рядом
+    /// с <see cref="GetSuccessLevelText"/>: три копии этой таблицы в компонентах
+    /// разъезжались бы при первой же правке палитры.
+    /// </summary>
+    public static string GetSuccessLevelColor(SuccessLevel level) => level switch
+    {
+        SuccessLevel.CriticalSuccess => "text-warning-600",
+        SuccessLevel.ExtremeSuccess => "text-success-600",
+        SuccessLevel.HardSuccess => "text-success-700",
+        SuccessLevel.RegularSuccess => "text-success-800",
+        SuccessLevel.Failure => "text-error-600",
+        SuccessLevel.Fumble => "text-error-800",
+        _ => "text-gray-600"
+    };
+
+    /// <summary>
     /// Короткая расшифровка броска с дополнительными костями, например
     /// « [кости 24, 44 — бонусная]». Для броска без модификаторов возвращает пустую строку.
     /// </summary>
