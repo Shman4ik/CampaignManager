@@ -16,11 +16,30 @@
                     <h4 class="dev-step-title">1. Проверки опыта</h4>
                     @if (_checkedSkills.Count > 0)
                     {
-                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
-                                disabled="@(PendingSkills.Count == 0)"
-                                @onclick="RollAllSkills">
-                            <i class="fa-solid fa-dice mr-1"></i>Бросить все (@PendingSkills.Count)
-                        </button>
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
+                                    disabled="@(PendingSkills.Count == 0)"
+                                    @onclick="RollAllSkills">
+                                <i class="fa-solid fa-dice mr-1"></i>Бросить все (@PendingSkills.Count)
+                            </button>
+                            @if (_confirmClearChecks)
+                            {
+                                <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="ClearChecksWithoutRolling">
+                                    Точно снять?
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                        @onclick="() => _confirmClearChecks = false">
+                                    Отмена
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
+                                        @onclick="() => _confirmClearChecks = true">
+                                    Снять отметки
+                                </button>
+                            }
+                        </div>
                     }
                 </header>
 
@@ -33,8 +52,17 @@
                 @if (_checkedSkills.Count == 0)
                 {
                     <div class="dev-empty">
-                        Отмеченных навыков нет. Галочку ставят за успешное применение навыка в игре —
-                        по одной на навык, сколько бы раз он ни сработал.
+                        @if (_clearedWithoutRolling)
+                        {
+                            <text>Отметки сняты без проверок опыта.</text>
+                        }
+                        else
+                        {
+                            <text>
+                                Отмеченных навыков нет. Галочку ставят за успешное применение навыка в игре —
+                                по одной на навык, сколько бы раз он ни сработал.
+                            </text>
+                        }
                     </div>
                 }
                 else
@@ -390,6 +418,8 @@
     private readonly List<string> _creditLog = [];
     private string? _habituationLog;
     private bool _opened;
+    private bool _confirmClearChecks;
+    private bool _clearedWithoutRolling;
 
     private List<Skill> PendingSkills => _checkedSkills.Where(s => !_skillResults.ContainsKey(s)).ToList();
 
@@ -435,6 +465,8 @@
         _creditChoice = CreditRatingChange.BusinessAsUsual;
         _creditLog.Clear();
         _habituationLog = null;
+        _confirmClearChecks = false;
+        _clearedWithoutRolling = false;
 
         _biographyOptions = BuildBiographyOptions();
         _selectedBiography = _biographyOptions.FirstOrDefault()?.Label ?? "";
@@ -476,6 +508,20 @@
     {
         foreach (var skill in PendingSkills)
             RollSkill(skill);
+    }
+
+    /// <summary>
+    ///     Аварийное снятие отметок без проверок опыта: галочки поставили не тем навыкам.
+    ///     Раньше это была кнопка «Сбросить» в шапке секции «Навыки» — на листе ей делать нечего,
+    ///     отметки живут ради этой фазы.
+    /// </summary>
+    private void ClearChecksWithoutRolling()
+    {
+        DevelopmentPhaseRules.ClearSkillChecks(Character);
+        _checkedSkills = [];
+        _skillResults.Clear();
+        _confirmClearChecks = false;
+        _clearedWithoutRolling = true;
     }
 
     private void RollLuck() => _luckResult = DevelopmentPhaseRules.RollLuckRecovery(Character);
