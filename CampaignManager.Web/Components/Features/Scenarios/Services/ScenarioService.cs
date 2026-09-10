@@ -456,9 +456,13 @@ public sealed class ScenarioService(
 
     /// <summary>
     ///     Занимает НПС в сценарии. Лист персонажа не копируется: правки НПС видны во всех
-    ///     сценариях, где он занят. Повторный вызов обновляет роль и количество.
+    ///     сценариях, где он занят. Повторный вызов обновляет роль, количество и заметку.
+    ///     <para>
+    ///         <paramref name="notes" /> оставлен необязательным: ручной ввод через
+    ///         <c>AddNpcModal</c> заметку не спрашивает, а импорт сценария — переносит.
+    ///     </para>
     /// </summary>
-    public async Task<bool> AddNpcToScenarioAsync(Guid scenarioId, Guid characterId, NpcRole role = NpcRole.Neutral, int count = 1)
+    public async Task<bool> AddNpcToScenarioAsync(Guid scenarioId, Guid characterId, NpcRole role = NpcRole.Neutral, int count = 1, string? notes = null)
     {
         try
         {
@@ -471,6 +475,7 @@ public sealed class ScenarioService(
             {
                 existing.Role = role;
                 existing.Count = Math.Max(1, count);
+                if (notes is not null) existing.Notes = notes;
                 existing.LastUpdated = DateTime.UtcNow;
             }
             else
@@ -480,7 +485,8 @@ public sealed class ScenarioService(
                     ScenarioId = scenarioId,
                     CharacterId = characterId,
                     Role = role,
-                    Count = Math.Max(1, count)
+                    Count = Math.Max(1, count),
+                    Notes = notes
                 };
                 cast.Init();
                 dbContext.ScenarioNpcs.Add(cast);
