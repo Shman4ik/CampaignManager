@@ -40,6 +40,14 @@ LLM-валидацией персонажа ушла таблица `LlmKnowledg
   `docs/squash-migrations.sql`. Он переписывает `__EFMigrationsHistory` и удаляет
   `LlmKnowledgeEntries` — единственное изменение схемы. Без него `database update` решит,
   что схемы нет, и попробует создать её заново.
+- **Журнал миграций общий у обеих моделей.** `AppDbContext` и `AppIdentityDbContext` пишут
+  в одну `public."__EFMigrationsHistory"` — отдельной таблицы у схемы `identity` нет. Значит
+  «удалить из журнала всё, кроме своей миграции» — всегда ошибка: заодно уходит строка
+  `20250314173627_InitialMigration`, и следующий `database update --context AppIdentityDbContext`
+  пытается создать `AspNetRoles` заново и падает с `42P07: relation already exists`. Схема при
+  этом цела, чинится возвратом строки в журнал. Скрипт схлопывания поэтому удаляет по списку,
+  а не по «всё кроме», и проверяет состав журнала перед `COMMIT`.
+- Проверять после переноса надо **оба** контекста, а не только `AppDbContext`.
 - **Скрипт уничтожает данные удаляемой таблицы:** там около 31 КБ авторского справочника
   CoC 7e на русском, к самой валидации отношения не имеющего. Выгрузить заранее помогает
   `docs/export-llm-knowledge.sql`.
@@ -258,12 +266,19 @@ the .NET 10 circuit persistence stack:
   connected tab to call `Blazor.pauseCircuit()` from `IHostedService.StopAsync`, which moves the state
   into the browser. Data Protection keys are stored in PostgreSQL, so the new instance can unprotect
   what the browser sends back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
-- Client side: `wwwroot/js/circuit-persistence.js` pauses on tab hide and retries resume with backoff.
+- Client side: `wwwroot/js/circuit-persistence.js` pauses the circuit when the tab has been hidden for
+  `PAUSE_AFTER_HIDDEN_MS` (30 с) — или сразу, по `freeze`/`pagehide`, если браузер вот-вот остановит
+  на странице JS, — и возобновляет с нарастающей паузой. Порог не опускать обратно к секундам: пауза
+  рвёт соединение и поднимает диалог, а заглянуть в соседнюю вкладку и вернуться — обычное дело.
   The (Russian) reconnect dialog is `#components-reconnect-modal` in `App.razor` plus
   `wwwroot/css/reconnect.css` — the `components-reconnect-*` class names come from the framework,
   don't rename them.
 - Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
   otherwise it silently disappears on resume.
+- **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
+  а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
+  активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
+  переживает и паузу, и F5, и на него можно дать ссылку. Пример — `ScenarioDetailPage` (`?mode=play`).
 
 ### Design System Colors
 
