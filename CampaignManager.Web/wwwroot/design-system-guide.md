@@ -133,6 +133,20 @@ Prefer the `<Button>` Blazor component over raw `cm-btn` classes in new code.
 
 Usage: `<input class="cm-input" />`
 
+Модификаторы:
+
+| Класс | Зачем |
+|---|---|
+| `cm-input-icon-left` | отступ слева под вложенную иконку (лупа в поиске) |
+| `cm-field-label-inline` | подпись слева от поля, а не над ним — снимает нижний отступ |
+| `cm-field-note` | подсказка под полем: правило из книги со ссылкой на страницу |
+
+**`design-system.css` подключается после тейлвиндовского `styles.css`**, поэтому свойства,
+которые `.cm-input` задаёт сам, утилитами не переопределяются: `w-20`, `flex-1` и `pl-8`
+на самом поле молча не работают против `width: 100%` и сокращённого `padding`. Ширину
+задавайте обёрткой (`<div class="w-20"><input class="cm-input"/></div>`), а новые отступы —
+модификатором в дизайн-системе, а не утилитой на странице.
+
 ## Shared Blazor Components
 
 All in `Components/Shared/`, globally available.
