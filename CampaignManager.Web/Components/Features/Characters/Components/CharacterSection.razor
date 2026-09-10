@@ -1,0 +1,52 @@
+@* Сворачиваемая секция листа персонажа: шапка с иконкой и заголовком плюс тело.
+
+   Шапка сама по себе уже отделяет секцию от соседних, поэтому внутренние
+   компоненты не заводят собственную карточку — тело даёт им отступ и всё.
+   Раньше каждая из семи секций повторяла эту разметку целиком. *@
+
+<section id="@Id" class="mb-8">
+    <div class="bg-white rounded-lg overflow-hidden shadow-sm">
+        <div class="section-header px-4 py-2 bg-gradient-to-r @Gradient flex justify-between items-center cursor-pointer select-none"
+             data-testid="@($"section-header-{Id}")"
+             aria-expanded="@(Expanded ? "true" : "false")"
+             @onclick="OnToggle">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid @Icon text-white/70"></i>
+                <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">@Title</h3>
+                @if (TitleSuffix is not null)
+                {
+                    <div class="flex flex-wrap items-center gap-1" @onclick:stopPropagation="true">@TitleSuffix</div>
+                }
+            </div>
+            <div class="flex items-center gap-2">
+                @if (HeaderActions is not null)
+                {
+                    <div @onclick:stopPropagation="true">@HeaderActions</div>
+                }
+                <span class="text-white/70 text-sm transition-transform duration-200">@(Expanded ? "▲" : "▼")</span>
+            </div>
+        </div>
+        @if (Expanded)
+        {
+            <div class="@BodyClass">@ChildContent</div>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter] public required string Id { get; set; }
+    [Parameter] public required string Title { get; set; }
+    [Parameter] public required string Icon { get; set; }
+    [Parameter] public bool Expanded { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+
+    /// <summary>Управляющие элементы рядом с заголовком; клики не сворачивают секцию.</summary>
+    [Parameter] public RenderFragment? TitleSuffix { get; set; }
+
+    /// <summary>Кнопки в правой части шапки, перед стрелкой.</summary>
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter] public string Gradient { get; set; } = "from-primary-600 to-primary-700";
+    [Parameter] public string BodyClass { get; set; } = "p-4";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

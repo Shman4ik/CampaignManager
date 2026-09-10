@@ -5,8 +5,11 @@
 @using CampaignManager.Web.Extensions
 @inject WeaponService WeaponService
 
-<div class="bg-white shadow rounded-lg p-4 mb-4">
-    <h3 class="text-xl font-bold mb-4">Оружие</h3>
+@* Блок всегда рендерится внутри секции листа персонажа, поэтому своей карточки
+   не заводит: рамку и отступ даёт секция. *@
+
+<section>
+    <h3 class="cm-section-title block mb-3">Оружие</h3>
 
     <!-- Weapons List with Accordion -->
     <div class="mb-4">
@@ -282,103 +285,94 @@
     </div>
 
     <!-- Add New Weapon -->
-    <div class="bg-gray-50 p-3 rounded-md mb-3">
-        <details class="group" data-testid="add-weapon-details">
-            <summary class="flex justify-between items-center cursor-pointer" data-testid="add-weapon-summary">
-                <span class="text-sm font-medium text-gray-700">Добавить оружие</span>
-                <span class="transition group-open:rotate-180">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </span>
-            </summary>
+    <details class="group border border-gray-200 rounded-md" data-testid="add-weapon-details">
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2" data-testid="add-weapon-summary">
+            <span class="text-sm font-medium text-gray-700">Добавить оружие</span>
+            <i class="fa-solid fa-chevron-down text-gray-500 transition group-open:rotate-180"></i>
+        </summary>
+        <div class="border-t border-gray-200 p-3">
+            <div class="relative mb-3">
+                <input type="text" @bind="newWeapon.Name" @oninput="OnWeaponNameInput" placeholder="Название оружия"
+                       class="w-full p-2 border border-primary-300 rounded bg-primary-50 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
 
-            <div class="mt-3 p-3 border border-gray-200 rounded-lg">
-                <div class="relative mb-3">
-                    <input type="text" @bind="newWeapon.Name" @oninput="OnWeaponNameInput" placeholder="Название оружия"
-                           class="w-full p-2 border border-primary-300 rounded bg-primary-50 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"/>
-
-                    @if (suggestedWeapons.Any())
-                    {
-                        <div
-                            class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                            @foreach (var weapon in suggestedWeapons)
-                            {
-                                <div @onclick="() => SelectWeapon(weapon)"
-                                     class="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100">
-                                    <div class="font-medium">@weapon.Name</div>
-                                    <div class="text-xs text-gray-500">@weapon.Type.ToRussianString()</div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <!-- Weapon filters -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                    <div>
-                        <select @bind="selectedWeaponType" @oninput="FilterSuggestedWeapons"
-                                class="w-full p-2 border border-primary-300 rounded bg-primary-50 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors">
-                            <option value="">Все типы оружия</option>
-                            @foreach (var type in Enum.GetValues(typeof(WeaponType)).Cast<WeaponType>())
-                            {
-                                <option value="@type">@type.ToRussianString()</option>
-                            }
-                        </select>
+                @if (suggestedWeapons.Any())
+                {
+                    <div
+                        class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                        @foreach (var weapon in suggestedWeapons)
+                        {
+                            <div @onclick="() => SelectWeapon(weapon)"
+                                 class="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100">
+                                <div class="font-medium">@weapon.Name</div>
+                                <div class="text-xs text-gray-500">@weapon.Type.ToRussianString()</div>
+                            </div>
+                        }
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <div class="flex items-center">
-                            <input id="is1920Filter" type="checkbox" @bind="is1920Filter"
-                                   @oninput="FilterSuggestedWeapons"
-                                   class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="is1920Filter" class="ml-2 block text-sm text-gray-700">1920-е</label>
-                        </div>
-                        <div class="flex items-center">
-                            <input id="isModernFilter" type="checkbox" @bind="isModernFilter"
-                                   @oninput="FilterSuggestedWeapons"
-                                   class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="isModernFilter" class="ml-2 block text-sm text-gray-700">Современность</label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Weapon details grid - responsive for mobile -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    <div>
-                        <input type="text" @bind="newWeapon.Damage" placeholder="Урон"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                    <div>
-                        <input type="text" @bind="newWeapon.Range" placeholder="Дальность"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                    <div>
-                        <input type="text" @bind="newWeapon.Attacks" placeholder="Атаки"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                    <div>
-                        <input type="text" @bind="newWeapon.Ammo" placeholder="Патроны"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                    <div>
-                        <input type="text" @bind="newWeapon.Malfunction" placeholder="Осечка"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                    <div>
-                        <input type="text" @bind="newWeapon.Notes" placeholder="Примечания"
-                               class="cm-input-sm !text-left !p-1"/>
-                    </div>
-                </div>
-
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm w-full mt-3" data-testid="add-weapon-btn" @onclick="AddWeapon">
-                    <span>Добавить</span>
-                </button>
+                }
             </div>
-        </details>
-    </div>
-</div>
+
+            <!-- Weapon filters -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <div>
+                    <select @bind="selectedWeaponType" @oninput="FilterSuggestedWeapons"
+                            class="w-full p-2 border border-primary-300 rounded bg-primary-50 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors">
+                        <option value="">Все типы оружия</option>
+                        @foreach (var type in Enum.GetValues(typeof(WeaponType)).Cast<WeaponType>())
+                        {
+                            <option value="@type">@type.ToRussianString()</option>
+                        }
+                    </select>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center">
+                        <input id="is1920Filter" type="checkbox" @bind="is1920Filter"
+                               @oninput="FilterSuggestedWeapons"
+                               class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
+                        <label for="is1920Filter" class="ml-2 block text-sm text-gray-700">1920-е</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="isModernFilter" type="checkbox" @bind="isModernFilter"
+                               @oninput="FilterSuggestedWeapons"
+                               class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
+                        <label for="isModernFilter" class="ml-2 block text-sm text-gray-700">Современность</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weapon details grid - responsive for mobile -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div>
+                    <input type="text" @bind="newWeapon.Damage" placeholder="Урон"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+                <div>
+                    <input type="text" @bind="newWeapon.Range" placeholder="Дальность"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+                <div>
+                    <input type="text" @bind="newWeapon.Attacks" placeholder="Атаки"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+                <div>
+                    <input type="text" @bind="newWeapon.Ammo" placeholder="Патроны"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+                <div>
+                    <input type="text" @bind="newWeapon.Malfunction" placeholder="Осечка"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+                <div>
+                    <input type="text" @bind="newWeapon.Notes" placeholder="Примечания"
+                           class="cm-input-sm !text-left !p-1"/>
+                </div>
+            </div>
+
+            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm w-full mt-3" data-testid="add-weapon-btn" @onclick="AddWeapon">
+                <span>Добавить</span>
+            </button>
+        </div>
+    </details>
+</section>
 
 @code {
     [Parameter] public Character Character { get; set; } = null!;

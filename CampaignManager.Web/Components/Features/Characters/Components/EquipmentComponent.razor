@@ -1,11 +1,14 @@
-@using CampaignManager.Web.Components.Features.Characters.Model
+﻿@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Items.Model
 @using CampaignManager.Web.Components.Features.Items.Services
 @using CampaignManager.Web.Components.Shared.Model
 @using CampaignManager.Web.Extensions
 @inject ItemService ItemService
-<div class="bg-white shadow rounded-md p-4 mb-4">
-    <h3 class="text-xl font-bold mb-4">Снаряжение и имущество</h3>
+@* Блок всегда рендерится внутри секции листа персонажа, поэтому своей карточки
+   не заводит: рамку и отступ даёт секция. *@
+
+<section>
+    <h3 class="cm-section-title block mb-3">Снаряжение и имущество</h3>
 
     <!-- Список предметов (responsive) -->
     <div class="mb-4">
@@ -60,85 +63,76 @@
     </div>
 
     <!-- Форма добавления предмета (адаптивная) -->
-    <div class="bg-gray-50 p-3 rounded-md mb-3">
-        <details class="group">
-            <summary class="flex justify-between items-center cursor-pointer">
-                <span class="text-sm font-medium text-gray-700">Добавить предмет</span>
-                <span class="transition group-open:rotate-180">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none"
-                         viewBox="0 0 24 24"
-                         stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </span>
-            </summary>
+    <details class="group border border-gray-200 rounded-md">
+        <summary class="flex items-center justify-between cursor-pointer px-3 py-2">
+            <span class="text-sm font-medium text-gray-700">Добавить предмет</span>
+            <i class="fa-solid fa-chevron-down text-gray-500 transition group-open:rotate-180"></i>
+        </summary>
+        <div class="border-t border-gray-200 p-3">
+            <div class="relative mb-3">
+                <input type="text" @bind="newItem.Name" @oninput="OnItemNameInput" placeholder="Название предмета"
+                       class="cm-input !text-left !p-2"/>
 
-            <div class="mt-3 p-3 border border-gray-200 rounded-lg">
-                <div class="relative mb-3">
-                    <input type="text" @bind="newItem.Name" @oninput="OnItemNameInput" placeholder="Название предмета"
-                           class="cm-input !text-left !p-2"/>
-
-                    @if (suggestedItems.Any())
-                    {
-                        <div
-                            class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                            @foreach (var item in suggestedItems)
-                            {
-                                <div @onclick="() => SelectItem(item)"
-                                     class="px-3 py-2 cursor-pointer hover:bg-gray-100 border-b border-gray-100 last:border-0">
-                                    <div class="font-medium text-sm">@item.Name</div>
-                                    @if (!string.IsNullOrEmpty(item.Type))
-                                    {
-                                        <div class="text-xs text-gray-500">Тип: @item.Type</div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(item.Description))
-                                    {
-                                        <div
-                                            class="text-xs text-gray-600">@(item.Description.Length > 100 ? item.Description.Substring(0, 100) + "..." : item.Description)</div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <!-- Фильтры предметов -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                    <select @bind="selectedItemType" class="cm-input !text-left !p-2">
-                        <option value="">Все типы предметов</option>
-                        @foreach (var type in availableItemTypes)
+                @if (suggestedItems.Any())
+                {
+                    <div
+                        class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                        @foreach (var item in suggestedItems)
                         {
-                            <option value="@type">@type</option>
+                            <div @onclick="() => SelectItem(item)"
+                                 class="px-3 py-2 cursor-pointer hover:bg-gray-100 border-b border-gray-100 last:border-0">
+                                <div class="font-medium text-sm">@item.Name</div>
+                                @if (!string.IsNullOrEmpty(item.Type))
+                                {
+                                    <div class="text-xs text-gray-500">Тип: @item.Type</div>
+                                }
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <div
+                                        class="text-xs text-gray-600">@(item.Description.Length > 100 ? item.Description.Substring(0, 100) + "..." : item.Description)</div>
+                                }
+                            </div>
                         }
-                    </select>
-
-                    <div class="flex items-center space-x-4">
-                        <label class="flex items-center">
-                            <input type="checkbox" @bind="is1920Filter"
-                                   class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <span class="ml-2 text-sm text-gray-700">1920-е</span>
-                        </label>
-                        <label class="flex items-center">
-                            <input type="checkbox" @bind="isModernFilter"
-                                   class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <span class="ml-2 text-sm text-gray-700">Современность</span>
-                        </label>
                     </div>
-                </div>
-
-                <!-- Описание предмета -->
-                <div class="mb-3">
-                    <input type="text" @bind="newItem.Description" placeholder="Описание предмета"
-                           class="cm-input !text-left !p-2"/>
-                </div>
-
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm w-full mt-3" @onclick="AddItem">
-                    <span>Добавить</span>
-                </button>
+                }
             </div>
-        </details>
-    </div>
-</div>
+
+            <!-- Фильтры предметов -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <select @bind="selectedItemType" class="cm-input !text-left !p-2">
+                    <option value="">Все типы предметов</option>
+                    @foreach (var type in availableItemTypes)
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" @bind="is1920Filter"
+                               class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
+                        <span class="ml-2 text-sm text-gray-700">1920-е</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" @bind="isModernFilter"
+                               class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
+                        <span class="ml-2 text-sm text-gray-700">Современность</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Описание предмета -->
+            <div class="mb-3">
+                <input type="text" @bind="newItem.Description" placeholder="Описание предмета"
+                       class="cm-input !text-left !p-2"/>
+            </div>
+
+            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm w-full mt-3" @onclick="AddItem">
+                <span>Добавить</span>
+            </button>
+        </div>
+    </details>
+</section>
 
 @code {
     [Parameter] public Character Character { get; set; } = null!;
