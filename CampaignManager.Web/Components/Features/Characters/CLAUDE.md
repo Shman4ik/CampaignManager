@@ -39,6 +39,25 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `Occupation : BaseDataBaseEntity, INamedEntity`.
 - `CharacterGenerationLog` / `GenerationLogEntry` — audit trail of random-generation rolls.
 
+## Разметка листа
+
+- Лист собран из `<CharacterSection>` — сворачиваемая секция с градиентной шапкой,
+  иконкой, `aria-expanded` и `data-testid="section-header-{Id}"`. Раскрытие хранит
+  страница (`_sectionVisibility`), компонент только показывает: `Expanded` + `OnToggle`.
+  Слоты: `TitleSuffix` — управляющие элементы рядом с заголовком (статус персонажа,
+  «Фаза развития»), `HeaderActions` — кнопки справа перед стрелкой; клики в обоих
+  не сворачивают секцию. `Gradient` и `BodyClass` меняют вид (лог генерации — янтарный
+  и со скроллом).
+- **Блоки внутри секции своей карточки не заводят.** `UnifiedPersonalInfoCard`,
+  `WeaponComponent`, `SpellComponent`, `EquipmentComponent`, `FinancesComponent` —
+  просто `<section>` с заголовком `cm-section-title`; рамку и отступ даёт секция.
+  Раньше каждый рисовал `bg-white shadow rounded-lg p-4`, и на белой секции получалась
+  белая карточка на белой карточке, а в характеристиках — ещё и серая подложка третьим
+  слоем. Если блок надо визуально отделить от соседнего в той же секции, секции ставят
+  `BodyClass="p-4 cm-stack"` — линейка между соседями вместо вложенной карточки.
+- `SkillGroupCard` — единственная настоящая карточка внутри секции: их много в
+  masonry-сетке, и рамка (`border`, не тень) там несёт смысл.
+
 ## Notes
 - Потолок Удачи всегда 99, а не стартовый бросок (стр. 93): начальное значение дальше нигде не
   используется, а Удача растёт в фазу развития. Старые листы правит `NormalizeLuckCap` при открытии.

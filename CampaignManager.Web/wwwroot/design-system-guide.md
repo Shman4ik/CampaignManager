@@ -74,11 +74,19 @@ is the reference:
 - Inside, group content with `cm-section` + `cm-section-header` > `cm-section-title`
   (the small uppercase label), and put content in `cm-card` > `cm-card-header` /
   `cm-card-body` / `cm-card-footer`.
+- **One card level, never two.** A card inside a card — a white panel on a white panel, or a
+  grey inset around a table that already sits in a card — is the thing this system is meant to
+  avoid; it reads as clutter rather than structure. Separate blocks inside one card with a rule
+  (`cm-stack`, or `cm-section-divided` on a single block), and render list items as rows
+  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards.
+- A component that always renders inside a card must not draw its own — the parent gives it
+  the frame and the padding. Say so in a comment at the top of the file so nobody adds one back.
 
 | Class | Use |
 |-------|-----|
 | cm-page | Page content container, directly under `<PageHeader>` |
 | cm-section | Vertical group; `cm-section-divided` adds a top rule |
+| cm-stack | Blocks stacked in one card: a rule between siblings instead of nested cards |
 | cm-section-title | Small uppercase group label (inside `cm-section-header`) |
 | cm-card-title | Card heading (inside `cm-card-header`) |
 | cm-card-count | Count pill after a card title |

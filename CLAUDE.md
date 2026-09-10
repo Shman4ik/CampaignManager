@@ -202,6 +202,11 @@ followed by one `<div class="cm-page">`. `Components/Pages/Home.razor` is the re
 pages, the character sheet and the scenario detail page all use it too. Inside, group with
 `cm-section` + `cm-section-title` and `cm-card` + `cm-card-header`/`-body`/`-footer`.
 
+- **One card level, never two.** A `cm-card` inside a `cm-card`, or a grey inset around a table
+  that already sits in a card, reads as clutter rather than structure. Separate blocks in one card
+  with a rule (`cm-stack`), and render list items as rows
+  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards. A component that always
+  renders inside a card must not draw its own — say so in a comment at the top of the file.
 - **Never** wrap page content in `max-w-*` + `mx-auto`. `page-with-sidebar` is a column flex
   container, so `mx-auto` on a flex item disables stretch and collapses the page to its content
   width — that is why sparse pages used to render as a narrow centred column.
