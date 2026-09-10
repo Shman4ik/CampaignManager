@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Microsoft.JSInterop;
 
 namespace CampaignManager.Web.Utilities.Circuits;
@@ -17,13 +17,67 @@ namespace CampaignManager.Web.Utilities.Circuits;
 /// класс можно будет выбросить.
 /// </para>
 /// </summary>
-public sealed class ActiveCircuitTracker(ILogger<ActiveCircuitTracker> logger)
+public sealed class ActiveCircuitTracker(
+    IHostApplicationLifetime lifetime,
+    ILogger<ActiveCircuitTracker> logger)
 {
-    private readonly ConcurrentDictionary<string, IJSRuntime> _connected = new();
+    /// <summary>
+    /// Сколько ждём вкладки. Меньше и стандартного докеровского SIGTERM-грейса (10 с),
+    /// и <c>HostOptions.ShutdownTimeout</c>.
+    /// </summary>
+    private static readonly TimeSpan PauseTimeout = TimeSpan.FromSeconds(4);
 
-    public void Connected(string circuitId, IJSRuntime jsRuntime) => _connected[circuitId] = jsRuntime;
+    private readonly ConcurrentDictionary<string, IJSRuntime> _connected = new();
+    private int _shutdownHookRegistered;
+
+    public void Connected(string circuitId, IJSRuntime jsRuntime)
+    {
+        _connected[circuitId] = jsRuntime;
+        EnsureShutdownHook();
+    }
 
     public void Disconnected(string circuitId) => _connected.TryRemove(circuitId, out _);
+
+    /// <summary>
+    ///     Вешает паузу на <see cref="IHostApplicationLifetime.ApplicationStopping"/> — и делает это
+    ///     лениво, при первом подключившемся circuit. И то, и другое обязательно.
+    ///     <para>
+    ///     Из <c>IHostedService.StopAsync</c> просить вкладки о паузе бесполезно: SignalR закрывает
+    ///     все соединения в своём обработчике <c>ApplicationStopping</c>
+    ///     (<c>HttpConnectionManager.CloseAllConnections</c>), а он отрабатывает раньше любого
+    ///     <c>StopAsync</c>. К моменту вызова говорить уже не с кем — трекер пуст, JS-вызов уходить
+    ///     некуда. Ровно так этот механизм и простоял мёртвым: в логе не появлялось ни строчки.
+    ///     </para>
+    ///     <para>
+    ///     Обработчики <see cref="CancellationToken"/> вызываются в порядке, обратном регистрации,
+    ///     поэтому наш должен быть зарегистрирован <b>позже</b> сигналровского. Отсюда лень:
+    ///     <c>HttpConnectionManager</c> создаётся при первом соединении, значит на момент первого
+    ///     <c>OnConnectionUpAsync</c> он уже подписан, и наш обработчик встаёт перед ним в очередь.
+    ///     Регистрация на старте приложения этой гарантии не даёт.
+    ///     </para>
+    ///     <para>
+    ///     Обработчик токена синхронный, поэтому паузу приходится дожидаться блокирующе: иначе
+    ///     остановка уйдёт дальше и оборвёт соединения на полуслове. Ожидание ограничено
+    ///     <see cref="PauseTimeout"/>.
+    ///     </para>
+    /// </summary>
+    private void EnsureShutdownHook()
+    {
+        if (Interlocked.Exchange(ref _shutdownHookRegistered, 1) == 1)
+            return;
+
+        lifetime.ApplicationStopping.Register(() =>
+        {
+            try
+            {
+                PauseAllAsync(PauseTimeout).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Не удалось приостановить circuit'ы перед остановкой сервера.");
+            }
+        });
+    }
 
     /// <summary>
     /// Просит все подключённые вкладки поставить свой circuit на паузу и ждёт, пока они

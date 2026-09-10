@@ -323,10 +323,10 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 
 // Пауза circuit'ов при остановке приложения: состояние уезжает в браузер и возвращается
-// на новый экземпляр после деплоя (см. Utilities/Circuits).
+// на новый экземпляр после деплоя (см. Utilities/Circuits). Сама подписка на остановку живёт
+// в ActiveCircuitTracker — из hosted-сервиса это делать поздно, там объяснено почему.
 builder.Services.AddSingleton<ActiveCircuitTracker>();
 builder.Services.AddScoped<CircuitHandler, ShutdownPauseCircuitHandler>();
-builder.Services.AddHostedService<CircuitShutdownPauseService>();
 
 // Persist Data Protection keys to PostgreSQL so they survive container restarts and work across replicas
 builder.Services.AddDataProtection()

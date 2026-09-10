@@ -110,3 +110,16 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   unbound row, and it is constrained by its own rules (`Kind = Pregen`, ещё не забронирован, привязан к сценарию).
 - Use `identityService.GetCurrentUserEmailAsync()` in authorization paths, never the synchronous
   `GetCurrentUserEmail()` — the latter reads `HttpContext` and returns `null` during interactive rendering.
+
+## Несохранённые правки листа
+- `CharacterPage` — единственная страница со снимком `[PersistentState]` (`CharacterPage.State.cs`,
+  свойство `PersistedDraft`). Circuit восстанавливает **только** помеченное этим атрибутом, а сама
+  страница собирается заново, поэтому без снимка любая пауза (уход на вкладку, сон планшета,
+  перезапуск сервера) молча перечитывала лист из базы и стирала несохранённые правки навыков.
+- Черновик применяется в `LoadCharacterDataAsync` **после** загрузки из базы и только если
+  `CharacterId` совпал: чужой черновик выбрасывается, иначе на экране окажется не тот лист.
+  При восстановлении показывается уведомление — иначе Хранитель не отличит правку от базы.
+- Добавляя на страницу новое состояние, которое обязано пережить паузу, клади его в
+  `CharacterDraft`, а не в приватное поле. Всё остальное (открытые секции, модалки) паузу не
+  переживает намеренно.
+- Лист сохраняется только кнопкой; автосохранения нет.

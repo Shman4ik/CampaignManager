@@ -159,6 +159,10 @@ public partial class CharacterPage
                 Character = await CreateNewCharacterTemplateAsync();
             }
 
+            // Circuit вернулся с паузы — на странице снова несохранённая правка, а не копия из базы.
+            if (TryRestoreDraft())
+                ShowNotification("Восстановлены несохранённые изменения листа", "info");
+
             // Старые листы хранят потолок Удачи равным стартовому броску — правим при открытии.
             if (Character is not null)
                 DerivedAttributeRules.NormalizeLuckCap(Character);
