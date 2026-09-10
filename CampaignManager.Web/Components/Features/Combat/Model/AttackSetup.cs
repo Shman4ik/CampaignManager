@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Weapons.Model;
+﻿using CampaignManager.Web.Components.Features.Bestiary.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 
 namespace CampaignManager.Web.Components.Features.Combat.Model;
 
@@ -13,11 +14,18 @@ public class AttackSetup
     /// <summary>Оружие персонажа (для игроков)</summary>
     public Weapon? SelectedWeapon { get; set; }
 
-    /// <summary>Название атаки существа (из CombatDescriptions)</summary>
+    /// <summary>Название атаки существа (строка «Бой» из статблока)</summary>
     public string? CreatureAttackName { get; set; }
 
     /// <summary>Урон атаки существа (свободный текст, напр. "1D6+1D4")</summary>
     public string? CreatureAttackDamage { get; set; }
+
+    /// <summary>
+    /// Как эта атака существа обращается с бонусом к урону: книга пишет это прямо в строке
+    /// урона — «урон 2d6 + БкУ», «урон 2d3 + ½ БкУ», «урон равен БкУ» (стр. 278).
+    /// Пусто для оружия сыщика: там режим выводится из типа оружия.
+    /// </summary>
+    public CreatureDamageBonusMode? CreatureDamageBonus { get; set; }
 
     /// <summary>Навык атаки (базовое значение, до модификаторов дальности)</summary>
     public int AttackSkillValue { get; set; }

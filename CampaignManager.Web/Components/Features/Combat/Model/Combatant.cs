@@ -216,7 +216,12 @@ public class Combatant
         SourceCreatureId = creature.Id;
         Side = side;
         Dexterity = creature.CreatureCharacteristics.Dexterity.Value;
-        Initiative = creature.CreatureCharacteristics.Initiative;
+        // Очерёдность идёт по убыванию ЛВК (стр. 110). Собственная инициатива —
+        // необязательная правка Хранителя, ноль означает «взять ЛВК»; без этого
+        // запаса любая тварь ходила бы после любого сыщика.
+        Initiative = creature.CreatureCharacteristics.Initiative > 0
+            ? creature.CreatureCharacteristics.Initiative
+            : creature.CreatureCharacteristics.Dexterity.Value;
 
         MaxHitPoints = creature.CreatureCharacteristics.HealPoint;
         CurrentHitPoints = creature.CreatureCharacteristics.HealPoint;
@@ -230,10 +235,11 @@ public class Combatant
         CreatureSource = creature;
 
         // Боевые характеристики существа
-        DamageBonus = creature.CreatureCharacteristics.AverageBonusToHit;
+        DamageBonus = creature.CreatureCharacteristics.AverageDamageBonus;
         ConstitutionValue = creature.CreatureCharacteristics.Constitution.Value;
         IntelligenceValue = creature.CreatureCharacteristics.Intelligence.Value;
-        Luck = creature.CreatureCharacteristics.Luck;
+        // Удачи у чудовищ книга не указывает: правило шальной пули (стр. 112) ищет
+        // невезучего среди союзников-сыщиков, а не среди тварей.
         Build = creature.CreatureCharacteristics.AverageComplexity;
         Armor = creature.CreatureCharacteristics.Armor;
 
@@ -241,12 +247,27 @@ public class Combatant
             ? creature.CreatureCharacteristics.DodgeSkill
             : creature.CreatureCharacteristics.Dexterity.Value / 2;
 
-        FightingSkill = creature.Attacks
-            .FirstOrDefault(a => a.IsMelee)?.SkillValue ?? 50;
+        // Базовый боевой навык существа — именно строка «Ближний бой» (стр. 278);
+        // ей же оно совершает манёвры и контратакует. Брать первую попавшуюся
+        // строку нельзя: у твари могут быть укус и захват со своими процентами.
+        FightingSkill = FindMeleeSkill(creature);
 
-        AttacksPerRound = creature.Attacks.Count > 0
-            ? creature.Attacks.Max(a => a.AttacksPerRound)
-            : 1;
+        // Атак за раунд — строка статблока, одна на всё существо (стр. 279).
+        AttacksPerRound = Math.Max(1, creature.CreatureCharacteristics.AttacksPerRound);
+    }
+
+    /// <summary>
+    ///     Процент базовой атаки существа: строка «Ближний бой», иначе самая частая
+    ///     атака ближнего боя, иначе стандартные 50%.
+    /// </summary>
+    private static int FindMeleeSkill(Creature creature)
+    {
+        var melee = creature.Attacks
+            .FirstOrDefault(a => a.Name.StartsWith("Ближний бой", StringComparison.OrdinalIgnoreCase));
+
+        return melee?.SkillValue
+               ?? creature.Attacks.FirstOrDefault(a => a.Kind == CreatureAttackKind.Melee)?.SkillValue
+               ?? 50;
     }
 
     private static int FindFightingSkill(Character character)

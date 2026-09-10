@@ -119,6 +119,20 @@ public class CombatActionResult
     public int? SanityAfter { get; set; }
     public int? SanityLoss { get; set; }
 
+    /// <summary>Вид тварей, за который зачтётся привыкание к ужасному (стр. 167).</summary>
+    public Guid? SanitySourceCreatureId { get; set; }
+
+    /// <summary>Название этого вида — под ним заводится запись привыкания на листе.</summary>
+    public string? SanitySourceCreatureName { get; set; }
+
+    /// <summary>Запись потери из бестиария («0/1d6»), из неё выводится предел привыкания.</summary>
+    public string? SanitySourceFormula { get; set; }
+
+    /// <summary>
+    /// Предел привыкания уже выбран, и потеря урезана или обнулена (стр. 167).
+    /// </summary>
+    public bool SanityCappedByHabituation { get; set; }
+
     /// <summary>Крах в проверке Рассудка — теряется максимум пунктов (стр. 153).</summary>
     public bool SanityFumble { get; set; }
 

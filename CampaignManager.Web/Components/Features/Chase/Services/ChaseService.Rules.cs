@@ -522,7 +522,11 @@ public sealed partial class ChaseService
 
         var previousMov = participant.AdjustedMov;
         participant.Mode = mode;
-        participant.NativeModeSpeed = nativeModeSpeed;
+        // Хранитель не вписал свою СКО — берём ту, что книга указала у существа
+        // («6 / полёт 20»), иначе останется половина обычной (стр. 141).
+        participant.NativeModeSpeed = nativeModeSpeed > 0
+            ? nativeModeSpeed
+            : participant.NativeSpeedFor(mode) ?? 0;
         var newMov = participant.AdjustedMov;
 
         RecalculateChaseSpeeds();

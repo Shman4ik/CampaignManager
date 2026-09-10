@@ -295,6 +295,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasColumnType("jsonb")
                 .HasDefaultValueSql("'[]'::jsonb");
 
+            // Store Skills as JSONB
+            entity.Property(c => c.Skills)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb");
+
             // Store CombatDescriptions as JSONB (legacy)
             entity.Property(c => c.CombatDescriptions)
                 .HasColumnType("jsonb");

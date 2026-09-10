@@ -1,4 +1,5 @@
-﻿@using CampaignManager.Web.Components.Features.Combat.Model
+﻿@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Combat.Model
 @using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Weapons.Model
@@ -721,26 +722,14 @@
             {
                 _attackOptions.Add(new AttackOption
                 {
-                    Name = attack.Name,
+                    Name = attack.Kind is CreatureAttackKind.Maneuver
+                        ? $"{attack.Name} (манёвр)"
+                        : attack.Name,
                     Damage = attack.DamageFormula,
                     IsMelee = attack.IsMelee,
-                    SkillValue = attack.SkillValue
+                    SkillValue = attack.SkillValue,
+                    CreatureDamageBonus = attack.DamageBonus
                 });
-            }
-
-            // Fallback: legacy CombatDescriptions для немигрированных данных
-            if (_selectedAttacker.CreatureSource.Attacks.Count == 0)
-            {
-                foreach (var kvp in _selectedAttacker.CreatureSource.CombatDescriptions)
-                {
-                    _attackOptions.Add(new AttackOption
-                    {
-                        Name = kvp.Key,
-                        Damage = "1D3",
-                        IsMelee = true,
-                        SkillValue = 50
-                    });
-                }
             }
         }
 
@@ -1079,6 +1068,7 @@
             SelectedWeapon = option?.Weapon,
             CreatureAttackName = option is { Weapon: null } ? option.Name : null,
             CreatureAttackDamage = option is { Weapon: null } ? option.Damage : null,
+            CreatureDamageBonus = option is { Weapon: null } ? option.CreatureDamageBonus : null,
             AttackSkillValue = _attackSkillValue,
             IsMelee = _isMelee,
             DefenderReaction = _defenderReaction,
@@ -1151,5 +1141,8 @@
         public Weapon? Weapon { get; set; }
         public bool IsMelee { get; set; }
         public int SkillValue { get; set; }
+
+        /// <summary>Режим бонуса к урону из статблока; пусто для оружия сыщика.</summary>
+        public CreatureDamageBonusMode? CreatureDamageBonus { get; set; }
     }
 }

@@ -33,6 +33,13 @@ public class Creature : BaseDataBaseEntity, INamedEntity
     public Dictionary<string, string> CombatDescriptions { get; set; } = new();
 
     /// <summary>
+    ///     Навыки существа («Скрытность 90%»). Книга указывает их не у всех тварей:
+    ///     большинство владеет хотя бы Слухом, Скрытностью или Вниманием, и недостающие
+    ///     Хранитель добавляет сам (стр. 278).
+    /// </summary>
+    public List<CreatureSkill> Skills { get; set; } = [];
+
+    /// <summary>
     ///     Особые умения
     /// </summary>
     public Dictionary<string, string> SpecialAbilities { get; set; } = new();

@@ -1,4 +1,4 @@
-namespace CampaignManager.Web.Components.Features.Combat.Model;
+﻿namespace CampaignManager.Web.Components.Features.Combat.Model;
 
 /// <summary>
 /// DTO для настройки проверки рассудка (CoC 7e, глава 8)
@@ -17,6 +17,19 @@ public class SanityCheckSetup
     /// Потеря рассудка при неудаче (напр. "1D6", "1D10", "2D6")
     /// </summary>
     public string FailureLoss { get; set; } = "1D6";
+
+    /// <summary>
+    /// Существо, при виде которого идёт проверка. Нужно для привыкания к ужасному
+    /// (стр. 167): потеря за этот вид складывается в общий счётчик на листе, а сверх
+    /// предела сыщик за него уже не теряет.
+    /// </summary>
+    public Guid? SourceCreatureId { get; set; }
+
+    /// <summary>Название вида тварей для записи привыкания.</summary>
+    public string? SourceCreatureName { get; set; }
+
+    /// <summary>Запись потери из бестиария как есть («0/1d6») — задаёт предел привыкания.</summary>
+    public string? SourceSanityLossFormula { get; set; }
 
     /// <summary>
     /// Ручной ввод броска d100 (null = авторбросок).
