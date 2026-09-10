@@ -245,18 +245,32 @@ Blazor Server keeps page state in a server-side circuit, so a dropped connection
 iPad tab, or a deployment would otherwise wipe whatever the Keeper had on screen. The app opts into
 the .NET 10 circuit persistence stack:
 
-- `[PersistentState]` on a **public** property is what gets saved and restored. A service opts in by
-  being registered with `RegisterPersistentService<T>(RenderMode.InteractiveServer)` in `Program.cs`
-  (`CombatService` and `ChaseService` today). The getter runs when the circuit is paused, the setter
+- `[PersistentState]` on a **public** property is what gets saved and restored — **и больше ничего**.
+  Возобновление не «оживляет» страницу: она собирается заново, `OnInitializedAsync` отрабатывает
+  снова, все приватные поля возвращаются к значениям по умолчанию. Любое состояние, которое обязано
+  пережить паузу, либо помечено этим атрибутом, либо лежит в адресе (см. ниже) — третьего нет.
+  A service opts in by being registered with
+  `RegisterPersistentService<T>(RenderMode.InteractiveServer)` in `Program.cs`
+  (`CombatService` and `ChaseService` today); компонент — просто публичным свойством с атрибутом
+  (`CharacterPage.PersistedDraft`). The getter runs when the circuit is paused, the setter
   when it resumes — expose **one snapshot property** per service rather than marking every field.
 - The persisted value must be JSON-serializable: plain POCOs, no cycles, no lazy EF navigations.
 - Retention is configured on `CircuitOptions` (`PersistedCircuitInMemoryMaxRetained`,
   `PersistedCircuitInMemoryRetentionPeriod`). That state lives in the server's memory and does **not**
   survive a process restart.
-- Surviving a restart relies on pausing circuits *before* shutdown: `Utilities/Circuits` asks every
-  connected tab to call `Blazor.pauseCircuit()` from `IHostedService.StopAsync`, which moves the state
-  into the browser. Data Protection keys are stored in PostgreSQL, so the new instance can unprotect
-  what the browser sends back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
+- Surviving a restart relies on pausing circuits *before* shutdown: `ActiveCircuitTracker` asks every
+  connected tab to call `Blazor.pauseCircuit()`, which moves the state into the browser. Data
+  Protection keys are stored in PostgreSQL, so the new instance can unprotect what the browser sends
+  back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
+- **Подписка на остановку висит на `ApplicationStopping` и оформляется лениво, при первом
+  подключившемся circuit — не трогай ни то, ни другое.** Из `IHostedService.StopAsync` просить
+  вкладки о паузе поздно: SignalR закрывает все соединения своим обработчиком `ApplicationStopping`
+  (`HttpConnectionManager.CloseAllConnections`), который отрабатывает раньше любого `StopAsync`, и
+  трекер к тому моменту пуст. Обработчики `CancellationToken` идут в обратном порядке регистрации,
+  поэтому наш обязан быть зарегистрирован позже сигналровского — отсюда лень: на момент первого
+  `OnConnectionUpAsync` `HttpConnectionManager` уже подписан. Механизм ровно по этой причине
+  простоял мёртвым: в логе не появлялось ни строчки, а после деплоя терялось всё.
+  Подробности — в комментарии к `ActiveCircuitTracker.EnsureShutdownHook`.
 - Client side: `wwwroot/js/circuit-persistence.js` pauses the circuit when the tab has been hidden for
   `PAUSE_AFTER_HIDDEN_MS` (30 с) — или сразу, по `freeze`/`pagehide`, если браузер вот-вот остановит
   на странице JS, — и возобновляет с нарастающей паузой. Порог не опускать обратно к секундам: пауза
