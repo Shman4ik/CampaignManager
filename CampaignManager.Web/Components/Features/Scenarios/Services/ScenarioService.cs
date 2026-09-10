@@ -582,27 +582,6 @@ public sealed class ScenarioService(
     }
 
     /// <summary>
-    ///     Сценарии, в которых занят этот НПС.
-    /// </summary>
-    public async Task<List<Scenario>> GetScenariosWithNpcAsync(Guid characterId)
-    {
-        try
-        {
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.ScenarioNpcs
-                .Where(sn => sn.CharacterId == characterId)
-                .Select(sn => sn.Scenario!)
-                .OrderBy(s => s.Name)
-                .ToListAsync();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving scenarios for NPC {CharacterId}", characterId);
-            return [];
-        }
-    }
-
-    /// <summary>
     ///     Gets all available creatures for adding to scenarios
     /// </summary>
     /// <returns>A list of all creatures</returns>

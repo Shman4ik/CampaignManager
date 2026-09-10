@@ -16,16 +16,6 @@ public sealed class BookService(
     public Task<List<Book>> GetAllBooksAsync() =>
         CrudServiceHelper.GetAllCachedAsync<Book>(dbContextFactory, cache, BooksKey, logger);
 
-    public async Task<Book?> GetBookByNameAsync(string name)
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Books
-            .FirstOrDefaultAsync(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    public Task<Book?> GetBookByIdAsync(Guid id) =>
-        CrudServiceHelper.GetByIdAsync<Book>(dbContextFactory, id, logger);
-
     public async Task<bool> AddBookAsync(Book book)
     {
         if (string.IsNullOrWhiteSpace(book.Name)) return false;

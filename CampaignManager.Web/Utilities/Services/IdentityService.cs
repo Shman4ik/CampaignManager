@@ -95,12 +95,6 @@ public class IdentityService(
         return _cachedUser;
     }
 
-    public void InvalidateUserCache()
-    {
-        _cachedUser = null;
-        _userCacheLoaded = false;
-    }
-
     public async Task<ApplicationUser?> GetUserAsync(string? email)
     {
         if (email == null) return null;

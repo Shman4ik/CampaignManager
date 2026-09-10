@@ -744,13 +744,6 @@ public sealed partial class ChaseService
         NotifyStateChanged();
     }
 
-    public IReadOnlyList<string> GetRoutes() =>
-        Participants
-            .Where(p => !string.IsNullOrWhiteSpace(p.RouteLabel))
-            .Select(p => p.RouteLabel!)
-            .Distinct()
-            .OrderBy(r => r)
-            .ToList();
 }
 
 /// <summary>Насколько существу подходит навык, которого у него нет (стр. 142).</summary>

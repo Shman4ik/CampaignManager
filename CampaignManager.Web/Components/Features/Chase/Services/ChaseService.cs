@@ -199,15 +199,6 @@ public sealed partial class ChaseService
         }
     }
 
-    public void SetVehicle(Guid id, string vehicleName, int vehicleSpeed)
-    {
-        var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p is null) return;
-
-        ApplyVehicle(p, vehicleName, vehicleSpeed, 1, 0, null);
-        NotifyStateChanged();
-    }
-
     /// <summary>Посадить участника в транспорт из таблицы V (стр. 143).</summary>
     public void SetVehicleFromTemplate(Guid id, VehicleTemplate template)
     {
@@ -1009,24 +1000,6 @@ public sealed partial class ChaseService
         }
     }
 
-    public ChaseActionResult RecordOtherAction(Guid participantId, string description, bool costsMovementAction)
-    {
-        var participant = Participants.First(p => p.Id == participantId);
-
-        return new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.Other,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            IsSuccess = true,
-            ActorMovementActionsSpent = costsMovementAction ? 1 : 0,
-            LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation,
-            Summary = $"{participant.Name}: {description}"
-        };
-    }
-
     // ───────────────────── Проверки состояния ─────────────────────
 
     /// <summary>
@@ -1111,14 +1084,6 @@ public sealed partial class ChaseService
             Phase = ChasePhase.Ended;
 
         NotifyStateChanged();
-    }
-
-    public int GetDistanceBetween(Guid id1, Guid id2)
-    {
-        var p1 = Participants.FirstOrDefault(p => p.Id == id1);
-        var p2 = Participants.FirstOrDefault(p => p.Id == id2);
-        if (p1 is null || p2 is null) return 0;
-        return Math.Abs(p1.CurrentLocation - p2.CurrentLocation);
     }
 
     public bool IsChaseOver() =>

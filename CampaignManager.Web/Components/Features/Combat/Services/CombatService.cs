@@ -462,17 +462,6 @@ public sealed partial class CombatService
     };
 
     /// <summary>
-    /// Порог броска для данной дальности — то же число, что и уровень сложности,
-    /// но в виде значения навыка. Нужно только для подписей в интерфейсе.
-    /// </summary>
-    public static int GetRollThresholdForRange(int baseSkill, RangeLevel range) => range switch
-    {
-        RangeLevel.Long => baseSkill / 2,
-        RangeLevel.Extreme => baseSkill / 5,
-        _ => baseSkill
-    };
-
-    /// <summary>
     /// Союзник стрелка на линии огня с наименьшей Удачей (стр. 112). Союзниками
     /// считаются бойцы той же стороны, кроме самого стрелка и его цели.
     /// </summary>
@@ -900,14 +889,6 @@ public sealed partial class CombatService
         setup is { IsMelee: false, SurpriseMode: SurpriseMode.AutoHit }
             ? SurpriseMode.BonusDie
             : setup.SurpriseMode;
-
-    /// <summary>
-    /// Может ли боец атаковать в этом раунде: укрытие от огня отнимает атаку,
-    /// а число атак за раунд ограничено (стр. 100, 111).
-    /// </summary>
-    public bool CanAttack(Combatant combatant) =>
-        combatant.AttackBlockedInRound != CurrentRound
-        && combatant.AttacksThisRound < Math.Max(1, combatant.AttacksPerRound);
 
     /// <summary>Почему боец не может атаковать; null — может.</summary>
     public string? GetAttackBlockReason(Combatant combatant)
@@ -1524,18 +1505,6 @@ public sealed partial class CombatService
                          (notes.Count > 0 ? " " + string.Join(" ", notes) : "");
 
         return result;
-    }
-
-    /// <summary>
-    /// Сбрасывает счётчик потерянного за день рассудка — вызывать, когда сыщики
-    /// добрались до безопасного места и игровой день закончился (стр. 153).
-    /// </summary>
-    public void StartNewGameDay()
-    {
-        foreach (var c in Combatants)
-            c.SanityLostToday = 0;
-
-        NotifyStateChanged();
     }
 
     // ───────────────────── Применение результата ─────────────────────

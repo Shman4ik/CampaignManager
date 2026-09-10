@@ -402,34 +402,6 @@ public sealed class CharacterService(
         }
     }
 
-    /// <summary>
-    ///     Переносит НПС между общей библиотекой и кампанией.
-    /// </summary>
-    /// <param name="characterId">Лист НПС.</param>
-    /// <param name="campaignId">Кампания-владелец или <c>null</c>, чтобы вернуть НПС в библиотеку.</param>
-    public async Task MoveNpcToCampaignAsync(Guid characterId, Guid? campaignId)
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        var character = await dbContext.CharacterStorage.FindAsync(characterId);
-        if (character is null)
-            throw new KeyNotFoundException($"Character with ID {characterId} not found");
-
-        if (character.Kind != CharacterKind.Npc)
-            throw new InvalidOperationException("Владельца можно менять только у НПС");
-
-        if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Write))
-        {
-            logger.LogWarning("Denied owner change on character {CharacterId}", characterId);
-            throw new UnauthorizedAccessException("Недостаточно прав для изменения владельца этого НПС");
-        }
-
-        character.CampaignId = campaignId;
-        character.LastUpdated = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync();
-
-        logger.LogInformation("NPC {CharacterId} moved to campaign {CampaignId}", characterId, campaignId);
-    }
-
 
     /// <summary>
     ///     Reserves a pregen character for the current user: the pregen template is transformed into the
