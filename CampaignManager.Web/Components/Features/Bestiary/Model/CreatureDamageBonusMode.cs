@@ -1,9 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 
 /// <summary>
 ///     Как строка урона в статблоке обращается со средним бонусом к урону (БкУ).
 ///     Книга печатает это словами прямо в строке атаки (стр. 278).
 /// </summary>
+// В JSONB значение лежит именем («Melee», «Full»), а не числом: статблок должен
+// читаться в базе глазами, и порядок членов перечисления не должен менять данные.
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CreatureDamageBonusMode
 {
     /// <summary>«урон 1d3» — бонус не добавляется.</summary>

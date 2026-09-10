@@ -1,8 +1,13 @@
+using System.Text.Json.Serialization;
+
 namespace CampaignManager.Web.Components.Features.Bestiary.Model;
 
 /// <summary>
 ///     Чем является строка «Бой» в статблоке существа (гл. 14, стр. 278–279).
 /// </summary>
+// В JSONB значение лежит именем («Melee», «Full»), а не числом: статблок должен
+// читаться в базе глазами, и порядок членов перечисления не должен менять данные.
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CreatureAttackKind
 {
     /// <summary>Обычная атака в ближнем бою — когти, щупальца, укусы, удары (стр. 278).</summary>
