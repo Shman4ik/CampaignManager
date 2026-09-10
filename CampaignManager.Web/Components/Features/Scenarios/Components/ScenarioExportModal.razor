@@ -1,0 +1,89 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Shared
+@inject ScenarioImportService ScenarioImportService
+@inject IJSRuntime JS
+@inject ILogger<ScenarioExportModal> Logger
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Экспорт сценария в JSON"
+       MaxWidth="4xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            <Alert Type="info" Title="Обменный формат">
+                Этот JSON принимает кнопка «Импорт» на странице шаблонов сценариев — на этой же
+                платформе или на другой. Возьмите его за образец, когда переносите новый сценарий
+                из книги правил.
+            </Alert>
+
+            @if (_isLoading)
+            {
+                <LoadingIndicator/>
+            }
+            else if (_error is not null)
+            {
+                <Alert Type="error" Title="Экспорт не выполнен">@_error</Alert>
+            }
+            else
+            {
+                <textarea class="cm-input font-mono text-xs" rows="20" readonly>@_json</textarea>
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            <Button ButtonType="button" OnClick="Hide" Variant="secondary">Закрыть</Button>
+            <Button ButtonType="button" OnClick="CopyToClipboard" Variant="primary"
+                    IsDisabled="@(_isLoading || string.IsNullOrEmpty(_json))">
+                @(_copied ? "Скопировано" : "Скопировать")
+            </Button>
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+    private bool _isVisible;
+    private bool _isLoading;
+    private bool _copied;
+    private string? _json;
+    private string? _error;
+
+    public async Task Show(Guid scenarioId)
+    {
+        _isVisible = true;
+        _isLoading = true;
+        _copied = false;
+        _json = null;
+        _error = null;
+        StateHasChanged();
+
+        _json = await ScenarioImportService.ExportAsync(scenarioId);
+        if (_json is null) _error = "Сценарий не найден.";
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard()
+    {
+        if (string.IsNullOrEmpty(_json)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _json);
+            _copied = true;
+        }
+        catch (JSException ex)
+        {
+            // Буфер обмена недоступен (нет https или отказ браузера) — текст всё равно виден в поле.
+            Logger.LogWarning(ex, "Clipboard write failed for scenario export");
+        }
+    }
+}

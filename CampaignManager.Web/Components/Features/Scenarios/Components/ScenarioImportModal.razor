@@ -1,0 +1,137 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Shared
+@inject ScenarioImportService ScenarioImportService
+@inject NavigationManager NavigationManager
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Импорт сценария из JSON"
+       MaxWidth="4xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            @if (_result is null)
+            {
+                <Alert Type="info" Title="Как это работает">
+                    Вставьте JSON сценария — основные поля, локации с проверками навыков, ключевые факты,
+                    раздатки и состав НПС заведутся за один раз. Импорт всегда создаёт <strong>новый</strong>
+                    сценарий. Готовый JSON нужного вида отдаёт кнопка «Экспорт» на странице любого сценария.
+                </Alert>
+
+                <div>
+                    <label for="importJson" class="cm-field-label">JSON сценария</label>
+                    <textarea id="importJson" @bind="_json" class="cm-input font-mono text-xs" rows="18"
+                              placeholder='{ "name": "Название сценария", "era": "1920-е", "locations": [], "keyFacts": [], "handouts": [], "npcs": [] }'></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <Alert Type="error" Title="Импорт не выполнен">@_error</Alert>
+                }
+            }
+            else
+            {
+                <Alert Type="success" Title="Сценарий импортирован">
+                    «@_result.ScenarioName»: локаций — @_result.LocationsCreated,
+                    ключевых фактов — @_result.KeyFactsCreated,
+                    раздаток — @_result.HandoutsCreated,
+                    новых листов НПС — @_result.NpcsCreated,
+                    занято уже существующих — @_result.NpcsReused.
+                </Alert>
+
+                @if (_result.Warnings.Count > 0)
+                {
+                    <Alert Type="warning" Title="Замечания">
+                        <ul class="list-disc list-inside space-y-1">
+                            @foreach (var warning in _result.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </Alert>
+                }
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            @if (_result is null)
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="secondary">Отмена</Button>
+                <Button ButtonType="button" OnClick="Import" Variant="primary"
+                        IsDisabled="@(_isImporting || string.IsNullOrWhiteSpace(_json))">
+                    @(_isImporting ? "Импортирую…" : "Импортировать")
+                </Button>
+            }
+            else
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="secondary">Закрыть</Button>
+                <Button ButtonType="button" OnClick="OpenImported" Variant="primary">Открыть сценарий</Button>
+            }
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+    /// <summary>
+    ///     Вызывается после успешного импорта, чтобы страница перечитала список сценариев.
+    /// </summary>
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private bool _isVisible;
+    private bool _isImporting;
+    private string _json = string.Empty;
+    private string? _error;
+    private ScenarioImportResult? _result;
+
+    public void Show()
+    {
+        _json = string.Empty;
+        _error = null;
+        _result = null;
+        _isImporting = false;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task Import()
+    {
+        if (string.IsNullOrWhiteSpace(_json)) return;
+
+        _isImporting = true;
+        _error = null;
+
+        try
+        {
+            var result = await ScenarioImportService.ImportAsync(_json);
+
+            if (!result.Success)
+            {
+                _error = result.Error ?? "Неизвестная ошибка импорта.";
+                return;
+            }
+
+            _result = result;
+            await OnImported.InvokeAsync();
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+    private void OpenImported()
+    {
+        if (_result?.ScenarioId is not { } scenarioId) return;
+
+        _isVisible = false;
+        NavigationManager.NavigateTo($"/scenarios/{scenarioId}");
+    }
+}

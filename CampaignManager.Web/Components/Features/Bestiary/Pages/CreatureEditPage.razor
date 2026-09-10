@@ -482,6 +482,7 @@
     private bool isUploadingImage;
     private string? displayImageUrl;
     private Guid? _lastLoadedId;
+    private bool _hasLoadedOnce;
 
     private class DictionaryEntry
     {
@@ -491,8 +492,11 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Id != _lastLoadedId)
+        // Сравнивать только Id нельзя: у нового существа он null, как и _lastLoadedId,
+        // поэтому первый заход не грузил данные и страница навсегда оставалась в isLoading.
+        if (!_hasLoadedOnce || Id != _lastLoadedId)
         {
+            _hasLoadedOnce = true;
             _lastLoadedId = Id;
             await LoadData();
         }
