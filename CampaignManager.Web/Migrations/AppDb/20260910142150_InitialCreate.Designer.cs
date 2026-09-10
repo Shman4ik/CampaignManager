@@ -18,7 +18,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Web.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260910132807_InitialCreate")]
+    [Migration("20260910142150_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -286,48 +286,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("CampaignPlayers", "games");
-                });
-
-            modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.LlmKnowledgeEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTimeOffset>("LastUpdated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("LlmKnowledgeEntries", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.Occupation", b =>

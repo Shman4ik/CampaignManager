@@ -185,25 +185,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                 });
 
             migrationBuilder.CreateTable(
-                name: "LlmKnowledgeEntries",
-                schema: "games",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Content = table.Column<string>(type: "text", nullable: false),
-                    SortOrder = table.Column<int>(type: "integer", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    LastUpdated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_LlmKnowledgeEntries", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Occupations",
                 schema: "games",
                 columns: table => new
@@ -556,13 +537,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                 filter: "\"Status\" = 'Pending'");
 
             migrationBuilder.CreateIndex(
-                name: "IX_LlmKnowledgeEntries_Key",
-                schema: "games",
-                table: "LlmKnowledgeEntries",
-                column: "Key",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Occupations_Name",
                 schema: "games",
                 table: "Occupations",
@@ -658,10 +632,6 @@ namespace CampaignManager.Web.Migrations.AppDb
 
             migrationBuilder.DropTable(
                 name: "KeeperApplications",
-                schema: "games");
-
-            migrationBuilder.DropTable(
-                name: "LlmKnowledgeEntries",
                 schema: "games");
 
             migrationBuilder.DropTable(
