@@ -28,6 +28,7 @@ public partial class CharacterPage
     [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private LastCharacterService LastCharacterService { get; set; } = default!;
     [Inject] private ScenarioService ScenarioService { get; set; } = default!;
+    [Inject] private ILogger<CharacterPage> Logger { get; set; } = default!;
 
     [Parameter] public Guid? CharacterId { get; set; }
 
@@ -159,6 +160,11 @@ public partial class CharacterPage
                 Character = await CreateNewCharacterTemplateAsync();
             }
 
+            // Слепок берём с того, что лежит в базе. Всё, что страница делает дальше —
+            // восстановленный черновик и правка потолка Удачи у старых листов, — становится
+            // обычным изменением и уходит в базу первым же автосохранением.
+            MarkSaved();
+
             // Circuit вернулся с паузы — на странице снова несохранённая правка, а не копия из базы.
             if (TryRestoreDraft())
                 ShowNotification("Восстановлены несохранённые изменения листа", "info");
@@ -234,6 +240,8 @@ public partial class CharacterPage
             if (CharacterStorageDto is not null)
             {
                 await CharacterService.UpdateCharacterAsync(Character);
+                MarkSaved();
+                _autoSaveState = AutoSaveState.Saved;
                 ShowNotification($"{KindLabel} успешно обновлён!", "success");
                 return;
             }
@@ -252,6 +260,10 @@ public partial class CharacterPage
             Character.Id = created.Id;
             CharacterId = created.Id;
             CharacterStorageDto = created;
+
+            // С этого момента лист существует в базе — дальше его ведёт автосохранение.
+            MarkSaved();
+            _autoSaveState = AutoSaveState.Saved;
 
             // НПС появляется в сценарии связью — копия листа больше не создаётся.
             if (CreationKind is CharacterKind.Npc && ScenarioId is { } scenarioId)
@@ -406,24 +418,7 @@ public partial class CharacterPage
     private void HandleDevelopmentPhaseFinished()
     {
         RecalculateDerivedAttributes();
-        ShowNotification("Фаза развития завершена, отметки навыков стёрты. Не забудьте сохранить лист.", "success");
-    }
-
-    private void ResetUsedSkills()
-    {
-        if (Character?.Skills.SkillGroups == null)
-            return;
-
-        foreach (var group in Character.Skills.SkillGroups)
-        {
-            foreach (var skill in group.Skills)
-            {
-                skill.IsUsed = false;
-            }
-        }
-
-        ShowNotification("Все использованные навыки сброшены", "success");
-        StateHasChanged();
+        ShowNotification("Фаза развития завершена, отметки навыков стёрты.", "success");
     }
 
     private bool _navMenuOpen;
@@ -494,6 +489,8 @@ public partial class CharacterPage
     {
         if (firstRender)
         {
+            StartAutoSaveLoop();
+
             await Task.Delay(100);
 
             if (CharacterId.HasValue && CharacterId.Value != Guid.Empty && Character is not null && !IsNpc)
