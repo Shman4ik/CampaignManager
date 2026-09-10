@@ -52,6 +52,16 @@
     file created later during the build never reaches the publish output — the site would
     then deploy successfully and serve 404 for /styles.css.
   -->
+  <!--
+    Drop it from the wwwroot/** glob at evaluation time: on any build after the first the
+    file is already on disk, so the glob picks it up and the target's Include below adds a
+    second copy — static web assets then fail with "Two assets found targeting the same path".
+    Removing it inside the target is too late for that.
+  -->
+  <ItemGroup>
+    <Content Remove="wwwroot\styles.css" />
+  </ItemGroup>
+
   <Target Name="Tailwind" BeforeTargets="ResolveProjectStaticWebAssets">
     <Exec Condition="'$(Configuration)' != 'Release'"
           Command="npx --yes tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css" />
@@ -61,8 +71,8 @@
     <Error Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/styles.css')"
            Text="Tailwind did not produce wwwroot/styles.css." />
     <ItemGroup>
-      <Content Remove="wwwroot/styles.css" />
-      <Content Include="wwwroot/styles.css" />
+      <Content Remove="wwwroot\styles.css" />
+      <Content Include="wwwroot\styles.css" />
     </ItemGroup>
   </Target>
 
