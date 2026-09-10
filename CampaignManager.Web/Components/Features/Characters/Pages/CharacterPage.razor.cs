@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Campaigns.Models;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Components;
 using CampaignManager.Web.Components.Features.Characters.Model;
@@ -25,7 +25,6 @@ public partial class CharacterPage
     [Inject] private OccupationService OccupationService { get; set; } = default!;
     [Inject] private SkillService SkillService { get; set; } = default!;
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
-    [Inject] private LlmCharacterValidationService LlmService { get; set; } = default!;
     [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private LastCharacterService LastCharacterService { get; set; } = default!;
     [Inject] private ScenarioService ScenarioService { get; set; } = default!;
@@ -80,7 +79,6 @@ public partial class CharacterPage
     private bool _showGenerateModal;
     private bool _showDevelopmentPhase;
     private bool _isKeeper;
-    private LlmSuggestionsModal? _llmModal;
     private List<Campaign> _keeperCampaigns = [];
     private string _ownerCampaignId = "";
 
@@ -301,20 +299,6 @@ public partial class CharacterPage
     private void OpenGenerateModal() => _showGenerateModal = true;
 
     private void CloseGenerateModal() => _showGenerateModal = false;
-
-    private async Task OpenLlmModal()
-    {
-        if (_llmModal is not null)
-            await _llmModal.OpenAsync();
-    }
-
-    private async Task HandleLlmApplied(Character updated)
-    {
-        await CharacterService.UpdateCharacterAsync(updated);
-        CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(updated.Id);
-        Character = CharacterStorageDto?.Character;
-        ShowNotification("Персонаж обновлён по рекомендациям LLM", "success");
-    }
 
     private async Task HandleGenerate(GenerateCharacterModal.GenerationParameters parameters)
     {

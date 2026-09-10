@@ -1,0 +1,48 @@
+@namespace CampaignManager.Web.Components.Features.Chase.Components
+
+@* Тройка полей «навык — значение — бросок», одинаковая у всех действий погони.
+   Компонент отдаёт три сестринских <div>, поэтому его можно ставить прямо
+   в grid-контейнер панели: раскладка остаётся такой же, как при ручной разметке.
+   Значения обновляются по onchange — как у @bind, который здесь был раньше. *@
+
+<div>
+    <label class="text-xs text-gray-600">@SkillLabel</label>
+    <input type="text" value="@SkillName" @onchange="OnSkillNameChanged"
+           placeholder="@SkillPlaceholder"
+           class="w-full text-sm border border-gray-300 rounded px-2 py-1.5"/>
+</div>
+<div>
+    <label class="text-xs text-gray-600">Значение навыка</label>
+    <input type="number" value="@SkillValue" @onchange="OnSkillValueChanged"
+           class="w-full text-sm border border-gray-300 rounded px-2 py-1.5"/>
+</div>
+<div>
+    <label class="text-xs text-gray-600">@RollLabel</label>
+    <input type="number" min="1" max="100" value="@Roll" @onchange="OnRollChanged"
+           placeholder="01–100"
+           class="w-full text-sm border border-gray-300 rounded px-2 py-1.5"/>
+</div>
+
+@code {
+    [Parameter] public string SkillLabel { get; set; } = "Навык";
+    [Parameter] public string RollLabel { get; set; } = "Бросок d100";
+    [Parameter] public string? SkillPlaceholder { get; set; }
+
+    [Parameter] public string SkillName { get; set; } = "";
+    [Parameter] public EventCallback<string> SkillNameChanged { get; set; }
+
+    [Parameter] public int SkillValue { get; set; }
+    [Parameter] public EventCallback<int> SkillValueChanged { get; set; }
+
+    [Parameter] public int Roll { get; set; }
+    [Parameter] public EventCallback<int> RollChanged { get; set; }
+
+    private Task OnSkillNameChanged(ChangeEventArgs e) =>
+        SkillNameChanged.InvokeAsync(e.Value?.ToString() ?? "");
+
+    private Task OnSkillValueChanged(ChangeEventArgs e) =>
+        SkillValueChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var v) ? v : 0);
+
+    private Task OnRollChanged(ChangeEventArgs e) =>
+        RollChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var v) ? v : 0);
+}

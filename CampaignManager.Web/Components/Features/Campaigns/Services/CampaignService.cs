@@ -188,35 +188,6 @@ public sealed class CampaignService(
     }
 
     /// <summary>
-    ///     Checks if the current user is an admin or keeper of the specified campaign
-    /// </summary>
-    /// <param name="campaignId">Campaign ID</param>
-    /// <returns>True if user is admin or keeper, false otherwise</returns>
-    public async Task<bool> IsUserAdminOrKeeperAsync(Guid campaignId)
-    {
-        try
-        {
-            var user = await identityService.GetUserAsync();
-            if (user == null) return false;
-
-            // Check if user is global admin
-            if (user.Role == PlayerRole.Administrator) return true;
-
-            // Check if user is campaign keeper
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var campaign = await dbContext.Campaigns
-                .FirstOrDefaultAsync(c => c.Id == campaignId);
-
-            return campaign?.KeeperEmail?.Equals(user.Email, StringComparison.OrdinalIgnoreCase) == true;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error checking if user is admin or keeper for campaign {CampaignId}", campaignId);
-            return false;
-        }
-    }
-
-    /// <summary>
     ///     Returns all campaigns where the current user is the Keeper, including player counts.
     /// </summary>
     public async Task<List<Campaign>> GetKeeperCampaignsAsync()

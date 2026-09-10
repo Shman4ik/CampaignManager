@@ -1,4 +1,4 @@
-# Combat Feature
+﻿# Combat Feature
 
 Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 
@@ -19,7 +19,7 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
   но не полную перезагрузку вкладки.
 
 ## Key Models
-- `Combatant`, `CombatActionResult`, and per-action setup types: `AttackSetup`, `ManeuverSetup`, `FleeSetup`, `CoverSetup`, `SanityCheckSetup`.
+- `Combatant`, `CombatActionResult`, and per-action setup types: `AttackSetup`, `ManeuverSetup`, `SanityCheckSetup`.
 - `CombatSide` (`Party` / `Enemy` / `Neutral`) — сторона участника. Заменяет прежний флаг
   «игрок / существо»: союзный НПС теперь стоит рядом с отрядом, и правило шальной пули
   (`FindUnluckiestAlly`, стр. 112) ищет союзника по стороне, а не по «это лист игрока».
@@ -104,6 +104,11 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 - Иконки — Font Awesome (`<i class="fa-solid fa-…"></i>`), как в `Sidebar`/`AboutPage`. Эмодзи не использовать:
   они цветные и выбиваются из стиля.
 - Бейджи состояний в `CombatantCard` — константы `Badge*` в самом компоненте: заливка `-100`, текст `-800`, рамка `-200`.
+- `CombatantCard` — строка списка, а не карточка: она всегда внутри `cm-card`
+  «Порядок инициативы», поэтому рисует только линейку сверху
+  (`border-t border-t-gray-200 first:border-t-0`) и левую полосу-акцент у активного.
+  Возвращать ей `bg-white shadow` не надо — получится карточка в карточке.
+  То же у `Chase/Components/ChaseParticipantCard` и `Chase/Components/LocationEditor`.
   Цвет кодирует **тяжесть** состояния (`BadgeGood` / `BadgeImpaired` / `BadgeCritical` / `BadgeNeutral`), а не конкретное
   состояние — его называет подпись. Плотная заливка оставлена только для смерти, агонии и бессрочного безумия.
 - Вкладки действий и кнопки источников участников (`CombatHelperPage`) описаны массивами `Tabs` / `*AddModes`

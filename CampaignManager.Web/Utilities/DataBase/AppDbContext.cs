@@ -45,9 +45,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // User Preferences
     public DbSet<UserPreferences> UserPreferences { get; set; } = null!;
 
-    // LLM Knowledge Base
-    public DbSet<LlmKnowledgeEntry> LlmKnowledgeEntries { get; set; } = null!;
-
     // Сохранённые сцены погони
     public DbSet<ChaseSessionDto> ChaseSessions { get; set; } = null!;
 
@@ -353,16 +350,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(p => p.UserEmail).IsRequired();
             entity.HasIndex(p => p.UserEmail).IsUnique();
             entity.Property(p => p.Preferences).HasColumnType("jsonb");
-        });
-
-        // LlmKnowledgeEntry Configuration
-        modelBuilder.Entity<LlmKnowledgeEntry>(entity =>
-        {
-            entity.ToTable("LlmKnowledgeEntries");
-            entity.Property(e => e.Key).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
-            entity.HasIndex(e => e.Key).IsUnique();
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
         });
 
         // EditHistoryEntry Configuration

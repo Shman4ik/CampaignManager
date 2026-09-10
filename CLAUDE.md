@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -26,6 +26,28 @@ dotnet ef migrations add <Name> --project CampaignManager.Web --context AppIdent
 dotnet ef database update --project CampaignManager.Web --context AppDbContext
 dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
 ```
+
+История миграций `AppDb` схлопнута в одну `20260910142150_InitialCreate` — сорок шесть
+прежних миграций занимали 34 664 строки, две трети всего C# в проекте. Схема приложения
+при этом не менялась, кроме одного намеренного удаления: вместе с выпиленной
+LLM-валидацией персонажа ушла таблица `LlmKnowledgeEntries`.
+
+Новую миграцию под удаление таблицы заводить не стали — `InitialCreate` ещё нигде не был
+применён, поэтому его просто перегенерировали без неё. Каждая лишняя миграция стоит около
+тысячи строк Designer-снапшота, а выигрыш от удаления фичи — 665.
+
+- **Базу, накатанную до схлопывания, нужно перевести на новый журнал один раз** скриптом
+  `docs/squash-migrations.sql`. Он переписывает `__EFMigrationsHistory` и удаляет
+  `LlmKnowledgeEntries` — единственное изменение схемы. Без него `database update` решит,
+  что схемы нет, и попробует создать её заново.
+- **Скрипт уничтожает данные удаляемой таблицы:** там около 31 КБ авторского справочника
+  CoC 7e на русском, к самой валидации отношения не имеющего. Выгрузить заранее помогает
+  `docs/export-llm-knowledge.sql`.
+- Пустой базе скрипт не нужен: обычный `database update` создаст схему из `InitialCreate`.
+- Миграции нигде не применяются автоматически — ни в `Program.cs`, ни в Dockerfile, ни в CI,
+  так что момент накатывания выбирается вручную.
+- Прежние миграции содержали только `UPDATE` существующих строк (backfill'ы оружия и
+  бестиария), без `InsertData`, поэтому на новой базе схлопывание ничего не теряет.
 
 **Tailwind CSS** is built automatically by the `Tailwind` MSBuild target in the csproj:
 - Debug: `npx tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css`
@@ -126,7 +148,6 @@ Each feature folder has its own `CLAUDE.md` with that feature's services, models
 Uses minimal APIs (not controllers), mapped in `Utilities/Api/`:
 - `AccountEndpoints.cs` — `/api/account/login`, `/api/account/logout`
 - `MinioApi.cs` — File storage
-- `CharacterMigrationApi.cs` — Character migration
 
 Swagger available at `/swagger`.
 
@@ -172,7 +193,7 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
 - Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
-- Shared components in `Components/Shared/`: Badge, Modal, ConfirmationModal, NotificationAlert, SaveButton, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
+- Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
 
 #### Page shell — the same on every page
 
@@ -181,6 +202,11 @@ followed by one `<div class="cm-page">`. `Components/Pages/Home.razor` is the re
 pages, the character sheet and the scenario detail page all use it too. Inside, group with
 `cm-section` + `cm-section-title` and `cm-card` + `cm-card-header`/`-body`/`-footer`.
 
+- **One card level, never two.** A `cm-card` inside a `cm-card`, or a grey inset around a table
+  that already sits in a card, reads as clutter rather than structure. Separate blocks in one card
+  with a rule (`cm-stack`), and render list items as rows
+  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards. A component that always
+  renders inside a card must not draw its own — say so in a comment at the top of the file.
 - **Never** wrap page content in `max-w-*` + `mx-auto`. `page-with-sidebar` is a column flex
   container, so `mx-auto` on a flex item disables stretch and collapses the page to its content
   width — that is why sparse pages used to render as a narrow centred column.

@@ -199,15 +199,6 @@ public sealed partial class ChaseService
         }
     }
 
-    public void SetVehicle(Guid id, string vehicleName, int vehicleSpeed)
-    {
-        var p = Participants.FirstOrDefault(x => x.Id == id);
-        if (p is null) return;
-
-        ApplyVehicle(p, vehicleName, vehicleSpeed, 1, 0, null);
-        NotifyStateChanged();
-    }
-
     /// <summary>Посадить участника в транспорт из таблицы V (стр. 143).</summary>
     public void SetVehicleFromTemplate(Guid id, VehicleTemplate template)
     {
@@ -800,23 +791,8 @@ public sealed partial class ChaseService
                           (attackerWins ? "не помогло." : "атака отбита!");
         }
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.MeleeAttack,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = 1,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.MeleeAttack, attacker, skillName, skillValue,
+            actualRoll, level, success, target);
 
         if (success && damageRoll is > 0)
         {
@@ -857,24 +833,9 @@ public sealed partial class ChaseService
 
         var shootStyle = stoppedToShoot ? "стоя" : "на ходу";
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.RangedAttack,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
-            ActorMovementActionsSpent = stoppedToShoot ? 1 : 0,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
+        var result = SkillCheckResult(ChaseActionType.RangedAttack, attacker, skillName, skillValue,
+            actualRoll, level, success, target, movementActionsSpent: stoppedToShoot ? 1 : 0);
 
         if (success && damageRoll is > 0)
         {
@@ -936,24 +897,8 @@ public sealed partial class ChaseService
         var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            PenaltyDice = buildPenalty,
-            ActionType = ChaseActionType.CombatManeuver,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = 1,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.CombatManeuver, attacker, skillName, skillValue,
+            actualRoll, level, success, target, penaltyDice: buildPenalty);
 
         if (success)
         {
@@ -1007,24 +952,6 @@ public sealed partial class ChaseService
             ChaseLog.Insert(0, result);
             NotifyStateChanged();
         }
-    }
-
-    public ChaseActionResult RecordOtherAction(Guid participantId, string description, bool costsMovementAction)
-    {
-        var participant = Participants.First(p => p.Id == participantId);
-
-        return new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.Other,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            IsSuccess = true,
-            ActorMovementActionsSpent = costsMovementAction ? 1 : 0,
-            LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation,
-            Summary = $"{participant.Name}: {description}"
-        };
     }
 
     // ───────────────────── Проверки состояния ─────────────────────
@@ -1111,14 +1038,6 @@ public sealed partial class ChaseService
             Phase = ChasePhase.Ended;
 
         NotifyStateChanged();
-    }
-
-    public int GetDistanceBetween(Guid id1, Guid id2)
-    {
-        var p1 = Participants.FirstOrDefault(p => p.Id == id1);
-        var p2 = Participants.FirstOrDefault(p => p.Id == id2);
-        if (p1 is null || p2 is null) return 0;
-        return Math.Abs(p1.CurrentLocation - p2.CurrentLocation);
     }
 
     public bool IsChaseOver() =>

@@ -90,13 +90,6 @@
 
                         <div class="flex gap-1 sm:gap-2 ml-2">
                             <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="save-character-btn" aria-label="Сохранить персонажа" @onclick="SaveCharacterAsync"><i class="fa-regular fa-floppy-disk"></i></button>
-                            @if (_isKeeper && LlmService.IsEnabled && CharacterId is not null && CharacterId != Guid.Empty)
-                            {
-                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OpenLlmModal" aria-label="Проверить через LLM">
-                                    <i class="fa-solid fa-wand-magic-sparkles"></i>
-                                    <span class="hidden sm:inline ml-1">Проверить</span>
-                                </button>
-                            }
                             @if (CharacterId == null || CharacterId == Guid.Empty)
                             {
                                 <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="generate-character-btn" @onclick="OpenGenerateModal">
@@ -153,215 +146,115 @@
                 <EditForm Model="Character" FormName="CharacterForm">
                     <DataAnnotationsValidator/>
 
-                    <!-- Персональная информация -->
-                    <div id="personal" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-personal"
-                                aria-expanded="@(_sectionVisibility["personal"] ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("personal")'>
-								<div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-user text-white/70"></i>
-									<h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Личные данные</h3>
-									<div @onclick:stopPropagation="true">
-										@if (CharacterStorageDto != null)
-										{
-											<CharacterStatusChanger CharacterId="@CharacterStorageDto.Id" CurrentStatus="@CharacterStorageDto.Status" OnStatusUpdated="@HandleStatusUpdate" />					
-										}
-									</div>
-								</div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility["personal"] ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility["personal"])
+                    <CharacterSection Id="personal" Title="Личные данные" Icon="fa-user"
+                                      Expanded='@(_sectionVisibility["personal"])'
+                                      OnToggle='() => ToggleSectionVisibility("personal")'>
+                        <TitleSuffix>
+                            @if (CharacterStorageDto != null)
                             {
-                                <div class="p-1">
-                                    <UnifiedPersonalInfoCard 
-                                        Character="@Character" 
-                                        CharacterStorageDto="@CharacterStorageDto"
-                                        OnStatusUpdated="@HandleStatusUpdate"
-                                        OnCharacteristicUpdate="@UpdateCharacteristic"
-                                        OnDerivedChanged="@RecalculateDerivedAttributes" />
-                                </div>
+                                <CharacterStatusChanger CharacterId="@CharacterStorageDto.Id" CurrentStatus="@CharacterStorageDto.Status"
+                                                        OnStatusUpdated="@HandleStatusUpdate"/>
                             }
-                        </div>
-                    </div>
+                        </TitleSuffix>
+                        <ChildContent>
+                            <UnifiedPersonalInfoCard Character="@Character"
+                                                     CharacterStorageDto="@CharacterStorageDto"
+                                                     OnStatusUpdated="@HandleStatusUpdate"
+                                                     OnCharacteristicUpdate="@UpdateCharacteristic"
+                                                     OnDerivedChanged="@RecalculateDerivedAttributes"/>
+                        </ChildContent>
+                    </CharacterSection>
 
-                    <!-- Секция Навыки -->
-                    <div id="skills" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-skills"
-                                aria-expanded="@(_sectionVisibility["skills"] ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("skills")'>
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-graduation-cap text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Навыки</h3>
-                                    <div class="flex flex-wrap items-center gap-1" @onclick:stopPropagation="true">
-                                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm text-xs leading-tight" @onclick="OpenDevelopmentPhase">
-                                            <i class="fa-solid fa-dice mr-1"></i><span>Фаза развития</span>
-                                        </button>
-                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm text-xs leading-tight" @onclick="ResetUsedSkills">
-                                            <span>Сбросить</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility["skills"] ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility["skills"])
-                            {
-                                <div class="p-4">
-                                    <!-- Поле поиска навыков -->
-                                    <div class="mb-4">
-                                        <div class="relative">
-                                            <input type="text"
-                                                   id="skill-search"
-                                                   data-testid="skill-search-input"
-                                                   aria-label="Поиск навыков"
-                                                   @bind="_skillSearchQuery"
-                                                   @bind:event="oninput"
-                                                   placeholder="Поиск навыков..."
-                                                   class="cm-input !pl-10" />
-                                            <i class="fa-solid fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                            @if (!string.IsNullOrWhiteSpace(_skillSearchQuery))
-                                            {
-                                                <button @onclick="ClearSkillSearch"
-                                                        class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                                                    <i class="fa-solid fa-times"></i>
-                                                </button>
-                                            }
-                                        </div>
-                                    </div>
-
-                                    @{
-                                        var filteredGroups = GetFilteredSkillGroups();
-                                    }
-
-                                    @if (!filteredGroups.Any())
+                    <CharacterSection Id="skills" Title="Навыки" Icon="fa-graduation-cap"
+                                      Expanded='@(_sectionVisibility["skills"])'
+                                      OnToggle='() => ToggleSectionVisibility("skills")'>
+                        <TitleSuffix>
+                            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm text-xs leading-tight" @onclick="OpenDevelopmentPhase">
+                                <i class="fa-solid fa-dice mr-1"></i><span>Фаза развития</span>
+                            </button>
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm text-xs leading-tight" @onclick="ResetUsedSkills">
+                                <span>Сбросить</span>
+                            </button>
+                        </TitleSuffix>
+                        <ChildContent>
+                            <!-- Поле поиска навыков -->
+                            <div class="mb-4">
+                                <div class="relative">
+                                    <input type="text"
+                                           id="skill-search"
+                                           data-testid="skill-search-input"
+                                           aria-label="Поиск навыков"
+                                           @bind="_skillSearchQuery"
+                                           @bind:event="oninput"
+                                           placeholder="Поиск навыков..."
+                                           class="cm-input !pl-10" />
+                                    <i class="fa-solid fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                    @if (!string.IsNullOrWhiteSpace(_skillSearchQuery))
                                     {
-                                        <div class="text-center py-8 text-gray-500">
-                                            <i class="fa-solid fa-search text-3xl mb-2"></i>
-                                            <p>Навыки не найдены</p>
-                                        </div>
+                                        <button @onclick="ClearSkillSearch"
+                                                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                            <i class="fa-solid fa-times"></i>
+                                        </button>
                                     }
-                                    else
+                                </div>
+                            </div>
+
+                            @{
+                                var filteredGroups = GetFilteredSkillGroups();
+                            }
+
+                            @if (!filteredGroups.Any())
+                            {
+                                <div class="text-center py-8 text-gray-500">
+                                    <i class="fa-solid fa-search text-3xl mb-2"></i>
+                                    <p>Навыки не найдены</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- CSS columns layout — true masonry, renders each component once -->
+                                <div class="columns-1 sm:columns-2 lg:columns-3 gap-4">
+                                    @foreach (var group in filteredGroups)
                                     {
-                                        <!-- CSS columns layout — true masonry, renders each component once -->
-                                        <div class="columns-1 sm:columns-2 lg:columns-3 gap-4">
-                                            @foreach (var group in filteredGroups)
-                                            {
-                                                <div class="break-inside-avoid mb-4">
-                                                    <SkillGroupCard Group="@group" OnSkillValueEdited="@HandleSkillValueEdited"/>
-                                                </div>
-                                            }
+                                        <div class="break-inside-avoid mb-4">
+                                            <SkillGroupCard Group="@group" OnSkillValueEdited="@HandleSkillValueEdited"/>
                                         </div>
                                     }
                                 </div>
                             }
-                        </div>
-                    </div>
+                        </ChildContent>
+                    </CharacterSection>
 
-                    <!-- Секция Бой -->
-                    <div id="combat" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm mb-6">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-combat"
-                                aria-expanded="@(_sectionVisibility["combat"] ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("combat")'>
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-gun text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Оружие и заклинания</h3>
-                                </div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility["combat"] ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility["combat"])
-                            {
-                                <div class="p-1">
-                                    <WeaponComponent Character="@Character"/>
-                                    <SpellComponent Character="@Character"/>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                    <CharacterSection Id="combat" Title="Оружие и заклинания" Icon="fa-gun" BodyClass="p-4 cm-stack"
+                                      Expanded='@(_sectionVisibility["combat"])'
+                                      OnToggle='() => ToggleSectionVisibility("combat")'>
+                        <WeaponComponent Character="@Character"/>
+                        <SpellComponent Character="@Character"/>
+                    </CharacterSection>
 
-                    <!-- Секция Снаряжение -->
-                    <div id="equipment" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-equipment"
-                                aria-expanded="@(_sectionVisibility["equipment"] ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("equipment")'>
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-suitcase text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Снаряжение и финансы</h3>
-                                </div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility["equipment"] ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility["equipment"])
-                            {
-                                <div class="p-1">
-                                    <EquipmentComponent Character="@Character"/>
-                                    <FinancesComponent Character="@Character"/>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                    <CharacterSection Id="equipment" Title="Снаряжение и финансы" Icon="fa-suitcase" BodyClass="p-4 cm-stack"
+                                      Expanded='@(_sectionVisibility["equipment"])'
+                                      OnToggle='() => ToggleSectionVisibility("equipment")'>
+                        <EquipmentComponent Character="@Character"/>
+                        <FinancesComponent Character="@Character"/>
+                    </CharacterSection>
 
-                    <!-- Секция Рассудок и безумие -->
-                    <div id="sanity" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-sanity"
-                                aria-expanded="@(_sectionVisibility.GetValueOrDefault("sanity", true) ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("sanity")'>
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-brain text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Рассудок и безумие</h3>
-                                </div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility.GetValueOrDefault("sanity", true) ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility.GetValueOrDefault("sanity", true))
-                            {
-                                <div class="p-4">
-                                    <SanityPanel Character="@Character"/>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                    <CharacterSection Id="sanity" Title="Рассудок и безумие" Icon="fa-brain"
+                                      Expanded='@(_sectionVisibility.GetValueOrDefault("sanity", true))'
+                                      OnToggle='() => ToggleSectionVisibility("sanity")'>
+                        <SanityPanel Character="@Character"/>
+                    </CharacterSection>
 
-                    <!-- Секция Биография -->
-                    <div id="biography" class="mb-8">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div
-                                class="section-header px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 flex justify-between items-center cursor-pointer select-none"
-                                data-testid="section-header-biography"
-                                aria-expanded="@(_sectionVisibility["biography"] ? "true" : "false")"
-                                @onclick='() => ToggleSectionVisibility("biography")'>
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-book text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Биография и заметки</h3>
-                                </div>
-                                <span class="text-white/70 text-sm transition-transform duration-200">@(_sectionVisibility["biography"] ? "▲" : "▼")</span>
-                            </div>
-                            @if (_sectionVisibility["biography"])
-                            {
-                                <div class="p-1">
-                                    <BiographyComponent Character="@Character"/>
-                                </div>
-                            }
-                        </div>
-                    </div>
+                    <CharacterSection Id="biography" Title="Биография и заметки" Icon="fa-book"
+                                      Expanded='@(_sectionVisibility["biography"])'
+                                      OnToggle='() => ToggleSectionVisibility("biography")'>
+                        <BiographyComponent Character="@Character"/>
+                    </CharacterSection>
                 </EditForm>
 
                 <GenerateCharacterModal IsVisible="@_showGenerateModal"
                                         OnClose="CloseGenerateModal"
                                         OnGenerate="HandleGenerate" />
-
-                <LlmSuggestionsModal @ref="_llmModal" Character="@Character" OnApplied="HandleLlmApplied" />
 
                 <DevelopmentPhaseModal Character="@Character"
                                        IsVisible="@_showDevelopmentPhase"
@@ -372,66 +265,58 @@
                 @* Лог генерации персонажа *@
                 @if (_generationLog is not null)
                 {
-                    <div id="generation-log" class="mb-8 mt-4">
-                        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                            <div class="section-header px-4 py-2 bg-gradient-to-r from-amber-600 to-amber-700 flex justify-between items-center cursor-pointer select-none"
-                                 @onclick="ToggleGenerationLog">
-                                <div class="flex items-center space-x-3">
-                                    <i class="fa-solid fa-scroll text-white/70"></i>
-                                    <h3 class="text-lg font-semibold text-white" style="margin-bottom: 0;">Лог генерации</h3>
-                                    <span class="text-white/60 text-xs">(@_generationLog.Entries.Count записей)</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <button type="button" @onclick="ClearGenerationLog" @onclick:stopPropagation="true"
-                                            class="text-white/70 hover:text-white text-xs px-2 py-1 rounded border border-white/30 hover:border-white/60 transition-colors">
-                                        <i class="fa-solid fa-xmark mr-1"></i>Закрыть
-                                    </button>
-                                    <span class="text-white/70 text-sm transition-transform duration-200">@(_showGenerationLog ? "▲" : "▼")</span>
-                                </div>
-                            </div>
-                            @if (_showGenerationLog)
+                    <CharacterSection Id="generation-log" Title="Лог генерации" Icon="fa-scroll"
+                                      Gradient="from-amber-600 to-amber-700"
+                                      BodyClass="p-4 max-h-[600px] overflow-y-auto"
+                                      Expanded="@_showGenerationLog" OnToggle="ToggleGenerationLog">
+                        <TitleSuffix>
+                            <span class="text-white/60 text-xs">(@_generationLog.Entries.Count записей)</span>
+                        </TitleSuffix>
+                        <HeaderActions>
+                            <button type="button" @onclick="ClearGenerationLog"
+                                    class="text-white/70 hover:text-white text-xs px-2 py-1 rounded border border-white/30 hover:border-white/60 transition-colors">
+                                <i class="fa-solid fa-xmark mr-1"></i>Закрыть
+                            </button>
+                        </HeaderActions>
+                        <ChildContent>
+                            @{ var categories = _generationLog.Entries.Select(e => e.Category).Distinct().ToList(); }
+                            @foreach (var category in categories)
                             {
-                                <div class="p-4 max-h-[600px] overflow-y-auto">
-                                    @{ var categories = _generationLog.Entries.Select(e => e.Category).Distinct().ToList(); }
-                                    @foreach (var category in categories)
-                                    {
-                                        <div class="mb-4">
-                                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2">
-                                                @category
-                                            </h4>
-                                            <div class="space-y-1">
-                                                @foreach (var entry in _generationLog.Entries.Where(e => e.Category == category))
+                                <div class="mb-4">
+                                    <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-1 mb-2">
+                                        @category
+                                    </h4>
+                                    <div class="space-y-1">
+                                        @foreach (var entry in _generationLog.Entries.Where(e => e.Category == category))
+                                        {
+                                            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm py-0.5 @(entry.Description.StartsWith("---") ? "mt-2" : "")">
+                                                @if (entry.Description.StartsWith("---"))
                                                 {
-                                                    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm py-0.5 @(entry.Description.StartsWith("---") ? "mt-2" : "")">
-                                                        @if (entry.Description.StartsWith("---"))
-                                                        {
-                                                            <span class="font-semibold text-gray-600 text-xs uppercase">@entry.Description.Trim('-', ' ')</span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span class="text-gray-700 font-medium min-w-[160px]">@entry.Description</span>
-                                                            @if (entry.DiceRoll is not null)
-                                                            {
-                                                                <code class="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-mono">@entry.DiceRoll</code>
-                                                            }
-                                                            @if (entry.Result.HasValue)
-                                                            {
-                                                                <span class="font-bold text-emerald-700">= @entry.Result</span>
-                                                            }
-                                                            @if (entry.Details is not null)
-                                                            {
-                                                                <span class="text-gray-400 text-xs">@entry.Details</span>
-                                                            }
-                                                        }
-                                                    </div>
+                                                    <span class="font-semibold text-gray-600 text-xs uppercase">@entry.Description.Trim('-', ' ')</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-gray-700 font-medium min-w-[160px]">@entry.Description</span>
+                                                    @if (entry.DiceRoll is not null)
+                                                    {
+                                                        <code class="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-mono">@entry.DiceRoll</code>
+                                                    }
+                                                    @if (entry.Result.HasValue)
+                                                    {
+                                                        <span class="font-bold text-emerald-700">= @entry.Result</span>
+                                                    }
+                                                    @if (entry.Details is not null)
+                                                    {
+                                                        <span class="text-gray-400 text-xs">@entry.Details</span>
+                                                    }
                                                 }
                                             </div>
-                                        </div>
-                                    }
+                                        }
+                                    </div>
                                 </div>
                             }
-                        </div>
-                    </div>
+                        </ChildContent>
+                    </CharacterSection>
                 }
             }
             else

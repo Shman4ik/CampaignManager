@@ -316,15 +316,6 @@ builder.Services.AddScoped<UserPreferencesService>();
 // Register Minio service
 builder.Services.AddScoped<MinioService>();
 
-// Register LLM infrastructure
-builder.Services.Configure<LlmOptions>(
-    builder.Configuration.GetSection(LlmOptions.SectionName));
-builder.Services.AddSingleton<LlmClientFactory>();
-
-// Register LLM character validation
-builder.Services.Configure<LlmValidationOptions>(
-    builder.Configuration.GetSection(LlmValidationOptions.SectionName));
-builder.Services.AddScoped<LlmCharacterValidationService>();
 builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.LastCharacterService>();
 
 builder.Services.AddHttpClient();

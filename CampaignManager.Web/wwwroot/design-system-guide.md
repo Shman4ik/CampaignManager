@@ -74,11 +74,19 @@ is the reference:
 - Inside, group content with `cm-section` + `cm-section-header` > `cm-section-title`
   (the small uppercase label), and put content in `cm-card` > `cm-card-header` /
   `cm-card-body` / `cm-card-footer`.
+- **One card level, never two.** A card inside a card — a white panel on a white panel, or a
+  grey inset around a table that already sits in a card — is the thing this system is meant to
+  avoid; it reads as clutter rather than structure. Separate blocks inside one card with a rule
+  (`cm-stack`, or `cm-section-divided` on a single block), and render list items as rows
+  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards.
+- A component that always renders inside a card must not draw its own — the parent gives it
+  the frame and the padding. Say so in a comment at the top of the file so nobody adds one back.
 
 | Class | Use |
 |-------|-----|
 | cm-page | Page content container, directly under `<PageHeader>` |
 | cm-section | Vertical group; `cm-section-divided` adds a top rule |
+| cm-stack | Blocks stacked in one card: a rule between siblings instead of nested cards |
 | cm-section-title | Small uppercase group label (inside `cm-section-header`) |
 | cm-card-title | Card heading (inside `cm-card-header`) |
 | cm-card-count | Count pill after a card title |
@@ -126,6 +134,9 @@ Base `cm-btn` (44px, font-weight 600, rounded-lg) + variant. All have hover/acti
 Usage: `<button class="cm-btn cm-btn-primary">Save</button>`
 
 Prefer the `<Button>` Blazor component over raw `cm-btn` classes in new code.
+`<Button>` рисует ровно эти же классы (`cm-btn cm-btn-{variant} cm-btn-{size}`),
+так что компонент и ручная разметка выглядят одинаково — своего набора
+Tailwind-классов у компонента больше нет.
 
 ## CSS Form Input
 
@@ -174,11 +185,6 @@ Status block. `<Alert Type="warning" Title="Warning">Message</Alert>`
 - `Type` string = "info" — success|warning|error|info|primary|secondary|accent
 - `Title` string?
 
-### SaveButton
-Save with spinner. `<SaveButton IsLoading="@_saving" OnClick="Save" />`
-- `IsLoading` bool = false
-- `OnClick` EventCallback
-
 ### Modal
 Dialog container. Scrollable body, header/footer slots.
 ```
@@ -219,7 +225,7 @@ Dangerous action confirmation. Optional type-to-confirm.
 | EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder |
 | LoadingIndicator | Message | Spinner |
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
-| FilterPanel | Title, IsExpanded, IsExpandedChanged, ActionButtons(RF) | Collapsible filters |
+| FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
 | CustomInput | Label, Value, Type(text/number/checkbox), FullWidth, Disabled, OnValueChanged | Labeled form input |
 | InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |

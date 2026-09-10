@@ -1,4 +1,4 @@
-using CampaignManager.Web.Components.Features.Chase.Model;
+﻿using CampaignManager.Web.Components.Features.Chase.Model;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Combat.Services;
 
@@ -10,6 +10,45 @@ namespace CampaignManager.Web.Components.Features.Chase.Services;
 /// </summary>
 public sealed partial class ChaseService
 {
+    // ───────────────────── Заготовка результата ─────────────────────
+
+    /// <summary>
+    /// Результат действия «бросок против навыка, актор остаётся на своей локации» —
+    /// самая частая форма в погоне: атаки, манёвры, проверки управления, создание помех.
+    /// Поля, которые у каждого действия свои (Summary, урон, потерянные действия),
+    /// дописываются на месте вызова.
+    /// </summary>
+    private ChaseActionResult SkillCheckResult(
+        ChaseActionType actionType,
+        ChaseParticipant actor,
+        string? skillName,
+        int skillValue,
+        int roll,
+        SuccessLevel level,
+        bool isSuccess,
+        ChaseParticipant? target = null,
+        int movementActionsSpent = 1,
+        int penaltyDice = 0,
+        int bonusDice = 0) => new()
+    {
+        Round = CurrentRound,
+        ActionType = actionType,
+        ParticipantId = actor.Id,
+        ParticipantName = actor.Name,
+        TargetId = target?.Id,
+        TargetName = target?.Name,
+        SkillName = skillName,
+        SkillValue = skillValue,
+        Roll = roll,
+        SuccessLevel = level,
+        IsSuccess = isSuccess,
+        PenaltyDice = penaltyDice,
+        BonusDiceUsed = bonusDice,
+        ActorMovementActionsSpent = movementActionsSpent,
+        LocationBefore = actor.CurrentLocation,
+        LocationAfter = actor.CurrentLocation
+    };
+
     // ───────────────────── Комплекция и манёвры (стр. 136) ─────────────────────
 
     /// <summary>
@@ -41,23 +80,8 @@ public sealed partial class ChaseService
         var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.VehicleCollision,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = 1,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.VehicleCollision, attacker, skillName, skillValue,
+            actualRoll, level, success, target);
 
         if (!success)
         {
@@ -115,24 +139,8 @@ public sealed partial class ChaseService
         var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.TyreShot,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            PenaltyDice = 1,
-            ActorMovementActionsSpent = 0,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.TyreShot, attacker, skillName, skillValue,
+            actualRoll, level, success, target, movementActionsSpent: 0, penaltyDice: 1);
 
         if (!success)
         {
@@ -178,20 +186,9 @@ public sealed partial class ChaseService
         var level = CombatService.CalculateSuccessLevel(actualRoll, threshold);
         var keptControl = !isUnconscious && level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.DriverControlCheck,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            SkillName = $"Управление ({skillName})",
-            SkillValue = threshold,
-            Roll = isUnconscious ? 0 : actualRoll,
-            SuccessLevel = level,
-            IsSuccess = keptControl,
-            LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.DriverControlCheck, participant,
+            $"Управление ({skillName})", threshold, isUnconscious ? 0 : actualRoll, level, keptControl,
+            movementActionsSpent: 0);
 
         if (keptControl)
         {
@@ -467,21 +464,9 @@ public sealed partial class ChaseService
             : SuccessLevel.RegularSuccess;
         var success = level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.CreateObstacle,
-            ParticipantId = participant.Id,
-            ParticipantName = participant.Name,
-            SkillName = needsCheck ? skillName : null,
-            SkillValue = needsCheck ? skillValue : 0,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = Math.Max(0, movementActionCost),
-            LocationBefore = participant.CurrentLocation,
-            LocationAfter = participant.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.CreateObstacle, participant,
+            needsCheck ? skillName : null, needsCheck ? skillValue : 0, actualRoll, level, success,
+            movementActionsSpent: Math.Max(0, movementActionCost));
 
         if (success)
         {
@@ -744,13 +729,6 @@ public sealed partial class ChaseService
         NotifyStateChanged();
     }
 
-    public IReadOnlyList<string> GetRoutes() =>
-        Participants
-            .Where(p => !string.IsNullOrWhiteSpace(p.RouteLabel))
-            .Select(p => p.RouteLabel!)
-            .Distinct()
-            .OrderBy(r => r)
-            .ToList();
 }
 
 /// <summary>Насколько существу подходит навык, которого у него нет (стр. 142).</summary>

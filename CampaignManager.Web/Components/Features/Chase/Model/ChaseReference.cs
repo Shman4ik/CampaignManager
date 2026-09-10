@@ -85,14 +85,6 @@ public static class ChaseReference
         new("Мясорубка", "5D10", "Столкновение с многотонной фурой или поездом")
     ];
 
-    /// <summary>Авария по умолчанию для сложности помехи: 1 — обычная, 2 — трудная, 3 — чрезвычайная.</summary>
-    public static CrashTier GetDefaultCrashTier(int difficulty) => difficulty switch
-    {
-        2 => CrashTiers[1],
-        3 => CrashTiers[2],
-        _ => CrashTiers[0]
-    };
-
     /// <summary>Примеры преград и их ПЗ, стр. 136.</summary>
     public static readonly IReadOnlyList<BarrierPreset> BarrierPresets =
     [

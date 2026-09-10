@@ -23,22 +23,6 @@ public sealed class SpellService(
         CrudServiceHelper.GetAllCachedAsync<Spell>(dbContextFactory, cache, SpellsKey, logger);
 
     /// <summary>
-    ///     Gets a spell by name.
-    /// </summary>
-    public async Task<Spell?> GetSpellByNameAsync(string name)
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Spells
-            .FirstOrDefaultAsync(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    ///     Gets a spell by ID.
-    /// </summary>
-    public Task<Spell?> GetSpellByIdAsync(Guid id) =>
-        CrudServiceHelper.GetByIdAsync<Spell>(dbContextFactory, id, logger);
-
-    /// <summary>
     ///     Adds a new spell.
     /// </summary>
     public async Task<bool> AddSpellAsync(Spell spell)

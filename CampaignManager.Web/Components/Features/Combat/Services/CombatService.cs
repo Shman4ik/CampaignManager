@@ -462,17 +462,6 @@ public sealed partial class CombatService
     };
 
     /// <summary>
-    /// Порог броска для данной дальности — то же число, что и уровень сложности,
-    /// но в виде значения навыка. Нужно только для подписей в интерфейсе.
-    /// </summary>
-    public static int GetRollThresholdForRange(int baseSkill, RangeLevel range) => range switch
-    {
-        RangeLevel.Long => baseSkill / 2,
-        RangeLevel.Extreme => baseSkill / 5,
-        _ => baseSkill
-    };
-
-    /// <summary>
     /// Союзник стрелка на линии огня с наименьшей Удачей (стр. 112). Союзниками
     /// считаются бойцы той же стороны, кроме самого стрелка и его цели.
     /// </summary>
@@ -900,14 +889,6 @@ public sealed partial class CombatService
         setup is { IsMelee: false, SurpriseMode: SurpriseMode.AutoHit }
             ? SurpriseMode.BonusDie
             : setup.SurpriseMode;
-
-    /// <summary>
-    /// Может ли боец атаковать в этом раунде: укрытие от огня отнимает атаку,
-    /// а число атак за раунд ограничено (стр. 100, 111).
-    /// </summary>
-    public bool CanAttack(Combatant combatant) =>
-        combatant.AttackBlockedInRound != CurrentRound
-        && combatant.AttacksThisRound < Math.Max(1, combatant.AttacksPerRound);
 
     /// <summary>Почему боец не может атаковать; null — может.</summary>
     public string? GetAttackBlockReason(Combatant combatant)
@@ -1526,18 +1507,6 @@ public sealed partial class CombatService
         return result;
     }
 
-    /// <summary>
-    /// Сбрасывает счётчик потерянного за день рассудка — вызывать, когда сыщики
-    /// добрались до безопасного места и игровой день закончился (стр. 153).
-    /// </summary>
-    public void StartNewGameDay()
-    {
-        foreach (var c in Combatants)
-            c.SanityLostToday = 0;
-
-        NotifyStateChanged();
-    }
-
     // ───────────────────── Применение результата ─────────────────────
 
     public void SetPendingResult(CombatActionResult result)
@@ -1868,6 +1837,22 @@ public sealed partial class CombatService
         SuccessLevel.Failure => "провал",
         SuccessLevel.Fumble => "крах",
         _ => "неизвестно"
+    };
+
+    /// <summary>
+    /// Цвет уровня успеха для подписей в панелях боя и погони. Держится рядом
+    /// с <see cref="GetSuccessLevelText"/>: три копии этой таблицы в компонентах
+    /// разъезжались бы при первой же правке палитры.
+    /// </summary>
+    public static string GetSuccessLevelColor(SuccessLevel level) => level switch
+    {
+        SuccessLevel.CriticalSuccess => "text-warning-600",
+        SuccessLevel.ExtremeSuccess => "text-success-600",
+        SuccessLevel.HardSuccess => "text-success-700",
+        SuccessLevel.RegularSuccess => "text-success-800",
+        SuccessLevel.Failure => "text-error-600",
+        SuccessLevel.Fumble => "text-error-800",
+        _ => "text-gray-600"
     };
 
     /// <summary>
