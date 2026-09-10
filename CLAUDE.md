@@ -266,12 +266,19 @@ the .NET 10 circuit persistence stack:
   connected tab to call `Blazor.pauseCircuit()` from `IHostedService.StopAsync`, which moves the state
   into the browser. Data Protection keys are stored in PostgreSQL, so the new instance can unprotect
   what the browser sends back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
-- Client side: `wwwroot/js/circuit-persistence.js` pauses on tab hide and retries resume with backoff.
+- Client side: `wwwroot/js/circuit-persistence.js` pauses the circuit when the tab has been hidden for
+  `PAUSE_AFTER_HIDDEN_MS` (30 с) — или сразу, по `freeze`/`pagehide`, если браузер вот-вот остановит
+  на странице JS, — и возобновляет с нарастающей паузой. Порог не опускать обратно к секундам: пауза
+  рвёт соединение и поднимает диалог, а заглянуть в соседнюю вкладку и вернуться — обычное дело.
   The (Russian) reconnect dialog is `#components-reconnect-modal` in `App.razor` plus
   `wwwroot/css/reconnect.css` — the `components-reconnect-*` class names come from the framework,
   don't rename them.
 - Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
   otherwise it silently disappears on resume.
+- **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
+  а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
+  активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
+  переживает и паузу, и F5, и на него можно дать ссылку. Пример — `ScenarioDetailPage` (`?mode=play`).
 
 ### Design System Colors
 

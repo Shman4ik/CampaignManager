@@ -46,7 +46,7 @@ else if (_scenario is null)
         </Alert>
     </div>
 }
-else if (_viewMode == "play" && _scenario.Locations.Count > 0)
+else if (_isPlayMode && _scenario.Locations.Count > 0)
 {
     <!-- Play Mode: Three-panel layout -->
     <div class="flex flex-col h-screen">
@@ -63,7 +63,7 @@ else if (_viewMode == "play" && _scenario.Locations.Count > 0)
             <div class="flex items-center gap-2 ml-auto">
                 <button type="button"
                         class="cm-btn cm-btn-secondary cm-btn-sm"
-                        @onclick='() => _viewMode = "overview"'>
+                        @onclick="LeavePlayMode">
                     <i class="fas fa-th-large mr-1"></i> Обзор
                 </button>
                 <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
@@ -149,7 +149,7 @@ else
             </a>
             @if (_scenario.Locations.Count > 0)
             {
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick='() => _viewMode = "play"'>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="EnterPlayMode">
                     <i class="fas fa-map-marked-alt"></i> <span>Режим игры</span>
                 </button>
             }
@@ -560,6 +560,15 @@ else
 
     [Parameter] public Guid Id { get; set; }
 
+    // Режим игры и открытая локация живут в адресе, а не в полях компонента: circuit восстанавливает
+    // только [PersistentState], поэтому после паузы вкладки (см. js/circuit-persistence.js) Хранителя
+    // выбрасывало из режима игры в обзор. Заодно на сцену теперь можно дать ссылку и пережить F5.
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "location")]
+    public Guid? LocationId { get; set; }
+
     private ScenarioExportModal? _exportModal;
 
     private async Task ShowExportModal()
@@ -577,7 +586,6 @@ else
     private bool _loading = true;
     private string _markdownHtml = "";
     private bool _isKeeper;
-    private string _viewMode = "overview";
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
@@ -592,7 +600,8 @@ else
         [.. _cast.Where(c => c.Character is not null).Select(c => c.Character!), .. _scenarioPregens];
 
     // Play mode state
-    private Guid? _selectedLocationId;
+    private bool _isPlayMode => string.Equals(Mode, "play", StringComparison.OrdinalIgnoreCase);
+    private Guid? _selectedLocationId => LocationId;
     private bool _keyFactsPanelCollapsed;
 
     // Announcement form state
@@ -650,9 +659,25 @@ else
         }
     }
 
-    private void HandleLocationSelected(Guid? locationId)
+    private void HandleLocationSelected(Guid? locationId) => GoTo("play", locationId);
+
+    private void EnterPlayMode() => GoTo("play", LocationId);
+
+    private void LeavePlayMode() => GoTo(null, null);
+
+    /// <summary>
+    ///     Переписывает адрес под текущий режим. <c>replace: true</c> — чтобы переходы по локациям
+    ///     не забивали историю: «назад» из сценария должно вести к списку сценариев.
+    /// </summary>
+    private void GoTo(string? mode, Guid? locationId)
     {
-        _selectedLocationId = locationId;
+        var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["mode"] = mode,
+            ["location"] = mode is null ? null : locationId
+        });
+
+        NavigationManager.NavigateTo(uri, false, true);
     }
 
     private static string FormatScheduledDateForInput(DateTime? date) =>

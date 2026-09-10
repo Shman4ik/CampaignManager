@@ -59,3 +59,9 @@ A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` i
 - `AddCreatureModal` и `AddItemModal` используют одни и те же DOM-идентификаторы `quantity`,
   `location`, `notes`. Обе модалки всегда есть в разметке страницы сценария, поэтому
   `getElementById` попадает в первую (существа) — учитывайте это в автотестах и при отладке.
+- Режим игры на `ScenarioDetailPage` — это `?mode=play&location=<guid>` в адресе, а не поля
+  компонента. Circuit восстанавливает только `[PersistentState]`, поэтому раньше пауза вкладки
+  (см. `js/circuit-persistence.js`) выбрасывала Хранителя из трёхпанельного режима в обзор посреди
+  игры. Новое состояние режима игры добавлять туда же, в query, а не в приватное поле; менять его
+  только через `GoTo(mode, locationId)` — она ходит с `replace: true`, чтобы переходы по локациям
+  не забивали историю.
