@@ -27,9 +27,19 @@ dotnet ef database update --project CampaignManager.Web --context AppDbContext
 dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
 ```
 
-**Tailwind CSS** is built automatically via MSBuild targets in the csproj:
+**Tailwind CSS** is built automatically by the `Tailwind` MSBuild target in the csproj:
 - Debug: `npx tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css`
 - Release: same with `--minify`
+
+`wwwroot/styles.css` is a build artifact and is **not** tracked in git — it is regenerated on
+every build, so the deployed CSS always matches the current markup. Two things keep that working,
+don't undo either:
+- The target is hooked `BeforeTargets="ResolveProjectStaticWebAssets"`, and it adds the file to
+  `@(Content)` itself. MSBuild expands the `wwwroot/**` glob at evaluation time, so a file created
+  during the build is invisible to static web assets — without the explicit `Content Include` the
+  build and the deploy both succeed and the site serves 404 for `/styles.css`.
+- Building therefore requires `npx` (and network access on the first run). The Dockerfile copies
+  Node into the SDK stage for exactly this reason.
 
 **No test projects exist** in this solution.
 
