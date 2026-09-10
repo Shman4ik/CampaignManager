@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -185,7 +185,7 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
 - Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
-- Shared components in `Components/Shared/`: Badge, Modal, ConfirmationModal, NotificationAlert, SaveButton, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
+- Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
 
 #### Page shell — the same on every page
 

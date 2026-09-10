@@ -126,6 +126,9 @@ Base `cm-btn` (44px, font-weight 600, rounded-lg) + variant. All have hover/acti
 Usage: `<button class="cm-btn cm-btn-primary">Save</button>`
 
 Prefer the `<Button>` Blazor component over raw `cm-btn` classes in new code.
+`<Button>` рисует ровно эти же классы (`cm-btn cm-btn-{variant} cm-btn-{size}`),
+так что компонент и ручная разметка выглядят одинаково — своего набора
+Tailwind-классов у компонента больше нет.
 
 ## CSS Form Input
 
@@ -174,11 +177,6 @@ Status block. `<Alert Type="warning" Title="Warning">Message</Alert>`
 - `Type` string = "info" — success|warning|error|info|primary|secondary|accent
 - `Title` string?
 
-### SaveButton
-Save with spinner. `<SaveButton IsLoading="@_saving" OnClick="Save" />`
-- `IsLoading` bool = false
-- `OnClick` EventCallback
-
 ### Modal
 Dialog container. Scrollable body, header/footer slots.
 ```
@@ -219,7 +217,7 @@ Dangerous action confirmation. Optional type-to-confirm.
 | EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder |
 | LoadingIndicator | Message | Spinner |
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
-| FilterPanel | Title, IsExpanded, IsExpandedChanged, ActionButtons(RF) | Collapsible filters |
+| FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
 | CustomInput | Label, Value, Type(text/number/checkbox), FullWidth, Disabled, OnValueChanged | Labeled form input |
 | InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |
