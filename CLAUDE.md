@@ -27,6 +27,19 @@ dotnet ef database update --project CampaignManager.Web --context AppDbContext
 dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
 ```
 
+История миграций `AppDb` схлопнута в одну `20260910132807_InitialCreate` — сорок шесть
+прежних миграций занимали 34 664 строки, две трети всего C# в проекте. Схема при этом
+не изменилась: снапшот модели после схлопывания совпал с прежним побайтово.
+
+- **Базу, накатанную до схлопывания, нужно перевести на новый журнал один раз** скриптом
+  `docs/squash-migrations.sql` — он переписывает `__EFMigrationsHistory`, саму схему не трогает.
+  Без этого `database update` решит, что схемы нет, и попробует создать её заново.
+- Пустой базе скрипт не нужен: обычный `database update` создаст схему из `InitialCreate`.
+- Миграции нигде не применяются автоматически — ни в `Program.cs`, ни в Dockerfile, ни в CI,
+  так что момент накатывания выбирается вручную.
+- Прежние миграции содержали только `UPDATE` существующих строк (backfill'ы оружия и
+  бестиария), без `InsertData`, поэтому на новой базе схлопывание ничего не теряет.
+
 **Tailwind CSS** is built automatically by the `Tailwind` MSBuild target in the csproj:
 - Debug: `npx tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css`
 - Release: same with `--minify`

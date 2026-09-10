@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Chase.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
+using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -16,8 +18,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Web.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260329103543_PendingChanges")]
-    partial class PendingChanges
+    [Migration("20260910132807_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -25,16 +27,73 @@ namespace CampaignManager.Web.Migrations.AppDb
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("games")
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Admin.Model.KeeperApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ReviewComment")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedByEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserEmail", "Status")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.ToTable("KeeperApplications", "games");
+                });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Bestiary.Model.Creature", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<List<CreatureAttack>>("Attacks")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<Dictionary<string, string>>("CombatDescriptions")
                         .IsRequired()
@@ -60,6 +119,12 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<List<CreatureSkill>>("Skills")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<Dictionary<string, string>>("SpecialAbilities")
                         .IsRequired()
                         .HasColumnType("jsonb");
@@ -78,6 +143,83 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.ToTable("Creatures", "games");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Books.Model.Book", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string>("AlternativeNames")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Author")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("BookType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CthulhuMythosFull")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CthulhuMythosInitial")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Language")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("MythosRating")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("OccultismBonus")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<string>("PossibleSpells")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SanityLoss")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("StudyWeeks")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Year")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Books", "games");
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.Campaign", b =>
                 {
                     b.Property<Guid>("Id")
@@ -86,6 +228,9 @@ namespace CampaignManager.Web.Migrations.AppDb
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Era")
+                        .HasColumnType("integer");
 
                     b.Property<string>("KeeperEmail")
                         .HasColumnType("text");
@@ -143,6 +288,48 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.ToTable("CampaignPlayers", "games");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.LlmKnowledgeEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("LlmKnowledgeEntries", "games");
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.Occupation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -186,12 +373,47 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Property<int>("SocialSkillSlots")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Tags")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Name")
                         .IsUnique();
 
                     b.ToTable("Occupations", "games");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Chase.Model.ChaseSessionDto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KeeperEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<ChaseSnapshot>("State")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeeperEmail", "CampaignId")
+                        .IsUnique();
+
+                    b.ToTable("ChaseSessions", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Items.Model.Item", b =>
@@ -237,6 +459,9 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AnnouncementText")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("CampaignId")
                         .HasColumnType("uuid");
 
@@ -255,6 +480,11 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Property<ICollection<ScenarioHandout>>("Handouts")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsTemplate")
                         .ValueGeneratedOnAdd()
@@ -290,6 +520,9 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<DateTime?>("ScheduledDate")
+                        .HasColumnType("timestamp without time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampaignId");
@@ -297,6 +530,46 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.HasIndex("CreatorEmail");
 
                     b.ToTable("Scenarios", "games");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.ScenarioNpc", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Count")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ScenarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId");
+
+                    b.HasIndex("ScenarioId", "CharacterId")
+                        .IsUnique();
+
+                    b.ToTable("ScenarioNpcs", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Skills.Model.SkillModel", b =>
@@ -327,6 +600,12 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<bool>("Is1920")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsModern")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsUncommon")
                         .HasColumnType("boolean");
 
@@ -342,6 +621,9 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<Guid?>("ParentSkillId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("TimeRequired")
                         .IsRequired()
                         .HasColumnType("text");
@@ -354,6 +636,8 @@ namespace CampaignManager.Web.Migrations.AppDb
 
                     b.HasIndex("Name")
                         .IsUnique();
+
+                    b.HasIndex("ParentSkillId");
 
                     b.ToTable("Skills", "games");
                 });
@@ -411,15 +695,31 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<WeaponAmmoInfo>("AmmoInfo")
+                        .HasColumnType("jsonb")
+                        .HasComment("Структурированный боезапас (авто-парсинг поля Ammo)");
+
                     b.Property<string>("Attacks")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<WeaponAttacksInfo>("AttacksInfo")
+                        .HasColumnType("jsonb")
+                        .HasComment("Структурированное число атак (авто-парсинг поля Attacks)");
+
+                    b.Property<Guid?>("CatalogWeaponId")
+                        .HasColumnType("uuid")
+                        .HasComment("Заполнено только у копии в листе персонажа; у каталожной строки — null");
+
                     b.Property<string>("Cost")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<WeaponCostInfo>("CostInfo")
+                        .HasColumnType("jsonb")
+                        .HasComment("Структурированная стоимость (авто-парсинг поля Cost)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -429,11 +729,26 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<WeaponDamageInfo>("DamageInfo")
+                        .HasColumnType("jsonb")
+                        .HasComment("Структурированная информация об уроне (авто-парсинг поля Damage)");
+
                     b.Property<bool>("Is1920")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsImpaling")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsModern")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRare")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasComment("Редкое оружие: колонка «Встречается» таблицы XVII");
 
                     b.Property<DateTimeOffset>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
@@ -442,6 +757,10 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("MalfunctionThreshold")
+                        .HasColumnType("integer")
+                        .HasComment("Порог осечки числом (авто-парсинг поля Malfunction)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -458,10 +777,18 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<WeaponRangeInfo>("RangeInfo")
+                        .HasColumnType("jsonb")
+                        .HasComment("Структурированная дальность (авто-парсинг поля Range)");
+
                     b.Property<string>("Skill")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("SkillId")
+                        .HasColumnType("uuid")
+                        .HasComment("Навык из справочника Skills; без FK — см. Weapon.SkillId");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -477,10 +804,61 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.ToTable("Weapons", "games");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Wiki.Model.EditHistoryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EditorEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("EditorName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousSnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntityType", "EntityId", "CreatedAt")
+                        .IsDescending(false, false, true);
+
+                    b.ToTable("EditHistoryEntries", "games");
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Model.CharacterStorageDto", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CampaignId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("CampaignPlayerId")
@@ -499,6 +877,10 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -511,11 +893,62 @@ namespace CampaignManager.Web.Migrations.AppDb
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CampaignId");
+
                     b.HasIndex("CampaignPlayerId");
+
+                    b.HasIndex("Kind");
 
                     b.HasIndex("ScenarioId");
 
                     b.ToTable("Characters", "games");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Model.UserPreferences", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Dictionary<string, string>>("Preferences")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("UserEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserEmail")
+                        .IsUnique();
+
+                    b.ToTable("UserPreferences", "games");
+                });
+
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignPlayer", b =>
@@ -539,17 +972,51 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.Navigation("Campaign");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.ScenarioNpc", b =>
+                {
+                    b.HasOne("CampaignManager.Web.Model.CharacterStorageDto", "Character")
+                        .WithMany("ScenarioCasts")
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
+                        .WithMany("Cast")
+                        .HasForeignKey("ScenarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+
+                    b.Navigation("Scenario");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Skills.Model.SkillModel", b =>
+                {
+                    b.HasOne("CampaignManager.Web.Components.Features.Skills.Model.SkillModel", null)
+                        .WithMany()
+                        .HasForeignKey("ParentSkillId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Model.CharacterStorageDto", b =>
                 {
+                    b.HasOne("CampaignManager.Web.Components.Features.Campaigns.Models.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignPlayer", "CampaignPlayer")
                         .WithMany("Characters")
                         .HasForeignKey("CampaignPlayerId")
                         .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
-                        .WithMany("Npcs")
+                        .WithMany("Pregens")
                         .HasForeignKey("ScenarioId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Campaign");
 
                     b.Navigation("CampaignPlayer");
 
@@ -568,7 +1035,14 @@ namespace CampaignManager.Web.Migrations.AppDb
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", b =>
                 {
-                    b.Navigation("Npcs");
+                    b.Navigation("Cast");
+
+                    b.Navigation("Pregens");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Model.CharacterStorageDto", b =>
+                {
+                    b.Navigation("ScenarioCasts");
                 });
 #pragma warning restore 612, 618
         }
