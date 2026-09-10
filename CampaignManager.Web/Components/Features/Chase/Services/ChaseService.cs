@@ -791,23 +791,8 @@ public sealed partial class ChaseService
                           (attackerWins ? "не помогло." : "атака отбита!");
         }
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.MeleeAttack,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = 1,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.MeleeAttack, attacker, skillName, skillValue,
+            actualRoll, level, success, target);
 
         if (success && damageRoll is > 0)
         {
@@ -848,24 +833,9 @@ public sealed partial class ChaseService
 
         var shootStyle = stoppedToShoot ? "стоя" : "на ходу";
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            ActionType = ChaseActionType.RangedAttack,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
-            ActorMovementActionsSpent = stoppedToShoot ? 1 : 0,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
+        var result = SkillCheckResult(ChaseActionType.RangedAttack, attacker, skillName, skillValue,
+            actualRoll, level, success, target, movementActionsSpent: stoppedToShoot ? 1 : 0);
 
         if (success && damageRoll is > 0)
         {
@@ -927,24 +897,8 @@ public sealed partial class ChaseService
         var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
-        var result = new ChaseActionResult
-        {
-            Round = CurrentRound,
-            PenaltyDice = buildPenalty,
-            ActionType = ChaseActionType.CombatManeuver,
-            ParticipantId = attacker.Id,
-            ParticipantName = attacker.Name,
-            TargetId = target.Id,
-            TargetName = target.Name,
-            SkillName = skillName,
-            SkillValue = skillValue,
-            Roll = actualRoll,
-            SuccessLevel = level,
-            IsSuccess = success,
-            ActorMovementActionsSpent = 1,
-            LocationBefore = attacker.CurrentLocation,
-            LocationAfter = attacker.CurrentLocation
-        };
+        var result = SkillCheckResult(ChaseActionType.CombatManeuver, attacker, skillName, skillValue,
+            actualRoll, level, success, target, penaltyDice: buildPenalty);
 
         if (success)
         {
