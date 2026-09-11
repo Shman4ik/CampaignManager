@@ -1,0 +1,111 @@
+@page "/character/wizard"
+@using CampaignManager.Web.Components.Features.Characters.Components.Wizard
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Помощник создания сыщика</PageTitle>
+
+<PageHeader Title="Помощник создания сыщика">
+    <Actions>
+        <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">@EraLabel</Badge>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="Cancel">Выйти</button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    @if (!string.IsNullOrEmpty(_notification.Message))
+    {
+        <NotificationAlert Type="@_notification.Type" Message="@_notification.Message" OnClose="ClearNotification"/>
+    }
+
+    @if (_loading)
+    {
+        <LoadingIndicator/>
+    }
+    else
+    {
+        <nav class="wizard-steps" aria-label="Шаги создания сыщика">
+            @for (var i = 0; i < Steps.Count; i++)
+            {
+                var index = i;
+                var step = Steps[index];
+                <button type="button"
+                        class="wizard-step @(index == _draft.StepIndex ? "is-current" : "") @(index < _draft.StepIndex ? "is-done" : "")"
+                        disabled="@(index > _draft.StepIndex)"
+                        data-testid="@($"wizard-step-{index}")"
+                        @onclick="() => GoTo(index)">
+                    <span class="wizard-step-number">@(index + 1)</span>
+                    <span class="wizard-step-label">@step.Title</span>
+                </button>
+            }
+        </nav>
+
+        <div class="cm-card">
+            <div class="cm-card-header">
+                <span class="cm-card-title">@CurrentStep.Title</span>
+                <span class="cm-text-muted text-xs">@CurrentStep.Reference</span>
+            </div>
+            <div class="cm-card-body">
+                <p class="cm-text-body mb-4">@CurrentStep.Hint</p>
+
+                @switch (_draft.StepIndex)
+                {
+                    case 0:
+                        <WizardMethodStep Draft="_draft" OnChanged="OnDraftChanged" EraLocked="_eraLocked"/>
+                        break;
+                    case 1:
+                        <WizardCharacteristicsStep Draft="_draft" OnChanged="OnDraftChanged"/>
+                        break;
+                    case 2:
+                        <WizardOccupationStep Draft="_draft" Occupations="_occupations" Catalog="_catalog"
+                                              OnChanged="OnOccupationChanged"/>
+                        break;
+                    case 3:
+                        <WizardSkillsStep Draft="_draft" Catalog="_catalog" Slots="_slots"
+                                          Occupation="SelectedOccupation" OnChanged="OnDraftChanged"/>
+                        break;
+                    case 4:
+                        <WizardBiographyStep Draft="_draft" OnChanged="OnDraftChanged"/>
+                        break;
+                    case 5:
+                        <WizardGearStep Draft="_draft" OnChanged="OnDraftChanged"/>
+                        break;
+                    default:
+                        <WizardSummaryStep Draft="_draft" Catalog="_catalog" Occupation="SelectedOccupation"/>
+                        break;
+                }
+            </div>
+            <div class="cm-card-footer wizard-footer">
+                <div class="wizard-validation">
+                    @if (ValidationMessage is { } message)
+                    {
+                        <span><i class="fa-solid fa-circle-exclamation mr-1"></i>@message</span>
+                    }
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                            disabled="@(_draft.StepIndex == 0)" @onclick="Back">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Назад
+                    </button>
+                    @if (_draft.StepIndex < Steps.Count - 1)
+                    {
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
+                                disabled="@(ValidationMessage is not null)" data-testid="wizard-next" @onclick="Next">
+                            Далее <i class="fa-solid fa-arrow-right ml-1"></i>
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
+                                disabled="@(_isBusy || ValidationMessage is not null)" data-testid="wizard-finish"
+                                @onclick="CreateInvestigatorAsync">
+                            <i class="fa-solid fa-user-plus mr-1"></i> Создать сыщика
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
