@@ -144,6 +144,11 @@ public partial class InvestigatorWizardPage
             _draft.SlotChoices.Add("");
         if (_draft.SlotChoices.Count > _slots.Count)
             _draft.SlotChoices.RemoveRange(_slots.Count, _draft.SlotChoices.Count - _slots.Count);
+
+        // Специализации, названные книгой прямо («Язык, иностранный (латынь)» у Врача), в справочнике
+        // навыков не лежат — без этого они не попадут ни на лист, ни в список профессиональных навыков.
+        foreach (var (name, parent) in OccupationSkillResolver.FixedSpecializations(_slots))
+            _draft.AddedSpecializations[name] = parent;
     }
 
     private void OnDraftChanged() => StateHasChanged();

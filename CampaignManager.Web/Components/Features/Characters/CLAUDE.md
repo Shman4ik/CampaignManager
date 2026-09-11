@@ -30,7 +30,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   характеристик. Вторичные атрибуты остаются за `DerivedAttributeRules`.
 - `BiographyTables` (static) — списки 1d10 для шага 4 (стр. 40–43) и набор слов «Описание».
 - `OccupationSkillResolver` (static) — раскладывает профессию на слоты навыков (стр. 31, 38–39):
-  названный навык, «любая специализация», социальный слот, «ещё один любой».
+  названный навык, «любая специализация», выбор из перечисленного книгой списка, социальный слот,
+  «ещё один любой». Там же `RequiredSkillCount` (восемь) и `ProfessionalSkillCount` — проверка
+  «ровно восемь профессиональных навыков плюс Средства», её показывает `/occupations`.
 - `InvestigatorFactory(SkillService)` — собирает лист из `InvestigatorDraft`: характеристики,
   навыки (включая добавленные специализации), деньги. Считает не сам, а через `DerivedAttributeRules`
   и `FinanceRules`.
@@ -41,13 +43,23 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   специализации делятся прогрессом, закрытый (Ближний бой, Стрельба, Языки, Выживание) —
   книга прямо противопоставляет им Науку, так что вешать бонус на любую группу нельзя.
 - `OccupationService(dbContextFactory, IMemoryCache, logger)` — occupation catalog (skill point formulas, tags).
+  `SyncWithRulebookAsync` — апсерт по имени из `Occupation.GetDefaultOccupations()`, за кнопкой
+  «Синхронизировать с правилами» на `/occupations`. Это **единственный** способ доставить книжные
+  данные в живую базу: миграции нигде не применяются автоматически, а доступ к базе на чтение.
+  Ничего не удаляет — профессии, заведённые Хранителем сверх списка, остаются нетронутыми.
+  Переименования книги держит `RenamedByRulebook` («Детектив» → «Детектив полиции»); без него
+  апсерт по имени завёл бы вторую строку и оставил старую.
 
 ## Key Models
 - `CharacterStorageDto.Kind` (`CharacterKind`: `PlayerCharacter` / `Pregen` / `Npc`) — **единственный**
   признак вида персонажа, обычная колонка. Не выводить вид из статуса, из набора внешних ключей или
   из полей внутри JSONB: ровно так эта модель и запуталась до упрощения.
 - `Character` — composed of `PersonalInfo`, `Characteristics` (STR/DEX/CON/etc with `.Regular`/`.Half`/`.Fifth`), `DerivedAttributes` (HP/MP/Sanity/Luck as `AttributeWithMaxValue`), `Skills` (`SkillsModel` → `SkillGroup[]` → `Skill[]`, each with `.Regular`/`.Half`/`.Fifth`), `State` (`CharacterState` — IsUnconscious, HasSeriousInjury, IsDying, etc.), `Weapons` (`List<Weapon>`), `Spells` (`List<Spell>`), plus `BiographyInfo`, `Equipment`/`EquipmentItem`, `Finances`, `InsanityCondition`.
-- `Occupation : BaseDataBaseEntity, INamedEntity`.
+- `Occupation : BaseDataBaseEntity, INamedEntity`. Навыки лежат в трёх полях: `OccupationSkills`
+  (jsonb `List<string>` — названные книгой навыки), `SkillChoices` (jsonb
+  `List<OccupationSkillChoice>` — «выбрать N из перечисленных») и счётчики `SocialSkillSlots` /
+  `FreeSkillSlots`. `SkillChoices` — отдельная колонка именно потому, что `OccupationSkills`
+  остался плоским списком строк и старые строки обязаны читаться дальше.
 - `CharacterGenerationLog` / `GenerationLogEntry` — audit trail of random-generation rolls.
 - `InvestigatorDraft` — состояние помощника создания (см. ниже). Плоский POCO: он переживает
   паузу circuit как `[PersistentState]`, поэтому ни EF-сущностей, ни циклов в нём быть не должно.
@@ -131,9 +143,11 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - Слоты профессии (`OccupationSkillResolver.BuildSlots`) собирает **страница**, а шаг только
   показывает: выбор игрока хранится в `Draft.SlotChoices` по индексу слота, и шаг «Навыки» читает
   тот же список. Разъедутся индексы — навыки профессии уедут не туда.
-- Имена навыков в `Occupation.OccupationSkills` короче, чем в справочнике навыков («Языки (иностр.)»
-  против «Язык, иностранный»). Сопоставление живёт в `OccupationSkillResolver.Aliases` — одно место;
-  навык, который не нашёлся, превращается в слот `Unresolved`, и игрок выбирает замену руками.
+- **Имена навыков в `Occupation.OccupationSkills` пишутся ровно как в справочнике навыков**
+  («Язык, иностранный», не «Языки (иностр.)»). `OccupationSkillResolver.Aliases` остался только
+  ради справочников, сохранённых до этого приведения, — новые данные туда добавлять не нужно.
+  Навык, который не нашёлся, превращается в слот `Unresolved`, и игрок выбирает замену руками;
+  у книжных профессий таких слотов быть не должно.
 - Навыки с широким спектром (Искусство/ремесло, Наука, Ближний бой, Стрельба, Выживание, Иностранный
   язык) в справочнике — родители, и на лист не попадают: `BuildGroupsFromSkills` их отфильтровывает.
   Поэтому слот такого навыка — выбор специализации, а своя («Иностранный язык (латынь)») кладётся в
@@ -143,9 +157,34 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   обычные `OccupationPoints`; навык, чья база уже выше выбранного значения, остаётся на базе.
 - Черновик помощника переживает паузу circuit (`PersistedDraft`). Всё, что должно пережить уход на
   другую вкладку, кладётся в `InvestigatorDraft`, а не в приватное поле шага.
-- Справочник профессий в базе — приближение книжного списка: у Врача, например, одна «Наука» вместо
-  «Наука (биология)» и «Наука (фармакология)». Помощник показывает то, что лежит в `Occupations`,
-  и правится это редактированием профессии, а не кодом.
+- **Специализацию, которую книга называет прямо, слот отдаёт без выбора.** «Язык, иностранный
+  (латынь)» у Врача, «Искусство/ремесло (черчение)» у Инженера — таких навыков в справочнике нет,
+  и резолвер выдаёт `Fixed` с заполненным `ParentSkillName`. На лист они попадают через
+  `OccupationSkillResolver.FixedSpecializations`, который `RebuildSlots` кладёт в
+  `Draft.AddedSpecializations`. Забыть это — значит молча потерять профессиональный навык.
+- Слот «выбрать N из перечисленных» (`SkillChoices`) разворачивает варианты-родители в их
+  специализации: «четыре специализации из Ближний бой / Взлом / … / Стрельба» у Преступника даёт
+  один список со всеми видами ближнего боя и стрельбы плюс пункты «Другая специализация: …».
+  Соседние слоты одной группы делят пул — уже выбранное из списка убирается, иначе повтор просто
+  сгорел бы: одинаковые имена схлопываются в один профессиональный навык.
+- Справочник профессий в базе приведён к списку «Примеры занятий» (стр. 37–39) — все 28 книжных
+  профессий, у каждой ровно восемь профессиональных навыков плюс Средства. Помощник показывает то,
+  что лежит в `Occupations`; править это можно и руками на `/occupations`, а вернуть книжное
+  состояние — кнопкой «Синхронизировать с правилами».
+- **Археолог, Бухгалтер и Механик — не из русских «Примеров занятий».** Их в главе 3 нет вообще
+  (проверено по всем файлам `X:\Knowledge\CallOfCthulhu`: «Пункты проф. навыков» встречается ровно
+  28 раз). Достались приложению от самодельного списка имён в самом первом коммите
+  (`1b31a90`, `CharacterGenerationService.cs` — там же были «Автор», «Актер», «Атлет», «Бармен»,
+  «Ботаник»: калька с английского) и потому долго жили с семью навыками вместо восьми. Состав
+  выправлен по англоязычным правилам, где они есть: Archaeologist — Roll20-компендиум CoC 7e,
+  Accountant и Mechanic (and Skilled Trades) — Investigator Handbook. Теперь они в
+  `GetDefaultOccupations()` наравне с книжными, и синхронизация держит их в порядке.
+  Заводя ещё одну «не из книги», клади её в тот же блок с пометкой источника — иначе следующий
+  читатель решит, что она книжная.
+- Генератор (`CharacterGenerationService`) раскладывает профессию **тем же** резолвером и делает
+  выбор в слотах случайно (взвешенно по `Occupation.Tags`). Не заводить там второй разбор
+  `OccupationSkills`: именно из-за него генератор раньше молча терял «Стрельбу» и «Науку» —
+  это родители, на лист они не попадают.
 
 ## Authorization
 - `CharacterService.CanAccessCharacterAsync(dbContext, campaignPlayerId, access)` is the single access rule for
