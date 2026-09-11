@@ -1,0 +1,185 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 4: личные данные и биография — шесть граф и ключевая связь (стр. 37, 40–43). *@
+
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Личные данные</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div>
+                <label class="cm-field-label" for="bio-name">Имя сыщика <span class="text-red-500">*</span></label>
+                <input id="bio-name" type="text" class="cm-input" data-testid="investigator-name"
+                       value="@Draft.Info.Name" @onchange="args => SetInfo(i => i.Name = Text(args))"/>
+            </div>
+            <div>
+                <label class="cm-field-label" for="bio-gender">Пол</label>
+                <input id="bio-gender" type="text" class="cm-input" list="bio-gender-options"
+                       value="@Draft.Info.Gender" @onchange="args => SetInfo(i => i.Gender = Text(args))"/>
+                <datalist id="bio-gender-options">
+                    <option value="Мужской"></option>
+                    <option value="Женский"></option>
+                </datalist>
+            </div>
+            <div>
+                <label class="cm-field-label" for="bio-player">Имя игрока</label>
+                <input id="bio-player" type="text" class="cm-input"
+                       value="@Draft.Info.PlayerName" @onchange="args => SetInfo(i => i.PlayerName = Text(args))"/>
+            </div>
+            <div>
+                <label class="cm-field-label" for="bio-birthplace">Место рождения</label>
+                <input id="bio-birthplace" type="text" class="cm-input"
+                       value="@Draft.Info.Birthplace" @onchange="args => SetInfo(i => i.Birthplace = Text(args))"/>
+            </div>
+            <div>
+                <label class="cm-field-label" for="bio-residence">Место жительства</label>
+                <input id="bio-residence" type="text" class="cm-input"
+                       value="@Draft.Info.Residence" @onchange="args => SetInfo(i => i.Residence = Text(args))"/>
+            </div>
+            <div>
+                <label class="cm-field-label">Возраст и род занятий</label>
+                <p class="cm-text-body pt-2">@Draft.Age лет · @(string.IsNullOrEmpty(Draft.OccupationName) ? "профессия не выбрана" : Draft.OccupationName)</p>
+            </div>
+        </div>
+        <p class="cm-field-note mt-2">
+            Пол и место рождения не дают ни бонусов, ни штрафов — они нужны только образу сыщика (стр. 43).
+        </p>
+    </section>
+
+    @foreach (var section in BiographyTables.Sections)
+    {
+        <section @key="section.Key">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+                <h3 class="cm-section-title">@section.Title</h3>
+                <label class="flex items-center gap-1 text-sm text-gray-600">
+                    <input type="radio" name="key-connection" class="cm-checkbox"
+                           checked="@(Draft.KeyConnectionSection == section.Key)"
+                           data-testid="@($"key-connection-{section.Key}")"
+                           @onchange="() => SetKeyConnection(section.Key)"/>
+                    ключевая связь
+                </label>
+            </div>
+            <p class="cm-field-note mb-2">@section.Hint</p>
+
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+                @if (section.Key == "appearance")
+                {
+                    <select class="cm-input cm-input-sm w-56" value=""
+                            @onchange="args => Append(section.Key, Text(args))">
+                        <option value="">— выбрать слово —</option>
+                        @foreach (var word in section.Options)
+                        {
+                            <option value="@word">@word</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <select class="cm-input cm-input-sm flex-1 min-w-[16rem]" value=""
+                            @onchange="args => Append(section.Key, Text(args))">
+                        <option value="">— выбрать пункт списка —</option>
+                        @for (var i = 0; i < section.Options.Count; i++)
+                        {
+                            <option value="@section.Options[i]">@(i + 1). @section.Options[i]</option>
+                        }
+                    </select>
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                            data-testid="@($"roll-{section.Key}")"
+                            @onclick="() => RollInto(section.Key, section.Options)">
+                        <i class="fa-solid fa-dice mr-1"></i> 1d10
+                    </button>
+                }
+                @if (section.Key == "people")
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                            @onclick="() => RollInto(section.Key, BiographyTables.SignificantPeopleReasons)">
+                        <i class="fa-solid fa-dice mr-1"></i> 1d10: чем важен
+                    </button>
+                }
+            </div>
+
+            <textarea class="cm-input" rows="3" data-testid="@($"bio-{section.Key}")"
+                      value="@Read(section.Key)" @onchange="args => Write(section.Key, Text(args))"></textarea>
+        </section>
+    }
+
+    <section>
+        <p class="cm-text-body">
+            Заполнено граф: <strong>@FilledCount</strong> из @BiographyTables.Sections.Count.
+            Книга просит хотя бы три и одну отметку ключевой связи — её сыщик потом использует,
+            чтобы возвращать себе рассудок (стр. 43).
+        </p>
+    </section>
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private int FilledCount => BiographyTables.Sections.Count(s => !string.IsNullOrWhiteSpace(Read(s.Key)));
+
+    private static string Text(ChangeEventArgs args) => args.Value?.ToString() ?? "";
+
+    private string Read(string key) => key switch
+    {
+        "appearance" => Draft.Biography.Appearance,
+        "ideals" => Draft.Biography.IdealsAndPrinciples,
+        "people" => Draft.Biography.SignificantPeople,
+        "places" => Draft.Biography.ImportantPlaces,
+        "possessions" => Draft.Biography.ValuablePossessions,
+        _ => Draft.Biography.Traits
+    };
+
+    private async Task Write(string key, string value)
+    {
+        switch (key)
+        {
+            case "appearance": Draft.Biography.Appearance = value; break;
+            case "ideals": Draft.Biography.IdealsAndPrinciples = value; break;
+            case "people": Draft.Biography.SignificantPeople = value; break;
+            case "places": Draft.Biography.ImportantPlaces = value; break;
+            case "possessions": Draft.Biography.ValuablePossessions = value; break;
+            default: Draft.Biography.Traits = value; break;
+        }
+
+        SyncKeyConnection();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>Выбранный или выпавший пункт дописывается — у «Значимых людей» их сразу два (стр. 41–42).</summary>
+    private async Task Append(string key, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        var current = Read(key);
+        await Write(key, string.IsNullOrWhiteSpace(current) ? value : $"{current}\n{value}");
+    }
+
+    private async Task RollInto(string key, IReadOnlyList<string> table)
+    {
+        var (roll, text) = BiographyTables.Roll(table);
+        await Append(key, $"{roll}. {text}");
+    }
+
+    private async Task SetKeyConnection(string key)
+    {
+        Draft.KeyConnectionSection = key;
+        SyncKeyConnection();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>Текст ключевой связи всегда равен тексту отмеченной графы, даже если её правят после отметки.</summary>
+    private void SyncKeyConnection()
+    {
+        Draft.Biography.KeyConnection = string.IsNullOrEmpty(Draft.KeyConnectionSection)
+            ? ""
+            : Read(Draft.KeyConnectionSection);
+    }
+
+    private async Task SetInfo(Action<PersonalInfo> apply)
+    {
+        apply(Draft.Info);
+        await OnChanged.InvokeAsync();
+    }
+}

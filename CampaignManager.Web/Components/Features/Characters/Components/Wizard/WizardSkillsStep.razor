@@ -1,0 +1,382 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 3: пункты профессиональных навыков и личного интереса (стр. 34, 46). *@
+
+<div class="cm-stack">
+    <section>
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-4 flex-wrap">
+                @if (Draft.Method is CreationMethod.Blitz)
+                {
+                    <span class="cm-meta">
+                        <span class="cm-meta-label">Блиц-набор:</span>
+                        <strong>@string.Join(" / ", InvestigatorCreationRules.BlitzSkillValues)</strong>
+                    </span>
+                }
+                else
+                {
+                    <span class="cm-meta">
+                        <span class="cm-meta-label">Очки профессии:</span>
+                        <strong class="@BudgetClass(Draft.SpentOccupationPoints, OccupationBudget)"
+                                data-testid="occupation-budget">
+                            @Draft.SpentOccupationPoints / @OccupationBudget
+                        </strong>
+                    </span>
+                    <span class="cm-meta">
+                        <span class="cm-meta-label">Очки личного интереса:</span>
+                        <strong class="@BudgetClass(Draft.SpentPersonalPoints, PersonalBudget)"
+                                data-testid="personal-budget">
+                            @Draft.SpentPersonalPoints / @PersonalBudget
+                        </strong>
+                    </span>
+                }
+                @if (Draft.SkillCap is { } cap)
+                {
+                    <span class="cm-meta"><span class="cm-meta-label">Лимит навыка:</span> <strong>@cap%</strong></span>
+                }
+            </div>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ResetPoints">
+                Сбросить распределение
+            </button>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Средства</h3>
+        <div class="flex items-end gap-3 flex-wrap">
+            <div class="w-32">
+                <label class="cm-field-label" for="wizard-credit-rating">Значение, %</label>
+                <input id="wizard-credit-rating" type="number" class="cm-input" data-testid="credit-rating"
+                       min="@CreditMin" max="@CreditMax" value="@Draft.CreditRating"
+                       @onchange="SetCreditRating"/>
+            </div>
+            <p class="cm-text-body flex-1 min-w-[16rem]">
+                Диапазон профессии — @CreditMin–@CreditMax%.
+                @if (Draft.Method is not CreationMethod.Blitz)
+                {
+                    <span>Пункты в Средства идут из тех же очков профессии (стр. 34).</span>
+                }
+                <span class="cm-field-note block mt-1">Достаток: @WealthName. Деньги посчитаются на шаге «Снаряжение».</span>
+            </p>
+        </div>
+    </section>
+
+    @if (Draft.Method is CreationMethod.Blitz)
+    {
+        <section>
+            <h3 class="cm-section-title mb-2">Профессиональные навыки</h3>
+            <p class="cm-field-note mb-2">
+                Присвойте каждому навыку значение из блиц-набора — базовые значения в скобках при этом не учитываются
+                (стр. 46). Навык, чья база и без того выше выбранного значения (родной язык, например), остаётся на ней.
+            </p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-1">
+                @foreach (var name in OccupationSkillNames.Where(n => n != OccupationSkillResolver.CreditRatingSkill))
+                {
+                    <div class="slot-row" @key="name">
+                        <span>@name <span class="cm-field-note">(@BaseOf(name)%)</span></span>
+                        <span class="flex items-center gap-2">
+                            <select class="cm-input cm-input-sm w-28" data-testid="@($"blitz-{name}")"
+                                    value="@Draft.BlitzValues.GetValueOrDefault(name)"
+                                    @onchange="args => SetBlitzValue(name, args)">
+                                <option value="0">—</option>
+                                @foreach (var value in BlitzAvailableFor(name))
+                                {
+                                    <option value="@value">@value%</option>
+                                }
+                            </select>
+                            <strong class="w-12 text-right">@Total(name)%</strong>
+                        </span>
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section>
+            <h3 class="cm-section-title mb-2">Личные навыки</h3>
+            <p class="cm-field-note mb-2">
+                Выберите @InvestigatorCreationRules.BlitzPersonalSkillCount навыка и прибавьте к каждому
+                @InvestigatorCreationRules.BlitzPersonalSkillBonus% к базовому значению (стр. 46).
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                @for (var i = 0; i < InvestigatorCreationRules.BlitzPersonalSkillCount; i++)
+                {
+                    var index = i;
+                    <select class="cm-input cm-input-sm" @key="index" data-testid="@($"blitz-personal-{index}")"
+                            value="@BlitzPersonal(index)" @onchange="args => SetBlitzPersonal(index, args)">
+                        <option value="">— навык @(index + 1) —</option>
+                        @foreach (var skill in SelectableSkills)
+                        {
+                            <option value="@skill.Name">@skill.Name (@BaseOf(skill.Name)%)</option>
+                        }
+                    </select>
+                }
+            </div>
+        </section>
+    }
+    else
+    {
+        <section>
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <h3 class="cm-section-title">Распределение пунктов</h3>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <input type="search" class="cm-input cm-input-sm w-56" placeholder="Поиск по навыку…"
+                           @bind="_search" @bind:event="oninput"/>
+                    <label class="flex items-center gap-1 text-sm text-gray-600">
+                        <input type="checkbox" class="cm-checkbox" @bind="_occupationOnly"/>
+                        только навыки профессии
+                    </label>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="cm-table skills-table">
+                    <thead>
+                    <tr>
+                        <th class="text-left">Навык</th>
+                        <th class="text-center">База</th>
+                        <th class="text-center">Профессия</th>
+                        <th class="text-center">Личные</th>
+                        <th class="text-center">Итог</th>
+                        <th class="text-center">½</th>
+                        <th class="text-center">⅕</th>
+                    </tr>
+                    </thead>
+                    @foreach (var group in VisibleGroups)
+                    {
+                        <tbody @key="group.Name">
+                        <tr class="group-row">
+                            <td colspan="7">@group.Name</td>
+                        </tr>
+                        @foreach (var skill in group.Skills)
+                        {
+                            var name = skill.Name;
+                            var baseValue = BaseOf(name);
+                            var total = Total(name);
+                            <tr @key="name">
+                                <td>
+                                    @name
+                                    @if (IsOccupationSkill(name))
+                                    {
+                                        <i class="fa-solid fa-briefcase ml-1 text-accent" title="навык профессии"></i>
+                                    }
+                                </td>
+                                <td class="text-center text-gray-500">@baseValue</td>
+                                <td class="text-center">
+                                    @if (IsOccupationSkill(name) && name != OccupationSkillResolver.CreditRatingSkill)
+                                    {
+                                        <input type="number" class="cm-input cm-input-sm w-20 mx-auto text-center"
+                                               data-testid="@($"occ-{name}")" min="0"
+                                               value="@Draft.OccupationPoints.GetValueOrDefault(name)"
+                                               @onchange="args => SetOccupationPoints(name, args)"/>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-300">—</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (name is not OccupationSkillResolver.MythosSkill and not OccupationSkillResolver.CreditRatingSkill)
+                                    {
+                                        <input type="number" class="cm-input cm-input-sm w-20 mx-auto text-center"
+                                               data-testid="@($"pers-{name}")" min="0"
+                                               value="@Draft.PersonalPoints.GetValueOrDefault(name)"
+                                               @onchange="args => SetPersonalPoints(name, args)"/>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-300">—</span>
+                                    }
+                                </td>
+                                <td class="text-center font-semibold">@total</td>
+                                <td class="text-center text-gray-500">@(total / 2)</td>
+                                <td class="text-center text-gray-500">@(total / 5)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    }
+                </table>
+            </div>
+            <p class="cm-field-note mt-2">
+                Мифы Ктулху пунктами навыков не покупают, а Средства задаются отдельно, в пределах профессии.
+                Родной язык равен ОБР, Уклонение — половине ЛВК (стр. 34, 57, 77).
+            </p>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] [EditorRequired] public required SkillsModel Catalog { get; set; }
+    [Parameter] [EditorRequired] public required List<OccupationSlot> Slots { get; set; }
+    [Parameter] public Occupation? Occupation { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _search = "";
+    private bool _occupationOnly;
+    private SkillsModel _skills = new();
+    private List<string> _occupationSkills = [];
+
+    private Characteristics Characteristics => InvestigatorFactory.BuildCharacteristics(Draft);
+
+    private int OccupationBudget =>
+        InvestigatorFactory.OccupationPointsFor(Occupation, Characteristics, Draft.FormulaChoice);
+
+    private int PersonalBudget => InvestigatorFactory.PersonalPointsFor(Characteristics);
+
+    private int CreditMin => Occupation?.CreditRatingMin ?? 0;
+    private int CreditMax => Occupation?.CreditRatingMax ?? 99;
+
+    private string WealthName => FinanceRules.GetTier(Draft.CreditRating, Draft.ModernEra).Name;
+
+    private IReadOnlyList<string> OccupationSkillNames => _occupationSkills;
+
+    private List<Skill> AllSkills => _skills.SkillGroups.SelectMany(g => g.Skills).ToList();
+
+    /// <summary>Навыки, куда можно вложить личные пункты: всё, кроме Мифов Ктулху и Средств.</summary>
+    private IEnumerable<Skill> SelectableSkills => AllSkills
+        .Where(s => s.Name is not OccupationSkillResolver.MythosSkill and not OccupationSkillResolver.CreditRatingSkill)
+        .OrderBy(s => s.Name);
+
+    private IEnumerable<SkillGroup> VisibleGroups => _skills.SkillGroups
+        .Select(g => new SkillGroup
+        {
+            Name = g.Name,
+            Skills = g.Skills
+                .Where(s => !_occupationOnly || IsOccupationSkill(s.Name))
+                .Where(s => string.IsNullOrWhiteSpace(_search) ||
+                            s.Name.Contains(_search, StringComparison.OrdinalIgnoreCase))
+                .ToList()
+        })
+        .Where(g => g.Skills.Count > 0);
+
+    protected override void OnParametersSet()
+    {
+        _skills = InvestigatorFactory.BuildSkillList(Catalog, Draft);
+        _occupationSkills = InvestigatorFactory.ChosenOccupationSkills(Slots, Draft);
+    }
+
+    private bool IsOccupationSkill(string name) => _occupationSkills.Contains(name, StringComparer.Ordinal);
+
+    private int BaseOf(string name)
+    {
+        var skill = AllSkills.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
+        return skill is null ? 0 : InvestigatorFactory.BaseValue(skill, Characteristics);
+    }
+
+    private int Total(string name) => name == OccupationSkillResolver.CreditRatingSkill
+        ? Draft.CreditRating
+        : Math.Min(99, Draft.SkillTotal(name, BaseOf(name)));
+
+    private static string BudgetClass(int spent, int budget) =>
+        spent > budget ? "text-red-600" : spent == budget ? "text-green-700" : "text-amber-700";
+
+    private async Task SetCreditRating(ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        Draft.CreditRating = Math.Clamp(value, CreditMin, CreditMax);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetOccupationPoints(string name, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        Draft.OccupationPoints[name] = ClampPoints(name, value, Draft.PersonalPoints.GetValueOrDefault(name));
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetPersonalPoints(string name, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        Draft.PersonalPoints[name] = ClampPoints(name, value, Draft.OccupationPoints.GetValueOrDefault(name));
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>Пункты не уходят в минус и не поднимают навык выше лимита, если он включён (стр. 46).</summary>
+    private int ClampPoints(string name, int value, int otherPoints)
+    {
+        value = Math.Max(0, value);
+
+        var ceiling = Draft.SkillCap ?? 99;
+        var headroom = ceiling - BaseOf(name) - otherPoints;
+        return Math.Max(0, Math.Min(value, headroom));
+    }
+
+    private async Task ResetPoints()
+    {
+        Draft.OccupationPoints.Clear();
+        Draft.PersonalPoints.Clear();
+        Draft.BlitzValues.Clear();
+        Draft.BlitzPersonalSkills.Clear();
+        Draft.CreditRating = CreditMin;
+        await OnChanged.InvokeAsync();
+    }
+
+    // ── Блиц-метод ──────────────────────────────────────────────────────────
+
+    /// <summary>Значения блиц-набора, ещё не занятые другими навыками, плюс текущее.</summary>
+    private List<int> BlitzAvailableFor(string name)
+    {
+        var used = Draft.BlitzValues
+            .Where(kv => kv.Key != name)
+            .Select(kv => kv.Value)
+            .ToList();
+
+        List<int> available = [];
+        foreach (var value in InvestigatorCreationRules.BlitzSkillValues)
+        {
+            if (used.Remove(value))
+                continue;
+            available.Add(value);
+        }
+
+        return available;
+    }
+
+    private async Task SetBlitzValue(string name, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        if (value <= 0)
+        {
+            Draft.BlitzValues.Remove(name);
+            Draft.OccupationPoints.Remove(name);
+        }
+        else
+        {
+            Draft.BlitzValues[name] = value;
+            // «Не обращайте внимания на базовые значения в скобках» — навык получает ровно это значение.
+            Draft.OccupationPoints[name] = Math.Max(0, value - BaseOf(name));
+        }
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private string BlitzPersonal(int index) =>
+        index < Draft.BlitzPersonalSkills.Count ? Draft.BlitzPersonalSkills[index] : "";
+
+    private async Task SetBlitzPersonal(int index, ChangeEventArgs args)
+    {
+        while (Draft.BlitzPersonalSkills.Count <= index)
+            Draft.BlitzPersonalSkills.Add("");
+
+        var previous = Draft.BlitzPersonalSkills[index];
+        if (!string.IsNullOrEmpty(previous))
+            Draft.PersonalPoints.Remove(previous);
+
+        var name = args.Value?.ToString() ?? "";
+        Draft.BlitzPersonalSkills[index] = name;
+
+        if (!string.IsNullOrEmpty(name))
+            Draft.PersonalPoints[name] = InvestigatorCreationRules.BlitzPersonalSkillBonus;
+
+        await OnChanged.InvokeAsync();
+    }
+}

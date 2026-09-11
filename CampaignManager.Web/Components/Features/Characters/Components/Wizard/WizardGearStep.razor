@@ -1,0 +1,93 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 5: достаток и снаряжение (стр. 44–45). *@
+
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Достаток</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+            <div class="money-tile"><span>Средства</span><strong>@Draft.CreditRating%</strong></div>
+            <div class="money-tile"><span>Наличные</span><strong>$@Tier.CashText</strong></div>
+            <div class="money-tile"><span>Активы</span><strong>@(Tier.Assets is null ? "нет" : "$" + Tier.AssetsText)</strong></div>
+            <div class="money-tile"><span>Карманные деньги</span><strong>$@Tier.PocketMoneyText</strong></div>
+        </div>
+        <p class="cm-text-body"><strong>@Tier.Name.</strong> @Lifestyle.Housing</p>
+        <p class="cm-text-body">@Lifestyle.Transport</p>
+        <p class="cm-field-note mt-2">
+            Суммы в долларах США по таблице «Наличные и активы» для эпохи «@(Draft.ModernEra ? "наше время" : "1920-е годы")».
+            Карманные деньги — сумма, ниже которой траты за день не считают. За вещи, положенные вашему
+            достатку, платить не нужно: они уже есть.
+        </p>
+    </section>
+
+    <section>
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <h3 class="cm-section-title">Имущество и снаряжение</h3>
+            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="add-equipment"
+                    @onclick="AddItem">
+                <i class="fa-solid fa-plus mr-1"></i> Добавить предмет
+            </button>
+        </div>
+
+        @if (Draft.Equipment.Count == 0)
+        {
+            <p class="cm-text-body">
+                Перечислите важные предметы, оружие и снаряжение. Часто в начале записывать нечего —
+                и это нормально, всё интересное найдётся по ходу игры (стр. 44).
+            </p>
+        }
+        else
+        {
+            <div class="equipment-list">
+                @for (var i = 0; i < Draft.Equipment.Count; i++)
+                {
+                    var index = i;
+                    var item = Draft.Equipment[index];
+                    <div class="equipment-row" @key="index">
+                        <input type="text" class="cm-input cm-input-sm flex-1 min-w-[10rem]" placeholder="Название"
+                               data-testid="@($"equipment-name-{index}")"
+                               value="@item.Name" @onchange="args => Update(index, name: args.Value?.ToString())"/>
+                        <input type="text" class="cm-input cm-input-sm flex-[2] min-w-[12rem]" placeholder="Описание"
+                               value="@item.Description" @onchange="args => Update(index, description: args.Value?.ToString())"/>
+                        <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm" aria-label="Удалить предмет"
+                                @onclick="() => RemoveItem(index)">
+                            <i class="fa-solid fa-trash-alt"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private FinanceRules.WealthTier Tier => FinanceRules.GetTier(Draft.CreditRating, Draft.ModernEra);
+
+    private FinanceRules.Lifestyle Lifestyle => FinanceRules.GetLifestyle(Draft.CreditRating);
+
+    private async Task AddItem()
+    {
+        Draft.Equipment.Add(new EquipmentItem());
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveItem(int index)
+    {
+        Draft.Equipment.RemoveAt(index);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task Update(int index, string? name = null, string? description = null)
+    {
+        if (name is not null)
+            Draft.Equipment[index].Name = name;
+        if (description is not null)
+            Draft.Equipment[index].Description = description;
+
+        await OnChanged.InvokeAsync();
+    }
+}

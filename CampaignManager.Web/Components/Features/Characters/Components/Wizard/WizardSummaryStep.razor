@@ -1,0 +1,176 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 6: сводка листа перед созданием — ровно то, что уйдёт в базу. *@
+
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Сыщик</h3>
+        <p class="cm-h4">@(string.IsNullOrWhiteSpace(Draft.Info.Name) ? "Без имени" : Draft.Info.Name)</p>
+        <div class="cm-meta mt-1">
+            <span>@Draft.Age лет</span>
+            @if (!string.IsNullOrWhiteSpace(Draft.Info.Gender))
+            {
+                <span>@Draft.Info.Gender</span>
+            }
+            <span>@(Occupation?.Name ?? "без профессии")</span>
+            <span>@(Draft.ModernEra ? "наше время" : "1920-е годы")</span>
+            @if (!string.IsNullOrWhiteSpace(Draft.Info.Birthplace))
+            {
+                <span>родом из: @Draft.Info.Birthplace</span>
+            }
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Характеристики</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            @foreach (var info in InvestigatorCreationRules.Characteristics)
+            {
+                var value = Draft.Value(info.Key, Band);
+                <div class="summary-tile" @key="info.Key">
+                    <span>@info.Abbreviation</span>
+                    <strong>@value</strong>
+                    <span>@(value / 2) / @(value / 5)</span>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Вторичные атрибуты</h3>
+        <div class="cm-meta">
+            <span><span class="cm-meta-label">ПЗ:</span> @Preview.HitPoints</span>
+            <span><span class="cm-meta-label">ПМ:</span> @Preview.MagicPoints</span>
+            <span><span class="cm-meta-label">Рассудок:</span> @Preview.Sanity</span>
+            <span><span class="cm-meta-label">Удача:</span> @Draft.Luck</span>
+            <span><span class="cm-meta-label">СКО:</span> @Preview.MoveRate</span>
+            <span><span class="cm-meta-label">БкУ:</span> @Preview.DamageBonus</span>
+            <span><span class="cm-meta-label">Комплексия:</span> @Preview.Build</span>
+            <span><span class="cm-meta-label">Уклонение:</span> @Preview.Dodge</span>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Навыки выше базового значения</h3>
+        @if (ImprovedSkills.Count == 0)
+        {
+            <p class="cm-text-body">Пункты навыков ещё никуда не вложены.</p>
+        }
+        else
+        {
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1">
+                @foreach (var (name, value) in ImprovedSkills)
+                {
+                    <div class="flex items-baseline justify-between gap-2 text-sm" @key="name">
+                        <span class="truncate">@name</span>
+                        <strong>@value%</strong>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Деньги</h3>
+        <div class="cm-meta">
+            <span><span class="cm-meta-label">Средства:</span> @Draft.CreditRating% (@Tier.Name)</span>
+            <span><span class="cm-meta-label">Наличные:</span> $@Tier.CashText</span>
+            <span><span class="cm-meta-label">Активы:</span> @(Tier.Assets is null ? "нет" : "$" + Tier.AssetsText)</span>
+            <span><span class="cm-meta-label">Карманные:</span> $@Tier.PocketMoneyText</span>
+        </div>
+        @if (Draft.Equipment.Count > 0)
+        {
+            <p class="cm-text-body mt-2">
+                <span class="cm-meta-label">Снаряжение:</span>
+                @string.Join(", ", Draft.Equipment.Where(e => !string.IsNullOrWhiteSpace(e.Name)).Select(e => e.Name))
+            </p>
+        }
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Биография</h3>
+        @if (FilledSections.Count == 0)
+        {
+            <p class="cm-text-body">Графы биографии не заполнены — их можно дописать на листе.</p>
+        }
+        else
+        {
+            <dl class="biography-summary">
+                @foreach (var section in FilledSections)
+                {
+                    <div @key="section.Key">
+                        <dt>
+                            @section.Title
+                            @if (Draft.KeyConnectionSection == section.Key)
+                            {
+                                <span class="key-connection">ключевая связь</span>
+                            }
+                        </dt>
+                        <dd>@Read(section.Key)</dd>
+                    </div>
+                }
+            </dl>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] [EditorRequired] public required SkillsModel Catalog { get; set; }
+    [Parameter] public Occupation? Occupation { get; set; }
+
+    private AgeBand Band => InvestigatorCreationRules.BandFor(Draft.Age);
+
+    private InvestigatorFactory.DerivedPreview Preview => InvestigatorFactory.Preview(Draft);
+
+    private FinanceRules.WealthTier Tier => FinanceRules.GetTier(Draft.CreditRating, Draft.ModernEra);
+
+    private List<BiographyTables.Section> FilledSections => BiographyTables.Sections
+        .Where(s => !string.IsNullOrWhiteSpace(Read(s.Key)))
+        .ToList();
+
+    /// <summary>
+    ///     Навыки, куда что-то вложено, плюс Средства: сводка показывает то, чем сыщик отличается
+    ///     от чистого листа, а не весь справочник.
+    /// </summary>
+    private List<(string Name, int Value)> ImprovedSkills
+    {
+        get
+        {
+            var characteristics = InvestigatorFactory.BuildCharacteristics(Draft);
+            var skills = InvestigatorFactory.BuildSkillList(Catalog, Draft).SkillGroups.SelectMany(g => g.Skills);
+
+            List<(string, int)> result = [];
+            foreach (var skill in skills)
+            {
+                if (skill.Name == OccupationSkillResolver.CreditRatingSkill)
+                {
+                    if (Draft.CreditRating > 0)
+                        result.Add((skill.Name, Draft.CreditRating));
+                    continue;
+                }
+
+                var invested = Draft.OccupationPoints.GetValueOrDefault(skill.Name)
+                               + Draft.PersonalPoints.GetValueOrDefault(skill.Name);
+                if (invested <= 0)
+                    continue;
+
+                result.Add((skill.Name,
+                    Math.Min(99, InvestigatorFactory.BaseValue(skill, characteristics) + invested)));
+            }
+
+            return result.OrderByDescending(r => r.Item2).ThenBy(r => r.Item1).ToList();
+        }
+    }
+
+    private string Read(string key) => key switch
+    {
+        "appearance" => Draft.Biography.Appearance,
+        "ideals" => Draft.Biography.IdealsAndPrinciples,
+        "people" => Draft.Biography.SignificantPeople,
+        "places" => Draft.Biography.ImportantPlaces,
+        "possessions" => Draft.Biography.ValuablePossessions,
+        _ => Draft.Biography.Traits
+    };
+}

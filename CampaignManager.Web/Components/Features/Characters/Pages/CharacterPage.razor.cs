@@ -312,6 +312,24 @@ public partial class CharacterPage
         _notification.Message = null;
     }
 
+    /// <summary>Помощник создаёт лист по шагам главы 3 и сам сохраняет его — сюда игрок уже не возвращается.</summary>
+    private void OpenWizard()
+    {
+        var query = new List<string>();
+        if (CampaignId is { } campaignId)
+            query.Add($"campaignId={campaignId}");
+        if (ScenarioId is { } scenarioId)
+            query.Add($"scenarioId={scenarioId}");
+        if (CreationKind is CharacterKind.Npc)
+            query.Add("kind=npc");
+        else if (CreationKind is CharacterKind.Pregen)
+            query.Add("kind=pregen");
+
+        NavigationManager.NavigateTo(query.Count > 0
+            ? $"/character/wizard?{string.Join("&", query)}"
+            : "/character/wizard");
+    }
+
     private void OpenGenerateModal() => _showGenerateModal = true;
 
     private void CloseGenerateModal() => _showGenerateModal = false;

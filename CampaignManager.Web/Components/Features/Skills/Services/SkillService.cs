@@ -140,10 +140,12 @@ public sealed class SkillService(
 
     private static string GetBaseValueString(SkillModel skill)
     {
+        // Имена — те, что лежат в справочнике навыков; со старым «Языки (родной)» подпись
+        // родного языка молча показывала «0%» вместо базы, равной ОБР.
         return skill.Name switch
         {
-            "Уклонение"        => "½ ЛВК",
-            "Языки (родной)"   => "ОБР",
+            "Уклонение"      => "½ ЛВК",
+            "Язык, родной"   => "ОБР",
             _ => $"{skill.BaseValue}%"
         };
     }

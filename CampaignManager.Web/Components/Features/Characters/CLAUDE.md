@@ -23,6 +23,17 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `FinanceRules` (static) — таблица II «Наличные и активы» (стр. 45) в одном месте: по ней
   считает деньги и `CharacterGenerationService`, и пересчёт Средств в фазе развития.
   Столбец выбирает `isModern` (эпоха названа и она не классическая — как при генерации).
+  `GetLifestyle` — раздел «Достаток» (стр. 44): жильё и транспорт, положенные Средствам.
+- `InvestigatorCreationRules` (static) — **единственное** место, где живут шаги 1–2 главы 3
+  (стр. 28–31, 45–46): формулы бросков характеристик, таблица возрастных модификаторов
+  (`AgeBands`), проверка улучшения ОБР, готовые наборы блиц-метода и пределы «покупки»
+  характеристик. Вторичные атрибуты остаются за `DerivedAttributeRules`.
+- `BiographyTables` (static) — списки 1d10 для шага 4 (стр. 40–43) и набор слов «Описание».
+- `OccupationSkillResolver` (static) — раскладывает профессию на слоты навыков (стр. 31, 38–39):
+  названный навык, «любая специализация», социальный слот, «ещё один любой».
+- `InvestigatorFactory(SkillService)` — собирает лист из `InvestigatorDraft`: характеристики,
+  навыки (включая добавленные специализации), деньги. Считает не сам, а через `DerivedAttributeRules`
+  и `FinanceRules`.
 - `Dice` (static) — 1d100, NdM и бросок с бонусной костью (меньший из двух десятков).
 - `WoundRules` (static) — порог серьёзной раны (≥ половины максимума ПЗ) и вывод состояния
   «без сознания» / «при смерти» из нуля ПЗ.
@@ -38,6 +49,10 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `Character` — composed of `PersonalInfo`, `Characteristics` (STR/DEX/CON/etc with `.Regular`/`.Half`/`.Fifth`), `DerivedAttributes` (HP/MP/Sanity/Luck as `AttributeWithMaxValue`), `Skills` (`SkillsModel` → `SkillGroup[]` → `Skill[]`, each with `.Regular`/`.Half`/`.Fifth`), `State` (`CharacterState` — IsUnconscious, HasSeriousInjury, IsDying, etc.), `Weapons` (`List<Weapon>`), `Spells` (`List<Spell>`), plus `BiographyInfo`, `Equipment`/`EquipmentItem`, `Finances`, `InsanityCondition`.
 - `Occupation : BaseDataBaseEntity, INamedEntity`.
 - `CharacterGenerationLog` / `GenerationLogEntry` — audit trail of random-generation rolls.
+- `InvestigatorDraft` — состояние помощника создания (см. ниже). Плоский POCO: он переживает
+  паузу circuit как `[PersistentState]`, поэтому ни EF-сущностей, ни циклов в нём быть не должно.
+- `CharacteristicKey` / `CharacteristicInfo` / `AgeBand` — восемь характеристик и строка таблицы
+  возрастных модификаторов.
 
 ## Разметка листа
 
@@ -99,6 +114,38 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   меняла бы справочник у всех пользователей. См. `Weapons/CLAUDE.md`.
 - Числа из оружия (ёмкость магазина, порог осечки, дальность, число атак) читаются через
   `WeaponStatsReader`, а не из строковых полей: старые копии в JSONB несут только текст.
+
+## Помощник создания сыщика
+
+`InvestigatorWizardPage` (`/character/wizard`) ведёт игрока по пяти шагам главы 3 плюс выбор
+способа и сводка; шаги лежат в `Components/Wizard/`. Страница создаёт лист сама
+(`CreateCharacterAsync`) и уходит на него — в `CharacterPage` игрок после помощника не возвращается.
+
+- **Маршрут именно `/character/wizard`, а не `/character/create/wizard`.** У `CharacterPage` есть
+  `@page "/character/create/{Kind}"` со строковым параметром: он перехватил бы любой третий сегмент.
+- Владельца помощник берёт из query (`campaignId`, `scenarioId`, `kind`) — теми же правилами, что и
+  `CharacterPage`: НПС попадает в сценарий связью, преген — полем `ScenarioId`.
+- **Любой бросок можно не бросать, а вписать.** За столом кости настоящие, поэтому у каждого броска
+  (характеристики, набор варианта 3, проверка ОБР, Удача, 1d10 варианта 6) рядом с кнопкой есть поле
+  ввода. Добавляя в помощник новый бросок, оставляй такую же пару — это требование, а не удобство.
+- Слоты профессии (`OccupationSkillResolver.BuildSlots`) собирает **страница**, а шаг только
+  показывает: выбор игрока хранится в `Draft.SlotChoices` по индексу слота, и шаг «Навыки» читает
+  тот же список. Разъедутся индексы — навыки профессии уедут не туда.
+- Имена навыков в `Occupation.OccupationSkills` короче, чем в справочнике навыков («Языки (иностр.)»
+  против «Язык, иностранный»). Сопоставление живёт в `OccupationSkillResolver.Aliases` — одно место;
+  навык, который не нашёлся, превращается в слот `Unresolved`, и игрок выбирает замену руками.
+- Навыки с широким спектром (Искусство/ремесло, Наука, Ближний бой, Стрельба, Выживание, Иностранный
+  язык) в справочнике — родители, и на лист не попадают: `BuildGroupsFromSkills` их отфильтровывает.
+  Поэтому слот такого навыка — выбор специализации, а своя («Иностранный язык (латынь)») кладётся в
+  `Draft.AddedSpecializations` и добавляется на лист в `InvestigatorFactory.BuildSkillList`.
+- Блиц-метод (вариант 5) — единственный, который меняет ещё и шаг «Навыки»: вместо бюджета очков он
+  раздаёт девять готовых значений. Хранится это в `Draft.BlitzValues`, из которых пересчитываются
+  обычные `OccupationPoints`; навык, чья база уже выше выбранного значения, остаётся на базе.
+- Черновик помощника переживает паузу circuit (`PersistedDraft`). Всё, что должно пережить уход на
+  другую вкладку, кладётся в `InvestigatorDraft`, а не в приватное поле шага.
+- Справочник профессий в базе — приближение книжного списка: у Врача, например, одна «Наука» вместо
+  «Наука (биология)» и «Наука (фармакология)». Помощник показывает то, что лежит в `Occupations`,
+  и правится это редактированием профессии, а не кодом.
 
 ## Authorization
 - `CharacterService.CanAccessCharacterAsync(dbContext, campaignPlayerId, access)` is the single access rule for

@@ -1,0 +1,565 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 1: характеристики, возрастные модификаторы, проверки ОБР и Удача (стр. 28–31). *@
+
+<div class="cm-stack">
+    <section>
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+            <h3 class="cm-section-title">Характеристики</h3>
+            <div class="flex items-center gap-2 flex-wrap">
+                @switch (Draft.Method)
+                {
+                    case CreationMethod.Standard:
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="roll-all"
+                                @onclick="RollAll">
+                            <i class="fa-solid fa-dice mr-1"></i> Бросить все
+                        </button>
+                        break;
+                    case CreationMethod.AssignRolls:
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="roll-pool"
+                                @onclick="RollPool">
+                            <i class="fa-solid fa-dice mr-1"></i> Бросить набор
+                        </button>
+                        break;
+                    case CreationMethod.PointBuy:
+                        <span class="cm-meta">
+                            <span class="cm-meta-label">Распределено:</span>
+                            <strong class="@(PointBuySpent == InvestigatorCreationRules.PointBuyBudget ? "text-green-700" : "text-amber-700")">
+                                @PointBuySpent / @InvestigatorCreationRules.PointBuyBudget
+                            </strong>
+                        </span>
+                        break;
+                    case CreationMethod.Blitz:
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ClearAssignments">
+                            Сбросить раскладку
+                        </button>
+                        break;
+                }
+            </div>
+        </div>
+
+        @if (Draft.Method is CreationMethod.AssignRolls)
+        {
+            <div class="flex items-center gap-2 flex-wrap mb-2">
+                <span class="cm-meta-label">Набор бросков:</span>
+                @for (var i = 0; i < Draft.Pool.Count; i++)
+                {
+                    var index = i;
+                    <input type="number" class="cm-input cm-input-sm w-16 text-center" @key="index"
+                           data-testid="@($"pool-{index}")" min="0" max="99" value="@Draft.Pool[index]"
+                           @onchange="args => SetPoolValue(index, args)"/>
+                }
+            </div>
+            <p class="cm-field-note mb-2">
+                Пять бросков 3d6 × 5 и три броска (2d6 + 6) × 5: бросьте их кнопкой или впишите то, что выпало
+                на столе. Дальше разложите значения по характеристикам — ИНТ и ТЕЛ книга рекомендует держать
+                от @InvestigatorCreationRules.RecommendedIntelligenceSize.
+            </p>
+        }
+
+        <div class="overflow-x-auto">
+            <table class="cm-table">
+                <thead>
+                <tr>
+                    <th class="text-left">Характеристика</th>
+                    <th class="text-left">Бросок</th>
+                    <th class="text-center">Значение</th>
+                    @if (Band.DistributedPenalty > 0)
+                    {
+                        <th class="text-center">Возраст</th>
+                    }
+                    @if (Draft.ExtraClass)
+                    {
+                        <th class="text-center">Экстра</th>
+                    }
+                    <th class="text-center">Итог</th>
+                    <th class="text-center">½</th>
+                    <th class="text-center">⅕</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var info in InvestigatorCreationRules.Characteristics)
+                {
+                    var key = info.Key;
+                    var final = Draft.Value(key, Band);
+                    <tr @key="key">
+                        <td>
+                            <span class="font-semibold">@info.Abbreviation</span>
+                            <span class="cm-field-note ml-1">@info.Name</span>
+                        </td>
+                        <td class="text-xs text-gray-500">
+                            @(Draft.Method is CreationMethod.Standard
+                                ? Draft.RollText.GetValueOrDefault(key, info.DiceText)
+                                : info.DiceText)
+                        </td>
+                        <td class="text-center">
+                            @switch (Draft.Method)
+                            {
+                                case CreationMethod.Standard:
+                                    <div class="flex items-center justify-center gap-1">
+                                        <input type="number" class="cm-input cm-input-sm w-20 text-center"
+                                               data-testid="@($"char-{key}")" min="0" max="99"
+                                               value="@Draft.Rolled.GetValueOrDefault(key)"
+                                               @onchange="args => SetRolled(key, args)"/>
+                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                                title="Бросить кости" @onclick="() => RollOne(key)">
+                                            <i class="fa-solid fa-dice"></i>
+                                        </button>
+                                    </div>
+                                    break;
+                                case CreationMethod.PointBuy:
+                                    <input type="number" class="cm-input cm-input-sm w-24 mx-auto text-center"
+                                           data-testid="@($"char-{key}")"
+                                           min="@InvestigatorCreationRules.PointBuyMin"
+                                           max="@InvestigatorCreationRules.PointBuyMax"
+                                           step="5"
+                                           value="@Draft.Rolled.GetValueOrDefault(key)"
+                                           @onchange="args => SetPointBuy(key, args)"/>
+                                    break;
+                                default:
+                                    <select class="cm-input cm-input-sm w-24 mx-auto" data-testid="@($"char-{key}")"
+                                            value="@Draft.Rolled.GetValueOrDefault(key)"
+                                            @onchange="args => AssignFromPool(key, args)">
+                                        <option value="0">—</option>
+                                        @foreach (var candidate in AvailableFor(key))
+                                        {
+                                            <option value="@candidate">@candidate</option>
+                                        }
+                                    </select>
+                                    break;
+                            }
+                        </td>
+                        @if (Band.DistributedPenalty > 0)
+                        {
+                            <td class="text-center">
+                                @if (Band.PenaltyTargets.Contains(key))
+                                {
+                                    <div class="flex items-center justify-center gap-1">
+                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                                disabled="@(Draft.AgePenaltyDistribution.GetValueOrDefault(key) <= 0)"
+                                                @onclick="() => ChangePenalty(key, -1)">−</button>
+                                        <span class="w-8 text-center">@Draft.AgePenaltyDistribution.GetValueOrDefault(key)</span>
+                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                                data-testid="@($"penalty-plus-{key}")"
+                                                disabled="@(Draft.RemainingAgePenalty(Band) <= 0 || final <= 1)"
+                                                @onclick="() => ChangePenalty(key, 1)">+</button>
+                                    </div>
+                                }
+                                else if (key is CharacteristicKey.Appearance && Band.AppearancePenalty > 0)
+                                {
+                                    <span class="text-red-600">−@Band.AppearancePenalty</span>
+                                }
+                                else if (key is CharacteristicKey.Education && Band.EducationPenalty > 0)
+                                {
+                                    <span class="text-red-600">−@Band.EducationPenalty</span>
+                                }
+                            </td>
+                        }
+                        @if (Draft.ExtraClass)
+                        {
+                            <td class="text-center">
+                                <div class="flex items-center justify-center gap-1">
+                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                            disabled="@(Draft.ExtraClassBonus.GetValueOrDefault(key) <= 0)"
+                                            @onclick="() => ChangeExtraClass(key, -1)">−</button>
+                                    <span class="w-8 text-center">@Draft.ExtraClassBonus.GetValueOrDefault(key)</span>
+                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                            disabled="@(Draft.RemainingExtraClass() <= 0 || final >= InvestigatorCreationRules.MaxCharacteristic)"
+                                            @onclick="() => ChangeExtraClass(key, 1)">+</button>
+                                </div>
+                            </td>
+                        }
+                        <td class="text-center font-semibold" data-testid="@($"final-{key}")">@final</td>
+                        <td class="text-center text-gray-500">@(final / 2)</td>
+                        <td class="text-center text-gray-500">@(final / 5)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Band.DistributedPenalty > 0)
+        {
+            <p class="cm-field-note mt-2">
+                Возраст «@Band.Name»: вычтите суммарно @Band.DistributedPenalty из
+                @string.Join(", ", Band.PenaltyTargets.Select(k => InvestigatorCreationRules.Info(k).Abbreviation)).
+                Осталось распределить: <strong>@Draft.RemainingAgePenalty(Band)</strong>.
+            </p>
+        }
+    </section>
+
+    @if (Draft.ExtraClass)
+    {
+        <section>
+            <h3 class="cm-section-title mb-2">Сыщик экстра-класса</h3>
+            <div class="flex items-end gap-3 flex-wrap">
+                <div class="w-28">
+                    <label class="cm-field-label" for="extra-class-roll">Выпало (0–9)</label>
+                    <input id="extra-class-roll" type="number" class="cm-input" data-testid="extra-class-roll"
+                           min="0" max="@InvestigatorCreationRules.ExtraClassMaxBonus"
+                           value="@Draft.ExtraClassPool" @onchange="SetExtraClass"/>
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-1" @onclick="RollExtraClass">
+                    <i class="fa-solid fa-dice mr-1"></i> Бросить 1d10
+                </button>
+                <span class="cm-text-body mb-2">
+                    @(Draft.ExtraClassPool is null
+                        ? "Бросок ещё не сделан."
+                        : $"Осталось распределить: {Draft.RemainingExtraClass()}.")
+                </span>
+            </div>
+        </section>
+    }
+
+    <section>
+        <h3 class="cm-section-title mb-2">Проверки улучшения ОБР</h3>
+        @if (Band.EducationChecks == 0)
+        {
+            <p class="cm-text-body">В этом возрасте проверок улучшения ОБР нет.</p>
+        }
+        else
+        {
+            <div class="flex items-end gap-3 flex-wrap mb-2">
+                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm mb-1" data-testid="edu-check"
+                        disabled="@(!CanAddEducationCheck)" @onclick="RollEducationCheck">
+                    <i class="fa-solid fa-dice mr-1"></i> Бросить проверку
+                </button>
+                <div class="w-24">
+                    <label class="cm-field-label" for="edu-roll">Выпало 1d100</label>
+                    <input id="edu-roll" type="number" class="cm-input" data-testid="edu-roll" min="1" max="100"
+                           value="@_manualEduRoll" @onchange="args => _manualEduRoll = ParseOrNull(args)"/>
+                </div>
+                <div class="w-24">
+                    <label class="cm-field-label" for="edu-gain">Прибавка 1d10</label>
+                    <input id="edu-gain" type="number" class="cm-input" data-testid="edu-gain" min="1" max="10"
+                           value="@_manualEduGain" @onchange="args => _manualEduGain = ParseOrNull(args)"/>
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-1" data-testid="edu-manual"
+                        disabled="@(!CanAddEducationCheck || _manualEduRoll is null)"
+                        @onclick="AddManualEducationCheck">
+                    Записать бросок
+                </button>
+                <span class="cm-text-body mb-2">Сделано @Draft.EducationChecks.Count из @Band.EducationChecks</span>
+                @if (Draft.EducationChecks.Count > 0)
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-1" @onclick="ResetEducationChecks">
+                        Сбросить
+                    </button>
+                }
+            </div>
+            <p class="cm-field-note mb-2">
+                Прибавку 1d10 вписывают только при успехе — когда на 1d100 выпало больше текущего ОБР (стр. 30).
+            </p>
+            <ul class="text-sm text-gray-600 list-disc pl-5">
+                @foreach (var check in Draft.EducationChecks)
+                {
+                    <li>
+                        @(check.Gain > 0
+                            ? $"1d100 = {check.Roll} > {check.Before} → +{check.Gain} (ОБР {check.Before} → {check.Before + check.Gain})"
+                            : $"1d100 = {check.Roll} ≤ {check.Before} → без изменений")
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Удача</h3>
+        <div class="flex items-end gap-3 flex-wrap">
+            <div class="w-28">
+                <label class="cm-field-label" for="luck-value">Значение</label>
+                <input id="luck-value" type="number" class="cm-input" data-testid="luck-value" min="0" max="99"
+                       value="@Draft.Luck" @onchange="SetLuck"/>
+            </div>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-1" data-testid="roll-luck"
+                    @onclick="RollLuck">
+                <i class="fa-solid fa-dice mr-1"></i> Бросить 3d6 × 5
+            </button>
+            <span class="cm-text-body mb-2">
+                @if (Draft.Luck > 0)
+                {
+                    <strong>@Draft.Luck</strong>
+                    @(Draft.LuckRolls.Count > 1 ? $" (броски: {string.Join(", ", Draft.LuckRolls)} — берём лучший)" : "")
+                }
+                else
+                {
+                    <span>Ещё не бросали@(Band.LuckRolls > 1 ? ". В этом возрасте бросок делается дважды, берётся лучший результат." : "")</span>
+                }
+            </span>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Вторичные атрибуты</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div class="derived-tile"><span>Пункты здоровья</span><strong>@Preview.HitPoints</strong></div>
+            <div class="derived-tile"><span>Пункты магии</span><strong>@Preview.MagicPoints</strong></div>
+            <div class="derived-tile"><span>Рассудок</span><strong>@Preview.Sanity</strong></div>
+            <div class="derived-tile"><span>Удача</span><strong>@Draft.Luck</strong></div>
+            <div class="derived-tile"><span>Скорость</span><strong>@Preview.MoveRate</strong></div>
+            <div class="derived-tile"><span>Бонус к урону</span><strong>@Preview.DamageBonus</strong></div>
+            <div class="derived-tile"><span>Комплексия</span><strong>@Preview.Build</strong></div>
+            <div class="derived-tile"><span>Уклонение</span><strong>@Preview.Dodge</strong></div>
+        </div>
+    </section>
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>Что выпало на настоящих костях при проверке ОБР — пока игрок не нажал «Записать бросок».</summary>
+    private int? _manualEduRoll;
+
+    private int? _manualEduGain;
+
+    private AgeBand Band => InvestigatorCreationRules.BandFor(Draft.Age);
+
+    private InvestigatorFactory.DerivedPreview Preview => InvestigatorFactory.Preview(Draft);
+
+    private bool CanAddEducationCheck =>
+        Draft.EducationChecks.Count < Band.EducationChecks && Draft.CharacteristicsFilled;
+
+    private static int? ParseOrNull(ChangeEventArgs args) =>
+        int.TryParse(args.Value?.ToString(), out var value) ? value : null;
+
+    private int PointBuySpent => Draft.Rolled.Values.Sum();
+
+    /// <summary>Набор значений, из которого раскладывают характеристики: свой бросок или блиц-набор.</summary>
+    private IReadOnlyList<int> SourcePool => Draft.Method is CreationMethod.Blitz
+        ? InvestigatorCreationRules.BlitzCharacteristics
+        : Draft.Pool;
+
+    protected override void OnInitialized()
+    {
+        // Блиц-набор фиксирован — показываем его сразу, без лишней кнопки.
+        if (Draft.Method is CreationMethod.Blitz && Draft.Pool.Count == 0)
+            Draft.Pool = [..InvestigatorCreationRules.BlitzCharacteristics];
+
+        // Вариант 3: восемь пустых полей, чтобы броски со стола было куда вписать.
+        if (Draft.Method is CreationMethod.AssignRolls && Draft.Pool.Count == 0)
+            Draft.Pool = [0, 0, 0, 0, 0, 0, 0, 0];
+    }
+
+    /// <summary>Значения набора, ещё не занятые другими характеристиками, плюс текущее.</summary>
+    private List<int> AvailableFor(CharacteristicKey key)
+    {
+        var used = Draft.Rolled
+            .Where(kv => kv.Key != key && kv.Value > 0)
+            .Select(kv => kv.Value)
+            .ToList();
+
+        List<int> available = [];
+        foreach (var value in SourcePool)
+        {
+            if (value <= 0)
+                continue;
+            if (used.Remove(value))
+                continue;
+            available.Add(value);
+        }
+
+        return available;
+    }
+
+    /// <summary>Значение характеристики вписывают руками, когда кости бросали за столом.</summary>
+    private async Task SetRolled(CharacteristicKey key, ChangeEventArgs args)
+    {
+        if (ParseOrNull(args) is not { } value)
+            return;
+
+        Draft.Rolled[key] = Math.Clamp(value, 0, InvestigatorCreationRules.MaxCharacteristic);
+        Draft.RollText.Remove(key);
+        InvalidateEducationChecks(key);
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    ///     Правка набора бросков: если это значение уже разложено по характеристике, раскладку
+    ///     для неё снимаем — иначе на листе останется число, которого в наборе больше нет.
+    /// </summary>
+    private async Task SetPoolValue(int index, ChangeEventArgs args)
+    {
+        if (ParseOrNull(args) is not { } value)
+            return;
+
+        var previous = Draft.Pool[index];
+        Draft.Pool[index] = Math.Clamp(value, 0, InvestigatorCreationRules.MaxCharacteristic);
+
+        var assigned = Draft.Rolled.FirstOrDefault(kv => kv.Value == previous);
+        if (previous > 0 && assigned.Value == previous)
+            Draft.Rolled.Remove(assigned.Key);
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetLuck(ChangeEventArgs args)
+    {
+        if (ParseOrNull(args) is not { } value)
+            return;
+
+        Draft.Luck = Math.Clamp(value, 0, DerivedAttributeRules.MaxLuck);
+        Draft.LuckRolls.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetExtraClass(ChangeEventArgs args)
+    {
+        Draft.ExtraClassPool = ParseOrNull(args) is { } value
+            ? Math.Clamp(value, 0, InvestigatorCreationRules.ExtraClassMaxBonus)
+            : null;
+        Draft.ExtraClassBonus.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>Проверка ОБР, брошенная за столом: успех определяется тем же правилом (стр. 30).</summary>
+    private async Task AddManualEducationCheck()
+    {
+        if (_manualEduRoll is not { } roll || !CanAddEducationCheck)
+            return;
+
+        var education = Draft.Value(CharacteristicKey.Education, Band);
+        var gain = roll > education ? Math.Clamp(_manualEduGain ?? 0, 0, 10) : 0;
+
+        Draft.EducationChecks.Add(new EducationCheckEntry
+        {
+            Roll = Math.Clamp(roll, 1, 100),
+            Before = education,
+            Gain = Math.Min(gain, InvestigatorCreationRules.MaxCharacteristic - education)
+        });
+
+        _manualEduRoll = null;
+        _manualEduGain = null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollOne(CharacteristicKey key)
+    {
+        var roll = InvestigatorCreationRules.Roll(key);
+        Draft.Rolled[key] = roll.Value;
+        Draft.RollText[key] = roll.Text;
+        InvalidateEducationChecks(key);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollAll()
+    {
+        foreach (var info in InvestigatorCreationRules.Characteristics)
+        {
+            var roll = InvestigatorCreationRules.Roll(info.Key);
+            Draft.Rolled[info.Key] = roll.Value;
+            Draft.RollText[info.Key] = roll.Text;
+        }
+
+        Draft.EducationChecks.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollPool()
+    {
+        Draft.Pool = InvestigatorCreationRules.RollPool();
+        Draft.Rolled.Clear();
+        Draft.EducationChecks.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ClearAssignments()
+    {
+        Draft.Rolled.Clear();
+        Draft.EducationChecks.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task AssignFromPool(CharacteristicKey key, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        if (value <= 0)
+            Draft.Rolled.Remove(key);
+        else
+            Draft.Rolled[key] = value;
+
+        InvalidateEducationChecks(key);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetPointBuy(CharacteristicKey key, ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var value))
+            return;
+
+        Draft.Rolled[key] = Math.Clamp(value, InvestigatorCreationRules.PointBuyMin, InvestigatorCreationRules.PointBuyMax);
+        InvalidateEducationChecks(key);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ChangePenalty(CharacteristicKey key, int delta)
+    {
+        var current = Draft.AgePenaltyDistribution.GetValueOrDefault(key);
+        var next = current + delta;
+
+        if (next < 0 || (delta > 0 && Draft.RemainingAgePenalty(Band) <= 0))
+            return;
+
+        Draft.AgePenaltyDistribution[key] = next;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ChangeExtraClass(CharacteristicKey key, int delta)
+    {
+        var next = Draft.ExtraClassBonus.GetValueOrDefault(key) + delta;
+
+        if (next < 0 || (delta > 0 && Draft.RemainingExtraClass() <= 0))
+            return;
+
+        Draft.ExtraClassBonus[key] = next;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollExtraClass()
+    {
+        // «Бросить 1d10 и распределить результат от 0 до 9» (стр. 46): кость единиц читается как 0–9.
+        Draft.ExtraClassPool = Dice.Roll(1, 10) - 1;
+        Draft.ExtraClassBonus.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollEducationCheck()
+    {
+        var check = InvestigatorCreationRules.RollEducationCheck(Draft.Value(CharacteristicKey.Education, Band));
+        Draft.EducationChecks.Add(new EducationCheckEntry
+        {
+            Roll = check.Roll,
+            Before = check.Before,
+            Gain = check.Gain
+        });
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ResetEducationChecks()
+    {
+        Draft.EducationChecks.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RollLuck()
+    {
+        Draft.LuckRolls = Enumerable.Range(0, Math.Max(1, Band.LuckRolls))
+            .Select(_ => InvestigatorCreationRules.RollLuck().Value)
+            .ToList();
+        Draft.Luck = Draft.LuckRolls.Max();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    ///     Проверка ОБР бросается против текущего значения ОБР, поэтому смена самого ОБР
+    ///     делает уже сделанные проверки недействительными. Остальные характеристики их не трогают.
+    /// </summary>
+    private void InvalidateEducationChecks(CharacteristicKey key)
+    {
+        if (key is CharacteristicKey.Education)
+            Draft.EducationChecks.Clear();
+    }
+}

@@ -1,0 +1,190 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Шаг 0 помощника: способ создания (стр. 45–46), эпоха и возраст сыщика (стр. 30). *@
+
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Способ определения характеристик</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            @foreach (var option in Methods)
+            {
+                <button type="button"
+                        class="method-card @(Draft.Method == option.Method ? "is-selected" : "")"
+                        data-testid="@($"method-{option.Method}")"
+                        @onclick="() => SelectMethod(option.Method)">
+                    <span class="method-card-title">@option.Title</span>
+                    <span class="method-card-text">@option.Description</span>
+                    <span class="method-card-ref">@option.Reference</span>
+                </button>
+            }
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Эпоха</h3>
+        <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" class="cm-btn cm-btn-sm @(Draft.ModernEra ? "cm-btn-secondary" : "cm-btn-primary")"
+                    disabled="@EraLocked" @onclick="() => SetEra(false)">1920-е годы</button>
+            <button type="button" class="cm-btn cm-btn-sm @(Draft.ModernEra ? "cm-btn-primary" : "cm-btn-secondary")"
+                    disabled="@EraLocked" @onclick="() => SetEra(true)">Наше время</button>
+        </div>
+        <p class="cm-field-note mt-2">
+            @(EraLocked
+                ? "Эпоха взята из кампании — от неё зависят состав навыков и столбец таблицы «Наличные и активы»."
+                : "От эпохи зависят состав навыков и столбец таблицы «Наличные и активы» (стр. 45).")
+        </p>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Возраст</h3>
+        <div class="flex items-end gap-3 flex-wrap">
+            <div class="w-32">
+                <label class="cm-field-label" for="wizard-age">Лет</label>
+                <input id="wizard-age" type="number" class="cm-input" data-testid="wizard-age"
+                       min="@InvestigatorCreationRules.MinAge" max="@InvestigatorCreationRules.MaxAge"
+                       value="@Draft.Age" @onchange="SetAge"/>
+            </div>
+            <div class="flex-1 min-w-[16rem]">
+                <p class="cm-text-body"><strong>@Band.Name</strong> (@Band.Range лет)</p>
+                <ul class="text-sm text-gray-600 list-disc pl-5 mt-1">
+                    @foreach (var line in AgeEffects)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Необязательные правила</h3>
+        <label class="flex items-start gap-2 cm-text-body mb-2">
+            <input type="checkbox" class="cm-checkbox mt-1" checked="@(Draft.SkillCap is not null)"
+                   @onchange="ToggleSkillCap"/>
+            <span>
+                Лимит начальных значений навыков — @InvestigatorCreationRules.OptionalSkillCap%.
+                <span class="cm-field-note">Ни один навык при создании не поднимется выше этого значения (стр. 46).</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-2 cm-text-body">
+            <input type="checkbox" class="cm-checkbox mt-1" checked="@Draft.ExtraClass"
+                   @onchange="ToggleExtraClass"/>
+            <span>
+                Сыщик экстра-класса — вариант 6.
+                <span class="cm-field-note">Дополнительный бросок 1d10 даёт от 0 до 9 пунктов, которые вы разложите по характеристикам (стр. 46).</span>
+            </span>
+        </label>
+    </section>
+</div>
+
+@code {
+    [Parameter] [EditorRequired] public required InvestigatorDraft Draft { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public bool EraLocked { get; set; }
+
+    private sealed record MethodOption(CreationMethod Method, string Title, string Description, string Reference);
+
+    private static readonly IReadOnlyList<MethodOption> Methods =
+    [
+        new(CreationMethod.Standard, "Стандартный",
+            "Каждая характеристика бросается своей формулой: 3d6 × 5 для СИЛ, ВЫН, ЛВК, НАР и МОЩ, (2d6 + 6) × 5 для ИНТ, ТЕЛ и ОБР. Не понравился результат — бросьте заново.",
+            "стр. 28–29, вариант 1"),
+        new(CreationMethod.AssignRolls, "Разложить броски",
+            "Пять бросков 3d6 и три броска 2d6 + 6 умножаются на 5, а полученные значения вы раскладываете по характеристикам как захотите.",
+            "вариант 3, стр. 46"),
+        new(CreationMethod.PointBuy, "Покупка характеристик",
+            $"Распределите {InvestigatorCreationRules.PointBuyBudget} пунктов между восемью характеристиками, каждой от {InvestigatorCreationRules.PointBuyMin} до {InvestigatorCreationRules.PointBuyMax}.",
+            "вариант 4, стр. 46"),
+        new(CreationMethod.Blitz, "Блиц-метод",
+            "Готовые наборы: 40, 50, 50, 50, 60, 60, 70, 80 для характеристик и 70/60/60/50/50/50/40/40/40 для профессиональных навыков и Средств.",
+            "вариант 5, стр. 46")
+    ];
+
+    private AgeBand Band => InvestigatorCreationRules.BandFor(Draft.Age);
+
+    private IEnumerable<string> AgeEffects
+    {
+        get
+        {
+            var band = Band;
+
+            if (band.EducationPenalty > 0)
+                yield return $"−{band.EducationPenalty} к ОБР";
+            if (band.StrengthSizePenalty > 0)
+                yield return $"−{band.StrengthSizePenalty} суммарно из СИЛ и/или ТЕЛ (распределите сами)";
+            if (band.PhysicalPenalty > 0)
+                yield return $"−{band.PhysicalPenalty} суммарно из СИЛ, ВЫН и/или ЛВК (распределите сами)";
+            if (band.AppearancePenalty > 0)
+                yield return $"−{band.AppearancePenalty} к НАР";
+            if (band.EducationChecks > 0)
+                yield return $"проверок улучшения ОБР: {band.EducationChecks}";
+            if (band.LuckRolls > 1)
+                yield return $"Удача бросается {band.LuckRolls} раза, берётся лучший результат";
+            if (band.MovePenalty > 0)
+                yield return $"−{band.MovePenalty} к Скорости";
+            if (band is { EducationPenalty: 0, AppearancePenalty: 0, PhysicalPenalty: 0, StrengthSizePenalty: 0, MovePenalty: 0 })
+                yield return "штрафов к характеристикам нет";
+        }
+    }
+
+    private async Task SelectMethod(CreationMethod method)
+    {
+        if (Draft.Method == method)
+            return;
+
+        Draft.Method = method;
+        ResetCharacteristics();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetEra(bool modern)
+    {
+        Draft.ModernEra = modern;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SetAge(ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var age))
+            return;
+
+        Draft.Age = Math.Clamp(age, InvestigatorCreationRules.MinAge, InvestigatorCreationRules.MaxAge);
+
+        // Возрастная полоса меняет и вычеты, и число проверок ОБР — старые распределения к ней уже не относятся.
+        Draft.AgePenaltyDistribution.Clear();
+        Draft.EducationChecks.Clear();
+        Draft.LuckRolls.Clear();
+        Draft.Luck = 0;
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleSkillCap(ChangeEventArgs args)
+    {
+        Draft.SkillCap = args.Value is true ? InvestigatorCreationRules.OptionalSkillCap : null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleExtraClass(ChangeEventArgs args)
+    {
+        Draft.ExtraClass = args.Value is true;
+        Draft.ExtraClassPool = null;
+        Draft.ExtraClassBonus.Clear();
+
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>Сменили способ — прежние броски к нему не относятся, начинаем шаг характеристик заново.</summary>
+    private void ResetCharacteristics()
+    {
+        Draft.Rolled.Clear();
+        Draft.RollText.Clear();
+        Draft.Pool.Clear();
+        Draft.AgePenaltyDistribution.Clear();
+        Draft.ExtraClassBonus.Clear();
+        Draft.EducationChecks.Clear();
+        Draft.LuckRolls.Clear();
+        Draft.Luck = 0;
+    }
+}

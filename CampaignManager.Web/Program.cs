@@ -288,6 +288,7 @@ builder.Services.AddOutputCache();
 // Register services
 builder.Services.AddScoped<CharacterService>();
 builder.Services.AddScoped<CharacterGenerationService>();
+builder.Services.AddScoped<InvestigatorFactory>();
 builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
 builder.Services.AddScoped<IdentityService>();

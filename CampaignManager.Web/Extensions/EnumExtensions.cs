@@ -73,10 +73,14 @@ public static class EnumExtensions
         {
             OccupationSkillPointFormula.Edu4 => "ОБР × 4",
             OccupationSkillPointFormula.Edu2Dex2 => "ОБР × 2 + ЛВК × 2",
-            OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + ВНШ × 2",
+            OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + НАР × 2",
             OccupationSkillPointFormula.Edu2Str2 => "ОБР × 2 + СИЛ × 2",
             OccupationSkillPointFormula.Edu2Pow2 => "ОБР × 2 + МОЩ × 2",
-            OccupationSkillPointFormula.Edu2DexOrStr2 => "ОБР × 2 + max(ЛВК, СИЛ) × 2",
+            // Книга даёт игроку выбор, а не «наибольшее из» (стр. 38–39), поэтому и пишем «или».
+            OccupationSkillPointFormula.Edu2DexOrStr2 => "ОБР × 2 + ЛВК × 2 или ОБР × 2 + СИЛ × 2",
+            OccupationSkillPointFormula.Edu2AppOrPow2 => "ОБР × 2 + НАР × 2 или ОБР × 2 + МОЩ × 2",
+            OccupationSkillPointFormula.Edu2DexOrPow2 => "ОБР × 2 + ЛВК × 2 или ОБР × 2 + МОЩ × 2",
+            OccupationSkillPointFormula.Edu2AppOrDexOrStr2 => "ОБР × 2 + НАР × 2, ЛВК × 2 или СИЛ × 2",
             _ => formula.ToString()
         };
     }

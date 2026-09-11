@@ -2,6 +2,7 @@
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Shared.Model;
+using CampaignManager.Web.Extensions;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
@@ -92,19 +93,8 @@ public sealed class CharacterGenerationService(SkillService skillService)
         return occupation;
     }
 
-    private static string FormatFormula(OccupationSkillPointFormula f) => f switch
-    {
-        OccupationSkillPointFormula.Edu4 => "ОБР × 4",
-        OccupationSkillPointFormula.Edu2Dex2 => "ОБР × 2 + ЛВК × 2",
-        OccupationSkillPointFormula.Edu2App2 => "ОБР × 2 + НАР × 2",
-        OccupationSkillPointFormula.Edu2Str2 => "ОБР × 2 + СИЛ × 2",
-        OccupationSkillPointFormula.Edu2Pow2 => "ОБР × 2 + МОЩ × 2",
-        OccupationSkillPointFormula.Edu2DexOrStr2 => "ОБР × 2 + max(ЛВК, СИЛ) × 2",
-        OccupationSkillPointFormula.Edu2AppOrPow2 => "ОБР × 2 + НАР × 2 или ОБР × 2 + МОЩ × 2",
-        OccupationSkillPointFormula.Edu2DexOrPow2 => "ОБР × 2 + ЛВК × 2 или ОБР × 2 + МОЩ × 2",
-        OccupationSkillPointFormula.Edu2AppOrDexOrStr2 => "ОБР × 2 + НАР × 2 / ЛВК × 2 / СИЛ × 2",
-        _ => "ОБР × 4"
-    };
+    /// <summary>Формулу называет справочник переводов — вторая копия этих строк рано или поздно разъедется.</summary>
+    private static string FormatFormula(OccupationSkillPointFormula f) => f.ToRussianString();
 
     #endregion
 
