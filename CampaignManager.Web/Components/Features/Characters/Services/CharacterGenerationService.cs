@@ -441,12 +441,12 @@ public sealed class CharacterGenerationService(SkillService skillService)
         DerivedAttributeRules.ApplyDodge(character, DerivedAttributeRules.ComputeDodge(character.Characteristics));
         log.Add("Навыки", "Уклонение = ЛВК / 2", result: character.PersonalInfo.Dodge);
 
-        var ownLang = allSkills.FirstOrDefault(s => s.Name == "Языки (родной)");
+        var ownLang = allSkills.FirstOrDefault(s => s.Name == OccupationSkillResolver.OwnLanguageSkill);
         if (ownLang is not null)
         {
             ownLang.Value.Regular = character.Characteristics.Education.Regular;
             ownLang.Value.UpdateDerived();
-            log.Add("Навыки", "Языки (родной) = ОБР", result: ownLang.Value.Regular);
+            log.Add("Навыки", $"{OccupationSkillResolver.OwnLanguageSkill} = ОБР", result: ownLang.Value.Regular);
         }
 
         // 2. Очки навыков профессии
@@ -454,45 +454,10 @@ public sealed class CharacterGenerationService(SkillService skillService)
         log.Add("Навыки", $"--- Очки профессии ({occupation.Name}) ---",
             details: $"{FormatFormula(occupation.SkillPointFormula)} = {occupationPoints}");
 
-        // Собрать навыки профессии (исключая Мифы Ктулху)
-        var occupationSkillNames = occupation.OccupationSkills
-            .Where(n => n != "Мифы Ктулху")
-            .ToList();
-
-        // Добавить социальные слоты — случайный выбор из пула
-        if (occupation.SocialSkillSlots > 0)
-        {
-            string[] socialPool = ["Запугивание", "Красноречие", "Обаяние", "Убеждение"];
-            var availableSocial = socialPool.Where(s => !occupationSkillNames.Contains(s)).ToList();
-            var socialChoices = availableSocial.OrderBy(_ => _random.Next()).Take(occupation.SocialSkillSlots).ToList();
-            foreach (var social in socialChoices)
-            {
-                occupationSkillNames.Add(social);
-                log.Add("Навыки", $"Социальный слот профессии: {social}");
-            }
-        }
-
-        // Добавить свободные слоты — взвешенный выбор по тегам профессии
-        if (occupation.FreeSkillSlots > 0)
-        {
-            var freePool = allSkills
-                .Where(s => s.Name != "Мифы Ктулху" && s.Name != "Уклонение" && !occupationSkillNames.Contains(s.Name))
-                .ToList();
-
-            var freeChoices = PickWeighted(freePool,
-                    s => SkillWeight(s.Name, occupation.Tags),
-                    occupation.FreeSkillSlots)
-                .Select(s => s.Name)
-                .ToList();
-
-            foreach (var free in freeChoices)
-            {
-                occupationSkillNames.Add(free);
-                var weight = SkillWeight(free, occupation.Tags);
-                log.Add("Навыки", $"Свободный слот профессии: {free}",
-                    details: $"Вес: {weight}");
-            }
-        }
+        // Слоты профессии раскладывает тот же резолвер, что и помощник создания: и «Стрельба»
+        // как выбор специализации, и «четыре из перечисленных», и социальные/свободные слоты.
+        // За генератор выбор делает случай — взвешенно по тегам профессии.
+        var occupationSkillNames = ResolveOccupationSkills(character, occupation, allSkills, log);
 
         // Распределить очки профессии
         DistributeOccupationPoints(allSkills, occupationSkillNames, occupationPoints, occupation, log);
@@ -507,6 +472,80 @@ public sealed class CharacterGenerationService(SkillService skillService)
         // Обновить производные для всех навыков
         foreach (var skill in allSkills)
             skill.Value.UpdateDerived();
+    }
+
+    /// <summary>
+    ///     Имена навыков профессии для генератора: слоты <see cref="OccupationSkillResolver" />,
+    ///     выбор в которых делает случай. Специализацию, названную книгой прямо и отсутствующую
+    ///     в справочнике («Язык, иностранный (латынь)»), добавляем на лист — иначе навык пропал бы.
+    /// </summary>
+    private List<string> ResolveOccupationSkills(
+        Character character, Occupation occupation, List<Skill> allSkills, CharacterGenerationLog log)
+    {
+        List<string> names = [];
+
+        void Take(string name)
+        {
+            if (!string.IsNullOrWhiteSpace(name) && !names.Contains(name, StringComparer.Ordinal))
+                names.Add(name);
+        }
+
+        foreach (var slot in OccupationSkillResolver.BuildSlots(occupation, allSkills))
+            switch (slot.Kind)
+            {
+                case OccupationSlotKind.Fixed when slot.ParentSkillName is { } parent:
+                    var known = allSkills.FirstOrDefault(s =>
+                        string.Equals(s.Name, slot.Options[0], StringComparison.OrdinalIgnoreCase));
+                    if (known is null)
+                    {
+                        var created = OccupationSkillResolver.CreateSpecialization(slot.Options[0], parent, allSkills);
+                        var group = character.Skills.SkillGroups.FirstOrDefault(g => g.Skills.Any(s =>
+                                        string.Equals(s.ParentSkillName, parent, StringComparison.OrdinalIgnoreCase)))
+                                    ?? character.Skills.SkillGroups.First();
+                        group.Skills.Add(created);
+                        allSkills.Add(created);
+                        log.Add("Навыки", $"Специализация профессии: {created.Name}");
+                    }
+
+                    Take(slot.Options[0]);
+                    break;
+
+                case OccupationSlotKind.Fixed or OccupationSlotKind.CreditRating:
+                    Take(slot.FixedSkillName ?? "");
+                    break;
+
+                case OccupationSlotKind.Specialization or OccupationSlotKind.Choice or OccupationSlotKind.Social:
+                    var pool = slot.Options.Where(o => !names.Contains(o, StringComparer.Ordinal)).ToList();
+                    var picked = PickWeighted(pool, o => SkillWeight(o, occupation.Tags), 1).FirstOrDefault();
+                    if (picked is not null)
+                    {
+                        Take(picked);
+                        log.Add("Навыки", $"{slot.Label}: {picked}");
+                    }
+
+                    break;
+
+                case OccupationSlotKind.Any:
+                    var free = allSkills
+                        .Where(s => s.Name != OccupationSkillResolver.MythosSkill && s.Name != "Уклонение" &&
+                                    !names.Contains(s.Name, StringComparer.Ordinal))
+                        .ToList();
+                    var chosen = PickWeighted(free, s => SkillWeight(s.Name, occupation.Tags), 1).FirstOrDefault();
+                    if (chosen is not null)
+                    {
+                        Take(chosen.Name);
+                        log.Add("Навыки", $"Свободный слот профессии: {chosen.Name}",
+                            details: $"Вес: {SkillWeight(chosen.Name, occupation.Tags)}");
+                    }
+
+                    break;
+
+                case OccupationSlotKind.Unresolved:
+                    log.Add("Навыки", $"Навыка «{slot.Label}» нет в справочнике — слот пропущен");
+                    break;
+            }
+
+        return names;
     }
 
     private void DistributeOccupationPoints(List<Skill> allSkills, List<string> occupationSkillNames, int totalPoints, Occupation occupation, CharacterGenerationLog log)

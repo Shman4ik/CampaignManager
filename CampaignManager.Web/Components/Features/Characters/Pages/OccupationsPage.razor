@@ -11,6 +11,9 @@
 
 <PageHeader Title="Профессии">
     <Actions>
+        <Button Variant="secondary" Size="sm" Icon="fa-book" OnClick="() => _showSyncModal = true">
+            Синхронизировать с правилами
+        </Button>
         <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="OpenAddModal">Добавить</Button>
     </Actions>
 </PageHeader>
@@ -89,8 +92,22 @@
                                 <span class="font-medium">@occ.CreditRatingMin–@occ.CreditRatingMax%</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="text-gray-500 w-24 flex-shrink-0">Своб. слоты:</span>
-                                <span class="font-medium">@occ.FreeSkillSlots</span>
+                                <span class="text-gray-500 w-24 flex-shrink-0">Слоты:</span>
+                                <span class="font-medium">своб. @occ.FreeSkillSlots · соц. @occ.SocialSkillSlots</span>
+                            </div>
+                            @{
+                                var count = OccupationSkillResolver.ProfessionalSkillCount(occ);
+                                var matchesBook = count == OccupationSkillResolver.RequiredSkillCount;
+                            }
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 w-24 flex-shrink-0">Проф. навыков:</span>
+                                <span class="font-medium @(matchesBook ? "text-success-700" : "text-warning-700")">
+                                    @count / @OccupationSkillResolver.RequiredSkillCount
+                                    @if (!matchesBook)
+                                    {
+                                        <span> — расходится с книгой</span>
+                                    }
+                                </span>
                             </div>
                             <div>
                                 <span class="text-gray-500 text-xs">Навыки:</span>
@@ -98,6 +115,12 @@
                                     @foreach (var skill in occ.OccupationSkills)
                                     {
                                         <span class="inline-block px-2 py-0.5 text-xs rounded-full bg-primary-100 text-primary-700">@skill</span>
+                                    }
+                                    @foreach (var choice in occ.SkillChoices)
+                                    {
+                                        <span class="inline-block px-2 py-0.5 text-xs rounded-full bg-accent-100 text-accent-700">
+                                            @choice.Count из: @string.Join(" / ", choice.Options)
+                                        </span>
                                     }
                                 </div>
                             </div>
@@ -140,16 +163,39 @@
                     <InputNumber @bind-Value="_formModel.CreditRatingMax" class="cm-input" />
                 </div>
             </div>
-            <div>
-                <label class="cm-field-label">Свободные слоты навыков</label>
-                <InputNumber @bind-Value="_formModel.FreeSkillSlots" class="cm-input w-24" />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="cm-field-label">Свободные слоты навыков</label>
+                    <InputNumber @bind-Value="_formModel.FreeSkillSlots" class="cm-input w-24" />
+                </div>
+                <div>
+                    <label class="cm-field-label">Социальные слоты</label>
+                    <InputNumber @bind-Value="_formModel.SocialSkillSlots" class="cm-input w-24" />
+                    <p class="text-xs text-gray-400 mt-1">Запугивание, Красноречие, Обаяние или Убеждение.</p>
+                </div>
             </div>
             <div>
-                <label class="cm-field-label">Навыки профессии (через запятую)</label>
-                <InputTextArea @bind-Value="_formModel.SkillsText" class="cm-input" rows="3"
-                               placeholder="Оценка, История, Работа в библиотеке, Средства" />
-                <p class="text-xs text-gray-400 mt-1">Каждый навык через запятую. Пробелы по краям убираются автоматически.</p>
+                <label class="cm-field-label">Навыки профессии (по одному в строке)</label>
+                <InputTextArea @bind-Value="_formModel.SkillsText" class="cm-input font-mono text-sm" rows="8"
+                               placeholder="Оценка&#10;История&#10;Работа в библиотеке&#10;Средства" />
+                <p class="text-xs text-gray-400 mt-1">
+                    Имя пишется ровно как в справочнике навыков — «Язык, иностранный», а не «Языки (иностр.)»;
+                    иначе слот не найдёт навык. В именах есть запятые, поэтому разделитель — перевод строки.
+                </p>
             </div>
+            <div>
+                <label class="cm-field-label">Выбор из списка (по одной строке: «N: навык | навык | навык»)</label>
+                <InputTextArea @bind-Value="_formModel.ChoicesText" class="cm-input font-mono text-sm" rows="3"
+                               placeholder="1: Лазание | Плавание&#10;2: Язык, иностранный | Механика | Первая помощь" />
+                <p class="text-xs text-gray-400 mt-1">
+                    «Лазание либо Плавание», «любые два из…», «четыре специализации следующих навыков…».
+                    Если вариант — навык с широким спектром (Ближний бой, Стрельба), игрок выберет его специализацию.
+                </p>
+            </div>
+            <p class="cm-field-note">
+                Профессиональных навыков по книге ровно @OccupationSkillResolver.RequiredSkillCount плюс Средства.
+                Сейчас получается <strong>@FormSkillCount</strong>.
+            </p>
         </div>
     </EditForm>
     </ChildContent>
@@ -160,6 +206,22 @@
         </button>
     </FooterContent>
 </Modal>
+
+<ConfirmationModal IsVisible="@_showSyncModal"
+                   OnConfirm="SyncWithRulebook"
+                   OnCancel="() => _showSyncModal = false"
+                   Title="Синхронизация с книгой правил"
+                   Message="Справочник будет приведён к списку «Примеры занятий» из «Зова Ктулху» 7e."
+                   ConfirmText="Синхронизировать"
+                   CancelText="Отмена">
+    <DetailsContent>
+        <ul class="text-gray-700 text-sm list-disc pl-5 space-y-1">
+            <li>Книжные профессии перезапишутся: навыки, слоты, формула очков и Средства.</li>
+            <li>Ваши правки книжных профессий при этом пропадут.</li>
+            <li>Профессии, которых в книге нет, останутся нетронутыми — ничего не удаляется.</li>
+        </ul>
+    </DetailsContent>
+</ConfirmationModal>
 
 <ConfirmationModal IsVisible="@_showDeleteModal"
                    OnConfirm="DeleteOccupation"
@@ -197,6 +259,10 @@
     // Delete state
     private bool _showDeleteModal;
     private Occupation? _occupationToDelete;
+
+    // Sync state
+    private bool _showSyncModal;
+    private bool _syncing;
 
     // Notification
     private string? _notification;
@@ -263,7 +329,10 @@
             CreditRatingMin = occ.CreditRatingMin,
             CreditRatingMax = occ.CreditRatingMax,
             FreeSkillSlots = occ.FreeSkillSlots,
-            SkillsText = string.Join(", ", occ.OccupationSkills)
+            SocialSkillSlots = occ.SocialSkillSlots,
+            SkillsText = string.Join(Environment.NewLine, occ.OccupationSkills),
+            ChoicesText = string.Join(Environment.NewLine,
+                occ.SkillChoices.Select(c => $"{c.Count}: {string.Join(" | ", c.Options)}"))
         };
         _showModal = true;
     }
@@ -279,9 +348,8 @@
         if (string.IsNullOrWhiteSpace(_formModel.Name))
             return;
 
-        var skills = _formModel.SkillsText?
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList() ?? [];
+        var skills = SplitLines(_formModel.SkillsText);
+        var choices = ParseChoices(_formModel.ChoicesText);
 
         try
         {
@@ -292,7 +360,9 @@
                 _editingOccupation.CreditRatingMin = _formModel.CreditRatingMin;
                 _editingOccupation.CreditRatingMax = _formModel.CreditRatingMax;
                 _editingOccupation.FreeSkillSlots = _formModel.FreeSkillSlots;
+                _editingOccupation.SocialSkillSlots = _formModel.SocialSkillSlots;
                 _editingOccupation.OccupationSkills = skills;
+                _editingOccupation.SkillChoices = choices;
                 _editingOccupation.LastUpdated = DateTimeOffset.UtcNow;
 
                 var success = await OccupationService.UpdateAsync(_editingOccupation);
@@ -307,7 +377,9 @@
                     CreditRatingMin = _formModel.CreditRatingMin,
                     CreditRatingMax = _formModel.CreditRatingMax,
                     FreeSkillSlots = _formModel.FreeSkillSlots,
-                    OccupationSkills = skills
+                    SocialSkillSlots = _formModel.SocialSkillSlots,
+                    OccupationSkills = skills,
+                    SkillChoices = choices
                 };
 
                 var result = await OccupationService.CreateAsync(occupation);
@@ -359,6 +431,83 @@
         _notificationType = type;
     }
 
+    /// <summary>
+    ///     Имена навыков содержат запятые («Язык, иностранный»), поэтому разделитель здесь —
+    ///     перевод строки, а в списке вариантов — вертикальная черта.
+    /// </summary>
+    private static List<string> SplitLines(string? text) =>
+        text?.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Trim('\r').Trim())
+            .Where(line => line.Length > 0)
+            .ToList() ?? [];
+
+    private static List<OccupationSkillChoice> ParseChoices(string? text)
+    {
+        List<OccupationSkillChoice> choices = [];
+
+        foreach (var line in SplitLines(text))
+        {
+            var separator = line.IndexOf(':');
+            if (separator <= 0 || !int.TryParse(line[..separator].Trim(), out var count) || count <= 0)
+                continue;
+
+            var options = line[(separator + 1)..]
+                .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+            if (options.Count > 0)
+                choices.Add(new OccupationSkillChoice { Count = count, Options = options });
+        }
+
+        return choices;
+    }
+
+    /// <summary>Сколько профессиональных навыков получится у того, что сейчас набрано в форме.</summary>
+    private int FormSkillCount
+    {
+        get
+        {
+            var preview = new Occupation
+            {
+                Name = _formModel.Name,
+                OccupationSkills = SplitLines(_formModel.SkillsText),
+                SkillChoices = ParseChoices(_formModel.ChoicesText),
+                FreeSkillSlots = _formModel.FreeSkillSlots,
+                SocialSkillSlots = _formModel.SocialSkillSlots
+            };
+
+            return OccupationSkillResolver.ProfessionalSkillCount(preview);
+        }
+    }
+
+    private async Task SyncWithRulebook()
+    {
+        _showSyncModal = false;
+        if (_syncing) return;
+
+        try
+        {
+            _syncing = true;
+            var result = await OccupationService.SyncWithRulebookAsync();
+
+            if (result.Failed)
+            {
+                ShowNotification("Не удалось синхронизировать справочник", "error");
+                return;
+            }
+
+            await LoadData();
+            ShowNotification(
+                $"Синхронизировано с книгой: добавлено {result.Added}, обновлено {result.Updated}, " +
+                $"без изменений {result.Unchanged}, своих не тронуто {result.Untouched}",
+                "success");
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
     private sealed class OccupationFormModel
     {
         [Required(ErrorMessage = "Введите название")]
@@ -369,6 +518,8 @@
         public int CreditRatingMin { get; set; } = 9;
         public int CreditRatingMax { get; set; } = 50;
         public int FreeSkillSlots { get; set; }
+        public int SocialSkillSlots { get; set; }
         public string? SkillsText { get; set; } = "Средства";
+        public string? ChoicesText { get; set; }
     }
 }

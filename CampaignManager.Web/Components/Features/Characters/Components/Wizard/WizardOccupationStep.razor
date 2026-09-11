@@ -94,6 +94,10 @@
                             {
                                 <span class="cm-field-note text-amber-700">нет в справочнике навыков — выберите замену</span>
                             }
+                            @if (slot.Hint is { } hint)
+                            {
+                                <span class="cm-field-note">@hint</span>
+                            }
                         </div>
                         @if (!slot.NeedsChoice)
                         {
@@ -104,25 +108,25 @@
                         else
                         {
                             <select class="cm-input cm-input-sm" data-testid="@($"slot-{index}")"
-                                    value="@Choice(index)" @onchange="args => SetChoice(index, slot, args)">
+                                    value="@Choice(index)" @onchange="args => SetChoice(index, args)">
                                 <option value="">— выберите навык —</option>
-                                @foreach (var option in OptionsFor(slot))
+                                @foreach (var option in OptionsFor(index, slot))
                                 {
                                     <option value="@option">@option</option>
                                 }
-                                @if (slot.AllowsCustomName)
+                                @foreach (var parent in slot.CustomParents)
                                 {
-                                    <option value="@CustomOption">Другая специализация…</option>
+                                    <option value="@(CustomOption + parent)">Другая специализация: @parent…</option>
                                 }
                             </select>
-                            @if (_customSlot == index)
+                            @if (_customSlot == index && _customParent is { } customParent)
                             {
-                                <div class="flex items-center gap-2 mt-1">
-                                    <input type="text" class="cm-input cm-input-sm flex-1"
-                                           placeholder="@($"Например: {slot.ParentSkillName} (латынь)")"
+                                <div class="flex items-center gap-2 mt-1 flex-wrap">
+                                    <input type="text" class="cm-input cm-input-sm flex-1 min-w-[12rem]"
+                                           placeholder="@($"Например: {customParent} (латынь)")"
                                            @bind="_customName"/>
                                     <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
-                                            @onclick="() => AddCustom(index, slot)">Добавить</button>
+                                            @onclick="() => AddCustom(index, customParent)">Добавить</button>
                                 </div>
                             }
                         }
@@ -148,6 +152,7 @@
     private string _search = "";
     private bool _lovecraftianOnly;
     private int? _customSlot;
+    private string? _customParent;
     private string _customName = "";
 
     private Occupation? Selected => Occupations.FirstOrDefault(o => o.Id == Draft.OccupationId);
@@ -179,16 +184,32 @@
 
     /// <summary>
     ///     «Ещё один любой навык» — любой из справочника, кроме Мифов Ктулху (их пунктами не покупают)
-    ///     и Средств: у них свой слот с диапазоном профессии.
+    ///     и Средств: у них свой слот с диапазоном профессии. У слота «N из перечисленных» из списка
+    ///     убираем то, что игрок уже взял соседним слотом той же группы: книга просит N разных навыков,
+    ///     а повтор просто сгорел бы — одинаковые имена схлопываются в один профессиональный навык.
     /// </summary>
-    private IEnumerable<string> OptionsFor(OccupationSlot slot) =>
-        slot.ChoosesFromAllSkills
-            ? AllSkills
+    private IEnumerable<string> OptionsFor(int index, OccupationSlot slot)
+    {
+        if (slot.ChoosesFromAllSkills)
+            return AllSkills
                 .Select(s => s.Name)
                 .Where(n => n is not OccupationSkillResolver.MythosSkill
                     and not OccupationSkillResolver.CreditRatingSkill)
-                .OrderBy(n => n)
-            : slot.Options;
+                .OrderBy(n => n);
+
+        if (slot.ChoiceGroup < 0)
+            return slot.Options;
+
+        var taken = Slots
+            .Select((s, i) => (Slot: s, Index: i))
+            .Where(p => p.Slot.ChoiceGroup == slot.ChoiceGroup && p.Index != index)
+            .Select(p => Choice(p.Index))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var current = Choice(index);
+        return slot.Options.Where(o => !taken.Contains(o) || o == current);
+    }
 
     private async Task SelectAsync(Occupation occupation)
     {
@@ -203,6 +224,7 @@
         Draft.OccupationPoints.Clear();
         Draft.CreditRating = occupation.CreditRatingMin;
         _customSlot = null;
+        _customParent = null;
 
         EnsureSlotCapacity();
         await OnChanged.InvokeAsync();
@@ -214,38 +236,43 @@
         await OnChanged.InvokeAsync();
     }
 
-    private async Task SetChoice(int index, OccupationSlot slot, ChangeEventArgs args)
+    private async Task SetChoice(int index, ChangeEventArgs args)
     {
         var value = args.Value?.ToString() ?? "";
         EnsureSlotCapacity();
 
-        if (value == CustomOption)
+        // Родителей у слота может быть несколько (Преступник выбирает и ближний бой, и стрельбу),
+        // поэтому «своя специализация» — отдельный пункт на каждого, а не один общий.
+        if (value.StartsWith(CustomOption, StringComparison.Ordinal))
         {
             _customSlot = index;
+            _customParent = value[CustomOption.Length..];
             _customName = "";
             return;
         }
 
         _customSlot = null;
+        _customParent = null;
         var previous = Draft.SlotChoices[index];
         Draft.SlotChoices[index] = value;
         DropUnusedSpecialization(previous);
         await OnChanged.InvokeAsync();
     }
 
-    private async Task AddCustom(int index, OccupationSlot slot)
+    private async Task AddCustom(int index, string parentSkillName)
     {
         var name = _customName.Trim();
-        if (name.Length == 0 || slot.ParentSkillName is null)
+        if (name.Length == 0)
             return;
 
         EnsureSlotCapacity();
         var previous = Draft.SlotChoices[index];
-        Draft.AddedSpecializations[name] = slot.ParentSkillName;
+        Draft.AddedSpecializations[name] = parentSkillName;
         Draft.SlotChoices[index] = name;
         DropUnusedSpecialization(previous);
 
         _customSlot = null;
+        _customParent = null;
         _customName = "";
         await OnChanged.InvokeAsync();
     }
@@ -254,6 +281,11 @@
     private void DropUnusedSpecialization(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || !Draft.AddedSpecializations.ContainsKey(name))
+            return;
+
+        // Специализация, названную книгой прямо («Язык, иностранный (латынь)»), держит слот Fixed —
+        // в SlotChoices её нет, и без этой проверки она бы исчезла с листа при правке соседнего слота.
+        if (Slots.Any(s => string.Equals(s.FixedSkillName, name, StringComparison.Ordinal)))
             return;
 
         if (!Draft.SlotChoices.Contains(name, StringComparer.Ordinal))

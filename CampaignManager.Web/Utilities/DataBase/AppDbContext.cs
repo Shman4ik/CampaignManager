@@ -328,6 +328,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(o => o.Name).IsUnique();
             entity.Property(o => o.SkillPointFormula).HasConversion<string>();
             entity.Property(o => o.OccupationSkills).HasColumnType("jsonb");
+            entity.Property(o => o.SkillChoices).HasColumnType("jsonb");
         });
 
         // KeeperApplication Configuration
