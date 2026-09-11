@@ -13,15 +13,6 @@ public sealed class OccupationService(
 {
     private const string OccupationsCacheKey = "AllOccupations";
 
-    /// <summary>
-    ///     Профессии, которые в книге переименованы относительно того, как они лежат в базе.
-    ///     Нужны синхронизации: без этого апсерт по имени завёл бы вторую строку и оставил старую.
-    /// </summary>
-    private static readonly Dictionary<string, string> RenamedByRulebook = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Детектив"] = "Детектив полиции"
-    };
-
     public Task<List<Occupation>> GetAllOccupationsAsync() =>
         CrudServiceHelper.GetAllCachedAsync<Occupation>(dbContextFactory, cache, OccupationsCacheKey, logger);
 
@@ -45,7 +36,9 @@ public sealed class OccupationService(
 
     /// <summary>
     ///     Приводит справочник к списку «Примеры занятий» из книги правил (стр. 37–39):
-    ///     апсерт по имени из <see cref="Occupation.GetDefaultOccupations" />.
+    ///     апсерт по имени из <see cref="Occupation.GetDefaultOccupations" />. Апсерт именно по имени,
+    ///     поэтому переименование профессии в коде заведёт новую строку, а старая останется рядом —
+    ///     такое переносится руками на `/occupations`, отдельной таблицы синонимов тут нет.
     ///     Ничего не удаляет — профессии, заведённые Хранителем сверх списка, остаются как есть.
     ///     Миграции нигде не применяются автоматически, и postgres-доступ у нас только на чтение,
     ///     поэтому данные в живую базу приезжают именно так.
@@ -65,16 +58,9 @@ public sealed class OccupationService(
             var bookNames = book.Select(o => o.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             int added = 0, updated = 0, unchanged = 0;
 
-            var oldNames = RenamedByRulebook
-                .ToDictionary(r => r.Value, r => r.Key, StringComparer.OrdinalIgnoreCase);
-
             foreach (var source in book)
             {
-                if (!byName.TryGetValue(source.Name, out var target) &&
-                    oldNames.TryGetValue(source.Name, out var oldName))
-                    byName.TryGetValue(oldName, out target);
-
-                if (target is null)
+                if (!byName.TryGetValue(source.Name, out var target))
                 {
                     source.Init();
                     dbContext.Occupations.Add(source);
@@ -93,8 +79,7 @@ public sealed class OccupationService(
                 updated++;
             }
 
-            var untouched = existing.Count(o =>
-                !bookNames.Contains(o.Name) && !RenamedByRulebook.ContainsKey(o.Name));
+            var untouched = existing.Count(o => !bookNames.Contains(o.Name));
 
             if (added > 0 || updated > 0)
                 await dbContext.SaveChangesAsync();

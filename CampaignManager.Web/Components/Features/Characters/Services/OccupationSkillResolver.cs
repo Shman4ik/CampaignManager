@@ -89,28 +89,14 @@ public static class OccupationSkillResolver
         ["Запугивание", "Красноречие", "Обаяние", "Убеждение"];
 
     /// <summary>
-    ///     Совместимость с уже сохранёнными справочниками: так профессии писались до того,
-    ///     как их привели к именам из games."Skills". Новые данные сюда добавлять не нужно —
-    ///     пишите имя навыка ровно так, как оно стоит в справочнике навыков.
-    /// </summary>
-    private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Языки (родной)"] = OwnLanguageSkill,
-        ["Языки (иностр.)"] = "Язык, иностранный",
-        ["Вождение"] = "Вождение автомобиля",
-        ["Упр. тяж. машинами"] = "Управление тяжёлыми машинами",
-        ["Стрельба (винт./дроб.)"] = "Стрельба (винтовка/дробовик)"
-    };
-
-    /// <summary>
     ///     Сколько профессиональных навыков даёт род занятий. Средства не в счёт: у них свой
     ///     слот с диапазоном профессии. По книге должно выйти ровно <see cref="RequiredSkillCount" />.
     /// </summary>
     public static int ProfessionalSkillCount(Occupation occupation) =>
         occupation.OccupationSkills.Count(s =>
             !string.IsNullOrWhiteSpace(s) &&
-            !string.Equals(Normalize(s), CreditRatingSkill, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(Normalize(s), MythosSkill, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(s.Trim(), CreditRatingSkill, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(s.Trim(), MythosSkill, StringComparison.OrdinalIgnoreCase))
         + occupation.SkillChoices.Sum(c => c.Count)
         + occupation.SocialSkillSlots
         + occupation.FreeSkillSlots;
@@ -130,7 +116,7 @@ public static class OccupationSkillResolver
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
 
-            var name = Normalize(raw);
+            var name = raw.Trim();
 
             if (string.Equals(name, CreditRatingSkill, StringComparison.OrdinalIgnoreCase))
                 continue; // Средства добавляем в конце, чтобы они всегда стояли на одном месте.
@@ -228,7 +214,7 @@ public static class OccupationSkillResolver
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
 
-            var name = Normalize(raw);
+            var name = raw.Trim();
 
             if (parents.TryGetValue(name, out var specializations))
             {
@@ -270,13 +256,6 @@ public static class OccupationSkillResolver
                 g => g.Key,
                 g => (IReadOnlyList<string>)g.Select(s => s.Name).OrderBy(n => n).ToList(),
                 StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>Имя навыка из описания профессии в том виде, в каком оно лежит в справочнике навыков.</summary>
-    public static string Normalize(string occupationSkillName)
-    {
-        var name = occupationSkillName.Trim();
-        return Aliases.TryGetValue(name, out var alias) ? alias : name;
     }
 
     /// <summary>
