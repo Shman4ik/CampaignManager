@@ -4,7 +4,7 @@
     <thead>
     <tr class="border-b border-gray-300">
         <th class="text-left font-semibold text-xs text-gray-600 pb-1"></th>
-        <th class="w-24 text-center font-semibold text-xs text-gray-600 pb-1">Текущ.</th>
+        <th class="w-[8.5rem] text-center font-semibold text-xs text-gray-600 pb-1">Текущ.</th>
         <th class="w-14 text-center font-semibold text-xs text-gray-600 pb-1">Макс.</th>
     </tr>
     </thead>
@@ -29,21 +29,27 @@
                 }
             </td>
             <td class="py-1 px-0.5">
-                <div class="flex items-center gap-0.5">
+                @* Кнопки шага — штатный cm-btn-icon (36x36): за игрой их жмут пальцем каждый
+                   раунд, и прежние 20x24 в тап-цель не укладывались. *@
+                <div class="flex items-center gap-1">
                     <button type="button" @onclick="() => AdjustAttribute(attr, -1)"
-                            class="w-5 h-6 flex items-center justify-center text-sm font-bold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-gray-600 transition-colors leading-none flex-shrink-0">−</button>
+                            aria-label="@attr.Label минус"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-secondary shrink-0">−</button>
                     @* Полю нужен пол, а не свобода сжиматься: на планшетной ширине (768px) колонка
                        ужимала его до 39px, и «40» обрезалось до «4». 2.75rem держит двузначное
                        значение целиком, а таблица от этого не растёт — запас в колонке есть. *@
-                    <input type="number" class="@inputClass min-w-[2.75rem]"
+                    <input type="number" class="@inputClass min-w-[2.75rem] min-h-[36px]"
+                           aria-label="@attr.Label текущее"
                            value="@attr.Attribute.Value"
                            @onchange="@(e => SetAttribute(attr, e))"/>
                     <button type="button" @onclick="() => AdjustAttribute(attr, 1)"
-                            class="w-5 h-6 flex items-center justify-center text-sm font-bold bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-gray-600 transition-colors leading-none flex-shrink-0">+</button>
+                            aria-label="@attr.Label плюс"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-secondary shrink-0">+</button>
                 </div>
             </td>
             <td class="py-1 px-0.5">
-                <input type="number" class="cm-input-sm"
+                <input type="number" class="cm-input-sm min-h-[36px]"
+                       aria-label="@attr.Label максимум"
                        @bind="attr.Attribute.MaxValue"/>
             </td>
         </tr>
@@ -60,18 +66,31 @@
 </table>
 
 @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой (стр. 117) *@
-<div class="mt-1.5 pt-1.5 border-t border-gray-200">
-    <div class="flex items-center gap-1 flex-wrap">
-        <label for="wound-damage" class="text-[10px] text-gray-500 uppercase font-semibold">Урон</label>
-        <input id="wound-damage" type="number" min="1" class="cm-input-sm !w-14" @bind="_damage" @bind:event="oninput"/>
-        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ApplyDamage">Нанести</button>
-        <span class="text-[10px] text-gray-500">серьёзная рана с @_majorWoundThreshold</span>
+<div class="mt-3 pt-3 border-t border-gray-200">
+    @* Поле и кнопка выровнены по нижнему краю: у поля сверху подпись, у кнопки нет. *@
+    <div class="flex items-end gap-2 flex-wrap">
+        <div class="shrink-0">
+            <label for="wound-damage" class="cm-field-label">Урон</label>
+            <input id="wound-damage" type="number" min="1" class="cm-input-sm !w-16 min-h-[36px]"
+                   @bind="_damage" @bind:event="oninput"/>
+        </div>
+        @* Кнопка красная контуром, как строчное удаление: она бьёт по сыщику, а не
+           «применяет настройку», — но и не подтверждение в диалоге, чтобы быть сплошной. *@
+        <button type="button" class="cm-btn cm-btn-sm cm-btn-outline-error"
+                data-testid="apply-damage" @onclick="ApplyDamage">
+            <i class="fa-solid fa-heart-crack mr-1.5"></i>Нанести
+        </button>
     </div>
+    <p class="cm-field-note">Серьёзная рана — от @_majorWoundThreshold за одну атаку.</p>
+
     @if (_lastHitWasMajor)
     {
-        <div class="mt-1 px-2 py-1 bg-orange-50 border border-orange-200 rounded text-[11px] text-orange-800">
-            ⚠ Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает,
-            нужна проверка ВЫН, иначе он теряет сознание.
+        <div class="mt-2 flex gap-2 px-2.5 py-2 bg-warning-50 border border-warning-200 rounded-md text-xs text-warning-800">
+            <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0" aria-hidden="true"></i>
+            <span>
+                Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает,
+                нужна проверка ВЫН, иначе он теряет сознание.
+            </span>
         </div>
     }
 </div>

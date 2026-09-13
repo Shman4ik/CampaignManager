@@ -298,6 +298,14 @@ public partial class CharacterPage
         _ => "Персонаж"
     };
 
+    /// <summary>
+    ///     Сколько живёт плашка, которая ничего не требует от Хранителя. Ошибку и предупреждение
+    ///     снимает только он сам: там текст, по которому надо что-то сделать.
+    /// </summary>
+    private static readonly TimeSpan NotificationLifetime = TimeSpan.FromSeconds(5);
+
+    private CancellationTokenSource? _notificationCts;
+
     private void ShowNotification(string message, string type)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -305,11 +313,56 @@ public partial class CharacterPage
 
         _notification.Message = message;
         _notification.Type = type;
+
+        CancelNotificationTimer();
+
+        if (type is "error" or "warning")
+            return;
+
+        var cts = new CancellationTokenSource();
+        _notificationCts = cts;
+        _ = HideNotificationLaterAsync(message, cts.Token);
+    }
+
+    /// <summary>
+    ///     Снимает плашку через <see cref="NotificationLifetime" />, если за это время её не сменило
+    ///     другое сообщение и Хранитель не закрыл её сам.
+    /// </summary>
+    private async Task HideNotificationLaterAsync(string message, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(NotificationLifetime, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (_notification.Message != message)
+            return;
+
+        await InvokeAsync(() =>
+        {
+            _notification.Message = null;
+            StateHasChanged();
+        });
     }
 
     private void ClearNotification()
     {
+        CancelNotificationTimer();
         _notification.Message = null;
+    }
+
+    private void CancelNotificationTimer()
+    {
+        if (_notificationCts is null)
+            return;
+
+        _notificationCts.Cancel();
+        _notificationCts.Dispose();
+        _notificationCts = null;
     }
 
     /// <summary>Помощник создаёт лист по шагам главы 3 и сам сохраняет его — сюда игрок уже не возвращается.</summary>

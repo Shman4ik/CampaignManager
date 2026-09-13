@@ -1,28 +1,48 @@
 ﻿@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
-<div>
-    <h6 class="text-xs font-semibold text-gray-500 pb-1 mb-1.5 border-b border-gray-300">Состояние сыщика</h6>
-    <div class="space-y-1.5">
-        @foreach (var condition in _conditions)
+
+@* Строка отметки одна на обе группы: разметка у них не различается, различается смысл.
+   Объявление стоит до разметки — Razor выполняет блок в порядке документа. *@
+@{
+    RenderFragment<ConditionRow> ConditionRowMarkup = condition =>
+    @<label class="flex items-center gap-2.5 px-2 min-h-[40px] rounded-md cursor-pointer transition-all duration-200 @(condition.Getter() ? condition.ActiveBg : "hover:bg-gray-50")">
+        <input type="checkbox" checked="@condition.Getter()"
+               @onchange="@(e => { condition.Setter(e.Value is true); StateHasChanged(); })"
+               class="cm-checkbox"/>
+        @if (condition.Getter())
         {
-            var isActive = condition.Getter();
-            <label class="flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 @(isActive ? condition.ActiveBg : "hover:bg-gray-50")">
-                <input type="checkbox" checked="@isActive"
-                       @onchange="@(e => { condition.Setter(e.Value is true); StateHasChanged(); })"
-                       class="w-3.5 h-3.5 rounded border-primary-300 accent-accent-500"/>
-                @if (isActive)
-                {
-                    <span class="inline-flex items-center gap-1 text-xs font-semibold @condition.ActiveText">
-                        <i class="@condition.Icon text-[10px]"></i>
-                        @condition.Label
-                    </span>
-                }
-                else
-                {
-                    <span class="text-xs text-gray-700">@condition.Label</span>
-                }
-            </label>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold @condition.ActiveText">
+                <i class="@condition.Icon text-xs"></i>
+                @condition.Label
+            </span>
         }
+        else
+        {
+            <span class="text-sm text-gray-700">@condition.Label</span>
+        }
+    </label>;
+}
+
+<div class="state-block">
+    <h6 class="text-xs font-semibold text-gray-500 pb-1 mb-1.5 border-b border-gray-300">Состояние сыщика</h6>
+
+    @* Отметку ставят пальцем, поэтому тап-цель — вся строка в 40px, а не чекбокс в 14px:
+       сам чекбокс остаётся штатным cm-checkbox. Колонки — это группы: слева то, что с телом,
+       справа то, что с рассудком. Встают они рядом или друг под другом, решает ширина самого
+       блока (@container), а не окна, — см. .razor.css. *@
+    <div class="state-list">
+        <div class="state-group">
+            @foreach (var condition in _bodyConditions)
+            {
+                @ConditionRowMarkup(condition)
+            }
+        </div>
+        <div class="state-group">
+            @foreach (var condition in _mindConditions)
+            {
+                @ConditionRowMarkup(condition)
+            }
+        </div>
     </div>
 </div>
 
@@ -33,23 +53,32 @@
 
     private record ConditionRow(string Label, string Icon, string ActiveBg, string ActiveText, Func<bool> Getter, Action<bool> Setter);
 
-    private List<ConditionRow> _conditions = [];
+    /// <summary>Что с телом сыщика — левая колонка.</summary>
+    private List<ConditionRow> _bodyConditions = [];
+
+    /// <summary>Что с его рассудком — правая колонка.</summary>
+    private List<ConditionRow> _mindConditions = [];
 
     protected override void OnParametersSet()
     {
-        _conditions =
+        // Порядок причинный: серьёзная рана первая, потому что именно она решает, чем
+        // оборачивается ноль ПЗ — без сознания или при смерти (стр. 118).
+        _bodyConditions =
         [
-            new("Без сознания", "fa-solid fa-moon", "bg-yellow-50", "text-yellow-700",
-                () => State.IsUnconscious, v => State.IsUnconscious = v),
-            // Серьёзная рана решает, чем оборачивается ноль ПЗ: без сознания или при смерти (стр. 118).
             new("Серьезная рана", "fa-solid fa-heart-crack", "bg-orange-50", "text-orange-700",
                 () => State.HasSeriousInjury, v =>
                 {
                     State.HasSeriousInjury = v;
                     WoundRules.UpdateConsciousness(Character);
                 }),
+            new("Без сознания", "fa-solid fa-moon", "bg-yellow-50", "text-yellow-700",
+                () => State.IsUnconscious, v => State.IsUnconscious = v),
             new("При смерти", "fa-solid fa-skull", "bg-red-50", "text-red-700",
-                () => State.IsDying, v => State.IsDying = v),
+                () => State.IsDying, v => State.IsDying = v)
+        ];
+
+        _mindConditions =
+        [
             new("Врем. безумие", "fa-solid fa-brain", "bg-purple-50", "text-purple-700",
                 () => State.HasTemporaryInsanity, v => State.HasTemporaryInsanity = v),
             new("Бессроч. безумие", "fa-solid fa-brain", "bg-purple-100", "text-purple-800",

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text.Json;
 using CampaignManager.Web.Components.Features.Characters.Model;
 
@@ -133,6 +133,8 @@ public partial class CharacterPage : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        CancelNotificationTimer();
+
         if (_autoSaveCts is null)
             return;
 

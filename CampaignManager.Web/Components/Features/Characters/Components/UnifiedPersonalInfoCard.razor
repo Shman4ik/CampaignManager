@@ -1,94 +1,131 @@
 ﻿@using CampaignManager.Web.Components.Features.Characters.Model
 
 @* Три колонки с вертикальными разделителями. Своей карточки у компонента нет
-   намеренно: он всегда живёт внутри секции листа, и вторая рамка её только утяжеляла. *@
+   намеренно: он всегда живёт внутри секции листа, и вторая рамка её только утяжеляла.
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:divide-x md:divide-gray-200">
+   Ширины колонок неравные: характеристикам после того, как «Труд.» и «Чрез.» перестали
+   быть полями ввода, хватает меньшего, а «Состоянию» — блоку, который единственный правят
+   за игрой, — отдано больше всех.
+
+   Три колонки начинаются с lg (1024px, iPad Pro в портрете), а не с md. На 768px они
+   помещались только пока кнопки шага были 20px: с нормальной тап-целью «Состоянию»
+   остаётся 240px, и колонка «Макс.» обрезала «11» до «1». Ниже lg блоки идут в столбик
+   во всю ширину. *@
+
+<div class="grid grid-cols-1 lg:grid-cols-[1fr_0.85fr_1.15fr] gap-4 lg:divide-x lg:divide-gray-200">
     <!-- Column 1: Personal Information -->
-    <div class="space-y-1.5">
+    <div class="space-y-3">
         <h5 class="cm-section-title block mb-2 pb-1 border-b border-gray-200">
             Персональная информация
         </h5>
 
-        <div class="flex items-start gap-3">
-            <div class="flex-1 min-w-0 space-y-1.5">
-                <CustomInput Label="Игрок" Value="@Character.PersonalInfo.PlayerName" LabelClass="min-w-[70px] text-xs"
-                             OnValueChanged="@(v => Character.PersonalInfo.PlayerName = v)"/>
+        @* Подпись стоит над полем, а не слева от него. Слева она съедала 70px из 216px ширины
+           колонки, и из-за этого приходилось прятать портрет до lg и складывать пары полей
+           в столбик. Теперь полю достаётся вся ширина, а портрет рядом с именем помещается
+           уже с md — как рамка в правом верхнем углу бланка. *@
+        @* Рамка портрета центрируется по паре «Имя/Профессия»: сверху она была на 8px выше
+           первого поля из-за подписи над ним, снизу подпись «Загрузить» висела в пустоте. *@
+        <div class="flex items-center gap-3">
+            <CharacterPortrait Character="@Character"/>
 
-                <CustomInput Label="Имя" Value="@Character.PersonalInfo.Name" LabelClass="min-w-[70px] text-xs"
-                             OnValueChanged="@(v => Character.PersonalInfo.Name = v)"/>
+            <div class="flex-1 min-w-0 space-y-2">
+                <div>
+                    <label for="pi-name" class="cm-field-label">Имя</label>
+                    <input id="pi-name" type="text" class="cm-input"
+                           @bind="Character.PersonalInfo.Name"/>
+                </div>
 
-                <CustomInput Label="Профессия" Value="@Character.PersonalInfo.Occupation" LabelClass="min-w-[70px] text-xs"
-                             OnValueChanged="@(v => Character.PersonalInfo.Occupation = v)"/>
-            </div>
-
-            @* Портрет стоит рядом с именем — как рамка в правом верхнем углу бланка, — но только
-               с lg (1024px, iPad Pro в портрете). Ниже колонка сужается до 216px, и рамка рядом
-               с полем зажимала имя до 46px: «Джон Смит» превращался в «Дж». Уронить её под поля
-               не вариант — посреди формы она читается как случайный блок, поэтому на узких
-               экранах портрета просто нет. Значение при этом остаётся в листе: прячется рамка,
-               а не `PortraitUrl`. *@
-            <div class="hidden lg:block">
-                <CharacterPortrait Character="@Character"/>
+                <div>
+                    <label for="pi-occupation" class="cm-field-label">Профессия</label>
+                    <input id="pi-occupation" type="text" class="cm-input"
+                           @bind="Character.PersonalInfo.Occupation"/>
+                </div>
             </div>
         </div>
 
-        @* Пары складываются в столбик, пока колонка не дотянет до lg: на 768px каждому полю
-           доставалось около 50px. *@
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
+        <div>
+            <label for="pi-player" class="cm-field-label">Игрок</label>
+            <input id="pi-player" type="text" class="cm-input"
+                   @bind="Character.PersonalInfo.PlayerName"/>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
             @* Возраст меняет Скорость, поэтому после него нужен тот же пересчёт, что и после характеристики *@
-            <CustomInput Label="Возраст" Type="number" Value="@Character.PersonalInfo.Age.ToString()"
-                         LabelClass="min-w-[50px] text-xs" ContainerClass="flex items-center gap-1"
-                         OnValueChanged="@OnAgeChanged"/>
-
-            <CustomInput Label="Пол" Value="@Character.PersonalInfo.Gender" 
-                         LabelClass="min-w-[30px] text-xs" ContainerClass="flex items-center gap-1"
-                         OnValueChanged="@(v => Character.PersonalInfo.Gender = v)"/>
-        </div>
-
-        <CustomInput Label="Место рож." Value="@Character.PersonalInfo.Birthplace" LabelClass="min-w-[70px] text-xs"
-                     OnValueChanged="@(v => Character.PersonalInfo.Birthplace = v)"/>
-
-        <CustomInput Label="Место жит." Value="@Character.PersonalInfo.Residence" LabelClass="min-w-[70px] text-xs"
-                     OnValueChanged="@(v => Character.PersonalInfo.Residence = v)"/>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
-            <CustomInput Label="Б.К.У." Value="@Character.PersonalInfo.DamageBonus" 
-                         LabelClass="min-w-[45px] text-xs" ContainerClass="flex items-center gap-1"
-                         OnValueChanged="@(v => Character.PersonalInfo.DamageBonus = v)"/>
-
-            <CustomInput Label="Комп." Value="@Character.PersonalInfo.Build" 
-                         LabelClass="min-w-[45px] text-xs" ContainerClass="flex items-center gap-1"
-                         OnValueChanged="@(v => Character.PersonalInfo.Build = v)"/>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
-            <CustomInput Label="Скор." Type="number" Value="@Character.PersonalInfo.MoveSpeed.ToString()" 
-                         LabelClass="min-w-[45px] text-xs" ContainerClass="flex items-center gap-1"
-                         OnValueChanged="@(v => Character.PersonalInfo.MoveSpeed = int.TryParse(v, out var speed) ? speed : 0)"/>
-
-            @* Уклонение правится в навыках — здесь только зеркало, чтобы два значения не разъезжались *@
-            <div class="flex items-center gap-1">
-                <label for="derived-dodge" class="text-xs font-medium text-gray-700 min-w-[45px]">Укло.:</label>
-                <input id="derived-dodge" type="number" readonly
-                       aria-describedby="derived-dodge-hint"
-                       value="@Character.PersonalInfo.Dodge"
-                       class="cm-input flex-1 min-w-0 bg-gray-50 text-gray-600"/>
-                <span id="derived-dodge-hint" class="sr-only">Значение навыка «Уклонение», правится в разделе «Навыки»</span>
+            <div>
+                <label for="pi-age" class="cm-field-label">Возраст</label>
+                <input id="pi-age" type="number" class="cm-input"
+                       value="@Character.PersonalInfo.Age"
+                       @onchange="@(e => OnAgeChanged(e.Value?.ToString()))"/>
             </div>
+
+            <div>
+                <label for="pi-gender" class="cm-field-label">Пол</label>
+                <input id="pi-gender" type="text" class="cm-input"
+                       @bind="Character.PersonalInfo.Gender"/>
+            </div>
+        </div>
+
+        <div>
+            <label for="pi-birthplace" class="cm-field-label">Место рождения</label>
+            <input id="pi-birthplace" type="text" class="cm-input"
+                   @bind="Character.PersonalInfo.Birthplace"/>
+        </div>
+
+        <div>
+            <label for="pi-residence" class="cm-field-label">Место жительства</label>
+            <input id="pi-residence" type="text" class="cm-input"
+                   @bind="Character.PersonalInfo.Residence"/>
         </div>
     </div>
 
+    @* Ниже lg колонки идут в столбик, и таблице незачем растягиваться на всю ширину листа:
+       поле под двузначное число в 220px читается как ошибка вёрстки. *@
     <!-- Column 2: Characteristics -->
-    <div class="md:pl-4">
+    <div class="lg:pl-4 max-w-md lg:max-w-none">
         <h5 class="cm-section-title block mb-2 pb-1 border-b border-gray-200">
             Характеристики
         </h5>
         <AttributeRowsTable Characteristics="@Character.Characteristics" OnUpdate="@OnCharacteristicUpdate"/>
+
+        @* Бонус к урону, Комплекция, Скорость и Уклонение считаются из характеристик
+           (DerivedAttributeRules), поэтому стоят под ними, а не в анкете, где лежали раньше
+           вперемешку с местом жительства. Место под ними всё равно пустовало. *@
+        <div class="mt-3 pt-3 border-t border-gray-200">
+            <h6 class="cm-section-title block mb-2">Производные</h6>
+            <div class="grid grid-cols-4 gap-2 max-w-xs lg:max-w-none">
+                <div>
+                    <label for="derived-db" class="cm-field-label text-center">Б.К.У.</label>
+                    <input id="derived-db" type="text" class="cm-input-sm min-h-[36px]"
+                           @bind="Character.PersonalInfo.DamageBonus"/>
+                </div>
+
+                <div>
+                    <label for="derived-build" class="cm-field-label text-center">Комп.</label>
+                    <input id="derived-build" type="text" class="cm-input-sm min-h-[36px]"
+                           @bind="Character.PersonalInfo.Build"/>
+                </div>
+
+                <div>
+                    <label for="derived-move" class="cm-field-label text-center">Скор.</label>
+                    <input id="derived-move" type="number" class="cm-input-sm min-h-[36px]"
+                           @bind="Character.PersonalInfo.MoveSpeed"/>
+                </div>
+
+                @* Уклонение правится в навыках — здесь только зеркало, чтобы два значения не разъезжались *@
+                <div>
+                    <label for="derived-dodge" class="cm-field-label text-center">Укло.</label>
+                    <input id="derived-dodge" type="number" readonly
+                           aria-describedby="derived-dodge-hint"
+                           value="@Character.PersonalInfo.Dodge"
+                           class="cm-input-sm min-h-[36px] bg-gray-100 text-gray-600"/>
+                    <span id="derived-dodge-hint" class="sr-only">Значение навыка «Уклонение», правится в разделе «Навыки»</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Column 3: State (Derived Attributes + Character State) -->
-    <div class="md:pl-4">
+    <div class="lg:pl-4 max-w-md lg:max-w-none">
         <h5 class="cm-section-title block mb-2 pb-1 border-b border-gray-200">
             Состояние
         </h5>
@@ -114,7 +151,7 @@
     /// <summary>Просьба к странице перерисоваться целиком: правка задела другие секции листа.</summary>
     [Parameter] public EventCallback OnSheetChanged { get; set; }
 
-    private async Task OnAgeChanged(string value)
+    private async Task OnAgeChanged(string? value)
     {
         Character.PersonalInfo.Age = int.TryParse(value, out var age) ? age : 0;
         await OnDerivedChanged.InvokeAsync();
