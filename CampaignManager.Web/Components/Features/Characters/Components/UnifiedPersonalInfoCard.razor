@@ -10,8 +10,6 @@
             Персональная информация
         </h5>
 
-        @* Портрет стоит рядом с именем — как на бланке, где рамка занимает правый верхний угол.
-           Отдельной колонки он не получает: на iPad в портретной ориентации их и так три. *@
         <div class="flex items-start gap-3">
             <div class="flex-1 min-w-0 space-y-1.5">
                 <CustomInput Label="Игрок" Value="@Character.PersonalInfo.PlayerName" LabelClass="min-w-[70px] text-xs"
@@ -24,10 +22,20 @@
                              OnValueChanged="@(v => Character.PersonalInfo.Occupation = v)"/>
             </div>
 
-            <CharacterPortrait Character="@Character"/>
+            @* Портрет стоит рядом с именем — как рамка в правом верхнем углу бланка, — но только
+               с lg (1024px, iPad Pro в портрете). Ниже колонка сужается до 216px, и рамка рядом
+               с полем зажимала имя до 46px: «Джон Смит» превращался в «Дж». Уронить её под поля
+               не вариант — посреди формы она читается как случайный блок, поэтому на узких
+               экранах портрета просто нет. Значение при этом остаётся в листе: прячется рамка,
+               а не `PortraitUrl`. *@
+            <div class="hidden lg:block">
+                <CharacterPortrait Character="@Character"/>
+            </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-x-2">
+        @* Пары складываются в столбик, пока колонка не дотянет до lg: на 768px каждому полю
+           доставалось около 50px. *@
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
             @* Возраст меняет Скорость, поэтому после него нужен тот же пересчёт, что и после характеристики *@
             <CustomInput Label="Возраст" Type="number" Value="@Character.PersonalInfo.Age.ToString()"
                          LabelClass="min-w-[50px] text-xs" ContainerClass="flex items-center gap-1"
@@ -44,7 +52,7 @@
         <CustomInput Label="Место жит." Value="@Character.PersonalInfo.Residence" LabelClass="min-w-[70px] text-xs"
                      OnValueChanged="@(v => Character.PersonalInfo.Residence = v)"/>
 
-        <div class="grid grid-cols-2 gap-x-2">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
             <CustomInput Label="Б.К.У." Value="@Character.PersonalInfo.DamageBonus" 
                          LabelClass="min-w-[45px] text-xs" ContainerClass="flex items-center gap-1"
                          OnValueChanged="@(v => Character.PersonalInfo.DamageBonus = v)"/>
@@ -54,7 +62,7 @@
                          OnValueChanged="@(v => Character.PersonalInfo.Build = v)"/>
         </div>
 
-        <div class="grid grid-cols-2 gap-x-2">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-2">
             <CustomInput Label="Скор." Type="number" Value="@Character.PersonalInfo.MoveSpeed.ToString()" 
                          LabelClass="min-w-[45px] text-xs" ContainerClass="flex items-center gap-1"
                          OnValueChanged="@(v => Character.PersonalInfo.MoveSpeed = int.TryParse(v, out var speed) ? speed : 0)"/>
