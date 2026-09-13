@@ -48,46 +48,54 @@
                         }
                     </div>
                     <div class="campaign-card-body">
+                        @* Свою же почту в роли Хранителя не повторяем — об этом говорит бейдж в шапке. *@
                         <div class="campaign-meta">
-                            <span class="campaign-meta-label">Хранитель:</span>
-                            <span class="campaign-meta-value">@campaign.KeeperEmail</span>
+                            @if (!isKeeper)
+                            {
+                                <span class="campaign-meta-value" title="@campaign.KeeperEmail">@campaign.KeeperEmail</span>
+                                <span class="campaign-meta-sep">·</span>
+                            }
+                            <span class="campaign-meta-count">Игроков: @(campaign.Players?.Count ?? 0)</span>
                         </div>
-                        <div class="campaign-meta">
-                            <span class="campaign-meta-label">Игроков:</span>
-                            <span class="campaign-meta-value">@(campaign.Players?.Count ?? 0)</span>
-                        </div>
-
-                        @if (isKeeper && _isKeeper)
-                        {
-                            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm campaign-full-btn"
-                                    @onclick="() => AddNpc(campaign.Id)">
-                                <i class="fa-solid fa-plus"></i>Добавить NPC
-                            </button>
-                        }
 
                         @if (userCharacter is not null)
                         {
-                            <div class="campaign-char-box">
-                                <div class="campaign-char-name">@userCharacter.CharacterName</div>
-                                <div class="campaign-char-occ">@userCharacter.Character.PersonalInfo.Occupation</div>
-                                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm campaign-full-btn"
+                            <div class="campaign-row">
+                                <span class="campaign-row-text" title="@userCharacter.CharacterName">
+                                    <span class="campaign-row-name">@userCharacter.CharacterName</span>
+                                    @if (!string.IsNullOrWhiteSpace(userCharacter.Character.PersonalInfo.Occupation))
+                                    {
+                                        <span class="campaign-row-sub">@userCharacter.Character.PersonalInfo.Occupation</span>
+                                    }
+                                </span>
+                                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
                                         @onclick="() => EditCharacter(userCharacter.Id)">
-                                    <i class="fa-solid fa-user"></i>Открыть персонажа
+                                    Открыть
                                 </button>
                             </div>
                         }
-                        else
+
+                        @if (userCharacter is null || (isKeeper && _isKeeper))
                         {
-                            <div class="campaign-no-char">
-                                <p class="campaign-no-char-text">Нет персонажа в этой кампании</p>
-                                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm campaign-full-btn"
-                                        @onclick="() => StartWizard(campaign.Id)">
-                                    <i class="fa-solid fa-wand-magic-sparkles"></i>Создать сыщика
-                                </button>
-                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm campaign-full-btn"
-                                        @onclick="() => CreateNewCharacter(campaign.Id)">
-                                    <i class="fa-solid fa-plus"></i>Пустой лист
-                                </button>
+                            <div class="campaign-actions">
+                                @if (userCharacter is null)
+                                {
+                                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
+                                            @onclick="() => StartWizard(campaign.Id)">
+                                        <i class="fa-solid fa-wand-magic-sparkles"></i>Создать сыщика
+                                    </button>
+                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                            @onclick="() => CreateNewCharacter(campaign.Id)">
+                                        Пустой лист
+                                    </button>
+                                }
+                                @if (isKeeper && _isKeeper)
+                                {
+                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm campaign-action-wide"
+                                            @onclick="() => AddNpc(campaign.Id)">
+                                        <i class="fa-solid fa-plus"></i>Добавить NPC
+                                    </button>
+                                }
                             </div>
                         }
 
@@ -97,9 +105,11 @@
                                 <div class="campaign-npcs-title">NPC (@npcs.Count)</div>
                                 @foreach (var npc in npcs)
                                 {
-                                    <div class="campaign-npc-row">
-                                        <span class="campaign-npc-name" title="@npc.CharacterName">@npc.CharacterName</span>
-                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    <div class="campaign-row">
+                                        <span class="campaign-row-text" title="@npc.CharacterName">
+                                            <span class="campaign-row-name">@npc.CharacterName</span>
+                                        </span>
+                                        <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm"
                                                 @onclick="() => EditCharacter(npc.Id)">
                                             Открыть
                                         </button>
