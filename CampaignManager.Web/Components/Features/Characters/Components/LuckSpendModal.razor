@@ -1,0 +1,215 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Необязательное правило «Пункты Удачи» (стр. 96). Считает только LuckRules — здесь разметка. *@
+
+<Modal IsVisible="@IsVisible" OnClose="@OnClose" Title="Потратить Удачу" MaxWidth="2xl">
+    <ChildContent>
+        <div class="cm-stack">
+            <section>
+                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3">
+                    <div>
+                        <label for="luck-target" class="cm-field-label">Проверка</label>
+                        <select id="luck-target" class="cm-input w-full" data-testid="luck-target"
+                                value="@_targetKey" @onchange="SelectTarget">
+                            <option value="">— выберите навык или характеристику —</option>
+                            <optgroup label="Характеристики">
+                                @foreach (var option in _characteristicOptions)
+                                {
+                                    <option value="@option.Key">@option.Label (@option.Value)</option>
+                                }
+                            </optgroup>
+                            @foreach (var group in Character.Skills.SkillGroups)
+                            {
+                                <optgroup label="@group.Name">
+                                    @foreach (var skill in group.Skills)
+                                    {
+                                        <option value="@(SkillPrefix + skill.Name)">@skill.Name (@skill.Value.Regular)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label for="luck-roll" class="cm-field-label">Выпало</label>
+                        <input id="luck-roll" type="number" min="1" max="100" class="cm-input w-full"
+                               data-testid="luck-roll" @bind="_roll" @bind:event="oninput"
+                               @bind:after="RecalculateOptions"/>
+                    </div>
+                </div>
+
+                <p class="cm-field-note mt-2" data-testid="luck-current">
+                    Удача сейчас <strong>@Luck.Value</strong>.
+                    @if (Target is { } target)
+                    {
+                        <span>
+                            Бросок @_roll против @target.Value — @LuckRules.LevelText(LuckRules.LevelOf(_roll, target.Value)).
+                        </span>
+                    }
+                </p>
+            </section>
+
+            @if (Target is { } chosen)
+            {
+                <section>
+                    <h4 class="cm-section-title mb-2">За что платим</h4>
+
+                    @if (!LuckRules.CanSpendOn(_roll, chosen.Value))
+                    {
+                        <p class="cm-text-body" data-testid="luck-forbidden">
+                            За этот бросок торговаться нельзя: крах, осечка и критический успех
+                            вступают в силу в любом случае.
+                        </p>
+                    }
+                    else if (_options.Count == 0)
+                    {
+                        <p class="cm-text-body" data-testid="luck-nothing">
+                            Улучшать нечего — бросок и так дал лучшее, что даёт это значение.
+                        </p>
+                    }
+                    else
+                    {
+                        <div class="flex flex-wrap gap-2" data-testid="luck-options">
+                            @foreach (var option in _options)
+                            {
+                                <button type="button"
+                                        class="cm-btn cm-btn-sm @(option.Affordable ? "cm-btn-primary" : "cm-btn-secondary")"
+                                        disabled="@(!option.Affordable)"
+                                        data-testid="@($"luck-option-{option.Level}")"
+                                        @onclick="() => Spend(chosen, option)">
+                                    @LuckRules.LevelText(option.Level): @option.Cost
+                                    @(option.Affordable ? "" : " — не хватает")
+                                </button>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (_result is { } result)
+            {
+                <section>
+                    <div class="rounded-md border border-success-200 bg-success-50 p-3 text-sm text-success-800"
+                         data-testid="luck-result">
+                        @result
+                    </div>
+                </section>
+            }
+
+            <section>
+                <p class="cm-field-note">
+                    Пункты Удачи нельзя тратить на проверки Удачи, урона, Рассудка и на броски потери
+                    рассудка, а также на повторную проверку — либо повтор, либо Удача. Успех, купленный
+                    за Удачу, не даёт права на улучшение навыка: галочка снимается (стр. 96).
+                </p>
+            </section>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">Закрыть</button>
+    </FooterContent>
+</Modal>
+
+@code {
+    /// <summary>Отличает навык от характеристики в значении <c>option</c>: имена навыков произвольны.</summary>
+    private const string SkillPrefix = "skill:";
+
+    /// <summary>С чего начинается поле «выпало» при каждом открытии.</summary>
+    private const int DefaultRoll = 50;
+
+    [Parameter] [EditorRequired] public required Character Character { get; set; }
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Трата меняет Удачу, а её рисует родитель — просим перерисоваться.</summary>
+    [Parameter] public EventCallback OnSpent { get; set; }
+
+    private sealed record TargetOption(string Key, string Label, int Value, Skill? Skill);
+
+    private string _targetKey = "";
+    private int _roll = DefaultRoll;
+    private string? _result;
+
+    private List<TargetOption> _characteristicOptions = [];
+    private IReadOnlyList<LuckRules.SpendOption> _options = [];
+    private bool _wasVisible;
+
+    private AttributeWithMaxValue Luck => Character.DerivedAttributes.Luck;
+
+    private TargetOption? Target => _targetKey.Length == 0 ? null : Resolve(_targetKey);
+
+    protected override void OnParametersSet()
+    {
+        // Диалог не размонтируется, а прячется, поэтому прошлый бросок и его итог остались бы
+        // на экране при следующем открытии — и выглядели бы как результат нового броска.
+        if (IsVisible && !_wasVisible)
+        {
+            _roll = DefaultRoll;
+            _result = null;
+        }
+
+        _wasVisible = IsVisible;
+
+        _characteristicOptions = InvestigatorCreationRules.Characteristics
+            .Select(info => new TargetOption(
+                info.Key.ToString(),
+                info.Abbreviation,
+                InvestigatorFactory.Read(Character.Characteristics, info.Key),
+                null))
+            .ToList();
+
+        RecalculateOptions();
+    }
+
+    private TargetOption? Resolve(string key)
+    {
+        if (key.StartsWith(SkillPrefix, StringComparison.Ordinal))
+        {
+            var name = key[SkillPrefix.Length..];
+            var skill = Character.Skills.SkillGroups
+                .SelectMany(g => g.Skills)
+                .FirstOrDefault(s => s.Name == name);
+
+            return skill is null ? null : new TargetOption(key, skill.Name, skill.Value.Regular, skill);
+        }
+
+        return _characteristicOptions.FirstOrDefault(o => o.Key == key);
+    }
+
+    private void SelectTarget(ChangeEventArgs args)
+    {
+        _targetKey = args.Value?.ToString() ?? "";
+        _result = null;
+        RecalculateOptions();
+    }
+
+    private void RecalculateOptions() =>
+        _options = Target is { } target
+            ? LuckRules.Options(_roll, target.Value, Luck.Value)
+            : [];
+
+    /// <summary>
+    ///     Списывает пункты и снимает с навыка отметку развития: успех, купленный за Удачу,
+    ///     галочки не даёт, а игрок мог поставить её раньше по ходу проверки.
+    /// </summary>
+    private async Task Spend(TargetOption target, LuckRules.SpendOption option)
+    {
+        if (!option.Affordable)
+            return;
+
+        var before = Luck.Value;
+        Luck.Value = before - option.Cost;
+
+        var checkDropped = target.Skill is { IsUsed: true };
+        if (checkDropped)
+            target.Skill!.IsUsed = false;
+
+        _result = $"Бросок {_roll} → {option.ResultingRoll}: {LuckRules.LevelText(option.Level)}. " +
+                  $"Удача {before} → {Luck.Value}." +
+                  (checkDropped ? $" Отметка развития с «{target.Label}» снята." : "");
+
+        _roll = option.ResultingRoll;
+        RecalculateOptions();
+        await OnSpent.InvokeAsync();
+    }
+}

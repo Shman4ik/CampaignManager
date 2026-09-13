@@ -17,6 +17,16 @@
         <tr class="border-b border-gray-100">
             <td class="py-1">
                 <span class="text-xs font-medium text-gray-700">@attr.Label</span>
+                @* Трата Удачи — необязательное правило со своей арифметикой, ей нужен диалог,
+                   а не поле: платят за конкретную проверку, а не «просто списывают» (стр. 96). *@
+                @if (attr.IsLuck)
+                {
+                    <button type="button" class="luck-spend" data-testid="luck-spend-open"
+                            aria-label="Потратить Удачу на бросок"
+                            @onclick="() => _showLuckModal = true">
+                        <i class="fa-solid fa-coins"></i>
+                    </button>
+                }
             </td>
             <td class="py-1 px-0.5">
                 <div class="flex items-center gap-0.5">
@@ -63,6 +73,11 @@
     }
 </div>
 
+<LuckSpendModal Character="@Character"
+                IsVisible="@_showLuckModal"
+                OnClose="CloseLuckModal"
+                OnSpent="@OnSheetChanged"/>
+
 @code {
     [Parameter] public required Character Character { get; set; }
 
@@ -71,12 +86,25 @@
     /// </summary>
     [Parameter] public EventCallback OnConditionsChanged { get; set; }
 
+    /// <summary>
+    ///     Правка задела лист за пределами этой карточки — перерисовать нужно страницу целиком.
+    ///     Трата Удачи снимает с навыка отметку развития, а навыки рисует другая секция: без этого
+    ///     галочка в модели снята, а на экране стоит.
+    /// </summary>
+    [Parameter] public EventCallback OnSheetChanged { get; set; }
+
     private DerivedAttributes Attributes => Character.DerivedAttributes;
 
-    private record AttributeRow(string Label, string ColorClass, AttributeWithMaxValue Attribute, bool IsHitPoints);
+    private record AttributeRow(
+        string Label,
+        string ColorClass,
+        AttributeWithMaxValue Attribute,
+        bool IsHitPoints,
+        bool IsLuck = false);
 
     private List<AttributeRow> _attributeRows = [];
     private int _damage = 1;
+    private bool _showLuckModal;
     private bool _lastHitWasMajor;
     private int _majorWoundThreshold;
 
@@ -87,11 +115,13 @@
             new("ПЗ", "red", Attributes.HitPoints, true),
             new("ПМ", "blue", Attributes.MagicPoints, false),
             new("Рассудок", "purple", Attributes.Sanity, false),
-            new("Удача", "green", Attributes.Luck, false)
+            new("Удача", "green", Attributes.Luck, false, IsLuck: true)
         ];
 
         _majorWoundThreshold = WoundRules.MajorWoundThreshold(Attributes.HitPoints.MaxValue);
     }
+
+    private void CloseLuckModal() => _showLuckModal = false;
 
     private async Task ApplyDamage()
     {

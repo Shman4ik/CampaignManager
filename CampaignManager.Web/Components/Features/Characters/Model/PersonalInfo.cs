@@ -56,4 +56,11 @@ public class PersonalInfo
     ///     Телосложение персонажа
     /// </summary>
     public string Build { get; set; } = "0";
+
+    /// <summary>
+    ///     Портрет сыщика: путь к объекту в MinIO («images/characters/…») либо внешний
+    ///     https-адрес. На бланке под него отведён правый верхний угол (стр. 33, шаг 8).
+    ///     Показывается через <c>/api/minio/image/{путь}</c> — так же, как изображения бестиария.
+    /// </summary>
+    public string? PortraitUrl { get; set; }
 }

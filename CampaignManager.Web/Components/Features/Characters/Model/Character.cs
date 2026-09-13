@@ -71,4 +71,10 @@ public class Character
     ///     Структурированный список фобий и маний сыщика.
     /// </summary>
     public List<InsanityCondition> InsanityConditions { get; set; } = [];
+
+    /// <summary>
+    ///     «Знакомые сыщики» (стр. 33, шаг 11). Состав кампании сюда не копируется — строка
+    ///     хранит ссылку на лист соседа и собственную заметку о нём, см. <see cref="FellowInvestigator" />.
+    /// </summary>
+    public List<FellowInvestigator> FellowInvestigators { get; set; } = [];
 }

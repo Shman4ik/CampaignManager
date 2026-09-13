@@ -10,14 +10,22 @@
             Персональная информация
         </h5>
 
-        <CustomInput Label="Игрок" Value="@Character.PersonalInfo.PlayerName" LabelClass="min-w-[70px] text-xs"
-                     OnValueChanged="@(v => Character.PersonalInfo.PlayerName = v)"/>
+        @* Портрет стоит рядом с именем — как на бланке, где рамка занимает правый верхний угол.
+           Отдельной колонки он не получает: на iPad в портретной ориентации их и так три. *@
+        <div class="flex items-start gap-3">
+            <div class="flex-1 min-w-0 space-y-1.5">
+                <CustomInput Label="Игрок" Value="@Character.PersonalInfo.PlayerName" LabelClass="min-w-[70px] text-xs"
+                             OnValueChanged="@(v => Character.PersonalInfo.PlayerName = v)"/>
 
-        <CustomInput Label="Имя" Value="@Character.PersonalInfo.Name" LabelClass="min-w-[70px] text-xs"
-                     OnValueChanged="@(v => Character.PersonalInfo.Name = v)"/>
+                <CustomInput Label="Имя" Value="@Character.PersonalInfo.Name" LabelClass="min-w-[70px] text-xs"
+                             OnValueChanged="@(v => Character.PersonalInfo.Name = v)"/>
 
-        <CustomInput Label="Профессия" Value="@Character.PersonalInfo.Occupation" LabelClass="min-w-[70px] text-xs"
-                     OnValueChanged="@(v => Character.PersonalInfo.Occupation = v)"/>
+                <CustomInput Label="Профессия" Value="@Character.PersonalInfo.Occupation" LabelClass="min-w-[70px] text-xs"
+                             OnValueChanged="@(v => Character.PersonalInfo.Occupation = v)"/>
+            </div>
+
+            <CharacterPortrait Character="@Character"/>
+        </div>
 
         <div class="grid grid-cols-2 gap-x-2">
             @* Возраст меняет Скорость, поэтому после него нужен тот же пересчёт, что и после характеристики *@
@@ -77,7 +85,8 @@
             Состояние
         </h5>
         <div class="space-y-3">
-            <DerivedAttributesTable Character="@Character" OnConditionsChanged="@StateHasChanged"/>
+            <DerivedAttributesTable Character="@Character" OnConditionsChanged="@StateHasChanged"
+                                    OnSheetChanged="@OnSheetChanged"/>
             <div class="border-t border-gray-200 pt-2">
                 <CharacterStateTable Character="@Character"/>
             </div>
@@ -93,6 +102,9 @@
 
     /// <summary>Просьба к странице пересчитать вторичные атрибуты (используется правкой возраста).</summary>
     [Parameter] public EventCallback OnDerivedChanged { get; set; }
+
+    /// <summary>Просьба к странице перерисоваться целиком: правка задела другие секции листа.</summary>
+    [Parameter] public EventCallback OnSheetChanged { get; set; }
 
     private async Task OnAgeChanged(string value)
     {
