@@ -325,6 +325,92 @@ public sealed class CharacterService(
     }
 
     /// <summary>
+    ///     Сосед по столу для блока «Знакомые сыщики»: чей лист, как зовут сыщика,
+    ///     кто им играет и кто он по профессии.
+    /// </summary>
+    public sealed record PartyMember(Guid CharacterId, string Name, string PlayerName, string Occupation);
+
+    /// <summary>
+    ///     Остальные сыщики той же игры — состав для блока «Знакомые сыщики» (стр. 33, шаг 11).
+    ///     Для листа игрока это активные листы игроков той же кампании, для прегена — ростер
+    ///     его ваншота. У НПС и у заготовки из общей библиотеки состава нет: они ничьи, и
+    ///     блок на их листе заполняется руками.
+    ///     <para>
+    ///         Имя, игрок и профессия отдаются из живых листов, а не из копии в JSONB: сосед
+    ///         может переименоваться или сменить род занятий, и лист не должен помнить старое.
+    ///     </para>
+    /// </summary>
+    public async Task<List<PartyMember>> GetPartyAsync(Guid characterId)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var character = await dbContext.CharacterStorage.FindAsync(characterId);
+            if (character is null)
+                return [];
+
+            if (!await CanAccessCharacterAsync(dbContext, character.CampaignPlayerId, CharacterAccess.Read))
+            {
+                logger.LogWarning("Denied party read for character {CharacterId}", characterId);
+                return [];
+            }
+
+            var query = dbContext.CharacterStorage
+                .Where(c => c.Id != characterId && c.Status == CharacterStatus.Active);
+
+            if (character.CampaignPlayerId is { } playerId)
+            {
+                var campaignId = await dbContext.CampaignPlayers
+                    .Where(p => p.Id == playerId)
+                    .Select(p => (Guid?)p.CampaignId)
+                    .FirstOrDefaultAsync();
+
+                if (campaignId is null)
+                    return [];
+
+                query = query.Where(c => c.Kind == CharacterKind.PlayerCharacter
+                                         && c.CampaignPlayer!.CampaignId == campaignId.Value);
+            }
+            else if (character.ScenarioId is { } scenarioId)
+            {
+                query = query.Where(c => c.Kind == CharacterKind.Pregen && c.ScenarioId == scenarioId);
+            }
+            else
+            {
+                return [];
+            }
+
+            // Профессия лежит внутри JSONB, а он не колонка и в SQL не разбирается — строки
+            // забираем целиком и раскладываем уже здесь. Партия — это единицы листов.
+            var rows = await query
+                .Include(c => c.CampaignPlayer)
+                .OrderBy(c => c.CharacterName)
+                .ToListAsync();
+
+            return rows
+                .Select(c => new PartyMember(
+                    c.Id,
+                    string.IsNullOrWhiteSpace(c.Character.PersonalInfo.Name)
+                        ? c.CharacterName
+                        : c.Character.PersonalInfo.Name,
+                    FirstFilled(c.Character.PersonalInfo.PlayerName, c.CampaignPlayer?.PlayerName),
+                    c.Character.PersonalInfo.Occupation))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving party for character {CharacterId}", characterId);
+            return [];
+        }
+    }
+
+    /// <summary>Имя игрока с листа, а если его там нет — из слота кампании.</summary>
+    private static string FirstFilled(string? sheetValue, string? slotValue) =>
+        !string.IsNullOrWhiteSpace(sheetValue) ? sheetValue
+        : !string.IsNullOrWhiteSpace(slotValue) ? slotValue
+        : "";
+
+    /// <summary>
     ///     Прегены, принадлежащие сценарию (ростер ваншота).
     /// </summary>
     public async Task<List<CharacterStorageDto>> GetScenarioPregensAsync(Guid scenarioId)

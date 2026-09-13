@@ -1,0 +1,187 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@inject CharacterService CharacterService
+
+@* «Знакомые сыщики» — шаг 11 заполнения листа (стр. 33). Компонент всегда рендерится внутри
+   секции «Биография и заметки», поэтому своей карточки не заводит: рамку даёт секция. *@
+
+<section>
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <h3 class="cm-section-title">Знакомые сыщики</h3>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="fellow-add"
+                @onclick="AddManual">
+            <i class="fa-solid fa-plus mr-1"></i>Вписать вручную
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <LoadingIndicator/>
+    }
+    else if (Rows.Count == 0)
+    {
+        <p class="cm-field-note">
+            Состав подтянется из кампании, как только у неё появятся другие сыщики.
+            Тех, кого в системе нет, можно вписать вручную.
+        </p>
+    }
+    else
+    {
+        <div data-testid="fellow-list">
+            @foreach (var row in Rows)
+            {
+                <div class="fellow-row border-t border-t-gray-200 first:border-t-0" @key="row.Key">
+                    @if (row.Member is { } member)
+                    {
+                        <div class="fellow-who">
+                            <span class="fellow-name" data-testid="@($"fellow-name-{member.CharacterId}")">@member.Name</span>
+                            <span class="fellow-meta">@Describe(member.PlayerName, member.Occupation)</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="fellow-who fellow-who-manual">
+                            <input type="text" class="cm-input-sm !text-left" placeholder="Имя сыщика"
+                                   aria-label="Имя сыщика"
+                                   value="@row.Entry!.Name"
+                                   @onchange="e => SetManualName(row.Entry!, e)"/>
+                            <input type="text" class="cm-input-sm !text-left" placeholder="Игрок"
+                                   aria-label="Имя игрока"
+                                   value="@row.Entry!.PlayerName"
+                                   @onchange="e => SetManualPlayer(row.Entry!, e)"/>
+                        </div>
+                    }
+
+                    <input type="text" class="cm-input-sm !text-left fellow-note"
+                           placeholder="Пара слов о профессии или характере"
+                           aria-label="@($"Заметка о сыщике {row.DisplayName}")"
+                           data-testid="@($"fellow-note-{row.Key}")"
+                           value="@row.Note"
+                           @onchange="e => SetNote(row, e)"/>
+
+                    @* Удалять можно только вписанное руками: состав кампании не редактируется с листа. *@
+                    @if (row.Member is null)
+                    {
+                        <button type="button" class="fellow-remove" data-testid="@($"fellow-remove-{row.Key}")"
+                                aria-label="@($"Убрать {row.DisplayName}")"
+                                @onclick="() => RemoveManual(row.Entry!)">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="fellow-remove-placeholder" aria-hidden="true"></span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] [EditorRequired] public required Character Character { get; set; }
+
+    /// <summary>Строка листа в базе. У несохранённого листа её ещё нет — состав тянуть неоткуда.</summary>
+    [Parameter] public Guid? CharacterId { get; set; }
+
+    private List<CharacterService.PartyMember> _party = [];
+    private bool _loading;
+    private Guid? _loadedFor;
+
+    /// <summary>
+    ///     Строка блока: либо сосед по кампании (<paramref name="Member" /> заполнен, имя и профессия
+    ///     живые), либо вписанный руками (<paramref name="Entry" /> без <c>CharacterId</c>).
+    ///     У соседа <paramref name="Entry" /> появляется только в тот момент, когда владелец листа
+    ///     напишет о нём заметку, — иначе открытие листа само по себе меняло бы JSONB и дёргало
+    ///     автосохранение.
+    /// </summary>
+    private sealed record Row(CharacterService.PartyMember? Member, FellowInvestigator? Entry)
+    {
+        public string Key => Member?.CharacterId.ToString() ?? Entry!.GetHashCode().ToString();
+
+        public string DisplayName => Member?.Name ?? Entry!.Name;
+
+        public string Note => Entry?.Note ?? "";
+    }
+
+    private List<Row> Rows
+    {
+        get
+        {
+            var known = _party.Select(p => p.CharacterId).ToHashSet();
+
+            List<Row> rows = [.. _party.Select(m => new Row(m, EntryFor(m.CharacterId)))];
+
+            // Вписанные руками и осиротевшие (сосед вышел из кампании — заметка о нём осталась):
+            // у обоих показываем то имя, что лежит в листе.
+            rows.AddRange(Character.FellowInvestigators
+                .Where(e => e.CharacterId is not { } id || !known.Contains(id))
+                .Select(e => new Row(null, e)));
+
+            return rows;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CharacterId is not { } id || id == Guid.Empty || _loadedFor == id)
+            return;
+
+        _loadedFor = id;
+        _loading = true;
+        _party = await CharacterService.GetPartyAsync(id);
+        _loading = false;
+    }
+
+    private FellowInvestigator? EntryFor(Guid characterId) =>
+        Character.FellowInvestigators.FirstOrDefault(e => e.CharacterId == characterId);
+
+    private static string Describe(string playerName, string occupation)
+    {
+        var parts = new[] { playerName, occupation }.Where(p => !string.IsNullOrWhiteSpace(p));
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    ///     Заметка о соседе заводит строку в листе и заодно снимает с него слепок имени:
+    ///     если сосед потом выйдет из кампании, строка останется читаемой, а не станет
+    ///     заметкой без адресата.
+    /// </summary>
+    private void SetNote(Row row, ChangeEventArgs args)
+    {
+        var note = args.Value?.ToString() ?? "";
+
+        if (row.Entry is { } existing)
+        {
+            existing.Note = note;
+
+            // Пустая заметка о соседе — это отсутствие заметки: строку из листа убираем,
+            // сам сосед никуда не денется, он придёт из состава кампании.
+            if (note.Length == 0 && existing.CharacterId is not null)
+                Character.FellowInvestigators.Remove(existing);
+
+            return;
+        }
+
+        if (note.Length == 0 || row.Member is not { } member)
+            return;
+
+        Character.FellowInvestigators.Add(new FellowInvestigator
+        {
+            CharacterId = member.CharacterId,
+            Name = member.Name,
+            PlayerName = member.PlayerName,
+            Note = note
+        });
+    }
+
+    private void SetManualName(FellowInvestigator entry, ChangeEventArgs args) =>
+        entry.Name = args.Value?.ToString() ?? "";
+
+    private void SetManualPlayer(FellowInvestigator entry, ChangeEventArgs args) =>
+        entry.PlayerName = args.Value?.ToString() ?? "";
+
+    private void AddManual() => Character.FellowInvestigators.Add(new FellowInvestigator());
+
+    private void RemoveManual(FellowInvestigator entry) => Character.FellowInvestigators.Remove(entry);
+}

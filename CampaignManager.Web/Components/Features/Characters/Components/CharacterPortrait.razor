@@ -1,0 +1,108 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@inject Utilities.Services.MinioService MinioService
+@inject ILogger<CharacterPortrait> Logger
+
+@* Портрет сыщика — правый верхний угол бланка (стр. 33, шаг 8). Своей карточки не заводит:
+   живёт внутри «Личных данных». Подпись под рамкой обязательна — на планшете подсказки
+   по наведению не существует, и без неё рамка читается как украшение, а не как кнопка. *@
+
+<div class="portrait-block">
+    <label class="portrait-frame @(_isUploading ? "is-busy" : "")" data-testid="portrait-frame">
+        @if (_isUploading)
+        {
+            <span class="portrait-hint"><i class="fa-solid fa-rotate fa-spin"></i></span>
+        }
+        else if (PortraitSrc is { } src)
+        {
+            <img src="@src" alt="Портрет: @(Character.PersonalInfo.Name)" class="portrait-image"/>
+        }
+        else
+        {
+            <span class="portrait-hint">
+                <i class="fa-solid fa-user-tie text-lg"></i>
+                <span class="portrait-hint-text">Портрет</span>
+            </span>
+        }
+        <InputFile OnChange="UploadAsync" accept="image/*" class="sr-only" data-testid="portrait-input"/>
+    </label>
+
+    <div class="portrait-actions">
+        <span class="portrait-caption">@(PortraitSrc is null ? "Загрузить" : "Заменить")</span>
+        @if (PortraitSrc is not null)
+        {
+            <button type="button" class="portrait-remove" data-testid="portrait-remove"
+                    aria-label="Убрать портрет" @onclick="Remove">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        }
+    </div>
+
+    @if (_error is { } error)
+    {
+        <p class="portrait-error" data-testid="portrait-error">@error</p>
+    }
+</div>
+
+@code {
+    /// <summary>Пять мегабайт — тот же потолок, что у изображений бестиария.</summary>
+    private const long MaxFileSize = 5 * 1024 * 1024;
+
+    [Parameter] [EditorRequired] public required Character Character { get; set; }
+
+    private bool _isUploading;
+    private string? _error;
+
+    /// <summary>
+    ///     Внешнюю ссылку отдаём как есть, объект MinIO — через наш эндпойнт: он единственный
+    ///     знает ключи хранилища (так же устроен <c>CreatureCard</c>).
+    /// </summary>
+    private string? PortraitSrc => Character.PersonalInfo.PortraitUrl switch
+    {
+        null or "" => null,
+        var url when url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) => url,
+        var path => $"/api/minio/image/{path}"
+    };
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        _error = null;
+        _isUploading = true;
+
+        try
+        {
+            // Имя файла случайное, а не по имени сыщика: имя меняется и содержит пробелы,
+            // а перезаписывать чужой объект из-за совпадения имён нельзя.
+            var extension = Path.GetExtension(file.Name);
+            var objectName = $"images/characters/{Guid.CreateVersion7()}{extension}";
+
+            await using var stream = file.OpenReadStream(MaxFileSize);
+            await MinioService.UploadAsync(stream, objectName, file.ContentType);
+
+            Character.PersonalInfo.PortraitUrl = objectName;
+        }
+        catch (IOException)
+        {
+            _error = "Файл больше 5 МБ.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось загрузить портрет сыщика {Name}", Character.PersonalInfo.Name);
+            _error = "Не удалось загрузить портрет.";
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    /// <summary>
+    ///     Убираем ссылку, но не сам объект: лист мог быть скопирован (преген → лист игрока),
+    ///     и удаление из хранилища осиротило бы чужой портрет.
+    /// </summary>
+    private void Remove()
+    {
+        Character.PersonalInfo.PortraitUrl = null;
+        _error = null;
+    }
+}
