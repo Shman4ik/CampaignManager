@@ -1,0 +1,309 @@
+@page "/profile"
+@using CampaignManager.Web.Components.Features.Admin.Model
+@using CampaignManager.Web.Components.Features.Admin.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Profile.Model
+@using CampaignManager.Web.Components.Features.Profile.Services
+@using CampaignManager.Web.Utilities.Services
+@attribute [Authorize]
+@inject ProfileService ProfileService
+@inject AdminService AdminService
+@inject UserPreferencesService UserPreferencesService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Личный кабинет</PageTitle>
+
+<PageHeader Title="Личный кабинет">
+    <Actions>
+        <a href="/api/account/logout" class="cm-btn cm-btn-secondary cm-btn-sm">
+            <i class="fa-solid fa-right-from-bracket mr-1"></i>Выйти
+        </a>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    @if (_profile is null)
+    {
+        <p class="cm-empty"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Загрузка...</p>
+    }
+    else
+    {
+        @if (_notification is not null)
+        {
+            <NotificationAlert Type="@_notificationType" Message="@_notification" OnClose="@(() => _notification = null)"/>
+        }
+
+        <!-- Профиль -->
+        <div class="cm-section">
+            <div class="cm-section-header">
+                <span class="cm-section-title">Профиль</span>
+            </div>
+            <div class="cm-card">
+                <div class="cm-card-body cm-stack">
+                    <div class="profile-identity">
+                        <div class="profile-avatar">@InitialOf(_profile.DisplayName)</div>
+                        <div class="min-w-0 flex-1">
+                            <div class="font-semibold text-sm truncate" style="color:var(--color-primary-800);">@_profile.DisplayName</div>
+                            <div class="text-xs truncate" style="color:var(--color-primary-400);">@_profile.Email</div>
+                        </div>
+                        <Badge Variant="@RoleBadgeVariant(_profile.Role)" Size="sm">@RoleName(_profile.Role)</Badge>
+                    </div>
+
+                    <div>
+                        <label class="cm-field-label" for="display-name">Отображаемое имя</label>
+                        <input id="display-name" type="text" class="cm-input w-full"
+                               maxlength="@ProfileService.MaxDisplayNameLength"
+                               @bind="_displayName" @bind:event="oninput"/>
+                        <p class="cm-field-hint text-xs mt-1">
+                            Видно в меню, в списке участников кампании и в заявках администратору.
+                        </p>
+
+                        @if (_profile.CampaignPlayerCount > 0)
+                        {
+                            <label class="profile-check">
+                                <input type="checkbox" class="cm-checkbox" @bind="_syncCampaigns"/>
+                                <span class="text-sm">
+                                    Заменить имя и в моих кампаниях (@_profile.CampaignPlayerCount)
+                                    <span class="profile-row-note">В каждой кампании имя своё — замена сотрёт эти различия</span>
+                                </span>
+                            </label>
+                        }
+
+                        <div class="mt-3">
+                            <Button Variant="primary" OnClick="SaveNameAsync" IsDisabled="@(_saving || !IsNameChanged)">
+                                @(_saving ? "Сохранение..." : "Сохранить имя")
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Роль -->
+        <div class="cm-section">
+            <div class="cm-section-header">
+                <span class="cm-section-title">Роль в системе</span>
+            </div>
+            <div class="cm-card">
+                <div class="cm-card-body cm-stack">
+                    <p class="text-sm" style="color:var(--color-primary-600);">@RoleDescription(_profile.Role)</p>
+
+                    @if (!_profile.IsKeeper)
+                    {
+                        @if (_profile.LatestApplication?.Status == KeeperApplicationStatus.Pending)
+                        {
+                            <div class="cm-meta">
+                                <i class="fa-solid fa-hourglass-half" style="color:var(--color-warning-600);"></i>
+                                <span>Заявка от @FormatDate(_profile.LatestApplication.CreatedAt) ожидает рассмотрения.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            @if (_profile.LatestApplication?.Status == KeeperApplicationStatus.Rejected)
+                            {
+                                <div>
+                                    <div class="cm-meta">
+                                        <i class="fa-solid fa-circle-xmark" style="color:var(--color-error-600);"></i>
+                                        <span>Заявка от @FormatDate(_profile.LatestApplication.CreatedAt) отклонена.</span>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(_profile.LatestApplication.ReviewComment))
+                                    {
+                                        <p class="text-sm mt-1" style="color:var(--color-primary-600);">
+                                            Комментарий: @_profile.LatestApplication.ReviewComment
+                                        </p>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-sm" style="color:var(--color-primary-600);">
+                                    Хранители создают кампании и сценарии, ведут вики и управляют NPC.
+                                    Подайте заявку — администратор рассмотрит её.
+                                </p>
+                            }
+
+                            <div>
+                                <Button Variant="secondary" Icon="fa-paper-plane" IsDisabled="@_submitting"
+                                        OnClick="SubmitApplicationAsync">
+                                    @(_profile.LatestApplication is null ? "Подать заявку на Хранителя" : "Подать заявку снова")
+                                </Button>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Мои игры -->
+        <div class="cm-section">
+            <div class="cm-section-header">
+                <span class="cm-section-title">Мои игры</span>
+            </div>
+            <div class="cm-card">
+                <a href="/campaigns" class="profile-row">
+                    <span><i class="fa-solid fa-map mr-2" style="color:var(--color-primary-400);"></i>Кампании</span>
+                    <span class="profile-row-value">
+                        @_profile.CampaignCount<i class="fa-solid fa-chevron-right ml-2 text-xs"></i>
+                    </span>
+                </a>
+                <a href="/" class="profile-row">
+                    <span><i class="fa-solid fa-user mr-2" style="color:var(--color-primary-400);"></i>Сыщики</span>
+                    <span class="profile-row-value">
+                        @_profile.CharacterCount<i class="fa-solid fa-chevron-right ml-2 text-xs"></i>
+                    </span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Интерфейс -->
+        <div class="cm-section">
+            <div class="cm-section-header">
+                <span class="cm-section-title">Интерфейс</span>
+            </div>
+            <div class="cm-card">
+                <label class="profile-row">
+                    <span>
+                        Боковое меню развёрнуто
+                        <span class="profile-row-note">На всех устройствах, где вы вошли</span>
+                    </span>
+                    <input type="checkbox" class="cm-checkbox" checked="@_sidebarExpanded"
+                           @onchange="@(e => SaveSettingAsync(UserPreferenceKeys.SidebarExpanded, (bool)e.Value!))"/>
+                </label>
+                <label class="profile-row">
+                    <span>
+                        Помнить последнего сыщика
+                        <span class="profile-row-note">Нижнее меню откроет его и на другом устройстве</span>
+                    </span>
+                    <input type="checkbox" class="cm-checkbox" checked="@_syncLastCharacter"
+                           @onchange="@(e => SaveSettingAsync(UserPreferenceKeys.SyncLastCharacter, (bool)e.Value!))"/>
+                </label>
+            </div>
+        </div>
+
+        <!-- Данные -->
+        <div class="cm-section">
+            <div class="cm-section-header">
+                <span class="cm-section-title">Мои данные</span>
+            </div>
+            <div class="cm-card">
+                <div class="cm-card-body">
+                    <p class="text-sm" style="color:var(--color-primary-600);">
+                        О вас хранится только нужное для игры: адрес @_profile.Email (им вы входите, по нему
+                        определяется доступ), отображаемое имя, роль и созданные вами материалы.
+                    </p>
+                    <p class="text-sm mt-2" style="color:var(--color-primary-600);">
+                        Подробнее — на странице <a href="/legal" style="color:var(--color-accent-600);">о данных и правах</a>.
+                        Удаление аккаунта пока выполняет администратор по запросу.
+                    </p>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private UserProfile? _profile;
+    private string _displayName = string.Empty;
+    // Выключено намеренно: в кампаниях имя у игрока своё («Дима» в одной, полное имя в другой),
+    // и смена имени в кабинете не должна молча их выравнивать.
+    private bool _syncCampaigns;
+    private bool _sidebarExpanded;
+    private bool _syncLastCharacter;
+    private bool _saving;
+    private bool _submitting;
+    private string? _notification;
+    private string _notificationType = "success";
+
+    private bool IsNameChanged =>
+        _profile is not null
+        && !string.IsNullOrWhiteSpace(_displayName)
+        && !string.Equals(_displayName.Trim(), _profile.DisplayName, StringComparison.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _profile = await ProfileService.GetProfileAsync();
+        _displayName = _profile?.DisplayName ?? string.Empty;
+
+        var prefs = await UserPreferencesService.GetAllAsync();
+        _sidebarExpanded = ReadBool(prefs, UserPreferenceKeys.SidebarExpanded, false);
+        _syncLastCharacter = ReadBool(prefs, UserPreferenceKeys.SyncLastCharacter, true);
+    }
+
+    private static bool ReadBool(IReadOnlyDictionary<string, string> prefs, string key, bool fallback) =>
+        prefs.TryGetValue(key, out var raw) && bool.TryParse(raw, out var value) ? value : fallback;
+
+    private static string FormatDate(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("dd.MM.yyyy");
+
+    private async Task SaveNameAsync()
+    {
+        if (_profile is null || _saving) return;
+
+        _saving = true;
+        var result = await ProfileService.UpdateDisplayNameAsync(_displayName, _syncCampaigns);
+        _saving = false;
+
+        if (!result.IsSuccess)
+        {
+            _notification = result.Error;
+            _notificationType = "error";
+            return;
+        }
+
+        // Имя в меню приходит из claim'а, а тот собирается на HTTP-запросе: без полной
+        // перезагрузки страница показывала бы новое имя, а сайдбар рядом — старое.
+        Nav.NavigateTo("/profile", true);
+    }
+
+    private async Task SubmitApplicationAsync()
+    {
+        if (_submitting) return;
+
+        _submitting = true;
+        var application = await AdminService.SubmitApplicationAsync(string.Empty);
+        _submitting = false;
+
+        if (application is null)
+        {
+            _notification = "Не удалось отправить заявку";
+            _notificationType = "error";
+            return;
+        }
+
+        _notification = "Заявка отправлена — ожидайте рассмотрения";
+        _notificationType = "success";
+        _profile = await ProfileService.GetProfileAsync();
+    }
+
+    private async Task SaveSettingAsync(string key, bool value)
+    {
+        if (key == UserPreferenceKeys.SidebarExpanded) _sidebarExpanded = value;
+        if (key == UserPreferenceKeys.SyncLastCharacter) _syncLastCharacter = value;
+        await UserPreferencesService.SetBoolAsync(key, value);
+    }
+
+    private static char InitialOf(string name) =>
+        name.Length > 0 ? char.ToUpper(name[0]) : '?';
+
+    private static string RoleName(PlayerRole role) => role switch
+    {
+        PlayerRole.Administrator => "Администратор",
+        PlayerRole.GameMaster => "Хранитель",
+        _ => "Игрок"
+    };
+
+    private static string RoleBadgeVariant(PlayerRole role) => role switch
+    {
+        PlayerRole.Administrator => "accent",
+        PlayerRole.GameMaster => "success",
+        _ => "secondary"
+    };
+
+    private static string RoleDescription(PlayerRole role) => role switch
+    {
+        PlayerRole.Administrator => "Администратор: полный доступ, включая пользователей и заявки.",
+        PlayerRole.GameMaster => "Хранитель: создание кампаний и сценариев, редактирование вики и NPC.",
+        _ => "Игрок: участие в кампаниях и ведение своих сыщиков."
+    };
+}

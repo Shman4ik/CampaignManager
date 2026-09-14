@@ -27,6 +27,7 @@ public partial class CharacterPage
     [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
     [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private LastCharacterService LastCharacterService { get; set; } = default!;
+    [Inject] private UserPreferencesService UserPreferencesService { get; set; } = default!;
     [Inject] private ScenarioService ScenarioService { get; set; } = default!;
     [Inject] private ILogger<CharacterPage> Logger { get; set; } = default!;
 
@@ -570,9 +571,27 @@ public partial class CharacterPage
                 LastCharacterService.Set(CharacterId.Value.ToString(), name);
                 await JsRuntime.InvokeVoidAsync("localStorage.setItem", "last-character-id", CharacterId.Value.ToString());
                 await JsRuntime.InvokeVoidAsync("localStorage.setItem", "last-character-name", name);
+                await RememberAcrossDevicesAsync(CharacterId.Value, name);
             }
         }
 
         await base.OnAfterRenderAsync(firstRender);
+    }
+
+    /// <summary>
+    ///     Дублирует «последнего сыщика» в настройки пользователя, чтобы нижнее меню открывало его
+    ///     и на другом устройстве. Настройка выключается в личном кабинете — тогда остаётся только
+    ///     localStorage этого браузера.
+    /// </summary>
+    private async Task RememberAcrossDevicesAsync(Guid characterId, string name)
+    {
+        if (!await UserPreferencesService.GetBoolAsync(UserPreferenceKeys.SyncLastCharacter, true))
+            return;
+
+        await UserPreferencesService.SetManyAsync(new Dictionary<string, string>
+        {
+            [UserPreferenceKeys.LastCharacterId] = characterId.ToString(),
+            [UserPreferenceKeys.LastCharacterName] = name
+        });
     }
 }

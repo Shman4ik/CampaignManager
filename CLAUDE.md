@@ -140,6 +140,11 @@ Each feature folder has its own `CLAUDE.md` with that feature's services, models
 - **Two DbContexts**: `AppDbContext` (schema: "games") for app data, `AppIdentityDbContext` (schema: "identity") for auth
 - **Base Entity**: All entities inherit `BaseDataBaseEntity` with `Id` (Guid v7), `CreatedAt`, `LastUpdated` — call `.Init()` on creation
 - **JSONB heavily used**: Character stats, creature characteristics, scenario data stored as JSONB columns. Be careful when changing model shapes — JSONB serialization is sensitive to schema changes.
+  Правка коллекции **на месте** (`entity.SomeDictionary[key] = value`) трекеру изменений не видна:
+  ссылка не поменялась, а компаратора у jsonb-колонки нет. `SaveChanges` тогда отправляет UPDATE
+  только по остальным полям, и запись молча теряется — первая (INSERT новой строки) проходит, вторая
+  нет. Либо присваивать новый экземпляр, либо помечать свойство вручную:
+  `db.Entry(e).Property(x => x.SomeDictionary).IsModified = true` (пример — `UserPreferencesService`).
 - **Factory pattern**: Always use `IDbContextFactory<AppDbContext>` with `await using var dbContext = await dbContextFactory.CreateDbContextAsync()` — DbContext is NOT thread-safe
 
 ### API Endpoints

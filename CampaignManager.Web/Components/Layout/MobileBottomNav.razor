@@ -7,6 +7,7 @@
 @inject IdentityService IdentityService
 @inject AdminService AdminService
 @inject LastCharacterService LastCharacterService
+@inject UserPreferencesService UserPreferencesService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @implements IDisposable
 
@@ -61,6 +62,10 @@
             @if (_isAuthenticated)
             {
                 <div class="mobile-drawer-section-title">Основное</div>
+                <a href="/profile" @onclick="CloseDrawer" class="mobile-drawer-item">
+                    <i class="fa-solid fa-id-card"></i>
+                    <span>Личный кабинет</span>
+                </a>
                 <a href="/campaigns" @onclick="CloseDrawer" class="mobile-drawer-item">
                     <i class="fa-solid fa-map"></i>
                     <span>Кампании</span>
@@ -160,12 +165,37 @@
 
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _isAuthenticated = authState.User.Identity?.IsAuthenticated == true;
+
+        if (_isAuthenticated)
+            await RestoreSyncedCharacterAsync();
+
         _isKeeper = await IdentityService.IsKeeper();
         _isAdmin = await IdentityService.IsAdministrator();
         if (_isAdmin)
             _pendingCount = await AdminService.GetPendingApplicationsCountAsync();
 
         StateHasChanged();
+    }
+
+    /// <summary>
+    ///     Последний открытый сыщик синхронизируется через настройки пользователя, поэтому вкладка
+    ///     ведёт на него и с другого устройства. Значение из настроек важнее localStorage: оно
+    ///     новее — его пишет страница листа при каждом открытии.
+    /// </summary>
+    private async Task RestoreSyncedCharacterAsync()
+    {
+        var prefs = await UserPreferencesService.GetAllAsync();
+
+        var syncEnabled = !prefs.TryGetValue(UserPreferenceKeys.SyncLastCharacter, out var raw)
+                          || !bool.TryParse(raw, out var enabled)
+                          || enabled;
+        if (!syncEnabled) return;
+
+        if (prefs.TryGetValue(UserPreferenceKeys.LastCharacterId, out var id) && !string.IsNullOrWhiteSpace(id))
+        {
+            _lastCharacterId = id;
+            _lastCharacterName = prefs.GetValueOrDefault(UserPreferenceKeys.LastCharacterName);
+        }
     }
 
     private void OnLastCharacterChanged()

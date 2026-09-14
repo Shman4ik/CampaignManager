@@ -15,3 +15,5 @@ Keeper-application review and site administration.
   adding new methods. `GetPendingApplicationsCountAsync` degrades to `0` instead of throwing, because it feeds a
   badge rendered in the shared layout.
 - `SubmitApplicationAsync` is intentionally open to any signed-in user — that is how a player asks to become a Keeper.
+  Вызывает её личный кабинет (`Features/Profile`), он же показывает статус последней заявки; карточки
+  на главной больше нет.
