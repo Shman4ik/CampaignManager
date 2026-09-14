@@ -11,6 +11,7 @@ using CampaignManager.Web.Components.Features.Books.Services;
 using CampaignManager.Web.Components.Features.Weapons.Services;
 using CampaignManager.Web.Components.Features.Chase.Services;
 using CampaignManager.Web.Components.Features.Combat.Services;
+using CampaignManager.Web.Components.Features.Profile.Services;
 using CampaignManager.Web.Components.Features.Wiki.Services;
 using CampaignManager.Web.Utilities.Api;
 using CampaignManager.Web.Utilities.Circuits;
@@ -313,6 +314,7 @@ builder.Services.AddScoped<CampaignManager.Web.Components.Features.Chase.Service
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<WikiHistoryService>();
 builder.Services.AddScoped<UserPreferencesService>();
+builder.Services.AddScoped<ProfileService>();
 
 // Register Minio service
 builder.Services.AddScoped<MinioService>();

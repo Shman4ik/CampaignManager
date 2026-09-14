@@ -7,6 +7,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IdentityService IdentityService
 @inject AdminService AdminService
+@inject UserPreferencesService UserPreferencesService
 @implements IDisposable
 
 @if (_tabletExpanded)
@@ -66,8 +67,8 @@
     <div class="sidebar-footer">
         <AuthorizeView>
             <Authorized>
-                <!-- User row -->
-                <div class="sidebar-item" style="cursor:default;gap:8px;">
+                <!-- User row — вход в личный кабинет -->
+                <a href="/profile" class="sidebar-item" style="gap:8px;" title="Личный кабинет">
                     <span class="sidebar-icon">
                         <div style="width:22px;height:22px;border-radius:50%;background:var(--cm-gradient-primary);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0;">
                             @(context.User.Identity?.Name?.Length > 0 ? char.ToUpper(context.User.Identity.Name[0]) : '?')
@@ -76,7 +77,7 @@
                     <span class="sidebar-label" style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;">
                         @context.User.Identity?.Name
                     </span>
-                </div>
+                </a>
                 <!-- Logout -->
                 <button class="sidebar-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"
                         @onclick="Logout">
@@ -188,7 +189,10 @@
         else
         {
             _collapsed = !_collapsed;
+            // localStorage — чтобы следующая страница на этом устройстве отрисовалась сразу в нужном
+            // виде, настройка пользователя — чтобы то же состояние приехало на другое устройство.
             await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
+            await UserPreferencesService.SetBoolAsync(UserPreferenceKeys.SidebarExpanded, !_collapsed);
         }
     }
 
@@ -250,6 +254,15 @@
         var isAdmin = await IdentityService.IsAdministrator();
         if (isAdmin)
             _pendingCount = await AdminService.GetPendingApplicationsCountAsync();
+
+        // Настройка из кабинета важнее локального кэша: на новом устройстве localStorage пуст,
+        // а привычное состояние меню должно приехать вместе с аккаунтом.
+        var storedExpanded = await UserPreferencesService.GetAsync(UserPreferenceKeys.SidebarExpanded);
+        if (bool.TryParse(storedExpanded, out var expanded) && expanded == _collapsed)
+        {
+            _collapsed = !expanded;
+            await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
+        }
 
         // Save login hint
         try

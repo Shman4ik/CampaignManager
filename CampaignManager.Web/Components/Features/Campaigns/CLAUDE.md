@@ -8,6 +8,9 @@ Top-level container a Keeper creates to run a game: players, era, status.
 ## Key Models
 - `Campaign : BaseDataBaseEntity` — `Name`, `Status` (`CampaignStatus`, default `Planning`), `KeeperEmail`, `Era` (`Eras`, default `Classic`), `Players` (`List<CampaignPlayer>`).
 - `CampaignPlayer : BaseDataBaseEntity` — `CampaignId`, `Characters` (`ICollection<CharacterStorageDto>`) — a player's characters *within this campaign*.
+  `PlayerName` — копия имени, снятая при вступлении, и у одного игрока она в разных кампаниях
+  разная намеренно. Выровнять её по имени из личного кабинета можно только вручную, галочкой
+  на `/profile` (см. `Features/Profile/CLAUDE.md`).
 - `CampaignCreateModel` — form/DTO shape for campaign creation.
 
 ## Владение персонажами
