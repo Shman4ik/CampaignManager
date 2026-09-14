@@ -1,35 +1,128 @@
 @namespace CampaignManager.Web.Components.Shared
 
-<div class="@GetAlertClasses()">
-    @if (!string.IsNullOrEmpty(Title))
+@* Иконка, закрытие и компактный размер вынесены в сам компонент: экраны
+   собирали это вокруг Alert вручную. Шкала типографики выровнена по карточке —
+   заголовок 0.875rem/600, текст 0.8125rem/1.5 — чтобы алерт рядом с cm-card
+   читался как элемент того же веса. Чернила всегда tone-900 полной
+   непрозрачности: цвет несёт подложка, а не приглушённый текст.
+   Классы записаны целиком — Tailwind не видит интерполированные имена. *@
+
+<div class="@GetAlertClasses()" role="@(Type.Equals("error", StringComparison.OrdinalIgnoreCase) ? "alert" : null)" @attributes="ExtraAttributes">
+    @if (ShowIcon)
     {
-        <div class="font-medium">@Title</div>
+        <i class="fa-solid @IconClass @IconColorClass @(Small ? "text-[0.8125rem]" : "text-[0.9375rem]") shrink-0 leading-5"
+           aria-hidden="true"></i>
     }
-    <div>@ChildContent</div>
+    <div class="min-w-0 flex-1">
+        @if (!string.IsNullOrEmpty(Title))
+        {
+            <div class="@(Small ? "text-[0.8125rem]" : "text-sm") font-semibold leading-tight @(ChildContent is not null ? "mb-0.5" : "")">
+                @Title
+            </div>
+        }
+        @if (ChildContent is not null)
+        {
+            <div class="@(Small ? "text-xs" : "text-[0.8125rem]") leading-normal">@ChildContent</div>
+        }
+        @if (Actions is not null)
+        {
+            <div class="mt-2.5 flex gap-2">@Actions</div>
+        }
+    </div>
+    @if (OnClose.HasDelegate)
+    {
+        <button type="button" @onclick="OnClose" aria-label="Закрыть"
+                class="@(Small ? "w-7 h-7 -mr-1 -mt-0.5 text-xs" : "w-9 h-9 -mr-1.5 -mt-1 text-[0.8125rem]")
+                       flex items-center justify-center shrink-0 rounded bg-transparent border-none cursor-pointer">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    }
 </div>
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    /// <summary>Кнопки под сообщением. Используйте Size="sm".</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
     [Parameter] public string Type { get; set; } = "info";
 
     [Parameter] public string? Title { get; set; }
 
+    /// <summary>Показать иконку типа. По умолчанию выключена — короткая строка её не требует.</summary>
+    [Parameter] public bool ShowIcon { get; set; }
+
+    /// <summary>Переопределяет иконку типа, например "fa-wrench".</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>Компактный вид: для сайдбаров, панелей фильтров и тела карточек.</summary>
+    [Parameter] public bool Small { get; set; }
+
+    /// <summary>Задайте, чтобы появился ✕ и алерт стал закрываемым.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Атрибуты, переданные вызывающим (`class="mb-6"`, `id`, `data-*`). Без этого
+    /// Blazor падает на любом лишнем атрибуте: разметка компилируется, а исключение
+    /// прилетает в рантайме — ровно тогда, когда алерт наконец показывают.
+    /// </summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    /// <summary>Всё, кроме class: свой class компонент подмешивает к собственным классам, а не затирается им.</summary>
+    private IReadOnlyDictionary<string, object>? ExtraAttributes =>
+        AdditionalAttributes is null || !AdditionalAttributes.ContainsKey("class")
+            ? AdditionalAttributes
+            : AdditionalAttributes.Where(a => a.Key != "class").ToDictionary(a => a.Key, a => a.Value);
+
+    private string? ExtraClass =>
+        AdditionalAttributes is not null && AdditionalAttributes.TryGetValue("class", out var c)
+            ? c?.ToString()
+            : null;
+
+    private string Tone => Type.ToLower() switch
+    {
+        "success" or "warning" or "error" or "info" or "primary" or "secondary" or "accent" => Type.ToLower(),
+        _ => "info"
+    };
+
+    private string IconClass => Icon ?? Tone switch
+    {
+        "success" => "fa-circle-check",
+        "warning" => "fa-triangle-exclamation",
+        "error" => "fa-circle-exclamation",
+        _ => "fa-circle-info"
+    };
+
+    private string IconColorClass => Tone switch
+    {
+        "success" => "text-success-600",
+        "warning" => "text-warning-600",
+        "error" => "text-error-600",
+        "info" => "text-accent-600",
+        "primary" => "text-primary-600",
+        "secondary" => "text-secondary-600",
+        _ => "text-accent-600"
+    };
+
     private string GetAlertClasses()
     {
-        var baseClasses = "p-4 rounded-md mb-4";
+        var layout = Small
+            ? "flex items-start gap-2 px-2.5 py-2 rounded-md mb-2"
+            : "flex items-start gap-2.5 px-4 py-3 rounded-md mb-3";
 
-        return Type.ToLower() switch
+        var tone = Tone switch
         {
-            "success" => $"bg-success-50 text-success-900 border border-success-200 {baseClasses}",
-            "warning" => $"bg-warning-50 text-warning-900 border border-warning-200 {baseClasses}",
-            "error" => $"bg-error-50 text-error-900 border border-error-200 {baseClasses}",
-            "info" => $"bg-info-50 text-info-900 border border-info-200 {baseClasses}",
-            "primary" => $"bg-primary-50 text-primary-900 border border-primary-200 {baseClasses}",
-            "secondary" => $"bg-secondary-50 text-secondary-900 border border-secondary-200 {baseClasses}",
-            "accent" => $"bg-accent-50 text-accent-900 border border-accent-200 {baseClasses}",
-            _ => $"bg-info-50 text-info-900 border border-info-200 {baseClasses}"
+            "success" => "bg-success-50 text-success-900 border border-success-200",
+            "warning" => "bg-warning-50 text-warning-900 border border-warning-200",
+            "error" => "bg-error-50 text-error-900 border border-error-200",
+            "info" => "bg-info-50 text-info-900 border border-info-200",
+            "primary" => "bg-primary-50 text-primary-900 border border-primary-200",
+            "secondary" => "bg-secondary-50 text-secondary-900 border border-secondary-200",
+            "accent" => "bg-accent-50 text-accent-900 border border-accent-200",
+            _ => "bg-info-50 text-info-900 border border-info-200"
         };
-    }
 
+        return $"{tone} {layout} {ExtraClass}".TrimEnd();
+    }
 }

@@ -199,6 +199,26 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
 - Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
 
+#### Уведомления — только `<Alert>`
+
+Любое сообщение пользователю (ошибка сохранения, предупреждение по правилам, успех
+операции) — это `<Alert Type="error|warning|success|info">`, а не свой `<div>` с
+`bg-red-50`. Свои блоки расползлись по семи тонам: где-то `red-*` вместо `error-*`,
+где-то `rounded-xl border-2`, где-то вообще бутстраповский `alert alert-danger`,
+которого в сборке нет. Параметры: `ShowIcon`, `Icon="fa-skull"`, `Small` (для
+плотных панелей листа сыщика), `Actions`, `OnClose`.
+
+- Алерт несёт **собственный** нижний отступ (`mb-3`, `mb-2` у `Small`). Если он не
+  нужен — `class="!mb-0"`; просто `mb-0` проиграет, у обоих классов одинаковая
+  специфичность. Свой `class` подмешивается к классам компонента, не затирает их.
+- **`<ValidationSummary>` классы игнорирует** — Blazor дописывает свой
+  `class="validation-errors"` после splat'а переданных атрибутов. Оформление живёт
+  в `.validation-errors` в `design-system.css` и повторяет `<Alert Type="error">`.
+  Передавать туда утилиты Tailwind бесполезно, это уже проверено пятью формами.
+- Панели правил в `Combat/` и `Chase/` (`AttackResultDisplay`, `ChaseActionPanel`)
+  тонированные блоки рисуют сами — это содержимое экрана с контролами внутри,
+  а не уведомления; на `<Alert>` их не переводили.
+
 #### Page shell — the same on every page
 
 Every routable page is `<PageHeader Title="…">` (with page-level actions in its `Actions` slot)

@@ -102,6 +102,14 @@ module.exports = {
           900: '#1E2F3E',
           950: '#0F1821',
         }
+      },
+      // Те же три семейства, что и --font-family-* в design-system.css.
+      // Без этого font-mono на кубиках, треке погони и JSON-текстареях
+      // разрешался в системный моноширинный, а не в JetBrains Mono.
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        serif: ['Bitter', 'Georgia', 'Times New Roman', 'serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       }
     }
   },
