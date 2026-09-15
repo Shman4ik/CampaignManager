@@ -73,6 +73,19 @@
             </div>
         </div>
 
+        @if (Playback.CurrentTrack is not null)
+        {
+            @* Разметка намеренно неизменная: значения полосы и подписей ставит
+               js/music-player.js напрямую, а Blazor эти элементы после первой отрисовки
+               больше не патчит — иначе четыре перерисовки в секунду шли бы через circuit. *@
+            <div class="cm-music-seek">
+                <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
+                <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0"
+                       aria-label="Позиция в треке" disabled/>
+                <span class="cm-music-time" id="cm-music-duration">--:--</span>
+            </div>
+        }
+
         @if (_expanded)
         {
             <div class="cm-music-bar-row cm-music-bar-row--wrap">
@@ -93,16 +106,17 @@
 
         @if (_needsGesture)
         {
+            @* У кнопки нет @onclick: нажатие обрабатывает js/music-player.js прямым слушателем.
+               Через Blazor Server не выйдет — нажатие уходит на сервер и возвращается, активация
+               жеста к тому моменту истекает, и запуск снова упирается в тот же запрет браузера. *@
             <Alert Type="warning" Small="true" ShowIcon="true" Icon="fa-hand-pointer" class="!mb-0"
                    OnClose="() => _needsGesture = false">
-                @if (Playback.CurrentTrack?.SourceType == MusicSourceType.YouTube)
-                {
-                    <text>Браузер не даёт запустить ролик сам. Коснитесь окошка плеера в углу — дальше треки будут переключаться одной кнопкой.</text>
-                }
-                else
-                {
-                    <text>Браузер не даёт запустить звук сам — нажмите «Продолжить» ещё раз.</text>
-                }
+                <div class="flex flex-wrap items-center gap-2">
+                    <span>Браузер не разрешает запустить звук сам — это его защита от самоиграющих страниц.</span>
+                    <button type="button" id="cm-music-unlock" class="cm-btn cm-btn-primary cm-btn-sm">
+                        <i class="fas fa-play"></i> <span>Включить звук</span>
+                    </button>
+                </div>
             </Alert>
         }
 
@@ -275,6 +289,14 @@
 
     [JSInvokable]
     public void NotifyError(string message) => Playback.ReportError(message);
+
+    /// <summary>Пользователь нажал «Включить звук» — предупреждение больше не нужно.</summary>
+    [JSInvokable]
+    public void NotifyGestureResolved()
+    {
+        _needsGesture = false;
+        InvokeAsync(StateHasChanged);
+    }
 
     [JSInvokable]
     public void NotifyNeedsGesture()

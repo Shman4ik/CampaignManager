@@ -1,6 +1,7 @@
 ﻿using CampaignManager.Web.Components.Features.Music.Model;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.Extensions.Primitives;
 using Minio.Exceptions;
 using System.Security.Claims;
 
@@ -11,6 +12,9 @@ namespace CampaignManager.Web.Utilities.Api;
 /// </summary>
 public static class MinioApi
 {
+    /// <summary>Потолок одного ответа на Range — чтобы ответ не разрастался в памяти.</summary>
+    private const long MaxChunkBytes = 4L * 1024 * 1024;
+
     /// <summary>
     /// Maps Minio API endpoints to the application's routing
     /// </summary>
@@ -96,12 +100,18 @@ public static class MinioApi
     /// Намеренно не presigned-ссылка прямо на хранилище: плеер пропускает файл через
     /// Web Audio, чтобы управлять громкостью (на iOS иначе никак), а
     /// <c>createMediaElementSource</c> на кросс-доменном элементе без CORS отдаёт тишину.
-    /// Цена — <see cref="MinioService.GetObjectAsync" /> буферизует объект в память целиком,
-    /// поэтому перемотка перекачивает трек заново. Для фоновой музыки приемлемо.
+    /// <para>
+    ///     <c>Range</c> разбирается вручную, а не через <c>enableRangeProcessing</c>: тому режиму
+    ///     нужен уже вычитанный перематываемый поток, то есть объект пришлось бы каждый раз тянуть
+    ///     из хранилища целиком. Здесь запрошенный отрезок читается напрямую
+    ///     (<see cref="MinioService.GetObjectRangeAsync" />), поэтому сдвиг ползунка стоит одного
+    ///     короткого запроса, а не повторной выкачки трека.
+    /// </para>
     /// </remarks>
-    private static async Task<Results<FileStreamHttpResult, BadRequest<string>, NotFound<string>, StatusCodeHttpResult>> GetAudioAsync(
+    private static async Task<IResult> GetAudioAsync(
         string objectPath,
         MinioService minioService,
+        HttpContext http,
         ILogger<Program> logger)
     {
         if (string.IsNullOrEmpty(objectPath))
@@ -114,13 +124,46 @@ public static class MinioApi
         if (!MusicSource.IsSupportedAudioFile(objectPath))
             return TypedResults.BadRequest("Unsupported audio format");
 
+        var contentType = MusicSource.GetAudioContentType(objectPath);
+
         try
         {
-            var stream = await minioService.GetObjectAsync(objectPath);
-            // enableRangeProcessing — иначе браузер не даст перемотать трек, а Safari
-            // вообще отказывается играть источник, который не отвечает на Range.
-            return TypedResults.File(stream, MusicSource.GetAudioContentType(objectPath),
-                enableRangeProcessing: true);
+            var size = await minioService.GetObjectSizeAsync(objectPath);
+
+            // Без этого заголовка браузер не считает источник перематываемым: ползунок работать
+            // не будет, а Safari в придачу капризничает с воспроизведением.
+            http.Response.Headers.AcceptRanges = "bytes";
+
+            if (!TryParseRange(http.Request.Headers.Range, size, out var start, out var end))
+            {
+                // Заголовка нет или он неразборчив — отдаём объект целиком, как раньше.
+                var whole = await minioService.GetObjectAsync(objectPath);
+                return TypedResults.Stream(whole, contentType);
+            }
+
+            if (start >= size)
+            {
+                http.Response.Headers.ContentRange = $"bytes */{size}";
+                return TypedResults.StatusCode(StatusCodes.Status416RangeNotSatisfiable);
+            }
+
+            // Отрезок режется по MaxChunkBytes: отдать меньше запрошенного сервер вправе, браузер
+            // просто попросит продолжение. Иначе «bytes=0-» на пятидесятимегабайтном треке означало
+            // бы те же пятьдесят мегабайт в памяти, от которых мы здесь и уходим.
+            var length = Math.Min(end - start + 1, MaxChunkBytes);
+            var last = start + length - 1;
+
+            var slice = await minioService.GetObjectRangeAsync(objectPath, start, length);
+
+            http.Response.StatusCode = StatusCodes.Status206PartialContent;
+            http.Response.ContentType = contentType;
+            http.Response.ContentLength = length;
+            http.Response.Headers.ContentRange = $"bytes {start}-{last}/{size}";
+
+            await using (slice)
+                await slice.CopyToAsync(http.Response.Body);
+
+            return TypedResults.Empty;
         }
         catch (ObjectNotFoundException)
         {
@@ -131,6 +174,53 @@ public static class MinioApi
             logger.LogError(ex, "Error retrieving audio {ObjectPath}", objectPath);
             return TypedResults.StatusCode(500);
         }
+    }
+
+    /// <summary>
+    ///     Разбирает <c>Range: bytes=…</c>. Поддержаны обе формы, которыми пользуются браузеры:
+    ///     <c>bytes=1024-</c> — от позиции до конца, так выглядит перемотка, и <c>bytes=0-1</c> —
+    ///     пробный запрос, которым Safari выясняет размер. Форма <c>bytes=-N</c> (последние N байт)
+    ///     тоже разбирается: ею читают хвост с метаданными. Несколько диапазонов в одном заголовке
+    ///     не поддержаны — для аудио браузеры их не шлют.
+    /// </summary>
+    private static bool TryParseRange(StringValues header, long size, out long start, out long end)
+    {
+        start = 0;
+        end = size - 1;
+
+        var raw = header.ToString();
+        if (string.IsNullOrEmpty(raw) || size <= 0) return false;
+        if (!raw.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var spec = raw["bytes=".Length..].Trim();
+        if (spec.Contains(',')) return false;
+
+        var dash = spec.IndexOf('-');
+        if (dash < 0) return false;
+
+        var fromText = spec[..dash];
+        var toText = spec[(dash + 1)..];
+
+        if (fromText.Length == 0)
+        {
+            if (!long.TryParse(toText, out var suffix) || suffix <= 0) return false;
+            start = Math.Max(0, size - suffix);
+            end = size - 1;
+            return true;
+        }
+
+        if (!long.TryParse(fromText, out start) || start < 0) return false;
+
+        if (toText.Length == 0)
+        {
+            end = size - 1;
+            return true;
+        }
+
+        if (!long.TryParse(toText, out end) || end < start) return false;
+
+        end = Math.Min(end, size - 1);
+        return true;
     }
 
     /// <summary>
