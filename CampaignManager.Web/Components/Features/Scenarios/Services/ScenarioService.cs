@@ -815,6 +815,19 @@ public sealed class ScenarioService(
         }
     }
 
+    /// <summary>
+    ///     Сбрасывает все три списочных кэша сценариев. Локации, ключевые факты и раздатки —
+    ///     jsonb-колонки самой строки сценария, поэтому их правка меняет то же, что отдаёт
+    ///     <c>GetAllScenariosAsync</c>: без сброса правка не доезжает до режима игры
+    ///     до истечения пятнадцатиминутного кэша.
+    /// </summary>
+    private void InvalidateScenarioCaches()
+    {
+        cache.Remove(ScenariosCacheKey);
+        cache.Remove(TemplatesCacheKey);
+        cache.Remove(PublishedCacheKey);
+    }
+
     // ── Location CRUD ──────────────────────────────────────────────
 
     public async Task<bool> AddLocationAsync(Guid scenarioId, ScenarioLocation location)
@@ -831,6 +844,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -857,6 +871,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -883,6 +898,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)

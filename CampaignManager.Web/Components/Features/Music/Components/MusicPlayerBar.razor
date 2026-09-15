@@ -1,0 +1,337 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
+@using CampaignManager.Web.Utilities.Services
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject MusicPlaybackService Playback
+@inject MusicTrackService TrackService
+@inject IdentityService IdentityService
+@inject UserPreferencesService UserPreferencesService
+@inject IJSRuntime JS
+
+@* Панель живёт в MainLayout, а не на странице: уход со сценария в боевой помощник не должен
+   обрывать музыку. Сам звук держит js/music-player.js, здесь только состояние и кнопки. *@
+
+@if (_visible)
+{
+    <div class="cm-music-bar">
+        <div class="cm-music-bar-row">
+            <button type="button" class="cm-music-toggle" title="@(_expanded ? "Свернуть" : "Развернуть")"
+                    @onclick="() => _expanded = !_expanded">
+                <i class="fas @(_expanded ? "fa-chevron-down" : "fa-chevron-up")"></i>
+            </button>
+
+            <i class="fas fa-music cm-music-glyph @(Playback.IsPlaying ? "cm-music-glyph--live" : "")"></i>
+
+            <div class="cm-music-title">
+                @if (Playback.CurrentTrack is { } track)
+                {
+                    <span class="cm-music-name" title="@track.Name">@track.Name</span>
+                    @if (!string.IsNullOrWhiteSpace(Playback.PoolLabel) && Playback.PoolLabel != track.Name)
+                    {
+                        <span class="cm-music-pool">@Playback.PoolLabel</span>
+                    }
+                }
+                else
+                {
+                    <span class="cm-music-pool">Музыка не играет</span>
+                }
+            </div>
+
+            <div class="cm-music-controls">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                        disabled="@(Playback.CurrentTrack is null)"
+                        title="@(Playback.IsPlaying ? "Пауза" : "Продолжить")"
+                        @onclick="TogglePause">
+                    <i class="fas @(Playback.IsPlaying ? "fa-pause" : "fa-play")"></i>
+                </button>
+
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                        disabled="@(!Playback.HasPool)"
+                        title="Другой трек из той же сцены"
+                        @onclick="RollAsync">
+                    <i class="fas fa-shuffle"></i>
+                </button>
+
+                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
+                        disabled="@(Playback.CurrentTrack is null)"
+                        title="Остановить"
+                        @onclick="Playback.Stop">
+                    <i class="fas fa-stop"></i>
+                </button>
+
+                <div class="cm-music-volume">
+                    <button type="button" class="cm-music-toggle" title="@(Playback.Muted ? "Включить звук" : "Приглушить")"
+                            @onclick="Playback.ToggleMuted">
+                        <i class="fas @(Playback.Muted || Playback.Volume == 0 ? "fa-volume-xmark" : "fa-volume-high")"></i>
+                    </button>
+                    <input type="range" min="0" max="100" step="1" aria-label="Громкость"
+                           value="@Playback.Volume"
+                           @oninput="OnVolumeInput"/>
+                </div>
+            </div>
+        </div>
+
+        @if (_expanded)
+        {
+            <div class="cm-music-bar-row cm-music-bar-row--wrap">
+                <span class="cm-music-pool">Настроение:</span>
+                @foreach (var tag in _pinnedTags)
+                {
+                    <button type="button"
+                            class="cm-btn cm-btn-sm @(IsCurrentPool(tag) ? "cm-btn-primary" : "cm-btn-secondary")"
+                            @onclick="() => PlayTagAsync(tag)">
+                        @tag
+                    </button>
+                }
+                <a href="/music" class="cm-btn cm-btn-outline-primary cm-btn-sm">
+                    <i class="fas fa-sliders"></i> <span>Фонотека</span>
+                </a>
+            </div>
+        }
+
+        @if (_needsGesture)
+        {
+            <Alert Type="warning" Small="true" ShowIcon="true" Icon="fa-hand-pointer" class="!mb-0"
+                   OnClose="() => _needsGesture = false">
+                @if (Playback.CurrentTrack?.SourceType == MusicSourceType.YouTube)
+                {
+                    <text>Браузер не даёт запустить ролик сам. Коснитесь окошка плеера в углу — дальше треки будут переключаться одной кнопкой.</text>
+                }
+                else
+                {
+                    <text>Браузер не даёт запустить звук сам — нажмите «Продолжить» ещё раз.</text>
+                }
+            </Alert>
+        }
+
+        @if (Playback.Error is { } error)
+        {
+            <Alert Type="error" Small="true" ShowIcon="true" class="!mb-0" OnClose="Playback.ClearError">
+                @error
+            </Alert>
+        }
+    </div>
+}
+
+@code {
+
+    private bool _isKeeper;
+    private bool _hasLibrary;
+    private bool _expanded;
+    private bool _needsGesture;
+    private List<string> _pinnedTags = [];
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MusicPlayerBar>? _dotNetRef;
+
+    // Что уже отправлено в браузер. Нужно, чтобы отличить «сменился трек» от «подвинули
+    // громкость» и не перезаряжать играющий трек на каждый чих.
+    private long _pushedCommand;
+    private bool _pushedPlaying;
+    private int _pushedVolume = -1;
+    private bool _pushedMuted;
+
+    private bool _visible => _isKeeper && (_hasLibrary || Playback.CurrentTrack is not null);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Playback.OnChange += OnPlaybackChanged;
+        // Панель живёт в лэйауте и инициализируется один раз за circuit: без подписки
+        // первый заведённый трек не показал бы её до перезагрузки страницы.
+        TrackService.OnLibraryChanged += OnLibraryChanged;
+
+        _isKeeper = await IdentityService.IsKeeper();
+        if (!_isKeeper) return;
+
+        _hasLibrary = (await TrackService.GetAllTracksAsync()).Count > 0;
+        _pinnedTags = await LoadPinnedTagsAsync();
+
+        // Circuit возобновился — снимок вернул идентификатор трека, сущность дотягиваем здесь.
+        await Playback.RestoreTrackAsync();
+    }
+
+    private async Task<List<string>> LoadPinnedTagsAsync()
+    {
+        var raw = await UserPreferencesService.GetAsync(MusicPlaybackDefaults.PinnedTagsPreferenceKey);
+        if (string.IsNullOrWhiteSpace(raw))
+            return [.. MusicPlaybackDefaults.DefaultPinnedTags];
+
+        var tags = MusicSource.NormalizeTags(raw.Split(',', StringSplitOptions.RemoveEmptyEntries));
+        return tags.Count > 0 ? tags : [.. MusicPlaybackDefaults.DefaultPinnedTags];
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_isKeeper) return;
+
+        // Условие — «модуль ещё не загружен», а не firstRender: к первой отрисовке
+        // OnInitializedAsync ещё не дорабатывает, _isKeeper там false, и на этой ветке
+        // импорт не случался бы никогда. Гонка ловится не всегда: на лёгких страницах
+        // проверка прав успевала, на тяжёлых — нет, и плеер молча оставался без JS.
+        if (_module is null)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/music-player.js");
+            _dotNetRef = DotNetObjectReference.Create(this);
+
+            var handshake = await _module.InvokeAsync<PlayerHandshake>("attach", _dotNetRef);
+
+            // После паузы circuit компонент собирается заново, а звук в браузере продолжает
+            // играть. Если там звучит тот самый трек — считаем команду уже доставленной,
+            // иначе перезарядка оборвала бы музыку ровно в момент возвращения к вкладке.
+            var sameTrack = handshake.HasTrack
+                            && Playback.CurrentTrack is { } current
+                            && handshake.TrackId == current.Id.ToString();
+
+            _pushedCommand = sameTrack ? Playback.CommandVersion : -1;
+            _pushedPlaying = sameTrack && Playback.IsPlaying;
+        }
+
+        await PushAsync();
+    }
+
+    /// <summary>
+    ///     Доводит до браузера всё, что разошлось с состоянием сервиса: заряженный трек,
+    ///     пауза, громкость. Вызывается после каждой отрисовки — расхождений обычно нет.
+    /// </summary>
+    private async Task PushAsync()
+    {
+        if (_module is null) return;
+
+        try
+        {
+            if (_pushedCommand != Playback.CommandVersion)
+            {
+                _pushedCommand = Playback.CommandVersion;
+                _pushedPlaying = Playback.IsPlaying;
+                _needsGesture = false;
+
+                if (Playback.CurrentTrack is { } track)
+                {
+                    await _module.InvokeVoidAsync("load", ToDescriptor(track), Playback.Volume, Playback.Muted);
+                }
+                else
+                {
+                    await _module.InvokeVoidAsync("stop");
+                }
+
+                _pushedVolume = Playback.Volume;
+                _pushedMuted = Playback.Muted;
+                return;
+            }
+
+            if (_pushedPlaying != Playback.IsPlaying)
+            {
+                _pushedPlaying = Playback.IsPlaying;
+                await _module.InvokeVoidAsync(Playback.IsPlaying ? "resume" : "pause");
+            }
+
+            if (_pushedVolume != Playback.Volume || _pushedMuted != Playback.Muted)
+            {
+                _pushedVolume = Playback.Volume;
+                _pushedMuted = Playback.Muted;
+                await _module.InvokeVoidAsync("setVolume", Playback.Volume, Playback.Muted);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit ушёл на паузу между рендером и вызовом — звук от этого не страдает.
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private static TrackDescriptor ToDescriptor(MusicTrack track) => new(
+        track.Id.ToString(),
+        track.SourceType.ToString(),
+        track.Source,
+        track.StartSeconds,
+        track.Loop,
+        track.Volume);
+
+    // ───────────────────────── Действия ─────────────────────────
+
+    private void TogglePause() => Playback.TogglePause();
+
+    private async Task RollAsync() => await Playback.RollAsync();
+
+    private async Task PlayTagAsync(string tag) => await Playback.PlayTagAsync(tag);
+
+    private void OnVolumeInput(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var value))
+            Playback.SetVolume(value);
+    }
+
+    private bool IsCurrentPool(string tag) =>
+        Playback.IsPlaying && string.Equals(Playback.PoolLabel, tag, StringComparison.OrdinalIgnoreCase);
+
+    // ───────────────────── Обратные вызовы из браузера ─────────────────────
+
+    [JSInvokable]
+    public async Task NotifyEnded() => await Playback.HandleTrackEndedAsync();
+
+    [JSInvokable]
+    public void NotifyError(string message) => Playback.ReportError(message);
+
+    [JSInvokable]
+    public void NotifyNeedsGesture()
+    {
+        _needsGesture = true;
+        _expanded = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    // ───────────────────────── Жизненный цикл ─────────────────────────
+
+    private void OnPlaybackChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnLibraryChanged() => InvokeAsync(async () =>
+    {
+        _hasLibrary = (await TrackService.GetAllTracksAsync()).Count > 0;
+        StateHasChanged();
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        Playback.OnChange -= OnPlaybackChanged;
+        TrackService.OnLibraryChanged -= OnLibraryChanged;
+
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("detach", _dotNetRef);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        finally
+        {
+            _dotNetRef?.Dispose();
+        }
+    }
+
+    /// <summary>Что браузер ответил на подключение — играет ли уже что-нибудь.</summary>
+    private sealed record PlayerHandshake(bool HasTrack, string? TrackId);
+
+    /// <summary>Трек в том виде, в каком его понимает <c>music-player.js</c>.</summary>
+    private sealed record TrackDescriptor(
+        string Id,
+        string SourceType,
+        string Source,
+        int StartSeconds,
+        bool Loop,
+        int Volume);
+
+}

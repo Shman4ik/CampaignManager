@@ -1,0 +1,125 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
+@inject MusicImportService MusicImportService
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Импорт фонотеки из JSON"
+       MaxWidth="4xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            @if (_result is null)
+            {
+                <Alert Type="info" Title="Как это работает">
+                    Вставьте список треков — ссылки на YouTube и теги настроения заведутся за один раз.
+                    Трек с уже занятым названием пропускается, так что повторный запуск того же файла
+                    ничего не ломает. Готовый JSON нужного вида отдаёт кнопка «Экспорт JSON».
+                </Alert>
+
+                <div>
+                    <label for="musicImportJson" class="cm-field-label">JSON фонотеки</label>
+                    <textarea id="musicImportJson" @bind="_json" class="cm-input font-mono text-xs" rows="16"
+                              placeholder='{ "tracks": [ { "name": "Гул склада", "source": "https://www.youtube.com/watch?v=...", "tags": ["склад", "напряжение"] } ] }'></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <Alert Type="error" Title="Импорт не выполнен">@_error</Alert>
+                }
+            }
+            else
+            {
+                <Alert Type="success" Title="Фонотека пополнена">
+                    Заведено треков — @_result.Created, пропущено — @_result.Skipped.
+                </Alert>
+
+                @if (_result.Warnings.Count > 0)
+                {
+                    <Alert Type="warning" Title="Замечания">
+                        <ul class="list-disc list-inside space-y-1">
+                            @foreach (var warning in _result.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </Alert>
+                }
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            @if (_result is null)
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="secondary">Отмена</Button>
+                <Button ButtonType="button" OnClick="Import" Variant="primary"
+                        IsDisabled="@(_isImporting || string.IsNullOrWhiteSpace(_json))">
+                    @(_isImporting ? "Импортирую…" : "Импортировать")
+                </Button>
+            }
+            else
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="primary">Закрыть</Button>
+            }
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    /// <summary>Вызывается после импорта, чтобы страница перечитала список треков.</summary>
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private bool _isVisible;
+    private bool _isImporting;
+    private string _json = string.Empty;
+    private string? _error;
+    private MusicImportResult? _result;
+
+    // Show()/Hide() зовёт родительская страница, параметры при этом не меняются — Blazor сам
+    // компонент не перерисует, поэтому StateHasChanged здесь обязателен (см. Scenarios/CLAUDE.md).
+    public void Show()
+    {
+        _json = string.Empty;
+        _error = null;
+        _result = null;
+        _isImporting = false;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task Import()
+    {
+        if (string.IsNullOrWhiteSpace(_json)) return;
+
+        _isImporting = true;
+        _error = null;
+
+        try
+        {
+            var result = await MusicImportService.ImportAsync(_json);
+
+            if (!result.Success)
+            {
+                _error = result.Error ?? "Неизвестная ошибка импорта.";
+                return;
+            }
+
+            _result = result;
+            await OnImported.InvokeAsync();
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+}

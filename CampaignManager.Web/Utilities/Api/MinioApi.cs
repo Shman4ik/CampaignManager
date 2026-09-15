@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Utilities.Services;
+﻿using CampaignManager.Web.Components.Features.Music.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Minio.Exceptions;
 using System.Security.Claims;
@@ -24,6 +25,12 @@ public static class MinioApi
             .WithName("GetImage")
             .WithSummary("Retrieve an image from Minio storage")
             .WithDescription("Fetches an image file from Minio object storage and returns it with the appropriate content type");
+
+        minioGroup.MapGet("/audio/{*objectPath}", GetAudioAsync)
+            .RequireAuthorization()
+            .WithName("GetAudio")
+            .WithSummary("Retrieve an audio track from Minio storage")
+            .WithDescription("Streams a music track through the app's own origin so that Web Audio can control its volume");
 
         minioGroup.MapGet("/url/{*objectPath}", GetPresignedUrlAsync)
             .RequireAuthorization()
@@ -78,6 +85,50 @@ public static class MinioApi
         catch (Exception ex)
         {
             logger.LogError(ex, "Error retrieving image {ObjectPath}", objectPath);
+            return TypedResults.StatusCode(500);
+        }
+    }
+
+    /// <summary>
+    /// Streams an audio track from Minio storage through the application's own origin.
+    /// </summary>
+    /// <remarks>
+    /// Намеренно не presigned-ссылка прямо на хранилище: плеер пропускает файл через
+    /// Web Audio, чтобы управлять громкостью (на iOS иначе никак), а
+    /// <c>createMediaElementSource</c> на кросс-доменном элементе без CORS отдаёт тишину.
+    /// Цена — <see cref="MinioService.GetObjectAsync" /> буферизует объект в память целиком,
+    /// поэтому перемотка перекачивает трек заново. Для фоновой музыки приемлемо.
+    /// </remarks>
+    private static async Task<Results<FileStreamHttpResult, BadRequest<string>, NotFound<string>, StatusCodeHttpResult>> GetAudioAsync(
+        string objectPath,
+        MinioService minioService,
+        ILogger<Program> logger)
+    {
+        if (string.IsNullOrEmpty(objectPath))
+            return TypedResults.BadRequest("Object path is required");
+
+        // Prevent path traversal attacks
+        if (objectPath.Contains("..") || Path.IsPathRooted(objectPath))
+            return TypedResults.BadRequest("Invalid object path");
+
+        if (!MusicSource.IsSupportedAudioFile(objectPath))
+            return TypedResults.BadRequest("Unsupported audio format");
+
+        try
+        {
+            var stream = await minioService.GetObjectAsync(objectPath);
+            // enableRangeProcessing — иначе браузер не даст перемотать трек, а Safari
+            // вообще отказывается играть источник, который не отвечает на Range.
+            return TypedResults.File(stream, MusicSource.GetAudioContentType(objectPath),
+                enableRangeProcessing: true);
+        }
+        catch (ObjectNotFoundException)
+        {
+            return TypedResults.NotFound($"Audio {objectPath} not found");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving audio {ObjectPath}", objectPath);
             return TypedResults.StatusCode(500);
         }
     }

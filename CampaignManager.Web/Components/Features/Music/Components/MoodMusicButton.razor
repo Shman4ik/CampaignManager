@@ -1,0 +1,43 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Services
+@inject MusicPlaybackService Playback
+@inject MusicTrackService TrackService
+
+@* Одна кнопка настроения для шапки страницы. Сама прячется, если в фонотеке нет ни одного
+   трека с таким тегом: мёртвая кнопка в шапке хуже её отсутствия. *@
+
+@if (_poolSize > 0)
+{
+    <button type="button"
+            class="cm-btn cm-btn-sm @(_isCurrent ? "cm-btn-primary" : "cm-btn-secondary")"
+            @onclick="PlayAsync">
+        <i class="fas @(_isCurrent ? "fa-shuffle" : "fa-music")"></i>
+        <span>@Label</span>
+    </button>
+}
+
+@code {
+
+    /// <summary>Тег, по которому набирается пул.</summary>
+    [Parameter] [EditorRequired] public required string Tag { get; set; }
+
+    /// <summary>Подпись на кнопке.</summary>
+    [Parameter] [EditorRequired] public required string Label { get; set; }
+
+    private int _poolSize;
+
+    /// <summary>Пул уже играет — тогда кнопка перебрасывает трек, а не начинает заново.</summary>
+    private bool _isCurrent =>
+        Playback.CurrentTrack is not null
+        && string.Equals(Playback.PoolLabel, Tag, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync() =>
+        _poolSize = (await TrackService.ResolvePoolAsync([Tag], null)).Count;
+
+    private async Task PlayAsync()
+    {
+        if (_isCurrent) await Playback.RollAsync();
+        else await Playback.PlayTagAsync(Tag);
+    }
+
+}
