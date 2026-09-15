@@ -18,6 +18,15 @@
 const SINGLETON_KEY = '__cmMusicPlayer';
 const FADE_SECONDS = 1.2;
 const GESTURE_PROBE_MS = 2000;
+const TICK_MS = 250;
+
+// Идентификаторы элементов, которыми модуль управляет напрямую. Blazor рисует их один раз
+// с неизменной разметкой и больше не трогает, поэтому значения, выставленные отсюда, переживают
+// перерисовки панели.
+const SEEK_ID = 'cm-music-seek';
+const ELAPSED_ID = 'cm-music-elapsed';
+const DURATION_ID = 'cm-music-duration';
+const UNLOCK_ID = 'cm-music-unlock';
 
 // Пустой WAV: им «расчехляем» аудио-элемент внутри настоящего жеста пользователя, иначе
 // iOS не даст воспроизвести первый трек по команде из Blazor (round-trip съедает активацию).
@@ -41,7 +50,12 @@ function getState() {
         master: 0.6,
         muted: false,
         unlocked: false,
-        gestureTimer: null
+        gestureTimer: null,
+        ticker: null,
+        scrubbing: false,
+        barObserver: null,
+        observedBar: null,
+        barHeight: 0
     };
     window[SINGLETON_KEY] = state;
     return state;
@@ -257,6 +271,205 @@ function clearGestureProbe(state) {
     }
 }
 
+// ───────────────────── Позиция, перемотка и снятие блокировки ─────────────────────
+
+// Полоса позиции обновляется отсюда, а не из Blazor: четыре перерисовки в секунду через
+// SignalR — это постоянный трафик circuit и рывки на планшете. Blazor рисует элементы один раз
+// с неизменной разметкой и больше их не патчит, поэтому значения, выставленные здесь, живут.
+
+function currentTimes(state) {
+    if (!state.track) return null;
+
+    if (state.track.sourceType === 'YouTube') {
+        const player = state.ytPlayer;
+        if (!player || typeof player.getDuration !== 'function') return null;
+        return { position: player.getCurrentTime() || 0, duration: player.getDuration() || 0 };
+    }
+
+    const audio = state.audio;
+    if (!audio) return null;
+    // У потока и у ещё не разобранного файла длительность — NaN или Infinity.
+    return {
+        position: audio.currentTime || 0,
+        duration: Number.isFinite(audio.duration) ? audio.duration : 0
+    };
+}
+
+function formatTime(seconds) {
+    const total = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const rest = total % 60;
+    const pad = value => String(value).padStart(2, '0');
+    return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
+}
+
+function renderProgress(state) {
+    const slider = document.getElementById(SEEK_ID);
+    if (!slider) return;
+
+    const elapsed = document.getElementById(ELAPSED_ID);
+    const duration = document.getElementById(DURATION_ID);
+    const times = currentTimes(state);
+
+    // Длительности нет — это прямой эфир либо файл ещё не разобран. Перематывать нечего.
+    if (!times || times.duration <= 0) {
+        slider.disabled = true;
+        if (elapsed) elapsed.textContent = formatTime(times ? times.position : 0);
+        if (duration) duration.textContent = '--:--';
+        return;
+    }
+
+    slider.disabled = false;
+    if (duration) duration.textContent = formatTime(times.duration);
+
+    // Пока ползунок тянут пальцем, позицию не перебиваем — иначе он вырывается из-под руки.
+    if (state.scrubbing) return;
+
+    slider.value = String(Math.round((times.position / times.duration) * 1000));
+    if (elapsed) elapsed.textContent = formatTime(times.position);
+}
+
+function startTicker(state) {
+    if (state.ticker) return;
+    state.ticker = setInterval(() => renderProgress(state), TICK_MS);
+}
+
+function stopTicker(state) {
+    if (!state.ticker) return;
+    clearInterval(state.ticker);
+    state.ticker = null;
+}
+
+function seekToFraction(state, fraction) {
+    const times = currentTimes(state);
+    if (!times || times.duration <= 0) return;
+
+    // Полсекунды от конца: точное попадание в конец тут же роняет трек в «закончился».
+    const target = Math.max(0, Math.min(times.duration - 0.5, fraction * times.duration));
+
+    if (state.track.sourceType === 'YouTube') {
+        if (state.ytPlayer && typeof state.ytPlayer.seekTo === 'function') state.ytPlayer.seekTo(target, true);
+        return;
+    }
+
+    try {
+        state.audio.currentTime = target;
+    } catch {
+        // Источник не перематывается — ползунок вернётся на место следующим тиком.
+    }
+}
+
+// Высота панели плавает: пустая — одна строка, с полосой позиции — две, с раскрытым рядом
+// настроений и предупреждением — четыре. Фиксированной величиной в CSS это не покрыть, поэтому
+// меряем настоящую высоту и отдаём её стилям переменной. Переменная ставится на <html>, а не на
+// <body>: enhanced-навигация Blazor сливает body с серверным ответом и правки на нём срезает.
+function applyBarHeight(state, height) {
+    const rounded = Math.round(height);
+    if (rounded <= 0) return;
+    state.barHeight = rounded;
+    // Значение переставляется каждый раз, без памяти о прежнем: enhanced-навигация Blazor
+    // сливает разметку с серверным ответом и инлайновый стиль срезает, а с проверкой
+    // «высота не менялась» восстановить его было бы уже некому. Повторная запись того же
+    // значения браузеру ничего не стоит.
+    document.documentElement.style.setProperty('--cm-music-bar-height', rounded + 'px');
+}
+
+function ensureBarObserved(state) {
+    const bar = document.querySelector('.cm-music-bar');
+
+    if (!bar) {
+        // Панель скрылась — отдаём отступ обратно объявленному в таблице значению.
+        if (state.observedBar) {
+            state.observedBar = null;
+            state.barHeight = 0;
+            document.documentElement.style.removeProperty('--cm-music-bar-height');
+        }
+        return;
+    }
+
+    if (state.observedBar === bar) {
+        // Элемент тот же — но переменную могло срезать навигацией, поэтому переставляем.
+        applyBarHeight(state, bar.getBoundingClientRect().height);
+        return;
+    }
+
+    // Blazor пересоздал элемент — старое наблюдение умерло вместе с ним.
+    state.observedBar = bar;
+    if (!state.barObserver) {
+        state.barObserver = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                // Именно borderBoxSize: contentRect не считает padding и рамку панели,
+                // и отступ выходил ровно на эти пиксели меньше нужного.
+                const box = entry.borderBoxSize && entry.borderBoxSize[0];
+                applyBarHeight(state, box ? box.blockSize : entry.target.getBoundingClientRect().height);
+            }
+        });
+    }
+    state.barObserver.disconnect();
+    state.barObserver.observe(bar);
+    applyBarHeight(state, bar.getBoundingClientRect().height);
+}
+
+// Всё синхронно и без await: активация жеста живёт только в синхронной части обработчика,
+// первый же await её теряет — а весь смысл кнопки в том, чтобы запустить звук внутри жеста.
+function unlockPlayback(state) {
+    state.unlocked = true;
+
+    const ctx = ensureGraph(state);
+    if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => { });
+
+    if (state.track && state.track.sourceType === 'YouTube') {
+        if (state.ytPlayer && typeof state.ytPlayer.playVideo === 'function') {
+            state.ytPlayer.playVideo();
+            startGestureProbe(state);
+        }
+    } else if (state.audio) {
+        const played = state.audio.play();
+        if (played && typeof played.catch === 'function') played.catch(() => { });
+    }
+
+    notify('NotifyGestureResolved');
+}
+
+// Слушатели делегированные и ставятся один раз: панель перерисовывается и пересобирается
+// при каждой паузе circuit, а привязка к конкретным элементам это бы не пережила.
+function installControls(state) {
+    if (state.controlsInstalled) return;
+    state.controlsInstalled = true;
+
+    // Раз в секунду хватает: запрос одного селектора, зато высота отступа не разъезжается
+    // даже когда музыка не играет, а Хранитель раскрыл ряд настроений.
+    ensureBarObserved(state);
+    setInterval(() => ensureBarObserved(state), 1000);
+
+    document.addEventListener('input', event => {
+        if (!event.target || event.target.id !== SEEK_ID) return;
+        state.scrubbing = true;
+
+        const times = currentTimes(state);
+        const elapsed = document.getElementById(ELAPSED_ID);
+        if (times && times.duration > 0 && elapsed) {
+            elapsed.textContent = formatTime((event.target.value / 1000) * times.duration);
+        }
+    });
+
+    document.addEventListener('change', event => {
+        if (!event.target || event.target.id !== SEEK_ID) return;
+        state.scrubbing = false;
+        seekToFraction(state, event.target.value / 1000);
+    });
+
+    // Кнопка «Включить звук» обрабатывается здесь, а не через @onclick: нажатие в Blazor Server
+    // уходит на сервер и возвращается, активация жеста к тому моменту истекает — и playVideo()
+    // снова упирается в тот же запрет, из-за которого кнопка и понадобилась.
+    document.addEventListener('click', event => {
+        if (!event.target || !event.target.closest) return;
+        if (!event.target.closest('#' + UNLOCK_ID)) return;
+        unlockPlayback(state);
+    }, true);
+}
+
 // ───────────────────────── Обратная связь в Blazor ─────────────────────────
 
 function notify(method, arg) {
@@ -276,6 +489,9 @@ export function attach(dotNetRef) {
     state.dotNet = dotNetRef;
     ensureAudio(state);
     installUnlock(state);
+    installControls(state);
+    // Circuit мог возобновиться поверх уже играющего трека — полосу позиции надо оживить.
+    if (state.track) startTicker(state);
     return {
         // Компонент после возобновления circuit должен понять, играет ли что-то уже,
         // и не перезаряжать трек поверх звучащего.
@@ -297,6 +513,8 @@ export async function load(track, master, muted) {
     state.master = Math.min(Math.max(master, 0), 100) / 100;
     state.muted = !!muted;
     clearGestureProbe(state);
+
+    startTicker(state);
 
     if (track.sourceType === 'YouTube') {
         await stopFile(state);
@@ -404,6 +622,8 @@ export async function resume() {
 export async function stop() {
     const state = getState();
     state.track = null;
+    state.scrubbing = false;
+    stopTicker(state);
     clearGestureProbe(state);
     stopYouTube(state);
     await stopFile(state);
@@ -421,4 +641,10 @@ export function setVolume(master, muted) {
     }
     // Короткая рампа вместо мгновенного скачка — иначе на ползунке слышны щелчки.
     fadeTo(state, effectiveGain(state), 0.08);
+}
+
+// Перемотка «снаружи», из C#. Обычная перемотка ползунком идёт мимо Blazor,
+// но точка входа нужна, например, чтобы вернуться к началу трека кнопкой.
+export function seek(fraction) {
+    seekToFraction(getState(), fraction);
 }

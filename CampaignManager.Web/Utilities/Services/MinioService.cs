@@ -1,17 +1,23 @@
-﻿using Minio;
+﻿using System.Net.Http.Headers;
+using Minio;
 using Minio.DataModel.Args;
 
 namespace CampaignManager.Web.Utilities.Services;
 
 public class MinioService
 {
+    /// <summary>Ссылка нужна на один запрос отрезка и наружу не выходит — минуты хватает с запасом.</summary>
+    private const int PresignedRangeExpirySeconds = 60;
+
     private readonly string _bucketName;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<MinioService> _logger;
     private readonly IMinioClient _minioClient;
 
     public MinioService(IConfiguration configuration, ILogger<MinioService> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
 
         var endpoint = configuration["Minio:Endpoint"] ?? "s3.dmnet.dev";
         var accessKey = configuration["Minio:AccessKey"] ?? throw new ArgumentNullException("Minio:AccessKey");
@@ -47,6 +53,55 @@ public class MinioService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving object {ObjectName} from Minio", objectName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Размер объекта в байтах. Нужен для ответа на <c>Range</c>: без него не собрать
+    ///     заголовок <c>Content-Range</c> и не проверить границы запрошенного отрезка.
+    /// </summary>
+    public async Task<long> GetObjectSizeAsync(string objectName)
+    {
+        var stat = await _minioClient.StatObjectAsync(new StatObjectArgs()
+            .WithBucket(_bucketName)
+            .WithObject(objectName));
+
+        return stat.Size;
+    }
+
+    /// <summary>
+    ///     Читает из объекта только запрошенный отрезок.
+    ///     <para>
+    ///         Именно из-за этого метода перемотка трека не стоит перекачивания всего файла:
+    ///         <see cref="GetObjectAsync" /> тянет объект целиком в память, и на тридцатимегабайтном
+    ///         эмбиенте каждый сдвиг ползунка означал бы новую полную выкачку из хранилища.
+    ///     </para>
+    /// </summary>
+    public async Task<Stream> GetObjectRangeAsync(string objectName, long offset, long length)
+    {
+        try
+        {
+            // Обычный HTTP по короткоживущей presigned-ссылке, а не GetObjectArgs.WithOffsetAndLength:
+            // SDK перед выдачей объекта делает StatObject теми же заголовками, получает на Range
+            // ответ 206 и роняет PartialContentException. Здесь Range уходит ровно один раз.
+            // Побочная выгода — ResponseHeadersRead отдаёт поток как есть, без копии в память.
+            var url = await GetPresignedUrlAsync(objectName, PresignedRangeExpirySeconds);
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Range = new RangeHeaderValue(offset, offset + length - 1);
+
+            var client = _httpClientFactory.CreateClient("minio");
+            var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+
+            // Поток закрывает вызывающий; его Dispose возвращает соединение в пул.
+            return await response.Content.ReadAsStreamAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving range {Offset}+{Length} of {ObjectName} from Minio",
+                offset, length, objectName);
             throw;
         }
     }
