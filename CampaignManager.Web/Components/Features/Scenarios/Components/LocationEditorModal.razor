@@ -1,8 +1,11 @@
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Utilities.Services
 @inject MarkdownService MarkdownService
+@inject MusicTrackService MusicTrackService
 
 <Modal IsVisible="_isVisible"
        OnClose="Hide"
@@ -50,6 +53,64 @@
                 {
                     <textarea @bind="_model.Description" class="cm-input" rows="8"
                               placeholder="Описание локации для хранителя..."></textarea>
+                }
+            </div>
+
+            <!-- Музыка сцены -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Музыка</label>
+                <p class="text-xs text-gray-500 mb-2">
+                    По тегам кнопка «Играть» в режиме игры берёт случайный трек из подходящих —
+                    сцена звучит по-разному. Закреплённый трек добавляется к ним отдельной кнопкой.
+                </p>
+
+                @for (var index = 0; index < _model.MusicTags.Count; index++)
+                {
+                    var i = index;
+                    var value = _model.MusicTags[i];
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" class="cm-input !flex-1" list="cm-location-music-tags"
+                               placeholder="напряжение"
+                               value="@value"
+                               @oninput="e => _model.MusicTags[i] = e.Value?.ToString() ?? string.Empty"/>
+                        <Button ButtonType="button" Variant="outline-error" Size="sm" Icon="fa-times"
+                                OnClick="() => _model.MusicTags.RemoveAt(i)"/>
+                    </div>
+                }
+
+                <datalist id="cm-location-music-tags">
+                    @foreach (var tag in _knownTags)
+                    {
+                        <option value="@tag"></option>
+                    }
+                </datalist>
+
+                <Button ButtonType="button" Variant="outline-primary" Size="sm" Icon="fa-plus"
+                        OnClick="() => _model.MusicTags.Add(string.Empty)">Добавить тег</Button>
+
+                @if (_tracks.Count > 0)
+                {
+                    <div class="mt-3">
+                        <span class="block text-sm font-medium text-gray-700 mb-1">Закрепить треки</span>
+                        <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1">
+                            @foreach (var track in _tracks)
+                            {
+                                <label class="flex min-h-[36px] cursor-pointer items-center gap-2">
+                                    <input type="checkbox"
+                                           class="h-5 w-5 rounded border-primary-300 accent-accent-500"
+                                           checked="@_model.MusicTrackIds.Contains(track.Id)"
+                                           @onchange="e => ToggleTrack(track.Id, e.Value is true)"/>
+                                    <span class="text-sm text-primary-700">@track.Name</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <p class="mt-2 text-xs text-gray-500">
+                        Фонотека пуста — треки заводятся на странице «Музыка».
+                    </p>
                 }
             </div>
 
@@ -112,6 +173,26 @@
     private ScenarioLocation _model = new() { Name = "" };
     private List<ScenarioLocation> _availableParents = [];
     private string _selectedParentId = "";
+    private List<MusicTrack> _tracks = [];
+    private List<string> _knownTags = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tracks = await MusicTrackService.GetAllTracksAsync();
+        _knownTags = await MusicTrackService.GetAllTagsAsync();
+    }
+
+    private void ToggleTrack(Guid trackId, bool selected)
+    {
+        if (selected)
+        {
+            if (!_model.MusicTrackIds.Contains(trackId)) _model.MusicTrackIds.Add(trackId);
+        }
+        else
+        {
+            _model.MusicTrackIds.Remove(trackId);
+        }
+    }
 
     public void Show(List<ScenarioLocation> existingLocations, ScenarioLocation? editLocation = null)
     {
@@ -138,7 +219,14 @@
                 CreatureIds = [..editLocation.CreatureIds],
                 ItemIds = [..editLocation.ItemIds],
                 NpcIds = [..editLocation.NpcIds],
-                HandoutIds = [..editLocation.HandoutIds]
+                HandoutIds = [..editLocation.HandoutIds],
+                // Новое поле локации обязано попасть в эту копию: то, чего здесь нет,
+                // молча стирается при любой правке локации.
+                MusicTags = [..editLocation.MusicTags],
+                // Удалённый из фонотеки трек оставил бы за собой висячий идентификатор во всех
+                // локациях, где был закреплён. Пул его и так не найдёт, но копить мусор незачем —
+                // отбрасываем при первой же правке локации.
+                MusicTrackIds = [..editLocation.MusicTrackIds.Where(id => _tracks.Any(t => t.Id == id))]
             };
             _selectedParentId = editLocation.ParentLocationId?.ToString() ?? "";
             _availableParents = existingLocations.Where(l => l.Id != editLocation.Id).ToList();
@@ -182,6 +270,8 @@
         if (string.IsNullOrWhiteSpace(_model.Name)) return;
 
         _model.ParentLocationId = Guid.TryParse(_selectedParentId, out var parentId) ? parentId : null;
+        // «Бой», «бой » и «бой» должны попасть в один пул — приводим к канону до сохранения.
+        _model.MusicTags = MusicSource.NormalizeTags(_model.MusicTags);
 
         await OnSaved.InvokeAsync(_model);
         Hide();

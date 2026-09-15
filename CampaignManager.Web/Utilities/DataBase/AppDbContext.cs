@@ -5,6 +5,7 @@ using CampaignManager.Web.Components.Features.Chase.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Items.Model;
+using CampaignManager.Web.Components.Features.Music.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Components.Features.Skills.Model;
 using CampaignManager.Web.Components.Features.Spells.Model;
@@ -28,6 +29,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Spell> Spells { get; set; } = null!;
     public DbSet<Book> Books { get; set; } = null!;
     public DbSet<SkillModel> Skills { get; set; } = null!;
+    public DbSet<MusicTrack> MusicTracks { get; set; } = null!;
 
     // Scenario Management DbSets
     public DbSet<Scenario> Scenarios { get; set; } = null!;
@@ -194,6 +196,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(b => b.ImageUrl).HasMaxLength(500);
             entity.Property(b => b.AlternativeNames).HasColumnType("jsonb");
             entity.Property(b => b.PossibleSpells).HasColumnType("jsonb");
+        });
+
+        // Фонотека Хранителя
+        modelBuilder.Entity<MusicTrack>(entity =>
+        {
+            entity.ToTable("MusicTracks");
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(300);
+            entity.HasIndex(t => t.Name).IsUnique();
+            entity.Property(t => t.SourceType).HasConversion<string>().IsRequired();
+            entity.Property(t => t.Source).IsRequired().HasMaxLength(500);
+            entity.Property(t => t.Notes).HasMaxLength(2000);
+            entity.Property(t => t.Tags).HasColumnType("jsonb");
         });
 
         // Настройка навыков

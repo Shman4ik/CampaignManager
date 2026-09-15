@@ -1,0 +1,431 @@
+@page "/music"
+@using CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
+@using CampaignManager.Web.Utilities.Services
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject MusicTrackService TrackService
+@inject MusicPlaybackService Playback
+@inject IdentityService IdentityService
+@inject UserPreferencesService UserPreferencesService
+
+<PageTitle>Фонотека - Campaign Manager</PageTitle>
+
+@if (!_isKeeper)
+{
+    <div class="cm-page">
+        <Alert Type="error" Title="Доступ запрещён">
+            Фонотека доступна только Хранителю.
+        </Alert>
+    </div>
+}
+else
+{
+    <PageHeader Title="Фонотека">
+        <Actions>
+            <Button Variant="secondary" Size="sm" Icon="fa-file-import" OnClick="ShowImportModal">Импорт JSON</Button>
+            <Button Variant="secondary" Size="sm" Icon="fa-file-export" OnClick="ShowExportModal">Экспорт JSON</Button>
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить трек</Button>
+        </Actions>
+    </PageHeader>
+
+    <div class="cm-page">
+        @if (_loading)
+        {
+            <LoadingIndicator Message="Загружаем фонотеку..."/>
+        }
+        else
+        {
+            <FilterPanel Title="Фильтры" @bind-IsExpanded="_filtersExpanded" OnReset="ResetFilters">
+                <ChildContent>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <input type="text" id="trackSearch" placeholder="Поиск по названию, тегу, заметке..."
+                               value="@_search"
+                               @oninput="HandleSearchInput"
+                               class="min-w-[14rem] flex-1 rounded border border-primary-300 bg-primary-50 px-3 py-1.5 text-sm transition-colors hover:border-primary-400 hover:bg-white focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500/25"/>
+                    </div>
+
+                    @if (_allTags.Count > 0)
+                    {
+                        @* Чипы тегов — кнопки, а не ссылки: на планшете по мелкой ссылке не попасть. *@
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            @foreach (var tag in _allTags)
+                            {
+                                <button type="button"
+                                        class="cm-btn cm-btn-sm @(_selectedTags.Contains(tag) ? "cm-btn-primary" : "cm-btn-secondary")"
+                                        @onclick="() => ToggleTag(tag)">
+                                    @tag
+                                </button>
+                            }
+                        </div>
+                    }
+                </ChildContent>
+            </FilterPanel>
+
+            @if (_tracks.Count == 0)
+            {
+                <EmptyState Title="Фонотека пуста"
+                            Message="Добавьте первый трек — ссылку на YouTube или свой файл, — и разметьте его тегами настроения."
+                            IconClass="fa-music">
+                    <ActionButton>
+                        <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить трек</Button>
+                    </ActionButton>
+                </EmptyState>
+            }
+            else if (_filtered.Count == 0)
+            {
+                <EmptyState Title="Ничего не нашлось"
+                            Message="Под выбранные теги и запрос треков нет."
+                            IconClass="fa-search">
+                    <ActionButton>
+                        <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ResetFilters">Сбросить фильтры</Button>
+                    </ActionButton>
+                </EmptyState>
+            }
+            else
+            {
+                <div class="cm-card cm-section">
+                    <div class="cm-card-header">
+                        <span class="cm-section-title">Треки</span>
+                        <span class="cm-empty">@_filtered.Count из @_tracks.Count</span>
+                    </div>
+                    <div class="cm-card-body">
+                        @* Строки, а не вложенные карточки: карточка в карточке читается как мусор. *@
+                        @foreach (var track in _filtered)
+                        {
+                            <div class="flex flex-wrap items-center gap-3 border-t border-t-gray-200 py-3 first:border-t-0 first:pt-0">
+                                <i class="@SourceIcon(track) text-lg text-accent-500 w-5 text-center" aria-hidden="true"></i>
+
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-semibold text-gray-800">@track.Name</div>
+                                    <div class="mt-1 flex flex-wrap items-center gap-1.5">
+                                        @foreach (var tag in track.Tags)
+                                        {
+                                            <Badge Variant="accent" Size="sm" Rounded="full">@tag</Badge>
+                                        }
+                                        @if (!track.Loop)
+                                        {
+                                            <Badge Variant="secondary" Size="sm" Rounded="full">без повтора</Badge>
+                                        }
+                                        @if (track.StartSeconds > 0)
+                                        {
+                                            <Badge Variant="secondary" Size="sm" Rounded="full">с @track.StartSeconds с</Badge>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(track.Notes))
+                                    {
+                                        <p class="mt-1 text-xs text-gray-500">@track.Notes</p>
+                                    }
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <Button Variant="secondary" Size="sm" Icon="fa-play"
+                                            OnClick="() => PlayAsync(track)">Прослушать</Button>
+                                    <Button Variant="outline-primary" Size="sm" Icon="fa-edit"
+                                            OnClick="() => ShowEditModal(track)">Правка</Button>
+                                    <Button Variant="outline-error" Size="sm" Icon="fa-trash"
+                                            OnClick="() => AskDelete(track)">Удалить</Button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="cm-card cm-section">
+                <div class="cm-card-header">
+                    <span class="cm-section-title">Быстрые настроения</span>
+                </div>
+                <div class="cm-card-body">
+                    <p class="mb-3 text-sm text-gray-600">
+                        Эти теги стоят кнопками в панели плеера — чтобы боевая музыка была под рукой,
+                        не открывая фонотеку. По одному в строке, порядок сохраняется.
+                    </p>
+
+                    @for (var index = 0; index < _pinnedTags.Count; index++)
+                    {
+                        var i = index;
+                        var value = _pinnedTags[i];
+                        <div class="mb-2 flex gap-2">
+                            <input type="text" class="cm-input !flex-1" list="cm-pinned-tags"
+                                   value="@value"
+                                   @oninput="e => _pinnedTags[i] = e.Value?.ToString() ?? string.Empty"/>
+                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
+                                    @onclick="() => _pinnedTags.RemoveAt(i)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    }
+
+                    <datalist id="cm-pinned-tags">
+                        @foreach (var tag in _allTags)
+                        {
+                            <option value="@tag"></option>
+                        }
+                    </datalist>
+
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <Button Variant="outline-primary" Size="sm" Icon="fa-plus"
+                                OnClick="() => _pinnedTags.Add(string.Empty)">Добавить настроение</Button>
+                        <Button Variant="primary" Size="sm" Icon="fa-save" OnClick="SavePinnedTagsAsync">Сохранить</Button>
+                    </div>
+
+                    @if (_pinnedSaved)
+                    {
+                        <Alert Type="success" Small="true" ShowIcon="true" OnClose="() => _pinnedSaved = false">
+                            Сохранено. Панель плеера подхватит новые кнопки после перезагрузки страницы.
+                        </Alert>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <Modal IsVisible="_showEditor" OnClose="CloseEditor"
+           Title="@(_isNewTrack ? "Новый трек" : "Правка трека")"
+           MaxWidth="3xl" HeaderColorScheme="primary">
+        <ChildContent>
+            @if (_editing is not null)
+            {
+                <MusicTrackFormFields Track="_editing" KnownTags="_allTags"/>
+            }
+            @if (_saveError is not null)
+            {
+                <Alert Type="error" Title="Не сохранилось" ShowIcon="true">@_saveError</Alert>
+            }
+        </ChildContent>
+        <FooterContent>
+            <Button Variant="secondary" OnClick="CloseEditor">Отмена</Button>
+            <Button Variant="primary" Icon="fa-save" IsDisabled="_saving" OnClick="SaveAsync">
+                @(_saving ? "Сохраняем..." : "Сохранить")
+            </Button>
+        </FooterContent>
+    </Modal>
+
+    @* Show()/Hide() этих модалок зовёт страница, параметры при этом не меняются — каждая
+       перерисовывает себя сама (см. Scenarios/CLAUDE.md). *@
+    <MusicImportModal @ref="_importModal" OnImported="LoadAsync"/>
+    <MusicExportModal @ref="_exportModal"/>
+
+    <ConfirmationModal IsVisible="_pendingDelete is not null"
+                       Title="Удалить трек"
+                       Message="@($"Удалить «{_pendingDelete?.Name}» из фонотеки?")"
+                       WarningText="Локации, где он закреплён, просто перестанут его предлагать."
+                       ConfirmText="Удалить"
+                       IconType="error"
+                       OnConfirm="DeleteAsync"
+                       OnCancel="() => _pendingDelete = null"/>
+}
+
+@code {
+
+    private bool _isKeeper;
+    private bool _loading = true;
+    private bool _filtersExpanded = true;
+
+    private List<MusicTrack> _tracks = [];
+    private List<string> _allTags = [];
+    private readonly HashSet<string> _selectedTags = [];
+    private string _search = string.Empty;
+
+    private List<string> _pinnedTags = [];
+    private bool _pinnedSaved;
+
+    private bool _showEditor;
+    private bool _isNewTrack;
+    private bool _saving;
+    private string? _saveError;
+    private MusicTrack? _editing;
+    private Guid _editingId;
+
+    private MusicTrack? _pendingDelete;
+
+    private MusicImportModal? _importModal;
+    private MusicExportModal? _exportModal;
+
+    private void ShowImportModal() => _importModal?.Show();
+
+    private async Task ShowExportModal()
+    {
+        if (_exportModal is not null) await _exportModal.Show();
+    }
+
+    /// <summary>
+    ///     Отфильтрованный список. Пересчитывается на каждую отрисовку — фонотека это
+    ///     десятки записей, не тысячи, отдельного кэша не стоит.
+    /// </summary>
+    private List<MusicTrack> _filtered =>
+    [
+        .. _tracks.Where(MatchesFilters)
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isKeeper = await IdentityService.IsKeeper();
+        if (!_isKeeper)
+        {
+            _loading = false;
+            return;
+        }
+
+        await LoadAsync();
+
+        var raw = await UserPreferencesService.GetAsync(MusicPlaybackDefaults.PinnedTagsPreferenceKey);
+        _pinnedTags = string.IsNullOrWhiteSpace(raw)
+            ? [.. MusicPlaybackDefaults.DefaultPinnedTags]
+            : MusicSource.NormalizeTags(raw.Split(',', StringSplitOptions.RemoveEmptyEntries));
+
+        _loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        _tracks = await TrackService.GetAllTracksAsync();
+        _allTags = await TrackService.GetAllTagsAsync();
+    }
+
+    private bool MatchesFilters(MusicTrack track)
+    {
+        if (_selectedTags.Count > 0 && !track.Tags.Any(_selectedTags.Contains))
+            return false;
+
+        if (_search.Length == 0) return true;
+
+        return track.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+               || (track.Notes?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false)
+               || track.Tags.Any(t => t.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void HandleSearchInput(ChangeEventArgs args) => _search = args.Value?.ToString() ?? string.Empty;
+
+    private void ToggleTag(string tag)
+    {
+        if (!_selectedTags.Add(tag)) _selectedTags.Remove(tag);
+    }
+
+    private void ResetFilters()
+    {
+        _search = string.Empty;
+        _selectedTags.Clear();
+    }
+
+    private static string SourceIcon(MusicTrack track) =>
+        track.SourceType == MusicSourceType.YouTube ? "fa-brands fa-youtube" : "fas fa-file-audio";
+
+    // ───────────────────────── Плеер ─────────────────────────
+
+    private async Task PlayAsync(MusicTrack track) => await Playback.PlayTrackAsync(track.Id);
+
+    // ───────────────────────── Правка ─────────────────────────
+
+    private void ShowAddModal()
+    {
+        _editing = new MusicTrack { Name = string.Empty, Source = string.Empty };
+        _editingId = Guid.Empty;
+        _isNewTrack = true;
+        _saveError = null;
+        _showEditor = true;
+    }
+
+    private void ShowEditModal(MusicTrack track)
+    {
+        // Правим копию: список приходит из кэша сервиса, и отменённая правка иначе
+        // осталась бы в нём до истечения пятнадцати минут.
+        _editing = new MusicTrack
+        {
+            Name = track.Name,
+            SourceType = track.SourceType,
+            Source = track.Source,
+            Tags = [.. track.Tags],
+            Notes = track.Notes,
+            StartSeconds = track.StartSeconds,
+            Loop = track.Loop,
+            Volume = track.Volume
+        };
+        _editingId = track.Id;
+        _isNewTrack = false;
+        _saveError = null;
+        _showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        _showEditor = false;
+        _editing = null;
+        _saveError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null) return;
+
+        if (string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _saveError = "Без названия трек не найти в списке.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editing.Source))
+        {
+            _saveError = _editing.SourceType == MusicSourceType.YouTube
+                ? "Укажите ссылку на ролик."
+                : "Загрузите файл.";
+            return;
+        }
+
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            if (_isNewTrack)
+            {
+                var created = await TrackService.CreateTrackAsync(_editing);
+                if (created is null)
+                {
+                    _saveError = "Трек с таким названием уже есть в фонотеке.";
+                    return;
+                }
+            }
+            else
+            {
+                _editing.Id = _editingId;
+                if (!await TrackService.UpdateTrackAsync(_editing))
+                {
+                    _saveError = "Не удалось сохранить трек.";
+                    return;
+                }
+            }
+
+            await LoadAsync();
+            CloseEditor();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDelete(MusicTrack track) => _pendingDelete = track;
+
+    private async Task DeleteAsync()
+    {
+        if (_pendingDelete is null) return;
+
+        await TrackService.DeleteTrackAsync(_pendingDelete.Id);
+        _pendingDelete = null;
+        await LoadAsync();
+    }
+
+    // ───────────────────────── Быстрые настроения ─────────────────────────
+
+    private async Task SavePinnedTagsAsync()
+    {
+        _pinnedTags = MusicSource.NormalizeTags(_pinnedTags);
+        await UserPreferencesService.SetAsync(
+            MusicPlaybackDefaults.PinnedTagsPreferenceKey,
+            string.Join(',', _pinnedTags));
+        _pinnedSaved = true;
+    }
+
+}

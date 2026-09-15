@@ -1,0 +1,97 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
+@inject MusicPlaybackService Playback
+@inject MusicTrackService TrackService
+
+@* Музыка сцены в режиме игры. Рисуется внутри уже размеченной страницы локации —
+   своей карточки не заводит, только заголовок секции и ряд кнопок. *@
+
+@if (_hasAnything)
+{
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-3">
+            <i class="fas fa-music text-accent-500 mr-2"></i>Музыка
+        </h2>
+
+        @* flex-wrap обязателен: в портрете планшета ряд из «Играть», «Другой» и трёх
+           закреплённых треков в одну строку не влезает. *@
+        <div class="flex flex-wrap items-center gap-2">
+            @if (_poolSize > 0)
+            {
+                <Button Variant="primary" Size="sm" Icon="fa-play" OnClick="PlayPoolAsync">
+                    @(_poolSize > 1 ? $"Играть ({_poolSize})" : "Играть")
+                </Button>
+
+                @if (_isCurrentPool && _poolSize > 1)
+                {
+                    <Button Variant="secondary" Size="sm" Icon="fa-shuffle" OnClick="RollAsync">Другой</Button>
+                }
+            }
+
+            @foreach (var track in _pinnedTracks)
+            {
+                <Button Variant="outline-primary" Size="sm" Icon="fa-play"
+                        OnClick="() => PlayTrackAsync(track.Id)">
+                    @track.Name
+                </Button>
+            }
+        </div>
+
+        @if (Tags.Count > 0)
+        {
+            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                @foreach (var tag in Tags)
+                {
+                    <Badge Variant="accent" Size="sm" Rounded="full">@tag</Badge>
+                }
+            </div>
+        }
+
+        @if (_poolSize == 0)
+        {
+            <p class="mt-2 text-sm text-gray-500">
+                Под теги этой локации в фонотеке пока ничего нет.
+            </p>
+        }
+    </div>
+}
+
+@code {
+
+    /// <summary>Теги настроения локации.</summary>
+    [Parameter] public IReadOnlyList<string> Tags { get; set; } = [];
+
+    /// <summary>Треки, закреплённые за локацией явно.</summary>
+    [Parameter] public IReadOnlyList<Guid> TrackIds { get; set; } = [];
+
+    /// <summary>Название сцены — его показывает панель плеера рядом с треком.</summary>
+    [Parameter] public string? Label { get; set; }
+
+    private int _poolSize;
+    private List<MusicTrack> _pinnedTracks = [];
+
+    private bool _hasAnything => _poolSize > 0 || Tags.Count > 0 || TrackIds.Count > 0;
+
+    private bool _isCurrentPool =>
+        Playback.CurrentTrack is not null
+        && Label is not null
+        && string.Equals(Playback.PoolLabel, Label, StringComparison.Ordinal);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var pool = await TrackService.ResolvePoolAsync(Tags, TrackIds);
+        _poolSize = pool.Count;
+
+        // Закреплённые показываем отдельными кнопками: если для сцены есть единственно
+        // верная вещь, Хранитель должен нажать её, а не крутить рулетку.
+        _pinnedTracks = [.. pool.Where(t => TrackIds.Contains(t.Id))];
+    }
+
+    private async Task PlayPoolAsync() => await Playback.PlayPoolAsync(Tags, TrackIds, Label);
+
+    private async Task RollAsync() => await Playback.RollAsync();
+
+    private async Task PlayTrackAsync(Guid trackId) => await Playback.PlayTrackAsync(trackId);
+
+}

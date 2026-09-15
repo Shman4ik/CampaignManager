@@ -1,0 +1,243 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Utilities.Services
+@inject MinioService MinioService
+@inject ILogger<MusicTrackFormFields> Logger
+
+@* Поля трека. Компонент всегда рисуется внутри cm-card модалки — своей карточки не заводит. *@
+
+<div class="space-y-4">
+    <div class="space-y-2">
+        <label for="trackName" class="block text-sm font-semibold text-gray-700">Название</label>
+        <input id="trackName" type="text" class="cm-input" placeholder="Например, «Гул склада»"
+               value="@Track.Name"
+               @oninput="e => Track.Name = e.Value?.ToString() ?? string.Empty"/>
+    </div>
+
+    <div class="space-y-2">
+        <label class="block text-sm font-semibold text-gray-700">Источник</label>
+        <div class="flex flex-wrap gap-2">
+            <button type="button"
+                    class="cm-btn cm-btn-sm @(Track.SourceType == MusicSourceType.YouTube ? "cm-btn-primary" : "cm-btn-secondary")"
+                    @onclick="() => SetSource(MusicSourceType.YouTube)">
+                <i class="fa-brands fa-youtube"></i> <span>Ссылка YouTube</span>
+            </button>
+            <button type="button"
+                    class="cm-btn cm-btn-sm @(Track.SourceType == MusicSourceType.Storage ? "cm-btn-primary" : "cm-btn-secondary")"
+                    @onclick="() => SetSource(MusicSourceType.Storage)">
+                <i class="fas fa-file-audio"></i> <span>Свой файл</span>
+            </button>
+        </div>
+    </div>
+
+    @if (Track.SourceType == MusicSourceType.YouTube)
+    {
+        <div class="space-y-2">
+            <label for="trackLink" class="block text-sm font-semibold text-gray-700">Ссылка или идентификатор ролика</label>
+            <input id="trackLink" type="text" class="cm-input"
+                   placeholder="https://www.youtube.com/watch?v=..."
+                   value="@_linkInput"
+                   @oninput="OnLinkInput"/>
+            @if (_linkError is not null)
+            {
+                <Alert Type="warning" Small="true" ShowIcon="true" class="!mb-0">@_linkError</Alert>
+            }
+            else if (!string.IsNullOrEmpty(Track.Source))
+            {
+                <p class="text-xs text-gray-500">Ролик: <code class="font-mono">@Track.Source</code></p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="space-y-2">
+            <label class="block text-sm font-semibold text-gray-700">Файл</label>
+            @if (!string.IsNullOrEmpty(Track.Source))
+            {
+                <p class="text-xs text-gray-500 break-all">Загружен: <code class="font-mono">@Track.Source</code></p>
+            }
+            <label class="cm-btn cm-btn-secondary cm-btn-sm inline-flex cursor-pointer">
+                <i class="fas fa-upload"></i>
+                <span>@(_isUploading ? "Загрузка..." : "Выбрать файл")</span>
+                <InputFile OnChange="UploadAsync" accept="audio/*" class="sr-only" disabled="@_isUploading"/>
+            </label>
+            <p class="text-xs text-gray-500">mp3, ogg, m4a, wav, opus, flac — до 50 МБ.</p>
+            @if (_uploadError is not null)
+            {
+                <Alert Type="error" Small="true" ShowIcon="true" class="!mb-0">@_uploadError</Alert>
+            }
+        </div>
+    }
+
+    <div class="space-y-2">
+        <label class="block text-sm font-semibold text-gray-700">Теги настроения</label>
+        <p class="text-xs text-gray-500">По ним локация и кнопки настроения набирают пул. «Бой», «бой » и «Бой» — один тег.</p>
+
+        @for (var index = 0; index < Track.Tags.Count; index++)
+        {
+            var i = index;
+            var value = Track.Tags[i];
+            <div class="flex gap-2">
+                <input type="text" class="cm-input !flex-1" list="cm-known-tags" placeholder="бой"
+                       value="@value"
+                       @oninput="e => UpdateTag(i, e.Value?.ToString() ?? string.Empty)"/>
+                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm" @onclick="() => RemoveTag(i)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        }
+
+        <datalist id="cm-known-tags">
+            @foreach (var tag in KnownTags)
+            {
+                <option value="@tag"></option>
+            }
+        </datalist>
+
+        <Button Variant="outline-primary" Size="sm" Icon="fa-plus" OnClick="AddTag">Добавить тег</Button>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="space-y-2">
+            <label for="trackStart" class="block text-sm font-semibold text-gray-700">Начать с секунды</label>
+            <input id="trackStart" type="number" min="0" class="cm-input"
+                   value="@Track.StartSeconds"
+                   @oninput="e => Track.StartSeconds = ParseInt(e.Value, 0, 0, 86400)"/>
+        </div>
+
+        <div class="space-y-2">
+            <label for="trackVolume" class="block text-sm font-semibold text-gray-700">
+                Громкость трека: @Track.Volume%
+            </label>
+            <input id="trackVolume" type="range" min="0" max="100" step="5" class="w-full h-8"
+                   value="@Track.Volume"
+                   @oninput="e => Track.Volume = ParseInt(e.Value, 100, 0, 100)"/>
+        </div>
+
+        <div class="space-y-2">
+            <label class="block text-sm font-semibold text-gray-700">Повтор</label>
+            <label for="trackLoop" class="flex min-h-[36px] cursor-pointer items-center gap-2">
+                <input id="trackLoop" type="checkbox" class="h-5 w-5 rounded border-primary-300 accent-accent-500"
+                       checked="@Track.Loop"
+                       @onchange="e => Track.Loop = e.Value is true"/>
+                <span class="text-sm text-primary-700">Зациклить</span>
+            </label>
+            <p class="text-xs text-gray-500">Без повтора плеер сам возьмёт другой трек той же сцены.</p>
+        </div>
+    </div>
+
+    <div class="space-y-2">
+        <label for="trackNotes" class="block text-sm font-semibold text-gray-700">Заметка</label>
+        <textarea id="trackNotes" rows="2" class="cm-input resize-y" placeholder="К чему подходит, откуда взято"
+                  value="@Track.Notes"
+                  @oninput="e => Track.Notes = e.Value?.ToString()"></textarea>
+    </div>
+</div>
+
+@code {
+
+    /// <summary>Редактируемый трек. Компонент правит его на месте — страница сама решает, когда сохранять.</summary>
+    [Parameter] [EditorRequired] public required MusicTrack Track { get; set; }
+
+    /// <summary>Теги, уже встречающиеся в фонотеке, — для автодополнения.</summary>
+    [Parameter] public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    private const long MaxFileSize = 50L * 1024 * 1024;
+
+    private string _linkInput = string.Empty;
+    private string? _linkError;
+    private string? _uploadError;
+    private bool _isUploading;
+
+    protected override void OnParametersSet()
+    {
+        // Поле ссылки показывает то, что Хранитель ввёл, а в модели лежит уже разобранный
+        // идентификатор. При открытии формы на существующем треке восстанавливаем ссылку из него.
+        if (Track.SourceType == MusicSourceType.YouTube && _linkInput.Length == 0 && Track.Source.Length > 0)
+            _linkInput = $"https://www.youtube.com/watch?v={Track.Source}";
+    }
+
+    private void SetSource(MusicSourceType type)
+    {
+        if (Track.SourceType == type) return;
+        Track.SourceType = type;
+        Track.Source = string.Empty;
+        _linkInput = string.Empty;
+        _linkError = null;
+        _uploadError = null;
+    }
+
+    private void OnLinkInput(ChangeEventArgs args)
+    {
+        _linkInput = args.Value?.ToString() ?? string.Empty;
+
+        if (_linkInput.Trim().Length == 0)
+        {
+            Track.Source = string.Empty;
+            _linkError = null;
+            return;
+        }
+
+        if (MusicSource.TryParseYouTubeId(_linkInput, out var videoId))
+        {
+            Track.Source = videoId;
+            _linkError = null;
+            return;
+        }
+
+        Track.Source = string.Empty;
+        _linkError = "Не похоже на ссылку YouTube. Подойдёт адрес вида youtube.com/watch?v=… или youtu.be/…";
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        _uploadError = null;
+
+        if (!MusicSource.IsSupportedAudioFile(file.Name))
+        {
+            _uploadError = "Такой формат не поддерживается. Нужен mp3, ogg, m4a, wav, opus или flac.";
+            return;
+        }
+
+        _isUploading = true;
+        try
+        {
+            // Имя объекта случайное, а не по имени файла: имена повторяются и содержат
+            // пробелы, а перезаписывать чужой трек из-за совпадения нельзя (так же устроен
+            // портрет сыщика в CharacterPortrait).
+            var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+            var objectName = $"music/{Guid.CreateVersion7()}{extension}";
+
+            await using var stream = file.OpenReadStream(MaxFileSize);
+            await MinioService.UploadAsync(stream, objectName, MusicSource.GetAudioContentType(file.Name));
+
+            Track.Source = objectName;
+            if (string.IsNullOrWhiteSpace(Track.Name))
+                Track.Name = Path.GetFileNameWithoutExtension(file.Name);
+        }
+        catch (IOException)
+        {
+            _uploadError = "Файл больше 50 МБ.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Не удалось загрузить трек {FileName}", file.Name);
+            _uploadError = "Не удалось загрузить файл.";
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private void AddTag() => Track.Tags.Add(string.Empty);
+
+    private void RemoveTag(int index) => Track.Tags.RemoveAt(index);
+
+    private void UpdateTag(int index, string value) => Track.Tags[index] = value;
+
+    private static int ParseInt(object? raw, int fallback, int min, int max) =>
+        int.TryParse(raw?.ToString(), out var value) ? Math.Clamp(value, min, max) : fallback;
+
+}

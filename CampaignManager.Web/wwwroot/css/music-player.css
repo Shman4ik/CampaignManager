@@ -1,0 +1,71 @@
+/* Окошко плеера YouTube.
+   Живёт на <body>, а не внутри компонента, потому что перенос iframe по DOM перезагружает
+   плеер и обрывает трек (см. комментарий в js/music-player.js). По той же причине
+   «спрятан» здесь — это увод за экран, а не display:none: скрытый так iframe перестаёт играть.
+   Стили глобальные, а не *.razor.css: изоляция привязывается к разметке компонента,
+   которой у этих элементов нет. */
+
+.cm-yt-host {
+    position: fixed;
+    right: 1rem;
+    bottom: 5.5rem;
+    z-index: 60;
+    width: 160px;
+    height: 90px;
+    overflow: hidden;
+    border: 1px solid var(--color-gray-300, #d1d5db);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
+    background: #000;
+}
+
+.cm-yt-host iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
+.cm-yt-host--tucked {
+    /* Остаётся отрисованным и звучащим, но глаза не мозолит. */
+    left: -10000px;
+    right: auto;
+    bottom: 0;
+    pointer-events: none;
+}
+
+/* Аудио-элемент тоже висит на <body> и не должен занимать место в потоке. */
+#cm-music-audio {
+    display: none;
+}
+
+/* Место под панель плеера. Условие — «панель действительно есть в разметке»
+   (:has), а не класс на <body>: класс приходилось бы ставить из JS, а enhanced-навигация
+   Blazor сливает <body> с серверным ответом и такой класс срезает — на переходе между
+   локациями в режиме игры панель начинала перекрывать нижнюю часть экрана.
+   Правила глобальные: отодвигать нужно чужое содержимое, изоляция стилей до него не дотянется. */
+
+:root {
+    --cm-music-bar-height: 52px;
+}
+
+.page-with-sidebar:has(.cm-music-bar) {
+    padding-bottom: var(--cm-music-bar-height);
+}
+
+/* Режим игры сценария занимает всю высоту экрана — ему высоту приходится уменьшать,
+   отступом снизу тут не обойтись. */
+.page-with-sidebar:has(.cm-music-bar) .cm-play-shell {
+    height: calc(100vh - var(--cm-music-bar-height));
+}
+
+@media (max-width: 768px) {
+    /* Панель встаёт над нижней навигацией, поэтому места нужно на обе. */
+    .page-with-sidebar:has(.cm-music-bar) {
+        padding-bottom: calc(var(--cm-music-bar-height) + 58px);
+    }
+
+    .page-with-sidebar:has(.cm-music-bar) .cm-play-shell {
+        height: calc(100vh - var(--cm-music-bar-height) - 58px);
+    }
+}

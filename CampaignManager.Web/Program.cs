@@ -4,6 +4,7 @@ using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Items.Services;
+using CampaignManager.Web.Components.Features.Music.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Spells.Services;
@@ -40,7 +41,10 @@ builder.Services.AddRazorComponents()
     // возобновлении — бой и погоня переживают обрыв связи, сон планшета и деплой.
     // Восстанавливается всё, что помечено [PersistentState].
     .RegisterPersistentService<CombatService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer)
-    .RegisterPersistentService<ChaseService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer);
+    .RegisterPersistentService<ChaseService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer)
+    // Плеер туда же: сам звук паузу переживает своими силами (аудио-элемент живёт вне дерева
+    // Blazor), а снимок нужен, чтобы панель после возобновления показывала верный трек.
+    .RegisterPersistentService<MusicPlaybackService>(Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer);
 
 // Configure SignalR with increased message size limits
 builder.Services.AddSignalR(options =>
@@ -303,6 +307,9 @@ builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<ScenarioImportService>();
 builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<ItemService>();
+builder.Services.AddScoped<MusicTrackService>();
+builder.Services.AddScoped<MusicPlaybackService>();
+builder.Services.AddScoped<MusicImportService>();
 
 //Register skills service
 builder.Services.AddScoped<SkillService>();
