@@ -310,6 +310,7 @@ builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<MusicTrackService>();
 builder.Services.AddScoped<MusicPlaybackService>();
 builder.Services.AddScoped<MusicImportService>();
+builder.Services.AddScoped<MusicBulkUploadService>();
 
 //Register skills service
 builder.Services.AddScoped<SkillService>();
