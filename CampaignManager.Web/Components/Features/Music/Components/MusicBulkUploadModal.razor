@@ -1,0 +1,208 @@
+@namespace CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Music.Model
+@using CampaignManager.Web.Components.Features.Music.Services
+@inject MusicBulkUploadService BulkUploadService
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Загрузить файлы в фонотеку"
+       MaxWidth="3xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            @if (_result is null)
+            {
+                <Alert Type="info" Title="Как это работает">
+                    Выберите сразу всю папку с треками: название каждого возьмётся из имени файла,
+                    а теги настроения проставятся общие на всю пачку. Трек с уже занятым названием
+                    пропускается, так что повторный выбор той же папки ничего не задвоит.
+                </Alert>
+
+                <div class="space-y-2">
+                    <label class="cm-field-label">Файлы</label>
+                    <label class="cm-btn cm-btn-secondary inline-flex cursor-pointer">
+                        <i class="fas fa-upload"></i>
+                        <span>Выбрать файлы</span>
+                        <InputFile OnChange="OnFilesSelected" accept="audio/*" multiple class="sr-only"
+                                   disabled="@_isUploading"/>
+                    </label>
+                    <p class="text-xs text-gray-500">
+                        mp3, ogg, m4a, wav, opus, flac — до 50 МБ каждый,
+                        не больше @MusicBulkUploadService.MaxFiles файлов за раз.
+                    </p>
+
+                    @if (_files.Count > 0)
+                    {
+                        <div class="max-h-48 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2">
+                            @foreach (var file in _files)
+                            {
+                                <div class="truncate py-0.5 font-mono text-xs text-gray-600">@file.Name</div>
+                            }
+                        </div>
+                        <p class="text-xs text-gray-500">Выбрано файлов: @_files.Count</p>
+                    }
+                </div>
+
+                <div class="space-y-2">
+                    <label for="bulkTags" class="cm-field-label">Теги настроения</label>
+                    <input id="bulkTags" type="text" class="cm-input" list="cm-bulk-tags"
+                           placeholder="ужас, напряжение"
+                           @bind="_tagsInput" @bind:event="oninput"/>
+                    <datalist id="cm-bulk-tags">
+                        @foreach (var tag in KnownTags)
+                        {
+                            <option value="@tag"></option>
+                        }
+                    </datalist>
+                    <p class="text-xs text-gray-500">Через запятую. По ним локация и кнопки настроения наберут пул.</p>
+                </div>
+
+                <label for="bulkLoop" class="flex min-h-[36px] cursor-pointer items-center gap-2">
+                    <input id="bulkLoop" type="checkbox" class="h-5 w-5 rounded border-primary-300 accent-accent-500"
+                           checked="@_loop" @onchange="e => _loop = e.Value is true"/>
+                    <span class="text-sm text-primary-700">Зациклить все треки пачки</span>
+                </label>
+
+                @if (_isUploading)
+                {
+                    @* Своя полоса, а не LoadingIndicator: важно не «идёт загрузка», а сколько осталось. *@
+                    <div class="space-y-1">
+                        <div class="h-2 w-full overflow-hidden rounded bg-gray-200">
+                            <div class="h-full bg-accent-500 transition-all" style="width: @(PercentDone)%"></div>
+                        </div>
+                        <p class="truncate text-xs text-gray-500">
+                            @_progress.Done из @_progress.Total — @_progress.FileName
+                        </p>
+                    </div>
+                }
+
+                @if (_error is not null)
+                {
+                    <Alert Type="error" Title="Загрузка не выполнена">@_error</Alert>
+                }
+            }
+            else
+            {
+                <Alert Type="success" Title="Фонотека пополнена">
+                    Заведено треков — @_result.Created, пропущено — @_result.Skipped.
+                </Alert>
+
+                @if (_result.Warnings.Count > 0)
+                {
+                    <Alert Type="warning" Title="Замечания">
+                        <ul class="list-inside list-disc space-y-1">
+                            @foreach (var warning in _result.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </Alert>
+                }
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            @if (_result is null)
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="secondary" IsDisabled="_isUploading">Отмена</Button>
+                <Button ButtonType="button" OnClick="UploadAsync" Variant="primary" Icon="fa-upload"
+                        IsDisabled="@(_isUploading || _files.Count == 0)">
+                    @(_isUploading ? "Загружаю…" : $"Загрузить ({_files.Count})")
+                </Button>
+            }
+            else
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="primary">Закрыть</Button>
+            }
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    /// <summary>Теги, уже встречающиеся в фонотеке, — для автодополнения.</summary>
+    [Parameter] public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    /// <summary>Вызывается после загрузки, чтобы страница перечитала список треков.</summary>
+    [Parameter] public EventCallback OnUploaded { get; set; }
+
+    private bool _isVisible;
+    private bool _isUploading;
+    private bool _loop = true;
+    private string _tagsInput = string.Empty;
+    private string? _error;
+    private MusicImportResult? _result;
+    private MusicUploadProgress _progress;
+    private List<IBrowserFile> _files = [];
+
+    private int PercentDone => _progress.Total == 0 ? 0 : _progress.Done * 100 / _progress.Total;
+
+    // Show()/Hide() зовёт родительская страница, параметры при этом не меняются — Blazor сам
+    // компонент не перерисует, поэтому StateHasChanged здесь обязателен (см. Scenarios/CLAUDE.md).
+    public void Show()
+    {
+        _files = [];
+        _tagsInput = string.Empty;
+        _loop = true;
+        _error = null;
+        _result = null;
+        _progress = default;
+        _isUploading = false;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private void OnFilesSelected(InputFileChangeEventArgs args)
+    {
+        // Без явного предела GetMultipleFiles бросает на одиннадцатом файле — а пачка
+        // как раз и нужна больше десятка.
+        _files = [.. args.GetMultipleFiles(MusicBulkUploadService.MaxFiles)];
+        _error = null;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_files.Count == 0) return;
+
+        _isUploading = true;
+        _error = null;
+        _progress = new MusicUploadProgress(0, _files.Count, _files[0].Name);
+
+        try
+        {
+            // Отчёт приходит из потока загрузки, поэтому перерисовку зовём через InvokeAsync.
+            var progress = new Progress<MusicUploadProgress>(p =>
+            {
+                _progress = p;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var result = await BulkUploadService.UploadAsync(
+                _files,
+                _tagsInput.Split(',', StringSplitOptions.RemoveEmptyEntries),
+                _loop,
+                progress);
+
+            if (!result.Success)
+            {
+                _error = result.Error ?? "Неизвестная ошибка загрузки.";
+                return;
+            }
+
+            _result = result;
+            await OnUploaded.InvokeAsync();
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+}
