@@ -2,11 +2,13 @@
 //
 // Три вещи определяют устройство этого модуля, и все три легко сломать правкой «на вид безобидной»:
 //
-// 1. ВЕСЬ звук живёт в синглтоне на window, а <audio> и контейнер YouTube висят прямо на
-//    document.body — не в дереве Blazor. Пауза circuit (вкладка скрыта 30 с, js/circuit-persistence.js)
-//    при возобновлении пересобирает страницу заново; всё, что рендерил компонент, пересоздаётся,
-//    и музыка оборвалась бы посреди сцены. Страница при resume не перезагружается, поэтому
-//    синглтон и элементы переживают паузу. Не переносить элементы внутрь .razor.
+// 1. ВЕСЬ звук живёт в синглтоне на window, а <audio> и контейнер YouTube — в
+//    <div id="cm-music-host" data-permanent> из App.razor, не в дереве Blazor. Пауза circuit
+//    (вкладка скрыта 30 с, js/circuit-persistence.js) при возобновлении пересобирает страницу
+//    заново; всё, что рендерил компонент, пересоздалось бы вместе с ней, и музыка оборвалась бы
+//    посреди сцены. Страница при resume не перезагружается, поэтому синглтон и элементы паузу
+//    переживают. Не переносить элементы внутрь .razor и не вешать обратно на <body> —
+//    почему именно в этот контейнер, написано над playerHost().
 //
 // 2. Громкость — только через Web Audio GainNode. iOS игнорирует HTMLMediaElement.volume
 //    (значение выставляется, звук остаётся прежним), а целевое устройство — iPad Pro.
@@ -27,6 +29,10 @@ const SEEK_ID = 'cm-music-seek';
 const ELAPSED_ID = 'cm-music-elapsed';
 const DURATION_ID = 'cm-music-duration';
 const UNLOCK_ID = 'cm-music-unlock';
+
+// Постоянный дом для <audio> и окошка YouTube — <div id="cm-music-host" data-permanent>
+// в App.razor.
+const HOST_ID = 'cm-music-host';
 
 // Пустой WAV: им «расчехляем» аудио-элемент внутри настоящего жеста пользователя, иначе
 // iOS не даст воспроизвести первый трек по команде из Blazor (round-trip съедает активацию).
@@ -63,17 +69,46 @@ function getState() {
 
 // ───────────────────────── Аудио-элемент и граф Web Audio ─────────────────────────
 
+// Элементы плеера кладутся сюда, а НЕ на <body> напрямую. Enhanced-навигация Blazor на каждом
+// переходе сливает <body> с разметкой серверного ответа и всё, чего в ответе нет, из него
+// удаляет — добавленное из JS срезалось на первой же смене страницы. Удаление <audio> из
+// документа браузер по спецификации доводит внутренними шагами паузы, то есть музыка просто
+// замолкала; iframe YouTube от удаления умирал насовсем, а state.ytPlayer продолжал ссылаться
+// на труп, поэтому кнопки панели больше ничего не делали и плеер оживал только через F5.
+// Спасает единственное: контейнер, который есть в серверной разметке (App.razor) и помечен
+// data-permanent — дочерние узлы такого элемента сравнение DOM не трогает вообще. Атрибуты же
+// оно синхронизирует и у него, поэтому состояние (src трека, класс «спрятан») живёт на
+// вложенных элементах, а на самом контейнере не должно появляться ничего меняющегося.
+function playerHost() {
+    // Запасной вариант на случай, если разметка контейнера почему-то не дошла: на текущей
+    // странице звук будет, а на переходе оборвётся — это лучше, чем совсем без звука.
+    return document.getElementById(HOST_ID) ?? document.body;
+}
+
 function ensureAudio(state) {
-    if (state.audio) return state.audio;
+    if (state.audio) {
+        // Элемент могли вынести из документа — браузер такой ставит на паузу. Возвращаем
+        // на место, иначе панель осталась бы с кнопками, которые ничего не включают.
+        if (!state.audio.isConnected) playerHost().appendChild(state.audio);
+        return state.audio;
+    }
 
     const audio = document.createElement('audio');
     audio.id = 'cm-music-audio';
     audio.preload = 'none';
     // Не хочется, чтобы iOS показывал наш эмбиент в «Сейчас играет» как видео.
     audio.setAttribute('playsinline', '');
-    document.body.appendChild(audio);
+    playerHost().appendChild(audio);
 
     audio.addEventListener('ended', () => {
+        // Пустой WAV из installUnlock «заканчивается» сразу же, и его конец сервер принимал
+        // за конец трека: HandleTrackEndedAsync снимал IsPlaying, панель показывала «играет
+        // на паузе», хотя музыка шла. Ловилось это на первом же касании страницы — том самом,
+        // которым Хранитель и включает трек. Отсюда и две проверки: играть должен именно файл
+        // из хранилища, и закончиться должен он, а не заглушка.
+        if (state.track?.sourceType !== 'Storage') return;
+        if (audio.currentSrc === SILENT_WAV) return;
+
         // Зацикленный трек сюда не приходит — его крутит сам браузер.
         notify('NotifyEnded');
     });
@@ -170,10 +205,29 @@ function ensureYouTubeHost(state) {
     const mount = document.createElement('div');
     mount.id = 'cm-music-yt-mount';
     host.appendChild(mount);
-    document.body.appendChild(host);
+    playerHost().appendChild(host);
 
     state.ytHost = host;
     return host;
+}
+
+// Окошко вынесли из документа — значит, iframe внутри уже мёртв: вернуть его на место нельзя,
+// любой reparent iframe перезагружает, а объект YT.Player после этого отвечает в пустоту.
+// Поэтому сбрасываем всё и даём следующему load() собрать плеер заново: лучше один оборванный
+// трек, чем панель, которая до перезагрузки страницы молча не реагирует на кнопки.
+function dropDetachedYouTubePlayer(state) {
+    if (!state.ytHost || state.ytHost.isConnected) return;
+
+    try {
+        state.ytPlayer?.destroy?.();
+    } catch {
+        // iframe уже недоступен — жаловаться некому.
+    }
+
+    state.ytHost.remove();
+    state.ytHost = null;
+    state.ytPlayer = null;
+    state.ytReady = null;
 }
 
 function loadYouTubeApi(state) {
@@ -202,6 +256,8 @@ function loadYouTubeApi(state) {
 }
 
 async function ensureYouTubePlayer(state) {
+    dropDetachedYouTubePlayer(state);
+
     if (state.ytPlayer) {
         await state.ytReady;
         return state.ytPlayer;
