@@ -29,6 +29,7 @@ const SEEK_ID = 'cm-music-seek';
 const ELAPSED_ID = 'cm-music-elapsed';
 const DURATION_ID = 'cm-music-duration';
 const UNLOCK_ID = 'cm-music-unlock';
+const START_TRIGGER_SELECTOR = '.cm-music-start';
 
 // Постоянный дом для <audio> и окошка YouTube — <div id="cm-music-host" data-permanent>
 // в App.razor.
@@ -167,15 +168,30 @@ function wait(ms) {
 
 // ───────────────────────── Снятие блокировки iOS ─────────────────────────
 
-// Вешается один раз и срабатывает на первом же касании страницы. Внутри настоящего жеста
-// и AudioContext переводится в running, и аудио-элемент помечается «пользователь разрешил» —
+// Вешается один раз и срабатывает только на кнопке, которая действительно запускает музыку.
+// Нельзя «расчехлять» звук на первом произвольном касании страницы: на iPad даже пустой WAV
+// захватывает системную аудиосессию и останавливает YouTube/музыку из другого приложения,
+// хотя пользователь ещё не просил сайт ничего воспроизводить. Внутри настоящего жеста
+// AudioContext переводится в running, а аудио-элемент помечается «пользователь разрешил» —
 // после этого play() из Blazor проходит, хотя сам по себе жестом уже не считается.
 function installUnlock(state) {
     if (state.unlocked || state.unlockInstalled) return;
     state.unlockInstalled = true;
 
-    const unlock = () => {
+    const removeListeners = () => {
+        document.removeEventListener('pointerdown', unlock, true);
+        document.removeEventListener('touchend', unlock, true);
+        document.removeEventListener('keydown', unlock, true);
+    };
+
+    const unlock = event => {
+        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+
+        const target = event.target;
+        if (!target || !target.closest || !target.closest(START_TRIGGER_SELECTOR)) return;
+
         state.unlocked = true;
+        removeListeners();
         const ctx = ensureGraph(state);
         if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => { });
 
@@ -189,9 +205,10 @@ function installUnlock(state) {
         }
     };
 
-    document.addEventListener('pointerdown', unlock, { capture: true, once: true });
-    document.addEventListener('touchend', unlock, { capture: true, once: true });
-    document.addEventListener('keydown', unlock, { capture: true, once: true });
+    document.addEventListener('pointerdown', unlock, true);
+    // Старые версии iOS не посылают Pointer Events.
+    document.addEventListener('touchend', unlock, true);
+    document.addEventListener('keydown', unlock, true);
 }
 
 // ───────────────────────── YouTube ─────────────────────────
@@ -543,7 +560,8 @@ function notify(method, arg) {
 export function attach(dotNetRef) {
     const state = getState();
     state.dotNet = dotNetRef;
-    ensureAudio(state);
+    // Само подключение панели не должно даже создавать аудиограф. Всё аудио инициализируется
+    // лениво только при намерении включить трек — это не даёт iOS повода захватить аудиосессию.
     installUnlock(state);
     installControls(state);
     // Circuit мог возобновиться поверх уже играющего трека — полосу позиции надо оживить.
