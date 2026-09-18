@@ -200,7 +200,12 @@ function installUnlock(state) {
             audio.src = SILENT_WAV;
             const played = audio.play();
             if (played && typeof played.then === 'function') {
-                played.then(() => audio.pause()).catch(() => { });
+                // Ответ play() приходит асинхронно. За это время Blazor уже может загрузить
+                // настоящий трек в тот же элемент; без проверки поздний pause() заглушки
+                // останавливал уже его — особенно часто на iPad с быстрым локальным сервером.
+                played.then(() => {
+                    if (audio.currentSrc === SILENT_WAV) audio.pause();
+                }).catch(() => { });
             }
         }
     };

@@ -19,6 +19,15 @@
     transition: var(--sidebar-transition);
 }
 
+/* На iPad полоса позиции иначе оказывается почти на системной полосе жестов. Горизонтальное
+   движение по ней iPadOS принимает за переход в соседнее приложение. Дополнительный низ входит
+   в высоту панели через ResizeObserver, поэтому содержимое страницы тоже отступит правильно. */
+@media (hover: none) and (pointer: coarse) and (min-width: 769px) {
+    .cm-music-bar {
+        padding-bottom: max(32px, calc(8px + env(safe-area-inset-bottom, 0px)));
+    }
+}
+
 /* Без ::deep: изоляция дописывает метку компонента к последнему селектору, а .sidebar
    и .page-with-sidebar остаются как есть — ровно то, что нужно для внешнего контекста. */
 .sidebar:not(.collapsed) ~ .page-with-sidebar .cm-music-bar {
@@ -154,6 +163,9 @@
     /* Полоску в 4px пальцем не поймать — набираем высоту зоны нажатия. */
     height: 28px;
     cursor: pointer;
+    /* Жест принадлежит ползунку, а не прокрутке/навигации браузера. Системный жест от самого
+       края запретить нельзя, поэтому выше панель ещё и получает безопасный нижний отступ. */
+    touch-action: none;
 }
 
 .cm-music-seek input[type='range']:disabled {
