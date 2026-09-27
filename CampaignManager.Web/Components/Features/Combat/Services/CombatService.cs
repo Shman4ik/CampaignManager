@@ -1806,54 +1806,19 @@ public sealed partial class CombatService
     /// <summary>
     /// Поиск значения навыка персонажа по имени. Названия из каталога оружия сокращены
     /// («Стрельба (П)»), а в листе записаны полностью («Стрельба (пистолет)»), поэтому
-    /// сравниваются база и специализация по отдельности (см. <see cref="SkillNameMatcher"/>).
+    /// строку ищет <see cref="SkillNameMatcher.FindBest{T}"/> — тем же порядком, каким быстрый НПС
+    /// выбирает строку листа под оружие. Не нашлось — 0.
     /// </summary>
     public static int FindSkillValue(Character character, string skillName)
     {
-        if (character.Skills?.SkillGroups is null || string.IsNullOrWhiteSpace(skillName)) return 0;
+        if (character.Skills?.SkillGroups is null) return 0;
 
-        var skills = character.Skills.SkillGroups
-            .SelectMany(g => g.Skills)
-            .Select(s => (Skill: s, Name: SkillNameMatcher.Parse(s.Name)))
-            .ToList();
+        var skill = SkillNameMatcher.FindBest(
+            character.Skills.SkillGroups.SelectMany(g => g.Skills),
+            s => s.Name,
+            skillName);
 
-        // Точное совпадение всего названия — самый надёжный случай
-        foreach (var (skill, _) in skills)
-        {
-            if (SkillNameMatcher.FullNameEquals(skill.Name, skillName)) return skill.Value.Regular;
-        }
-
-        var target = SkillNameMatcher.Parse(skillName);
-        var sameBase = skills.Where(s => s.Name.Base == target.Base).ToList();
-
-        // Базы не совпали дословно — пробуем по словам: «Вождение» из правил погони
-        // это «Вождение автомобиля» в листе
-        if (sameBase.Count == 0)
-        {
-            return skills
-                .Where(s => SkillNameMatcher.BaseMatches(s.Name.Base, target.Base))
-                .Select(s => s.Skill.Value.Regular)
-                .FirstOrDefault();
-        }
-
-        // Навык без уточнения: «Ближний бой» у оружия — это «Ближний бой (драка)» в листе
-        var specialization = target.Specialization
-                             ?? SkillNameMatcher.DefaultSpecializationFor(target.Base);
-
-        if (specialization is not null)
-        {
-            foreach (var (skill, name) in sameBase)
-            {
-                if (SkillNameMatcher.SpecializationMatches(name.Specialization, specialization))
-                    return skill.Value.Regular;
-            }
-        }
-
-        // Специализации в листе нет — берём базовый навык без уточнения, если он записан
-        return sameBase
-            .Where(s => s.Name.Specialization is null)
-            .Select(s => s.Skill.Value.Regular)
-            .FirstOrDefault();
+        return skill?.Value.Regular ?? 0;
     }
 
     /// <summary>

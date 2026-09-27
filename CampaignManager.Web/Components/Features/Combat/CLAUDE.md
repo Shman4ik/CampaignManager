@@ -77,6 +77,11 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
   строк «в лоб» давало 0 у любого стрелка, поэтому база и специализация сравниваются
   отдельно, с таблицей сокращений и совпадением слов по префиксу. Новое сокращение — в
   `SpecializationAliases`, а не в `FindSkillValue`.
+- Сам порядок сопоставления — `SkillNameMatcher.FindBest(кандидаты, имя, навык)`, **один на
+  приложение**: по нему `FindSkillValue` ищет строку листа в бою, а
+  `NPC/Services/QuickNpcRules.ResolveWeaponSkill` — строку чистого листа под оружие быстрого НПС.
+  Раньше у НПС была своя копия того же порядка; разойдись они — бой взял бы другую строку, и НПС
+  стрелял бы нулём.
 - Порог осечки (стр. 113) — это `Weapon.MalfunctionThreshold`. Строковый разбор
   («100», «00» — это 100 на процентных костях, пустая строка) живёт в
   `WeaponStatsParser.ParseMalfunction` и доступен через `WeaponStatsReader` как ветка

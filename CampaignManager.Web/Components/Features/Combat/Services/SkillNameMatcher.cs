@@ -59,6 +59,64 @@ public static class SkillNameMatcher
         return new SkillName(baseName, spec);
     }
 
+    /// <summary>
+    /// Строка навыка, которой отвечает название <paramref name="skillName" /> — навык из данных
+    /// оружия («Стрельба (П)»), из правил погони («Вождение») или из проверки локации. Порядок:
+    /// полное название, затем база и специализация по отдельности (у навыка без уточнения — его
+    /// специализация по умолчанию, иначе строка без специализации), и только если базы не
+    /// совпали дословно — база по словам.
+    /// <para>
+    /// Это <b>единственный</b> порядок сопоставления на приложение: по нему бой ищет значение навыка
+    /// (<see cref="CombatService.FindSkillValue(Characters.Model.Character, string)" />), а быстрый НПС —
+    /// строку листа под выбранное оружие (<c>QuickNpcRules.ResolveWeaponSkill</c>). Разойдутся — и
+    /// НПС будет стрелять нулём, потому что бой возьмёт не ту строку.
+    /// </para>
+    /// </summary>
+    /// <returns>Первый подходящий кандидат в порядке списка; <c>null</c> — не нашлось.</returns>
+    public static T? FindBest<T>(IEnumerable<T> candidates, Func<T, string?> nameOf, string? skillName)
+        where T : class
+    {
+        if (string.IsNullOrWhiteSpace(skillName)) return null;
+
+        var parsed = candidates.Select(c => (Item: c, Name: Parse(nameOf(c)))).ToList();
+
+        // Точное совпадение всего названия — самый надёжный случай
+        foreach (var (item, _) in parsed)
+        {
+            if (FullNameEquals(nameOf(item), skillName)) return item;
+        }
+
+        var target = Parse(skillName);
+        var sameBase = parsed.Where(p => p.Name.Base == target.Base).ToList();
+
+        // Базы не совпали дословно — пробуем по словам: «Вождение» из правил погони
+        // это «Вождение автомобиля» в листе
+        if (sameBase.Count == 0)
+        {
+            return parsed
+                .Where(p => BaseMatches(p.Name.Base, target.Base))
+                .Select(p => p.Item)
+                .FirstOrDefault();
+        }
+
+        // Навык без уточнения: «Ближний бой» у оружия — это «Ближний бой (драка)» в листе
+        var specialization = target.Specialization ?? DefaultSpecializationFor(target.Base);
+
+        if (specialization is not null)
+        {
+            foreach (var (item, name) in sameBase)
+            {
+                if (SpecializationMatches(name.Specialization, specialization)) return item;
+            }
+        }
+
+        // Специализации в листе нет — берём базовый навык без уточнения, если он записан
+        return sameBase
+            .Where(p => p.Name.Specialization is null)
+            .Select(p => p.Item)
+            .FirstOrDefault();
+    }
+
     /// <summary>Специализация по умолчанию для базового навыка, если она есть.</summary>
     public static string? DefaultSpecializationFor(string baseName) =>
         DefaultSpecializations.GetValueOrDefault(baseName);

@@ -285,32 +285,14 @@ public static partial class QuickNpcRules
     }
 
     /// <summary>
-    ///     Строка чистого листа, которую бой возьмёт для этого оружия. Порядок тот же, что у
+    ///     Строка чистого листа, которую бой возьмёт для этого оружия. Ищет её тот же
+    ///     <see cref="SkillNameMatcher.FindBest{T}" />, что и
     ///     <see cref="CombatService.FindSkillValue(Character, string)" />: полное имя, затем база и
     ///     специализация по отдельности («Стрельба (П)» — это «Стрельба (пистолет)»).
     ///     <c>null</c> — такой строки на листе нет, навык нужно завести под именем из каталога.
     /// </summary>
-    public static string? ResolveWeaponSkill(string weaponSkill)
-    {
-        var exact = SheetSkillNames.FirstOrDefault(n => SkillNameMatcher.FullNameEquals(n, weaponSkill));
-        if (exact is not null) return exact;
-
-        var target = SkillNameMatcher.Parse(weaponSkill);
-        var parsed = SheetSkillNames.Select(n => (Name: n, Parsed: SkillNameMatcher.Parse(n))).ToList();
-        var sameBase = parsed.Where(p => p.Parsed.Base == target.Base).ToList();
-
-        if (sameBase.Count == 0)
-            return parsed.FirstOrDefault(p => SkillNameMatcher.BaseMatches(p.Parsed.Base, target.Base)).Name;
-
-        var specialization = target.Specialization ?? SkillNameMatcher.DefaultSpecializationFor(target.Base);
-        if (specialization is not null)
-        {
-            var match = sameBase.FirstOrDefault(p => SkillNameMatcher.SpecializationMatches(p.Parsed.Specialization, specialization));
-            if (match.Name is not null) return match.Name;
-        }
-
-        return sameBase.FirstOrDefault(p => p.Parsed.Specialization is null).Name;
-    }
+    public static string? ResolveWeaponSkill(string weaponSkill) =>
+        SkillNameMatcher.FindBest(SheetSkillNames, n => n, weaponSkill);
 
     private static void UpsertSkill(QuickNpcDraft draft, string name, int value)
     {
