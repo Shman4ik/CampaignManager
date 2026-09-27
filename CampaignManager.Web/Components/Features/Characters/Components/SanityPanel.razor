@@ -23,6 +23,8 @@
         var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
         var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
         var permanentlyInsane = SanityRules.IsPermanentlyInsane(Character);
+        var insane = Character.State.HasTemporaryInsanity || Character.State.HasIndefiniteInsanity;
+        var activeConditions = Character.InsanityConditions.Count(c => c.Active);
     }
 
     @if (permanentlyInsane)
@@ -163,78 +165,93 @@
     </div>
 
     <!-- Фобии и мании -->
-    <div>
-        <div class="flex items-center justify-between mb-2">
-            <h6 class="text-xs font-semibold text-gray-600 uppercase">Фобии и мании</h6>
-            <div class="flex gap-1">
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Phobia)">
+    <section data-testid="insanity-conditions">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h6 class="cm-section-title">Фобии и мании</h6>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="add-phobia"
+                        @onclick="() => OpenCondition(InsanityConditionKind.Phobia)">
                     <i class="fa-solid fa-plus mr-1"></i>Фобия
                 </button>
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Mania)">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="add-mania"
+                        @onclick="() => OpenCondition(InsanityConditionKind.Mania)">
                     <i class="fa-solid fa-plus mr-1"></i>Мания
                 </button>
             </div>
         </div>
 
-        @if (_addingKind.HasValue)
-        {
-            <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                <div class="text-xs text-gray-600 mb-1">Новая @(_addingKind == InsanityConditionKind.Phobia ? "фобия" : "мания") (бросьте 1d100 по таблице @(_addingKind == InsanityConditionKind.Phobia ? "IX" : "X"))</div>
-                <input type="text" class="cm-input cm-input-sm w-full mb-1" placeholder="Название" @bind="_newName" />
-                <input type="text" class="cm-input cm-input-sm w-full mb-2" placeholder="Описание (необязательно)" @bind="_newDescription" />
-                <div class="flex gap-1">
-                    <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ConfirmAdd">Добавить</button>
-                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAdd">Отмена</button>
-                </div>
-            </div>
-        }
-
         @if (Character.InsanityConditions.Count == 0)
         {
-            <div class="text-xs text-gray-400 italic">Нет записей</div>
+            <div class="text-xs text-primary-400 italic">Нет записей</div>
         }
         else
         {
-            <div class="space-y-1">
+            <div>
                 @foreach (var c in Character.InsanityConditions.OrderByDescending(x => x.Active).ThenBy(x => x.AcquiredAt))
                 {
-                    <div class="flex items-start gap-2 p-2 rounded-md border @(c.Active ? "border-purple-200 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-60")">
-                        <span class="text-[10px] uppercase font-bold @(c.Kind == InsanityConditionKind.Phobia ? "text-red-700" : "text-orange-700")">
+                    <div @key="c.Id" class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 border-t border-t-gray-200 first:border-t-0 @(c.Active ? "" : "opacity-60")">
+                        <Badge Variant="@(c.Kind == InsanityConditionKind.Phobia ? "error" : "warning")" Size="sm">
                             @(c.Kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")
-                        </span>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm font-semibold text-gray-900 @(c.Active ? "" : "line-through")">@c.Name</div>
+                        </Badge>
+                        <div class="flex-1 min-w-[10rem]">
+                            <div class="text-sm font-semibold text-primary-900 @(c.Active ? "" : "line-through")">@c.Name</div>
                             @if (!string.IsNullOrWhiteSpace(c.Description))
                             {
-                                <div class="text-xs text-gray-600">@c.Description</div>
+                                <div class="text-xs text-primary-600">@c.Description</div>
                             }
-                            <div class="text-[10px] text-gray-400">@c.AcquiredAt.ToLocalTime().ToString("d")</div>
+                            <div class="text-xs text-primary-400">
+                                @c.AcquiredAt.ToLocalTime().ToString("d")@(c.Active ? "" : " · вылечено")
+                            </div>
                         </div>
-                        <div class="flex gap-1">
-                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-gray-300 hover:bg-gray-100"
-                                    title="@(c.Active ? "Вылечено" : "Активно")"
+                        <div class="flex gap-2">
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
                                     @onclick="() => c.Active = !c.Active">
-                                <i class="fa-solid @(c.Active ? "fa-check" : "fa-rotate-left")"></i>
+                                <i class="fa-solid @(c.Active ? "fa-check" : "fa-rotate-left") mr-1"></i>@(c.Active ? "Вылечено" : "Вернуть")
                             </button>
-                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
                                     @onclick="() => Character.InsanityConditions.Remove(c)">
-                                <i class="fa-solid fa-trash"></i>
+                                <i class="fa-solid fa-trash mr-1"></i>Удалить
                             </button>
                         </div>
                     </div>
                 }
             </div>
         }
-    </div>
+
+        @if (activeConditions > 0)
+        {
+            <ul class="cm-field-note list-disc pl-4 mt-2 space-y-1">
+                @if (insane)
+                {
+                    <li>
+                        Пока сыщик безумен: рядом объект фобии — всё, кроме боя и бегства, со штрафной костью
+                        (не для проверок Рассудка и на реальность); объект мании — штрафная кость ко всем броскам,
+                        пока сыщик не утолит влечение или не уйдёт от него (стр. 157).
+                    </li>
+                }
+                <li>
+                    Лечение (стр. 165): раз в месяц игрового времени психоаналитик проходит проверку Психоанализа,
+                    при успехе сыщик — проверку Рассудка; оба успеха снимают фобию или манию. Крах в любой из
+                    проверок — −1d6 рассудка. Успешный Психоанализ помогает и на время справиться с приступом
+                    фобии (стр. 160).
+                </li>
+            </ul>
+        }
+    </section>
 </div>
+
+<AddInsanityConditionModal Character="@Character"
+                           IsVisible="@_conditionOpen"
+                           Kind="@_conditionKind"
+                           OnClose="CloseCondition"
+                           OnAdded="CloseCondition" />
 
 @code {
     [Parameter] public required Character Character { get; set; }
 
-    private InsanityConditionKind? _addingKind;
-    private string _newName = "";
-    private string _newDescription = "";
     private int _manualAmount = 1;
+    private bool _conditionOpen;
+    private InsanityConditionKind _conditionKind = InsanityConditionKind.Phobia;
 
     private static int RollDice(int count, int sides) => Dice.Roll(count, sides);
 
@@ -307,34 +324,11 @@
         Character.State.IndefiniteInsanityStartedAt = v ? DateTime.UtcNow : null;
     }
 
-    private void StartAdd(InsanityConditionKind kind)
+    private void OpenCondition(InsanityConditionKind kind)
     {
-        _addingKind = kind;
-        _newName = "";
-        _newDescription = "";
+        _conditionKind = kind;
+        _conditionOpen = true;
     }
 
-    private void CancelAdd()
-    {
-        _addingKind = null;
-    }
-
-    private void ConfirmAdd()
-    {
-        if (_addingKind is null || string.IsNullOrWhiteSpace(_newName))
-        {
-            _addingKind = null;
-            return;
-        }
-
-        Character.InsanityConditions.Add(new InsanityCondition
-        {
-            Kind = _addingKind.Value,
-            Name = _newName.Trim(),
-            Description = string.IsNullOrWhiteSpace(_newDescription) ? null : _newDescription.Trim()
-        });
-        _addingKind = null;
-        _newName = "";
-        _newDescription = "";
-    }
+    private void CloseCondition() => _conditionOpen = false;
 }

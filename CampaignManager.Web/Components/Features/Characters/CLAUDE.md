@@ -19,6 +19,11 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   этого отредактированный вручную лист раньше расходился с правилами.
 - `SanityRules` (static) — максимум Рассудка, пороги безумия, начисление навыка Мифов за
   связанное с ними безумие (`RecordMythosInsanity`).
+- `InsanityTables` (static) — **единственное** место таблиц главы 8: фобии (IX, стр. 158) и
+  мании (X, стр. 159). Номера строк — как в русском издании, чтобы бросок настоящими костями
+  находил ту же строку. Названия — термины (явные опечатки распознанного текста книги исправлены:
+  «Базофобия», а не «Газофобия», две «Амакомании» — это Алгомания и Амаксомания), описания —
+  пересказ, **не цитата**: копировать текст книги сюда нельзя.
 - `DevelopmentPhaseRules` (static) — **единственное** место, где живёт фаза развития сыщиков
   (стр. 92–94, 164–167): проверки опыта по отмеченным навыкам, +2d6 Рассудка за навык,
   дошедший до 90%, восстановление Удачи, награда Хранителя, самолечение с ключевой связью,
@@ -205,6 +210,15 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   вид подтягивается из бестиария, предел — из `CreatureCharacteristics.SanityLoss` через
   `Bestiary/Services/SanityLossFormula`. Сама потеря рассудка списывается через колбэк
   в `SanityPanel`: пороги безумия считаются только там.
+
+## Фобии и мании (глава 8)
+
+- **Фобия/мания** — `AddInsanityConditionModal` за кнопками «Фобия»/«Мания» в секции «Рассудок и
+  безумие»: выбор таблицы, «Бросить 1d100», поле «Выпало» или список строк; строка таблицы
+  подставляет название и описание в поля, в запись уходит то, что осталось в полях после правки.
+  Модель `InsanityCondition` не менялась — старые записи читаются как были.
+- Под списком фобий и маний — подсказки, без механики: штрафная кость при встрече с объектом
+  у безумного сыщика (стр. 157) и лечение психотерапией раз в игровой месяц (стр. 165).
 - `Characters/Model/Skill.cs` (a character's own skill *value*) is a different type from `Skills/Model/SkillModel.cs` (the master skill catalog) — don't confuse the two when searching for "Skill".
 - Same pattern for `Weapon`/`Spell`: the character holds `List<Weapon>`/`List<Spell>` referencing the catalog types defined in the `Weapons`/`Spells` features.
 - `Character.Weapons` — это **копии** каталожных записей, а не сами записи: у копии свой
