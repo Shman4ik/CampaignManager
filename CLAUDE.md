@@ -340,6 +340,13 @@ the .NET 10 circuit persistence stack:
   don't rename them.
 - Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
   otherwise it silently disappears on resume.
+- **Лог.** Жизнь circuit'ов пишет `ActiveCircuitTracker` (Information, строка на событие): открыт,
+  потерял соединение, снова на связи, пауза, закрыт — со временем жизни. Своего события «пауза»
+  у `CircuitHandler` нет: её ловит колбэк `RegisterOnPersisting`, который
+  `ShutdownPauseCircuitHandler` вешает в области circuit (пререндер живёт в области HTTP-запроса
+  и туда не попадает). Категория `Microsoft.AspNetCore.Components.Server.Circuits` остаётся
+  заглушённой до Critical. Путь, статус и время каждого запроса — `Microsoft.AspNetCore.Hosting.Diagnostics`
+  на Information (по две строки на запрос: начало и конец); по ним видно, какая страница медленная.
 - **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
   а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
   активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
