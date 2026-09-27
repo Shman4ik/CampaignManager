@@ -59,7 +59,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `InvestigatorFactory(SkillService)` — собирает лист из `InvestigatorDraft`: характеристики,
   навыки (включая добавленные специализации), деньги. Считает не сам, а через `DerivedAttributeRules`
   и `FinanceRules`.
-- `Dice` (static) — 1d100, NdM и бросок с бонусной костью (меньший из двух десятков).
+- `Dice` (static) — короткая запись бросков для правил листа: NdM и 1d100 (с бонусными костями —
+  `Percentile(bonusDice)`). Своих бросков не держит — зовёт `CombatService.RollDice` /
+  `RollD100`: бросок d100 с бонусными и штрафными костями на приложение один (стр. 89).
 - `WoundRules` (static) — порог серьёзной раны (≥ половины максимума ПЗ) и вывод состояния
   «без сознания» / «при смерти» из нуля ПЗ.
 - `LuckRules` (static) — необязательное правило «Пункты Удачи» (стр. 96): во что обойдётся

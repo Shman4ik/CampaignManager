@@ -1,8 +1,15 @@
+using CampaignManager.Web.Components.Features.Combat.Services;
+
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 /// <summary>
-///     Кости для правил листа персонажа. Отдельный тип, чтобы правила не тянули за собой
-///     собственный <see cref="Random" /> и оставались читаемыми.
+///     Кости для правил листа персонажа — короткая запись, чтобы правила оставались читаемыми.
+///     <para>
+///         Своих бросков здесь нет: бросает <see cref="CombatService" />. Бросок d100 с бонусными
+///         и штрафными костями на приложение один — <see cref="CombatService.RollD100(int, int)" />
+///         (стр. 89); раньше здесь жила своя копия бонусной кости, и две реализации одного правила
+///         рано или поздно разошлись бы.
+///     </para>
 /// </summary>
 public static class Dice
 {
@@ -11,32 +18,13 @@ public static class Dice
     {
         var total = 0;
         for (var i = 0; i < count; i++)
-            total += Random.Shared.Next(1, sides + 1);
+            total += CombatService.RollDice(sides);
         return total;
     }
 
-    /// <summary>1d100: две кости десятков и единиц, «00 0» читается как 100.</summary>
-    public static int Percentile()
-    {
-        var tens = Random.Shared.Next(0, 10);
-        var units = Random.Shared.Next(0, 10);
-        return Combine(tens, units);
-    }
-
     /// <summary>
-    ///     1d100 с бонусной костью: бросают две кости десятков и берут меньший результат (стр. 84).
+    ///     1d100; с <paramref name="bonusDice" /> бонусными костями бросают несколько костей десятков
+    ///     и берут меньший результат (стр. 89).
     /// </summary>
-    public static int PercentileWithBonusDie()
-    {
-        var units = Random.Shared.Next(0, 10);
-        var first = Combine(Random.Shared.Next(0, 10), units);
-        var second = Combine(Random.Shared.Next(0, 10), units);
-        return Math.Min(first, second);
-    }
-
-    private static int Combine(int tens, int units)
-    {
-        var value = tens * 10 + units;
-        return value == 0 ? 100 : value;
-    }
+    public static int Percentile(int bonusDice = 0) => CombatService.RollD100(bonusDice, 0).Result;
 }
