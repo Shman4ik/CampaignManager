@@ -3,10 +3,40 @@
 A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` is nullable — scenarios can exist standalone).
 
 ## Key Services
-- `ScenarioService(dbContextFactory, IMemoryCache, CampaignService campaignService, logger)` — the only feature service with a direct dependency on another feature's service (`CampaignService`).
+- `ScenarioService(dbContextFactory, IMemoryCache, CampaignService campaignService, IdentityService identityService, logger)` — the only feature service with a direct dependency on another feature's service (`CampaignService`). Он же — единственное место правил доступа к сценариям (см. «Права» ниже).
 - `ScenarioImportService(ScenarioService, CharacterService, logger)` — перенос сценария целиком
   одним JSON-файлом. Ничего не пишет в базу сам: только через два сервиса выше, поэтому права,
   валидация и `Init()` отрабатывают как при ручном вводе.
+
+## Права
+
+Сценарии — **общая библиотека Хранителей**. Игрок не правит ничего. Правила живут ровно в одном
+месте — `ScenarioService.Evaluate`, всё остальное только собирает для него данные:
+
+| Сценарий | Править | Удалить |
+|---|---|---|
+| шаблон (`CampaignId == null`) | любой Хранитель | автор (`CreatorEmail`, без учёта регистра) или администратор |
+| шаблон без автора (`CreatorEmail == null`, старые записи) | любой Хранитель | только администратор |
+| сценарий кампании (`CampaignId != null`) | Хранитель этой кампании (`Campaign.KeeperEmail`) или администратор | он же |
+
+- **Каждый метод записи проверяет права сам**: `UpdateScenarioAsync`, `DeleteScenarioAsync`,
+  НПС (`Add/Update/RemoveNpc…`), существа, предметы, локации, ключевые факты, раздатки — через
+  `MayWriteAsync` по строке **из базы**, а не по объекту со страницы. Отказ — `LogWarning` и
+  `false` (`null` у создания): контракт методов не меняется, страницы и так обрабатывают неудачу.
+- `CreateScenarioAsync` и `CreateScenarioFromTemplateAsync` (`MayCreateAsync`): сценарий заводит
+  только Хранитель, а в кампанию — только её Хранитель. **Автора ставит сервис** по текущему
+  пользователю: страницы брали почту синхронным `GetCurrentUserEmail`, который в интерактивном
+  рендере отдаёт `null`, а импорт её не заполнял вовсе — отсюда шаблоны без автора.
+- `UpdateScenarioAsync` не даёт правкой сменить `CreatorEmail` и `CampaignId` — от них зависят
+  права. Кампанию сценарию назначает только публикация ваншота.
+- **Публикация шаблона привязывает его к кампании ваншота** того, кто опубликовал
+  (`CreateCampaignForOneShotAsync`). С этого момента это сценарий кампании: править и удалять его
+  может только опубликовавший Хранитель (и администратор), даже если автор шаблона — другой.
+- Страницам права отдаёт `GetAccessAsync(scenario)` / `GetAccessAsync(список)` (`ScenarioAccess`:
+  `CanEdit`, `CanDelete`; список читает Хранителей кампаний одним запросом). `ScenariosPage` прячет
+  «Изменить»/«Удалить» у карточки, `ScenarioDetailPage` — «Редактировать» и все кнопки правки
+  (анонс остаётся виден, но заблокирован), `ScenarioEditPage` вместо формы показывает `<Alert>`.
+  «Добавить в кампанию» предлагает только кампании из `GetWritableCampaignsAsync`.
 
 ## Импорт / экспорт JSON
 

@@ -67,6 +67,7 @@ else
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             @foreach (var scenario in FilteredScenarios)
             {
+                var access = AccessOf(scenario);
                 <div class="cm-card hover:shadow-lg transition-shadow duration-300 flex flex-col h-full">
                     <div class="cm-card-header">
                         <span class="cm-card-title truncate">@scenario.Name</span>
@@ -104,12 +105,24 @@ else
                         <button type="button" class="cm-btn cm-btn-primary cm-btn-sm w-full justify-center" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{scenario.Id}"))">
                             <i class="fas fa-eye"></i> <span>Просмотр</span>
                         </button>
-                        <div class="grid grid-cols-2 gap-1.5 w-full">
-                            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm justify-center" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{scenario.Id}/edit"))">
-                                <i class="fas fa-edit"></i> <span>Изменить</span>
-                            </button>
-                            <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="@(() => ConfirmDelete(scenario))" AdditionalClasses="justify-center">Удалить</Button>
-                        </div>
+                        @* Кнопки — по правам из ScenarioService: удалить шаблон может только автор
+                           или администратор, а опубликованный ваншот уже привязан к кампании
+                           и правится только её Хранителем. *@
+                        @if (access.CanEdit || access.CanDelete)
+                        {
+                            <div class="grid @(access.CanEdit && access.CanDelete ? "grid-cols-2" : "grid-cols-1") gap-1.5 w-full">
+                                @if (access.CanEdit)
+                                {
+                                    <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm justify-center" @onclick="@(() => NavigationManager.NavigateTo($"/scenarios/{scenario.Id}/edit"))">
+                                        <i class="fas fa-edit"></i> <span>Изменить</span>
+                                    </button>
+                                }
+                                @if (access.CanDelete)
+                                {
+                                    <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="@(() => ConfirmDelete(scenario))" AdditionalClasses="justify-center">Удалить</Button>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -140,6 +153,11 @@ else
     private bool _isKeeper;
     private ScenarioImportModal? _importModal;
 
+    /// <summary>Права на каждую карточку: считает ScenarioService, страница только прячет кнопки.</summary>
+    private Dictionary<Guid, ScenarioAccess> _access = [];
+
+    private ScenarioAccess AccessOf(Scenario scenario) => _access.GetValueOrDefault(scenario.Id);
+
     private void ShowImportModal()
     {
         if (_importModal is null)
@@ -167,6 +185,7 @@ else
         {
             _loading = true;
             _scenarios = await ScenarioService.GetAllScenariosAsync(true);
+            _access = await ScenarioService.GetAccessAsync(_scenarios);
         }
         catch (Exception ex)
         {
@@ -180,6 +199,8 @@ else
 
     private void ConfirmDelete(Scenario scenario)
     {
+        if (!AccessOf(scenario).CanDelete) return;
+
         _scenarioToDelete = scenario;
         _showDeleteModal = true;
     }
