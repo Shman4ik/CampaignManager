@@ -325,6 +325,10 @@ builder.Services.AddScoped<CombatService>();
 builder.Services.AddScoped<ChaseService>();
 builder.Services.AddScoped<CampaignManager.Web.Components.Features.Chase.Services.ChaseSessionService>();
 
+// Ширма Хранителя: кнопка в шапке и панель в лэйауте — разные острова одного circuit, и общий у них
+// только scoped-сервис. RegisterPersistentService не нужен: открытая ширма паузу не переживает намеренно.
+builder.Services.AddScoped<CampaignManager.Web.Components.Features.KeeperScreen.Services.KeeperScreenState>();
+
 // Register Admin and Wiki services
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<WikiHistoryService>();

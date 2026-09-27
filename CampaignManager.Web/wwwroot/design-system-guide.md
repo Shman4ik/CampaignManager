@@ -78,6 +78,9 @@ is the reference:
 - `PageHeader` is the 56px sticky topbar. Every page has one, including info pages. Page-level
   actions go in its `Actions` slot — never floating in the body — and are always `cm-btn-sm`
   (the topbar is only 56px tall).
+- `PageHeader` сам дописывает справа кнопку «Ширма» (ширма Хранителя, `Features/KeeperScreen`);
+  остальным пользователям она не видна. Выключает её только `ShowKeeperScreen="false"` на самой
+  `/reference`. Своя шапка без `PageHeader` (режим игры сценария) ставит `<KeeperScreenButton/>` сама.
 - `cm-page` is the content container: full width, 20px padding. Do **not** use
   `max-w-*` + `mx-auto` here — those are flex items of a column flex container, so `mx-auto`
   disables stretch and collapses sparse pages to their content width.
