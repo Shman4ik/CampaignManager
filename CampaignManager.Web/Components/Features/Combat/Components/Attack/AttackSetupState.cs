@@ -268,7 +268,9 @@ public sealed class AttackSetupState
 
     /// <summary>
     /// Хранитель ввёл итог своих физических костей — модификаторы он применил сам, поэтому
-    /// расшифровки костей у такого броска нет.
+    /// расшифровки костей у такого броска нет. Уровень атаки считается со сложностью
+    /// <see cref="RequiredLevel" />, как в <see cref="CombatService.ResolveRangedAttack" />: у стрельбы
+    /// на большой дальности крах наступает с 96, если половина навыка меньше 50 (стр. 88).
     /// </summary>
     public void EnterRoll(string? raw, bool isAttacker)
     {
@@ -279,7 +281,7 @@ public sealed class AttackSetupState
         {
             AttackerRoll = v;
             AttackerRollDetail = null;
-            AttackerSuccessLevel = CombatService.CalculateSuccessLevel(v, AttackSkillValue);
+            AttackerSuccessLevel = CombatService.CalculateSuccessLevel(v, AttackSkillValue, RequiredLevel);
         }
         else
         {
@@ -294,7 +296,7 @@ public sealed class AttackSetupState
         var mods = CurrentModifiers();
         AttackerRollDetail = CombatService.RollD100(mods.BonusDice, mods.PenaltyDice);
         AttackerRoll = AttackerRollDetail.Result;
-        AttackerSuccessLevel = CombatService.CalculateSuccessLevel(AttackerRoll.Value, AttackSkillValue);
+        AttackerSuccessLevel = CombatService.CalculateSuccessLevel(AttackerRoll.Value, AttackSkillValue, RequiredLevel);
     }
 
     public void AutoRollDefender()

@@ -1010,7 +1010,9 @@ public sealed partial class CombatService
         result.SurpriseMode = NormalizeSurprise(setup);
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
         result.AttackerRoll = result.AttackerRollDetail.Result;
-        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
+        // Крах — от сложности, которую задала дальность: на большой дальности у навыка 60 цель 30,
+        // и 96–100 уже крах, а не только 100 (стр. 88)
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue, requiredLevel);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
         if (setup.SelectedWeapon is { } firedWeapon
