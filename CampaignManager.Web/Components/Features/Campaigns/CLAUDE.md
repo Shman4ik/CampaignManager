@@ -45,6 +45,9 @@ Top-level container a Keeper creates to run a game: players, era, status.
   `SaveSessionAsync`; уже привязанный сценарий при правке не перепроверяется.
 - Номер встречи предлагается следующим (`NextNumber`), но правится руками. Сортировка — по дате
   встречи, потом по номеру, новые сверху.
+- Открытая модалка с недописанной записью переживает паузу circuit через
+  `CampaignJournalPage.PersistedEditor` (`[PersistentState]`). Новое поле формы — в
+  `CampaignSessionInput`, иначе оно пропадёт при возобновлении.
 
 ## Владение персонажами
 `CharacterStorageDto` (JSONB-обёртка листа) лежит в общем `CampaignManager.Web/Model/`, а кто им

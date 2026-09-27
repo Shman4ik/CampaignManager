@@ -222,11 +222,54 @@
     private string BackHref => _journal?.CanEdit == true ? "/campaigns" : "/";
     private string BackLabel => _journal?.CanEdit == true ? "Кампании" : "Главная";
 
+    /// <summary>Незаконченная запись в модалке, переживающая паузу circuit.</summary>
+    public sealed class EditorDraft
+    {
+        public Guid CampaignId { get; set; }
+
+        public CampaignSessionInput? Input { get; set; }
+
+        public string? LinkedScenarioName { get; set; }
+    }
+
+    /// <summary>
+    ///     Хронику пишут после встречи, и она бывает длинной: уход в соседнее приложение за
+    ///     заметками дольше 30 секунд ставит circuit на паузу, а страница собирается заново и
+    ///     помнит только [PersistentState] (см. корневой CLAUDE.md). Без этого свойства набранный
+    ///     текст пропадал бы вместе с открытой модалкой.
+    /// </summary>
+    [PersistentState]
+    public EditorDraft? PersistedEditor
+    {
+        get => _showEditor
+            ? new EditorDraft { CampaignId = CampaignId, Input = _editorModel, LinkedScenarioName = _editorLinkedScenarioName }
+            : null;
+        set => _restoredEditor = value;
+    }
+
+    private EditorDraft? _restoredEditor;
+
     protected override async Task OnParametersSetAsync()
     {
         _loading = true;
         await LoadAsync();
         _loading = false;
+        TryRestoreEditor();
+    }
+
+    /// <summary>Черновик другой кампании (или журнал больше не наш) молча выбрасывается.</summary>
+    private void TryRestoreEditor()
+    {
+        var draft = _restoredEditor;
+        _restoredEditor = null;
+
+        if (draft?.Input is null || draft.CampaignId != CampaignId || _journal?.CanEdit != true)
+            return;
+
+        _editorModel = draft.Input;
+        _editorLinkedScenarioName = draft.LinkedScenarioName;
+        _editorError = null;
+        _showEditor = true;
     }
 
     private async Task LoadAsync() => _journal = await JournalService.GetJournalAsync(CampaignId);
