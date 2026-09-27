@@ -10,9 +10,6 @@ public sealed record VehicleTemplate(
     string SkillName,
     string Category);
 
-/// <summary>Строка таблицы III «Другие виды урона» (стр. 122).</summary>
-public sealed record DamageTier(string Name, string Formula, string Examples);
-
 /// <summary>Строка таблицы VI «Столкновения транспорта» (стр. 145).</summary>
 public sealed record CrashTier(string Name, string BuildLossFormula, string Description);
 
@@ -63,14 +60,9 @@ public static class ChaseReference
     public static VehicleTemplate? FindVehicle(string? name) =>
         string.IsNullOrWhiteSpace(name) ? null : Vehicles.FirstOrDefault(v => v.Name == name);
 
-    /// <summary>Таблица III «Другие виды урона», стр. 122.</summary>
-    public static readonly IReadOnlyList<DamageTier> DamageTiers =
-    [
-        new("Мелкое", "1D3", "Удар кулаком, попадание камня, падение в болото"),
-        new("Среднее", "1D6", "Падение на траву, удар дубинкой, пуля малого калибра"),
-        new("Тяжёлое", "1D10", "Падение на бетон, удар топором, пуля 38-го калибра"),
-        new("Губительное", "2D10", "Попасть под машину на 50 км/ч, взрыв гранаты в 3–6 м")
-    ];
+    // Таблица III «Другие виды урона» (стр. 122) здесь больше не живёт: она нужна не только
+    // погоне, но и ширме Хранителя, и лежит одна на всё приложение —
+    // KeeperScreen/Model/OtherDamageReference.Tiers.
 
     /// <summary>
     /// Таблица VI «Столкновения транспорта», стр. 145. Урон считается в пунктах Комплекции.
