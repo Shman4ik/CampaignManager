@@ -62,6 +62,10 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `Dice` (static) — короткая запись бросков для правил листа: NdM и 1d100 (с бонусными костями —
   `Percentile(bonusDice)`). Своих бросков не держит — зовёт `CombatService.RollDice` /
   `RollD100`: бросок d100 с бонусными и штрафными костями на приложение один (стр. 89).
+  Все кости приложения живут в `CombatService` (по той же причине, что и пороги успеха, — см.
+  `Combat/CLAUDE.md`), поэтому формулу вроде «1d8» лист бросает прямо через
+  `CombatService.RollDiceFormula` (так делает `MythosBookReadingModal`): своего разбора формул
+  в `Dice` нет и заводить его не нужно.
 - `WoundRules` (static) — порог серьёзной раны (≥ половины максимума ПЗ) и вывод состояния
   «без сознания» / «при смерти» из нуля ПЗ.
 - `LuckRules` (static) — необязательное правило «Пункты Удачи» (стр. 97): во что обойдётся
