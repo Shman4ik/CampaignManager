@@ -270,6 +270,9 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
   `outline-primary`/`outline-error` = row edit/delete, `error` = destructive confirmation in a
   dialog, `success` = approving someone's request. `cm-btn-info` is not for buttons.
 - Header actions are always `cm-btn-sm` — the topbar is 56px tall.
+- `PageHeader` itself appends the Keeper's «Ширма» button (hidden from players); a page with its own
+  topbar instead of `PageHeader` (scenario play mode) places `<KeeperScreenButton/>` by hand.
+  See `Features/KeeperScreen/CLAUDE.md`.
 - Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
   **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
   `cm-btn-error` and `<Button Variant="error">` render different reds.
