@@ -80,7 +80,7 @@ is the reference:
   (the topbar is only 56px tall).
 - `PageHeader` сам дописывает справа кнопку «Ширма» (ширма Хранителя, `Features/KeeperScreen`);
   остальным пользователям она не видна. Выключает её только `ShowKeeperScreen="false"` на самой
-  `/reference`. Своя шапка без `PageHeader` (режим игры сценария) ставит `<KeeperScreenButton/>` сама.
+  `/reference`. Своих шапок в обход `PageHeader` не заводить — иначе кнопку ширмы придётся ставить руками.
 - `cm-page` is the content container: full width, 20px padding. Do **not** use
   `max-w-*` + `mx-auto` here — those are flex items of a column flex container, so `mx-auto`
   disables stretch and collapses sparse pages to their content width.

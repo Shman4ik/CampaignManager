@@ -5,7 +5,7 @@
 
 ## Где в интерфейсе
 - **Кнопка «Ширма»** (`Components/KeeperScreenButton`) — в `Shared/PageHeader`, то есть в шапке
-  любой страницы, и отдельно в своей шапке режима игры `ScenarioDetailPage`. Сама прячется от
+  любой страницы, включая режим игры `ScenarioDetailPage` (он тоже рисует `PageHeader`). Сама прячется от
   всех, кроме Хранителя/администратора (`IdentityService.IsKeeper`).
 - **Выезжающая панель** (`Components/KeeperScreenHost`) — в `Layout/MainLayout`, после панели
   плеера. Встаёт справа поверх текущего экрана: бой, сценарий, лист остаются под ней и не
