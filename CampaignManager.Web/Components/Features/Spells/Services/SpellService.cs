@@ -7,11 +7,13 @@ using Microsoft.Extensions.Caching.Memory;
 namespace CampaignManager.Web.Components.Features.Spells.Services;
 
 /// <summary>
-///     Service for managing spells data.
+///     Справочник заклинаний. Читают все вошедшие, правят только Хранитель и администратор —
+///     проверка стоит в каждом методе записи, а не только в разметке страницы.
 /// </summary>
 public sealed class SpellService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<SpellService> logger)
 {
     private const string SpellsKey = "AllSpells";
@@ -27,6 +29,7 @@ public sealed class SpellService(
     /// </summary>
     public async Task<bool> AddSpellAsync(Spell spell)
     {
+        await identityService.EnsureKeeperAsync("добавление заклинания в справочник");
         if (string.IsNullOrWhiteSpace(spell.Name)) return false;
         return await CrudServiceHelper.CreateAsync(dbContextFactory, cache, SpellsKey, spell, logger) is not null;
     }
@@ -34,12 +37,18 @@ public sealed class SpellService(
     /// <summary>
     ///     Updates an existing spell.
     /// </summary>
-    public Task<bool> UpdateSpellAsync(Spell spell) =>
-        CrudServiceHelper.UpdateAsync(dbContextFactory, cache, SpellsKey, spell, logger);
+    public async Task<bool> UpdateSpellAsync(Spell spell)
+    {
+        await identityService.EnsureKeeperAsync("изменение заклинания в справочнике");
+        return await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, SpellsKey, spell, logger);
+    }
 
     /// <summary>
     ///     Deletes a spell by ID.
     /// </summary>
-    public Task<bool> DeleteSpellAsync(Guid id) =>
-        CrudServiceHelper.DeleteAsync<Spell>(dbContextFactory, cache, SpellsKey, id, logger);
+    public async Task<bool> DeleteSpellAsync(Guid id)
+    {
+        await identityService.EnsureKeeperAsync("удаление заклинания из справочника");
+        return await CrudServiceHelper.DeleteAsync<Spell>(dbContextFactory, cache, SpellsKey, id, logger);
+    }
 }

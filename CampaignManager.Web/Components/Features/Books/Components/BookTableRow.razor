@@ -30,20 +30,23 @@
     {
         <td class="tabular-nums">@(Book.OccultismBonus.HasValue ? $"+{Book.OccultismBonus}%" : "—")</td>
     }
-    <td @onclick:stopPropagation="true">
-        <div class="flex justify-end gap-1">
-            <button type="button" aria-label="Изменить: @Book.Name"
-                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
-                    @onclick="() => OnEdit.InvokeAsync(Book)">
-                <i class="fas fa-pen"></i>
-            </button>
-            <button type="button" aria-label="Удалить: @Book.Name"
-                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
-                    @onclick="() => OnDelete.InvokeAsync(Book)">
-                <i class="fas fa-trash-alt"></i>
-            </button>
-        </div>
-    </td>
+    @if (CanEdit)
+    {
+        <td @onclick:stopPropagation="true">
+            <div class="flex justify-end gap-1">
+                <button type="button" aria-label="Изменить: @Book.Name"
+                        class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
+                        @onclick="() => OnEdit.InvokeAsync(Book)">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button type="button" aria-label="Удалить: @Book.Name"
+                        class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
+                        @onclick="() => OnDelete.InvokeAsync(Book)">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </td>
+    }
 </tr>
 
 @if (IsExpanded)
@@ -133,12 +136,15 @@
     /// <summary>Колонка «+Оккультизм»: у книг Мифов она пуста всегда.</summary>
     [Parameter] public bool ShowOccultism { get; set; } = true;
 
+    /// <summary>Ячейка с кнопками «Изменить/Удалить» — только у того, кто может править справочник.</summary>
+    [Parameter] public bool CanEdit { get; set; }
+
     [Parameter] public EventCallback<Book> OnEdit { get; set; }
     [Parameter] public EventCallback<Book> OnDelete { get; set; }
     [Parameter] public EventCallback OnToggleExpand { get; set; }
 
-    // Название, язык, автор, рассудок, действия — всегда; остальное по флагам.
-    private int ColumnCount => 5 + (ShowMythos ? 3 : 0) + (ShowOccultism ? 1 : 0);
+    // Название, язык, автор, рассудок — всегда; остальное, включая действия, по флагам.
+    private int ColumnCount => 4 + (ShowMythos ? 3 : 0) + (ShowOccultism ? 1 : 0) + (CanEdit ? 1 : 0);
 
     private bool HasDetails =>
         !ShowType ||

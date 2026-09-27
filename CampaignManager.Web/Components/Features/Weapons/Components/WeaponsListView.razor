@@ -29,7 +29,10 @@
                 <th>Боезапас</th>
                 <th>Осечка</th>
                 <th>Цена</th>
-                <th><span class="sr-only">Действия</span></th>
+                @if (CanEdit)
+                {
+                    <th><span class="sr-only">Действия</span></th>
+                }
             </tr>
             </thead>
             <tbody>
@@ -38,6 +41,7 @@
                 <WeaponTableRow Weapon="@weapon"
                                 IsExpanded="@(ExpandedWeaponId == weapon.Id)"
                                 ShowEra="@ShowEra"
+                                CanEdit="@CanEdit"
                                 OnEdit="OnEdit"
                                 OnDelete="OnDelete"
                                 OnToggleExpand="() => OnToggleExpand.InvokeAsync(weapon)" />
@@ -93,16 +97,19 @@
                             </span>
                         </div>
                     </div>
-                    <button type="button" aria-label="Изменить: @weapon.Name"
-                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
-                            @onclick="() => OnEdit.InvokeAsync(weapon)">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button type="button" aria-label="Удалить: @weapon.Name"
-                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
-                            @onclick="() => OnDelete.InvokeAsync(weapon)">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    @if (CanEdit)
+                    {
+                        <button type="button" aria-label="Изменить: @weapon.Name"
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
+                                @onclick="() => OnEdit.InvokeAsync(weapon)">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        <button type="button" aria-label="Удалить: @weapon.Name"
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
+                                @onclick="() => OnDelete.InvokeAsync(weapon)">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    }
                 </div>
 
                 @if (ExpandedWeaponId == weapon.Id)
@@ -155,6 +162,12 @@
 
     /// <summary>Показывать метки эпохи в строке: смысл есть, только когда список не сужен до одной эпохи.</summary>
     [Parameter] public bool ShowEra { get; set; }
+
+    /// <summary>
+    ///     Кнопки «Изменить/Удалить». Без права правки колонка действий пропадает целиком,
+    ///     а не остаётся пустой полосой справа.
+    /// </summary>
+    [Parameter] public bool CanEdit { get; set; }
 
     [Parameter] public string? CurrentSortField { get; set; }
     [Parameter] public bool SortAscending { get; set; }

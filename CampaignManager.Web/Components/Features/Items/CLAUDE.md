@@ -3,7 +3,7 @@
 General equipment/item catalog (independent entity).
 
 ## Key Services
-- `ItemService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `ItemService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
 - `ItemEraText.Describe(era)` — эпоха одной строкой по-русски («1920-е, наши дни»).
   `Eras` — флаги, предмет бывает сразу из обеих эпох, поэтому это перечисление значений,
   а не выбор одного из трёх. Единственное место, где эпоха превращается в текст.
@@ -41,6 +41,9 @@ General equipment/item catalog (independent entity).
 - Кнопки строки — иконки `cm-btn-sm cm-btn-icon` 36×36 с `aria-label`; подписей нет,
   подсказок по наведению тоже (на планшете их не бывает). Текстовые «Изменить/Удалить»
   занимали 353px из 1249 — больше, чем описание.
+- **Правят только Хранитель и администратор**, смотрят все — правило и его устройство те же,
+  что у оружия (`Features/Weapons/CLAUDE.md`, «Права»): проверка в `ItemService`, `CanEdit`
+  у `ItemsListView`, без него колонка действий исчезает целиком.
 - Фильтры меняют состояние через явные обработчики (`HandleSearchInput`,
   `SetEra1920`, …), а не через `@bind`: каждый из них обязан сбросить `currentPage`,
   иначе с десятой страницы фильтр уводит в пустой список.

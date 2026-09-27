@@ -3,7 +3,7 @@
 Rulebook/sourcebook catalog (independent entity).
 
 ## Key Services
-- `BookService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `BookService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
 - `BookTypeText.Short(bookType)` — короткая подпись категории («Мифы», «Оккультизм»)
   для метки в строке каталога. Полное `ToRussianString()` («Книга по оккультизму»)
   остаётся в модалках и подтверждениях: в колонке названия оно съедает половину ширины.
@@ -43,4 +43,7 @@ Rulebook/sourcebook catalog (independent entity).
   (как у оружия, где текстовая колонка одна) язык и автор схлопывались до «Англи…».
 - Кнопки строки — иконки `cm-btn-sm cm-btn-icon` 36×36 с `aria-label`; подписей нет,
   подсказок по наведению тоже (на планшете их не бывает).
+- **Правят только Хранитель и администратор**, смотрят все — правило и его устройство те же,
+  что у оружия (`Features/Weapons/CLAUDE.md`, «Права»): проверка в `BookService`, `CanEdit`
+  у `BooksListView`/`BookTableRow`, без него колонка действий исчезает целиком.
 - На странице 25 книг вместо 6: плотная строка занимает одну строку текста.

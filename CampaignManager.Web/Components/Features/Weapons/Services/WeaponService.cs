@@ -6,9 +6,14 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace CampaignManager.Web.Components.Features.Weapons.Services;
 
+/// <summary>
+///     Справочник оружия. Читают все вошедшие, правят только Хранитель и администратор —
+///     проверка стоит в каждом методе записи, а не только в разметке страницы.
+/// </summary>
 public sealed class WeaponService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<WeaponService> logger)
 {
     private const string WeaponsKey = "AllWeapons";
@@ -48,11 +53,15 @@ public sealed class WeaponService(
         return weapons;
     }
 
-    public async Task<bool> AddWeaponAsync(Weapon weapon) =>
-        await CrudServiceHelper.CreateAsync(dbContextFactory, cache, WeaponsKey, weapon, logger) is not null;
+    public async Task<bool> AddWeaponAsync(Weapon weapon)
+    {
+        await identityService.EnsureKeeperAsync("добавление оружия в справочник");
+        return await CrudServiceHelper.CreateAsync(dbContextFactory, cache, WeaponsKey, weapon, logger) is not null;
+    }
 
     public async Task<bool> UpdateWeaponAsync(Weapon weapon)
     {
+        await identityService.EnsureKeeperAsync("изменение оружия в справочнике");
         var result = await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, WeaponsKey, weapon, logger);
         if (result) ClearCache();
         return result;
@@ -60,6 +69,7 @@ public sealed class WeaponService(
 
     public async Task<bool> DeleteWeaponAsync(Guid id)
     {
+        await identityService.EnsureKeeperAsync("удаление оружия из справочника");
         var result = await CrudServiceHelper.DeleteAsync<Weapon>(dbContextFactory, cache, WeaponsKey, id, logger);
         if (result) ClearCache();
         return result;

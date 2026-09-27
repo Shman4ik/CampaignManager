@@ -1,6 +1,7 @@
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Shared.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
@@ -10,8 +11,14 @@ public partial class ItemsPage
 {
     [Inject] private ItemService ItemService { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private ILogger<ItemsPage> Logger { get; set; } = default!;
     [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
 
     // Editable item class for form binding
     public class EditableItem
@@ -75,6 +82,7 @@ public partial class ItemsPage
     // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadItemsAsync();
     }
 
@@ -185,6 +193,8 @@ public partial class ItemsPage
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editItem = new EditableItem(); // Reset the edit model
         editItem1920 = true;
@@ -195,6 +205,8 @@ public partial class ItemsPage
 
     private void ShowEditModal(Item item)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
         // Copy the item data to the editable model
         editItem = new EditableItem
@@ -283,6 +295,8 @@ public partial class ItemsPage
     // Show the delete confirmation modal
     private void ShowDeleteModal(Item item)
     {
+        if (!canEdit) return;
+
         deleteItem = item;
         errorMessage = null; // Clear errors
         showDeleteModal = true;
