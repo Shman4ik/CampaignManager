@@ -1,0 +1,291 @@
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Components.Features.Checks.Model
+@using CampaignManager.Web.Components.Features.Checks.Services
+@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Combat.Services
+@inject CampaignService CampaignService
+@inject ILogger<GroupCheckPanel> Logger
+
+@* Групповая проверка восприятия (гл. 10, стр. 200–201): одна кнопка бросает Внимание (или любой
+   навык) за всех сыщиков кампании. Зацепку получает прошедший с наивысшим уровнем успеха, при
+   равенстве — несколько сыщиков или тот, у кого навык выше. Листы только читаются: сохранять тут
+   нечего, отметки развития игроки ставят у себя. Своей карточки не рисует. *@
+
+<div class="cm-stack" data-testid="group-check">
+    <section>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+                <label class="cm-field-label" for="group-check-campaign">Кампания</label>
+                <select id="group-check-campaign" class="cm-input" data-testid="group-check-campaign"
+                        value="@(_campaignId?.ToString() ?? "")" @onchange="SelectCampaign">
+                    <option value="">— выберите кампанию —</option>
+                    @foreach (var campaign in _campaigns)
+                    {
+                        <option value="@campaign.Id">@campaign.Name</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="cm-field-label" for="group-check-skill">Навык</label>
+                <input id="group-check-skill" class="cm-input" data-testid="group-check-skill"
+                       placeholder="Внимание" @bind="_skillName" @bind:event="oninput"/>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mt-2">
+            @foreach (var skill in PerceptionSkills)
+            {
+                <button type="button"
+                        class="cm-btn cm-btn-sm @(IsSkill(skill) ? "cm-btn-primary" : "cm-btn-secondary")"
+                        @onclick="() => _skillName = skill">
+                    <span>@skill</span>
+                </button>
+            }
+        </div>
+
+        <div class="mt-3">
+            <span class="cm-field-label">Сложность</span>
+            <DifficultyPicker @bind-Value="_difficulty"/>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mt-3">
+            <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="group-check-roll"
+                    disabled="@(_party.Count == 0 || string.IsNullOrWhiteSpace(_skillName))" @onclick="RollAll">
+                <i class="fa-solid fa-dice-d20 mr-1"></i><span>Бросить за всех</span>
+            </button>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="group-check-clear"
+                    disabled="@(_rolls.Count == 0)" @onclick="() => _rolls.Clear()">
+                <span>Очистить броски</span>
+            </button>
+        </div>
+    </section>
+
+    <section>
+        @if (_loading)
+        {
+            <LoadingIndicator Message="Загружаем сыщиков…"/>
+        }
+        else if (_campaignId is null)
+        {
+            <p class="cm-empty">Выберите кампанию — в список попадут активные сыщики её игроков.</p>
+        }
+        else if (_party.Count == 0)
+        {
+            <p class="cm-empty">В кампании нет активных сыщиков.</p>
+        }
+        else
+        {
+            var rows = Rows();
+            var best = BestRows(rows);
+
+            <div class="overflow-x-auto">
+                <table class="cm-table">
+                    <thead>
+                    <tr>
+                        <th>Сыщик</th>
+                        <th>@(string.IsNullOrWhiteSpace(_skillName) ? "Навык" : _skillName.Trim())</th>
+                        <th>Выпало</th>
+                        <th>Результат</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in rows)
+                    {
+                        var isBest = best.Contains(row.Investigator.Id);
+                        <tr class="@(isBest ? "group-check-best" : "")" data-testid="@($"group-check-row-{row.Investigator.Id}")">
+                            <td>
+                                <div class="font-semibold">@row.Investigator.Name</div>
+                                @if (!string.IsNullOrWhiteSpace(row.Investigator.PlayerName))
+                                {
+                                    <div class="cm-field-note">@row.Investigator.PlayerName</div>
+                                }
+                            </td>
+                            <td class="whitespace-nowrap">
+                                @row.Target.Value
+                                <span class="cm-field-note">≤ @SkillCheckRules.TargetNumber(row.Target.Value, _difficulty)</span>
+                            </td>
+                            <td>
+                                <div class="w-20">
+                                    <input type="number" min="1" max="100" class="cm-input"
+                                           aria-label="@($"Выпало у {row.Investigator.Name}")"
+                                           value="@row.Roll" @onchange="e => SetRoll(row.Investigator.Id, e)"/>
+                                </div>
+                            </td>
+                            <td>
+                                @if (row.Outcome is { } outcome)
+                                {
+                                    <span class="font-semibold @CombatService.GetSuccessLevelColor(outcome.Level)">
+                                        @SkillCheckRules.LevelTitle(outcome.Level)
+                                    </span>
+                                    @if (!outcome.Passed && outcome.Level >= SuccessLevel.RegularSuccess)
+                                    {
+                                        <div class="cm-field-note">мало для этой сложности</div>
+                                    }
+                                    @if (isBest)
+                                    {
+                                        <div><Badge Variant="accent" Size="sm">Лучший результат</Badge></div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="cm-field-note">ещё не бросали</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="text-sm text-gray-700 mt-3" data-testid="group-check-summary">@Summary(rows, best)</p>
+            <p class="cm-field-note mt-1">
+                При равенстве уровней зацепку получают несколько сыщиков или тот, у кого навык выше, — решает
+                Хранитель. Провалившие могут пройти повторную проверку, если объяснят, как ищут иначе (стр. 200–201).
+            </p>
+        }
+    </section>
+</div>
+
+@code {
+    /// <summary>Выбранная кампания; хозяин может её запомнить между открытиями.</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+    [Parameter] public EventCallback<Guid?> CampaignIdChanged { get; set; }
+
+    /// <summary>Три навыка восприятия (стр. 199) — остальные вписываются в поле.</summary>
+    private static readonly string[] PerceptionSkills = ["Внимание", "Слух", "Психология"];
+
+    private sealed record Row(CheckInvestigator Investigator, CheckTarget Target, int? Roll, CheckOutcome? Outcome);
+
+    private List<Campaign> _campaigns = [];
+    private List<CheckInvestigator> _party = [];
+
+    /// <summary>Кампания, чей состав на экране. Параметр только задаёт её при открытии.</summary>
+    private Guid? _campaignId;
+
+    /// <summary>Последнее значение параметра: перечитываем состав, только когда хозяин его сменил.</summary>
+    private Guid? _lastCampaignParameter;
+    private bool _loading;
+    private string _skillName = PerceptionSkills[0];
+    private SuccessLevel _difficulty = SuccessLevel.RegularSuccess;
+    private readonly Dictionary<Guid, int> _rolls = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _campaigns = await CampaignService.GetKeeperCampaignsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading keeper campaigns for the group check");
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CampaignId == _lastCampaignParameter && _campaignId == CampaignId)
+            return;
+
+        _lastCampaignParameter = CampaignId;
+        await LoadPartyAsync(CampaignId);
+    }
+
+    private async Task SelectCampaign(ChangeEventArgs args)
+    {
+        var id = Guid.TryParse(args.Value?.ToString(), out var parsed) ? parsed : (Guid?)null;
+        _lastCampaignParameter = id;
+        await LoadPartyAsync(id);
+        await CampaignIdChanged.InvokeAsync(id);
+    }
+
+    private async Task LoadPartyAsync(Guid? campaignId)
+    {
+        _campaignId = campaignId;
+        _rolls.Clear();
+
+        if (campaignId is not { } id)
+        {
+            _party = [];
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            _party = CheckInvestigator.FromCampaign(await CampaignService.GetCampaignWithCharactersAsync(id));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading investigators of campaign {CampaignId} for the group check", id);
+            _party = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool IsSkill(string skill) =>
+        string.Equals(_skillName.Trim(), skill, StringComparison.OrdinalIgnoreCase);
+
+    private void RollAll()
+    {
+        foreach (var investigator in _party)
+            _rolls[investigator.Id] = SkillCheckRules.Roll(0).Result;
+    }
+
+    private void SetRoll(Guid investigatorId, ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var roll) && roll is >= 1 and <= 100)
+            _rolls[investigatorId] = roll;
+        else
+            _rolls.Remove(investigatorId);
+    }
+
+    /// <summary>Строки в порядке состава, а не по результату: пересортировка под пальцем мешала бы вписывать броски.</summary>
+    private List<Row> Rows() =>
+        _party.Select(investigator =>
+            {
+                var target = CheckTargets.ResolveByName(investigator.Character, _skillName);
+                int? roll = _rolls.TryGetValue(investigator.Id, out var value) ? value : null;
+                var outcome = roll is { } r ? SkillCheckRules.Evaluate(r, target.Value, _difficulty) : null;
+                return new Row(investigator, target, roll, outcome);
+            })
+            .ToList();
+
+    /// <summary>
+    ///     Лучшие: прошли проверку с наивысшим уровнем успеха, а среди них — с наибольшим значением
+    ///     навыка (стр. 88, 200). Полное равенство — все такие строки.
+    /// </summary>
+    private static HashSet<Guid> BestRows(List<Row> rows)
+    {
+        var passed = rows.Where(r => r.Outcome is { Passed: true }).ToList();
+        if (passed.Count == 0)
+            return [];
+
+        var topLevel = passed.Max(r => r.Outcome!.Level);
+        var topValue = passed.Where(r => r.Outcome!.Level == topLevel).Max(r => r.Target.Value);
+
+        return passed
+            .Where(r => r.Outcome!.Level == topLevel && r.Target.Value == topValue)
+            .Select(r => r.Investigator.Id)
+            .ToHashSet();
+    }
+
+    private static string Summary(List<Row> rows, HashSet<Guid> best)
+    {
+        if (rows.All(r => r.Outcome is null))
+            return "Бросков ещё нет.";
+
+        if (best.Count == 0)
+            return "Никто не прошёл проверку — зацепка упущена.";
+
+        var names = rows.Where(r => best.Contains(r.Investigator.Id)).Select(r => r.Investigator.Name);
+        var level = rows.First(r => best.Contains(r.Investigator.Id)).Outcome!.Level;
+        var passedCount = rows.Count(r => r.Outcome is { Passed: true });
+
+        return $"Лучше всех: {string.Join(", ", names)} — {CombatService.GetSuccessLevelText(level)}. " +
+               $"Прошли проверку: {passedCount} из {rows.Count}.";
+    }
+}

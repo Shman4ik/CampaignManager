@@ -192,7 +192,9 @@ public sealed class CampaignService(
     /// </summary>
     public async Task<List<Campaign>> GetKeeperCampaignsAsync()
     {
-        var userEmail = identityService.GetCurrentUserEmail();
+        // Асинхронный вариант: ширма Хранителя зовёт этот метод уже из живого circuit, без
+        // пререндера, а синхронный читает HttpContext и там может вернуть null.
+        var userEmail = await identityService.GetCurrentUserEmailAsync();
         if (string.IsNullOrEmpty(userEmail)) return [];
 
         var userEmailLower = userEmail.ToLower();
