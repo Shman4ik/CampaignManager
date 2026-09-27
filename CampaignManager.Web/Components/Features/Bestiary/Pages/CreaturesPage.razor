@@ -53,30 +53,21 @@
 
     @if (_loading)
     {
-        <div class="flex justify-center items-center h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
+        <LoadingIndicator/>
     }
     else if (_creatures.Count == 0)
     {
-        <div class="cm-card">
-            <div class="cm-card-body text-center">
-                @if (!string.IsNullOrEmpty(_searchTerm) || _selectedType != "")
+        <EmptyState IconClass="fa-skull"
+                    Title="Существа не найдены"
+                    Message="@(HasActiveFilters ? "Нет существ, соответствующих критериям поиска." : "В бестиарии пока нет существ. Добавьте первое, чтобы начать.")">
+            <ActionButton>
+                <Button Variant="primary" Icon="fa-plus" OnClick="CreateNewCreature">Добавить существо</Button>
+                @if (HasActiveFilters)
                 {
-                    <p class="cm-empty">Нет существ, соответствующих критериям поиска.</p>
-                    <Button OnClick="ClearFilters"
-                            Variant="secondary"
-                            Size="md">
-                        Очистить фильтры
-                    </Button>
+                    <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
                 }
-                else
-                {
-                    <p class="cm-empty">В базе данных нет существ.</p>
-                    <p class="text-gray-500">Добавьте первое существо, чтобы начать.</p>
-                }
-            </div>
-        </div>
+            </ActionButton>
+        </EmptyState>
     }
     else
     {
@@ -128,6 +119,8 @@
     private readonly int _pageSize = 6;
     private int _totalItems;
     private int TotalPages => (int)Math.Ceiling((double)_totalItems / _pageSize);
+
+    private bool HasActiveFilters => !string.IsNullOrEmpty(_searchTerm) || _selectedType != "";
 
     protected override async Task OnInitializedAsync()
     {

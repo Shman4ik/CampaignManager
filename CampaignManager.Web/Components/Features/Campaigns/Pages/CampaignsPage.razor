@@ -55,26 +55,21 @@ else
         <!-- Loading -->
         @if (_loading)
         {
-            <div class="flex justify-center items-center h-48">
-                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
-            </div>
+            <LoadingIndicator/>
         }
         else if (!FilteredCampaigns.Any())
         {
-            <div class="cm-card">
-                <div class="cm-card-body text-center">
-                    <i class="fas fa-scroll text-4xl text-gray-300 mb-4 block"></i>
-                    @if (_campaigns.Count == 0)
+            <EmptyState IconClass="fa-scroll"
+                        Title="@(_campaigns.Count == 0 ? "Кампаний пока нет" : "Кампании не найдены")"
+                        Message="@(_campaigns.Count == 0 ? "Создайте свою первую кампанию." : "Нет кампаний по заданным фильтрам.")">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="OpenAddModal">Создать кампанию</Button>
+                    @if (_campaigns.Count > 0)
                     {
-                        <p class="text-lg text-gray-600 mb-1">Кампаний пока нет.</p>
-                        <p class="text-gray-500">Создайте свою первую кампанию.</p>
+                        <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
                     }
-                    else
-                    {
-                        <p class="cm-empty">Нет кампаний по заданным фильтрам.</p>
-                    }
-                </div>
-            </div>
+                </ActionButton>
+            </EmptyState>
         }
         else
         {
@@ -262,6 +257,12 @@ else
         {
             await LoadCampaigns();
         }
+    }
+
+    private void ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _statusFilter = string.Empty;
     }
 
     private async Task LoadCampaigns()

@@ -37,16 +37,18 @@ else
 
     @if (_loading)
     {
-        <div class="flex justify-center items-center h-64">
-            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-        </div>
+        <LoadingIndicator/>
     }
     else if (_scenarios.Count == 0)
     {
-        <div class="cm-card"><div class="cm-card-body text-center">
-            <p class="cm-empty">Шаблонов нет.</p>
-            <p class="text-gray-500">Создайте новый шаблон.</p>
-        </div></div>
+        <EmptyState IconClass="fa-masks-theater"
+                    Title="Шаблонов нет"
+                    Message="Создайте новый шаблон или перенесите готовый сценарий из JSON-файла.">
+            <ActionButton>
+                <Button Variant="primary" Icon="fa-plus" OnClick="@(() => NavigationManager.NavigateTo("/scenarios/new"))">Новый шаблон</Button>
+                <Button Variant="secondary" Icon="fa-file-import" OnClick="ShowImportModal">Импорт JSON</Button>
+            </ActionButton>
+        </EmptyState>
     }
     else
     {
@@ -58,9 +60,13 @@ else
 
         @if (!FilteredScenarios.Any())
         {
-            <div class="cm-card"><div class="cm-card-body text-center">
-                <p class="cm-empty">Шаблоны не найдены.</p>
-            </div></div>
+            <EmptyState IconClass="fa-search"
+                        Title="Шаблоны не найдены"
+                        Message="Нет шаблонов, подходящих под поиск.">
+                <ActionButton>
+                    <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
+                </ActionButton>
+            </EmptyState>
         }
         else
         {
@@ -168,6 +174,8 @@ else
 
         _importModal.Show();
     }
+
+    private void ClearFilters() => _searchTerm = string.Empty;
 
     private IEnumerable<Scenario> FilteredScenarios => string.IsNullOrWhiteSpace(_searchTerm)
         ? _scenarios

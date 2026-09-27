@@ -235,8 +235,8 @@ Dangerous action confirmation. Optional type-to-confirm.
 | Component | Parameters | Purpose |
 |-----------|-----------|---------|
 | NotificationAlert | Type, Message, OnClose | Dismissable notification |
-| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder |
-| LoadingIndicator | Message | Spinner |
+| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder. Сам является `cm-card` — ставится на место списка, не внутрь другой карточки. В ActionButton: основное действие (`primary`, «Добавить …») и, если пусто из-за фильтра, `secondary` «Очистить фильтры» |
+| LoadingIndicator | Message (по умолчанию «Загрузка…») | Единственный спиннер: своих `animate-spin` на страницах не рисовать |
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
 | FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
