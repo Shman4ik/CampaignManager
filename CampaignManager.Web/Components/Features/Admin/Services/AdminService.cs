@@ -1,6 +1,7 @@
 using CampaignManager.Web.Components.Features.Admin.Model;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ public sealed class AdminService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IDbContextFactory<AppIdentityDbContext> identityDbContextFactory,
     IdentityService identityService,
+    UserClaimsCache userClaimsCache,
     ILogger<AdminService> logger)
 {
     /// <summary>
@@ -71,6 +73,9 @@ public sealed class AdminService(
 
             user.Role = role;
             await db.SaveChangesAsync();
+
+            // Роль попадает в claims из кэша — без сброса новая доехала бы только через его TTL.
+            userClaimsCache.Invalidate(email);
             logger.LogInformation("Role for {Email} changed to {Role}", email, role);
             return true;
         }

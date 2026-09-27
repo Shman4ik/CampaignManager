@@ -250,6 +250,10 @@ builder.Services.AddAuthentication(options =>
                 {
                     logger.LogError(ex, "Failed to upsert user record for {Email}", email);
                 }
+
+                // Роль только что могла подняться до администратора (AdminEmails), а вход — и так
+                // та точка, где человек ждёт свежих прав: снимаем закэшированные роль и имя.
+                context.HttpContext.RequestServices.GetRequiredService<UserClaimsCache>().Invalidate(email);
             }
 
             logger.LogInformation("Successfully created authentication ticket for user: {Email}", email);
@@ -260,6 +264,9 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"))
     .AddPolicy("RequireKeeper", policy => policy.RequireRole("GameMaster", "Administrator"));
 builder.Services.AddCascadingAuthenticationState();
+// Трансформация идёт на каждый запрос, включая статику, — роль и имя она берёт из кэша
+// (см. UserClaimsCache), а не из базы. Кэш общий на процесс, поэтому singleton.
+builder.Services.AddSingleton<UserClaimsCache>();
 builder.Services.AddTransient<IClaimsTransformation, RoleClaimsTransformation>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
