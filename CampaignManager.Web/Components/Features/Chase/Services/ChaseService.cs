@@ -1227,8 +1227,8 @@ public sealed partial class ChaseService
 
     public static string GetDifficultyText(int difficulty) => difficulty switch
     {
-        2 => "сложная",
-        3 => "экстремальная",
+        2 => "трудная",
+        3 => "чрезвычайная",
         _ => "обычная"
     };
 

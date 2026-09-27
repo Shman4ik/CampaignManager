@@ -1413,7 +1413,7 @@ public sealed partial class CombatService
                           $"{formula}={result.CounterDamageRolled}" +
                           (result.CounterBonusDamage != 0 ? $" + БкУ {result.CounterBonusDamage}" : "") +
                           (result.CounterArmorReduction > 0 ? $" − броня {result.CounterArmorReduction}" : "") +
-                          $" = {result.CounterTotalDamage} (ОЗ: {result.AttackerHpBefore}→{result.AttackerHpAfter}).";
+                          $" = {result.CounterTotalDamage} (ПЗ: {result.AttackerHpBefore}→{result.AttackerHpAfter}).";
 
         if (result.AttackerTriggeredMajorWound)
         {
@@ -1947,7 +1947,7 @@ public sealed partial class CombatService
             if (result.ExtraDamage > 0) dmgParts.Add($"доп. {result.ExtraDamage}");
             var dmgStr = $"Урон: {string.Join(" + ", dmgParts)} = {result.RawDamage}";
             if (result.ArmorReduction > 0) dmgStr += $" − броня {result.ArmorReduction} = {result.TotalDamage}";
-            parts.Add(dmgStr + $". ОЗ: {result.DefenderHpBefore}→{result.DefenderHpAfter}.");
+            parts.Add(dmgStr + $". ПЗ: {result.DefenderHpBefore}→{result.DefenderHpAfter}.");
 
             if (result.IsCritical) parts.Add("Критический удар!");
             else if (result.IsExtreme)
