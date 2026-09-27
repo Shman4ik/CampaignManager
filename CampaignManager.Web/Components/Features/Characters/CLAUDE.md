@@ -67,7 +67,8 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   зовёт `CombatService.CalculateSuccessLevel` — правило одно на всё приложение, и второй копии
   порогов «крах на 96+ при навыке ниже 50» быть не должно. Крах, осечку и критический успех
   выкупить нельзя, поэтому `CanSpendOn` на них отвечает `false`. Диалог — `LuckSpendModal`
-  за кнопкой с монетой в строке «Удача» (`DerivedAttributesTable`).
+  за кнопкой с монетой в строке «Удача» (`DerivedAttributesTable`). Название уровня успеха
+  берётся из `CombatService.GetSuccessLevelText` — своего словаря у `LuckRules` больше нет.
 - `SpecializationRules` (static) — бонус +10 смежным специализациям. Список навыков, где
   специализации делятся прогрессом, закрытый (Ближний бой, Стрельба, Языки, Выживание) —
   книга прямо противопоставляет им Науку, так что вешать бонус на любую группу нельзя.
