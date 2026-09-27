@@ -306,14 +306,22 @@
         {
             var c = QuickNpcRules.ToCharacteristics(_draft.Characteristics);
             var (build, damageBonus) = DerivedAttributeRules.ComputeBuildAndDamageBonus(c);
-            var dodgeRow = _draft.Skills.FirstOrDefault(r => string.Equals(r.Name.Trim(), "Уклонение", StringComparison.OrdinalIgnoreCase));
-            var dodge = Math.Max(DerivedAttributeRules.ComputeDodge(c), dodgeRow?.Value ?? 0);
+            var dodge = Math.Max(DerivedAttributeRules.ComputeDodge(c), SkillRowValue("Уклонение"));
+
+            // Рассудок чистого листа — МОЩ, но не выше 99 − Мифы Ктулху (у культиста они есть).
+            var sanity = Math.Min(c.Power.Regular, 99 - SkillRowValue("Мифы Ктулху"));
 
             return $"ПЗ {DerivedAttributeRules.ComputeMaxHitPoints(c)} · ПМ {DerivedAttributeRules.ComputeMaxMagicPoints(c)} · " +
-                   $"Рассудок {c.Power.Regular} · БкУ {damageBonus} · Комплекция {build} · " +
+                   $"Рассудок {sanity} · БкУ {damageBonus} · Комплекция {build} · " +
                    $"Скорость {DerivedAttributeRules.ComputeMoveRate(c, _draft.Age)} · Уклонение {dodge}";
         }
     }
+
+    private int SkillRowValue(string name) =>
+        _draft.Skills
+            .Where(r => string.Equals(r.Name.Trim(), name, StringComparison.OrdinalIgnoreCase))
+            .Select(r => QuickNpcRules.ClampSkill(r.Value))
+            .FirstOrDefault();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -417,6 +425,11 @@
 
         if (_nameIsGenerated)
             RollName();
+
+        // Список оружия фильтруется по эпохе: выбранное, но уже невидимое в нём оружие не должно
+        // тайком уехать в лист.
+        if (_draft.WeaponId is { } weaponId && WeaponsForEra().All(w => w.Id != weaponId))
+            QuickNpcRules.ApplyWeapon(_draft, null);
     }
 
     private void AddSkill() => _draft.Skills.Add(new QuickNpcSkill { Value = 50 });
