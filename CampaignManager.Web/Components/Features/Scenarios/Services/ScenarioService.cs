@@ -122,6 +122,18 @@ public sealed class ScenarioService(
     }
 
     /// <summary>
+    ///     Сценарии, в которые текущий пользователь может писать, — для выбора в диалогах вне
+    ///     страницы сценария (занять НПС из библиотеки). Чужой сценарий кампании метод записи всё равно
+    ///     отклонит, поэтому в списке его нет. Права те же — <see cref="Evaluate" />, второй копии нет.
+    /// </summary>
+    public async Task<List<Scenario>> GetWritableScenariosAsync()
+    {
+        var scenarios = await GetAllScenariosAsync();
+        var access = await GetAccessAsync(scenarios);
+        return [.. scenarios.Where(s => access.GetValueOrDefault(s.Id).CanEdit)];
+    }
+
+    /// <summary>
     ///     Кампании, куда текущий пользователь может положить сценарий: свои, а администратору — любые.
     ///     Для выбора в «Добавить в кампанию» — чтобы не предлагать то, что сервис отклонит.
     /// </summary>
