@@ -94,6 +94,9 @@ public sealed class ScenarioHandoutImportDto
     public string? Description { get; set; }
 
     public string? FileUrl { get; set; }
+
+    /// <summary>Пометка для Хранителя — игрокам не показывается (см. <see cref="ScenarioHandout.KeeperNote" />).</summary>
+    public string? KeeperNote { get; set; }
 }
 
 /// <summary>
