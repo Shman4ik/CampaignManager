@@ -35,16 +35,6 @@ public partial class ItemsPage
     // игроку кнопки, которые всё равно откажут.
     private bool canEdit;
 
-    // Editable item class for form binding
-    public class EditableItem
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? Type { get; set; }
-        public string? Description { get; set; }
-        public string? ImageUrl { get; set; }
-    }
-
     private bool isSearchPanelVisible = true;
 
     // List to hold all items fetched from the service
@@ -67,7 +57,7 @@ public partial class ItemsPage
     private bool showModal;
     private bool showDeleteModal; // State for Add/Edit modal
     private bool isEditMode;
-    private EditableItem editItem = new(); // Model for the edit form
+    private Item editItem = NewItem(); // Model for the edit form
     private bool editItem1920;
     private bool editItemModern;
 
@@ -158,7 +148,7 @@ public partial class ItemsPage
         if (!canEdit) return;
 
         isEditMode = false;
-        editItem = new EditableItem(); // Reset the edit model
+        editItem = NewItem(); // Reset the edit model
         editItem1920 = true;
         editItemModern = false;
         errorMessage = null; // Clear errors
@@ -170,15 +160,9 @@ public partial class ItemsPage
         if (!canEdit) return;
 
         isEditMode = true;
-        // Copy the item data to the editable model
-        editItem = new EditableItem
-        {
-            Id = item.Id,
-            Name = item.Name,
-            Type = item.Type,
-            Description = item.Description,
-            ImageUrl = item.ImageUrl
-        };
+        // Правим полную копию, а не экземпляр из кэша справочника: новое поле Item попадает
+        // в неё само. Эпоху форма держит двумя флажками и собирает обратно при сохранении.
+        editItem = EntityCloner.Clone(item);
         editItem1920 = (item.Era & Eras.Classic) != 0;
         editItemModern = (item.Era & Eras.Modern) != 0;
         errorMessage = null; // Clear errors
@@ -213,19 +197,11 @@ public partial class ItemsPage
             else if (editItemModern)
                 era = Eras.Modern;
 
-            var item = new Item
-            {
-                Id = editItem.Id,
-                Name = editItem.Name,
-                Type = editItem.Type,
-                Era = era,
-                Description = editItem.Description,
-                ImageUrl = editItem.ImageUrl
-            };
+            editItem.Era = era;
 
             if (isEditMode)
             {
-                var success = await ItemService.UpdateItemAsync(item);
+                var success = await ItemService.UpdateItemAsync(editItem);
                 if (!success)
                 {
                     errorMessage = "Не удалось обновить предмет. Возможно, предмет с таким названием уже существует.";
@@ -234,7 +210,7 @@ public partial class ItemsPage
             }
             else
             {
-                var created = await ItemService.CreateItemAsync(item);
+                var created = await ItemService.CreateItemAsync(editItem);
                 if (created == null)
                 {
                     errorMessage = "Не удалось создать предмет. Возможно, предмет с таким названием уже существует.";
@@ -293,6 +269,9 @@ public partial class ItemsPage
             // Keep the modal open to show the error
         }
     }
+
+    /// <summary>Пустой предмет для формы «Добавить»; эпоху перед сохранением задают флажки.</summary>
+    private static Item NewItem() => new() { Name = string.Empty, Era = Eras.Classic };
 
     // Filter items based on all active filters
     private IEnumerable<Item> FilterItems()

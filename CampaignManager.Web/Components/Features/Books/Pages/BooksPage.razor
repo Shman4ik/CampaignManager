@@ -305,25 +305,11 @@
         if (!canEdit) return;
 
         isEditMode = true;
-        editBook = new Book
-        {
-            Id = book.Id,
-            Name = book.Name,
-            BookType = book.BookType,
-            Language = book.Language,
-            Year = book.Year,
-            Author = book.Author,
-            SanityLoss = book.SanityLoss,
-            CthulhuMythosInitial = book.CthulhuMythosInitial,
-            CthulhuMythosFull = book.CthulhuMythosFull,
-            MythosRating = book.MythosRating,
-            StudyWeeks = book.StudyWeeks,
-            OccultismBonus = book.OccultismBonus,
-            Description = book.Description,
-            AlternativeNames = book.AlternativeNames?.ToList() ?? [],
-            PossibleSpells = book.PossibleSpells?.ToList() ?? [],
-            ImageUrl = book.ImageUrl
-        };
+        // Правим полную копию, а не экземпляр из кэша справочника: новое поле Book попадает
+        // в неё само. Списки из jsonb страхуем от null — форма и CleanBook ждут пустой список.
+        editBook = EntityCloner.Clone(book);
+        editBook.AlternativeNames ??= [];
+        editBook.PossibleSpells ??= [];
         modalErrorMessage = null;
         showModal = true;
     }

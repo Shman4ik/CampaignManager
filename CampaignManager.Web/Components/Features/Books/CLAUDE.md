@@ -29,6 +29,8 @@ Rulebook/sourcebook catalog (independent entity).
 `Components/BooksListView.razor` (таблица + карточки) и `Components/BookTableRow.razor`
 (строка), страница отвечает за фильтры и модалки. Страницу, сортировку и раскрытую строку
 держит общий `Shared/Model/CatalogListState<Book>` (см. `design-system-guide.md`, «Каталог»).
+Модалка правит полную копию книги (`Utilities/Services/EntityCloner.Clone`), поэтому новое
+поле `Book` в неё попадает само — перечислять поля руками не нужно.
 
 - Колонки: `Название · Язык · Автор · Рассудок · МКН · МКП · ЗМ · Оккульт. · действия`.
   Их девять, поэтому порог таблицы `xl` (1280), как у оружия: в портрет iPad (1024)

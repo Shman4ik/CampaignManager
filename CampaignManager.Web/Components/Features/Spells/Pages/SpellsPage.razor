@@ -280,16 +280,10 @@
         if (!canEdit) return;
 
         isEditMode = true;
-        editSpell = new Spell
-        {
-            Id = spell.Id,
-            Name = spell.Name,
-            SpellType = spell.SpellType,
-            Cost = spell.Cost,
-            CastingTime = spell.CastingTime,
-            Description = spell.Description,
-            AlternativeNames = spell.AlternativeNames?.ToList() ?? new List<string>()
-        };
+        // Правим полную копию, а не экземпляр из кэша справочника: новое поле Spell попадает
+        // в неё само. Список из jsonb страхуем от null — форма и CleanSpell ждут пустой список.
+        editSpell = EntityCloner.Clone(spell);
+        editSpell.AlternativeNames ??= [];
         modalErrorMessage = null;
         showModal = true;
     }

@@ -9,9 +9,11 @@ General equipment/item catalog (independent entity).
   а не выбор одного из трёх. Единственное место, где эпоха превращается в текст.
 
 ## Key Models
-- `Item : BaseDataBaseEntity, INamedEntity`. `Name` и `Era` — `required` и `init`,
-  поэтому страница правит предмет через промежуточный `ItemsPage.EditableItem`,
-  а не мутирует загруженный экземпляр.
+- `Item : BaseDataBaseEntity, INamedEntity`. `Name` и `Era` — `required`, но с обычным
+  сеттером: страница правит полную копию предмета (`Utilities/Services/EntityCloner.Clone`),
+  а не загруженный экземпляр из кэша. Промежуточного `EditableItem` больше нет — он требовал
+  переписывать каждое новое поле руками в двух местах. Эпоху форма держит двумя флажками
+  (`editItem1920`, `editItemModern`) и собирает в `Era` при сохранении.
 
 ## Страница каталога `/items`
 

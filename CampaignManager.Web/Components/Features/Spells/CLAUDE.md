@@ -26,6 +26,8 @@ Master spell catalog (independent entity).
 карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры
 и модалки. Страницу, сортировку и раскрытую строку держит общий
 `Shared/Model/CatalogListState<Spell>` (см. `design-system-guide.md`, «Каталог»).
+Модалка правит полную копию заклинания (`Utilities/Services/EntityCloner.Clone`), поэтому
+новое поле `Spell` в неё попадает само.
 
 - Колонки: `Название · Тип · Стоимость · Время сотворения · действия`. Их пять, а не
   девять, как у оружия, поэтому порог таблицы `lg` (1024): портрет iPad её вмещает —

@@ -11,12 +11,12 @@ public class Item : BaseDataBaseEntity, INamedEntity
     /// <summary>
     ///     The name of the item
     /// </summary>
-    public required string Name { get; init; }
+    public required string Name { get; set; }
 
     /// <summary>
     /// В какой этохе доступен этот предмет
     /// </summary>
-    public required Eras Era { get; init; }
+    public required Eras Era { get; set; }
 
     /// <summary>
     ///     The type of item (e.g., Weapon, Artifact, Tool)
