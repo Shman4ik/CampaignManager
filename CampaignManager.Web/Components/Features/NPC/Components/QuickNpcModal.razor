@@ -1,0 +1,475 @@
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.NPC.Model
+@using CampaignManager.Web.Components.Features.NPC.Services
+@using CampaignManager.Web.Components.Features.Scenarios.Services
+@using CampaignManager.Web.Components.Features.Weapons.Model
+@using CampaignManager.Web.Components.Features.Weapons.Services
+@using CampaignManager.Web.Components.Shared.Model
+@using CampaignManager.Web.Extensions
+@inject CharacterService CharacterService
+@inject ScenarioService ScenarioService
+@inject WeaponService WeaponService
+@inject ILogger<QuickNpcModal> Logger
+
+@* «Быстрый НПС» — встречный персонаж Хранителя за полминуты (гл. 10, стр. 187–189): типаж,
+   случайное имя под эпоху, характеристики «средний человек» или бросок, опытность в бою и
+   три-пять ключевых навыков. Лист собирает QuickNpcRules, сохраняет CharacterService —
+   так же, как лист, заведённый руками. Открытием управляет родитель через IsVisible:
+   форма сбрасывается в момент открытия. *@
+
+<Modal IsVisible="IsVisible"
+       OnClose="OnClose"
+       Title="Быстрый НПС"
+       MaxWidth="2xl"
+       MaxHeight="@null">
+    <ChildContent>
+        <div class="qn-form">
+            <section>
+                <span class="cm-field-label">Типаж</span>
+                <div class="qn-chips">
+                    @foreach (var archetype in QuickNpcRules.Archetypes)
+                    {
+                        var active = _draft.ArchetypeKey == archetype.Key;
+                        <button type="button" class="qn-chip @(active ? "qn-chip-active" : "")"
+                                aria-pressed="@(active ? "true" : "false")"
+                                @onclick="() => ApplyArchetype(archetype)">
+                            <i class="fa-solid @archetype.Icon"></i><span>@archetype.Label</span>
+                        </button>
+                    }
+                </div>
+            </section>
+
+            <section class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="sm:col-span-2">
+                    <label class="cm-field-label" for="qn-name">Имя</label>
+                    <div class="flex gap-2">
+                        <div class="flex-1 min-w-0">
+                            <input id="qn-name" class="cm-input" maxlength="100" autocomplete="off"
+                                   @bind="_draft.Name" @bind:event="oninput" @bind:after="MarkNameEdited"/>
+                        </div>
+                        <button type="button" class="cm-btn cm-btn-secondary shrink-0" @onclick="RollName">
+                            <i class="fa-solid fa-dice"></i><span>Другое</span>
+                        </button>
+                    </div>
+                    <p class="cm-field-note">Имена под эпоху: @QuickNpcRules.EraLabel(_era).</p>
+                </div>
+
+                <div>
+                    <span class="cm-field-label">Пол</span>
+                    <div class="qn-chips">
+                        <button type="button" class="qn-chip @(_draft.IsFemale ? "" : "qn-chip-active")"
+                                aria-pressed="@(_draft.IsFemale ? "false" : "true")"
+                                @onclick="() => SetFemale(false)">
+                            Мужчина
+                        </button>
+                        <button type="button" class="qn-chip @(_draft.IsFemale ? "qn-chip-active" : "")"
+                                aria-pressed="@(_draft.IsFemale ? "true" : "false")"
+                                @onclick="() => SetFemale(true)">
+                            Женщина
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="cm-field-label" for="qn-age">Возраст</label>
+                    <div class="w-24">
+                        <input id="qn-age" type="number" min="15" max="89" class="cm-input" @bind="_draft.Age"/>
+                    </div>
+                </div>
+
+                <div class="sm:col-span-2">
+                    <label class="cm-field-label" for="qn-occupation">Род занятий</label>
+                    <input id="qn-occupation" class="cm-input" maxlength="100" autocomplete="off"
+                           placeholder="Констебль, бармен, горничная…" @bind="_draft.Occupation"/>
+                </div>
+            </section>
+
+            <section>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <span class="cm-field-label mb-0">Характеристики</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="UseTypical">
+                            <span>Средний человек</span>
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RollCharacteristics">
+                            <i class="fa-solid fa-dice"></i><span>Бросить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="qn-stats">
+                    @foreach (var info in InvestigatorCreationRules.Characteristics)
+                    {
+                        var key = info.Key;
+                        <label class="qn-stat">
+                            <span class="qn-stat-label">@info.Abbreviation</span>
+                            <input type="number" min="1" max="99" class="cm-input" @bind="_draft.Characteristics[key]"/>
+                        </label>
+                    }
+                    <label class="qn-stat">
+                        <span class="qn-stat-label">Удача</span>
+                        <input type="number" min="0" max="99" class="cm-input" @bind="_draft.Luck"/>
+                    </label>
+                </div>
+                <p class="qn-derived">@DerivedSummary</p>
+            </section>
+
+            <section class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <span class="cm-field-label">
+                        Опытность в бою <span class="cm-field-hint">(стр. 187)</span>
+                    </span>
+                    <div class="qn-chips">
+                        @foreach (var option in QuickNpcRules.CombatLevels)
+                        {
+                            var active = _draft.CombatLevel == option.Level;
+                            <button type="button" class="qn-chip @(active ? "qn-chip-active" : "")"
+                                    aria-pressed="@(active ? "true" : "false")"
+                                    @onclick="() => SetCombatLevel(option.Level)">
+                                @option.Label · @((int)option.Level)%
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div>
+                    <label class="cm-field-label" for="qn-weapon">
+                        Оружие <span class="cm-field-hint">(необязательно)</span>
+                    </label>
+                    <select id="qn-weapon" class="cm-input" value="@(_draft.WeaponId?.ToString() ?? string.Empty)"
+                            @onchange="OnWeaponChanged">
+                        <option value="">— без оружия —</option>
+                        @foreach (var group in WeaponGroups)
+                        {
+                            <optgroup label="@group.Key.ToRussianString()">
+                                @foreach (var weapon in group)
+                                {
+                                    <option value="@weapon.Id">@weapon.Name (@weapon.Damage)</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+            </section>
+
+            <section>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-3 mb-2">
+                    <span class="cm-field-label mb-0">Ключевые навыки</span>
+                    <span class="cm-field-note">Навык занятия — от 50%, остальное ниже (стр. 187).</span>
+                </div>
+                <datalist id="qn-skill-names">
+                    @foreach (var name in QuickNpcRules.SheetSkillNames)
+                    {
+                        <option value="@name"></option>
+                    }
+                </datalist>
+                @if (_draft.Skills.Count == 0)
+                {
+                    <p class="cm-field-note">Выберите типаж или добавьте навык — остальные останутся на базовых значениях.</p>
+                }
+                <div class="qn-skill-rows">
+                    @foreach (var row in _draft.Skills)
+                    {
+                        <div class="qn-skill-row" @key="row">
+                            <div class="flex-1 min-w-0">
+                                <input class="cm-input" list="qn-skill-names" placeholder="Навык" autocomplete="off"
+                                       aria-label="Навык" @bind="row.Name"/>
+                            </div>
+                            <div class="w-20 shrink-0">
+                                <input type="number" min="0" max="99" class="cm-input" aria-label="Значение, %"
+                                       @bind="row.Value"/>
+                            </div>
+                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0"
+                                    @onclick="() => RemoveSkill(row)">
+                                <span>Убрать</span>
+                            </button>
+                        </div>
+                    }
+                </div>
+                @if (_draft.Skills.Count < QuickNpcRules.MaxSkillRows)
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mt-2" @onclick="AddSkill">
+                        <i class="fa-solid fa-plus"></i><span>Навык</span>
+                    </button>
+                }
+            </section>
+
+            <section>
+                <label class="cm-field-label" for="qn-note">
+                    Заметка <span class="cm-field-hint">(кто он и что знает — ляжет в предысторию)</span>
+                </label>
+                <input id="qn-note" class="cm-input" maxlength="500" autocomplete="off" @bind="_draft.Note"/>
+            </section>
+
+            @if (ScenarioId is not null)
+            {
+                <section class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="cm-field-label" for="qn-role">Роль в сценарии</label>
+                        <select id="qn-role" class="cm-input" @bind="_draft.Role">
+                            @foreach (var role in Enum.GetValues<NpcRole>())
+                            {
+                                <option value="@role">@role.ToRussianString()</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="cm-field-label" for="qn-count">Сколько таких</label>
+                        <div class="w-24">
+                            <input id="qn-count" type="number" min="1" max="20" class="cm-input" @bind="_draft.Count"/>
+                        </div>
+                    </div>
+                </section>
+            }
+            else if (Campaigns.Count > 0)
+            {
+                <section>
+                    <label class="cm-field-label" for="qn-owner">Где хранить</label>
+                    <select id="qn-owner" class="cm-input" value="@(_draft.CampaignId?.ToString() ?? string.Empty)"
+                            @onchange="OnOwnerChanged">
+                        <option value="">Общая библиотека НПС</option>
+                        @foreach (var campaign in Campaigns)
+                        {
+                            <option value="@campaign.Id">Кампания: @campaign.Name</option>
+                        }
+                    </select>
+                </section>
+            }
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <Alert Type="error" Small ShowIcon class="!mb-0">@_error</Alert>
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">
+            <span>Отмена</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-primary"
+                disabled="@(_saving || _createdOnly || string.IsNullOrWhiteSpace(_draft.Name))"
+                @onclick="SaveAsync">
+            @if (_saving)
+            {
+                <i class="fas fa-spinner fa-spin"></i>
+            }
+            else
+            {
+                <i class="fa-solid fa-bolt"></i>
+            }
+            <span>@(_saving ? "Создание..." : "Создать НПС")</span>
+        </button>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Лист создан (и, если задан <see cref="ScenarioId" />, занят в сценарии).</summary>
+    [Parameter] public EventCallback<CharacterStorageDto> OnCreated { get; set; }
+
+    /// <summary>
+    ///     Создаём из сценария: НПС ложится в общую библиотеку и занимается в сценарии связью
+    ///     (<c>ScenarioService.AddNpcToScenarioAsync</c>) с ролью и количеством из формы.
+    /// </summary>
+    [Parameter] public Guid? ScenarioId { get; set; }
+
+    /// <summary>Кампании Хранителя — варианты «где хранить» для НПС, созданного из библиотеки.</summary>
+    [Parameter] public IReadOnlyList<Campaign> Campaigns { get; set; } = [];
+
+    /// <summary>Эпоха для случайных имён, если её нельзя взять из выбранной кампании.</summary>
+    [Parameter] public Eras? DefaultEra { get; set; }
+
+    private QuickNpcDraft _draft = NewDraft();
+    private Eras _era = Eras.Classic;
+    private bool _nameIsGenerated;
+    private bool _wasVisible;
+    private bool _saving;
+    private string? _error;
+
+    /// <summary>Лист создан, а занять его в сценарии не вышло: повторное «Создать» дало бы двойника.</summary>
+    private bool _createdOnly;
+    private List<Weapon> _weapons = [];
+
+    private IEnumerable<IGrouping<WeaponType, Weapon>> WeaponGroups =>
+        WeaponsForEra()
+            .OrderBy(w => w.Type)
+            .ThenBy(w => w.Name)
+            .GroupBy(w => w.Type);
+
+    private string DerivedSummary
+    {
+        get
+        {
+            var c = QuickNpcRules.ToCharacteristics(_draft.Characteristics);
+            var (build, damageBonus) = DerivedAttributeRules.ComputeBuildAndDamageBonus(c);
+            var dodgeRow = _draft.Skills.FirstOrDefault(r => string.Equals(r.Name.Trim(), "Уклонение", StringComparison.OrdinalIgnoreCase));
+            var dodge = Math.Max(DerivedAttributeRules.ComputeDodge(c), dodgeRow?.Value ?? 0);
+
+            return $"ПЗ {DerivedAttributeRules.ComputeMaxHitPoints(c)} · ПМ {DerivedAttributeRules.ComputeMaxMagicPoints(c)} · " +
+                   $"Рассудок {c.Power.Regular} · БкУ {damageBonus} · Комплекция {build} · " +
+                   $"Скорость {DerivedAttributeRules.ComputeMoveRate(c, _draft.Age)} · Уклонение {dodge}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && !_wasVisible)
+            await ResetAsync();
+
+        _wasVisible = IsVisible;
+    }
+
+    private static QuickNpcDraft NewDraft() => new()
+    {
+        Characteristics = QuickNpcRules.TypicalCharacteristics(),
+        Luck = QuickNpcRules.TypicalLuck
+    };
+
+    private async Task ResetAsync()
+    {
+        _draft = NewDraft();
+        _era = DefaultEra ?? Eras.Classic;
+        _error = null;
+        _saving = false;
+        _createdOnly = false;
+        QuickNpcRules.ApplyCombatLevel(_draft, QuickNpcCombatLevel.Novice);
+        RollName();
+
+        if (_weapons.Count == 0)
+        {
+            try
+            {
+                _weapons = await WeaponService.GetAllWeaponsAsync();
+            }
+            catch (Exception ex)
+            {
+                // Без каталога оружия форма всё равно работает — просто без выбора оружия.
+                Logger.LogError(ex, "Error loading weapons for quick NPC");
+                _weapons = [];
+            }
+        }
+    }
+
+    private IEnumerable<Weapon> WeaponsForEra()
+    {
+        var modern = QuickNpcRules.IsModern(_era);
+        var forEra = _weapons
+            .Where(w => (modern ? w.IsModern : w.Is1920) || (!w.IsModern && !w.Is1920))
+            .ToList();
+
+        return forEra.Count > 0 ? forEra : _weapons;
+    }
+
+    private void ApplyArchetype(QuickNpcRules.Archetype archetype) => QuickNpcRules.ApplyArchetype(_draft, archetype);
+
+    private void SetCombatLevel(QuickNpcCombatLevel level) => QuickNpcRules.ApplyCombatLevel(_draft, level);
+
+    private void RollName()
+    {
+        _draft.Name = QuickNpcRules.RandomName(_era, _draft.IsFemale);
+        _nameIsGenerated = true;
+    }
+
+    private void MarkNameEdited() => _nameIsGenerated = false;
+
+    /// <summary>Сменили пол у ещё не тронутого случайного имени — имя подбирается заново.</summary>
+    private void SetFemale(bool female)
+    {
+        if (_draft.IsFemale == female) return;
+
+        _draft.IsFemale = female;
+        if (_nameIsGenerated)
+            RollName();
+    }
+
+    private void UseTypical()
+    {
+        _draft.Characteristics = QuickNpcRules.TypicalCharacteristics();
+        _draft.Luck = QuickNpcRules.TypicalLuck;
+    }
+
+    private void RollCharacteristics()
+    {
+        _draft.Characteristics = QuickNpcRules.RollCharacteristics();
+        _draft.Luck = QuickNpcRules.RollLuck();
+    }
+
+    private void OnWeaponChanged(ChangeEventArgs e)
+    {
+        var weapon = Guid.TryParse(e.Value?.ToString(), out var id)
+            ? _weapons.FirstOrDefault(w => w.Id == id)
+            : null;
+
+        QuickNpcRules.ApplyWeapon(_draft, weapon);
+    }
+
+    /// <summary>Выбранная кампания задаёт и владельца, и эпоху случайных имён.</summary>
+    private void OnOwnerChanged(ChangeEventArgs e)
+    {
+        _draft.CampaignId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+
+        var campaign = Campaigns.FirstOrDefault(c => c.Id == _draft.CampaignId);
+        _era = campaign?.Era ?? DefaultEra ?? Eras.Classic;
+
+        if (_nameIsGenerated)
+            RollName();
+    }
+
+    private void AddSkill() => _draft.Skills.Add(new QuickNpcSkill { Value = 50 });
+
+    private void RemoveSkill(QuickNpcSkill row)
+    {
+        _draft.Skills.Remove(row);
+        if (string.Equals(row.Name.Trim(), _draft.WeaponSkillName, StringComparison.OrdinalIgnoreCase))
+            _draft.WeaponSkillName = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_draft.Name))
+        {
+            _error = "Укажите имя НПС.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var weapon = _draft.WeaponId is { } weaponId ? _weapons.FirstOrDefault(w => w.Id == weaponId) : null;
+            var character = QuickNpcRules.BuildCharacter(_draft, weapon);
+
+            // Из сценария НПС идёт в библиотеку, а в сценарий — связью, как у «Создать» на странице сценария.
+            var ownerCampaignId = ScenarioId is null ? _draft.CampaignId : null;
+            var created = await CharacterService.CreateCharacterAsync(character, CharacterKind.Npc, campaignId: ownerCampaignId);
+
+            if (ScenarioId is { } scenarioId
+                && !await ScenarioService.AddNpcToScenarioAsync(scenarioId, created.Id, _draft.Role, Math.Clamp(_draft.Count, 1, 20)))
+            {
+                Logger.LogWarning("Quick NPC {CharacterId} created but not cast in scenario {ScenarioId}", created.Id, scenarioId);
+                _createdOnly = true;
+                _error = $"НПС «{created.CharacterName}» создан в библиотеке, но в сценарий не добавлен — добавьте его кнопкой «Из шаблонов».";
+                return;
+            }
+
+            await OnCreated.InvokeAsync(created);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _error = "Создавать НПС может только Хранитель.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating quick NPC {NpcName}", _draft.Name);
+            _error = "Не удалось создать НПС. Попробуйте ещё раз.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

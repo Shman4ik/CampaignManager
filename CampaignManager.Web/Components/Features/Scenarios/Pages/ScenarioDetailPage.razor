@@ -5,6 +5,7 @@
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Utilities.Services
 @using CampaignManager.Web.Components.Features.NPC.Components
+@using CampaignManager.Web.Components.Features.NPC.Services
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Components
@@ -311,8 +312,10 @@ else
                     </span>
                     @if (_access.CanEdit)
                     {
-                        <div class="flex gap-1 flex-shrink-0">
+                        @* Три кнопки на iPad в портрете не помещаются в строку рядом с заголовком — переносятся. *@
+                        <div class="flex flex-wrap justify-end gap-1">
                             <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewNpc">Создать</Button>
+                            <Button Variant="secondary" Size="sm" Icon="fa-bolt" OnClick="ShowQuickNpc">Быстрый</Button>
                             <Button Variant="secondary" Size="sm" Icon="fa-link" OnClick="ShowAddNpcModal">Из шаблонов</Button>
                         </div>
                     }
@@ -525,6 +528,13 @@ else
              ScenarioId="Id"
              Kind="CharacterKind.Npc"
              OnAdded="HandleCastAdded"/>
+
+<!-- Быстрый НПС: лист в библиотеку, в сценарий — связью с ролью и количеством -->
+<QuickNpcModal IsVisible="_showQuickNpc"
+               ScenarioId="Id"
+               DefaultEra="QuickNpcRules.EraFromText(_scenario?.Era)"
+               OnClose="() => _showQuickNpc = false"
+               OnCreated="HandleQuickNpcCreated"/>
 
 <!-- Add Pregen Modal (filtered to PlayerCharacter) -->
 <AddNpcModal @ref="_addPregenModal"
@@ -1004,6 +1014,16 @@ else
     private void CreateNewNpc()
     {
         NavigationManager.NavigateTo($"/character/create/npc?scenarioId={Id}");
+    }
+
+    private bool _showQuickNpc;
+
+    private void ShowQuickNpc() => _showQuickNpc = true;
+
+    private async Task HandleQuickNpcCreated(CharacterStorageDto _)
+    {
+        _showQuickNpc = false;
+        _cast = await ScenarioService.GetScenarioCastAsync(Id);
     }
 
     private void CreateNewPregen()
