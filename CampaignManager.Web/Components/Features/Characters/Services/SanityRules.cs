@@ -51,10 +51,18 @@ public static class SanityRules
     }
 
     /// <summary>
-    ///     Порог для проверки на бессрочное безумие — 1/5 от текущего Рассудка, потерянные
-    ///     за один игровой день (стр. 153).
+    ///     Порог бессрочного безумия: потеря «не менее 1/5 текущих пунктов рассудка» за один
+    ///     игровой день (гл. 8, «Бессрочное безумие», стр. 154). Пятая часть бывает дробной,
+    ///     а потеря — целая, поэтому порог округляется <b>вверх</b>: при Рассудке 52 пятая часть
+    ///     10,4, и 10 пунктов её ещё не достигают — нужно 11. Округление вниз давало 10 и объявляло
+    ///     безумие на пункт раньше книги.
+    ///     <para>
+    ///         Единственная точка порога: её показывают панель Рассудка, ширма Хранителя и
+    ///         модалка книги Мифов, по ней же решает бой (<c>CombatService.EvaluateSanityLoss</c>).
+    ///     </para>
     /// </summary>
-    public static int IndefiniteInsanityThreshold(int currentSanity) => currentSanity / 5;
+    public static int IndefiniteInsanityThreshold(int currentSanity) =>
+        currentSanity <= 0 ? 0 : (currentSanity + 4) / 5;
 
     /// <summary>
     ///     Триггер на проверку ИНТ → временное безумие: 5 и более пунктов, потерянных
@@ -110,7 +118,7 @@ public static class SanityRules
         UpdateBoutDueOnMark(character, insane);
     }
 
-    /// <summary>Отметка бессрочного безумия (≥1/5 текущего Рассудка за игровой день, стр. 153).</summary>
+    /// <summary>Отметка бессрочного безумия (≥1/5 текущего Рассудка за игровой день, стр. 154).</summary>
     public static void SetIndefiniteInsanity(Character character, bool insane)
     {
         character.State.HasIndefiniteInsanity = insane;

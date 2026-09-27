@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Features.Weapons.Services;
@@ -1536,8 +1537,11 @@ public sealed partial class CombatService
             }
         }
 
-        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 153)
-        if (target.CurrentSanity > 0 && lostToday * 5 >= target.CurrentSanity && !target.HasIndefiniteInsanity)
+        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 154).
+        // Порог — тот же, что показывает панель Рассудка на листе.
+        if (target.CurrentSanity > 0
+            && lostToday >= SanityRules.IndefiniteInsanityThreshold(target.CurrentSanity)
+            && !target.HasIndefiniteInsanity)
         {
             result.TriggeredIndefiniteInsanity = true;
             notes.Add($"За игровой день потеряно {lostToday} из {target.CurrentSanity} — это не меньше ⅕. Бессрочное безумие.");
