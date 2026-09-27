@@ -4,6 +4,11 @@ Master spell catalog (independent entity).
 
 ## Key Services
 - `SpellService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
+- `SpellCatalogMatcher` (static) — находит заклинание каталога по свободной записи из списка
+  «Возможные заклинания» книги Мифов. Только точное совпадение после нормализации (регистр, «ё»,
+  кавычки, пробелы) по `Name` и `AlternativeNames`; кандидаты — вся строка, текст в «ёлочках» и
+  часть до скобки. Нечёткого поиска нет намеренно: не нашлось — Хранитель сопоставит руками в
+  модалке чтения книги, а не получит молча чужое заклинание. `IsKnown` — есть ли такое на листе.
 
 ## Key Models
 - `Spell : BaseDataBaseEntity, INamedEntity` (declared in `SpellModel.cs`).
