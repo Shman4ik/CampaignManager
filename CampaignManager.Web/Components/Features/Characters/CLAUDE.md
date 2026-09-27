@@ -7,6 +7,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `CreateCharacterAsync` требует явный `CharacterKind` и ровно одного владельца
   (`campaignPlayerId` / `campaignId` / `scenarioId` — или ничего, тогда НПС попадает в общую
   библиотеку). Списки: `GetNpcsAsync`, `GetPregenTemplatesAsync`, `GetScenarioPregensAsync`.
+  Кого считать НПС в списке (вид `Npc`, архив — по просьбе), решает один `Npcs(...)` внутри
+  сервиса; `GetKeptCampaignNpcsAsync` — имена НПС всех кампаний текущего Хранителя одним запросом
+  и без JSONB (для главной).
   `GetPartyAsync` — состав для блока «Знакомые сыщики»: активные листы игроков той же кампании
   либо ростер того же сценария у прегена. Имя, игрок и профессия читаются из живых листов, а не
   из копии в JSONB, поэтому строки забираются целиком и раскладываются в памяти: профессия лежит

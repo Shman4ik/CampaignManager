@@ -3,9 +3,11 @@
 @inject CampaignService CampaignService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
-@rendermode InteractiveServer
 
-@if (_hasCampaigns)
+@* Список кампаний — из снимка HomeCampaignsPanel (там же отсеяны те, где пользователь уже
+   состоит); сам блок только вступает в кампанию. *@
+
+@if (Campaigns is { Available.Count: > 0 })
 {
     <div class="cm-section">
         <div class="cm-section-header">
@@ -20,7 +22,7 @@
         }
 
         <div class="cm-grid-cards">
-            @foreach (var campaign in AvailableCampaigns.Where(c => !IsUserInCampaign(c)))
+            @foreach (var campaign in Campaigns.Available)
             {
                 <div class="cm-card">
                     <div class="cm-card-header">
@@ -33,7 +35,7 @@
                             <span>@campaign.KeeperEmail</span>
                         </div>
 
-                        @if (IsUserAuthorized)
+                        @if (Campaigns.IsAuthenticated)
                         {
                             <div style="display:flex;flex-direction:column;gap:0.375rem;">
                                 <label class="text-xs font-semibold" style="color:var(--color-primary-600);">Ваше имя</label>
@@ -64,45 +66,24 @@
 }
 
 @code {
-    private List<Campaign> AvailableCampaigns { get; set; } = [];
-    private List<Campaign> UserCampaigns { get; set; } = [];
-    private bool IsUserAuthorized;
-    private string UserEmail = string.Empty;
+    /// <summary>Снимок главной; <c>null</c> — ещё грузится.</summary>
+    [Parameter] public HomeCampaigns? Campaigns { get; set; }
+
     private string? UserName;
-    private bool _hasCampaigns;
 
     private string NotificationMessage { get; set; } = string.Empty;
     private string _notifType = "info";
 
     protected override async Task OnInitializedAsync()
     {
+        // Имя подставляется в поле «Ваше имя» — из claims, без похода в базу.
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        IsUserAuthorized = authState.User.Identity?.IsAuthenticated ?? false;
-        UserEmail = authState.User?.FindFirst(ClaimTypes.Email)?.Value ?? string.Empty;
-        UserName = authState.User?.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
-
-        if (IsUserAuthorized)
-        {
-            var availableTask = CampaignService.GetAvailableCompaniesAsync();
-            var userTask = CampaignService.GetUserCampaignsAsync();
-            await Task.WhenAll(availableTask, userTask);
-            AvailableCampaigns = await availableTask;
-            UserCampaigns = await userTask;
-        }
-        else
-        {
-            AvailableCampaigns = await CampaignService.GetAvailableCompaniesAsync();
-        }
-
-        _hasCampaigns = AvailableCampaigns.Any(c => !IsUserInCampaign(c));
+        UserName = authState.User.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
     }
-
-    private bool IsUserInCampaign(Campaign campaign) =>
-        UserCampaigns?.Any(c => c.Id == campaign.Id) ?? false;
 
     private async Task JoinCampaignAsync(Guid campaignId, string userName)
     {
-        if (!IsUserAuthorized || string.IsNullOrWhiteSpace(userName)) return;
+        if (Campaigns?.IsAuthenticated != true || string.IsNullOrWhiteSpace(userName)) return;
         try
         {
             var ok = await CampaignService.JoinCampaignAsync(campaignId, userName);
