@@ -8,7 +8,7 @@
 @if (_entries.Count > 0 || _isLoading)
 {
     <div class="mt-6">
-        <button class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-3"
+        <button type="button" class="min-h-[40px] text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 mb-3"
                 @onclick="TogglePanel">
             <i class="fa-solid @(_expanded ? "fa-chevron-down" : "fa-chevron-right") text-xs"></i>
             <i class="fa-solid fa-clock-rotate-left"></i>
@@ -32,17 +32,18 @@
                                     <span class="font-medium text-gray-800">@entry.EditorName</span>
                                     <span class="text-gray-400 ml-2">@entry.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
                                 </div>
-                                <div class="flex items-center gap-2">
+                                <div class="flex flex-wrap items-center justify-end gap-2">
                                     <Badge Variant="@GetActionColor(entry.Action)">@GetActionText(entry.Action)</Badge>
                                     @if (_isKeeper && entry.PreviousSnapshotJson is not null)
                                     {
-                                        <button class="text-xs text-blue-600 hover:text-blue-800"
+                                        @* Кнопки, а не ссылки text-xs: по мелкому слову на планшете не попасть. *@
+                                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
                                                 @onclick="@(() => ShowDiff(entry))">
-                                            Diff
+                                            <i class="fa-solid fa-code-compare"></i><span>Сравнить</span>
                                         </button>
-                                        <button class="text-xs text-orange-600 hover:text-orange-800"
+                                        <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
                                                 @onclick="@(() => RevertAsync(entry.Id))">
-                                            Откатить
+                                            <i class="fa-solid fa-rotate-left"></i><span>Откатить</span>
                                         </button>
                                     }
                                 </div>
@@ -62,11 +63,11 @@
         <div class="grid grid-cols-2 gap-4 text-xs">
             <div>
                 <h4 class="font-semibold text-gray-700 mb-2">До</h4>
-                <pre class="bg-red-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.PreviousSnapshotJson ?? "—")</pre>
+                <pre class="bg-error-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.PreviousSnapshotJson ?? "—")</pre>
             </div>
             <div>
                 <h4 class="font-semibold text-gray-700 mb-2">После</h4>
-                <pre class="bg-green-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.SnapshotJson ?? "—")</pre>
+                <pre class="bg-success-50 p-3 rounded overflow-auto max-h-96 whitespace-pre-wrap break-words">@(_selectedEntry.SnapshotJson ?? "—")</pre>
             </div>
         </div>
     </Modal>
@@ -127,12 +128,14 @@
         await LoadHistoryAsync();
     }
 
+    // Варианты Badge, а не сырые имена цветов: «green/blue/red/gray» Badge не знает и рисовал
+    // все три действия одним и тем же primary.
     private static string GetActionColor(EditAction action) => action switch
     {
-        EditAction.Created => "green",
-        EditAction.Updated => "blue",
-        EditAction.Deleted => "red",
-        _ => "gray"
+        EditAction.Created => "success",
+        EditAction.Updated => "accent",
+        EditAction.Deleted => "error",
+        _ => "secondary"
     };
 
     private static string GetActionText(EditAction action) => action switch

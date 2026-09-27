@@ -17,6 +17,16 @@ CSS variables `--color-{palette}-{shade}` available for primary, secondary, acce
 | error | #C71D20 | Errors, destructive actions |
 | info | #4B7FAF | Info messages (= accent) |
 
+**Только эти палитры плюс нейтральный `gray-*`.** Дефолтные тейлвиндовские `blue-*`, `red-*`,
+`green-*`, `yellow-*`, `amber-*`, `orange-*`, `purple-*`, `emerald-*`, `slate-*` не используются:
+они ярче общего тона и на одном экране расходятся с `cm-btn-*`. Цвет несёт смысл —
+ошибка/опасность `error`, внимание `warning`, успех `success`, информация и выделение
+`accent`; вторая «нейтральная» краска, когда нужна пара к accent (раздатки рядом с фактами,
+Рассудок рядом с ПМ), — `secondary`. Класс — всегда полным литералом (`bg-error-100`), а не
+`$"bg-{color}-100"`: Tailwind собирает только то, что целиком встречается в исходниках.
+Эмодзи вместо иконок не ставить — только Font Awesome (`fa-triangle-exclamation`,
+`fa-check`, `fa-xmark`).
+
 ## CSS Variables
 
 ```
