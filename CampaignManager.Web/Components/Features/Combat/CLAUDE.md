@@ -5,6 +5,17 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 ## Key Services
 - `CombatService` (`sealed partial class`) — **not** the standard DI/DbContextFactory pattern (see root `CLAUDE.md` "Service Pattern"). It's a stateful, in-memory session service holding `Combatants`, `CurrentRound`, `CurrentTurnIndex`, `CombatLog`. Split across partial-class files — check for siblings before assuming `CombatService.cs` is the whole implementation.
 
+## Уровень успеха — одна точка на всё приложение
+`CombatService.CalculateSuccessLevel` — **единственные** пороги d100 (стр. 87–89): его зовут бой,
+погоня и `Characters/Services/LuckRules`. Второй копии не
+заводить — ровно так `DiceRoller` когда-то называл крах «Провал!». Метод статический и живёт здесь
+по историческим причинам: вынос в отдельный класс задел бы полсотни вызовов в панелях боя и погони.
+- Перегрузка со сложностью (`difficulty`) нужна для порога краха: 96–100 — крах, если для успеха
+  надо выбросить меньше 50, а у трудной проверки это половина навыка (стр. 88). Двухаргументный
+  вызов — это обычная сложность, поведение прежнее. `GetTargetNumber` — «сколько нужно выбросить».
+- Боевые вызовы по-прежнему двухаргументные: стрельба на большой дальности (нужен трудный успех)
+  крах от 96 не получает. Переводить их — отдельная правка правил боя.
+
 ## Персистентность
 `CombatService` живёт в circuit, поэтому сам по себе бой не переживает ни обрыв связи, ни уход
 вкладки в фон — на планшете за столом это происходит регулярно. Поэтому:
