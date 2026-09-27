@@ -4,7 +4,7 @@ using CampaignManager.Web.Components.Features.Combat.Services;
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 /// <summary>
-///     Необязательное правило «Пункты Удачи» («Зов Ктулху» 7e, стр. 96) — <b>единственное</b>
+///     Необязательное правило «Пункты Удачи» («Зов Ктулху» 7e, стр. 97) — <b>единственное</b>
 ///     место, где живёт его арифметика.
 ///     <para>
 ///         Один пункт Удачи уменьшает выпавшее число на единицу; потраченные пункты вычитаются
