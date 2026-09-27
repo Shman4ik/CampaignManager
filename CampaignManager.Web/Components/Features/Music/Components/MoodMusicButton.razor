@@ -26,13 +26,24 @@
 
     private int _poolSize;
 
+    /// <summary>Тег, под который уже посчитан <see cref="_poolSize" />.</summary>
+    private string? _loadedTag;
+
     /// <summary>Пул уже играет — тогда кнопка перебрасывает трек, а не начинает заново.</summary>
     private bool _isCurrent =>
         Playback.CurrentTrack is not null
         && string.Equals(Playback.PoolLabel, Tag, StringComparison.OrdinalIgnoreCase);
 
-    protected override async Task OnParametersSetAsync() =>
+    protected override async Task OnParametersSetAsync()
+    {
+        // Кнопка висит в шапке боя и погони, а те перерисовываются на каждое действие.
+        // Пул пересчитываем, только когда сменился сам тег (как ParticipantPicker).
+        if (_loadedTag is not null && string.Equals(_loadedTag, Tag, StringComparison.Ordinal))
+            return;
+
+        _loadedTag = Tag;
         _poolSize = (await TrackService.ResolvePoolAsync([Tag], null)).Count;
+    }
 
     private async Task PlayAsync()
     {
