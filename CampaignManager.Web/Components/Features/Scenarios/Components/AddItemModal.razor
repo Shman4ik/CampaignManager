@@ -1,18 +1,18 @@
 ﻿@using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Components.Features.Items.Model
+@using CampaignManager.Web.Components.Features.Items.Services
 @using CampaignManager.Web.Components.Shared
-@using CampaignManager.Web.Components.Shared.Model
 
 <Modal IsVisible="_isVisible"
        OnClose="Hide"
-       Title="Add Item to Scenario"
+       Title="Добавить предмет в сценарий"
        MaxWidth="lg"
        HeaderColorScheme="primary">
     <ChildContent>
         <div class="mb-4">
             <input type="text"
-                   placeholder="Search items..."
+                   placeholder="Поиск предметов..."
                    @bind-value="_searchTerm"
                    @bind-value:event="oninput"
                    class="cm-input"/>
@@ -22,7 +22,7 @@
             @if (_availableItems == null || !_availableItems.Any())
             {
                 <div class="text-center p-4 text-gray-500">
-                    No items available.
+                    В справочнике нет предметов.
                 </div>
             }
             else
@@ -35,7 +35,7 @@
                         <div class="flex items-center justify-between">
                             <h3 class="font-medium">@item.Name</h3>
                             <Button OnClick="() => SelectItem(item)" Variant="info" Size="sm">
-                                Select
+                                Выбрать
                             </Button>
                         </div>
                         <div class="mt-2 text-sm text-gray-600">
@@ -44,8 +44,8 @@
                                 <div class="truncate">@item.Description</div>
                             }
                             <div class="flex gap-2 mt-1">
-                                <div>Type: @item.Type</div>
-                                <div>Era: @GetEraDisplay(item.Era)</div>
+                                <div>Тип: @(string.IsNullOrEmpty(item.Type) ? "—" : item.Type)</div>
+                                <div>Эпоха: @ItemEraText.Describe(item.Era)</div>
                             </div>
                         </div>
                     </div>
@@ -55,7 +55,7 @@
 
         <div class="space-y-3 border-t border-gray-200 pt-4">
             <div>
-                <label for="quantity" class="cm-field-label">Quantity</label>
+                <label for="quantity" class="cm-field-label">Количество</label>
                 <input type="number"
                        id="quantity"
                        @bind="_quantity"
@@ -64,7 +64,7 @@
             </div>
 
             <div>
-                <label for="location" class="cm-field-label">Location (Optional)</label>
+                <label for="location" class="cm-field-label">Расположение (опционально)</label>
                 <input type="text"
                        id="location"
                        @bind="_location"
@@ -72,7 +72,7 @@
             </div>
 
             <div>
-                <label for="notes" class="cm-field-label">Notes (Optional)</label>
+                <label for="notes" class="cm-field-label">Заметки (опционально)</label>
                 <textarea id="notes"
                           @bind="_notes"
                           class="cm-input !min-h-[80px]"></textarea>
@@ -80,8 +80,8 @@
         </div>
     </ChildContent>
     <FooterContent>
-		<Button OnClick="Hide" Variant="secondary">Cancel</Button>
-		<Button OnClick="AddItemToScenarioAsync" Variant="primary" IsDisabled="@(_selectedItem == null)">Add Item</Button>
+        <Button OnClick="Hide" Variant="secondary">Отмена</Button>
+        <Button OnClick="AddItemToScenarioAsync" Variant="primary" IsDisabled="@(_selectedItem == null)">Добавить предмет</Button>
     </FooterContent>
 </Modal>
 
@@ -90,6 +90,7 @@
     [Parameter] public EventCallback<ScenarioItem> OnItemAdded { get; set; }
 
     [Inject] private ScenarioService ScenarioService { get; set; } = null!;
+    [Inject] private ILogger<AddItemModal> Logger { get; set; } = null!;
 
     private bool _isVisible;
     private string _searchTerm = string.Empty;
@@ -143,7 +144,7 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading items: {ex.Message}");
+            Logger.LogError(ex, "Error loading items for scenario {ScenarioId}", ScenarioId);
             _availableItems = [];
         }
     }
@@ -176,19 +177,8 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error adding item to scenario: {ex.Message}");
+            Logger.LogError(ex, "Error adding item {ItemName} to scenario {ScenarioId}", _selectedItem.Name, ScenarioId);
         }
-    }
-
-    private string GetEraDisplay(Eras era)
-    {
-        if ((era & Eras.Classic) != 0 && (era & Eras.Modern) != 0)
-            return "1920s & Modern";
-        if ((era & Eras.Classic) != 0)
-            return "1920s";
-        if ((era & Eras.Modern) != 0)
-            return "Modern";
-        return "Unknown";
     }
 
 }

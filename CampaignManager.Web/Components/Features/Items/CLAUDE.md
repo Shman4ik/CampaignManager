@@ -51,5 +51,5 @@ General equipment/item catalog (independent entity).
 ## Notes
 - `Scenarios/Model/ScenarioItem : Item` subclasses this to attach scenario-specific item
   instances (see `Scenarios/CLAUDE.md`).
-- `Scenarios/Components/AddItemModal.razor` держит собственную копию `GetEraDisplay`
-  и показывает «Era: 1920s» по-английски — её стоит перевести на `ItemEraText`.
+- `Scenarios/Components/AddItemModal.razor` показывает эпоху через `ItemEraText` — своей копии
+  перевода эпохи там больше нет, и заводить её снова не нужно.
