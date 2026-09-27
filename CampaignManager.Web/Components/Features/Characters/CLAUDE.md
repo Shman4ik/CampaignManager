@@ -141,6 +141,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `BodyClass="p-4 cm-stack"` — линейка между соседями вместо вложенной карточки.
 - `SkillGroupCard` — единственная настоящая карточка внутри секции: их много в
   masonry-сетке, и рамка (`border`, не тень) там несёт смысл.
+- **Тап-цели в навыках.** «Удалить навык» (`SkillGroupCard`, `SpecializationGroup`) — штатная
+  `cm-btn-sm cm-btn-icon cm-btn-outline-error` с корзиной и `aria-label`, как в строке оружия. Она
+  стоит в первой строке навыка рядом с кубиком проверки, который и так 36px, — строка от неё не
+  выросла, сузилось только место под имя. Кнопки `SkillPicker` (справочник / вручную) — тоже
+  `cm-btn-sm cm-btn-icon` с `aria-label`, строки выпадающего списка — не ниже 36px. «+» живёт
+  **только в ручном вводе**: из справочника навык добавляется выбором строки, а «+» рядом с поиском
+  раньше ничего не делал.
 - `WeaponComponent`: таблица (с `lg`) — только в `overflow-x-auto`, без рамки; ниже `lg` каждое
   оружие — строка через линейку (`border-t … first:border-t-0`), а не мини-карточка с рамкой.
   Корзина в строке — `cm-btn-sm cm-btn-icon cm-btn-outline-error` с `aria-label`, как в
