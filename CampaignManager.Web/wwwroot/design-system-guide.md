@@ -244,8 +244,12 @@ Dialog container. Scrollable body, header/footer slots.
 - `IsVisible` bool
 - `OnClose` EventCallback
 - `Title` string = ""
-- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl
-- `MaxHeight` string? = "70vh"
+- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl. Компонент переводит их в
+  полные литералы `max-w-*`; другое значение даёт 4xl. Интерполяцией (`$"max-w-{…}"`) класс
+  не собирать — Tailwind его не увидит, и модалка растянется на весь экран
+- `MaxHeight` string? = "70vh" — любое CSS-значение, идёт в `style` тела. `null` — тело без
+  своего предела. В любом случае окно не выше экрана: при длинном содержимом прокручивается
+  тело, шапка и подвал с кнопками остаются видны
 - `HeaderColorScheme` string = "primary"
 - `CloseOnBackdropClick` bool = true — `false` выключает и закрытие по фону, и Esc (крестик
   в шапке остаётся). Ставить на диалоги посреди игры, где случайное касание мимо окна не
