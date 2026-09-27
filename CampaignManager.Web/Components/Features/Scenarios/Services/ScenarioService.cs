@@ -606,18 +606,28 @@ public sealed class ScenarioService(
 
     /// <summary>
     ///     Состав НПС сценария вместе с листами персонажей.
+    ///     <para>
+    ///         У листов снята обратная ссылка <c>ScenarioCasts</c>: EF заполняет её при <c>Include</c>,
+    ///         и граф «участие → лист → участие» замыкается. Странице она не нужна, а циклический граф
+    ///         не переживает JSON — состав уезжает из пререндера снимком <c>ScenarioPagePrerender</c>.
+    ///     </para>
     /// </summary>
     public async Task<List<ScenarioNpc>> GetScenarioCastAsync(Guid scenarioId)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.ScenarioNpcs
+            var cast = await dbContext.ScenarioNpcs
                 .AsNoTracking()
                 .Include(sn => sn.Character)
                 .Where(sn => sn.ScenarioId == scenarioId)
                 .OrderBy(sn => sn.Character!.CharacterName)
                 .ToListAsync();
+
+            foreach (var entry in cast)
+                entry.Character?.ScenarioCasts.Clear();
+
+            return cast;
         }
         catch (Exception ex)
         {

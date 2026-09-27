@@ -100,6 +100,11 @@ iPad разворачивают к столу — на экране должна
   - `ScenarioSkillCheck` — predefined skill checks tied to the scenario.
 
 ## Notes
+- **Данные страницы сценария переезжают из пререндера** снимком `ScenarioPagePrerender`
+  (`ScenarioDetailPage.PrerenderedScenario`, `SkipLastSnapshot`, см. корневой CLAUDE.md). Снимок —
+  JSON, поэтому граф без циклов: `GetScenarioCastAsync` снимает у листов обратную ссылку
+  `ScenarioCasts`, сценарий и прегены грузятся без навигаций. Игроку страница данных не читает
+  вовсе — ему показывается только «Доступ запрещён».
 - `GetScenarioByIdAsync` отдаёт **только строку сценария** — без `Cast` и `Pregens`. Состав и
   прегены читаются отдельно (`GetScenarioCastAsync`, `CharacterService.GetScenarioPregensAsync`):
   раньше навигации подгружались джойном и не читались никем, а страница сценария получала прегены

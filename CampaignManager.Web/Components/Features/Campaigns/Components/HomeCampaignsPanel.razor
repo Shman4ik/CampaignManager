@@ -14,6 +14,19 @@
 @code {
     private HomeCampaigns? _campaigns;
 
+    /// <summary>
+    ///     Снимок из пререндера — интерактивный рендер берёт его, а не читает базу второй раз
+    ///     (см. корневой CLAUDE.md, «Данные пререндера»). Отдаётся только из статического рендера:
+    ///     на паузе circuit геттер молчит, а <c>SkipLastSnapshot</c> не даёт поднять снимок при
+    ///     возобновлении — за время паузы кампании могли измениться.
+    /// </summary>
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public HomeCampaigns? PrerenderedCampaigns
+    {
+        get => RendererInfo.IsInteractive ? null : _campaigns;
+        set => _campaigns = value;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _campaigns ??= await CampaignService.GetHomeCampaignsAsync();
