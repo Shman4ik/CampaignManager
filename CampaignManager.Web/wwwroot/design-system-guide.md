@@ -111,8 +111,21 @@ Colour carries meaning; do not pick it for variety.
 
 `cm-btn-info` (blue) is **not** for ordinary actions — it used to be scattered across submit
 buttons and made the same action look different on every page. Blue stays for informational
-`Badge`/`Alert`. Row actions always carry a text label, never a bare icon: there is no hover
-tooltip on the iPad this app targets.
+`Badge`/`Alert`.
+
+Row actions carry a text label: there is no hover tooltip on the iPad this app targets, so a
+`title=` explains nothing. **The one exception is a dense catalogue table** (weapons, items,
+books, spells — rows with eight numeric columns): there edit and delete are bare icons, because
+a label on every row would eat a column. The exception is narrow:
+
+- only the universally read glyphs — pen (`fa-pen`) for edit, bin (`fa-trash-alt`) for delete;
+  any other action in the row still gets a visible label;
+- `cm-btn-sm cm-btn-icon` (36×36) plus `aria-label` naming the row («Изменить: Кольт .45»),
+  never `title=` alone;
+- the same row rendered as a card below the table breakpoint keeps the same icons, so one
+  catalogue does not switch conventions between orientations.
+
+Lists of cards, rows inside a page section and form rows are not dense tables — label them.
 
 ## CSS Button Classes
 
