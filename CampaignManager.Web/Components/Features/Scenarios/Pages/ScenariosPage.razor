@@ -52,11 +52,14 @@ else
     }
     else
     {
-        <div class="mb-4">
-            <input type="search" placeholder="Поиск по названию..."
-                   class="w-full px-4 py-2 border border-primary-300 bg-primary-50 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                   @bind="_searchTerm" @bind:event="oninput"/>
-        </div>
+        <FilterPanel Title="Фильтры" @bind-IsExpanded="_filtersExpanded" OnReset="ClearFilters">
+            <ChildContent>
+                <label for="scenarioSearch" class="cm-field-label">Поиск</label>
+                <input type="search" id="scenarioSearch" placeholder="Поиск по названию..."
+                       class="cm-input"
+                       @bind="_searchTerm" @bind:event="oninput"/>
+            </ChildContent>
+        </FilterPanel>
 
         @if (!FilteredScenarios.Any())
         {
@@ -70,7 +73,9 @@ else
         }
         else
         {
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        @* Три колонки только с xl: на портрете iPad (1024) lg уже срабатывает, и карточки
+           сжимались до ~230px, а футер с тремя кнопками — до предела тап-цели. *@
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             @foreach (var scenario in FilteredScenarios)
             {
                 var access = AccessOf(scenario);
@@ -79,29 +84,21 @@ else
                         <span class="cm-card-title truncate">@scenario.Name</span>
                     </div>
                     <div class="cm-card-body flex-grow">
-                        <div class="flex items-center text-sm text-gray-600 mb-3">
-                            @if (!string.IsNullOrEmpty(scenario.Era) || !string.IsNullOrEmpty(scenario.Location))
-                            {
-                                <div class="flex space-x-2">
-                                    @if (!string.IsNullOrEmpty(scenario.Era))
-                                    {
-                                        <span
-                                            class="inline-block bg-secondary-100 text-secondary-800 rounded-md px-2 py-0.5 cm-text-sm">
-                                            @scenario.Era
-                                        </span>
-                                    }
-                                    @if (!string.IsNullOrEmpty(scenario.Location))
-                                    {
-                                        <span
-                                            class="inline-block bg-primary-100 text-primary-800 rounded-md px-2 py-0.5 cm-text-sm">
-                                            @scenario.Location
-                                        </span>
-                                    }
-                                </div>
-                            }
-                        </div>
+                        @if (!string.IsNullOrEmpty(scenario.Era) || !string.IsNullOrEmpty(scenario.Location))
+                        {
+                            <div class="flex flex-wrap gap-1.5 mb-3">
+                                @if (!string.IsNullOrEmpty(scenario.Era))
+                                {
+                                    <Badge Variant="secondary" Size="sm" WithBorder="false">@scenario.Era</Badge>
+                                }
+                                @if (!string.IsNullOrEmpty(scenario.Location))
+                                {
+                                    <Badge Variant="primary" Size="sm" WithBorder="false">@scenario.Location</Badge>
+                                }
+                            </div>
+                        }
 
-                        <p class="cm-text-body text-gray-600 line-clamp-3">
+                        <p class="cm-text-muted line-clamp-3">
                             @(string.IsNullOrEmpty(scenario.Description)
                                 ? "Описание отсутствует."
                                 : scenario.Description)
@@ -156,6 +153,7 @@ else
     private bool _showDeleteModal;
     private Scenario? _scenarioToDelete;
     private string _searchTerm = string.Empty;
+    private bool _filtersExpanded = true;
     private bool _isKeeper;
     private ScenarioImportModal? _importModal;
 

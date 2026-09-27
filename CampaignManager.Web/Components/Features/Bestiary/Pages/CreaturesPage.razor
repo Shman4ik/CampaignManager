@@ -20,25 +20,20 @@
 <div class="cm-page">
     <FilterPanel Title="Фильтры" @bind-IsExpanded="_isSearchPanelVisible" OnReset="ClearFilters">
         <ChildContent>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <div class="flex-grow">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex-1 min-w-0">
                     <label for="searchQuery" class="cm-field-label">Поиск</label>
-                    <div class="relative">
-                        <input type="text" id="searchQuery"
-                               class="cm-input w-full cm-input-icon-left"
-                               placeholder="Поиск по названию..."
-                               @bind="_searchTerm"
-                               @bind:event="oninput"
-                               @onkeyup="SearchKeyUp"/>
-                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                            <i class="fas fa-search text-gray-400 text-xs"></i>
-                        </div>
-                    </div>
+                    <input type="search" id="searchQuery"
+                           class="cm-input"
+                           placeholder="Поиск по названию..."
+                           value="@_searchTerm"
+                           @oninput="HandleSearchInput"/>
                 </div>
-                <div class="w-full sm:w-48">
+                <div class="w-full sm:w-56 shrink-0">
                     <label for="typeFilter" class="cm-field-label">Тип существа</label>
                     <select id="typeFilter"
-                            class="cm-input w-full"
+                            class="cm-input"
+                            value="@_selectedType"
                             @onchange="TypeSelectionChanged">
                         <option value="">Все типы</option>
                         @foreach (var type in EnumExtensions.GetEnumTypes<CreatureType>())
@@ -77,20 +72,12 @@
                 <CreatureCard Creature="@creature" OnDelete="@(c => ConfirmDelete(c))"/>
             }
         </div>
-        @if (TotalPages > 1)
-        {
-            <div class="flex justify-center items-center gap-2 mt-6">
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="PreviousPage" disabled="@(_currentPage <= 1)">
-                    <i class="fas fa-chevron-left"></i>
-                </button>
-                <span class="px-2">Страница @_currentPage из @TotalPages</span>
-                <Button OnClick="NextPage"
-                        Variant="secondary"
-                        Size="sm"
-                        Icon="fa-chevron-right"
-                        IsDisabled="@(_currentPage >= TotalPages)" />
-            </div>
-        }
+        <Pagination CurrentPage="@_currentPage"
+                    TotalPages="@TotalPages"
+                    TotalItems="@_totalItems"
+                    ItemsPerPage="@_pageSize"
+                    ItemsLabel="существ"
+                    OnPageChanged="GoToPage"/>
     }
 </div>
 
@@ -146,24 +133,19 @@
     }
 
 
-    private async Task OnSearchTermChanged(string searchTerm)
+    // Каждый фильтр возвращает на первую страницу: с пятой страницы узкий поиск
+    // иначе уводил в пустой список, хотя подходящие существа есть.
+    private async Task HandleSearchInput(ChangeEventArgs e)
     {
-        _searchTerm = searchTerm;
+        _searchTerm = e.Value?.ToString() ?? "";
+        _currentPage = 1;
         await LoadData();
     }
 
     private async Task TypeSelectionChanged(ChangeEventArgs e)
     {
-        // Преобразование значения в enum
-        if (string.IsNullOrEmpty(e.Value?.ToString()))
-        {
-            _selectedType = ""; // Для опции "Все типы"
-        }
-        else
-        {
-            _selectedType = e.Value.ToString() ?? "";
-        }
-
+        _selectedType = e.Value?.ToString() ?? "";
+        _currentPage = 1;
         await LoadData();
     }
 
@@ -171,13 +153,14 @@
     {
         _searchTerm = "";
         _selectedType = "";
+        _currentPage = 1;
         await LoadData();
     }
 
-    private async Task SearchKeyUp(KeyboardEventArgs e)
+    private async Task GoToPage(int page)
     {
-        // Handle search input directly without timer for now, could add debounce later
-        await OnSearchTermChanged(_searchTerm);
+        _currentPage = page;
+        await LoadData();
     }
 
     // Создание нового существа
@@ -217,29 +200,6 @@
             _showDeleteModal = false;
             _creatureToDelete = null;
         }
-    }
-
-    private async Task PreviousPage()
-    {
-        if (_currentPage > 1)
-        {
-            _currentPage--;
-            await LoadData();
-        }
-    }
-
-    private async Task NextPage()
-    {
-        if (_currentPage < TotalPages)
-        {
-            _currentPage++;
-            await LoadData();
-        }
-    }
-
-    private void ToggleSearchPanel()
-    {
-        _isSearchPanelVisible = !_isSearchPanelVisible;
     }
 
 }
