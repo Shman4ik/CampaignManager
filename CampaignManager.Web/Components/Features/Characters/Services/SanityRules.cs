@@ -8,6 +8,7 @@ namespace CampaignManager.Web.Components.Features.Characters.Services;
 public static class SanityRules
 {
     public const int AbsoluteMaxSanity = 99;
+    private const int MaxMythos = 99;
     private const string MythosSkillName = "Мифы Ктулху";
 
     /// <summary>
@@ -20,6 +21,34 @@ public static class SanityRules
     }
 
     public static int GetMythosValue(Character character) => FindMythosSkill(character)?.Value.Regular ?? 0;
+
+    /// <summary>
+    ///     Есть ли на листе навык "Мифы Ктулху": без него прирост Мифов просто некуда записать.
+    /// </summary>
+    public static bool HasMythosSkill(Character character) => FindMythosSkill(character) is not null;
+
+    /// <summary>
+    ///     Прибавляет к навыку "Мифы Ктулху" (не выше 99) и пересчитывает максимум Рассудка:
+    ///     99 − Мифы (стр. 152). Текущий Рассудок прижимается к новому максимуму. Возвращает
+    ///     фактическую прибавку; ноль — если навыка на листе нет.
+    /// </summary>
+    public static int AddMythos(Character character, int gain)
+    {
+        var mythos = FindMythosSkill(character);
+        if (mythos is null || gain <= 0)
+            return 0;
+
+        var before = mythos.Value.Regular;
+        mythos.Value.Regular = Math.Min(MaxMythos, before + gain);
+        mythos.Value.UpdateDerived();
+
+        // Новый максимум может оказаться ниже текущего Рассудка — прижимаем.
+        var max = ComputeMaxSanity(character);
+        character.DerivedAttributes.Sanity.MaxValue = max;
+        character.DerivedAttributes.Sanity.Value = Math.Min(character.DerivedAttributes.Sanity.Value, max);
+
+        return mythos.Value.Regular - before;
+    }
 
     /// <summary>
     ///     Порог для проверки на бессрочное безумие — 1/5 от текущего Рассудка, потерянные
@@ -121,18 +150,7 @@ public static class SanityRules
         var gain = character.State.MythosInsanityCount == 0 ? 5 : 1;
         character.State.MythosInsanityCount++;
 
-        var mythos = FindMythosSkill(character);
-        if (mythos is not null)
-        {
-            mythos.Value.Regular = Math.Min(99, mythos.Value.Regular + gain);
-            mythos.Value.UpdateDerived();
-        }
-
-        // Новый максимум может оказаться ниже текущего Рассудка — прижимаем.
-        var max = ComputeMaxSanity(character);
-        character.DerivedAttributes.Sanity.MaxValue = max;
-        character.DerivedAttributes.Sanity.Value = Math.Min(character.DerivedAttributes.Sanity.Value, max);
-
+        AddMythos(character, gain);
         return gain;
     }
 
