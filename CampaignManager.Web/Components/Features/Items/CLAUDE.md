@@ -17,8 +17,9 @@ General equipment/item catalog (independent entity).
 
 Устроена так же, как каталог оружия (`Features/Weapons/CLAUDE.md`), и правки к ней
 имеет смысл вести парой — расхождения здесь всегда были не замыслом, а недоделкой.
-Разметку списка держит `Components/ItemsListView.razor`, страница отвечает за фильтры,
-пагинацию и модалки.
+Разметку списка держит `Components/ItemsListView.razor`, страница отвечает за фильтры
+и модалки. Страницу, сортировку и раскрытую строку держит общий
+`Shared/Model/CatalogListState<Item>` (см. `design-system-guide.md`, «Каталог»).
 
 - Колонки: `Название · Тип · Описание · действия`. Их четыре, поэтому таблица
   помещается и в портрет iPad — порог `md` (768), а не `xl`, как у оружия с его
@@ -45,8 +46,9 @@ General equipment/item catalog (independent entity).
   что у оружия (`Features/Weapons/CLAUDE.md`, «Права»): проверка в `ItemService`, `CanEdit`
   у `ItemsListView`, без него колонка действий исчезает целиком.
 - Фильтры меняют состояние через явные обработчики (`HandleSearchInput`,
-  `SetEra1920`, …), а не через `@bind`: каждый из них обязан сбросить `currentPage`,
-  иначе с десятой страницы фильтр уводит в пустой список.
+  `SetEra1920`, …), а не через `@bind`: каждый из них обязан сбросить страницу
+  (`ApplyFilters` → `catalog.ResetPage()`), иначе с десятой страницы фильтр уводит
+  в пустой список.
 
 ## Notes
 - `Scenarios/Model/ScenarioItem : Item` subclasses this to attach scenario-specific item

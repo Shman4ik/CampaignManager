@@ -9,6 +9,21 @@ namespace CampaignManager.Web.Components.Features.Items.Pages;
 
 public partial class ItemsPage
 {
+    // Страница, сортировка и раскрытая строка — общие у всех каталогов; здесь только фильтры.
+    private readonly CatalogListState<Item> catalog;
+
+    public ItemsPage()
+    {
+        catalog = new CatalogListState<Item>(
+            25,
+            FilterItems,
+            CatalogSort.By((Item i) => i.Name),
+            new Dictionary<string, CatalogSort<Item>>
+            {
+                [nameof(Item.Type)] = CatalogSort.By((Item i) => i.Type)
+            });
+    }
+
     [Inject] private ItemService ItemService { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private IdentityService IdentityService { get; set; } = default!;
@@ -36,17 +51,6 @@ public partial class ItemsPage
     private List<Item>? items; // Nullable to indicate loading state
     private List<string>? itemTypes; // Available item types
 
-    // Filtered list based on search query and other filters
-    private IQueryable<Item> filteredItems => FilterItems(); // Pagination properties
-    private int currentPage = 1;
-    private int itemsPerPage = 25;
-    private int totalPages => (int)Math.Ceiling((double)filteredItems.Count() / itemsPerPage);
-    private IEnumerable<Item> paginatedItems => filteredItems.Skip((currentPage - 1) * itemsPerPage).Take(itemsPerPage);
-
-    // Sorting properties
-    private string? sortField;
-    private bool sortAscending = true;
-
     // Search query bound to the input field
     private string searchQuery = string.Empty;
 
@@ -72,9 +76,6 @@ public partial class ItemsPage
 
     // Error message state
     private string? errorMessage;
-
-    // Expanded item details
-    private Guid? expandedItemId;
 
     // Form submission reference
     private ElementReference itemFormSubmitButton;
@@ -106,44 +107,6 @@ public partial class ItemsPage
             errorMessage = "Не удалось загрузить список предметов. Пожалуйста, попробуйте позже.";
             items = new List<Item>(); // Ensure items is not null
             itemTypes = new List<string>();
-        }
-    }
-
-    // Pagination methods
-    private void GoToPage(int page)
-    {
-        if (page >= 1 && page <= totalPages)
-        {
-            currentPage = page;
-        }
-    }
-
-    // Sorting methods
-    private void ToggleSort(string field)
-    {
-        if (sortField == field)
-        {
-            sortAscending = !sortAscending;
-        }
-        else
-        {
-            sortField = field;
-            sortAscending = true;
-        }
-
-        currentPage = 1; // Reset to first page when sorting
-    }
-
-    // Toggle item details
-    private void ToggleItemDetails(Item item)
-    {
-        if (expandedItemId == item.Id)
-        {
-            expandedItemId = null;
-        }
-        else
-        {
-            expandedItemId = item.Id;
         }
     }
 
@@ -185,7 +148,7 @@ public partial class ItemsPage
 
     private void ApplyFilters()
     {
-        currentPage = 1; // Reset to first page when filtering
+        catalog.ResetPage(); // Reset to first page when filtering
         // This will trigger a re-render which will use our updated filter values
         StateHasChanged();
     }
@@ -332,14 +295,14 @@ public partial class ItemsPage
     }
 
     // Filter items based on all active filters
-    private IQueryable<Item> FilterItems()
+    private IEnumerable<Item> FilterItems()
     {
         if (items == null)
         {
-            return Enumerable.Empty<Item>().AsQueryable(); // Return empty IQueryable if source is null
+            return [];
         }
 
-        var query = items.AsQueryable(); // Use AsQueryable for sorting
+        IEnumerable<Item> query = items;
 
         // Apply search filter
         if (!string.IsNullOrWhiteSpace(searchQuery))
@@ -369,27 +332,6 @@ public partial class ItemsPage
         else if (is1920Filter && isModernFilter)
         {
             query = query.Where(i => (i.Era & Eras.Classic) != 0 || (i.Era & Eras.Modern) != 0);
-        }
-
-        // Apply sorting
-        if (!string.IsNullOrEmpty(sortField))
-        {
-            switch (sortField)
-            {
-                case nameof(Item.Name):
-                    query = sortAscending ? query.OrderBy(i => i.Name) : query.OrderByDescending(i => i.Name);
-                    break;
-                case nameof(Item.Type):
-                    query = sortAscending ? query.OrderBy(i => i.Type) : query.OrderByDescending(i => i.Type);
-                    break;
-                default:
-                    query = query.OrderBy(i => i.Name);
-                    break;
-            }
-        }
-        else
-        {
-            query = query.OrderBy(i => i.Name);
         }
 
         return query;
