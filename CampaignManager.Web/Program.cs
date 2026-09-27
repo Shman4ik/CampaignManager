@@ -335,6 +335,7 @@ builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<MinioService>();
 
 builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.LastCharacterService>();
+builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.NavigationBadgeService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();

@@ -1,12 +1,12 @@
 @using Microsoft.AspNetCore.WebUtilities
 @using CampaignManager.Web.Utilities.Services
-@using CampaignManager.Web.Components.Features.Admin.Services
+@using CampaignManager.Web.Components.Layout.Services
 @rendermode InteractiveServer
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IdentityService IdentityService
-@inject AdminService AdminService
+@inject NavigationBadgeService NavigationBadges
 @inject UserPreferencesService UserPreferencesService
 @implements IDisposable
 
@@ -250,11 +250,12 @@
             return;
         }
 
-        // Authenticated — load extras
+        // Authenticated — load extras. Счётчик заявок и настройки нужны и нижней навигации;
+        // оба сервиса отдают ей тот же ответ, так что в базу за ними ходим один раз на circuit.
         _checkingAuth = false;
         var isAdmin = await IdentityService.IsAdministrator();
         if (isAdmin)
-            _pendingCount = await AdminService.GetPendingApplicationsCountAsync();
+            _pendingCount = await NavigationBadges.GetPendingApplicationsCountAsync();
 
         // Настройка из кабинета важнее локального кэша: на новом устройстве localStorage пуст,
         // а привычное состояние меню должно приехать вместе с аккаунтом.
