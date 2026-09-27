@@ -3,18 +3,111 @@ using CampaignManager.Web.Components.Features.Characters.Model;
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 /// <summary>
-///     Таблицы главы 8 «Рассудок» — единственное место, где они лежат: примеры фобий
-///     (таблица IX, стр. 158) и маний (таблица X, стр. 159).
+///     Таблицы главы 8 «Рассудок» — единственное место, где они лежат: приступ безумия
+///     в реальном времени (таблица VII, стр. 155) и в кратком изложении (таблица VIII, стр. 157),
+///     примеры фобий (таблица IX, стр. 158) и маний (таблица X, стр. 159).
 ///     Номера строк совпадают с русским изданием, чтобы бросок с настоящих костей находил ту же
 ///     строку, что и в книге. Названия — общеупотребительные термины (явные опечатки распознанного
-///     текста книги исправлены), описания — пересказ своими словами, не цитата.
+///     текста книги исправлены), описания и тексты приступов — пересказ своими словами, не цитата.
 /// </summary>
 public static class InsanityTables
 {
+    /// <summary>Кость таблиц приступа (VII и VIII).</summary>
+    public const int BoutDie = 10;
+
+    /// <summary>Кость длительности приступа: 1d10 раундов или 1d10 часов.</summary>
+    public const int BoutDurationDie = 10;
+
     /// <summary>Кость таблиц фобий и маний.</summary>
     public const int ConditionDie = 100;
 
+    /// <param name="Number">Номер строки — результат 1d10.</param>
+    /// <param name="Title">Название строки, как в книге.</param>
+    /// <param name="ReadAloud">Что Хранитель читает игроку — от второго лица.</param>
+    /// <param name="KeeperNote">Механика строки для Хранителя, одной-двумя фразами.</param>
+    /// <param name="Acquires">Строка даёт новую фобию или манию — диалог сразу ведёт к таблице IX/X.</param>
+    public sealed record BoutEntry(
+        int Number,
+        string Title,
+        string ReadAloud,
+        string KeeperNote,
+        InsanityConditionKind? Acquires = null);
+
     public sealed record ConditionEntry(int Number, string Name, string Description);
+
+    /// <summary>Таблица VII «Приступ в реальном времени»: каждая строка длится 1d10 раундов.</summary>
+    public static IReadOnlyList<BoutEntry> RealTimeBouts { get; } =
+    [
+        new(1, "Амнезия",
+            "Последнее, что ты помнишь, — тихое безопасное место. Как ты оказался здесь и что это перед тобой — не знаешь.",
+            "Сыщик не помнит ничего с тех пор, как в последний раз был в безопасности."),
+        new(2, "Психосоматическое расстройство",
+            "Глаза вдруг перестают видеть — или уши слышать, или рука больше не слушается.",
+            "От шока сыщик временно слепнет, глохнет или теряет власть над конечностью — выберите одно."),
+        new(3, "Буйство",
+            "Всё заливает красным. Ты крушишь всё, до чего дотянешься, и бьёшь любого рядом — своего или чужого.",
+            "Слепая ярость: сыщик нападает и на врагов, и на товарищей."),
+        new(4, "Паранойя",
+            "Они все заодно. За тобой следят, тебя предали, всё, что ты видишь, подстроено. Верить нельзя никому.",
+            "Мания преследования: любой вокруг — враг, всё увиденное — обман."),
+        new(5, "Значимый человек",
+            "Ты вдруг узнаёшь в одном из присутствующих того, кто значит для тебя больше всех на свете.",
+            "Сыщик принимает кого-то рядом за человека из раздела «Значимые люди» и ведёт себя с ним соответственно."),
+        new(6, "Обморок",
+            "В глазах темнеет, ноги подкашиваются — и ты падаешь без чувств.",
+            "Сыщик без сознания."),
+        new(7, "Паническое бегство",
+            "Бежать. Прямо сейчас, как можно дальше и любой ценой — даже если придётся бросить остальных.",
+            "Сыщик рвётся прочь любым способом: может угнать единственную машину и оставить товарищей."),
+        new(8, "Истерика",
+            "Ты не можешь остановиться: из тебя рвутся смех, крик или рыдания, и ни на что другое сил нет.",
+            "Сыщик способен только смеяться, плакать, кричать и тому подобное."),
+        new(9, "Фобия",
+            "Тебя охватывает безотчётный страх — и то, чего ты боишься, мерещится тебе повсюду.",
+            "Новая фобия: выберите по таблице IX или бросьте 1d100. Весь приступ её объект чудится сыщику, даже если его рядом нет.",
+            InsanityConditionKind.Phobia),
+        new(10, "Мания",
+            "Тебя захватывает влечение, которому невозможно сопротивляться.",
+            "Новая мания: выберите по таблице X или бросьте 1d100. На время приступа она целиком владеет сыщиком.",
+            InsanityConditionKind.Mania)
+    ];
+
+    /// <summary>Таблица VIII «Приступ в кратком изложении»: время проматывается, обычно на 1d10 часов.</summary>
+    public static IReadOnlyList<BoutEntry> SummaryBouts { get; } =
+    [
+        new(1, "Амнезия",
+            "Ты приходишь в себя в незнакомом месте. Где ты? И — кто ты?",
+            "Сыщик не помнит, кто он такой; память возвращается постепенно."),
+        new(2, "Ограблен",
+            "Ты очнулся. Цел и невредим — но карманы пусты.",
+            "Все ценности похищены. Ценное имущество из биографии спасает только успешная проверка Удачи."),
+        new(3, "Избит",
+            "Ты приходишь в себя в синяках и ссадинах. Тело ноет, но вещи при тебе.",
+            "ПЗ — половина от тех, что были до приступа, серьёзной раны нет. Как это случилось, решает Хранитель. Сыщика не ограбили."),
+        new(4, "Буйство",
+            "Ты приходишь в себя посреди разгрома. Что здесь случилось — и чья это кровь?",
+            "Сыщик крушил всё вокруг; кого он ранил или убил, решает Хранитель. Сам сыщик может ничего не помнить."),
+        new(5, "Идеалы и принципы",
+            "Всё это время ты служил своему убеждению — громко, истово, не оглядываясь ни на кого.",
+            "Одна из черт раздела «Идеалы и принципы» проявилась в крайней, показной, безумной форме."),
+        new(6, "Значимые люди",
+            "Всё это время ты пробивался к тому, кто дороже всех, — ты должен был сделать нечто очень важное.",
+            "Сыщик любой ценой добирается до главного человека из «Значимых людей» и делает что-то важное для их отношений. Может затянуться дольше 1d10 часов."),
+        new(7, "Заключение",
+            "Ты приходишь в себя в больничной палате — или в камере полицейского участка. Понемногу вспоминаешь, как сюда попал.",
+            "Психиатрическая лечебница или полиция — на выбор Хранителя."),
+        new(8, "Паническое бегство",
+            "Ты приходишь в себя далеко отсюда — в лесу, в вагоне поезда, в междугороднем автобусе.",
+            "Сыщик оказался вдали от места событий."),
+        new(9, "Фобия",
+            "Всё это время ты прятался от того, что вдруг стало для тебя невыносимым.",
+            "Новая фобия: выберите по таблице IX или бросьте 1d100. Всё это время сыщик изо всех сил избегал её объекта.",
+            InsanityConditionKind.Phobia),
+        new(10, "Мания",
+            "Всё это время ты без оглядки предавался новой страсти.",
+            "Новая мания: выберите по таблице X или бросьте 1d100. Заметили ли это другие — решают Хранитель и игрок.",
+            InsanityConditionKind.Mania)
+    ];
 
     /// <summary>Таблица IX «Примеры фобий».</summary>
     public static IReadOnlyList<ConditionEntry> Phobias { get; } = Numbered(
@@ -226,6 +319,13 @@ public static class InsanityTables
         ("Эфиромания", "пристрастие к эфиру")
     ]);
 
+    public static IReadOnlyList<BoutEntry> Bouts(InsanityBoutMode mode) =>
+        mode == InsanityBoutMode.Summary ? SummaryBouts : RealTimeBouts;
+
+    /// <summary>Строка таблицы приступа по броску 1d10; null — число вне таблицы.</summary>
+    public static BoutEntry? FindBout(InsanityBoutMode mode, int roll) =>
+        roll is >= 1 and <= BoutDie ? Bouts(mode)[roll - 1] : null;
+
     public static IReadOnlyList<ConditionEntry> Conditions(InsanityConditionKind kind) =>
         kind == InsanityConditionKind.Mania ? Manias : Phobias;
 
@@ -233,13 +333,48 @@ public static class InsanityTables
     public static ConditionEntry? FindCondition(InsanityConditionKind kind, int roll) =>
         roll is >= 1 and <= ConditionDie ? Conditions(kind)[roll - 1] : null;
 
+    /// <summary>Номер таблицы, как его печатает книга: «VII» / «VIII».</summary>
+    public static string TableNumeral(InsanityBoutMode mode) =>
+        mode == InsanityBoutMode.Summary ? "VIII" : "VII";
+
     /// <summary>Номер таблицы, как его печатает книга: «IX» / «X».</summary>
     public static string TableNumeral(InsanityConditionKind kind) =>
         kind == InsanityConditionKind.Mania ? "X" : "IX";
 
     /// <summary>Страница таблицы в русском издании.</summary>
+    public static int TablePage(InsanityBoutMode mode) => mode == InsanityBoutMode.Summary ? 157 : 155;
+
+    /// <summary>Страница таблицы в русском издании.</summary>
     public static int TablePage(InsanityConditionKind kind) => kind == InsanityConditionKind.Mania ? 159 : 158;
+
+    /// <summary>
+    ///     «6 раундов» / «3 часа»: в реальном времени приступ идёт боевыми раундами (стр. 155),
+    ///     в кратком изложении — часами (стр. 156).
+    /// </summary>
+    public static string DurationText(InsanityBoutMode mode, int amount) =>
+        mode == InsanityBoutMode.Summary
+            ? $"{amount} {Plural(amount, "час", "часа", "часов")}"
+            : $"{amount} {Plural(amount, "раунд", "раунда", "раундов")}";
+
+    /// <summary>Единица длительности в родительном падеже — для подписи «1d10 раундов».</summary>
+    public static string DurationUnit(InsanityBoutMode mode) =>
+        mode == InsanityBoutMode.Summary ? "часов" : "раундов";
 
     private static IReadOnlyList<ConditionEntry> Numbered(IReadOnlyList<(string Name, string Description)> rows) =>
         rows.Select((row, index) => new ConditionEntry(index + 1, row.Name, row.Description)).ToList();
+
+    private static string Plural(int count, string one, string few, string many)
+    {
+        var lastTwo = Math.Abs(count) % 100;
+        var last = lastTwo % 10;
+        if (lastTwo is >= 11 and <= 14)
+            return many;
+
+        return last switch
+        {
+            1 => one,
+            >= 2 and <= 4 => few,
+            _ => many
+        };
+    }
 }
