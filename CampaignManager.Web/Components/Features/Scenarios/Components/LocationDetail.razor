@@ -1,6 +1,8 @@
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Checks.Components
+@using CampaignManager.Web.Components.Features.Checks.Services
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
 @inject MarkdownService MarkdownService
@@ -45,18 +47,27 @@
                     @foreach (var check in Location.SkillChecks)
                     {
                         <div class="border border-gray-200 rounded-md overflow-hidden">
-                            <button type="button"
-                                    class="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                                    @onclick="() => ToggleSkillCheck(check.Id)">
-                                <span class="font-medium text-gray-800">@check.SkillName</span>
-                                @if (!string.IsNullOrEmpty(check.Difficulty))
-                                {
-                                    <span class="text-xs px-2 py-0.5 rounded-full @GetDifficultyClass(check.Difficulty)">
-                                        @GetDifficultyLabel(check.Difficulty)
-                                    </span>
-                                }
-                                <i class="fas @(_expandedChecks.Contains(check.Id) ? "fa-chevron-up" : "fa-chevron-down") ml-auto text-gray-400 text-xs"></i>
-                            </button>
+                            @* Кнопка «Проверить» стоит рядом со строкой, а не внутри неё: кнопка в кнопке —
+                               невалидная разметка, и тап по ней раскрывал бы строку. *@
+                            <div class="flex items-stretch bg-gray-50">
+                                <button type="button"
+                                        class="flex-1 min-w-0 flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                                        @onclick="() => ToggleSkillCheck(check.Id)">
+                                    <span class="font-medium text-gray-800">@check.SkillName</span>
+                                    @if (!string.IsNullOrEmpty(check.Difficulty))
+                                    {
+                                        <span class="text-xs px-2 py-0.5 rounded-full @GetDifficultyClass(check.Difficulty)">
+                                            @GetDifficultyLabel(check.Difficulty)
+                                        </span>
+                                    }
+                                    <i class="fas @(_expandedChecks.Contains(check.Id) ? "fa-chevron-up" : "fa-chevron-down") ml-auto text-gray-400 text-xs"></i>
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0 m-1.5"
+                                        data-testid="@($"location-check-{check.Id}")"
+                                        @onclick="() => OpenCheck(check)">
+                                    <i class="fa-solid fa-dice-d20 mr-1"></i><span>Проверить</span>
+                                </button>
+                            </div>
                             @if (_expandedChecks.Contains(check.Id))
                             {
                                 <div class="px-4 py-3 border-t border-gray-200 space-y-2">
@@ -175,8 +186,23 @@
     }
 </div>
 
+@* Проверка навыка локации — общий диалог Checks. Сыщиков он берёт из кампании сценария сам;
+   их листы только читаются, отметки и Удачу Хранитель переносит на лист. *@
+<SkillCheckModal IsVisible="@(_checkToRoll is not null)"
+                 CampaignId="@CampaignId"
+                 InitialTargetName="@_checkToRoll?.SkillName"
+                 InitialDifficulty="@SkillCheckRules.ParseScenarioDifficulty(_checkToRoll?.Difficulty)"
+                 OnClose="() => _checkToRoll = null"/>
+
 @code {
     [Parameter] public ScenarioLocation? Location { get; set; }
+
+    /// <summary>Кампания сценария: из неё диалог проверки предлагает сыщиков. Нет кампании — только вручную.</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    private ScenarioSkillCheck? _checkToRoll;
+
+    private void OpenCheck(ScenarioSkillCheck check) => _checkToRoll = check;
     [Parameter] public ICollection<ScenarioCreature> ScenarioCreatures { get; set; } = [];
     [Parameter] public ICollection<ScenarioItem> ScenarioItems { get; set; } = [];
     [Parameter] public ICollection<CharacterStorageDto> Npcs { get; set; } = [];

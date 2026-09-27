@@ -3,6 +3,7 @@
 @page "/character/{CharacterId:guid}"
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Components
+@using CampaignManager.Web.Components.Features.Checks.Components
 @using CampaignManager.Web.Extensions
 @attribute [Authorize]
 @rendermode InteractiveServer
@@ -178,7 +179,8 @@
                                                      OnStatusUpdated="@HandleStatusUpdate"
                                                      OnCharacteristicUpdate="@UpdateCharacteristic"
                                                      OnDerivedChanged="@RecalculateDerivedAttributes"
-                                                     OnSheetChanged="@StateHasChanged"/>
+                                                     OnSheetChanged="@StateHasChanged"
+                                                     OnCharacteristicCheck="@OpenCharacteristicCheck"/>
                         </ChildContent>
                     </CharacterSection>
 
@@ -212,6 +214,10 @@
                                         </button>
                                     }
                                 </div>
+                                <p class="cm-field-note mt-1">
+                                    <i class="fa-solid fa-dice-d20 mr-1"></i>Кубик в строке навыка и тап по характеристике
+                                    (СИЛ, ЛВК…) открывают проверку: сложность, кости, Удача, повтор и отметка развития.
+                                </p>
                             </div>
 
                             @{
@@ -232,7 +238,8 @@
                                     @foreach (var group in filteredGroups)
                                     {
                                         <div class="break-inside-avoid mb-4">
-                                            <SkillGroupCard Group="@group" OnSkillValueEdited="@HandleSkillValueEdited"/>
+                                            <SkillGroupCard Group="@group" OnSkillValueEdited="@HandleSkillValueEdited"
+                                                            OnCheckRequested="@OpenSkillCheck"/>
                                         </div>
                                     }
                                 </div>
@@ -279,6 +286,13 @@
                                        IsModern="@IsModernEra"
                                        OnClose="CloseDevelopmentPhase"
                                        OnFinished="HandleDevelopmentPhaseFinished" />
+
+                <SkillCheckModal Character="@Character"
+                                 IsVisible="@_showSkillCheck"
+                                 InitialTargetKey="@_checkTargetKey"
+                                 InitialTargetName="@_checkTargetName"
+                                 OnClose="CloseSkillCheck"
+                                 OnSheetChanged="@StateHasChanged" />
 
                 @* Лог генерации персонажа *@
                 @if (_generationLog is not null)

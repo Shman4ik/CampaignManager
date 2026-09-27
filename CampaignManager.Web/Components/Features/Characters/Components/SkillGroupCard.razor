@@ -47,6 +47,7 @@
                             }
                             <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
                         </div>
+                        @CheckButton(skill)
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                         @* Мифы Ктулху и Средства не отмечают — им место под галочку не положено (стр. 92) *@
@@ -118,6 +119,7 @@
                                           title="Смежная специализация перешла порог — этот навык поднимается на @specBonus (но не выше самого порога)">+@specBonus</span>
                                 }
                             </div>
+                            @CheckButton(skill)
                         </div>
                         <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                             @if (DevelopmentPhaseRules.CanBeChecked(skill.Name))
@@ -162,7 +164,8 @@
                                          AllGroupSkills="@allInGroup"
                                          OnRemove="EventCallback.Factory.Create<Skill>(this, RemoveSkill)"
                                          OnValueChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecValueChanged)"
-                                         OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)" />
+                                         OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)"
+                                         OnCheckRequested="@OnCheckRequested" />
                 }
             }
         </div>
@@ -182,6 +185,24 @@
 
     /// <summary>Значение навыка отредактировали — лист может пересчитать зависящее от него.</summary>
     [Parameter] public EventCallback<Skill> OnSkillValueEdited { get; set; }
+
+    /// <summary>
+    ///     Кубик в строке навыка — странице открыть диалог проверки (Checks/SkillCheckModal).
+    ///     Тап по имени навыка занят справкой (SkillInfoPopover), поэтому у проверки своя кнопка.
+    /// </summary>
+    [Parameter] public EventCallback<Skill> OnCheckRequested { get; set; }
+
+    private RenderFragment CheckButton(Skill skill) => __builder =>
+    {
+        if (!OnCheckRequested.HasDelegate) return;
+        <button type="button"
+                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                aria-label="@($"Проверка: {skill.Name}")"
+                data-testid="@($"skill-check-{skill.Name}")"
+                @onclick="() => OnCheckRequested.InvokeAsync(skill)">
+            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+        </button>
+    };
 
     private SkillPicker? _picker;
 
