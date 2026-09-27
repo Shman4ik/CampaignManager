@@ -1,0 +1,184 @@
+@inject CombatService CombatService
+
+@* Дальний бой в панели атаки: дальность, заклинившее оружие, режим стрельбы и патроны
+   (стр. 110–114). Любая правка здесь перерисовывает всю панель через OnChanged — от дальности
+   и режима зависят броски, урон и кнопка «Провести атаку». *@
+
+<!-- Дальность (только для дальнего боя) -->
+<div class="mb-3">
+    <label class="block text-xs font-medium text-gray-600 mb-1">Дальность</label>
+    <div class="flex flex-wrap gap-2">
+        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
+            <input type="radio" name="range" checked="@(State.RangeLevel == RangeLevel.Base)"
+                   @onchange="() => SetRangeLevel(RangeLevel.Base)" />
+            <span>Обычная — обычный успех (@State.AttackSkillValue)@State.RangeHint(1)</span>
+        </label>
+        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
+            <input type="radio" name="range" checked="@(State.RangeLevel == RangeLevel.Long)"
+                   @onchange="() => SetRangeLevel(RangeLevel.Long)" />
+            <span>Большая — трудный успех (@(State.AttackSkillValue / 2))@State.RangeHint(2)</span>
+        </label>
+        <label class="flex items-center gap-1 py-1 text-xs cursor-pointer">
+            <input type="radio" name="range" checked="@(State.RangeLevel == RangeLevel.Extreme)"
+                   @onchange="() => SetRangeLevel(RangeLevel.Extreme)" />
+            <span>Сверхбольшая — чрезвычайный успех (@(State.AttackSkillValue / 5))@State.RangeHint(4)</span>
+        </label>
+    </div>
+    @if (State.SelectedWeapon is { } rangeWeapon && State.BaseRangeMeters is null)
+    {
+        <p class="mt-1 text-xs text-gray-400">
+            Базовая дальность не разобрана: в данных оружия «@rangeWeapon.Range».
+        </p>
+    }
+</div>
+
+@if (State.WeaponIsJammed)
+{
+    <div class="mb-3 rounded-md border border-error-300 bg-error-50 p-3">
+        <div class="text-xs font-semibold text-error-800">
+            @State.SelectedAttacker!.JammedWeaponName заклинило. Стрелять из него нельзя,
+            пока оружие не починят: осталось @State.SelectedAttacker.JamRepairRoundsLeft раунд(ов)
+            успешных проверок Механики или Стрельбы, по одной за раунд (стр. 113).
+        </div>
+        <div class="mt-2 flex items-center gap-2">
+            <label class="text-xs text-gray-600">Навык</label>
+            <input type="number" min="1" max="100" @bind="State.RepairSkill" @bind:after="Changed"
+                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none" />
+            <label class="text-xs text-gray-600">Бросок</label>
+            <input type="number" min="1" max="100" @bind="State.RepairRoll" @bind:after="Changed"
+                   class="border border-primary-300 rounded px-2 py-0.5 text-xs w-16 focus:outline-none"
+                   placeholder="1–100" />
+            <button type="button" @onclick="RepairJam"
+                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-xs text-gray-700">
+                Чинить
+            </button>
+        </div>
+        @if (State.RepairMessage is not null)
+        {
+            <div class="mt-1 text-xs text-gray-600">@State.RepairMessage</div>
+        }
+    </div>
+}
+
+<!-- Режим стрельбы (стр. 111–114) -->
+<div class="mb-3">
+    <label class="block text-xs font-medium text-gray-600 mb-1">Режим стрельбы</label>
+    <div class="space-y-1">
+        <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
+            <input type="radio" name="firingMode" checked="@(State.FiringMode == FiringMode.Single)"
+                   @onchange="() => SetFiringMode(FiringMode.Single)" />
+            Одиночный выстрел
+        </label>
+        @if (State.AllowsMultipleShots)
+        {
+            <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
+                <input type="radio" name="firingMode" checked="@(State.FiringMode == FiringMode.PistolBurst)"
+                       @onchange="() => SetFiringMode(FiringMode.PistolBurst)" />
+                Серия из пистолета — отдельная проверка на выстрел, каждая со штрафной костью
+                (не больше @State.MaxShotsPerRound за раунд)
+            </label>
+        }
+        @if (State.AllowsVolley)
+        {
+            <label class="flex items-center gap-2 py-1 text-xs text-gray-700 cursor-pointer">
+                <input type="radio" name="firingMode" checked="@(State.FiringMode == FiringMode.Volley)"
+                       @onchange="() => SetFiringMode(FiringMode.Volley)" />
+                @State.VolleyModeLabel
+            </label>
+        }
+    </div>
+
+    @if (!State.AllowsMultipleShots && !State.AllowsVolley && State.SelectedWeapon is { } singleShotWeapon)
+    {
+        <p class="mt-1 text-xs text-gray-400">
+            @singleShotWeapon.Name: @WeaponStatsReader.AttacksDisplay(singleShotWeapon) —
+            других режимов огня у этого оружия нет.
+        </p>
+    }
+
+    @if (State.FiringMode == FiringMode.Volley && State.SelectedAttacker != null)
+    {
+        var checkNo = State.SelectedAttacker.AutofireChecksThisRound + 1;
+        <div class="mt-2 rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-600">
+            Залп при непрерывном огне — <strong>@CombatService.GetVolleySize(State.AttackSkillValue) пуль</strong>
+            (навык ÷ 10, минимум 3). Это <strong>проверка №@checkNo</strong> за раунд.
+            @if (checkNo > 1)
+            {
+                <text>Каждая следующая проверка добавляет штрафную кость, после двух — поднимает сложность.</text>
+            }
+            <div class="mt-1 flex items-center gap-2">
+                <label class="text-gray-600">Патронов в залпе</label>
+                <input type="number" min="1" @bind="State.ShotsInVolley" @bind:after="Changed"
+                       class="border border-primary-300 rounded px-2 py-0.5 w-16 focus:outline-none" />
+            </div>
+        </div>
+    }
+
+    @if (State.AmmoCapacity > 0 && State.SelectedAttacker != null)
+    {
+        var left = State.AmmoLeft;
+        <div class="mt-2 flex items-center gap-2 text-xs">
+            <span class="@(left < State.ShotsPerCheck ? "text-error-700 font-semibold" : "text-gray-600")">
+                Патронов: @left / @State.AmmoCapacity
+            </span>
+            <button type="button" @onclick="Reload"
+                    class="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-600">
+                Перезарядить
+            </button>
+            @if (left < State.ShotsPerCheck)
+            {
+                <span class="text-error-700">— не хватает патронов на эту проверку</span>
+            }
+        </div>
+        <p class="mt-1 text-xs text-gray-400">
+            Смена магазина занимает раунд, лента в пулемёт — два (стр. 111).
+        </p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required AttackSetupState State { get; set; }
+
+    /// <summary>Что-то поменялось — панель перерисовывается целиком, как до разбиения на части.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private Task Changed() => OnChanged.InvokeAsync();
+
+    private Task SetRangeLevel(RangeLevel range)
+    {
+        State.SetRangeLevel(range);
+        return Changed();
+    }
+
+    private Task SetFiringMode(FiringMode mode)
+    {
+        State.SetFiringMode(mode);
+        return Changed();
+    }
+
+    private Task RepairJam()
+    {
+        var attacker = State.SelectedAttacker;
+        if (attacker is null || State.RepairRoll is not { } roll) return Task.CompletedTask;
+
+        var before = attacker.JamRepairRoundsLeft;
+        var ok = CombatService.TryRepairJam(attacker, State.RepairSkill, roll);
+        var level = CombatService.CalculateSuccessLevel(roll, State.RepairSkill);
+
+        State.RepairMessage = ok
+            ? string.IsNullOrEmpty(attacker.JammedWeaponName)
+                ? $"{CombatService.GetSuccessLevelText(level)} — оружие починено."
+                : $"{CombatService.GetSuccessLevelText(level)} — осталось {attacker.JamRepairRoundsLeft} из {before} раунд(ов)."
+            : $"{CombatService.GetSuccessLevelText(level)} — починить не удалось, попробуйте в следующем раунде.";
+
+        State.RepairRoll = null;
+        return Changed();
+    }
+
+    private Task Reload()
+    {
+        if (State.SelectedWeapon is { } weapon && State.SelectedAttacker is { } attacker)
+            CombatService.Reload(attacker, weapon);
+        return Changed();
+    }
+}

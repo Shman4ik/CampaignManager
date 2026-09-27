@@ -40,6 +40,23 @@ Combat-encounter resolution per Call of Cthulhu 7e rules (Chapter 6).
 - `ParticipantOption` / `ParticipantSourceKind` — строка списка «добавить участника»: несёт исходную
   сущность, сторону и количество, поэтому годится и бою, и погоне.
 
+## Панель атаки
+`Components/AttackSetupPanel.razor` (+ `.razor.cs`) — вкладка «Атака»: кто бьёт, чем, по кому и
+кнопка «Провести атаку». Разделы по виду атаки вынесены в `Components/Attack/`:
+`AttackRangedOptions` (дальность, заклинившее оружие, режим стрельбы, патроны),
+`AttackDefenseOptions` (защита в ближнем бою), `AttackRollInputs` (броски и уровень успеха),
+`AttackModifierOptions` (кости Хранителя, броня, готовность цели, модификаторы стрельбы) и
+`AttackDamageInputs` (урон и контратака).
+- Состояние — один `Attack/AttackSetupState` на панель: поля ввода, выбранные участники и оружие,
+  броски и всё, что из них следует (`RequiredLevel`, `AttackConnects`, `CurrentModifiers`,
+  `BuildSetup`). Методы, которым нужен сам бой (`TryRepairJam`, `Reload`, `Resolve*Attack`), —
+  в компонентах, у которых есть внедрённый `CombatService`.
+- Раздел после любой правки зовёт `OnChanged`, и панель перерисовывается **целиком** — как было,
+  пока всё жило в одном файле: от дальности зависят броски, от бросков — урон и кнопка. Поле
+  через `@bind` в разделе — с `@bind:after`, иначе соседние разделы покажут старое.
+- Классы Tailwind — только в `.razor`: сканер не читает `.cs`, класс из `AttackSetupState`
+  в сборку не попадёт.
+
 ## Названия навыков и осечка
 
 Числовые характеристики оружия спрашиваются у `Weapons/Services/WeaponStatsReader`, а не
