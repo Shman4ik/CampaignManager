@@ -303,5 +303,4 @@ Dangerous action confirmation. Optional type-to-confirm.
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
 | FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
-| CustomInput | Label, Value, Type(text/number/checkbox), FullWidth, Disabled, OnValueChanged | Labeled form input |
 | InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |
