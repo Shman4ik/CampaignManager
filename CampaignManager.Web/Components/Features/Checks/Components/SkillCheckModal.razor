@@ -1,0 +1,93 @@
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Checks.Model
+@using CampaignManager.Web.Components.Features.Combat.Model
+@inject CampaignService CampaignService
+@inject ILogger<SkillCheckModal> Logger
+
+@* Диалог проверки навыка: SkillCheckPanel в модалке. Панель пересоздаётся на каждое открытие
+   (@key) — прошлый бросок не должен встречать Хранителя при следующей проверке.
+   С CampaignId диалог сам подгружает сыщиков кампании (режим игры сценария); их листы
+   только читаются, запись — через открытый лист и его автосохранение. *@
+
+<Modal IsVisible="@IsVisible" OnClose="@OnClose" Title="@Title" MaxWidth="2xl">
+    <ChildContent>
+        @if (_loadingParty)
+        {
+            <LoadingIndicator Message="Загружаем сыщиков кампании…"/>
+        }
+        else if (IsVisible)
+        {
+            <SkillCheckPanel @key="_openCount"
+                             Character="@Character"
+                             Writable="@(Character is not null)"
+                             Party="@(CampaignId is null ? null : _party)"
+                             InitialTargetKey="@InitialTargetKey"
+                             InitialTargetName="@InitialTargetName"
+                             InitialDifficulty="@InitialDifficulty"
+                             OnSheetChanged="@OnSheetChanged"/>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" data-testid="check-close" @onclick="OnClose">Закрыть</button>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Открытый на странице лист: диалог меняет его, а сохраняет автосохранение листа.</summary>
+    [Parameter] public Character? Character { get; set; }
+
+    /// <summary>Кампания, чьих сыщиков предложить на выбор (режим игры сценария).</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    [Parameter] public string? InitialTargetKey { get; set; }
+    [Parameter] public string? InitialTargetName { get; set; }
+    [Parameter] public SuccessLevel InitialDifficulty { get; set; } = SuccessLevel.RegularSuccess;
+
+    [Parameter] public EventCallback OnSheetChanged { get; set; }
+
+    private int _openCount;
+    private bool _wasVisible;
+    private bool _loadingParty;
+    private Guid? _loadedCampaignId;
+    private List<CheckInvestigator> _party = [];
+
+    private string Title =>
+        string.IsNullOrWhiteSpace(InitialTargetName) ? "Проверка" : $"Проверка: {InitialTargetName}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opened = IsVisible && !_wasVisible;
+        _wasVisible = IsVisible;
+        if (!opened)
+            return;
+
+        _openCount++;
+
+        if (CampaignId is { } campaignId && campaignId != _loadedCampaignId)
+            await LoadPartyAsync(campaignId);
+    }
+
+    private async Task LoadPartyAsync(Guid campaignId)
+    {
+        _loadingParty = true;
+        try
+        {
+            var campaign = await CampaignService.GetCampaignWithCharactersAsync(campaignId);
+            _party = CheckInvestigator.FromCampaign(campaign);
+            _loadedCampaignId = campaignId;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading investigators of campaign {CampaignId} for a skill check", campaignId);
+            _party = [];
+        }
+        finally
+        {
+            _loadingParty = false;
+        }
+    }
+}
