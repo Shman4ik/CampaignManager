@@ -8,6 +8,14 @@ Keeper-application review and site administration.
 ## Key Models
 - `KeeperApplication : BaseDataBaseEntity` — a user's request to be granted Keeper privileges.
 
+## Pages
+- Роль везде по-русски — `PlayerRole.ToRussianString()` (`Extensions/EnumExtensions`): и в бейдже,
+  и в `<select>` смены роли. `value` у `<option>` остаётся именем члена перечисления — по нему
+  `ChangeRoleAsync` разбирает выбор.
+- Бейджам — только варианты `Badge` (`warning`/`success`/`error`/`secondary`/`accent`…), не имена
+  цветов: «yellow»/«red» он не знает, и раньше все статусы и роли рисовались одним primary.
+  Цвета ролей те же, что в личном кабинете.
+
 ## Authorization
 - Every administrator-only method on `AdminService` calls `EnsureAdministratorAsync` first and throws
   `UnauthorizedAccessException` when the caller is not an administrator. The `[Authorize(Roles = "Administrator")]`

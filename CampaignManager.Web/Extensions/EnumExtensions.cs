@@ -118,4 +118,12 @@ public static class EnumExtensions
         BookType.OccultBook => "Книга по оккультизму",
         _ => type.ToString()
     };
+
+    public static string ToRussianString(this PlayerRole role) => role switch
+    {
+        PlayerRole.Administrator => "Администратор",
+        PlayerRole.GameMaster => "Хранитель",
+        PlayerRole.Player => "Игрок",
+        _ => role.ToString()
+    };
 }
