@@ -1,0 +1,60 @@
+@inject ChaseService ChaseService
+
+@* Не потерять след (стр. 139): только преследователь; провал выводит его из погони. *@
+
+<div class="bg-secondary-50 border border-secondary-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-secondary-800">Не потерять след — 1 действие перемещения</div>
+    <p class="text-xs text-secondary-700">
+        Когда преследователь больше не видит, куда побежала жертва, Хранитель назначает
+        проверку Чтения следов. Провал — погоня для этого преследователя окончена.
+    </p>
+    <div class="grid grid-cols-2 gap-3">
+        <div>
+            <label class="text-xs text-gray-600">Навык</label>
+            <input type="text" @bind="Form.SkillName" placeholder="Чтение следов"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Значение навыка</label>
+            <input type="number" @bind="Form.SkillValue"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Сложность</label>
+            <select @bind="Form.Difficulty" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="1">Обычная</option>
+                <option value="2">Сложная</option>
+                <option value="3">Экстремальная</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Бросок d100</label>
+            <input type="number" min="1" max="100" @bind="Form.Roll" placeholder="01–100"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="Execute">
+            <span>Искать</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task Execute()
+    {
+        var skill = string.IsNullOrWhiteSpace(Form.SkillName) ? "Чтение следов" : Form.SkillName;
+        var result = ChaseService.ResolveTrackingCheck(
+            Participant.Id, skill, Form.SkillValue, Form.Difficulty,
+            ChaseActionForm.Entered(Form.Roll));
+        await OnResolved.InvokeAsync(result);
+    }
+}

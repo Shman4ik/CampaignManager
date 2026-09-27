@@ -1,0 +1,45 @@
+@inject ChaseService ChaseService
+
+@* Педаль в пол (стр. 137): разгон заявляется до перемещения и не отменяется. *@
+
+<div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-warning-800">Разгон — 1 действие перемещения</div>
+    <p class="text-xs text-warning-700">
+        Заявляется до перемещения и не отменяется: транспорт проедет всё намеченное,
+        если только не провалит проверку помехи по пути.
+        @if (Participant.HasNavigatorAssist)
+        {
+            <span class="font-medium"> Штурман снимет одну штрафную кость.</span>
+        }
+    </p>
+    <div>
+        <label class="text-xs text-gray-600">Локаций за одно действие</label>
+        <select @bind="Form.BoostLocations" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+            <option value="2">2 локации — 1 штрафная кость</option>
+            <option value="3">3 локации — 1 штрафная кость</option>
+            <option value="4">4 локации — 2 штрафные кости</option>
+            <option value="5">5 локаций — 2 штрафные кости</option>
+        </select>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="Execute">
+            <span>Разогнаться</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task Execute()
+    {
+        var result = ChaseService.ResolveFloorIt(Participant.Id, Form.BoostLocations);
+        await OnResolved.InvokeAsync(result);
+    }
+}
