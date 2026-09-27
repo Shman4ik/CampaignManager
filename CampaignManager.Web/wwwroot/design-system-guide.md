@@ -226,8 +226,19 @@ Dialog container. Scrollable body, header/footer slots.
 - `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl
 - `MaxHeight` string? = "70vh"
 - `HeaderColorScheme` string = "primary"
-- `CloseOnBackdropClick` bool = true
+- `CloseOnBackdropClick` bool = true — `false` выключает и закрытие по фону, и Esc (крестик
+  в шапке остаётся). Ставить на диалоги посреди игры, где случайное касание мимо окна не
+  должно ничего пропускать (проверка ВЫН умирающих в бою)
 - `FooterContent` RenderFragment?
+
+Любой диалог — это `<Modal>`, а не свой `fixed inset-0` с белой панелью: у самодельных не было
+ни анимации, ни блокировки прокрутки страницы, ни закрытия по Esc, и шапка у каждого своя.
+
+### Tabs
+Вкладки над содержимым страницы. `<Tabs Items="…" @bind-ActiveKey="_tab"/>`, где `Items` —
+список `Tabs.Item(Key, Label, Icon?, Count?)`; счётчик показывается пилюлей, если больше нуля.
+Компонент ничего не хранит, содержимое вкладки страница рисует сама под ним. Вкладка 44px в
+высоту — тап-цель. Своих полос `border-b-2` на странице не заводить.
 
 ### ConfirmationModal
 Dangerous action confirmation. Optional type-to-confirm.

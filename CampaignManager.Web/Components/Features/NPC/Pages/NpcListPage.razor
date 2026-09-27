@@ -46,29 +46,17 @@ else
             </div>
         }
 
-        <div class="border-b border-gray-200 mb-4">
-            <nav class="flex flex-wrap gap-1 -mb-px">
-                <button type="button"
-                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_tab =="npc" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
-                        @onclick='() => _tab = "npc"'>
-                    <i class="fa-solid fa-masks-theater mr-1"></i> НПС (@_npcs.Count)
-                </button>
-                <button type="button"
-                        class="px-4 py-2 text-sm font-medium rounded-t-md border-b-2 transition-colors @(_tab =="pregen" ? "border-accent-500 text-accent-600 bg-white" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")"
-                        @onclick='() => _tab = "pregen"'>
-                    <i class="fa-solid fa-user mr-1"></i> Прегены (@_pregens.Count)
-                </button>
-            </nav>
-        </div>
+        <Tabs Items="TabItems" @bind-ActiveKey="_tab"/>
 
         <FilterPanel>
             <div class="flex flex-wrap items-end gap-4">
                 <div class="flex-1 min-w-[16rem]">
-                    <label class="cm-field-label">Поиск</label>
-                    <input type="text" class="cm-input w-full" placeholder="Поиск по имени..."
+                    <label for="npcSearch" class="cm-field-label">Поиск</label>
+                    <input type="search" id="npcSearch" class="cm-input" placeholder="Поиск по имени..."
                            @bind="_search" @bind:event="oninput"/>
                 </div>
-                <label class="flex items-center gap-2 cursor-pointer cm-btn cm-btn-secondary cm-btn-sm">
+                @* Флажок в строку высотой с поле — тап-цель, а не 16px квадратик. *@
+                <label class="flex min-h-[40px] items-center gap-2 cursor-pointer text-sm text-primary-700">
                     <input type="checkbox" class="cm-checkbox" checked="@_showArchived" @onchange="ToggleArchived"/>
                     Показывать архив
                 </label>
@@ -83,7 +71,22 @@ else
         {
             <EmptyState Title="@(_tab == "npc" ? "Нет НПС" : "Нет прегенов")"
                         Message="Создайте первого — он появится в библиотеке и будет доступен во всех сценариях."
-                        IconClass="fa-users-slash"/>
+                        IconClass="fa-users-slash">
+                <ActionButton>
+                    @if (_tab == "npc")
+                    {
+                        <Button OnClick="CreateNpc" Variant="primary" Icon="fa-plus">Добавить НПС</Button>
+                    }
+                    else
+                    {
+                        <Button OnClick="CreatePregen" Variant="primary" Icon="fa-plus">Добавить прегена</Button>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_search))
+                    {
+                        <Button OnClick="@(() => _search = "")" Variant="secondary" Icon="fa-undo-alt">Очистить фильтры</Button>
+                    }
+                </ActionButton>
+            </EmptyState>
         }
         else
         {
@@ -141,6 +144,12 @@ else
     private EventCallback<CharacterStorageDto> OnCastCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, ShowCastDialog);
     private EventCallback<CharacterStorageDto> OnArchiveCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, ConfirmArchive);
     private EventCallback<CharacterStorageDto> OnRestoreCallback => EventCallback.Factory.Create<CharacterStorageDto>(this, RestoreAsync);
+
+    private IReadOnlyList<Tabs.Item> TabItems =>
+    [
+        new("npc", "НПС", "fa-masks-theater", _npcs.Count),
+        new("pregen", "Прегены", "fa-user", _pregens.Count)
+    ];
 
     private List<CharacterStorageDto> Visible =>
         (_tab == "npc" ? _npcs : _pregens)

@@ -1,0 +1,45 @@
+@namespace CampaignManager.Web.Components.Shared
+
+@* Вкладки страницы. Раньше NpcListPage и ScenarioEditPage держали по ручной копии одной
+   и той же разметки (border-b-2, акцент у активной, счётчик пилюлей) — теперь она одна.
+   Компонент ничего не хранит: какая вкладка открыта, решает страница (ActiveKey +
+   ActiveKeyChanged, работает с @bind-ActiveKey). Содержимое вкладки страница рисует
+   сама под компонентом. Высота вкладки 44px — палец на iPad, а не курсор. *@
+<div class="tabs" role="tablist">
+    @foreach (var item in Items)
+    {
+        var active = item.Key == ActiveKey;
+        <button type="button"
+                role="tab"
+                aria-selected="@(active ? "true" : "false")"
+                class="tab @(active ? "tab-active" : "")"
+                @onclick="() => SelectAsync(item.Key)">
+            @if (item.Icon is not null)
+            {
+                <i class="fa-solid @item.Icon" aria-hidden="true"></i>
+            }
+            <span>@item.Label</span>
+            @if (item.Count is > 0)
+            {
+                <span class="tab-count">@item.Count</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary>Одна вкладка: ключ, подпись, иконка Font Awesome и необязательный счётчик.</summary>
+    public sealed record Item(string Key, string Label, string? Icon = null, int? Count = null);
+
+    [Parameter, EditorRequired] public IReadOnlyList<Item> Items { get; set; } = [];
+
+    [Parameter] public string ActiveKey { get; set; } = "";
+
+    [Parameter] public EventCallback<string> ActiveKeyChanged { get; set; }
+
+    private async Task SelectAsync(string key)
+    {
+        if (key == ActiveKey) return;
+        await ActiveKeyChanged.InvokeAsync(key);
+    }
+}
