@@ -4,9 +4,12 @@ on:
   push:
     branches: ["master"]
 
+concurrency:
+  group: build-and-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
-    environment: hetzner-vpc
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,49 +43,30 @@ jobs:
             ghcr.io/shman4ik/campaign-manager:latest
             ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
 
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@master
+      - name: Check out dmnet-gitops
+        uses: actions/checkout@v7
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          passphrase: ${{ secrets.VPS_SSH_KEY_PASSPHRASE }}
-          script: |
-            # Login to GitHub Container Registry
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          repository: Shman4ik/dmnet-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          path: gitops
 
-            # Pull the versioned image
-            docker pull ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-
-            # Stop and remove the existing container if it exists
-            docker stop campaign-manager || true
-            docker rm campaign-manager || true
-
-            # Run the new container with environment variables and specific version
-            docker run -d --name campaign-manager \
-              --restart unless-stopped \
-              -p 8080:8080 \
-              -e "ConnectionStrings__DefaultConnection=${{ secrets.ConnectionStrings__DefaultConnection }}" \
-              -e "Authentication__Google__ClientId=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTID }}" \
-              -e "Authentication__Google__ClientSecret=${{ secrets.CAMPAIGNMANAGER__AUTHENTICATION__GOOGLE__CLIENTSECRET }}" \
-              -e "Minio__AccessKey=${{ secrets.MINIO_ACCESSKEY }}" \
-              -e "Minio__SecretKey=${{ secrets.MINIO_SECRETKEY }}" \
-              -e "Authorization__AdminEmails__0=${{ secrets.ADMIN_EMAIL }}" \
-              -e "Community__DonateUrl=${{ secrets.DONATE_URL }}" \
-              -e "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true" \
-              -e "DOTNET_EnableDiagnostics=false" \
-              ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-
-            # Reload Nginx to apply any changes
-            sudo systemctl reload nginx
-
-            # Output deployed version for logging
-            echo "Deployed version: ${{ env.VERSION }}"
+      # Deploy = commit the new tag to dmnet-gitops; Argo CD in the cluster applies it within ~90 s.
+      # Nothing connects to the VPS.
+      - name: Point dmnet-gitops at the new image
+        working-directory: gitops/workloads/campaign-manager
+        run: |
+          yq -i '(.images[] | select(.name == "ghcr.io/shman4ik/campaign-manager")).newTag = strenv(VERSION)' kustomization.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "campaign-manager ${VERSION}" -m "Built from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          for attempt in 1 2 3; do git push && exit 0; git pull --rebase; done
+          exit 1
 
       - name: Delete old package versions
         uses: actions/delete-package-versions@v5
         with:
           package-name: campaign-manager
           package-type: container
-          min-versions-to-keep: 3
+          # Older tags stay pullable for rollbacks (revert the tag commit in dmnet-gitops).
+          min-versions-to-keep: 10
           ignore-versions: "^latest$"
