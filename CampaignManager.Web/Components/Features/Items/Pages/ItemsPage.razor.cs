@@ -102,8 +102,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            // Log the error (e.g., to console or a logging service)
-            Console.WriteLine($"Error loading items: {ex.Message}");
+            Logger.LogError(ex, "Error loading items");
             errorMessage = "Не удалось загрузить список предметов. Пожалуйста, попробуйте позже.";
             items = new List<Item>(); // Ensure items is not null
             itemTypes = new List<string>();
@@ -286,7 +285,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving item: {ex.Message}");
+            Logger.LogError(ex, "Error saving item {ItemId} {ItemName}", editItem.Id, editItem.Name);
             errorMessage = $"Не удалось сохранить предмет: {ex.Message}";
             // Keep the modal open to show the error
         }
@@ -314,10 +313,11 @@ public partial class ItemsPage
     {
         if (deleteItem == null) return; // Should not happen, but good practice
 
+        var itemId = deleteItem.Id;
         errorMessage = null; // Clear previous errors
         try
         {
-            await ItemService.DeleteItemAsync(deleteItem.Id); // Use Guid Id
+            await ItemService.DeleteItemAsync(itemId);
             showDeleteModal = false;
             await LoadItemsAsync(); // Refresh the list
             deleteItem = null; // Clear the selected item
@@ -325,7 +325,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error deleting item: {ex.Message}");
+            Logger.LogError(ex, "Error deleting item {ItemId}", itemId);
             errorMessage = $"Не удалось удалить предмет: {ex.Message}";
             // Keep the modal open to show the error
         }

@@ -125,6 +125,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error initializing character sheet {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
             _errorBoundary?.Recover();
@@ -184,6 +185,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error loading character {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
         }
@@ -285,6 +287,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error saving character {CharacterId} ({Kind})", CharacterId, CurrentKind);
             ShowNotification($"Ошибка при сохранении: {ex.Message}", "error");
             _errorBoundary?.Recover();
         }

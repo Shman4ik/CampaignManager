@@ -10,6 +10,7 @@
 @inject NavigationManager NavigationManager
 @inject CreatureService CreatureService
 @inject MinioService MinioService
+@inject ILogger<CreatureEditPage> Logger
 
 @rendermode InteractiveServer
 
@@ -574,8 +575,7 @@
             }
             catch (Exception ex)
             {
-                // Log error or notify user
-                Console.WriteLine($"Error getting presigned URL: {ex.Message}");
+                Logger.LogError(ex, "Error getting presigned URL {ImageUrl} for creature {CreatureId}", creature.ImageUrl, Id);
                 displayImageUrl = null; // Or a placeholder error image URL
             }
         }
@@ -611,7 +611,7 @@
             {
                 // Handle upload error (e.g., display a message to the user)
                 selectedFileName = $"Ошибка загрузки: {ex.Message}";
-                Console.WriteLine($"File upload failed: {ex.Message}");
+                Logger.LogError(ex, "Temporary image upload failed for creature {CreatureId}", Id);
                 creature.ImageUrl = null; // Clear image URL on error
                 displayImageUrl = null;
             }
@@ -725,12 +725,13 @@
             }
             else
             {
-                Console.WriteLine("Error saving creature");
+                // Причину сервис уже записал в лог сам — здесь только факт, что страница не ушла.
+                Logger.LogWarning("Creature {CreatureId} {CreatureName} was not saved", Id, creature.Name);
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving creature: {ex.Message}");
+            Logger.LogError(ex, "Error saving creature {CreatureId} {CreatureName}", Id, creature.Name);
         }
     }
 
@@ -758,8 +759,7 @@
         }
         catch (Exception ex)
         {
-            // Handle upload error (e.g., display a message to the user)
-            Console.WriteLine($"Error uploading image: {ex.Message}");
+            Logger.LogError(ex, "Error uploading image for creature {CreatureId}", creature.Id);
         }
     }
 
