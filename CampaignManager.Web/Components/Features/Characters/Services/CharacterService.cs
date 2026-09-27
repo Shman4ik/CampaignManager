@@ -351,6 +351,7 @@ public sealed class CharacterService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var query = dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.Kind == CharacterKind.Pregen && c.ScenarioId == null);
 
             if (!includeArchived)
@@ -399,6 +400,7 @@ public sealed class CharacterService(
             }
 
             var query = dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.Id != characterId && c.Status == CharacterStatus.Active);
 
             if (character.CampaignPlayerId is { } playerId)
@@ -462,6 +464,7 @@ public sealed class CharacterService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.ScenarioId == scenarioId
                             && c.Kind == CharacterKind.Pregen
                             && c.Status != CharacterStatus.Archived)

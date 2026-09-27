@@ -6,6 +6,7 @@ using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
 
 namespace CampaignManager.Web.Components.Features.Skills.Services;
 
@@ -193,10 +194,23 @@ public sealed class SkillService(
     }
 
     /// <summary>
-    /// Gets a skill by its ID
+    ///     Навык по идентификатору — из того же кэша справочника, что и списки, а не отдельным
+    ///     запросом: карточка навыка открывается дважды (пререндер и circuit), и оба раза ходила в базу.
+    ///     <para>
+    ///         Отдаётся <b>копия</b>: экземпляр в кэше общий на всех пользователей, а форма правки
+    ///         (<c>SkillEditPage</c>) меняет полученный объект на месте — отменённая правка иначе
+    ///         осталась бы в справочнике у всех до истечения кэша. Копия через JSON, а не по полям:
+    ///         новое поле модели не потеряется.
+    ///     </para>
     /// </summary>
-    public Task<SkillModel?> GetSkillByIdAsync(Guid id) =>
-        CrudServiceHelper.GetByIdAsync<SkillModel>(dbContextFactory, id, logger);
+    public async Task<SkillModel?> GetSkillByIdAsync(Guid id)
+    {
+        var skills = await GetAllSkillsUnpagedAsync();
+        var cached = skills.FirstOrDefault(s => s.Id == id);
+        return cached is null
+            ? null
+            : JsonSerializer.Deserialize<SkillModel>(JsonSerializer.SerializeToUtf8Bytes(cached));
+    }
 
     /// <summary>
     /// Creates a new skill, rejecting duplicates by name

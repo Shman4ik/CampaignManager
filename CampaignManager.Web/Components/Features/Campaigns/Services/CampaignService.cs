@@ -210,6 +210,7 @@ public sealed class CampaignService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
+            .AsNoTracking()
             .Where(p => p.Status != CampaignStatus.Completed)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();

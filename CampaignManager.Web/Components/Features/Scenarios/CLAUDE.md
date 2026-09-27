@@ -100,6 +100,12 @@ iPad разворачивают к столу — на экране должна
   - `ScenarioSkillCheck` — predefined skill checks tied to the scenario.
 
 ## Notes
+- `GetScenarioByIdAsync` отдаёт **только строку сценария** — без `Cast` и `Pregens`. Состав и
+  прегены читаются отдельно (`GetScenarioCastAsync`, `CharacterService.GetScenarioPregensAsync`):
+  раньше навигации подгружались джойном и не читались никем, а страница сценария получала прегены
+  дважды. Нужен состав — зови `GetScenarioCastAsync`, а не возвращай `Include`.
+- Списки сценариев, НПС, существ и предметов читаются `AsNoTracking`: сохраняют их другие методы,
+  по свежей строке из базы (`FindAsync` + `SetValues`), так что трекинг чтения ничего не давал.
 - NPCs and creatures are modeled differently: NPCs are full `CharacterStorageDto` character sheets; creatures/monsters subclass `Creature`. Don't try to unify them.
 - Состав НПС меняют только `AddNpcToScenarioAsync` / `UpdateScenarioNpcAsync` /
   `RemoveNpcFromScenarioAsync`. «Убрать НПС из сценария» удаляет связь, а не лист —
