@@ -79,7 +79,8 @@
                                     ScenarioCreatures="_scenario.ScenarioCreatures"
                                     ScenarioItems="_scenario.ScenarioItems"
                                     Npcs="_locationCharacters"
-                                    Handouts="_scenario.Handouts"/>
+                                    Handouts="_scenario.Handouts"
+                                    OnShowHandout="ShowHandout"/>
                 }
             </div>
 
@@ -89,7 +90,8 @@
                 <div class="w-80 flex-shrink-0">
                     <KeyFactsPanel KeyFacts="_scenario.KeyFacts"
                                    Handouts="_scenario.Handouts"
-                                   OnToggleCollapse="() => _keyFactsPanelCollapsed = true"/>
+                                   OnToggleCollapse="() => _keyFactsPanelCollapsed = true"
+                                   OnShowHandout="ShowHandout"/>
                 </div>
             }
             else
@@ -291,7 +293,13 @@ else
                                     <ul class="text-sm text-gray-600 space-y-1">
                                         @foreach (var h in _scenario.Handouts.OrderBy(h => h.Order))
                                         {
-                                            <li>@h.Name</li>
+                                            <li class="flex items-center justify-between gap-2">
+                                                <span class="min-w-0">@h.Name</span>
+                                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0"
+                                                        @onclick="() => ShowHandout(h.Id)">
+                                                    <i class="fa-solid fa-expand"></i><span>Показать</span>
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 </div>
@@ -562,6 +570,14 @@ else
 
 <!-- Export Scenario Modal -->
 <ScenarioExportModal @ref="_exportModal"/>
+
+@* Показ раздатки игрокам поверх и обзора, и режима игры. Открытая раздатка — ?handout= в адресе. *@
+@if (_shownHandout is not null)
+{
+    <HandoutShowcase Handout="_shownHandout"
+                     OnClose="HideHandout"
+                     SecondScreenHref="@($"/scenarios/{Id}/handouts/{_shownHandout.Id}")"/>
+}
 }
 
 @code {
@@ -576,6 +592,11 @@ else
 
     [SupplyParameterFromQuery(Name = "location")]
     public Guid? LocationId { get; set; }
+
+    // Раздатка, показанная игрокам, — тоже в адресе: iPad развёрнут к столу, и пауза вкладки
+    // не должна посреди показа вернуть на экран записи Хранителя.
+    [SupplyParameterFromQuery(Name = "handout")]
+    public Guid? HandoutId { get; set; }
 
     private ScenarioExportModal? _exportModal;
 
@@ -680,6 +701,11 @@ else
             ? _scenario?.Locations.FirstOrDefault(l => l.Id == _selectedLocationId.Value)
             : null;
 
+    private ScenarioHandout? _shownHandout =>
+        HandoutId is { } handoutId
+            ? _scenario?.Handouts.FirstOrDefault(h => h.Id == handoutId)
+            : null;
+
     // Modal references
     private AddNpcModal? _addNpcModal;
     private AddNpcModal? _addPregenModal;
@@ -744,11 +770,19 @@ else
         var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["mode"] = mode,
-            ["location"] = mode is null ? null : locationId
+            ["location"] = mode is null ? null : locationId,
+            ["handout"] = null
         });
 
         NavigationManager.NavigateTo(uri, false, true);
     }
+
+    /// <summary>Показать раздатку игрокам: режим и локация в адресе остаются, добавляется ?handout=.</summary>
+    private void ShowHandout(Guid handoutId) =>
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("handout", handoutId), false, true);
+
+    private void HideHandout() =>
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("handout", (Guid?)null), false, true);
 
     private static string FormatScheduledDateForInput(DateTime? date) =>
         date.HasValue ? date.Value.ToString("yyyy-MM-ddTHH:mm") : string.Empty;
