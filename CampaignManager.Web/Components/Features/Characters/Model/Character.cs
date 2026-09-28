@@ -63,6 +63,12 @@ public class Character
     public List<Spell> Spells { get; set; } = new();
 
     /// <summary>
+    ///     Книги Мифов, которые сыщик читает или прочитал (стр. 171–174). Старые листы этого поля
+    ///     не несут и читаются с пустым списком.
+    /// </summary>
+    public List<MythosBookRecord> MythosBooks { get; set; } = [];
+
+    /// <summary>
     ///     Заметки
     /// </summary>
     public string Notes { get; set; } = "";

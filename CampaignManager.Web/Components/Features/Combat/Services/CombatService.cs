@@ -918,6 +918,10 @@ public sealed partial class CombatService
     /// <summary>Почему боец не может атаковать; null — может.</summary>
     public string? GetAttackBlockReason(Combatant combatant)
     {
+        if (combatant.CastingSpell is { } casting)
+            return $"{combatant.Name} творит «{casting.Setup.SpellName}» (сработает в раунде {casting.CompletesInRound}). " +
+                   "Атаковать можно, только бросив сотворение — прервите его во вкладке «Заклинание».";
+
         if (combatant.AttackBlockedInRound == CurrentRound)
             return $"{combatant.Name} укрывался от огня и теряет атаку в этом раунде (стр. 111). " +
                    "До следующей атаки он может только уклоняться.";
@@ -1475,6 +1479,31 @@ public sealed partial class CombatService
             }
         }
 
+        var notes = new List<string>();
+        if (notesFromHabituation is not null)
+            notes.Add(notesFromHabituation);
+
+        EvaluateSanityLoss(target, sanLoss, setup.ManualIntRoll, setup.ManualInsanityDurationRoll, result, notes);
+
+        var successText = GetSuccessLevelText(result.AttackerSuccessLevel);
+        result.Summary = $"{target.Name}: проверка рассудка — бросок {roll} против {target.CurrentSanity} ({successText}). " +
+                         (isFumble ? $"Крах — максимальная потеря: {sanLoss} ед. " : $"Потеря: {sanLoss} ед. ") +
+                         $"РАС: {target.CurrentSanity}→{result.SanityAfter}." +
+                         (notes.Count > 0 ? " " + string.Join(" ", notes) : "");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Последствия потери рассудка (стр. 152–153): 5+ пунктов за раз — проверка ИНТ, и безумие
+    /// наступает при её <b>успехе</b>; ⅕ текущего рассудка за игровой день — бессрочное безумие;
+    /// ноль — неизлечимое. Одна точка для проверки Рассудка и для цены заклинания в рассудке:
+    /// пороги не должны разъехаться между ними.
+    /// </summary>
+    private static void EvaluateSanityLoss(
+        Combatant target, int sanLoss, int? manualIntRoll, int? manualDurationRoll,
+        CombatActionResult result, List<string> notes)
+    {
         result.SanityLoss = sanLoss;
         var sanityAfter = Math.Max(0, target.CurrentSanity - sanLoss);
         result.SanityAfter = sanityAfter;
@@ -1482,14 +1511,10 @@ public sealed partial class CombatService
         var lostToday = target.SanityLostToday + sanLoss;
         result.SanityLostToday = lostToday;
 
-        var notes = new List<string>();
-        if (notesFromHabituation is not null)
-            notes.Add(notesFromHabituation);
-
         // Потеря 5+ пунктов за раз — проверка ИНТ; безумие наступает при УСПЕХЕ (стр. 153)
         if (sanLoss >= 5)
         {
-            var intRoll = setup.ManualIntRoll ?? RollD100();
+            var intRoll = manualIntRoll ?? RollD100();
             result.IntelligenceRoll = intRoll;
             result.IntelligenceValue = target.IntelligenceValue;
 
@@ -1498,7 +1523,7 @@ public sealed partial class CombatService
 
             if (realizedTheHorror)
             {
-                result.TemporaryInsanityHours = setup.ManualInsanityDurationRoll ?? RollDice(10);
+                result.TemporaryInsanityHours = manualDurationRoll ?? RollDice(10);
                 notes.Add($"Потеряно 5+ пунктов за раз. Проверка ИНТ: {intRoll}/{target.IntelligenceValue} — " +
                           $"успех, сыщик осознал ужас. Временное безумие на {result.TemporaryInsanityHours} ч.");
             }
@@ -1522,14 +1547,6 @@ public sealed partial class CombatService
             result.TriggeredPermanentInsanity = true;
             notes.Add($"{target.Name} теряет рассудок полностью — неизлечимое безумие, персонаж выбывает из игры.");
         }
-
-        var successText = GetSuccessLevelText(result.AttackerSuccessLevel);
-        result.Summary = $"{target.Name}: проверка рассудка — бросок {roll} против {target.CurrentSanity} ({successText}). " +
-                         (isFumble ? $"Крах — максимальная потеря: {sanLoss} ед. " : $"Потеря: {sanLoss} ед. ") +
-                         $"РАС: {target.CurrentSanity}→{sanityAfter}." +
-                         (notes.Count > 0 ? " " + string.Join(" ", notes) : "");
-
-        return result;
     }
 
     // ───────────────────── Применение результата ─────────────────────
@@ -1542,8 +1559,9 @@ public sealed partial class CombatService
 
     public void ApplyResult(CombatActionResult result)
     {
-        // Урон защитнику
-        if (result.DefenderId.HasValue)
+        // Урон защитнику. Цель заклинания урона отсюда не получает: у заклинания свой эффект,
+        // и Хранитель проводит его отдельно (DefenderHp* у него не заполнены).
+        if (result.DefenderId.HasValue && result.ActionType != CombatActionType.CastSpell)
         {
             var defender = Combatants.FirstOrDefault(c => c.Id == result.DefenderId);
             if (defender != null)
@@ -1567,6 +1585,9 @@ public sealed partial class CombatService
 
                     // Получивший урон теряет преимущество от прицеливания (стр. 111)
                     defender.IsAiming = false;
+
+                    // Удар или выстрел срывает сотворение заклинания (стр. 177)
+                    DisruptSpellcasting(defender, result);
                 }
 
                 // Вырвался из захвата при манёвре
@@ -1594,6 +1615,8 @@ public sealed partial class CombatService
                 attacker.IsStabilized = false;
                 attacker.TemporaryHitPoints = 0;
                 attacker.IsAiming = false;
+
+                DisruptSpellcasting(attacker, result);
             }
         }
 
@@ -1602,45 +1625,57 @@ public sealed partial class CombatService
         {
             var target = Combatants.FirstOrDefault(c => c.Id == result.AttackerId);
             if (target != null)
-            {
-                target.CurrentSanity = result.SanityAfter ?? target.CurrentSanity;
-                target.SanityLostToday = result.SanityLostToday ?? target.SanityLostToday;
-
-                if (result.TriggeredTemporaryInsanity == true)
-                {
-                    target.HasTemporaryInsanity = true;
-                    target.TemporaryInsanityHours = result.TemporaryInsanityHours ?? 0;
-                }
-
-                if (result.TriggeredIndefiniteInsanity)
-                    target.HasIndefiniteInsanity = true;
-
-                if (result.TriggeredPermanentInsanity)
-                    target.HasPermanentInsanity = true;
-
-                // Синхронизация с исходным персонажем (для листа сыщика)
-                if (target.CharacterSource is { } src)
-                {
-                    src.DerivedAttributes.Sanity.Value = target.CurrentSanity;
-                    var loss = result.SanityLoss ?? 0;
-                    if (loss > 0)
-                        src.State.SanityLossEpisode += loss;
-                    if (result.TriggeredTemporaryInsanity == true && !src.State.HasTemporaryInsanity)
-                    {
-                        src.State.HasTemporaryInsanity = true;
-                        src.State.TemporaryInsanityStartedAt = DateTime.UtcNow;
-                    }
-                    if (result.TriggeredIndefiniteInsanity)
-                        src.State.HasIndefiniteInsanity = true;
-
-                    RecordHabituation(src, result);
-                }
-            }
+                ApplySanityOutcome(target, result);
         }
+
+        // Заклинание: цена заклинателя (ПМ, ПЗ, МОЩ, рассудок)
+        if (result.ActionType == CombatActionType.CastSpell)
+            ApplySpellCast(result);
 
         CombatLog.Insert(0, result);
         PendingResult = null;
         NotifyStateChanged();
+    }
+
+    /// <summary>
+    /// Переносит потерю рассудка из результата на участника и на его лист: текущий рассудок,
+    /// потерянное за день, отметки безумия, привыкание к ужасному. Общая для проверки Рассудка
+    /// и цены заклинания.
+    /// </summary>
+    private static void ApplySanityOutcome(Combatant target, CombatActionResult result)
+    {
+        target.CurrentSanity = result.SanityAfter ?? target.CurrentSanity;
+        target.SanityLostToday = result.SanityLostToday ?? target.SanityLostToday;
+
+        if (result.TriggeredTemporaryInsanity == true)
+        {
+            target.HasTemporaryInsanity = true;
+            target.TemporaryInsanityHours = result.TemporaryInsanityHours ?? 0;
+        }
+
+        if (result.TriggeredIndefiniteInsanity)
+            target.HasIndefiniteInsanity = true;
+
+        if (result.TriggeredPermanentInsanity)
+            target.HasPermanentInsanity = true;
+
+        // Синхронизация с исходным персонажем (для листа сыщика)
+        if (target.CharacterSource is { } src)
+        {
+            src.DerivedAttributes.Sanity.Value = target.CurrentSanity;
+            var loss = result.SanityLoss ?? 0;
+            if (loss > 0)
+                src.State.SanityLossEpisode += loss;
+            if (result.TriggeredTemporaryInsanity == true && !src.State.HasTemporaryInsanity)
+            {
+                src.State.HasTemporaryInsanity = true;
+                src.State.TemporaryInsanityStartedAt = DateTime.UtcNow;
+            }
+            if (result.TriggeredIndefiniteInsanity)
+                src.State.HasIndefiniteInsanity = true;
+
+            RecordHabituation(src, result);
+        }
     }
 
     /// <summary>

@@ -12,5 +12,8 @@ public enum CombatActionType
     DelayTurn,
     FleeFromMelee,
     SanityCheck,
-    Medicine
+    Medicine,
+
+    /// <summary>Сотворение заклинания (гл. 9). Добавлено в конец: журнал в снапшоте хранит число.</summary>
+    CastSpell
 }
