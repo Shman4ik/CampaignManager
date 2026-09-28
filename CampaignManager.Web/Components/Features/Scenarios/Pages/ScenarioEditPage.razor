@@ -347,7 +347,7 @@ else
 </div>
 
 <LocationEditorModal @ref="_locationEditorModal" OnSaved="HandleLocationSaved"/>
-<HandoutEditorModal @ref="_handoutEditorModal" OnSaved="HandleHandoutSaved"/>
+<HandoutEditorModal @ref="_handoutEditorModal" OnSave="HandleHandoutSaved"/>
 }
 
 @code {
@@ -656,26 +656,21 @@ else
         _handoutEditorModal?.Show(handout);
     }
 
-    private async Task HandleHandoutSaved(ScenarioHandout handout)
+    private async Task<bool> HandleHandoutSaved(ScenarioHandout handout)
     {
-        if (!Id.HasValue) return;
+        if (!Id.HasValue) return false;
 
         var existing = _model.Handouts.FirstOrDefault(h => h.Id == handout.Id);
-        bool success;
-
-        if (existing is not null)
-        {
-            success = await ScenarioService.UpdateHandoutAsync(Id.Value, handout);
-        }
-        else
-        {
-            success = await ScenarioService.AddHandoutAsync(Id.Value, handout);
-        }
+        var success = existing is not null
+            ? await ScenarioService.UpdateHandoutAsync(Id.Value, handout)
+            : await ScenarioService.AddHandoutAsync(Id.Value, handout);
 
         if (success)
         {
             await ReloadScenario();
         }
+
+        return success;
     }
 
     private async Task RemoveHandout(ScenarioHandout handout)

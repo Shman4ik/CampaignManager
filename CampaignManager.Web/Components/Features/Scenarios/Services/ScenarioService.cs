@@ -1129,6 +1129,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1155,6 +1156,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1181,6 +1183,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1201,6 +1204,7 @@ public sealed class ScenarioService(
             scenario.KeyFacts = facts;
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1226,6 +1230,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1252,6 +1257,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
@@ -1278,6 +1284,7 @@ public sealed class ScenarioService(
 
             dbContext.Scenarios.Update(scenario);
             await dbContext.SaveChangesAsync();
+            InvalidateScenarioCaches();
             return true;
         }
         catch (Exception ex)
