@@ -1,0 +1,44 @@
+@using Microsoft.AspNetCore.WebUtilities
+@inject NavigationManager Nav
+
+@* Вход для гостя. Браузер, который уже входил через Google, эту карточку не видит — он входит сам
+   (Utilities/Authorization/AutoLogin), поэтому она для нового устройства и для тех, кто нажал
+   «Выйти». Обе кнопки ведут мимо страницы Auth0: Google — сразу к выбору аккаунта Google, почта —
+   сразу к форме пароля. data-enhance-nav="false": это переход на чужой сайт, а не страница Blazor. *@
+<div class="cm-card">
+    <div class="cm-card-body">
+        @if (_status == "accessDenied")
+        {
+            <Alert Type="error" Title="Доступ закрыт" ShowIcon="true">
+                Почта этой учётки не подтверждена или её нет в списке допущенных. Напишите администратору.
+            </Alert>
+        }
+        else if (_status == "failed")
+        {
+            <Alert Type="warning" ShowIcon="true">Вход не завершился — попробуйте ещё раз.</Alert>
+        }
+
+        <p class="cm-text-muted">
+            Войдите, чтобы увидеть свои кампании и листы сыщиков. Браузер запомнит вход через Google —
+            в следующий раз ничего нажимать не придётся.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+            <a href="/api/account/login?method=google" data-enhance-nav="false" class="cm-btn cm-btn-primary">
+                <i class="fa-brands fa-google" aria-hidden="true"></i>Войти через Google
+            </a>
+            <a href="/api/account/login?method=email" data-enhance-nav="false" class="cm-btn cm-btn-secondary">
+                <i class="fa-solid fa-envelope" aria-hidden="true"></i>Почта и пароль
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    // authStatus ставит OnRemoteFailure в Program.cs, когда Auth0 вернул ошибку или вход отклонён.
+    private string? _status;
+
+    protected override void OnInitialized() =>
+        _status = QueryHelpers.ParseQuery(Nav.ToAbsoluteUri(Nav.Uri).Query).TryGetValue("authStatus", out var status)
+            ? status.ToString()
+            : null;
+}
