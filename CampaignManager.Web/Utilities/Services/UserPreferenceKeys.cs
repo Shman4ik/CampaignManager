@@ -6,9 +6,6 @@ namespace CampaignManager.Web.Utilities.Services;
 /// </summary>
 public static class UserPreferenceKeys
 {
-    /// <summary>Боковое меню развёрнуто по умолчанию.</summary>
-    public const string SidebarExpanded = "ui.sidebarExpanded";
-
     /// <summary>Помнить последнего открытого сыщика на всех устройствах.</summary>
     public const string SyncLastCharacter = "ui.syncLastCharacter";
 

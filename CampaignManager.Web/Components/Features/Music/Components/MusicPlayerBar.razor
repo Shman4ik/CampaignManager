@@ -11,16 +11,24 @@
 @inject IJSRuntime JS
 
 @* Панель живёт в MainLayout, а не на странице: уход со сценария в боевой помощник не должен
-   обрывать музыку. Сам звук держит js/music-player.js, здесь только состояние и кнопки. *@
+   обрывать музыку. Сам звук держит js/music-player.js, здесь только состояние и кнопки.
+   По умолчанию скрыта (Playback.IsPanelOpen): открывает её кнопка «Музыка» в шапке
+   (MusicPanelButton) или запуск любого трека. Скрытая панель звук не останавливает —
+   компонент и JS-модуль живут, не рисуется только разметка. *@
 
 @if (_visible)
 {
     <div class="cm-music-bar">
         <div class="cm-music-bar-row">
-            <button type="button" class="cm-music-toggle" title="@(_expanded ? "Свернуть" : "Развернуть")"
-                    @onclick="() => _expanded = !_expanded">
-                <i class="fas @(_expanded ? "fa-chevron-down" : "fa-chevron-up")"></i>
-            </button>
+            @* Без трека ряд настроений открыт всегда — ради него панель и открывают. *@
+            @if (Playback.CurrentTrack is not null)
+            {
+                <button type="button" class="cm-music-toggle"
+                        aria-label="@(_expanded ? "Скрыть настроения" : "Показать настроения")"
+                        @onclick="() => _expanded = !_expanded">
+                    <i class="fas @(_expanded ? "fa-chevron-down" : "fa-chevron-up")"></i>
+                </button>
+            }
 
             <i class="fas fa-music cm-music-glyph @(Playback.IsPlaying ? "cm-music-glyph--live" : "")"></i>
 
@@ -70,6 +78,12 @@
                            value="@Playback.Volume"
                            @oninput="OnVolumeInput"/>
                 </div>
+
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                        aria-label="Скрыть панель плеера"
+                        @onclick="Playback.TogglePanel">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
             </div>
         </div>
 
@@ -86,7 +100,7 @@
             </div>
         }
 
-        @if (_expanded)
+        @if (_expanded || Playback.CurrentTrack is null)
         {
             <div class="cm-music-bar-row cm-music-bar-row--wrap">
                 <span class="cm-music-pool">Настроение:</span>
@@ -147,7 +161,9 @@
     private int _pushedVolume = -1;
     private bool _pushedMuted;
 
-    private bool _visible => _isKeeper && (_hasLibrary || Playback.CurrentTrack is not null);
+    private bool _visible => _isKeeper
+                             && Playback.IsPanelOpen
+                             && (_hasLibrary || Playback.CurrentTrack is not null);
 
     protected override async Task OnInitializedAsync()
     {
@@ -303,7 +319,12 @@
     {
         _needsGesture = true;
         _expanded = true;
-        InvokeAsync(StateHasChanged);
+        // Кнопку «Включить звук» нужно увидеть, даже если панель успели скрыть.
+        InvokeAsync(() =>
+        {
+            Playback.OpenPanel();
+            StateHasChanged();
+        });
     }
 
     // ───────────────────────── Жизненный цикл ─────────────────────────
