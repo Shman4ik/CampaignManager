@@ -7,32 +7,22 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IdentityService IdentityService
 @inject NavigationBadgeService NavigationBadges
-@inject UserPreferencesService UserPreferencesService
-@implements IDisposable
 
-@if (_tabletExpanded)
-{
-    <div class="tablet-sidebar-backdrop" @onclick="CollapseTablet"></div>
-}
-
-@* Свёрнутое меню — рельс с подписями, как в iPadOS: под каждой иконкой короткая подпись
-   (ShortLabel у SidebarItem), видна всегда. Развёрнутое (настройка «Боковое меню развёрнуто»)
-   — прежние 240px с полными подписями. На ширине 769–1100px (портрет iPad) меню всегда
-   рельс, а стрелка открывает полное меню поверх страницы (_tabletExpanded). Правила — в
-   design-system.css, раздел «Рельс». *@
-<div class="sidebar @(_collapsed ? "collapsed" : "") @(_tabletExpanded ? "tablet-expanded" : "")">
+@* Меню — всегда рельс с подписями, как в iPadOS: под каждой иконкой короткая подпись
+   (ShortLabel у SidebarItem). Развернуть его до 240px больше нельзя: на iPad широкое меню
+   только отнимало место у страницы, а подписи рельса и так называют каждый пункт.
+   Правила — в design-system.css, раздел «Боковое меню». *@
+<div class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
         <div class="sidebar-logo-icon sidebar-logo-icon--cthulhu">
             <img src="/logo.svg" width="28" height="28" aria-hidden="true" alt="Campaign Manager logo" />
         </div>
-        <div class="sidebar-logo-text">Campaign Manager</div>
     </div>
 
     <!-- Nav -->
     <nav class="sidebar-nav">
         <div class="sidebar-group sidebar-group--main">
-            <div class="sidebar-section">Основное</div>
             <SidebarItem Href="/" Icon="fa-house" Label="Главная"/>
             <AuthorizeView>
                 <SidebarItem Href="/combat" Icon="fa-hand-fist" Label="Бой"/>
@@ -48,7 +38,6 @@
 
         <AuthorizeView>
             <div class="sidebar-group sidebar-group--wiki">
-                <div class="sidebar-section">Вики</div>
                 <SidebarItem Href="/weapons" Icon="fa-gun" Label="Оружие"/>
                 <SidebarItem Href="/bestiary" Icon="fa-skull" Label="Существа"/>
                 <SidebarItem Href="/items" Icon="fa-box" Label="Предметы"/>
@@ -61,7 +50,6 @@
 
         <AuthorizeView Policy="RequireAdministratorRole">
             <div class="sidebar-group sidebar-group--system">
-                <div class="sidebar-section">Система</div>
                 <SidebarItem Href="/admin/users" Icon="fa-users" Label="Пользователи" ShortLabel="Аккаунты"/>
                 <SidebarItem Href="/admin/applications" Icon="fa-inbox" Label="Заявки"
                              Badge="@(_pendingCount > 0 ? _pendingCount.ToString() : null)"/>
@@ -80,16 +68,12 @@
                             @(context.User.Identity?.Name?.Length > 0 ? char.ToUpper(context.User.Identity.Name[0]) : '?')
                         </span>
                     </span>
-                    <span class="sidebar-label sidebar-label--truncate">
-                        @context.User.Identity?.Name
-                    </span>
                     <span class="sidebar-rail-label">Кабинет</span>
                 </a>
                 <!-- Logout -->
                 <button type="button" class="sidebar-item sidebar-item--footer sidebar-item--button"
                         @onclick="Logout">
                     <span class="sidebar-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
-                    <span class="sidebar-label">Выйти</span>
                     <span class="sidebar-rail-label">Выйти</span>
                 </button>
             </Authorized>
@@ -98,25 +82,15 @@
                 {
                     <div class="sidebar-item sidebar-item--footer sidebar-item--muted">
                         <span class="sidebar-icon"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span>
-                        <span class="sidebar-label">Проверка...</span>
                         <span class="sidebar-rail-label">Проверка</span>
                     </div>
                 }
                 else
                 {
-                    @if (_silentLoginFailed)
-                    {
-                        <div class="sidebar-status text-warning-600">Автовход не удался</div>
-                    }
-                    @if (_accessDenied)
-                    {
-                        <div class="sidebar-status text-error-600">Доступ запрещён</div>
-                    }
                     <button type="button" class="sidebar-item sidebar-item--footer sidebar-item--button"
                             @onclick="ManualLogin">
                         @* Способ входа (Google или почта с паролем) выбирается уже на странице Auth0. *@
                         <span class="sidebar-icon"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span>
-                        <span class="sidebar-label">Войти</span>
                         <span class="sidebar-rail-label">Войти</span>
                     </button>
                 }
@@ -125,18 +99,7 @@
     </div>
 </div>
 
-<!-- Collapse toggle button -->
-<button type="button"
-        class="sidebar-collapse-btn"
-        style="left: @ToggleBtnLeft"
-        @onclick="ToggleSidebar"
-        aria-label="@(IsVisuallyExpanded ? "Свернуть меню" : "Развернуть меню")">
-    <i class="fa-solid @(IsVisuallyExpanded ? "fa-chevron-left" : "fa-chevron-right")" aria-hidden="true"></i>
-</button>
-
 @code {
-    private bool _collapsed = true;
-    private bool _tabletExpanded;
     private bool _checkingAuth = true;
     private bool _silentLoginFailed;
     private bool _accessDenied;
@@ -145,8 +108,6 @@
 
     protected override void OnInitialized()
     {
-        Nav.LocationChanged += OnLocationChanged;
-
         var uri = Nav.ToAbsoluteUri(Nav.Uri);
         var q = QueryHelpers.ParseQuery(uri.Query);
         if (q.TryGetValue("authStatus", out var s))
@@ -157,54 +118,9 @@
         }
     }
 
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-    {
-        _tabletExpanded = false;
-        InvokeAsync(StateHasChanged);
-    }
-
-    public void Dispose()
-    {
-        Nav.LocationChanged -= OnLocationChanged;
-    }
-
-    private bool IsVisuallyExpanded => _tabletExpanded || !_collapsed;
-
-    private string ToggleBtnLeft =>
-        _tabletExpanded ? "var(--sidebar-width)"
-            : _collapsed ? "var(--sidebar-width-collapsed)"
-                : "var(--sidebar-width)";
-
-    private void CollapseTablet()
-    {
-        _tabletExpanded = false;
-    }
-
-    private async Task ToggleSidebar()
-    {
-        var width = await JS.InvokeAsync<double>("eval", "window.innerWidth");
-        if (width is >= 769 and <= 1100)
-        {
-            _tabletExpanded = !_tabletExpanded;
-        }
-        else
-        {
-            _collapsed = !_collapsed;
-            // localStorage — чтобы следующая страница на этом устройстве отрисовалась сразу в нужном
-            // виде, настройка пользователя — чтобы то же состояние приехало на другое устройство.
-            await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
-            await UserPreferencesService.SetBoolAsync(UserPreferenceKeys.SidebarExpanded, !_collapsed);
-        }
-    }
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-
-        // Restore sidebar collapsed state — default to collapsed
-        var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "sidebar-collapsed");
-        _collapsed = stored != "false";
-        StateHasChanged();
 
         // Clean up authStatus from URL
         if (_silentLoginFailed || _accessDenied || _loginFailed)
@@ -256,15 +172,6 @@
         var isAdmin = await IdentityService.IsAdministrator();
         if (isAdmin)
             _pendingCount = await NavigationBadges.GetPendingApplicationsCountAsync();
-
-        // Настройка из кабинета важнее локального кэша: на новом устройстве localStorage пуст,
-        // а привычное состояние меню должно приехать вместе с аккаунтом.
-        var storedExpanded = await UserPreferencesService.GetAsync(UserPreferenceKeys.SidebarExpanded);
-        if (bool.TryParse(storedExpanded, out var expanded) && expanded == _collapsed)
-        {
-            _collapsed = !expanded;
-            await JS.InvokeVoidAsync("localStorage.setItem", "sidebar-collapsed", _collapsed.ToString().ToLower());
-        }
 
         // Save login hint
         try

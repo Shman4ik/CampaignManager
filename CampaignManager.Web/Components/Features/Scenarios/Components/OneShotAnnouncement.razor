@@ -45,15 +45,34 @@
                         <div class="scenario-info">
                             <h2 class="scenario-title">@scenario.Name</h2>
 
+                            @* Длинный анонс свёрнут до трёх строк: целиком он занимал полэкрана главной,
+                               а за столом его уже все прочли. Раскрытие — в поле, не в адресе: после
+                               паузы circuit анонс просто снова свёрнут, и это не потеря. *@
+                            @{
+                                var descLength = !string.IsNullOrEmpty(scenario.AnnouncementText)
+                                    ? scenario.AnnouncementText.Length
+                                    : scenario.Description?.Length ?? 0;
+                                var collapsible = descLength > DescriptionClampChars;
+                                var collapsed = collapsible && !_expandedDescriptions.Contains(scenario.Id);
+                                var scenarioId = scenario.Id;
+                            }
                             @if (!string.IsNullOrEmpty(scenario.AnnouncementText))
                             {
-                                <div class="scenario-desc markdown-content">
+                                <div class="scenario-desc markdown-content @(collapsed ? "scenario-desc--clamped" : "")">
                                     @((MarkupString)MarkdownService.ConvertToHtml(scenario.AnnouncementText))
                                 </div>
                             }
                             else if (!string.IsNullOrEmpty(scenario.Description))
                             {
-                                <p class="scenario-desc">@scenario.Description</p>
+                                <p class="scenario-desc @(collapsed ? "scenario-desc--clamped" : "")">@scenario.Description</p>
+                            }
+                            @if (collapsible)
+                            {
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-2.5"
+                                        aria-expanded="@(collapsed ? "false" : "true")"
+                                        @onclick="() => ToggleDescription(scenarioId)">
+                                    <i class="fa-solid @(collapsed ? "fa-chevron-down" : "fa-chevron-up") mr-1" aria-hidden="true"></i>@(collapsed ? "Подробнее" : "Свернуть")
+                                </button>
                             }
 
                             <div class="meta-tags">
@@ -95,13 +114,13 @@
                                         </div>
                                         @if (isMine)
                                         {
-                                            <button class="action-btn release-btn" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
+                                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
                                         }
                                         else if (isReserved)
                                         {
                                             @if (_isKeeperOrAdmin)
                                             {
-                                                <button class="action-btn release-btn" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
+                                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
                                             }
                                             else
                                             {
@@ -112,10 +131,10 @@
                                         {
                                             <AuthorizeView>
                                                 <Authorized>
-                                                    <button class="action-btn reserve-btn" @onclick="() => OpenReserveConfirm(pregen, scenario)">Забронировать</button>
+                                                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm shrink-0" @onclick="() => OpenReserveConfirm(pregen, scenario)">Забронировать</button>
                                                 </Authorized>
                                                 <NotAuthorized>
-                                                    <button class="action-btn ghost-btn" @onclick='() => NavigationManager.NavigateTo("/api/account/login", true)'>Войти</button>
+                                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0" @onclick='() => NavigationManager.NavigateTo("/api/account/login", true)'>Войти</button>
                                                 </NotAuthorized>
                                             </AuthorizeView>
                                         }
@@ -167,6 +186,17 @@
     private Scenario? _pendingScenario;
     private string? _notification;
     private string _notificationType = "info";
+
+    /// <summary>Длиннее этого анонс сворачивается до трёх строк — примерно столько в них и влезает.</summary>
+    private const int DescriptionClampChars = 240;
+
+    private readonly HashSet<Guid> _expandedDescriptions = [];
+
+    private void ToggleDescription(Guid scenarioId)
+    {
+        if (!_expandedDescriptions.Remove(scenarioId))
+            _expandedDescriptions.Add(scenarioId);
+    }
 
     protected override async Task OnInitializedAsync()
     {

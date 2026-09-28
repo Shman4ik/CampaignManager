@@ -94,11 +94,9 @@
     /* Gradients - minimal, only for CTA buttons */
     --cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-800) 100%);
 
-    /* Sidebar. Свёрнутое меню — рельс: иконка и подпись 11px под ней. 76px — столько,
-       чтобы самая длинная подпись («Заклинания») шла одной строкой. */
-    --sidebar-width: 240px;
-    --sidebar-width-collapsed: 76px;
-    --sidebar-transition: width 0.2s ease, margin-left 0.2s ease;
+    /* Боковое меню — рельс: иконка и подпись 11px под ней. 76px — столько, чтобы самая
+       длинная подпись («Заклинания») шла одной строкой. */
+    --sidebar-width: 76px;
 }
 
 /* Global resets */
@@ -520,7 +518,11 @@ body {
     margin-top: 0.25rem;
 }
 
-/* ── Sidebar layout ── */
+/* ── Боковое меню ──
+   Рельс как в iPadOS: под каждой иконкой короткая подпись (.sidebar-rail-label, ShortLabel
+   у SidebarItem), видна всегда — наведения на планшете нет, title= её не заменит.
+   Развёрнутого варианта с полными подписями больше нет: на iPad он только отнимал ширину
+   у страницы. */
 .sidebar {
     width: var(--sidebar-width);
     height: 100dvh;
@@ -532,84 +534,14 @@ body {
     flex-direction: column;
     z-index: 40;
     overflow: hidden;
-    transition: var(--sidebar-transition);
     flex-shrink: 0;
-}
-
-.sidebar.collapsed {
-    width: var(--sidebar-width-collapsed);
-}
-
-/* ── Рельс ──
-   Свёрнутое меню — не голые иконки, а рельс как в iPadOS: под каждой иконкой короткая
-   подпись (.sidebar-rail-label, ShortLabel у SidebarItem), видна всегда. Раньше имя пункта
-   жило только в title=, а наведения на планшете нет. Те же правила повторены ниже, в
-   планшетной ветке 769–1100px, где меню — рельс всегда, кроме открытого поверх страницы
-   (.tablet-expanded). Меняешь одно — поменяй и второе. */
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-label,
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-section,
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-logo-text,
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-logo-sub,
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-status {
-    display: none;
-}
-
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-logo {
-    justify-content: center;
-    padding: 0;
-}
-
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-nav {
-    padding: 8px 4px;
-}
-
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-footer {
-    padding: 6px 4px;
-}
-
-/* 46px в высоту — тап-цель, иконка над подписью */
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-item {
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    min-height: 46px;
-    padding: 5px 2px;
-    text-align: center;
-}
-
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-item .sidebar-icon {
-    width: 20px; height: 20px;
-    font-size: 16px;
-}
-
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-rail-label {
-    display: block;
-}
-
-/* Подписей групп в рельсе нет — группировку несёт линейка, поэтому она темнее */
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-group + .sidebar-group::before {
-    margin: 8px 12px;
-    background-color: var(--color-primary-300);
-}
-
-/* Счётчик — пилюля на плече иконки, подпись под ней остаётся читаемой */
-.sidebar.collapsed:not(.tablet-expanded) .sidebar-badge {
-    position: absolute;
-    top: 2px; left: calc(50% + 5px);
-    margin: 0;
-    min-width: 16px; height: 16px;
-    padding: 0 4px;
-    font-size: 10px; line-height: 14px;
-    text-align: center;
-    border: 1px solid var(--color-primary-50);
 }
 
 .sidebar-logo {
     height: 56px;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 14px;
+    justify-content: center;
     border-bottom: 1px solid var(--cm-border-color);
     flex-shrink: 0;
 }
@@ -630,49 +562,34 @@ body {
     overflow: hidden;
 }
 
-.sidebar-logo-text {
-    font-size: 15px; font-weight: 700;
-    color: var(--color-primary-800);
-    white-space: nowrap; overflow: hidden;
-    letter-spacing: -0.01em;
-}
-
-.sidebar-logo-sub {
-    font-size: 9px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--color-primary-400);
-    white-space: nowrap;
-}
-
 .sidebar-nav {
     flex: 1;
     min-height: 0;
-    padding: 8px 6px;
+    padding: 8px 4px;
     overflow-y: auto; overflow-x: hidden;
 }
 
-/* Nav is split into groups, each with a leading divider, so the collapsed rail
-   still reads as three blocks instead of one undifferentiated column of glyphs. */
+/* Подписей групп в рельсе нет — группировку несёт линейка между ними, поэтому она темнее
+   обычной границы: без неё столбец иконок читался бы одним сплошным списком. */
 .sidebar-group + .sidebar-group::before {
     content: "";
     display: block;
     height: 1px;
-    margin: 6px 10px;
-    background-color: var(--cm-border-color);
+    margin: 8px 12px;
+    background-color: var(--color-primary-300);
 }
 
-.sidebar-section {
-    font-size: 10px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    color: var(--color-primary-400);
-    padding: 10px 8px 4px;
-    white-space: nowrap; overflow: hidden;
-}
-
+/* 46px в высоту — тап-цель, иконка над подписью */
 .sidebar-item {
     position: relative;
-    display: flex; align-items: center; gap: 10px;
-    padding: 7px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 46px;
+    padding: 5px 2px;
+    text-align: center;
     border-radius: var(--cm-radius-md);
     color: var(--color-primary-500);
     cursor: pointer; user-select: none;
@@ -680,7 +597,6 @@ body {
     margin-bottom: 1px;
     white-space: nowrap;
     text-decoration: none;
-    font-size: 13.5px;
 }
 
 .sidebar-item:hover {
@@ -695,20 +611,16 @@ body {
 }
 
 .sidebar-item .sidebar-icon {
-    width: 18px; height: 18px;
+    width: 20px; height: 20px;
     flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
+    font-size: 16px;
 }
 
-.sidebar-item .sidebar-label {
-    overflow: hidden;
-}
-
-/* Подпись под иконкой в рельсе. В развёрнутом меню скрыта — там полная .sidebar-label.
-   Одна строка без многоточия: ShortLabel подбирается так, чтобы влезать целиком. */
+/* Подпись под иконкой. Одна строка без многоточия: ShortLabel подбирается так,
+   чтобы влезать целиком. */
 .sidebar-rail-label {
-    display: none;
+    display: block;
     max-width: 100%;
     font-size: 11px;
     line-height: 1.2;
@@ -722,28 +634,17 @@ body {
     font-weight: 600;
 }
 
-/* Пункты подвала: кабинет, выход, вход */
-.sidebar-item--footer .sidebar-label {
-    font-size: 12.5px;
-}
-
+/* Пункты подвала-кнопки: выход, вход */
 .sidebar-item--button {
     width: 100%;
     background: none;
     border: none;
-    text-align: left;
     font-family: inherit;
 }
 
 .sidebar-item--muted {
     cursor: default;
     color: var(--color-primary-400);
-}
-
-.sidebar-label--truncate {
-    text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
 }
 
 .sidebar-avatar {
@@ -756,66 +657,33 @@ body {
     flex-shrink: 0;
 }
 
-/* Строка статуса входа над кнопкой «Войти» — только в развёрнутом меню */
-.sidebar-status {
-    padding: 6px 8px;
-    font-size: 11px;
-    line-height: 1.4;
-}
-
+/* Счётчик — пилюля на плече иконки, подпись под ней остаётся читаемой */
 .sidebar-badge {
-    margin-left: auto;
+    position: absolute;
+    top: 2px; left: calc(50% + 5px);
+    min-width: 16px; height: 16px;
+    padding: 0 4px;
     background: var(--color-error-500);
     color: white;
     border-radius: 99px;
-    font-size: 10px; font-weight: 700;
-    padding: 1px 6px;
-    flex-shrink: 0;
+    font-size: 10px; font-weight: 700; line-height: 14px;
+    text-align: center;
+    border: 1px solid var(--color-primary-50);
 }
 
 .sidebar-footer {
-    padding: 6px;
+    padding: 6px 4px;
     border-top: 1px solid var(--cm-border-color);
     flex-shrink: 0;
 }
 
-/* Collapse button */
-.sidebar-collapse-btn {
-    width: 20px; height: 44px;
-    position: fixed; top: 50%; transform: translateY(-50%);
-    background: var(--color-primary-50);
-    border: 1px solid var(--cm-border-color);
-    border-left: none;
-    border-radius: 0 6px 6px 0;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--color-primary-400);
-    transition: all 0.15s, left 0.2s ease;
-    z-index: 41;
-    padding: 0;
-}
-
-.sidebar-collapse-btn:hover {
-    background: var(--color-primary-100);
-    color: var(--color-primary-700);
-}
-
-.sidebar-collapse-btn i {
-    font-size: 10px;
-}
-
 /* Main content area */
 .page-with-sidebar {
-    margin-left: var(--sidebar-width-collapsed);
-    transition: var(--sidebar-transition);
+    margin-left: var(--sidebar-width);
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-}
-
-.sidebar:not(.collapsed) ~ .page-with-sidebar {
-    margin-left: var(--sidebar-width);
 }
 
 /* Inner topbar (inside content, not global nav) */
@@ -953,72 +821,9 @@ body {
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .sidebar { display: none !important; }
-    .sidebar-collapse-btn { display: none !important; }
     .page-with-sidebar { margin-left: 0 !important; padding-bottom: 58px; }
     .mobile-bottom-nav { display: block; }
 }
-
-/* Планшетная ветка (портрет iPad — 1024px): меню здесь всегда рельс, какой бы ни была
-   настройка «Боковое меню развёрнуто», а стрелка открывает полное меню поверх страницы
-   (.tablet-expanded, с затемнением). Правила рельса — копия раздела «Рельс» выше с другим
-   селектором: медиазапрос не умеет разделить с ним тело правила. Полное меню поверх
-   страницы ничего не сбрасывает — рельсовые правила на .tablet-expanded просто не
-   распространяются. */
-@media (min-width: 769px) and (max-width: 1100px) {
-    .sidebar:not(.tablet-expanded) { width: var(--sidebar-width-collapsed); }
-    .sidebar:not(.tablet-expanded) .sidebar-label,
-    .sidebar:not(.tablet-expanded) .sidebar-section,
-    .sidebar:not(.tablet-expanded) .sidebar-logo-text,
-    .sidebar:not(.tablet-expanded) .sidebar-logo-sub,
-    .sidebar:not(.tablet-expanded) .sidebar-status { display: none; }
-    .sidebar:not(.tablet-expanded) .sidebar-logo { justify-content: center; padding: 0; }
-    .sidebar:not(.tablet-expanded) .sidebar-nav { padding: 8px 4px; }
-    .sidebar:not(.tablet-expanded) .sidebar-footer { padding: 6px 4px; }
-    .sidebar:not(.tablet-expanded) .sidebar-item {
-        flex-direction: column;
-        justify-content: center;
-        gap: 2px;
-        min-height: 46px;
-        padding: 5px 2px;
-        text-align: center;
-    }
-    .sidebar:not(.tablet-expanded) .sidebar-item .sidebar-icon { width: 20px; height: 20px; font-size: 16px; }
-    .sidebar:not(.tablet-expanded) .sidebar-rail-label { display: block; }
-    .sidebar:not(.tablet-expanded) .sidebar-group + .sidebar-group::before {
-        margin: 8px 12px;
-        background-color: var(--color-primary-300);
-    }
-    .sidebar:not(.tablet-expanded) .sidebar-badge {
-        position: absolute;
-        top: 2px; left: calc(50% + 5px);
-        margin: 0;
-        min-width: 16px; height: 16px;
-        padding: 0 4px;
-        font-size: 10px; line-height: 14px;
-        text-align: center;
-        border: 1px solid var(--color-primary-50);
-    }
-    .page-with-sidebar { margin-left: var(--sidebar-width-collapsed) !important; }
-
-    /* Стрелка стоит у края рельса и тогда, когда в настройках меню развёрнуто: на этой
-       ширине оно всё равно рельс (left задан инлайном из Sidebar.razor, отсюда !important). */
-    .sidebar:not(.tablet-expanded) ~ .sidebar-collapse-btn { left: var(--sidebar-width-collapsed) !important; }
-
-    .sidebar.tablet-expanded {
-        width: var(--sidebar-width);
-        z-index: 50;
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
-        cursor: default;
-    }
-}
-
-.tablet-sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 39;
-}
-
 
 /* ─────────────────────────────────────────
    Card
@@ -1288,21 +1093,4 @@ body {
 .cm-accordion-body {
     border-top: 1px solid var(--cm-border-color);
     padding: 1rem;
-}
-
-/* ─────────────────────────────────────────
-   User avatar pill
-───────────────────────────────────────── */
-.cm-avatar {
-    width: 2rem;
-    height: 2rem;
-    border-radius: 9999px;
-    background: var(--cm-gradient-primary);
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
 }

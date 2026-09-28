@@ -51,6 +51,14 @@ public sealed class MusicPlaybackService(
     /// </summary>
     public long CommandVersion { get; private set; }
 
+    /// <summary>
+    ///     Показана ли панель плеера. По умолчанию скрыта — пустая полоса «Музыка не играет»
+    ///     внизу каждой страницы только занимала место. Открывается кнопкой «Музыка» в шапке и
+    ///     сама — при запуске любого трека. В снимок намеренно не входит: после паузы circuit
+    ///     её снова открывает <see cref="RestoreTrackAsync" />, если что-то играло.
+    /// </summary>
+    public bool IsPanelOpen { get; private set; }
+
     /// <summary>Есть ли из чего выбрать следующий трек — по нему включается кнопка «Другой».</summary>
     public bool HasPool => _poolTags.Count > 0 || _poolTrackIds.Count > 0;
 
@@ -135,6 +143,7 @@ public sealed class MusicPlaybackService(
     {
         CurrentTrack = track;
         IsPlaying = true;
+        IsPanelOpen = true;
         Error = null;
         CommandVersion++;
 
@@ -176,6 +185,19 @@ public sealed class MusicPlaybackService(
         _poolTrackIds = [];
         Error = null;
         CommandVersion++;
+        NotifyStateChanged();
+    }
+
+    public void TogglePanel()
+    {
+        IsPanelOpen = !IsPanelOpen;
+        NotifyStateChanged();
+    }
+
+    public void OpenPanel()
+    {
+        if (IsPanelOpen) return;
+        IsPanelOpen = true;
         NotifyStateChanged();
     }
 
@@ -294,6 +316,7 @@ public sealed class MusicPlaybackService(
 
         RestoredTrackId = null;
         CurrentTrack = (await trackService.GetAllTracksAsync()).FirstOrDefault(t => t.Id == id);
+        if (CurrentTrack is not null) IsPanelOpen = true;
         NotifyStateChanged();
     }
 }

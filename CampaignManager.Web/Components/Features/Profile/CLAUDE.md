@@ -35,9 +35,8 @@
 ## Настройки интерфейса
 Ключи лежат в `Utilities/Services/UserPreferenceKeys.cs`, значения — в `UserPreferences`
 (JSONB, схема `games`):
-- `ui.sidebarExpanded` — читает `Layout/Sidebar.razor`. localStorage остаётся быстрым кэшем
-  для мгновенной отрисовки, но настройка пользователя перебивает его: на новом устройстве
-  localStorage пуст, а привычное меню должно приехать вместе с аккаунтом.
+- `ui.sidebarExpanded` больше не существует: боковое меню всегда рельс. В старых профилях
+  ключ может остаться в словаре — его никто не читает, чистить не нужно.
 - `ui.syncLastCharacter` + `ui.lastCharacterId`/`Name` — пишет `CharacterPage`, читает
   `Layout/MobileBottomNav`. По умолчанию включено.
 
