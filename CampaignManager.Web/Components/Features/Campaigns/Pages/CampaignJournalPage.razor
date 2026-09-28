@@ -1,0 +1,344 @@
+@page "/campaigns/{CampaignId:guid}/journal"
+@using System.Globalization
+@using CampaignManager.Web.Components.Features.Campaigns.Components
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+@using CampaignManager.Web.Components.Features.Campaigns.Services
+@using CampaignManager.Web.Utilities.Services
+@attribute [Authorize]
+@inject CampaignJournalService JournalService
+@inject MarkdownService MarkdownService
+@rendermode InteractiveServer
+
+<PageTitle>@(_journal is null ? "Журнал кампании" : $"Журнал — {_journal.CampaignName}")</PageTitle>
+
+<PageHeader Title="@(_journal is null ? "Журнал кампании" : $"Журнал: {_journal.CampaignName}")">
+    <Actions>
+        <a href="@BackHref" class="cm-btn cm-btn-secondary cm-btn-sm">
+            <i class="fas fa-arrow-left"></i> <span>@BackLabel</span>
+        </a>
+        @if (_journal?.CanEdit == true)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="OpenAdd">Новая встреча</Button>
+        }
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    @if (_loading)
+    {
+        <LoadingIndicator Message="Загрузка журнала..."/>
+    }
+    else if (_journal is null)
+    {
+        <Alert Type="error" Title="Журнал недоступен">
+            Кампания не найдена, или вы не Хранитель и не игрок этой кампании.
+        </Alert>
+    }
+    else
+    {
+        @if (!string.IsNullOrEmpty(_pageError))
+        {
+            <Alert Type="error" ShowIcon OnClose="() => _pageError = null">@_pageError</Alert>
+        }
+
+        <div class="cm-card">
+            <div class="cm-card-header">
+                <span class="cm-card-title">
+                    <i class="fa-solid fa-book-open mr-2"></i>Встречи
+                    <span class="cm-card-count">@_journal.Sessions.Count</span>
+                </span>
+            </div>
+            <div class="cm-card-body">
+                @if (_journal.Sessions.Count == 0)
+                {
+                    <p class="cm-empty">
+                        @(_journal.CanEdit
+                            ? "Записей пока нет. Добавьте первую встречу кнопкой «Новая встреча»."
+                            : "Хранитель ещё не вёл журнал этой кампании.")
+                    </p>
+                }
+                else
+                {
+                    @foreach (var session in _journal.Sessions)
+                    {
+                        var isLatest = session.Id == _journal.Sessions[0].Id;
+                        <article class="journal-entry" @key="session.Id">
+                            <div class="journal-entry-head">
+                                <div class="min-w-0">
+                                    <div class="journal-entry-meta">
+                                        <span class="journal-entry-number">@($"Встреча №{session.Number}")</span>
+                                        <span aria-hidden="true">·</span>
+                                        <time datetime="@session.SessionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
+                                            @session.SessionDate.ToString("d MMMM yyyy", RussianCulture)
+                                        </time>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(session.Title))
+                                    {
+                                        <h3 class="journal-entry-title">@session.Title</h3>
+                                    }
+                                </div>
+                                @if (_journal.CanEdit)
+                                {
+                                    <div class="flex flex-wrap gap-2 shrink-0">
+                                        <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => OpenEdit(session)">Изменить</Button>
+                                        <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => ConfirmDelete(session)">Удалить</Button>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (session.ScenarioName is not null || session.ScenarioCompleted)
+                            {
+                                <div class="flex flex-wrap items-center gap-2">
+                                    @if (session.ScenarioName is not null)
+                                    {
+                                        @if (_journal.CanEdit && session.ScenarioId is { } scenarioId)
+                                        {
+                                            <a href="/scenarios/@scenarioId" class="journal-entry-scenario">
+                                                <i class="fa-solid fa-scroll"></i>@session.ScenarioName
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">
+                                                <i class="fa-solid fa-scroll mr-1"></i>@session.ScenarioName
+                                            </Badge>
+                                        }
+                                    }
+                                    @if (session.ScenarioCompleted)
+                                    {
+                                        <Badge Variant="success" Size="sm" Rounded="full" WithBorder="false">
+                                            <i class="fa-solid fa-flag-checkered mr-1"></i>Сценарий завершён
+                                        </Badge>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(session.Summary))
+                            {
+                                <div class="markdown-content journal-entry-text">
+                                    @((MarkupString)MarkdownService.ConvertToHtml(session.Summary))
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(session.KeeperNotes))
+                            {
+                                <div class="journal-entry-notes">
+                                    <div class="journal-entry-notes-label">
+                                        <i class="fa-solid fa-lock"></i> Заметки Хранителя
+                                    </div>
+                                    <div class="markdown-content journal-entry-text">
+                                        @((MarkupString)MarkdownService.ConvertToHtml(session.KeeperNotes))
+                                    </div>
+                                </div>
+                            }
+
+                            @* Подсказка о фазе развития — только у последней встречи: как только
+                               записана следующая, момент для неё прошёл. Сама фаза проводится в листе. *@
+                            @if (session.ScenarioCompleted && isLatest)
+                            {
+                                <Alert Type="info" Small ShowIcon Icon="fa-graduation-cap" class="!mb-0"
+                                       Title="Фаза развития сыщиков (стр. 92)">
+                                    <p>
+                                        Откройте лист сыщика и нажмите «Фаза развития» в шапке раздела «Навыки»:
+                                        проверки отмеченных навыков, Рассудок за навыки от 90%, самолечение, Средства.
+                                    </p>
+                                    @if (_journal.Investigators.Count > 0)
+                                    {
+                                        <div class="flex flex-wrap gap-2 mt-2">
+                                            @foreach (var investigator in _journal.Investigators)
+                                            {
+                                                <a href="/character/@investigator.CharacterId" class="cm-btn cm-btn-secondary cm-btn-sm">
+                                                    <i class="fa-solid fa-user"></i>
+                                                    <span>@InvestigatorLabel(investigator)</span>
+                                                </a>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="mt-1">В кампании нет активных листов сыщиков.</p>
+                                    }
+                                </Alert>
+                            }
+                        </article>
+                    }
+                }
+            </div>
+        </div>
+
+        @if (_journal.CanEdit)
+        {
+            <EditCampaignSessionModal IsVisible="_showEditor"
+                                      Model="_editorModel"
+                                      Scenarios="_journal.Scenarios"
+                                      LinkedScenarioName="_editorLinkedScenarioName"
+                                      Saving="_saving"
+                                      Error="@_editorError"
+                                      OnSave="SaveAsync"
+                                      OnClose="CloseEditor"/>
+
+            <ConfirmationModal IsVisible="_sessionToDelete is not null"
+                               OnConfirm="DeleteAsync"
+                               OnCancel="() => _sessionToDelete = null"
+                               Title="Удалить запись журнала"
+                               Message="@DeleteMessage"
+                               ConfirmText="Удалить"
+                               IconType="error"
+                               IsLoading="_deleting"/>
+        }
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
+
+    [Parameter] public Guid CampaignId { get; set; }
+
+    private CampaignJournal? _journal;
+    private bool _loading = true;
+    private string? _pageError;
+
+    private bool _showEditor;
+    private CampaignSessionInput _editorModel = new();
+    private string? _editorLinkedScenarioName;
+    private string? _editorError;
+    private bool _saving;
+
+    private CampaignSessionView? _sessionToDelete;
+    private bool _deleting;
+
+    private string DeleteMessage => _sessionToDelete is not { } session
+        ? string.Empty
+        : string.IsNullOrWhiteSpace(session.Title)
+            ? $"Удалить встречу №{session.Number} из журнала?"
+            : $"Удалить встречу №{session.Number} «{session.Title}» из журнала?";
+
+    private static string InvestigatorLabel(JournalInvestigator investigator) =>
+        string.IsNullOrWhiteSpace(investigator.PlayerName)
+            ? investigator.Name
+            : $"{investigator.Name} ({investigator.PlayerName})";
+
+    // Хранитель пришёл сюда со списка кампаний, игрок — с главной.
+    private string BackHref => _journal?.CanEdit == true ? "/campaigns" : "/";
+    private string BackLabel => _journal?.CanEdit == true ? "Кампании" : "Главная";
+
+    /// <summary>Незаконченная запись в модалке, переживающая паузу circuit.</summary>
+    public sealed class EditorDraft
+    {
+        public Guid CampaignId { get; set; }
+
+        public CampaignSessionInput? Input { get; set; }
+
+        public string? LinkedScenarioName { get; set; }
+    }
+
+    /// <summary>
+    ///     Хронику пишут после встречи, и она бывает длинной: уход в соседнее приложение за
+    ///     заметками дольше 30 секунд ставит circuit на паузу, а страница собирается заново и
+    ///     помнит только [PersistentState] (см. корневой CLAUDE.md). Без этого свойства набранный
+    ///     текст пропадал бы вместе с открытой модалкой.
+    /// </summary>
+    [PersistentState]
+    public EditorDraft? PersistedEditor
+    {
+        get => _showEditor
+            ? new EditorDraft { CampaignId = CampaignId, Input = _editorModel, LinkedScenarioName = _editorLinkedScenarioName }
+            : null;
+        set => _restoredEditor = value;
+    }
+
+    private EditorDraft? _restoredEditor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        await LoadAsync();
+        _loading = false;
+        TryRestoreEditor();
+    }
+
+    /// <summary>Черновик другой кампании (или журнал больше не наш) молча выбрасывается.</summary>
+    private void TryRestoreEditor()
+    {
+        var draft = _restoredEditor;
+        _restoredEditor = null;
+
+        if (draft?.Input is null || draft.CampaignId != CampaignId || _journal?.CanEdit != true)
+            return;
+
+        _editorModel = draft.Input;
+        _editorLinkedScenarioName = draft.LinkedScenarioName;
+        _editorError = null;
+        _showEditor = true;
+    }
+
+    private async Task LoadAsync() => _journal = await JournalService.GetJournalAsync(CampaignId);
+
+    private void OpenAdd()
+    {
+        if (_journal is null) return;
+
+        _editorModel = new CampaignSessionInput { Number = _journal.NextNumber };
+        _editorLinkedScenarioName = null;
+        _editorError = null;
+        _showEditor = true;
+    }
+
+    private void OpenEdit(CampaignSessionView session)
+    {
+        _editorModel = CampaignSessionInput.From(session);
+        _editorLinkedScenarioName = session.ScenarioName;
+        _editorError = null;
+        _showEditor = true;
+    }
+
+    private void CloseEditor()
+    {
+        _showEditor = false;
+        _editorError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _editorError = null;
+        try
+        {
+            var result = await JournalService.SaveSessionAsync(CampaignId, _editorModel);
+            if (!result.IsSuccess)
+            {
+                _editorError = result.Error;
+                return;
+            }
+
+            _showEditor = false;
+            await LoadAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ConfirmDelete(CampaignSessionView session) => _sessionToDelete = session;
+
+    private async Task DeleteAsync()
+    {
+        if (_sessionToDelete is null) return;
+
+        _deleting = true;
+        try
+        {
+            var result = await JournalService.DeleteSessionAsync(_sessionToDelete.Id);
+            if (!result.IsSuccess)
+                _pageError = result.Error;
+
+            await LoadAsync();
+        }
+        finally
+        {
+            _deleting = false;
+            _sessionToDelete = null;
+        }
+    }
+}

@@ -512,6 +512,7 @@ public sealed class ScenarioService(
                             Name = h.Name,
                             Description = h.Description,
                             FileUrl = h.FileUrl,
+                            KeeperNote = h.KeeperNote,
                             Order = h.Order
                         };
                     })

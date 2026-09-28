@@ -303,6 +303,7 @@ builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<InvestigatorFactory>();
 builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
+builder.Services.AddScoped<CampaignJournalService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddScoped<SpellService>();
@@ -312,6 +313,7 @@ builder.Services.AddScoped<MarkdownService>();
 // Register scenario management services
 builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<ScenarioImportService>();
+builder.Services.AddScoped<ScenarioHandoutService>();
 builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<MusicTrackService>();

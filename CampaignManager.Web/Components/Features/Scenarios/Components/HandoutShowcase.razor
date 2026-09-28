@@ -1,0 +1,128 @@
+@using CampaignManager.Web.Components.Features.Scenarios.Model
+@using CampaignManager.Web.Utilities.Services
+@inject MarkdownService MarkdownService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+@* Показ раздатки игрокам: iPad разворачивают к столу, поэтому на экране только сама раздатка —
+   изображение и текст крупно, на тёмном фоне, — и кнопка «Закрыть». Название раздатки не
+   показывается: это пометка Хранителя, а не часть материала.
+   Два режима:
+   - в режиме игры и на странице сценария (интерактивно) — OnClose и ссылка на второй экран;
+   - на отдельной странице второго экрана (статический рендер) — CloseHref, без JS.
+   Какая раздатка открыта, решает адрес (?handout= или /handouts/{id}), а не поле компонента. *@
+
+<div class="handout-showcase" role="dialog" aria-modal="true" aria-label="Раздатка">
+    <div class="handout-showcase-bar">
+        <div class="handout-showcase-tools">
+            @if (SecondScreenHref is not null)
+            {
+                <a href="@SecondScreenHref" target="_blank" rel="noopener" class="cm-btn cm-btn-secondary cm-btn-sm">
+                    <i class="fa-solid fa-display"></i><span>Второй экран</span>
+                </a>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CopySecondScreenLinkAsync">
+                    <i class="fa-solid @(_copied ? "fa-check" : "fa-link")"></i>
+                    <span>@(_copied ? "Скопировано" : "Скопировать адрес")</span>
+                </button>
+                @if (_copyFailed)
+                {
+                    <span class="handout-showcase-address">@AbsoluteSecondScreenUrl</span>
+                }
+            }
+        </div>
+
+        @if (OnClose.HasDelegate)
+        {
+            <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">
+                <i class="fa-solid fa-xmark"></i><span>Закрыть</span>
+            </button>
+        }
+        else if (CloseHref is not null)
+        {
+            <a href="@CloseHref" class="cm-btn cm-btn-secondary">
+                <i class="fa-solid fa-xmark"></i><span>Закрыть</span>
+            </a>
+        }
+    </div>
+
+    <div class="handout-showcase-content">
+        @if (HasFile && IsPdf)
+        {
+            <iframe src="@Handout.FileUrl" class="handout-showcase-frame" title="Раздатка"></iframe>
+        }
+        else if (HasFile)
+        {
+            <img src="@Handout.FileUrl" alt="Раздатка" class="handout-showcase-image"/>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Handout.Description))
+        {
+            <div class="handout-showcase-paper markdown-content">
+                @((MarkupString)MarkdownService.ConvertToHtml(Handout.Description))
+            </div>
+        }
+
+        @if (!HasFile && string.IsNullOrWhiteSpace(Handout.Description))
+        {
+            <p class="handout-showcase-empty">В раздатке нет ни изображения, ни текста.</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ScenarioHandout Handout { get; set; } = null!;
+
+    /// <summary>Закрыть показ (интерактивный режим). Задан — кнопка «Закрыть» вызывает его.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Куда уводит «Закрыть» на статической странице второго экрана.</summary>
+    [Parameter] public string? CloseHref { get; set; }
+
+    /// <summary>Адрес этой же раздатки для второго экрана; только в интерактивном режиме.</summary>
+    [Parameter] public string? SecondScreenHref { get; set; }
+
+    private bool _copied;
+    private bool _copyFailed;
+    private Guid _shownHandoutId;
+
+    private bool HasFile => !string.IsNullOrWhiteSpace(Handout.FileUrl);
+
+    private bool IsPdf
+    {
+        get
+        {
+            var path = Handout.FileUrl?.Split('?', '#')[0] ?? string.Empty;
+            return path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private string AbsoluteSecondScreenUrl =>
+        SecondScreenHref is null ? string.Empty : NavigationManager.ToAbsoluteUri(SecondScreenHref).ToString();
+
+    protected override void OnParametersSet()
+    {
+        // Другая раздатка — отметка «скопировано» относилась к прошлой.
+        if (Handout.Id == _shownHandoutId) return;
+
+        _shownHandoutId = Handout.Id;
+        _copied = false;
+        _copyFailed = false;
+    }
+
+    private async Task CopySecondScreenLinkAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", AbsoluteSecondScreenUrl);
+            _copied = true;
+            _copyFailed = false;
+        }
+        catch (JSException)
+        {
+            // Буфер обмена доступен только по https и с разрешения браузера — тогда показываем
+            // адрес текстом, его можно набрать на втором устройстве.
+            _copied = false;
+            _copyFailed = true;
+        }
+    }
+}

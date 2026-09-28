@@ -1,0 +1,123 @@
+@using CampaignManager.Web.Components.Features.Campaigns.Models
+
+@* Добавление и правка встречи журнала. Видимостью, сохранением и ошибкой управляет страница
+   (CampaignJournalPage): модалка только редактирует переданную форму, поэтому её состояние
+   меняется вместе с параметрами и отдельный StateHasChanged ей не нужен.
+   Касание мимо окна его не закрывает: хроника бывает длинной, и терять её из-за промаха
+   пальцем на iPad нельзя. *@
+
+<Modal IsVisible="IsVisible"
+       OnClose="OnClose"
+       Title="@(Model.Id is null ? "Новая встреча" : "Изменить встречу")"
+       MaxWidth="2xl"
+       MaxHeight="@null"
+       CloseOnBackdropClick="false">
+    <ChildContent>
+        <EditForm Model="Model" OnValidSubmit="OnSave" FormName="campaignSessionForm">
+            <DataAnnotationsValidator/>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-2">
+                        <label class="cm-field-label" for="session-date">Дата встречи</label>
+                        <InputDate id="session-date" @bind-Value="Model.SessionDate" class="cm-input"/>
+                    </div>
+                    <div>
+                        <label class="cm-field-label" for="session-number">Номер</label>
+                        <InputNumber id="session-number" @bind-Value="Model.Number" class="cm-input" min="1"/>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="cm-field-label" for="session-title">
+                        Заголовок <span class="cm-field-hint">(необязательно)</span>
+                    </label>
+                    <InputText id="session-title" @bind-Value="Model.Title" class="cm-input"
+                               placeholder="Например: «Дом на Френч-Хилл»"/>
+                </div>
+
+                <div>
+                    <label class="cm-field-label" for="session-scenario">Сценарий</label>
+                    <InputSelect id="session-scenario" @bind-Value="Model.ScenarioId" class="cm-input">
+                        <option value="">— без сценария —</option>
+                        @foreach (var scenario in Scenarios)
+                        {
+                            <option value="@scenario.Id">@scenario.Name</option>
+                        }
+                        @if (Model.ScenarioId is { } linkedId && Scenarios.All(s => s.Id != linkedId))
+                        {
+                            @* Сценарий уже привязан, но в списке его нет — например, отвязан от кампании.
+                               Без этой строки select молча показал бы «без сценария». *@
+                            <option value="@linkedId">@(LinkedScenarioName ?? "Сценарий недоступен")</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <label class="flex items-start gap-3 cursor-pointer py-1">
+                    <InputCheckbox @bind-Value="Model.ScenarioCompleted" class="cm-checkbox mt-0.5 shrink-0"/>
+                    <span>
+                        <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
+                        <span class="cm-field-note block">
+                            Время фазы развития сыщиков (стр. 92): журнал покажет ссылки на их листы.
+                        </span>
+                    </span>
+                </label>
+
+                <div>
+                    <label class="cm-field-label" for="session-summary">
+                        Хроника <span class="cm-field-hint">(видна игрокам, markdown)</span>
+                    </label>
+                    <InputTextArea id="session-summary" @bind-Value="Model.Summary" class="cm-input" rows="6"
+                                   placeholder="Что произошло на встрече"/>
+                </div>
+
+                <div>
+                    <label class="cm-field-label" for="session-notes">
+                        <i class="fa-solid fa-lock mr-1"></i>Заметки Хранителя
+                        <span class="cm-field-hint">(только вам, markdown)</span>
+                    </label>
+                    <InputTextArea id="session-notes" @bind-Value="Model.KeeperNotes" class="cm-input" rows="4"
+                                   placeholder="Тайны, зацепки, что готовить к следующей встрече"/>
+                </div>
+
+                <ValidationSummary/>
+
+                @if (!string.IsNullOrEmpty(Error))
+                {
+                    <Alert Type="error" Small ShowIcon class="!mb-0">@Error</Alert>
+                }
+            </div>
+
+            <div class="flex flex-wrap justify-end gap-2 mt-6">
+                <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">
+                    <span>Отмена</span>
+                </button>
+                <button type="submit" class="cm-btn cm-btn-primary" disabled="@Saving">
+                    @if (Saving)
+                    {
+                        <i class="fas fa-spinner fa-spin"></i>
+                    }
+                    <span>@(Saving ? "Сохранение..." : "Сохранить")</span>
+                </button>
+            </div>
+        </EditForm>
+    </ChildContent>
+</Modal>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+
+    [Parameter, EditorRequired] public CampaignSessionInput Model { get; set; } = new();
+
+    [Parameter] public IReadOnlyList<JournalScenarioOption> Scenarios { get; set; } = [];
+
+    /// <summary>Имя уже привязанного сценария, если его нет среди <see cref="Scenarios" />.</summary>
+    [Parameter] public string? LinkedScenarioName { get; set; }
+
+    [Parameter] public bool Saving { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+}

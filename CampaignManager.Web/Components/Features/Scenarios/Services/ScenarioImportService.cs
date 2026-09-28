@@ -167,7 +167,8 @@ public sealed class ScenarioImportService(
                 {
                     Name = h.Name,
                     Description = h.Description,
-                    FileUrl = h.FileUrl
+                    FileUrl = h.FileUrl,
+                    KeeperNote = h.KeeperNote
                 })
                 .ToList(),
             Npcs = cast.Where(c => c.Character is not null).Select(ToNpcDto).ToList()
@@ -248,6 +249,7 @@ public sealed class ScenarioImportService(
                 Name = h.Name.Trim(),
                 Description = h.Description,
                 FileUrl = h.FileUrl,
+                KeeperNote = string.IsNullOrWhiteSpace(h.KeeperNote) ? null : h.KeeperNote.Trim(),
                 Order = index
             })
             .ToList();
