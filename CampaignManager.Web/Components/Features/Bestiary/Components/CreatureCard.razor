@@ -34,12 +34,34 @@
                 </div>
             </div>
 
-            <!-- Image with fixed width -->
-            @if (!string.IsNullOrEmpty(Creature.ImageUrl))
+            @* Первая картинка — обложка; остальные тапом по миниатюре, а не по наведению:
+               на iPad за столом наведения нет. *@
+            @if (Creature.Images.Count > 0)
             {
-                <div class="md:w-1/3 flex items-center justify-center">
-                    <img src="@GetImageUrl(Creature.ImageUrl)" alt="@Creature.Name"
+                var shown = Creature.Images[Math.Min(_imageIndex, Creature.Images.Count - 1)];
+                <div class="md:w-1/3 flex flex-col items-center gap-2">
+                    <img src="@CreatureImage.ToSrc(shown.Url)" alt="@(shown.Caption ?? Creature.Name)"
                          class="max-w-full h-auto max-h-48 object-contain rounded" loading="lazy"/>
+                    @if (!string.IsNullOrWhiteSpace(shown.Caption))
+                    {
+                        <span class="text-xs text-gray-500 text-center">@shown.Caption</span>
+                    }
+                    @if (Creature.Images.Count > 1)
+                    {
+                        <div class="flex flex-wrap justify-center gap-1">
+                            @for (var i = 0; i < Creature.Images.Count; i++)
+                            {
+                                var index = i;
+                                var image = Creature.Images[index];
+                                <button type="button"
+                                        class="h-11 w-11 rounded border overflow-hidden @(index == _imageIndex ? "border-accent-500 ring-2 ring-accent-500/30" : "border-gray-200")"
+                                        aria-label="@($"Картинка {index + 1}: {image.Caption ?? Creature.Name}")"
+                                        @onclick="() => _imageIndex = index">
+                                    <img src="@CreatureImage.ToSrc(image.Url)" alt="" class="h-full w-full object-cover" loading="lazy"/>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
             }
             else
@@ -121,6 +143,8 @@
 
     [Parameter] public EventCallback<Creature> OnDelete { get; set; }
 
+    private int _imageIndex;
+
     private List<(string Label, object? Value, string? DiceRoll)> Characteristics { get; set; } = new();
 
     protected override void OnParametersSet()
@@ -195,13 +219,6 @@
         var note = string.IsNullOrWhiteSpace(c.ArmorNote) ? null : c.ArmorNote;
         if (c.Armor > 0) return note is null ? $"{c.Armor}" : $"{c.Armor} — {note}";
         return note ?? "нет";
-    }
-
-    private string GetImageUrl(string? imageUrl)
-    {
-        if (string.IsNullOrEmpty(imageUrl))
-            return string.Empty;
-        return imageUrl.StartsWith("https://") ? imageUrl : $"/api/minio/image/{imageUrl}";
     }
 
     // Редактирование существа

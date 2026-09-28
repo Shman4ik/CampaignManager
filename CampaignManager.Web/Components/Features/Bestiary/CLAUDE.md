@@ -4,6 +4,10 @@ Creature/monster catalog for Call of Cthulhu 7e (independent entity — not owne
 
 ## Key Services
 - `CreatureService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `CreatureImportService(creatureService, logger)` — обмен бестиарием одним JSON (`{ "creatures": [...] }`,
+  голый массив или одно существо). Кнопки «Импорт JSON»/«Экспорт JSON» на `/bestiary`, экспорт одного
+  существа — кнопка «JSON» на странице правки. Формат — `Model/CreatureImportDto.cs`; вложенные части —
+  те же классы, что лежат в JSONB, поэтому формат не расходится с моделью.
 
 ## Key Models
 - `Creature : BaseDataBaseEntity, INamedEntity` — `CreatureCharacteristics`, `Attacks`
@@ -41,6 +45,26 @@ Creature/monster catalog for Call of Cthulhu 7e (independent entity — not owne
   просто игнорируются при десериализации; удалять их миграцией не стали.
 - `Initiative` — необязательное переопределение очерёдности. Ноль означает «взять ЛВК»
   (`Combatant` так и делает), потому что ходы идут по убыванию ЛВК (стр. 110).
+
+## Импорт JSON
+- В отличие от фонотеки, существо с занятым именем по умолчанию **обновляется** (галочка в окне):
+  основной сценарий — привести заведённых тварей к книге. Обновление переписывает статблок целиком,
+  но не трогает `CombatDescriptions` (исходный текст книги) и `Images`, если поля `images` в файле нет.
+  Пустой массив `images: []` картинки снимает.
+- `CombatService.RollDiceFormula` **молча пропускает** нераспознанные куски формулы: «2d6+БкУ» даст
+  только 2d6, «1д6» (русская «д» из книги) — ноль. Поэтому импорт нормализует «д»/«−» и
+  предупреждает о формуле урона или БкУ, которые бой не бросит (`CreatureImportService.IsRollable`).
+- Предупреждения, а не отказ: существо без атак (привидение, рой) или без ПЗ сохраняется, но
+  Хранитель видит, что в бою оно поведёт себя не так, как ждёшь.
+
+## Иллюстрации
+- `Images` (`List<CreatureImage>`: `Url` + `Caption`) — jsonb-колонка, первая картинка — обложка
+  карточки. Заменила одиночный `ImageUrl` (миграция `CreatureImages` перенесла его первым элементом).
+- `Url` — объект MinIO («images/beasts/…») или внешняя ссылка; `CreatureImage.ToSrc` решает, куда
+  вести тег img. Форма правки грузит файл сразу под постоянным именем
+  `images/beasts/{slug}-{8 hex}.{ext}` — прежняя схема писала всех в `{имя}.jpg` и затёрла бы вторую картинку.
+- `ScenarioCreature` наследует `Images`, поэтому копия в сценарии (`AddCreatureModal`, клон шаблона
+  в `ScenarioService`) переносит их вместе с навыками — раньше навыки при добавлении в сценарий терялись.
 
 ## Notes
 - `CreatureCharacteristics.SanityLoss` — потеря рассудка при встрече в формате «успех/провал»

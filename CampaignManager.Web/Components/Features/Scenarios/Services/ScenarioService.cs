@@ -306,6 +306,9 @@ public sealed class ScenarioService(
                             Attacks = sc.Attacks,
                             CombatDescriptions = sc.CombatDescriptions,
                             SpecialAbilities = sc.SpecialAbilities,
+                            Skills = sc.Skills,
+                            Images = sc.Images,
+                            Description = sc.Description,
                             Notes = sc.Notes
                         };
                     })

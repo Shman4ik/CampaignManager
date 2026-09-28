@@ -45,7 +45,7 @@ public class Creature : BaseDataBaseEntity, INamedEntity
     public Dictionary<string, string> SpecialAbilities { get; set; } = new();
 
     /// <summary>
-    ///     Optional URL to an image of the creature
+    ///     Иллюстрации существа по порядку показа; первая — обложка карточки.
     /// </summary>
-    public string? ImageUrl { get; set; }
+    public List<CreatureImage> Images { get; set; } = [];
 }
