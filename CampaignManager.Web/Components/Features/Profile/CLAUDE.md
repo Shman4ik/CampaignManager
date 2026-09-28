@@ -13,7 +13,7 @@
 
 ## Имя пользователя живёт в трёх местах — и это осознанно
 1. `ApplicationUser.UserName` (схема `identity`) — **источник истины**, его и меняет кабинет.
-2. Claim `ClaimTypes.Name` в куке — то, что отдал Google при входе. Именно его читает
+2. Claim `ClaimTypes.Name` в куке — то, что отдал Auth0 при входе (`name` из ID token). Именно его читает
    `context.User.Identity?.Name` в сайдбаре, на главной и в `JoinCampaignComponent`.
    Поэтому `RoleClaimsTransformation` **заменяет** этот claim значением из базы (не добавляет
    вторым: `ClaimsIdentity.Name` читает первый claim своего типа). Без этого смена имени в

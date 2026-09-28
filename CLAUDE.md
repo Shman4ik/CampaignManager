@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CampaignManager is a tabletop RPG (Call of Cthulhu 7e) management system built with .NET 10 Blazor Server. It manages
 campaigns, characters, scenarios, and game assets (creatures, items, weapons, spells, skills). Uses PostgreSQL with
-Entity Framework Core, Google OAuth authentication, and .NET Aspire for orchestration.
+Entity Framework Core, Auth0 (OpenID Connect) authentication, and .NET Aspire for orchestration.
 
 ## Development Commands
 
@@ -132,14 +132,14 @@ dotnet ef database update --project CampaignManager.Web --context AppDbContext
 dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
 ```
 
-Запуск приложения: без Google OAuth **каждый** запрос отдаёт 500
-(`ArgumentException: The value cannot be an empty string. (Parameter 'ClientId')` из
-middleware аутентификации, ещё до роутинга) — это не поломка кода, а пустая конфигурация.
-Хватает пустышек:
+Запуск приложения: без настроек Auth0 **каждый** запрос отдаёт 500 (`ArgumentException` про
+пустой `ClientId` из middleware аутентификации, ещё до роутинга) — это не поломка кода, а пустая
+конфигурация. Хватает пустышек — метаданные Auth0 запрашиваются только при входе:
 
 ```bash
-export Authentication__Google__ClientId=dummy-client-id
-export Authentication__Google__ClientSecret=dummy-client-secret
+export Authentication__Auth0__Domain=dummy.auth0.com
+export Authentication__Auth0__ClientId=dummy-client-id
+export Authentication__Auth0__ClientSecret=dummy-client-secret
 dotnet CampaignManager.Web/bin/Debug/net10.0/CampaignManager.Web.dll --urls http://127.0.0.1:5199
 ```
 
@@ -385,10 +385,45 @@ the .NET 10 circuit persistence stack:
 - Components: `{Entity}Card.razor`, `{Entity}Form.razor`, `{Entity}List.razor`
 - Modals: `Add{Entity}Modal.razor`, `Edit{Entity}Modal.razor`
 
+## Authentication (Auth0)
+
+Вход — OIDC (code flow) через Auth0, сессия — своя кука `.CampaignManager.Auth`; к Auth0 приложение
+ходит только при входе и выходе. Способы входа — коннекшены тенанта: `google-oauth2` (со своими
+ключами Google, не dev-ключами Auth0) и `Username-Password-Authentication` с **выключенной**
+регистрацией — такие учётки заводит администратор через `auth0` CLI. Тенант один на dev и прод
+(база у них общая, пользователи тоже), приложений в нём два: dev (`https://localhost:8080`) и прод
+(`https://cthulhu.dmnet.dev`). У каждого в Allowed Callback URLs — `/signin-oidc`, в Allowed Logout
+URLs — `/signout-callback-oidc`.
+
+Домен входа — кастомный `auth.cthulhu.dmnet.dev` (CNAME в DNS dmnet.dev на Porkbun, сертификат
+выпускает Auth0, в тенанте он домен по умолчанию); его и пишем в `Authentication:Auth0:Domain`.
+Каноничный `cthulhu-dmnet.eu.auth0.com` остаётся за CLI. Google-клиент «Campaign manager» живёт в
+проекте `dnd-project-371311`: в его redirect URIs — `/login/callback` обоих доменов Auth0, а само
+приложение Google обязано быть **In production** — в Testing через Google входят только test users.
+Redirect URI и публикацию Google меняют только в консоли: у `gcloud` для обычных OAuth-клиентов
+команд нет (`gcloud iam oauth-clients` — это Workforce Identity, другое).
+
+- **Все права держатся на почте** (белый список, `AdminEmails`, `KeeperEmail`, `PlayerEmail`…),
+  поэтому проверку `email_verified` в `OnTokenValidated` не убирать никогда: учётка с паролем на
+  чужой адрес иначе унаследует чужие кампании. Тестовым пользователям `email_verified: true`
+  ставится при создании.
+- `OnTokenValidated` пересобирает принципал из `ClaimTypes.Email`/`Name`/`NameIdentifier`
+  (`MapInboundClaims = false`): так же были устроены куки прямого входа через Google, и они
+  продолжают работать без перелогина. Новый claim из ID token в куку сам не попадёт — его надо
+  добавить там же.
+- `ResponseMode = Query`, а не `form_post` по умолчанию: куки корреляции и nonce — `Lax`, а
+  `form_post` — кросс-сайтовый POST с домена Auth0, на который браузер их не отправит.
+- Обычный вход — `prompt=login` (`select_account`, как у Google, Auth0 не понимает), тихий —
+  `prompt=none` плюс `login_hint`, который пробрасывает `OnRedirectToIdentityProvider`.
+- Выход гасит и сессию Auth0 (`/oidc/logout` с `client_id`), иначе следующий вход молча пускает
+  под прежней учёткой и переключиться между тестовыми пользователями нельзя.
+- Страница входа Auth0 — внешний сайт: агент в браузере пароли туда не вводит. Проверки под
+  разными пользователями делает человек или уже залогиненная вкладка.
+
 ## Configuration
 
 - `ConnectionStrings:DefaultConnection` — PostgreSQL
-- `Authentication:Google:ClientId` / `ClientSecret` — Google OAuth
+- `Authentication:Auth0:Domain` / `ClientId` / `ClientSecret` — Auth0 (see "Authentication" above)
 - Npgsql configured with dynamic JSON support and legacy timestamp behavior
 - SignalR: 2MB message size limit, 15-buffer capacity, 30s handshake timeout
 - Blazor Server: 20 max buffered render batches

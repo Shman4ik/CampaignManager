@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace CampaignManager.Web.Utilities.Api;
 
@@ -21,8 +22,8 @@ public static class AccountEndpoints
 
         accountGroup.MapGet("/login", HandleLogin)
             .WithName("Login")
-            .WithSummary("Initiate Google OAuth login flow")
-            .WithDescription("Starts the Google OAuth authentication process and redirects to Google's login page")
+            .WithSummary("Initiate Auth0 login flow")
+            .WithDescription("Starts the OpenID Connect flow and redirects to the Auth0 login page")
             .AllowAnonymous();
 
         accountGroup.MapGet("/logout", HandleLogout)
@@ -38,22 +39,23 @@ public static class AccountEndpoints
     private const string InteractiveModeValue = "interactive";
 
     /// <summary>
-    /// Initiates Google OAuth login flow
+    /// Initiates Auth0 (OpenID Connect) login flow
     /// </summary>
     /// <param name="returnUrl">URL to redirect to after successful authentication (default: "/")</param>
     /// <param name="mode">Authentication mode: 'silent' (no user interaction) or 'interactive' (show login prompt)</param>
-    /// <param name="loginHint">Optional email hint for Google to pre-select the account during silent authentication</param>
+    /// <param name="loginHint">Optional email hint for Auth0 to pre-fill the account during silent authentication</param>
     /// <param name="httpContext">HTTP context for the current request</param>
     /// <returns>
     /// <list type="bullet">
-    /// <item><description>302 Found - Redirect to Google OAuth login page</description></item>
+    /// <item><description>302 Found - Redirect to Auth0 login page</description></item>
     /// </list>
     /// </returns>
-    /// <response code="302">Redirects to Google OAuth authentication page</response>
+    /// <response code="302">Redirects to Auth0 authentication page</response>
     /// <remarks>
-    /// The 'silent' mode uses the 'prompt=none' OAuth parameter which attempts to authenticate 
-    /// without showing the Google login page. This is useful for automatic re-authentication.
-    /// The 'interactive' mode (default) always shows the Google login page.
+    /// The 'silent' mode uses the 'prompt=none' OIDC parameter which attempts to authenticate
+    /// without showing the Auth0 login page. This is useful for automatic re-authentication.
+    /// The 'interactive' mode (default) always shows the Auth0 login page ('prompt=login'), so the
+    /// user can pick another account even while an Auth0 session is alive.
     /// </remarks>
     private static async Task<ChallengeHttpResult> HandleLogin(
         string? returnUrl,
@@ -72,31 +74,27 @@ public static class AccountEndpoints
         var isSilent = string.Equals(selectedMode, SilentModeValue, StringComparison.Ordinal);
 
         // Set redirect path after authentication
-        var properties = new GoogleChallengeProperties
+        var properties = new OpenIdConnectChallengeProperties
         {
             RedirectUri = normalizedReturnUrl,
-            IsPersistent = true
+            IsPersistent = true,
+            // select_account, как было у Google, Auth0 не понимает; login показывает страницу входа
+            // даже при живой сессии Auth0 — иначе сменить учётку было бы нечем.
+            Prompt = isSilent ? "none" : "login"
         };
 
         properties.Items[AuthModeItemKey] = isSilent ? SilentModeValue : InteractiveModeValue;
         properties.Items[FailureRedirectItemKey] = normalizedReturnUrl;
 
-        if (isSilent)
+        // Параметр, а не Items: в state он не нужен, в запрос к Auth0 его ставит
+        // OnRedirectToIdentityProvider в Program.cs.
+        if (isSilent && !string.IsNullOrWhiteSpace(loginHint))
         {
-            properties.SetParameter("prompt", "none");
-            if (!string.IsNullOrWhiteSpace(loginHint))
-            {
-                properties.SetParameter("login_hint", loginHint);
-            }
-        }
-        else
-        {
-            properties.SetParameter("prompt", "select_account");
+            properties.SetParameter(OpenIdConnectParameterNames.LoginHint, loginHint);
         }
 
-        // Initiate Google authentication
         // Using TypedResults.Challenge marks this as an API endpoint for .NET 10
-        return TypedResults.Challenge(properties, new[] { GoogleDefaults.AuthenticationScheme });
+        return TypedResults.Challenge(properties, [OpenIdConnectDefaults.AuthenticationScheme]);
     }
 
     /// <summary>
@@ -106,18 +104,19 @@ public static class AccountEndpoints
     /// <param name="httpContext">HTTP context for the current request</param>
     /// <returns>
     /// <list type="bullet">
-    /// <item><description>302 Found - Redirect to specified return URL</description></item>
+    /// <item><description>302 Found - Redirect to the Auth0 logout endpoint, which then returns to the return URL</description></item>
     /// <item><description>400 Bad Request - Request was initiated from another site</description></item>
     /// </list>
     /// </returns>
-    /// <response code="302">Redirects to the specified return URL after successful logout</response>
+    /// <response code="302">Redirects through Auth0 logout back to the specified return URL</response>
     /// <response code="400">Cross-site logout request was rejected</response>
     /// <remarks>
-    /// This endpoint clears the authentication cookie and signs out the user from the application.
+    /// This endpoint clears the authentication cookie and ends the Auth0 session, so the next login
+    /// asks for an account again instead of silently reusing the previous one.
     /// The return URL is validated the same way as on login, so it can only point back at this host.
-    /// Note: This does not revoke the Google OAuth tokens or sign out from Google accounts.
+    /// Note: This does not sign the user out of Google itself.
     /// </remarks>
-    private static async Task<Results<RedirectHttpResult, BadRequest<string>>> HandleLogout(
+    private static Results<SignOutHttpResult, BadRequest<string>> HandleLogout(
         string? returnUrl,
         HttpContext httpContext)
     {
@@ -130,10 +129,10 @@ public static class AccountEndpoints
 
         AuthenticationProperties properties = new() { RedirectUri = normalizedReturnUrl };
 
-        await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme, properties);
-
-        // Using TypedResults.Redirect for consistency
-        return TypedResults.Redirect(normalizedReturnUrl);
+        // Сначала своя кука, затем Auth0: обработчик OIDC сам уводит на /oidc/logout, а оттуда
+        // через /signout-callback-oidc браузер возвращается на normalizedReturnUrl.
+        return TypedResults.SignOut(properties,
+            [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
     }
 
     /// <summary>
