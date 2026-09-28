@@ -63,6 +63,12 @@ public partial class CharacterPage : IAsyncDisposable
             _savedSnapshot = Snapshot(Character);
     }
 
+    /// <summary>
+    ///     Расходится ли лист на экране с тем, что лежит в базе. Тот же слепок, по которому решает
+    ///     автосохранение, — второй способ сравнивать листы заводить незачем.
+    /// </summary>
+    private bool HasUnsavedChanges => Character is not null && Snapshot(Character) != _savedSnapshot;
+
     private void StartAutoSaveLoop()
     {
         _autoSaveCts = new CancellationTokenSource();

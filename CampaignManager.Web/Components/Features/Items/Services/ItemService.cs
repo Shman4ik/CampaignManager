@@ -8,11 +8,13 @@ using Microsoft.Extensions.Caching.Memory;
 namespace CampaignManager.Web.Components.Features.Items.Services;
 
 /// <summary>
-///     Service for managing items and artifacts in the system
+///     Справочник предметов. Читают все вошедшие, правят только Хранитель и администратор —
+///     проверка стоит в каждом методе записи, а не только в разметке страницы.
 /// </summary>
 public sealed class ItemService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<ItemService> logger)
 {
     private const string ItemsCacheKey = "AllItems";
@@ -26,20 +28,29 @@ public sealed class ItemService(
     /// <summary>
     ///     Creates a new item, rejecting duplicates by name
     /// </summary>
-    public Task<Item?> CreateItemAsync(Item item) =>
-        CrudServiceHelper.CreateAsync(dbContextFactory, cache, ItemsCacheKey, item, logger);
+    public async Task<Item?> CreateItemAsync(Item item)
+    {
+        await identityService.EnsureKeeperAsync("добавление предмета в справочник");
+        return await CrudServiceHelper.CreateAsync(dbContextFactory, cache, ItemsCacheKey, item, logger);
+    }
 
     /// <summary>
     ///     Updates an existing item
     /// </summary>
-    public Task<bool> UpdateItemAsync(Item item) =>
-        CrudServiceHelper.UpdateAsync(dbContextFactory, cache, ItemsCacheKey, item, logger);
+    public async Task<bool> UpdateItemAsync(Item item)
+    {
+        await identityService.EnsureKeeperAsync("изменение предмета в справочнике");
+        return await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, ItemsCacheKey, item, logger);
+    }
 
     /// <summary>
     ///     Deletes an item by its ID
     /// </summary>
-    public Task<bool> DeleteItemAsync(Guid id) =>
-        CrudServiceHelper.DeleteAsync<Item>(dbContextFactory, cache, ItemsCacheKey, id, logger);
+    public async Task<bool> DeleteItemAsync(Guid id)
+    {
+        await identityService.EnsureKeeperAsync("удаление предмета из справочника");
+        return await CrudServiceHelper.DeleteAsync<Item>(dbContextFactory, cache, ItemsCacheKey, id, logger);
+    }
 
     /// <summary>
     ///     Gets all distinct item types in the system

@@ -4,7 +4,7 @@ Master weapon catalog (independent entity). Источник правды по �
 «Оружие» книги правил CoC 7e (стр. 399–402).
 
 ## Key Services
-- `WeaponService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `WeaponService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
   `GetAllRangeWeaponsAsync()` фильтрует уже загруженный список в памяти: `WeaponType` —
   не набор флагов, объединить типы в одно значение нельзя.
 - `WeaponStatsReader` — **единственная точка, где спрашивают у оружия число**
@@ -69,6 +69,20 @@ Master weapon catalog (independent entity). Источник правды по �
 `IMemoryCache`, общем для всех пользователей: правка патронов на листе мутировала бы
 справочник у всех сразу. Именно этим и болел `WeaponComponent.SelectWeapon` до
 `WeaponFactory.CopyForCharacter`.
+
+## Права
+
+Справочник общий для всех кампаний, поэтому **смотреть может любой вошедший, править — только
+Хранитель и администратор**. Так же устроены предметы, заклинания и книги.
+
+- Граница — в сервисе: `Add/Update/DeleteWeaponAsync` первым делом зовут
+  `IdentityService.EnsureKeeperAsync`, и та бросает `UnauthorizedAccessException`. Страница под
+  простым `[Authorize]` — просмотр нужен игрокам, — так что спрятанная кнопка защитой не считается.
+- Страница спрашивает `IsKeeper()` один раз в `OnInitializedAsync` и прячет «Добавить» в шапке,
+  CTA пустого состояния и кнопки строк; `Show*Modal` без права просто ничего не открывают.
+- `WeaponsListView`/`WeaponTableRow` получают `CanEdit` (по умолчанию `false`). Без него колонка
+  действий пропадает **целиком** — и `<th>`, и `<td>`, а `colspan` раскрытой строки считается от
+  числа колонок, иначе раскрытие растягивало бы таблицу на несуществующий столбец.
 
 ## Страница каталога `/weapons`
 

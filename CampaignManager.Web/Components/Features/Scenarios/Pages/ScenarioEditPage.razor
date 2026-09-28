@@ -33,6 +33,16 @@
         </Alert>
     </div>
 }
+else if (!_loading && !_canEdit)
+{
+    @* Шаблоны правит любой Хранитель, так что отказ здесь — всегда чужой сценарий кампании.
+       Сервис такую правку всё равно не сохранит: форма только зря обещала бы обратное. *@
+    <div class="cm-page">
+        <Alert Type="error" Title="Нет прав на правку">
+            Этот сценарий привязан к кампании другого Хранителя: править его может только Хранитель этой кампании или администратор.
+        </Alert>
+    </div>
+}
 else
 {
 <div class="cm-page">
@@ -383,6 +393,10 @@ else
     private bool _loading = true;
     private bool _showPreview;
     private bool _isKeeper;
+
+    /// <summary>Права на открытый сценарий по правилам ScenarioService; новый заводит любой Хранитель.</summary>
+    private bool _canEdit = true;
+
     private string _activeTab = "general";
 
     private LocationEditorModal? _locationEditorModal;
@@ -417,6 +431,7 @@ else
         try
         {
             _loading = true;
+            _canEdit = true;
 
             if (Id.HasValue)
             {
@@ -425,6 +440,7 @@ else
                 {
                     _model = scenario;
                     _editableFacts = [.. _model.KeyFacts];
+                    _canEdit = (await ScenarioService.GetAccessAsync(scenario)).CanEdit;
                 }
             }
             else
@@ -454,10 +470,9 @@ else
     {
         try
         {
-            var userEmail = IdentityService.GetCurrentUserEmail();
-
             if (IsNew)
             {
+                // Автора (CreatorEmail) ставит сам ScenarioService — по текущему пользователю.
                 Scenario newScenario = new()
                 {
                     Name = _model.Name,
@@ -468,8 +483,7 @@ else
                     IsTemplate = _model.IsTemplate,
                     IsPublished = _model.IsPublished,
                     ScheduledDate = _model.ScheduledDate,
-                    AnnouncementText = _model.AnnouncementText,
-                    CreatorEmail = userEmail
+                    AnnouncementText = _model.AnnouncementText
                 };
 
                 var result = await ScenarioService.CreateScenarioAsync(newScenario);

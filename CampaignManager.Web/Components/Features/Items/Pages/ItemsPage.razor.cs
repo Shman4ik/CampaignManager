@@ -1,6 +1,7 @@
 using CampaignManager.Web.Components.Features.Items.Model;
 using CampaignManager.Web.Components.Features.Items.Services;
 using CampaignManager.Web.Components.Shared.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
@@ -10,8 +11,14 @@ public partial class ItemsPage
 {
     [Inject] private ItemService ItemService { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private IdentityService IdentityService { get; set; } = default!;
     [Inject] private ILogger<ItemsPage> Logger { get; set; } = default!;
     [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
 
     // Editable item class for form binding
     public class EditableItem
@@ -75,6 +82,7 @@ public partial class ItemsPage
     // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadItemsAsync();
     }
 
@@ -94,8 +102,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            // Log the error (e.g., to console or a logging service)
-            Console.WriteLine($"Error loading items: {ex.Message}");
+            Logger.LogError(ex, "Error loading items");
             errorMessage = "Не удалось загрузить список предметов. Пожалуйста, попробуйте позже.";
             items = new List<Item>(); // Ensure items is not null
             itemTypes = new List<string>();
@@ -185,6 +192,8 @@ public partial class ItemsPage
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editItem = new EditableItem(); // Reset the edit model
         editItem1920 = true;
@@ -195,6 +204,8 @@ public partial class ItemsPage
 
     private void ShowEditModal(Item item)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
         // Copy the item data to the editable model
         editItem = new EditableItem
@@ -274,7 +285,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving item: {ex.Message}");
+            Logger.LogError(ex, "Error saving item {ItemId} {ItemName}", editItem.Id, editItem.Name);
             errorMessage = $"Не удалось сохранить предмет: {ex.Message}";
             // Keep the modal open to show the error
         }
@@ -283,6 +294,8 @@ public partial class ItemsPage
     // Show the delete confirmation modal
     private void ShowDeleteModal(Item item)
     {
+        if (!canEdit) return;
+
         deleteItem = item;
         errorMessage = null; // Clear errors
         showDeleteModal = true;
@@ -300,10 +313,11 @@ public partial class ItemsPage
     {
         if (deleteItem == null) return; // Should not happen, but good practice
 
+        var itemId = deleteItem.Id;
         errorMessage = null; // Clear previous errors
         try
         {
-            await ItemService.DeleteItemAsync(deleteItem.Id); // Use Guid Id
+            await ItemService.DeleteItemAsync(itemId);
             showDeleteModal = false;
             await LoadItemsAsync(); // Refresh the list
             deleteItem = null; // Clear the selected item
@@ -311,7 +325,7 @@ public partial class ItemsPage
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error deleting item: {ex.Message}");
+            Logger.LogError(ex, "Error deleting item {ItemId}", itemId);
             errorMessage = $"Не удалось удалить предмет: {ex.Message}";
             // Keep the modal open to show the error
         }

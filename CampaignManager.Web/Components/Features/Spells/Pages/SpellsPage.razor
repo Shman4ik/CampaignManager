@@ -3,8 +3,10 @@
 @using CampaignManager.Web.Components.Features.Spells.Model
 @using CampaignManager.Web.Components.Features.Spells.Services
 @using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject SpellService SpellService
+@inject IdentityService IdentityService
 @inject ILogger<SpellsPage> Logger
 @rendermode InteractiveServer
 
@@ -12,7 +14,10 @@
 
 <PageHeader Title="Заклинания">
     <Actions>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        @if (canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -38,14 +43,25 @@
 
     @if (!paginatedSpells.Any())
     {
-        <EmptyState
-            Title="Заклинания не найдены"
-            Message="Попробуйте изменить параметры фильтра или добавить новое заклинание."
-            IconClass="fa-hat-wizard">
-            <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить заклинание</Button>
-            </ActionButton>
-        </EmptyState>
+        @if (canEdit)
+        {
+            <EmptyState
+                Title="Заклинания не найдены"
+                Message="Попробуйте изменить параметры фильтра или добавить новое заклинание."
+                IconClass="fa-hat-wizard">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить заклинание</Button>
+                </ActionButton>
+            </EmptyState>
+        }
+        else
+        {
+            @* Справочник правят только Хранитель и администратор — игроку «добавить» не предлагаем. *@
+            <EmptyState
+                Title="Заклинания не найдены"
+                Message="Попробуйте изменить параметры фильтра."
+                IconClass="fa-hat-wizard" />
+        }
     }
     else
     {
@@ -53,6 +69,7 @@
             Spells="@paginatedSpells"
             ExpandedSpellId="@expandedSpellId"
             ShowType="@showType"
+            CanEdit="@canEdit"
             CurrentSortField="@sortField"
             SortAscending="@sortAscending"
             OnSortChanged="ToggleSort"
@@ -130,6 +147,11 @@
     private bool showDeleteModal;
     private bool isEditMode;
 
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
+
     private List<Spell>? spells;
     private string searchQuery = string.Empty;
     private string? selectedTypeFilter;
@@ -165,6 +187,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadSpellsAsync();
     }
 
@@ -268,6 +291,8 @@
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editSpell = new Spell
         {
@@ -284,6 +309,8 @@
 
     private void ShowEditModal(Spell spell)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
         editSpell = new Spell
         {
@@ -357,6 +384,8 @@
 
     private void ShowDeleteModal(Spell spell)
     {
+        if (!canEdit) return;
+
         deleteSpell = spell;
         showDeleteModal = true;
     }

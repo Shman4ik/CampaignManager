@@ -125,6 +125,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error initializing character sheet {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
             _errorBoundary?.Recover();
@@ -167,7 +168,10 @@ public partial class CharacterPage
             MarkSaved();
 
             // Circuit вернулся с паузы — на странице снова несохранённая правка, а не копия из базы.
-            if (TryRestoreDraft())
+            // Черновик приезжает после любой паузы, даже если лист никто не трогал, поэтому
+            // уведомляем, только когда он действительно расходится с базой: иначе плашка
+            // появлялась бы после каждого возвращения на вкладку, простоявшую в фоне 30 секунд.
+            if (TryRestoreDraft() && HasUnsavedChanges)
                 ShowNotification("Восстановлены несохранённые изменения листа", "info");
 
             // Старые листы хранят потолок Удачи равным стартовому броску — правим при открытии.
@@ -181,6 +185,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error loading character {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
         }
@@ -282,6 +287,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error saving character {CharacterId} ({Kind})", CharacterId, CurrentKind);
             ShowNotification($"Ошибка при сохранении: {ex.Message}", "error");
             _errorBoundary?.Recover();
         }

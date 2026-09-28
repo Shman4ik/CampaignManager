@@ -62,27 +62,30 @@
         }
     </td>
     <td class="tabular-nums whitespace-nowrap">@WeaponStatsReader.Cost(Weapon).RawText</td>
-    <td @onclick:stopPropagation="true">
-        <div class="flex gap-1 justify-end">
-            <button type="button" aria-label="Изменить: @Weapon.Name"
-                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
-                    @onclick="() => OnEdit.InvokeAsync(Weapon)">
-                <i class="fas fa-pen"></i>
-            </button>
-            <button type="button" aria-label="Удалить: @Weapon.Name"
-                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
-                    @onclick="() => OnDelete.InvokeAsync(Weapon)">
-                <i class="fas fa-trash-alt"></i>
-            </button>
-        </div>
-    </td>
+    @if (CanEdit)
+    {
+        <td @onclick:stopPropagation="true">
+            <div class="flex gap-1 justify-end">
+                <button type="button" aria-label="Изменить: @Weapon.Name"
+                        class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary"
+                        @onclick="() => OnEdit.InvokeAsync(Weapon)">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button type="button" aria-label="Удалить: @Weapon.Name"
+                        class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error"
+                        @onclick="() => OnDelete.InvokeAsync(Weapon)">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </td>
+    }
 </tr>
 
 @if (IsExpanded)
 {
     @* В строке уже стоит всё из таблицы XVII — здесь только то, чего в колонках нет. *@
     <tr class="wt-details">
-        <td colspan="9">
+        <td colspan="@ColumnCount">
             <div class="flex flex-wrap gap-x-8 gap-y-1.5 text-primary-600">
                 <div>
                     <span class="wt-label">Навык</span>
@@ -128,9 +131,15 @@
     /// <summary>Показывать метки эпохи в строке: смысл есть, только когда список не сужен до одной эпохи.</summary>
     [Parameter] public bool ShowEra { get; set; }
 
+    /// <summary>Ячейка с кнопками «Изменить/Удалить» — только у того, кто может править справочник.</summary>
+    [Parameter] public bool CanEdit { get; set; }
+
     [Parameter] public EventCallback<Weapon> OnEdit { get; set; }
     [Parameter] public EventCallback<Weapon> OnDelete { get; set; }
     [Parameter] public EventCallback OnToggleExpand { get; set; }
+
+    // Восемь колонок таблицы XVII плюс действия, если они есть.
+    private int ColumnCount => CanEdit ? 9 : 8;
 
     private string EraText => WeaponEraText.Describe(Weapon);
 

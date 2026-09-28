@@ -13,7 +13,8 @@ public class IdentityService(
     IHttpContextAccessor httpContextAccessor,
     AuthenticationStateProvider authenticationStateProvider,
     IDbContextFactory<AppIdentityDbContext> appIdentityDbContextFactory,
-    IDbContextFactory<AppDbContext> appDbContextFactory)
+    IDbContextFactory<AppDbContext> appDbContextFactory,
+    ILogger<IdentityService> logger)
 {
     private ApplicationUser? _cachedUser;
     private bool _userCacheLoaded;
@@ -48,6 +49,22 @@ public class IdentityService(
     public async Task<bool> IsAdministrator()
     {
         return await GetCurrentUserRole() is PlayerRole.Administrator;
+    }
+
+    /// <summary>
+    ///     Серверная граница для правки общего контента — справочников оружия, предметов, заклинаний
+    ///     и книг: Хранитель и администратор проходят, остальным летит
+    ///     <see cref="UnauthorizedAccessException" />. Спрятанная в интерфейсе кнопка защитой не
+    ///     считается: метод сервиса можно вызвать и в обход неё.
+    /// </summary>
+    public async Task EnsureKeeperAsync(string operation)
+    {
+        if (await IsKeeper())
+            return;
+
+        var email = await GetCurrentUserEmailAsync();
+        logger.LogWarning("Denied keeper operation {Operation} for {Email}", operation, email ?? "<anonymous>");
+        throw new UnauthorizedAccessException($"Операция «{operation}» доступна только Хранителю");
     }
 
     public async Task<PlayerRole> GetCurrentUserRole()

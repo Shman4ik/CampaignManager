@@ -4,8 +4,10 @@
 @using CampaignManager.Web.Components.Features.Books.Services
 @using CampaignManager.Web.Components.Shared
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject BookService BookService
+@inject IdentityService IdentityService
 @inject ILogger<BooksPage> Logger
 @rendermode InteractiveServer
 
@@ -13,7 +15,10 @@
 
 <PageHeader Title="Книги">
     <Actions>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        @if (canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -41,14 +46,25 @@
 
     @if (!paginatedBooks.Any())
     {
-        <EmptyState
-            Title="Книги не найдены"
-            Message="Попробуйте изменить параметры фильтра или добавить новую книгу."
-            IconClass="fa-book">
-            <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить книгу</Button>
-            </ActionButton>
-        </EmptyState>
+        @if (canEdit)
+        {
+            <EmptyState
+                Title="Книги не найдены"
+                Message="Попробуйте изменить параметры фильтра или добавить новую книгу."
+                IconClass="fa-book">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить книгу</Button>
+                </ActionButton>
+            </EmptyState>
+        }
+        else
+        {
+            @* Справочник правят только Хранитель и администратор — игроку «добавить» не предлагаем. *@
+            <EmptyState
+                Title="Книги не найдены"
+                Message="Попробуйте изменить параметры фильтра."
+                IconClass="fa-book" />
+        }
     }
     else
     {
@@ -58,6 +74,7 @@
             ShowType="@showType"
             ShowMythos="@showMythos"
             ShowOccultism="@showOccultism"
+            CanEdit="@canEdit"
             CurrentSortField="@sortField"
             SortAscending="@sortAscending"
             OnSortChanged="ToggleSort"
@@ -134,6 +151,11 @@
     private bool showDeleteModal;
     private bool isEditMode;
 
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
+
     private List<Book>? books;
     private string searchQuery = string.Empty;
     private BookType? selectedBookTypeFilter;
@@ -175,6 +197,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadBooksAsync();
     }
 
@@ -284,6 +307,8 @@
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editBook = new Book
         {
@@ -309,6 +334,8 @@
 
     private void ShowEditModal(Book book)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
         editBook = new Book
         {
@@ -398,6 +425,8 @@
 
     private void ShowDeleteModal(Book book)
     {
+        if (!canEdit) return;
+
         deleteBook = book;
         showDeleteModal = true;
     }

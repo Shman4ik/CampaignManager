@@ -3,7 +3,7 @@
 Master spell catalog (independent entity).
 
 ## Key Services
-- `SpellService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `SpellService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
 
 ## Key Models
 - `Spell : BaseDataBaseEntity, INamedEntity` (declared in `SpellModel.cs`).
@@ -34,6 +34,9 @@ Master spell catalog (independent entity).
   подобранные замером: стоимость вдвое длиннее времени сотворения, при равных долях
   у времени оставался пустой запас, а стоимость обрезалась.
 - Кнопки строки — иконки `cm-btn-sm cm-btn-icon` 36×36 с `aria-label`.
+- **Правят только Хранитель и администратор**, смотрят все — правило и его устройство те же,
+  что у оружия (`Features/Weapons/CLAUDE.md`, «Права»): проверка в `SpellService`, `CanEdit`
+  у `SpellsListView`/`SpellTableRow`, без него колонка действий исчезает целиком.
 - На странице 25 заклинаний вместо 6: плотная строка занимает одну строку текста.
 
 ## Notes

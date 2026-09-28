@@ -1,7 +1,5 @@
 using System.Security.Claims;
 using CampaignManager.Web.Model;
-using CampaignManager.Web.Utilities.DataBase;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 
 namespace CampaignManager.Web.Utilities.Authorization;
@@ -10,9 +8,12 @@ namespace CampaignManager.Web.Utilities.Authorization;
 ///     Подмешивает в принципал то, чем владеет приложение, а не Google: роль и отображаемое имя.
 ///     Оба значения живут в <see cref="ApplicationUser" />, а кука после входа знает только то,
 ///     что отдал Google, — см. Features/Profile/CLAUDE.md.
+///     <para>
+///         Вызывается на каждый HTTP-запрос, включая статику, поэтому читает не базу, а
+///         <see cref="UserClaimsCache" /> — почему это важно, написано там.
+///     </para>
 /// </summary>
-public sealed class RoleClaimsTransformation(
-    IDbContextFactory<AppIdentityDbContext> identityDbContextFactory) : IClaimsTransformation
+public sealed class RoleClaimsTransformation(UserClaimsCache userClaimsCache) : IClaimsTransformation
 {
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
@@ -28,8 +29,7 @@ public sealed class RoleClaimsTransformation(
         if (principal.HasClaim(c => c.Type == ClaimTypes.Role))
             return principal;
 
-        await using var db = await identityDbContextFactory.CreateDbContextAsync();
-        var user = await db.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
+        var user = await userClaimsCache.GetAsync(email);
 
         if (user is null)
             return principal;
@@ -38,7 +38,7 @@ public sealed class RoleClaimsTransformation(
             return principal;
 
         identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.ToString()));
-        ApplyDisplayName(identity, user.UserName);
+        ApplyDisplayName(identity, user.DisplayName);
 
         return principal;
     }

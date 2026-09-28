@@ -59,21 +59,24 @@
         };
     }
 
+    /// <summary>
+    ///     Каждый класс — целым литералом. Tailwind ищет классы в исходниках как текст и
+    ///     интерполяцию <c>border-{variant}-200</c> не видит: такие рамки в сборку не попадали.
+    ///     Неизвестный вариант («red», «green» и т.п.) рисуется как primary целиком, вместе с рамкой.
+    /// </summary>
     private string GetColorClasses()
     {
-        var variant = Variant.ToLower();
-        var borderClass = WithBorder ? $"border border-{variant}-200" : "";
-
-        return variant switch
+        var (colors, border) = Variant.ToLowerInvariant() switch
         {
-            "primary" => $"bg-primary-100 text-primary-800 {borderClass}",
-            "secondary" => $"bg-secondary-100 text-secondary-800 {borderClass}",
-            "accent" => $"bg-accent-100 text-accent-800 {borderClass}",
-            "success" => $"bg-success-100 text-success-800 {borderClass}",
-            "warning" => $"bg-warning-100 text-warning-800 {borderClass}",
-            "error" => $"bg-error-100 text-error-800 {borderClass}",
-            "info" => $"bg-info-100 text-info-800 {borderClass}",
-            _ => $"bg-primary-100 text-primary-800 {borderClass}"
+            "secondary" => ("bg-secondary-100 text-secondary-800", "border border-secondary-200"),
+            "accent" => ("bg-accent-100 text-accent-800", "border border-accent-200"),
+            "success" => ("bg-success-100 text-success-800", "border border-success-200"),
+            "warning" => ("bg-warning-100 text-warning-800", "border border-warning-200"),
+            "error" => ("bg-error-100 text-error-800", "border border-error-200"),
+            "info" => ("bg-info-100 text-info-800", "border border-info-200"),
+            _ => ("bg-primary-100 text-primary-800", "border border-primary-200")
         };
+
+        return WithBorder ? $"{colors} {border}" : colors;
     }
 }

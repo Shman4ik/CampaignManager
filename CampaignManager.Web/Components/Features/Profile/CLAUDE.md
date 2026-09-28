@@ -4,7 +4,7 @@
 кампаниям и сыщикам, настройки интерфейса.
 
 ## Key Services
-- `ProfileService(identityDbContextFactory, dbContextFactory, identityService, logger)` — вместе с
+- `ProfileService(identityDbContextFactory, dbContextFactory, identityService, userClaimsCache, logger)` — вместе с
   `AdminService` это второй сервис, открывающий **оба** контекста: пользователь лежит в схеме
   `identity`, а его кампании и листы — в `games`.
 
@@ -20,6 +20,10 @@
    кабинете не меняла бы ничего из видимого.
    Отсюда же `Nav.NavigateTo(..., forceLoad: true)` после сохранения: claim собирается на
    HTTP-запросе, и без полной перезагрузки страница показывала бы новое имя, а сайдбар — старое.
+   Роль и имя трансформация берёт не из базы, а из `Utilities/Authorization/UserClaimsCache`
+   (5 минут): она идёт на каждый запрос, включая статику. Поэтому `UpdateDisplayNameAsync` после
+   сохранения зовёт `UserClaimsCache.Invalidate(email)` — без сброса перезагрузка показала бы
+   старое имя. Новое место, где меняется `UserName` или `Role`, обязано делать то же самое.
 3. `CampaignPlayer.PlayerName` — копия, снятая при вступлении в кампанию. В разных кампаниях у
    одного человека имена **разные** и часто намеренно («Дима» в одной, полное имя в другой),
    поэтому галочка «заменить имя и в кампаниях» по умолчанию **выключена**, а сама замена —

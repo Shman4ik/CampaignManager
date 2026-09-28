@@ -9,6 +9,7 @@
 
 @inject WeaponService WeaponService
 @inject NavigationManager NavigationManager
+@inject IdentityService IdentityService
 @inject ILogger<WeaponsPage> Logger
 @rendermode InteractiveServer
 
@@ -16,7 +17,10 @@
 
 <PageHeader Title="Оружие">
     <Actions>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        @if (canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -49,14 +53,25 @@
     <!-- Empty State -->
     @if (paginatedWeapons.Count() == 0)
     {
-        <EmptyState
-            Title="Оружие не найдено"
-            Message="Попробуйте изменить параметры фильтра или добавить новое оружие."
-            IconClass="fa-search">
-            <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить оружие</Button>
-            </ActionButton>
-        </EmptyState>
+        @if (canEdit)
+        {
+            <EmptyState
+                Title="Оружие не найдено"
+                Message="Попробуйте изменить параметры фильтра или добавить новое оружие."
+                IconClass="fa-search">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить оружие</Button>
+                </ActionButton>
+            </EmptyState>
+        }
+        else
+        {
+            @* Справочник правят только Хранитель и администратор — игроку «добавить» не предлагаем. *@
+            <EmptyState
+                Title="Оружие не найдено"
+                Message="Попробуйте изменить параметры фильтра."
+                IconClass="fa-search" />
+        }
     }
     else
     {
@@ -64,6 +79,7 @@
             Weapons="@paginatedWeapons"
             ExpandedWeaponId="@expandedWeaponId"
             ShowEra="@showEra"
+            CanEdit="@canEdit"
             CurrentSortField="@sortField"
             SortAscending="@sortAscending"
             OnSortChanged="ToggleSort"
@@ -136,6 +152,11 @@
 @code {
     private bool isSearchPanelVisible = true;
 
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
+
     // List to hold all weapons fetched from the service
     private List<Weapon>? weapons; // Nullable to indicate loading state
 
@@ -186,6 +207,7 @@
     // Lifecycle method: Load data when the component is initialized
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadWeaponsAsync();
     }
 
@@ -199,7 +221,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading weapons: {ex.Message}");
+            Logger.LogError(ex, "Error loading weapons");
             errorMessage = "Не удалось загрузить список оружия. Пожалуйста, попробуйте позже.";
             weapons = new List<Weapon>();
         }
@@ -226,6 +248,8 @@
     // Show the modal for adding a new weapon
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editWeapon = new Weapon();
         modalErrorMessage = null;
@@ -235,6 +259,8 @@
     // Show the modal for editing an existing weapon
     private void ShowEditModal(Weapon weapon)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
         // Clone the weapon object to avoid modifying the original list item directly
         editWeapon = new Weapon
@@ -297,7 +323,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving weapon: {ex.Message}");
+            Logger.LogError(ex, "Error saving weapon {WeaponId} {WeaponName}", editWeapon.Id, editWeapon.Name);
             modalErrorMessage = $"Не удалось сохранить оружие: {ex.Message}";
         }
     }
@@ -305,6 +331,8 @@
     // Show the delete confirmation modal
     private void ShowDeleteModal(Weapon weapon)
     {
+        if (!canEdit) return;
+
         deleteWeapon = weapon;
         errorMessage = null;
         showDeleteModal = true;
@@ -322,10 +350,11 @@
     {
         if (deleteWeapon == null) return;
 
+        var weaponId = deleteWeapon.Id;
         errorMessage = null;
         try
         {
-            await WeaponService.DeleteWeaponAsync(deleteWeapon.Id);
+            await WeaponService.DeleteWeaponAsync(weaponId);
             showDeleteModal = false;
             await LoadWeaponsAsync();
             deleteWeapon = null;
@@ -333,7 +362,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error deleting weapon: {ex.Message}");
+            Logger.LogError(ex, "Error deleting weapon {WeaponId}", weaponId);
             errorMessage = $"Не удалось удалить оружие: {ex.Message}";
         }
     }
