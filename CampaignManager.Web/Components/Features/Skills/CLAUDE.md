@@ -4,6 +4,9 @@ Master skill catalog (independent entity — the definitions, not a character's 
 
 ## Key Services
 - `SkillService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+  `GetSkillByIdAsync` берёт навык из кэша справочника (`GetAllSkillsUnpagedAsync`), а не из базы,
+  и отдаёт **копию** (JSON-круг): форма правки меняет объект на месте, а экземпляр в кэше общий на
+  всех. Отдать кэшированный объект напрямую — значит пустить отменённую правку в справочник.
 
 ## Key Models
 - `SkillModel : BaseDataBaseEntity, INamedEntity`.

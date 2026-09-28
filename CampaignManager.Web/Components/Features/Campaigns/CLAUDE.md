@@ -3,11 +3,21 @@
 Top-level container a Keeper creates to run a game: players, era, status.
 
 ## Key Services
-- `CampaignService(dbContextFactory, identityService, httpContextAccessor, logger)`.
+- `CampaignService(dbContextFactory, identityService, characterService, httpContextAccessor, logger)`.
   `GetKeeperCampaignsAsync` берёт email через `GetCurrentUserEmailAsync`: его зовёт групповая
   проверка в ширме Хранителя, которая рендерится уже в живом circuit, без пререндера, а
   синхронный `GetCurrentUserEmail` читает `HttpContext` и там может вернуть `null`.
   `GetAllCampaignsAsync` (им пользуется `Combat/Components/CampaignSelector`) пока синхронный.
+- **Главная — `GetHomeCampaignsAsync`, один раз на загрузку.** Три блока главной
+  (`UserCampaignsComponent`, `JoinCampaignComponent`, `KeeperCharactersComponent`) — не острова, а
+  дети одного `HomeCampaignsPanel` (`@rendermode InteractiveServer`), который читает снимок
+  `HomeCampaigns` (`Models/HomeCampaigns.cs`) и раздаёт его параметром. Раньше каждый блок был своим
+  островом и грузил `Campaigns → Players → Characters` с полными листами сам (6 SQL на проход, плюс
+  по запросу НПС на каждую кампанию Хранителя). Теперь три параллельных запроса: свои кампании (листы —
+  только свой активный и все листы кампаний, которые ведёшь), доступные для вступления и НПС своих
+  кампаний (`CharacterService.GetKeptCampaignNpcsAsync`, без JSONB). `AspNetUsers` не читается —
+  почта и роль из claims. Новый блок главной про кампании берёт данные из снимка, а не зовёт сервис
+  сам; снимок плоский (без EF-навигаций), потому что переезжает из пререндера через `[PersistentState]`.
 - Сыщики кампании для проверок и боя — `GetCampaignWithCharactersAsync` (игроки со всеми листами):
   так их берут `Combat/Components/ParticipantPicker` и `Checks/Model/CheckInvestigator.FromCampaign`.
 - `CampaignJournalService(dbContextFactory, identityService, logger)` — журнал встреч кампании
@@ -56,6 +66,7 @@ Top-level container a Keeper creates to run a game: players, era, status.
 - `CampaignId` — НПС кампании (`Kind = Npc`); `null` — НПС из общей библиотеки, доступный везде;
 - `ScenarioId` — преген, созданный для сценария (см. `Scenarios/CLAUDE.md`).
 
-НПС кампании **не занимает слот игрока**: в `UserCampaignsComponent` их отдаёт
-`CharacterService.GetNpcsAsync(campaignId)`, а не `Players.SelectMany(p => p.Characters)`.
+НПС кампании **не занимает слот игрока**: на главной их отдаёт
+`CharacterService.GetKeptCampaignNpcsAsync` (все НПС кампаний Хранителя одним запросом), а не
+`Players.SelectMany(p => p.Characters)`.
 Удаление кампании не удаляет её НПС — FK стоит `SetNull`, и лист возвращается в библиотеку.

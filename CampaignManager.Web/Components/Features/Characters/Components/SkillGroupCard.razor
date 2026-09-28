@@ -31,10 +31,10 @@
                 <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                      data-testid="@($"skill-row-{skill.Name}")">
                     <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                        <button @onclick="@(() => RemoveSkill(skill))"
+                        <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                 aria-label="@($"Удалить навык {skill.Name}")"
-                                class="text-gray-400 hover:text-error-600 flex-shrink-0 transition-colors duration-200">
-                            <i class="fas fa-times text-xs"></i>
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
+                            <i class="fas fa-trash-alt" aria-hidden="true"></i>
                         </button>
                         <div class="min-w-0 flex-grow text-sm leading-snug">
                             @if (skill.SkillModelId.HasValue)
@@ -97,10 +97,10 @@
                     <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                          data-testid="@($"skill-row-{skill.Name}")">
                         <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                            <button @onclick="@(() => RemoveSkill(skill))"
+                            <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                     aria-label="@($"Удалить навык {skill.Name}")"
-                                    class="text-gray-400 hover:text-error-600 flex-shrink-0 transition-colors duration-200">
-                                <i class="fas fa-times text-xs"></i>
+                                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
+                                <i class="fas fa-trash-alt" aria-hidden="true"></i>
                             </button>
                             <div class="min-w-0 flex-grow text-sm leading-snug">
                                 @if (skill.SkillModelId.HasValue)
@@ -170,12 +170,11 @@
             }
         </div>
 
-        <!-- Add skill form -->
+        @* Добавление навыка. Кнопка «+» живёт в ручном вводе SkillPicker: из справочника навык
+           добавляется выбором строки, и «+» рядом с поиском раньше просто ничего не делал. *@
         <div class="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-2">
-            <SkillPicker @ref="_picker"
-                         CategoryFilter="@GroupCategory"
+            <SkillPicker CategoryFilter="@GroupCategory"
                          OnSkillSelected="OnPickerSkillSelected" />
-            <button type="button" class="cm-btn cm-btn-success h-6 w-6 !min-h-0 !rounded-full !p-0 flex-shrink-0 text-xs" @onclick="AddSkill"><i class="fas fa-plus"></i></button>
         </div>
     </div>
 </div>
@@ -204,8 +203,6 @@
         </button>
     };
 
-    private SkillPicker? _picker;
-
     private static readonly Dictionary<string, SkillCategory> GroupToCategory = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Решение Проблем"] = SkillCategory.ProblemSolving,
@@ -232,28 +229,6 @@
             SkillModelId = info.SkillModelId,
             ParentSkillName = info.ParentSkillName
         });
-    }
-
-    private void AddSkill()
-    {
-        if (_picker is { IsManualMode: true })
-        {
-            var info = _picker.GetManualSkillInfo();
-            if (info is not null)
-            {
-                Group.Skills.Add(new Skill
-                {
-                    Name = info.Name,
-                    BaseValue = info.BaseValue,
-                    Value = new AttributeValue(0),
-                    SkillModelId = info.SkillModelId
-                });
-                _picker.ManualName = "";
-                _picker.ManualBaseValue = "";
-            }
-            return;
-        }
-        // Picker mode: addition happens via OnPickerSkillSelected; "+" is a no-op there
     }
 
     private void RemoveSkill(Skill skill)

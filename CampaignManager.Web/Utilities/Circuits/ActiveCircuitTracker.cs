@@ -16,6 +16,12 @@ namespace CampaignManager.Web.Utilities.Circuits;
 /// В .NET 11 для этого появится штатный <c>Circuit.RequestCircuitPauseAsync</c> — тогда этот
 /// класс можно будет выбросить.
 /// </para>
+/// <para>
+/// Он же пишет в лог жизнь circuit'ов — открытие, обрыв, возврат связи, паузу и закрытие, по
+/// строке на событие. Категория <c>Microsoft.AspNetCore.Components.Server.Circuits</c> в
+/// appsettings заглушена до Critical, и без этих строк по логу нельзя было понять, ставились ли
+/// вкладки на паузу и сколько жили.
+/// </para>
 /// </summary>
 public sealed class ActiveCircuitTracker(
     IHostApplicationLifetime lifetime,
@@ -30,13 +36,38 @@ public sealed class ActiveCircuitTracker(
     private readonly ConcurrentDictionary<string, IJSRuntime> _connected = new();
     private int _shutdownHookRegistered;
 
-    public void Connected(string circuitId, IJSRuntime jsRuntime)
+    public void Opened(string circuitId) =>
+        logger.LogInformation("Circuit {CircuitId} открыт, на связи {ConnectedCount}", circuitId, _connected.Count);
+
+    public void Connected(string circuitId, IJSRuntime jsRuntime, bool reconnected = false)
     {
         _connected[circuitId] = jsRuntime;
         EnsureShutdownHook();
+
+        // Первое подключение уже записано как «открыт» — строку даёт только возврат после обрыва.
+        if (reconnected)
+            logger.LogInformation("Circuit {CircuitId} снова на связи", circuitId);
     }
 
-    public void Disconnected(string circuitId) => _connected.TryRemove(circuitId, out _);
+    public void Disconnected(string circuitId, bool logLoss = false)
+    {
+        _connected.TryRemove(circuitId, out _);
+
+        if (logLoss)
+            logger.LogInformation("Circuit {CircuitId} потерял соединение", circuitId);
+    }
+
+    /// <summary>Состояние circuit сохранено для паузы (вкладка в фоне, остановка сервера, вытеснение).</summary>
+    public void Paused(string circuitId) =>
+        logger.LogInformation("Circuit {CircuitId} ставится на паузу, состояние сохранено", circuitId);
+
+    public void Closed(string circuitId, TimeSpan lifetime, bool afterPause)
+    {
+        _connected.TryRemove(circuitId, out _);
+        logger.LogInformation(
+            "Circuit {CircuitId} закрыт через {LifetimeSeconds} с, после паузы: {AfterPause}, на связи {ConnectedCount}",
+            circuitId, (int)lifetime.TotalSeconds, afterPause, _connected.Count);
+    }
 
     /// <summary>
     ///     Вешает паузу на <see cref="IHostApplicationLifetime.ApplicationStopping"/> — и делает это

@@ -340,10 +340,36 @@ the .NET 10 circuit persistence stack:
   don't rename them.
 - Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
   otherwise it silently disappears on resume.
+- **Лог.** Жизнь circuit'ов пишет `ActiveCircuitTracker` (Information, строка на событие): открыт,
+  потерял соединение, снова на связи, пауза, закрыт — со временем жизни. Своего события «пауза»
+  у `CircuitHandler` нет: её ловит колбэк `RegisterOnPersisting`, который
+  `ShutdownPauseCircuitHandler` вешает в области circuit (пререндер живёт в области HTTP-запроса
+  и туда не попадает). Категория `Microsoft.AspNetCore.Components.Server.Circuits` остаётся
+  заглушённой до Critical. Путь, статус и время каждого запроса — `Microsoft.AspNetCore.Hosting.Diagnostics`
+  на Information (по две строки на запрос: начало и конец); по ним видно, какая страница медленная.
 - **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
   а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
   активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
   переживает и паузу, и F5, и на него можно дать ссылку. Пример — `ScenarioDetailPage` (`?mode=play`).
+
+### Данные пререндера
+
+Интерактивная страница рендерится дважды: статически (пререндер) и заново в circuit, и
+`OnInitializedAsync` без мер читает базу оба раза. Тяжёлые страницы (главная — `HomeCampaignsPanel`,
+`ScenarioDetailPage`, `CharacterPage` и её `FellowInvestigatorsPanel`) передают прочитанное в
+пререндере тем же `[PersistentState]`, но **с `RestoreBehavior = RestoreBehavior.SkipLastSnapshot`**:
+снимок поднимается при старте circuit и **не** поднимается при возобновлении после паузы — за паузу
+данные могли устареть, там страница честно перечитывает базу.
+
+- Геттер отдаёт снимок только из статического рендера (`RendererInfo.IsInteractive ? null : …`):
+  иначе на каждой паузе в браузер уезжала бы копия, которую всё равно никто не поднимет.
+- Снимок — отдельное свойство, не то, что держит правки на паузу: у `CharacterPage` черновик
+  (`PersistedDraft`, `SkipInitialValue`) и лист из пререндера (`PrerenderedSheet`) разведены.
+- Граф — без циклов EF: плоский DTO (`HomeCampaigns`) или сущности без обратных навигаций
+  (`ScenarioPagePrerender`, см. `Scenarios/CLAUDE.md`). Цикл роняет пререндер исключением JSON.
+- Снимок едет в HTML страницы (зашифрованным) и обратно по SignalR при старте circuit — в пределах
+  `MaximumReceiveMessageSize` (2 МБ). Кандидат в снимок — страница с десятком запросов, а не любая.
+- Берётся один раз и только если он от той же сущности (`Id` в снимке сверяется с параметром).
 
 ### Design System Colors
 

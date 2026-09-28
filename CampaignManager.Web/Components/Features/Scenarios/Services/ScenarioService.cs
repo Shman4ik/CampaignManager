@@ -122,6 +122,18 @@ public sealed class ScenarioService(
     }
 
     /// <summary>
+    ///     Сценарии, в которые текущий пользователь может писать, — для выбора в диалогах вне
+    ///     страницы сценария (занять НПС из библиотеки). Чужой сценарий кампании метод записи всё равно
+    ///     отклонит, поэтому в списке его нет. Права те же — <see cref="Evaluate" />, второй копии нет.
+    /// </summary>
+    public async Task<List<Scenario>> GetWritableScenariosAsync()
+    {
+        var scenarios = await GetAllScenariosAsync();
+        var access = await GetAccessAsync(scenarios);
+        return [.. scenarios.Where(s => access.GetValueOrDefault(s.Id).CanEdit)];
+    }
+
+    /// <summary>
     ///     Кампании, куда текущий пользователь может положить сценарий: свои, а администратору — любые.
     ///     Для выбора в «Добавить в кампанию» — чтобы не предлагать то, что сервис отклонит.
     /// </summary>
@@ -180,7 +192,8 @@ public sealed class ScenarioService(
             if (cache.TryGetValue(cacheKey, out List<Scenario>? scenarios) && scenarios is not null) return scenarios;
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var query = dbContext.Scenarios.AsQueryable();
+            // Без трекинга: список уходит в общий кэш, и через этот контекст его никто не сохраняет.
+            var query = dbContext.Scenarios.AsNoTracking();
 
             if (templatesOnly) query = query.Where(s => s.IsTemplate);
 
@@ -212,6 +225,7 @@ public sealed class ScenarioService(
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             scenarios = await dbContext.Scenarios
+                .AsNoTracking()
                 .Include(s => s.Pregens)
                 .ThenInclude(n => n.CampaignPlayer)
                 .Where(s => s.IsPublished)
@@ -241,6 +255,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
+                .AsNoTracking()
                 .Where(s => s.CampaignId == campaignId)
                 .OrderBy(s => s.Name)
                 .ToListAsync();
@@ -253,7 +268,13 @@ public sealed class ScenarioService(
     }
 
     /// <summary>
-    ///     Gets a scenario by its ID
+    ///     Сценарий по идентификатору — сама строка, без <c>Cast</c> и <c>Pregens</c>.
+    ///     <para>
+    ///         Состав НПС и прегены читают отдельно — <see cref="GetScenarioCastAsync" /> и
+    ///         <c>CharacterService.GetScenarioPregensAsync</c>: ими пользуется страница сценария, а эти
+    ///         навигации из результата не читал никто. Раньше они всё равно подгружались джойном, и
+    ///         страница получала прегены дважды — отсюда и полный лист каждого прегена лишний раз.
+    ///     </para>
     /// </summary>
     public async Task<Scenario?> GetScenarioByIdAsync(Guid id)
     {
@@ -261,9 +282,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
-                .Include(s => s.Cast)
-                .ThenInclude(sn => sn.Character)
-                .Include(s => s.Pregens)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
         catch (Exception ex)
@@ -599,17 +618,28 @@ public sealed class ScenarioService(
 
     /// <summary>
     ///     Состав НПС сценария вместе с листами персонажей.
+    ///     <para>
+    ///         У листов снята обратная ссылка <c>ScenarioCasts</c>: EF заполняет её при <c>Include</c>,
+    ///         и граф «участие → лист → участие» замыкается. Странице она не нужна, а циклический граф
+    ///         не переживает JSON — состав уезжает из пререндера снимком <c>ScenarioPagePrerender</c>.
+    ///     </para>
     /// </summary>
     public async Task<List<ScenarioNpc>> GetScenarioCastAsync(Guid scenarioId)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.ScenarioNpcs
+            var cast = await dbContext.ScenarioNpcs
+                .AsNoTracking()
                 .Include(sn => sn.Character)
                 .Where(sn => sn.ScenarioId == scenarioId)
                 .OrderBy(sn => sn.Character!.CharacterName)
                 .ToListAsync();
+
+            foreach (var entry in cast)
+                entry.Character?.ScenarioCasts.Clear();
+
+            return cast;
         }
         catch (Exception ex)
         {
@@ -764,6 +794,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
+                .AsNoTracking()
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
@@ -819,6 +850,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Items
+                .AsNoTracking()
                 .OrderBy(i => i.Name)
                 .ToListAsync();
         }

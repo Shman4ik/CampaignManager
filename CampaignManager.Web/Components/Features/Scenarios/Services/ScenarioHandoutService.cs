@@ -13,10 +13,13 @@ public sealed record HandoutDisplay(Guid ScenarioId, ScenarioHandout Handout, bo
 
 /// <summary>
 ///     Отдаёт одну раздатку для страницы второго экрана (<c>/scenarios/{id}/handouts/{handoutId}</c>).
-///     Отдельный сервис, а не метод <see cref="ScenarioService" />: у того своих проверок прав нет,
-///     а эта страница открывается по ссылке и обязана проверить их сама.
+///     Страница открывается по ссылке, поэтому права проверяются здесь, а не разметкой:
 ///     <list type="bullet">
-///         <item><description>ведущий сценария — автор (<c>CreatorEmail</c>), Хранитель его кампании, администратор;</description></item>
+///         <item><description>
+///             ведущий сценария — тот, кому <see cref="ScenarioService" /> даёт его править: шаблон — любой
+///             Хранитель, сценарий кампании — её Хранитель или администратор. Правила спрашиваются у
+///             <c>ScenarioService.GetAccessAsync</c>, второй копии здесь нет;
+///         </description></item>
 ///         <item><description>игроки кампании сценария — раздатка предназначена им, это «на руки» на своём устройстве.</description></item>
 ///     </list>
 ///     Остальным — <c>null</c>, как и для несуществующей раздатки: перебирать чужие сценарии нельзя.
@@ -24,6 +27,7 @@ public sealed record HandoutDisplay(Guid ScenarioId, ScenarioHandout Handout, bo
 public sealed class ScenarioHandoutService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
+    ScenarioService scenarioService,
     ILogger<ScenarioHandoutService> logger)
 {
     public async Task<HandoutDisplay?> GetHandoutForDisplayAsync(Guid scenarioId, Guid handoutId)
@@ -37,15 +41,12 @@ public sealed class ScenarioHandoutService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios
                 .AsNoTracking()
-                .Include(s => s.Campaign)
                 .FirstOrDefaultAsync(s => s.Id == scenarioId);
 
             if (scenario is null)
                 return null;
 
-            var canManage = string.Equals(scenario.CreatorEmail, email, StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(scenario.Campaign?.KeeperEmail, email, StringComparison.OrdinalIgnoreCase)
-                            || await identityService.IsAdministrator();
+            var canManage = (await scenarioService.GetAccessAsync(scenario)).CanEdit;
 
             if (!canManage && !await IsCampaignPlayerAsync(dbContext, scenario.CampaignId, email))
             {

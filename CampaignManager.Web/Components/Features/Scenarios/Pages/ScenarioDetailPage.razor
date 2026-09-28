@@ -717,10 +717,60 @@ else
     private AddItemModal? _addItemModal;
     private EditItemModal? _editItemModal;
 
+    /// <summary>
+    ///     Данные страницы из пререндера — чтобы интерактивный рендер не читал сценарий, состав и
+    ///     прегенов из базы второй раз (см. корневой CLAUDE.md, «Данные пререндера»). Граф без циклов:
+    ///     сценарий без навигаций, у листов состава снята обратная ссылка (см. GetScenarioCastAsync).
+    ///     Геттер отдаёт снимок только из статического рендера, а <c>SkipLastSnapshot</c> не даёт
+    ///     поднять его после паузы circuit — за паузу сценарий могли поправить.
+    /// </summary>
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public ScenarioPagePrerender? PrerenderedScenario
+    {
+        get => RendererInfo.IsInteractive || _scenario is null
+            ? null
+            : new ScenarioPagePrerender(Id, _scenario, _cast, _scenarioPregens, _access);
+        set => _prerendered = value;
+    }
+
+    private ScenarioPagePrerender? _prerendered;
+
     protected override async Task OnInitializedAsync()
     {
         _isKeeper = await IdentityService.IsKeeper();
+
+        // Игроку страница показывает только «Доступ запрещён» — читать для него сценарий незачем.
+        if (!_isKeeper)
+        {
+            _loading = false;
+            return;
+        }
+
+        if (TakePrerendered() is { } prerendered)
+        {
+            ApplyLoaded(prerendered.Scenario, prerendered.Cast, prerendered.Pregens, prerendered.Access);
+            _loading = false;
+            return;
+        }
+
         await LoadScenario();
+    }
+
+    /// <summary>Снимок пререндера, если он от этого же сценария; берётся один раз.</summary>
+    private ScenarioPagePrerender? TakePrerendered()
+    {
+        var prerendered = _prerendered;
+        _prerendered = null;
+        return prerendered?.ScenarioId == Id ? prerendered : null;
+    }
+
+    private void ApplyLoaded(Scenario? scenario, List<ScenarioNpc> cast, List<CharacterStorageDto> pregens, ScenarioAccess access)
+    {
+        _scenario = scenario;
+        _cast = cast;
+        _scenarioPregens = pregens;
+        _access = access;
+        _markdownHtml = scenario?.Journal is { } journal ? MarkdownService.ConvertToHtml(journal) : "";
     }
 
     private async Task LoadScenario()
@@ -735,18 +785,13 @@ else
 
             await Task.WhenAll(scenarioTask, castTask, pregensTask);
 
-            _scenario = scenarioTask.Result;
-            _cast = castTask.Result;
-            _scenarioPregens = pregensTask.Result;
+            var scenario = scenarioTask.Result;
 
             // Пересчитывается при каждой перезагрузке: публикация ваншота привязывает шаблон
             // к кампании, и права после неё меняются.
-            _access = _scenario is null ? ScenarioAccess.None : await ScenarioService.GetAccessAsync(_scenario);
+            var access = scenario is null ? ScenarioAccess.None : await ScenarioService.GetAccessAsync(scenario);
 
-            if (_scenario?.Journal is not null)
-            {
-                _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
-            }
+            ApplyLoaded(scenario, castTask.Result, pregensTask.Result, access);
         }
         catch (Exception ex)
         {

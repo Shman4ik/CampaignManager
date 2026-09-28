@@ -147,7 +147,16 @@ public partial class CharacterPage
                 CampaignEra = campaign?.Era;
             }
 
-            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
+            // Лист уже прочитан в пререндере — берём его оттуда, а не из базы второй раз. Слепок
+            // автосохранения приезжает вместе с ним: он снят с базы, а не с поправленного листа.
+            var prerendered = TakePrerenderedSheet();
+            if (prerendered is not null)
+            {
+                CharacterStorageDto = prerendered.Storage;
+                Character = prerendered.Storage.Character;
+                CampaignPlayer = prerendered.Player;
+            }
+            else if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
                 CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
                 Character = CharacterStorageDto?.Character;
@@ -166,7 +175,10 @@ public partial class CharacterPage
             // Слепок берём с того, что лежит в базе. Всё, что страница делает дальше —
             // восстановленный черновик и правка потолка Удачи у старых листов, — становится
             // обычным изменением и уходит в базу первым же автосохранением.
-            MarkSaved();
+            if (prerendered is not null)
+                _savedSnapshot = prerendered.SavedSnapshot;
+            else
+                MarkSaved();
 
             // Circuit вернулся с паузы — на странице снова несохранённая правка, а не копия из базы.
             // Черновик приезжает после любой паузы, даже если лист никто не трогал, поэтому
@@ -179,10 +191,14 @@ public partial class CharacterPage
             if (Character is not null)
                 DerivedAttributeRules.NormalizeLuckCap(Character);
 
-            if (CharacterStorageDto?.CampaignPlayerId is not null)
-                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
-            else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
-                CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
+            // У листа из пререндера слот игрока приехал вместе с ним.
+            if (prerendered is null)
+            {
+                if (CharacterStorageDto?.CampaignPlayerId is not null)
+                    CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
+                else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
+                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
+            }
         }
         catch (Exception ex)
         {

@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities;
@@ -13,27 +14,145 @@ namespace CampaignManager.Web.Components.Features.Campaigns.Services;
 public sealed class CampaignService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
+    CharacterService characterService,
     IHttpContextAccessor httpContextAccessor,
     ILogger<CampaignService> logger)
 {
     /// <summary>
-    ///     Retrieves a list of campaigns associated with the current user, including related players and characters.
+    ///     Всё о кампаниях, что показывает главная, — один раз на загрузку страницы.
+    ///     <para>
+    ///         Раньше три блока главной звали каждый свой метод, и каждый тянул
+    ///         <c>Campaigns → Players → Characters</c> с полными листами (два SQL на вызов, шесть на
+    ///         проход), плюс по запросу НПС на каждую кампанию Хранителя. Теперь три независимых
+    ///         запроса идут параллельно: свои кампании (листы — только те, что показываются), доступные
+    ///         для вступления и НПС своих кампаний без JSONB. Строку <c>AspNetUsers</c> не читаем
+    ///         вовсе: почта и роль есть в claims.
+    ///     </para>
     /// </summary>
-    /// <returns>Returns a list of Campaign objects or an empty list if no campaigns are found.</returns>
-    public async Task<List<Campaign>> GetUserCampaignsAsync()
+    public async Task<HomeCampaigns> GetHomeCampaignsAsync()
     {
-        var user = await identityService.GetUserAsync();
-        if (user == null) return [];
+        var email = await identityService.GetCurrentUserEmailAsync();
+        var emailLower = email?.ToLower();
 
-        var userEmail = user.Email?.ToLower() ?? string.Empty;
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        return await dbContext.Campaigns
-            .Include(c => c.Players)
-            .ThenInclude(cp => cp.Characters)
-            .AsSplitQuery()
-            .Where(c => c.Players.Any(p => p.PlayerEmail.ToLower() == userEmail))
-            .OrderByDescending(c => c.CreatedAt)
-            .ToListAsync();
+        var availableTask = GetAvailableForAsync(emailLower);
+        if (emailLower is null)
+            return new HomeCampaigns(null, false, [], await availableTask);
+
+        var mineTask = GetMineAsync(emailLower);
+        var isKeeper = await identityService.IsKeeper();
+        var npcsTask = isKeeper
+            ? characterService.GetKeptCampaignNpcsAsync()
+            : Task.FromResult<List<CharacterService.CampaignNpc>>([]);
+
+        await Task.WhenAll(availableTask, mineTask, npcsTask);
+
+        var npcsByCampaign = npcsTask.Result.ToLookup(n => n.CampaignId);
+        List<HomeCampaign> mine =
+        [
+            .. mineTask.Result.Select(c => c.KeptByMe
+                ? c with { Npcs = [.. npcsByCampaign[c.Id].Select(n => new HomeCharacter(n.Id, n.Name, null, CharacterKind.Npc, n.Status))] }
+                : c)
+        ];
+
+        return new HomeCampaigns(email, isKeeper, mine, availableTask.Result);
+    }
+
+    /// <summary>
+    ///     Кампании, где пользователь — игрок. Листы читаются только нужные главной: у своих
+    ///     кампаний Хранителя — все (таблица «Персонажи в ваших кампаниях»), у чужих — только свой
+    ///     активный. Профессия лежит в JSONB и в SQL не разбирается, поэтому эти листы приходят
+    ///     целиком и сворачиваются в строку уже здесь.
+    /// </summary>
+    private async Task<List<HomeCampaign>> GetMineAsync(string emailLower)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var rows = await dbContext.Campaigns
+                .AsNoTracking()
+                .Where(c => c.Players.Any(p => p.PlayerEmail.ToLower() == emailLower))
+                .OrderByDescending(c => c.CreatedAt)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.Status,
+                    c.KeeperEmail,
+                    KeptByMe = (c.KeeperEmail ?? string.Empty).ToLower() == emailLower,
+                    Players = c.Players
+                        .OrderBy(p => p.CreatedAt)
+                        .Select(p => new
+                        {
+                            p.PlayerName,
+                            IsMe = p.PlayerEmail.ToLower() == emailLower,
+                            Characters = p.Characters
+                                .Where(ch => (c.KeeperEmail ?? string.Empty).ToLower() == emailLower
+                                             || (p.PlayerEmail.ToLower() == emailLower && ch.Status == CharacterStatus.Active))
+                                .OrderBy(ch => ch.CreatedAt)
+                                .Select(ch => new { ch.Id, ch.CharacterName, ch.Kind, ch.Status, ch.Character })
+                                .ToList()
+                        })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            return
+            [
+                .. rows.Select(c =>
+                {
+                    var players = c.Players
+                        .Select(p => (p.IsMe, Player: new HomePlayer(p.PlayerName,
+                            [.. p.Characters.Select(ch => new HomeCharacter(ch.Id, ch.CharacterName, ch.Character.PersonalInfo.Occupation, ch.Kind, ch.Status))])))
+                        .ToList();
+
+                    var myCharacter = players
+                        .Where(p => p.IsMe)
+                        .SelectMany(p => p.Player.Characters)
+                        .FirstOrDefault(ch => ch.Status == CharacterStatus.Active);
+
+                    return new HomeCampaign(
+                        c.Id,
+                        c.Name,
+                        c.Status,
+                        c.KeeperEmail,
+                        c.KeptByMe,
+                        c.Players.Count,
+                        myCharacter,
+                        c.KeptByMe ? [.. players.Select(p => p.Player)] : [],
+                        []);
+                })
+            ];
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error loading home campaigns for {UserEmail}", emailLower);
+            return [];
+        }
+    }
+
+    /// <summary>Незавершённые кампании, в которых пользователя ещё нет (анониму — все незавершённые).</summary>
+    private async Task<List<HomeAvailableCampaign>> GetAvailableForAsync(string? emailLower)
+    {
+        try
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            var query = dbContext.Campaigns
+                .AsNoTracking()
+                .Where(c => c.Status != CampaignStatus.Completed);
+
+            if (emailLower is not null)
+                query = query.Where(c => !c.Players.Any(p => p.PlayerEmail.ToLower() == emailLower));
+
+            return await query
+                .OrderByDescending(c => c.CreatedAt)
+                .Select(c => new HomeAvailableCampaign(c.Id, c.Name, c.CreatedAt, c.KeeperEmail))
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error loading campaigns available to join");
+            return [];
+        }
     }
 
     /// <summary>
@@ -43,10 +162,10 @@ public sealed class CampaignService(
     /// <returns>Returns the campaign player details or null if the user is not authenticated.</returns>
     public async Task<CampaignPlayer?> GetCampaignPlayerAsync(Guid campaignId)
     {
-        var user = await identityService.GetUserAsync();
-        if (user == null) return null;
+        // Почта — из claims: полная строка AspNetUsers ради неё не нужна.
+        var userEmail = (await identityService.GetCurrentUserEmailAsync())?.ToLower();
+        if (userEmail is null) return null;
 
-        var userEmail = user.Email?.ToLower() ?? string.Empty;
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.CampaignPlayers
             .Include(p => p.Characters)
@@ -91,6 +210,7 @@ public sealed class CampaignService(
     {
         await using var dbContext = await dbContextFactory.CreateDbContextAsync();
         return await dbContext.Campaigns
+            .AsNoTracking()
             .Where(p => p.Status != CampaignStatus.Completed)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync();
