@@ -149,8 +149,9 @@ iPad разворачивают к столу — на экране должна
   `Checks/Components/SkillCheckModal` с навыком и сложностью проверки. Сыщиков диалог берёт из
   кампании сценария (`LocationDetail.CampaignId`) и только читает их листы. Сложность в
   `ScenarioSkillCheck.Difficulty` — строка `"Hard"`/`"Extreme"`, её переводит
-  `SkillCheckRules.ParseScenarioDifficulty`. Подписи «Сложная»/«Экстремальная» у плашек локации
-  расходятся с книгой («трудная»/«чрезвычайная», стр. 80) — диалог пишет по книге.
+  `SkillCheckRules.ParseScenarioDifficulty`, а подпись плашки и пункта в редакторе — по книге,
+  «Трудная»/«Чрезвычайная» (стр. 80), через тот же `SkillCheckRules.DifficultyLabel`, что у диалога.
+  Значения `"Hard"`/`"Extreme"` в данных не менялись — старые сценарии читаются как были.
 - Режим игры на `ScenarioDetailPage` — это `?mode=play&location=<guid>` в адресе, а не поля
   компонента. Circuit восстанавливает только `[PersistentState]`, поэтому раньше пауза вкладки
   (см. `js/circuit-persistence.js`) выбрасывала Хранителя из трёхпанельного режима в обзор посреди

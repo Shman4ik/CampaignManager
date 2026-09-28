@@ -78,7 +78,7 @@ public sealed class ScenarioSkillCheckImportDto
     public string SkillName { get; set; } = string.Empty;
 
     /// <summary>
-    ///     Пусто — обычная проверка; <c>Hard</c> — сложная; <c>Extreme</c> — чрезвычайная.
+    ///     Пусто — обычная проверка; <c>Hard</c> — трудная; <c>Extreme</c> — чрезвычайная.
     /// </summary>
     public string? Difficulty { get; set; }
 

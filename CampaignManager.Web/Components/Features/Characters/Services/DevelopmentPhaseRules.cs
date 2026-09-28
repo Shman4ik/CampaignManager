@@ -147,7 +147,7 @@ public static class DevelopmentPhaseRules
     public static SelfHealingResult RollSelfHealing(Character character, bool useKeyConnection)
     {
         var sanity = character.DerivedAttributes.Sanity;
-        var roll = useKeyConnection ? Dice.PercentileWithBonusDie() : Dice.Percentile();
+        var roll = Dice.Percentile(bonusDice: useKeyConnection ? 1 : 0);
         var success = roll <= sanity.Value;
 
         if (!success)

@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using CampaignManager.Web.Components.Features.Bestiary.Model;
 using CampaignManager.Web.Components.Features.Bestiary.Services;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Combat.Model;
 using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Components.Features.Weapons.Services;
@@ -1010,7 +1011,9 @@ public sealed partial class CombatService
         result.SurpriseMode = NormalizeSurprise(setup);
         result.AttackerRollDetail = RollFor(setup.AttackerRollDetail, setup.ManualAttackerRoll, modifiers.BonusDice, modifiers.PenaltyDice);
         result.AttackerRoll = result.AttackerRollDetail.Result;
-        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue);
+        // Крах — от сложности, которую задала дальность: на большой дальности у навыка 60 цель 30,
+        // и 96–100 уже крах, а не только 100 (стр. 88)
+        result.AttackerSuccessLevel = CalculateSuccessLevel(result.AttackerRoll, setup.AttackSkillValue, requiredLevel);
 
         // Проверка осечки: бросок ≥ значения осечки → оружие заклинило (CoC 7e стр. 113)
         if (setup.SelectedWeapon is { } firedWeapon
@@ -1410,7 +1413,7 @@ public sealed partial class CombatService
                           $"{formula}={result.CounterDamageRolled}" +
                           (result.CounterBonusDamage != 0 ? $" + БкУ {result.CounterBonusDamage}" : "") +
                           (result.CounterArmorReduction > 0 ? $" − броня {result.CounterArmorReduction}" : "") +
-                          $" = {result.CounterTotalDamage} (ОЗ: {result.AttackerHpBefore}→{result.AttackerHpAfter}).";
+                          $" = {result.CounterTotalDamage} (ПЗ: {result.AttackerHpBefore}→{result.AttackerHpAfter}).";
 
         if (result.AttackerTriggeredMajorWound)
         {
@@ -1534,8 +1537,11 @@ public sealed partial class CombatService
             }
         }
 
-        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 153)
-        if (target.CurrentSanity > 0 && lostToday * 5 >= target.CurrentSanity && !target.HasIndefiniteInsanity)
+        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 154).
+        // Порог — тот же, что показывает панель Рассудка на листе.
+        if (target.CurrentSanity > 0
+            && lostToday >= SanityRules.IndefiniteInsanityThreshold(target.CurrentSanity)
+            && !target.HasIndefiniteInsanity)
         {
             result.TriggeredIndefiniteInsanity = true;
             notes.Add($"За игровой день потеряно {lostToday} из {target.CurrentSanity} — это не меньше ⅕. Бессрочное безумие.");
@@ -1806,54 +1812,19 @@ public sealed partial class CombatService
     /// <summary>
     /// Поиск значения навыка персонажа по имени. Названия из каталога оружия сокращены
     /// («Стрельба (П)»), а в листе записаны полностью («Стрельба (пистолет)»), поэтому
-    /// сравниваются база и специализация по отдельности (см. <see cref="SkillNameMatcher"/>).
+    /// строку ищет <see cref="SkillNameMatcher.FindBest{T}"/> — тем же порядком, каким быстрый НПС
+    /// выбирает строку листа под оружие. Не нашлось — 0.
     /// </summary>
     public static int FindSkillValue(Character character, string skillName)
     {
-        if (character.Skills?.SkillGroups is null || string.IsNullOrWhiteSpace(skillName)) return 0;
+        if (character.Skills?.SkillGroups is null) return 0;
 
-        var skills = character.Skills.SkillGroups
-            .SelectMany(g => g.Skills)
-            .Select(s => (Skill: s, Name: SkillNameMatcher.Parse(s.Name)))
-            .ToList();
+        var skill = SkillNameMatcher.FindBest(
+            character.Skills.SkillGroups.SelectMany(g => g.Skills),
+            s => s.Name,
+            skillName);
 
-        // Точное совпадение всего названия — самый надёжный случай
-        foreach (var (skill, _) in skills)
-        {
-            if (SkillNameMatcher.FullNameEquals(skill.Name, skillName)) return skill.Value.Regular;
-        }
-
-        var target = SkillNameMatcher.Parse(skillName);
-        var sameBase = skills.Where(s => s.Name.Base == target.Base).ToList();
-
-        // Базы не совпали дословно — пробуем по словам: «Вождение» из правил погони
-        // это «Вождение автомобиля» в листе
-        if (sameBase.Count == 0)
-        {
-            return skills
-                .Where(s => SkillNameMatcher.BaseMatches(s.Name.Base, target.Base))
-                .Select(s => s.Skill.Value.Regular)
-                .FirstOrDefault();
-        }
-
-        // Навык без уточнения: «Ближний бой» у оружия — это «Ближний бой (драка)» в листе
-        var specialization = target.Specialization
-                             ?? SkillNameMatcher.DefaultSpecializationFor(target.Base);
-
-        if (specialization is not null)
-        {
-            foreach (var (skill, name) in sameBase)
-            {
-                if (SkillNameMatcher.SpecializationMatches(name.Specialization, specialization))
-                    return skill.Value.Regular;
-            }
-        }
-
-        // Специализации в листе нет — берём базовый навык без уточнения, если он записан
-        return sameBase
-            .Where(s => s.Name.Specialization is null)
-            .Select(s => s.Skill.Value.Regular)
-            .FirstOrDefault();
+        return skill?.Value.Regular ?? 0;
     }
 
     /// <summary>
@@ -1976,7 +1947,7 @@ public sealed partial class CombatService
             if (result.ExtraDamage > 0) dmgParts.Add($"доп. {result.ExtraDamage}");
             var dmgStr = $"Урон: {string.Join(" + ", dmgParts)} = {result.RawDamage}";
             if (result.ArmorReduction > 0) dmgStr += $" − броня {result.ArmorReduction} = {result.TotalDamage}";
-            parts.Add(dmgStr + $". ОЗ: {result.DefenderHpBefore}→{result.DefenderHpAfter}.");
+            parts.Add(dmgStr + $". ПЗ: {result.DefenderHpBefore}→{result.DefenderHpAfter}.");
 
             if (result.IsCritical) parts.Add("Критический удар!");
             else if (result.IsExtreme)

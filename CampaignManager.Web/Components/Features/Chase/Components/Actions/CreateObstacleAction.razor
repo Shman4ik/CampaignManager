@@ -1,0 +1,113 @@
+@inject ChaseService ChaseService
+
+@* Задержать преследователей — создать помеху или преграду (стр. 141). *@
+
+<div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-warning-800">Задержать преследователей</div>
+    <p class="text-xs text-warning-700">
+        Запереть дверь на засов — одно действие без проверки. Запереть Взломом — полный раунд
+        и успешная проверка. Придвинуть шкаф — проверка СИЛ и действие. Опрокинуть прилавок —
+        одно действие.
+    </p>
+    <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+            <label class="text-xs text-gray-600">Что делает</label>
+            <input type="text" @bind="Form.ObstacleDescription" placeholder="Опрокидывает прилавок с фруктами"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Локация</label>
+            <input type="number" min="1" max="@LocationCount" @bind="Form.ObstacleLocation"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Тип</label>
+            <select @bind="Form.ObstacleIsBarrier" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="false">Помеха — замедляет</option>
+                <option value="true">Преграда — не пускает</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Сложность препятствия</label>
+            <select @bind="Form.Difficulty" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="1">Обычная</option>
+                <option value="2">Трудная</option>
+                <option value="3">Чрезвычайная</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Стоит действий перемещения</label>
+            <select @bind="Form.ObstacleCost" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="0">0 — бесплатно</option>
+                <option value="1">1 действие</option>
+                <option value="2">Полный раунд</option>
+            </select>
+        </div>
+        @if (Form.ObstacleIsBarrier)
+        {
+            <div>
+                <label class="text-xs text-gray-600">Прочность преграды (ПЗ)</label>
+                <select @bind="Form.ObstacleHitPoints" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                    <option value="0">нельзя разрушить</option>
+                    @foreach (var preset in ChaseReference.BarrierPresets)
+                    {
+                        <option value="@preset.HitPoints">@preset.Name — @preset.HitPoints</option>
+                    }
+                </select>
+            </div>
+        }
+        <SkillCheckFields SkillLabel="Навык исполнителя (необязательно)" SkillPlaceholder="СИЛ / Взлом"
+                          @bind-SkillName="Form.SkillName" @bind-SkillValue="Form.SkillValue" @bind-Roll="Form.Roll"/>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="Execute">
+            <span>Перекрыть</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+
+    /// <summary>Сколько локаций на треке — верхняя граница номера.</summary>
+    [Parameter] public int LocationCount { get; set; }
+
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task Execute()
+    {
+        var description = string.IsNullOrWhiteSpace(Form.ObstacleDescription)
+            ? "перекрывает дорогу"
+            : Form.ObstacleDescription;
+
+        var obstacle = new ChaseLocation { Number = Form.ObstacleLocation };
+        if (Form.ObstacleIsBarrier)
+        {
+            obstacle.HasBarrier = true;
+            obstacle.BarrierName = description;
+            obstacle.BarrierDifficulty = Form.Difficulty;
+            obstacle.BarrierHitPoints = Form.ObstacleHitPoints;
+            obstacle.BarrierCurrentHitPoints = Form.ObstacleHitPoints;
+        }
+        else
+        {
+            obstacle.HasHazard = true;
+            obstacle.HazardName = description;
+            obstacle.HazardDifficulty = Form.Difficulty;
+            obstacle.HazardDamageFormula = "1D3";
+        }
+
+        var result = ChaseService.CreateObstacle(
+            Participant.Id, Form.ObstacleLocation, obstacle, description, Form.ObstacleCost,
+            string.IsNullOrWhiteSpace(Form.SkillName) ? null : Form.SkillName, Form.SkillValue,
+            ChaseActionForm.Entered(Form.Roll));
+
+        Form.ObstacleDescription = "";
+        await OnResolved.InvokeAsync(result);
+    }
+}

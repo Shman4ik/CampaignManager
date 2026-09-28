@@ -125,7 +125,8 @@ public sealed partial class CombatService
         {
             var power = GetPower(caster);
             var roll = setup.ManualCastingRoll ?? RollD100();
-            var level = CalculateSuccessLevel(roll, power);
+            // Проверка трудная, поэтому и крах считается от половины МОЩ (стр. 88)
+            var level = CalculateSuccessLevel(roll, power, SuccessLevel.HardSuccess);
 
             outcome.IsFirstCast = true;
             outcome.IsPushed = setup.IsPushed;

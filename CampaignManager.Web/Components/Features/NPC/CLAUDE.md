@@ -31,9 +31,11 @@
   `SkillsModel.DefaultSkillsModel()` по имени (не нашлось — группа «Особые навыки», как у импорта
   сценария), вторичные атрибуты — `DerivedAttributeRules.InitializeNewSheet`, оружие —
   `WeaponFactory.CopyForCharacter`. Родной язык выставляется равным ОБР.
-- Навык под выбранное оружие ищет `QuickNpcRules.ResolveWeaponSkill` тем же порядком, что
-  `CombatService.FindSkillValue` (через `SkillNameMatcher`): «Стрельба (П)» из каталога — это строка
-  «Стрельба (пистолет)» листа. Разойдутся — бой возьмёт не ту строку, и НПС будет стрелять нулём.
+- Навык под выбранное оружие ищет `QuickNpcRules.ResolveWeaponSkill` — тем же
+  `Combat/Services/SkillNameMatcher.FindBest`, которым `CombatService.FindSkillValue` ищет строку
+  в бою: «Стрельба (П)» из каталога — это строка «Стрельба (пистолет)» листа. Своей копии порядка
+  у НПС больше нет и заводить её нельзя: разойдутся — бой возьмёт не ту строку, и НПС будет
+  стрелять нулём.
 - Сохраняет `CharacterService.CreateCharacterAsync(…, CharacterKind.Npc, campaignId)`: из `/npcs` —
   в библиотеку или выбранную кампанию, из сценария — в библиотеку плюс
   `ScenarioService.AddNpcToScenarioAsync` с ролью и количеством из формы. Если лист создан, а связь

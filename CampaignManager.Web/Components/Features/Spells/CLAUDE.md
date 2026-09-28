@@ -23,8 +23,11 @@ Master spell catalog (independent entity).
 Устроена так же, как каталоги оружия, предметов и книг (`Features/Weapons/CLAUDE.md`,
 `Features/Items/CLAUDE.md`, `Features/Books/CLAUDE.md`), и правки к ним имеет смысл
 вести вместе. Разметку списка держит `Components/SpellsListView.razor` (таблица +
-карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры,
-пагинацию и модалки.
+карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры
+и модалки. Страницу, сортировку и раскрытую строку держит общий
+`Shared/Model/CatalogListState<Spell>` (см. `design-system-guide.md`, «Каталог»).
+Модалка правит полную копию заклинания (`Utilities/Services/EntityCloner.Clone`), поэтому
+новое поле `Spell` в неё попадает само.
 
 - Колонки: `Название · Тип · Стоимость · Время сотворения · действия`. Их пять, а не
   девять, как у оружия, поэтому порог таблицы `lg` (1024): портрет iPad её вмещает —

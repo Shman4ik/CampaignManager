@@ -1,0 +1,57 @@
+@inject ChaseService ChaseService
+
+@* Штурман (стр. 139): пассажир помогает водителю, результат применяется сразу, без предпросмотра. *@
+
+<div class="bg-accent-50 border border-accent-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-accent-800">Помощь с навигацией</div>
+    <p class="text-xs text-accent-700">
+        Пассажир следит за картой и подсказывает, как обходить помехи. При успехе следующий
+        разгон водителя получает на одну штрафную кость меньше.
+    </p>
+    <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+            <label class="text-xs text-gray-600">Водитель</label>
+            <select @bind="Form.TargetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="">— выберите водителя —</option>
+                @foreach (var t in Drivers)
+                {
+                    <option value="@t.Id">@t.Name — @t.VehicleName</option>
+                }
+            </select>
+        </div>
+        <SkillCheckFields SkillPlaceholder="Внимание / Ориентирование"
+                          @bind-SkillName="Form.SkillName" @bind-SkillValue="Form.SkillValue" @bind-Roll="Form.Roll"/>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="Execute"
+                disabled="@string.IsNullOrEmpty(Form.TargetId)">
+            <span>Подсказать маршрут</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+
+    /// <summary>Водители в погоне, кроме самого штурмана.</summary>
+    [Parameter, EditorRequired] public required List<ChaseParticipant> Drivers { get; set; }
+
+    /// <summary>
+    ///     Подсказка штурмана применяется сразу и в журнал идёт мимо предпросмотра, поэтому
+    ///     результата наверх панель не отдаёт — только закрывается, как при отмене.
+    /// </summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task Execute()
+    {
+        if (!Guid.TryParse(Form.TargetId, out var driverId)) return;
+        var skill = string.IsNullOrWhiteSpace(Form.SkillName) ? "Внимание" : Form.SkillName;
+        ChaseService.ResolveNavigatorAssist(
+            Participant.Id, driverId, skill, Form.SkillValue, ChaseActionForm.Entered(Form.Roll));
+        await OnCancel.InvokeAsync();
+    }
+}

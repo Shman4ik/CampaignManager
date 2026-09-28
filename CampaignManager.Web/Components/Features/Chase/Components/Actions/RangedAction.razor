@@ -1,0 +1,75 @@
+@inject ChaseService ChaseService
+
+@* Стрельба в погоне (стр. 136): огнестрел бьёт на любую дистанцию, цель не обязана быть рядом. *@
+
+<div class="bg-error-50 border border-error-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-error-800">Стрельба</div>
+    <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+            <label class="text-xs text-gray-600">Цель</label>
+            <select @bind="Form.TargetId" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="">— выберите цель —</option>
+                @foreach (var t in Targets)
+                {
+                    <option value="@t.Id">@t.Name (лок. @t.CurrentLocation)</option>
+                }
+            </select>
+        </div>
+        <SkillCheckFields SkillPlaceholder="Стрельба"
+                          @bind-SkillName="Form.SkillName" @bind-SkillValue="Form.SkillValue" @bind-Roll="Form.Roll"/>
+        <div>
+            <label class="text-xs text-gray-600">Урон (если попадание)</label>
+            <input type="number" min="0" @bind="Form.DamageRoll" placeholder="0"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div class="col-span-2">
+            <label class="flex items-center gap-2 text-xs text-gray-700 @(HasMovementAction ? "cursor-pointer" : "opacity-50")">
+                <input type="checkbox" @bind="Form.StoppedToShoot" disabled="@(!HasMovementAction)"
+                       class="rounded border-gray-300" />
+                Стоя на месте (−1 действие, без штрафной кости)
+            </label>
+            <p class="text-xs text-gray-400 mt-0.5">
+                На ходу — 0 действий, штрафная кость учитывается Хранителем в броске.
+                @if (!HasMovementAction)
+                {
+                    <span class="text-warning-600">Действий перемещения не осталось — только стрельба на ходу.</span>
+                }
+            </p>
+        </div>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-error cm-btn-sm" @onclick="Execute"
+                disabled="@string.IsNullOrEmpty(Form.TargetId)">
+            <span>Стрелять</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+
+    /// <summary>Все активные участники, кроме стрелка.</summary>
+    [Parameter, EditorRequired] public required List<ChaseParticipant> Targets { get; set; }
+
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool HasMovementAction => Participant.MovementActionsRemaining > 0;
+
+    private async Task Execute()
+    {
+        if (!Guid.TryParse(Form.TargetId, out var targetId)) return;
+        var skill = string.IsNullOrWhiteSpace(Form.SkillName) ? "Стрельба" : Form.SkillName;
+        var result = ChaseService.ResolveRangedAttack(
+            Participant.Id, targetId,
+            skill, Form.SkillValue,
+            ChaseActionForm.Entered(Form.Roll),
+            ChaseActionForm.Entered(Form.DamageRoll),
+            Form.StoppedToShoot);
+        await OnResolved.InvokeAsync(result);
+    }
+}
