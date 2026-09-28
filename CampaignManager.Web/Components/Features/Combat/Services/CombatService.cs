@@ -1498,7 +1498,7 @@ public sealed partial class CombatService
     }
 
     /// <summary>
-    /// Последствия потери рассудка (стр. 152–153): 5+ пунктов за раз — проверка ИНТ, и безумие
+    /// Последствия потери рассудка (стр. 153–154): 5+ пунктов за раз — проверка ИНТ, и безумие
     /// наступает при её <b>успехе</b>; ⅕ текущего рассудка за игровой день — бессрочное безумие;
     /// ноль — неизлечимое. Одна точка для проверки Рассудка и для цены заклинания в рассудке:
     /// пороги не должны разъехаться между ними.
@@ -1537,17 +1537,18 @@ public sealed partial class CombatService
             }
         }
 
-        // Бессрочное безумие: потеря не менее ⅕ текущего рассудка за игровой день (стр. 154).
+        // Бессрочное безумие: потеря не менее ⅕ рассудка на начало игрового дня (стр. 154).
         // Порог — тот же, что показывает панель Рассудка на листе.
         if (target.CurrentSanity > 0
-            && lostToday >= SanityRules.IndefiniteInsanityThreshold(target.CurrentSanity)
+            && SanityRules.IsIndefiniteInsanityLoss(sanityAfter, lostToday)
             && !target.HasIndefiniteInsanity)
         {
             result.TriggeredIndefiniteInsanity = true;
-            notes.Add($"За игровой день потеряно {lostToday} из {target.CurrentSanity} — это не меньше ⅕. Бессрочное безумие.");
+            notes.Add($"За игровой день потеряно {lostToday} из {SanityRules.SanityAtDayStart(sanityAfter, lostToday)} — " +
+                      "это не меньше ⅕. Бессрочное безумие.");
         }
 
-        // Неизлечимое безумие при нулевом рассудке (стр. 153)
+        // Неизлечимое безумие при нулевом рассудке (стр. 154)
         if (sanityAfter == 0)
         {
             result.TriggeredPermanentInsanity = true;

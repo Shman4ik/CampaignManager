@@ -555,9 +555,11 @@ public sealed partial class ChaseService
     /// Разрешить помеху на локации <paramref name="locationNumber"/> (стр. 133).
     /// Стоит 1 действие перемещения плюс по одному за каждую бонусную кость (максимум 2).
     /// Провал: урон + потеря 1d3 действий. Участник ВСЕГДА проходит дальше — успешно или нет.
+    /// Транспорт при провале теряет Комплекцию по таблице VI — сколько, решает Хранитель
+    /// (<paramref name="buildLossRoll"/>); без значения транспорт не страдает.
     /// </summary>
     public ChaseActionResult ResolveHazard(Guid participantId, int locationNumber, string skillName, int skillValue,
-        int? roll, int bonusDice, int? damageRoll, int? lostActionsRoll)
+        int? roll, int bonusDice, int? damageRoll, int? lostActionsRoll, int? buildLossRoll = null)
     {
         var participant = Participants.First(p => p.Id == participantId);
         var location = GetLocation(locationNumber);
@@ -567,7 +569,8 @@ public sealed partial class ChaseService
 
         var difficulty = location?.HazardDifficulty ?? 1;
         var threshold = GetDifficultyThreshold(skillValue, difficulty);
-        var actualRoll = roll ?? CombatService.RollD100();
+        // Оплаченные бонусные кости должны попасть и в автоматический бросок, а не только в списание действий
+        var actualRoll = roll ?? CombatService.RollD100(bonusDice, 0).Result;
         var level = CombatService.CalculateSuccessLevel(actualRoll, threshold);
         var success = level >= SuccessLevel.RegularSuccess;
         var hazardName = location?.HazardName ?? "Помеха";
@@ -618,6 +621,9 @@ public sealed partial class ChaseService
                 result.HpAfter = Math.Max(0, participant.CurrentHitPoints - result.DamageDealt.Value);
             }
 
+            if (participant.IsInVehicle && buildLossRoll is > 0)
+                result.TargetBuildLoss = buildLossRoll.Value;
+
             // Потеря действий перемещения (1d3)
             result.MovementActionsLost = lostActionsRoll ?? CombatService.RollDiceFormula("1D3");
 
@@ -626,6 +632,7 @@ public sealed partial class ChaseService
                              (bonusDice > 0 ? $"Бонусных костей: {bonusDice}. " : "") +
                              "Провал! " +
                              (result.DamageDealt > 0 ? $"Урон: {result.DamageDealt}. " : "") +
+                             (result.TargetBuildLoss > 0 ? $"Комплекция транспорта −{result.TargetBuildLoss}. " : "") +
                              $"Потеряно {Actions(result.MovementActionsLost)}. " +
                              $"Всё равно проходит на локацию {destination}.";
         }
@@ -827,15 +834,17 @@ public sealed partial class ChaseService
         var attacker = Participants.First(p => p.Id == attackerId);
         var target = Participants.First(p => p.Id == targetId);
 
-        var actualRoll = roll ?? CombatService.RollD100();
+        // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
+        var penaltyDice = stoppedToShoot ? 0 : 1;
+        var actualRoll = roll ?? CombatService.RollD100(0, penaltyDice).Result;
         var level = CombatService.CalculateSuccessLevel(actualRoll, skillValue);
         var success = level >= SuccessLevel.RegularSuccess;
 
         var shootStyle = stoppedToShoot ? "стоя" : "на ходу";
 
-        // Стоя на месте — 1 действие; на ходу — 0 действий и штрафная кость (стр. 139)
         var result = SkillCheckResult(ChaseActionType.RangedAttack, attacker, skillName, skillValue,
-            actualRoll, level, success, target, movementActionsSpent: stoppedToShoot ? 1 : 0);
+            actualRoll, level, success, target, movementActionsSpent: stoppedToShoot ? 1 : 0,
+            penaltyDice: penaltyDice);
 
         if (success && damageRoll is > 0)
         {

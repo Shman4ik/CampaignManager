@@ -64,7 +64,7 @@ public class SpellCastSetup
     /// <summary>1d6 — во сколько раз сверх обычного платить за провал повторной проверки.</summary>
     public int? ManualPushMultiplier { get; set; }
 
-    /// <summary>Проверка ИНТ при потере 5+ рассудка за раз (стр. 152).</summary>
+    /// <summary>Проверка ИНТ при потере 5+ рассудка за раз (стр. 153).</summary>
     public int? ManualIntRoll { get; set; }
 
     /// <summary>1d10 часов временного безумия.</summary>

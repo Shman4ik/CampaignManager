@@ -12,7 +12,7 @@ public static class SanityRules
     private const string MythosSkillName = "Мифы Ктулху";
 
     /// <summary>
-    ///     Максимум Рассудка = 99 − значение навыка "Мифы Ктулху" (стр. 63 и 152).
+    ///     Максимум Рассудка = 99 − значение навыка "Мифы Ктулху" (стр. 63 и 153).
     /// </summary>
     public static int ComputeMaxSanity(Character character)
     {
@@ -29,7 +29,7 @@ public static class SanityRules
 
     /// <summary>
     ///     Прибавляет к навыку "Мифы Ктулху" (не выше 99) и пересчитывает максимум Рассудка:
-    ///     99 − Мифы (стр. 152). Текущий Рассудок прижимается к новому максимуму. Возвращает
+    ///     99 − Мифы (стр. 153). Текущий Рассудок прижимается к новому максимуму. Возвращает
     ///     фактическую прибавку; ноль — если навыка на листе нет.
     /// </summary>
     public static int AddMythos(Character character, int gain)
@@ -57,21 +57,46 @@ public static class SanityRules
     ///     10,4, и 10 пунктов её ещё не достигают — нужно 11. Округление вниз давало 10 и объявляло
     ///     безумие на пункт раньше книги.
     ///     <para>
+    ///         «Текущий» — это Рассудок <b>на начало игрового дня</b>, а не после потери: иначе
+    ///         знаменатель уменьшался бы от той самой потери, которую с ним сравнивают, и порог
+    ///         плыл бы от того, в какой момент его посчитали. Раньше так и было — панель листа
+    ///         делила на Рассудок после всех потерь дня, бой — после прошлых, но до текущей.
+    ///         Своего поля «Рассудок утром» у листа нет, его восстанавливает
+    ///         <see cref="SanityAtDayStart"/>.
+    ///     </para>
+    ///     <para>
     ///         Единственная точка порога: её показывают панель Рассудка, ширма Хранителя и
     ///         модалка книги Мифов, по ней же решает бой (<c>CombatService.EvaluateSanityLoss</c>).
     ///     </para>
     /// </summary>
-    public static int IndefiniteInsanityThreshold(int currentSanity) =>
-        currentSanity <= 0 ? 0 : (currentSanity + 4) / 5;
+    public static int IndefiniteInsanityThreshold(int sanityAtDayStart) =>
+        sanityAtDayStart <= 0 ? 0 : (sanityAtDayStart + 4) / 5;
+
+    /// <summary>
+    ///     Рассудок на начало игрового дня: нынешний плюс потерянное за день. Прибавка рассудка
+    ///     посреди дня счётчик потерь не уменьшает, и тогда оценка выходит чуть выше настоящей —
+    ///     порог от этого только строже на пункт-другой, а не мягче.
+    /// </summary>
+    public static int SanityAtDayStart(int currentSanity, int lostToday) =>
+        Math.Max(0, currentSanity) + Math.Max(0, lostToday);
+
+    /// <summary>
+    ///     Наступает ли бессрочное безумие: за день потеряно не меньше пятой части Рассудка,
+    ///     бывшего на его начало. <paramref name="currentSanity"/> — Рассудок уже после потерь,
+    ///     <paramref name="lostToday"/> — все потери дня, включая последнюю.
+    /// </summary>
+    public static bool IsIndefiniteInsanityLoss(int currentSanity, int lostToday) =>
+        lostToday > 0
+        && lostToday >= IndefiniteInsanityThreshold(SanityAtDayStart(currentSanity, lostToday));
 
     /// <summary>
     ///     Триггер на проверку ИНТ → временное безумие: 5 и более пунктов, потерянных
-    ///     по одной и той же причине (стр. 152).
+    ///     по одной и той же причине (стр. 153).
     /// </summary>
     public const int TemporaryInsanityThreshold = 5;
 
     /// <summary>
-    ///     Рассудок упал до нуля — сыщик неизлечимо безумен и выбывает из игры (стр. 153).
+    ///     Рассудок упал до нуля — сыщик неизлечимо безумен и выбывает из игры (стр. 154).
     ///     Отдельного флага не держим: это ровно "Рассудок = 0".
     /// </summary>
     public static bool IsPermanentlyInsane(Character character) =>
