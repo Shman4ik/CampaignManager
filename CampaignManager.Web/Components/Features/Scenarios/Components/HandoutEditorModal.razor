@@ -13,7 +13,10 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="cm-field-label">Название</label>
-                    <input type="text" @bind="_model.Name" class="cm-input" placeholder="Название раздатки"/>
+                    @* oninput, а не change: кнопка «Добавить» зависит от названия, и с change она
+                       включалась только на blur — первый тап по ней сразу после ввода приходился
+                       в ещё выключенную кнопку и терялся, форма оставалась открытой. *@
+                    <input type="text" @bind="_model.Name" @bind:event="oninput" class="cm-input" placeholder="Название раздатки"/>
                 </div>
                 <div>
                     <label class="cm-field-label">URL файла</label>
@@ -63,21 +66,34 @@
         </div>
     </ChildContent>
     <FooterContent>
+        @if (_saveFailed)
+        {
+            <Alert Type="error" ShowIcon Small class="!mb-0 sm:mr-auto">
+                Не сохранилось — правки остались в форме, попробуйте ещё раз.
+            </Alert>
+        }
         <div class="flex justify-end gap-2">
-            <Button ButtonType="button" OnClick="Hide" Variant="secondary">Отмена</Button>
-            <Button ButtonType="button" OnClick="Save" Variant="primary" IsDisabled="@(string.IsNullOrWhiteSpace(_model.Name))">
-                @(_isEdit ? "Сохранить" : "Добавить")
+            <Button ButtonType="button" OnClick="Hide" Variant="secondary" IsDisabled="_saving">Отмена</Button>
+            <Button ButtonType="button" OnClick="Save" Variant="primary"
+                    IsDisabled="@(_saving || string.IsNullOrWhiteSpace(_model.Name))">
+                @(_saving ? "Сохранение…" : _isEdit ? "Сохранить" : "Добавить")
             </Button>
         </div>
     </FooterContent>
 </Modal>
 
 @code {
-    [Parameter] public EventCallback<ScenarioHandout> OnSaved { get; set; }
+    /// <summary>
+    ///     Сохранить раздатку; <c>false</c> — не вышло, и форма остаётся открытой с правками.
+    ///     Раньше это был EventCallback: форма закрывалась и при отказе, молча теряя введённое.
+    /// </summary>
+    [Parameter, EditorRequired] public required Func<ScenarioHandout, Task<bool>> OnSave { get; set; }
 
     private bool _isVisible;
     private bool _isEdit;
     private bool _showPreview;
+    private bool _saving;
+    private bool _saveFailed;
     private ScenarioHandout _model = new() { Name = "" };
 
     public void Show(ScenarioHandout? editHandout = null, int nextOrder = 0)
@@ -106,22 +122,43 @@
         }
 
         _showPreview = false;
+        _saveFailed = false;
         _isVisible = true;
         StateHasChanged();
     }
 
     private void Hide()
     {
+        if (_saving) return;
         _isVisible = false;
         StateHasChanged();
     }
 
     private void TogglePreview() => _showPreview = !_showPreview;
 
+    /// <summary>
+    ///     Пока идёт запись (с перечитыванием сценария — это секунды), кнопки выключены: второй тап
+    ///     по «Добавить» раньше заводил ту же раздатку второй раз.
+    /// </summary>
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(_model.Name)) return;
-        await OnSaved.InvokeAsync(_model);
-        Hide();
+        if (_saving || string.IsNullOrWhiteSpace(_model.Name)) return;
+
+        _saving = true;
+        _saveFailed = false;
+        bool saved;
+        try
+        {
+            saved = await OnSave(_model);
+        }
+        finally
+        {
+            _saving = false;
+        }
+
+        if (saved)
+            Hide();
+        else
+            _saveFailed = true;
     }
 }
