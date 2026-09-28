@@ -374,7 +374,7 @@ public sealed class CharacterGenerationService(SkillService skillService)
             details: $"({character.Characteristics.Size.Regular} + {character.Characteristics.Constitution.Regular}) / 10 = {hp}");
 
         var mp = character.DerivedAttributes.MagicPoints.MaxValue;
-        log.Add("Производные", "Очки магии = МОЩ / 5",
+        log.Add("Производные", "Пункты магии = МОЩ / 5",
             result: mp,
             details: $"{character.Characteristics.Power.Regular} / 5 = {mp}");
 

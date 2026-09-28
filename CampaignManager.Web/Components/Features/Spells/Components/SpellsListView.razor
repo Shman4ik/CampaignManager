@@ -22,7 +22,10 @@
                 }
                 <th>Стоимость</th>
                 <th>Время сотворения</th>
-                <th><span class="sr-only">Действия</span></th>
+                @if (CanEdit)
+                {
+                    <th><span class="sr-only">Действия</span></th>
+                }
             </tr>
             </thead>
             <tbody>
@@ -31,6 +34,7 @@
                 <SpellTableRow Spell="@spell"
                                IsExpanded="@(ExpandedSpellId == spell.Id)"
                                ShowType="@ShowType"
+                               CanEdit="@CanEdit"
                                OnEdit="OnEdit"
                                OnDelete="OnDelete"
                                OnToggleExpand="() => OnToggleExpand.InvokeAsync(spell)" />
@@ -61,16 +65,19 @@
                             <span>@Dash(spell.CastingTime)</span>
                         </div>
                     </div>
-                    <button type="button" aria-label="Изменить: @spell.Name"
-                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
-                            @onclick="() => OnEdit.InvokeAsync(spell)">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button type="button" aria-label="Удалить: @spell.Name"
-                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
-                            @onclick="() => OnDelete.InvokeAsync(spell)">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    @if (CanEdit)
+                    {
+                        <button type="button" aria-label="Изменить: @spell.Name"
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-primary flex-shrink-0"
+                                @onclick="() => OnEdit.InvokeAsync(spell)">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        <button type="button" aria-label="Удалить: @spell.Name"
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error flex-shrink-0"
+                                @onclick="() => OnDelete.InvokeAsync(spell)">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    }
                 </div>
 
                 @if (ExpandedSpellId == spell.Id)
@@ -111,6 +118,12 @@
 
     /// <summary>Колонка типа: смысл есть, только когда список не сужен фильтром до одного типа.</summary>
     [Parameter] public bool ShowType { get; set; } = true;
+
+    /// <summary>
+    ///     Кнопки «Изменить/Удалить». Без права правки колонка действий пропадает целиком,
+    ///     а не остаётся пустой полосой справа.
+    /// </summary>
+    [Parameter] public bool CanEdit { get; set; }
 
     [Parameter] public string? CurrentSortField { get; set; }
     [Parameter] public bool SortAscending { get; set; } = true;

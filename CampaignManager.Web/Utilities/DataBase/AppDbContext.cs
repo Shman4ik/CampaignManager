@@ -25,6 +25,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Campaign> Campaigns { get; set; } = null!;
     public DbSet<CharacterStorageDto> CharacterStorage { get; set; } = null!;
     public DbSet<CampaignPlayer> CampaignPlayers { get; set; } = null!;
+    public DbSet<CampaignSession> CampaignSessions { get; set; } = null!;
     public DbSet<Weapon> Weapons { get; set; } = null!;
     public DbSet<Spell> Spells { get; set; } = null!;
     public DbSet<Book> Books { get; set; } = null!;
@@ -83,6 +84,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity
                 .HasIndex(cp => new { cp.PlayerEmail, cp.CampaignId })
                 .IsUnique();
+        });
+
+        // Журнал кампании: одна строка — одна встреча за столом
+        modelBuilder.Entity<CampaignSession>(entity =>
+        {
+            entity.ToTable("CampaignSessions");
+
+            // Удалили кампанию — её хроника больше никому не нужна.
+            entity.HasOne(s => s.Campaign)
+                .WithMany()
+                .HasForeignKey(s => s.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Сценарий удалили — запись о встрече остаётся, теряется только ссылка.
+            entity.HasOne(s => s.Scenario)
+                .WithMany()
+                .HasForeignKey(s => s.ScenarioId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.Property(s => s.Title).HasMaxLength(CampaignJournalLimits.TitleLength);
+            entity.Property(s => s.Summary).HasMaxLength(CampaignJournalLimits.TextLength);
+            entity.Property(s => s.KeeperNotes).HasMaxLength(CampaignJournalLimits.TextLength);
+
+            // Журнал всегда читается целиком по кампании, новые встречи сверху
+            entity.HasIndex(s => new { s.CampaignId, s.SessionDate });
         });
 
         // Настройка Character

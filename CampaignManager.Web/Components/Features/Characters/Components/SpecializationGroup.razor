@@ -18,9 +18,10 @@
                перетасовывается (навык уехал в «изменённые») — и показывает чужое значение. *@
             <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150">
                 <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                    <button @onclick="@(() => OnRemove.InvokeAsync(skill))"
-                            class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
-                        <i class="fas fa-times text-xs"></i>
+                    <button type="button" @onclick="@(() => OnRemove.InvokeAsync(skill))"
+                            aria-label="@($"Удалить навык {skill.Name}")"
+                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
+                        <i class="fas fa-trash-alt" aria-hidden="true"></i>
                     </button>
                     <div class="min-w-0 flex-grow text-sm leading-snug">
                         @if (skill.SkillModelId.HasValue)
@@ -38,6 +39,16 @@
                                   title="Смежная специализация перешла порог — этот навык поднимается на @bonus (но не выше самого порога)">+@bonus</span>
                         }
                     </div>
+                    @if (OnCheckRequested.HasDelegate)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                                aria-label="@($"Проверка: {skill.Name}")"
+                                data-testid="@($"skill-check-{skill.Name}")"
+                                @onclick="() => OnCheckRequested.InvokeAsync(skill)">
+                            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+                        </button>
+                    }
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                     <input type="checkbox" checked="@skill.IsUsed"
@@ -70,6 +81,9 @@
     [Parameter] public EventCallback<Skill> OnRemove { get; set; }
     [Parameter] public EventCallback<SkillChangeArgs> OnValueChanged { get; set; }
     [Parameter] public EventCallback<SkillChangeArgs> OnUsedChanged { get; set; }
+
+    /// <summary>Кубик в строке — открыть проверку навыка, как в SkillGroupCard.</summary>
+    [Parameter] public EventCallback<Skill> OnCheckRequested { get; set; }
 
     public record SkillChangeArgs(Skill Skill, ChangeEventArgs Args);
 

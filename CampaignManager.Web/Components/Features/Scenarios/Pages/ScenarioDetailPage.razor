@@ -5,11 +5,13 @@
 @using CampaignManager.Web.Components.Features.Scenarios.Services
 @using CampaignManager.Web.Utilities.Services
 @using CampaignManager.Web.Components.Features.NPC.Components
+@using CampaignManager.Web.Components.Features.NPC.Services
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Components.Features.Scenarios.Components
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.KeeperScreen.Components
 @attribute [Authorize]
 @inject ScenarioService ScenarioService
 @inject NavigationManager NavigationManager
@@ -21,58 +23,19 @@
 @rendermode InteractiveServer
 <PageTitle>@(_scenario?.Name ?? "Сценарий")</PageTitle>
 
-@if (!_isKeeper)
-{
-    <div class="cm-page">
-        <Alert Type="error" Title="Доступ запрещён">
-            Эта страница доступна только для Хранителя.
-        </Alert>
-    </div>
-}
-else
-{
-@if (_loading)
-{
-    <div class="flex justify-center items-center h-64">
-        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-    </div>
-}
-else if (_scenario is null)
-{
-    <div class="cm-page">
-        <Alert Type="error" Title="Сценарий не найден">
-            <p class="mb-3">Запрошенный сценарий не найден.</p>
-            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm"><span>К сценариям</span></a>
-        </Alert>
-    </div>
-}
-else if (_isPlayMode && _scenario.Locations.Count > 0)
+@* Шапка — настоящий <PageHeader> во всех состояниях страницы: «нет доступа», загрузка,
+   «не найден», обзор и режим игры. Раньше три состояния из пяти шли без неё, а режим игры
+   рисовал самодельную копию топбара. Шапка описана один раз (Header в @code) и ставится
+   в двух местах только потому, что режим игры — колонка высотой в экран (h-screen), и шапка
+   обязана быть её первой строкой: вынесенная над колонкой, она сдвинула бы её на 56px вниз,
+   за край экрана, а высоту .cm-play-shell под панель плеера считает css/music-player.css. *@
+@if (_isKeeper && !_loading && _scenario is not null && _isPlayMode && _scenario.Locations.Count > 0)
 {
     <!-- Play Mode: Three-panel layout -->
     @* cm-play-shell — зацепка для css/music-player.css: когда снизу видна панель плеера,
        высота режима игры уменьшается на её высоту, иначе нижняя панель легла бы поверх. *@
     <div class="flex flex-col h-screen cm-play-shell">
-        <!-- Top toolbar -->
-        <div class="page-topbar">
-            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <span class="page-topbar-title truncate">@_scenario.Name</span>
-            @if (!string.IsNullOrEmpty(_scenario.Era))
-            {
-                <span class="cm-empty">@_scenario.Era</span>
-            }
-            <div class="flex items-center gap-2 ml-auto">
-                <button type="button"
-                        class="cm-btn cm-btn-secondary cm-btn-sm"
-                        @onclick="LeavePlayMode">
-                    <i class="fas fa-th-large mr-1"></i> Обзор
-                </button>
-                <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
-                    <i class="fas fa-edit mr-1"></i> Редактировать
-                </a>
-            </div>
-        </div>
+        @Header
 
         <!-- Three-panel content -->
         <div class="flex flex-1 overflow-hidden">
@@ -112,10 +75,12 @@ else if (_isPlayMode && _scenario.Locations.Count > 0)
                 else
                 {
                     <LocationDetail Location="_selectedLocation"
+                                    CampaignId="_scenario.CampaignId"
                                     ScenarioCreatures="_scenario.ScenarioCreatures"
                                     ScenarioItems="_scenario.ScenarioItems"
                                     Npcs="_locationCharacters"
-                                    Handouts="_scenario.Handouts"/>
+                                    Handouts="_scenario.Handouts"
+                                    OnShowHandout="ShowHandout"/>
                 }
             </div>
 
@@ -125,16 +90,18 @@ else if (_isPlayMode && _scenario.Locations.Count > 0)
                 <div class="w-80 flex-shrink-0">
                     <KeyFactsPanel KeyFacts="_scenario.KeyFacts"
                                    Handouts="_scenario.Handouts"
-                                   OnToggleCollapse="() => _keyFactsPanelCollapsed = true"/>
+                                   OnToggleCollapse="() => _keyFactsPanelCollapsed = true"
+                                   OnShowHandout="ShowHandout"/>
                 </div>
             }
             else
             {
-                <div class="flex-shrink-0 border-l border-gray-200 bg-white">
-                    <button type="button" class="p-3 text-gray-400 hover:text-gray-600"
-                            @onclick="() => _keyFactsPanelCollapsed = false"
-                            title="Показать ключевые факты">
-                        <i class="fas fa-chevron-left"></i>
+                @* Свёрнутая панель — узкая колонка с подписанной кнопкой: голая стрелка с
+                   подсказкой в title= на планшете ничего не объясняла. *@
+                <div class="flex-shrink-0 border-l border-gray-200 bg-white p-2">
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm flex-col !gap-1 !py-2 !px-2"
+                            @onclick="() => _keyFactsPanelCollapsed = false">
+                        <i class="fas fa-chevron-left"></i><span class="text-xs">Факты</span>
                     </button>
                 </div>
             }
@@ -143,30 +110,32 @@ else if (_isPlayMode && _scenario.Locations.Count > 0)
 }
 else
 {
-    <!-- Overview Mode: Original card-based layout -->
-    <PageHeader Title="@_scenario.Name">
-        <Actions>
-            <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm">
-                <i class="fas fa-arrow-left"></i> <span>Сценарии</span>
-            </a>
-            @if (_scenario.Locations.Count > 0)
-            {
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="EnterPlayMode">
-                    <i class="fas fa-map-marked-alt"></i> <span>Режим игры</span>
-                </button>
-            }
-            @if (_scenario.IsTemplate)
-            {
-                <Button Variant="secondary" Size="sm" Icon="fa-clipboard" OnClick="ShowUseCampaignModal">Добавить в кампанию</Button>
-            }
-            <Button Variant="secondary" Size="sm" Icon="fa-file-export" OnClick="ShowExportModal">Экспорт JSON</Button>
-            <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
-                <i class="fas fa-edit"></i> <span>Редактировать</span>
-            </a>
-        </Actions>
-    </PageHeader>
+    @Header
 
     <div class="cm-page">
+    @if (!_isKeeper)
+    {
+        <Alert Type="error" Title="Доступ запрещён">
+            Эта страница доступна только для Хранителя.
+        </Alert>
+    }
+    else if (_loading)
+    {
+        <LoadingIndicator/>
+    }
+    else if (_scenario is null)
+    {
+        <EmptyState IconClass="fa-masks-theater"
+                    Title="Сценарий не найден"
+                    Message="Такого сценария нет или он был удалён.">
+            <ActionButton>
+                <a href="/scenarios" class="cm-btn cm-btn-secondary"><i class="fas fa-arrow-left"></i><span>К сценариям</span></a>
+            </ActionButton>
+        </EmptyState>
+    }
+    else
+    {
+        <!-- Overview Mode -->
         <div class="cm-card cm-section">
             <div class="cm-card-body">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -197,7 +166,7 @@ else
                         {
                             <div class="mb-2">
                                 <span class="font-semibold text-gray-700">Кампания:</span>
-                                <a href="/campaigns/@_scenario.CampaignId" class="text-blue-600 hover:underline ml-2">
+                                <a href="/campaigns/@_scenario.CampaignId" class="text-accent-700 hover:text-accent-800 hover:underline ml-2">
                                     @(_scenario.Campaign?.Name ?? "Перейти к кампании")
                                 </a>
                             </div>
@@ -205,11 +174,12 @@ else
                     </div>
                 </div>
 
-                <!-- Анонс ваншота -->
-                <div class="cm-card cm-section">
-                    <div class="cm-card-header">
-                        <span class="cm-card-title">
-                            <i class="fa-solid fa-bullhorn mr-2"></i>Анонс ваншота
+                @* Анонс ваншота — блок той же карточки, отделённый линейкой, а не вложенная
+                   карточка: рамка в рамке здесь и была главным нарушением «одного уровня». *@
+                <div class="cm-section cm-section-divided">
+                    <div class="cm-section-header">
+                        <span class="cm-section-title">
+                            <i class="fa-solid fa-bullhorn mr-1"></i>Анонс ваншота
                         </span>
                         @if (_scenario.IsPublished)
                         {
@@ -221,16 +191,18 @@ else
                         }
                     </div>
 
-                    <div class="cm-card-body space-y-3">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" @bind="_scenario.IsPublished" class="cm-checkbox"/>
-                            <span class="cm-field-label mb-0">Показывать на главной странице</span>
+                    @* Без права правки анонс виден, но не редактируется: сохранить его сервис всё равно не даст. *@
+                    <div class="space-y-3">
+                        <label class="flex min-h-[40px] items-center gap-2 cursor-pointer">
+                            <input type="checkbox" @bind="_scenario.IsPublished" class="cm-checkbox" disabled="@(!_access.CanEdit)"/>
+                            <span class="cm-field-label cm-field-label-inline">Показывать на главной странице</span>
                         </label>
 
                         <div>
                             <label class="cm-field-label">Дата и время проведения</label>
                             <input type="datetime-local" value="@FormatScheduledDateForInput(_scenario.ScheduledDate)"
                                    @onchange="OnScheduledDateChanged"
+                                   disabled="@(!_access.CanEdit)"
                                    class="cm-input w-full md:w-auto"/>
                         </div>
 
@@ -240,6 +212,7 @@ else
                             </label>
                             <textarea @bind="_scenario.AnnouncementText" rows="4"
                                       placeholder="Короткий маркетинговый текст для главной страницы — о чём игра, атмосфера, триггеры..."
+                                      disabled="@(!_access.CanEdit)"
                                       class="cm-input w-full"></textarea>
                         </div>
 
@@ -248,15 +221,18 @@ else
                             <NotificationAlert Type="@_announcementSaveType" Message="@_announcementSaveMessage" OnClose="ClearAnnouncementMessage" />
                         }
 
-                        <div class="flex justify-end">
-                            <Button Variant="primary" Icon="fa-save" OnClick="SaveAnnouncementAsync" IsDisabled="_savingAnnouncement">
-                                @(_savingAnnouncement ? "Сохранение..." : "Сохранить анонс")
-                            </Button>
-                        </div>
+                        @if (_access.CanEdit)
+                        {
+                            <div class="flex justify-end">
+                                <Button Variant="primary" Icon="fa-save" OnClick="SaveAnnouncementAsync" IsDisabled="_savingAnnouncement">
+                                    @(_savingAnnouncement ? "Сохранение..." : "Сохранить анонс")
+                                </Button>
+                            </div>
+                        }
                     </div>
                 </div>
 
-                <div class="cm-section">
+                <div class="cm-section cm-section-divided">
                     <div class="cm-section-header">
                         <span class="cm-section-title">Описание</span>
                     </div>
@@ -301,8 +277,8 @@ else
                             }
                             @if (_scenario.KeyFacts.Count > 0)
                             {
-                                <div class="bg-amber-50 rounded-lg p-4">
-                                    <h3 class="font-semibold text-amber-700 mb-2">
+                                <div class="bg-accent-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-accent-700 mb-2">
                                         <i class="fas fa-key mr-1"></i>Ключевые факты
                                     </h3>
                                     <p class="text-sm text-gray-600">@_scenario.KeyFacts.Count фактов</p>
@@ -310,14 +286,23 @@ else
                             }
                             @if (_scenario.Handouts.Count > 0)
                             {
-                                <div class="bg-purple-50 rounded-lg p-4">
-                                    <h3 class="font-semibold text-purple-700 mb-2">
+                                <div class="bg-accent-50 rounded-lg p-4">
+                                    <h3 class="font-semibold text-accent-700 mb-2">
                                         <i class="fas fa-file-image mr-1"></i>Раздатки
                                     </h3>
                                     <ul class="text-sm text-gray-600 space-y-1">
                                         @foreach (var h in _scenario.Handouts.OrderBy(h => h.Order))
                                         {
-                                            <li>@h.Name</li>
+                                            <li class="flex items-center justify-between gap-2">
+                                                <div class="min-w-0">
+                                                    <span>@h.Name</span>
+                                                    <HandoutKeeperNote Note="@h.KeeperNote"/>
+                                                </div>
+                                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0"
+                                                        @onclick="() => ShowHandout(h.Id)">
+                                                    <i class="fa-solid fa-expand"></i><span>Показать</span>
+                                                </button>
+                                            </li>
                                         }
                                     </ul>
                                 </div>
@@ -336,10 +321,15 @@ else
                         <i class="fa-solid fa-masks-theater mr-2"></i>НПС сценария
                         <span class="cm-card-count">@_cast.Count</span>
                     </span>
-                    <div class="flex gap-1 flex-shrink-0">
-                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewNpc">Создать</Button>
-                        <Button Variant="secondary" Size="sm" Icon="fa-link" OnClick="ShowAddNpcModal">Из шаблонов</Button>
-                    </div>
+                    @if (_access.CanEdit)
+                    {
+                        @* Три кнопки на iPad в портрете не помещаются в строку рядом с заголовком — переносятся. *@
+                        <div class="flex flex-wrap justify-end gap-1">
+                            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewNpc">Создать</Button>
+                            <Button Variant="secondary" Size="sm" Icon="fa-bolt" OnClick="ShowQuickNpc">Быстрый</Button>
+                            <Button Variant="secondary" Size="sm" Icon="fa-link" OnClick="ShowAddNpcModal">Из шаблонов</Button>
+                        </div>
+                    }
                 </div>
                 <div class="cm-card-body">
                     @if (_cast.Count == 0)
@@ -348,15 +338,17 @@ else
                     }
                     else
                     {
-                        <div class="space-y-4">
+                        @* Листы — строки этой карточки через линейку, а не карточки в карточке. *@
+                        <div class="cm-stack">
                             @foreach (var entry in _cast.Where(c => c.Character is not null))
                             {
                                 <CharacterSummaryCard Character="@(entry.Character!)"
+                                                      Framed="false"
                                                       Role="entry.Role"
                                                       Count="entry.Count"
                                                       RemoveLabel="Убрать"
-                                                      OnRemove="RemoveNpcFromScenario"
-                                                      OnCastChanged="HandleCastChanged"/>
+                                                      OnRemove="RemoveNpcHandler"
+                                                      OnCastChanged="CastChangedHandler"/>
                             }
                         </div>
                     }
@@ -370,10 +362,13 @@ else
                         <i class="fa-solid fa-user mr-2"></i>Преген-персонажи
                         <span class="cm-card-count">@_scenarioPregens.Count</span>
                     </span>
-                    <div class="flex gap-1 flex-shrink-0">
-                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewPregen">Создать</Button>
-                        <Button Variant="secondary" Size="sm" Icon="fa-link" OnClick="ShowAddPregenModal">Из шаблонов</Button>
-                    </div>
+                    @if (_access.CanEdit)
+                    {
+                        <div class="flex gap-1 flex-shrink-0">
+                            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewPregen">Создать</Button>
+                            <Button Variant="secondary" Size="sm" Icon="fa-link" OnClick="ShowAddPregenModal">Из шаблонов</Button>
+                        </div>
+                    }
                 </div>
                 <div class="cm-card-body">
                     @if (_scenarioPregens.Count == 0)
@@ -382,13 +377,14 @@ else
                     }
                     else
                     {
-                        <div class="space-y-4">
+                        <div class="cm-stack">
                             @foreach (var pregen in _scenarioPregens)
                             {
                                 <CharacterSummaryCard Character="pregen"
+                                                      Framed="false"
                                                       OwnerLabel="@(pregen.CampaignPlayerId is null ? "Свободен" : "Забронирован")"
                                                       RemoveLabel="Убрать"
-                                                      OnRemove="RemovePregenFromScenario"/>
+                                                      OnRemove="RemovePregenHandler"/>
                             }
                         </div>
                     }
@@ -401,7 +397,10 @@ else
             <div class="cm-card">
                 <div class="cm-card-header">
                     <span class="cm-card-title">Существа</span>
-                    <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddCreatureModal">Добавить</Button>
+                    @if (_access.CanEdit)
+                    {
+                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddCreatureModal">Добавить</Button>
+                    }
                 </div>
                 <div class="cm-card-body">
                     @if (_scenario.ScenarioCreatures.Count == 0)
@@ -414,8 +413,8 @@ else
                             @foreach (var sc in _scenario.ScenarioCreatures)
                             {
                                 <div class="py-3">
-                                    <div class="flex justify-between items-start gap-2">
-                                        <div class="flex-1 min-w-0">
+                                    <div class="flex flex-wrap justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-[10rem]">
                                             <div class="font-medium text-gray-800 truncate">@sc.Name</div>
                                             <div class="text-xs text-gray-500 mt-0.5">@sc.Type</div>
                                             @if (!string.IsNullOrEmpty(sc.Location))
@@ -427,10 +426,13 @@ else
                                                 <div class="text-xs text-gray-600 mt-0.5 truncate"><span class="font-medium">Заметки:</span> @sc.Notes</div>
                                             }
                                         </div>
-                                        <div class="flex gap-1 flex-shrink-0">
-                                            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditCreatureModal(sc))"><i class="fas fa-edit"></i></button>
-                                            <button type="button" class="cm-btn cm-btn-error cm-btn-sm" title="Удалить" @onclick="@(() => RemoveCreature(sc))"><i class="fas fa-trash"></i></button>
-                                        </div>
+                                        @if (_access.CanEdit)
+                                        {
+                                            <div class="flex flex-wrap gap-1 flex-shrink-0">
+                                                <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="@(() => ShowEditCreatureModal(sc))">Изменить</Button>
+                                                <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="@(() => RemoveCreature(sc))">Удалить</Button>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             }
@@ -443,7 +445,10 @@ else
             <div class="cm-card">
                 <div class="cm-card-header">
                     <span class="cm-card-title">Предметы</span>
-                    <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddItemModal">Добавить</Button>
+                    @if (_access.CanEdit)
+                    {
+                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddItemModal">Добавить</Button>
+                    }
                 </div>
                 <div class="cm-card-body">
                     @if (_scenario.ScenarioItems.Count == 0)
@@ -456,8 +461,8 @@ else
                             @foreach (var si in _scenario.ScenarioItems)
                             {
                                 <div class="py-3">
-                                    <div class="flex justify-between items-start gap-2">
-                                        <div class="flex-1 min-w-0">
+                                    <div class="flex flex-wrap justify-between items-start gap-2">
+                                        <div class="flex-1 min-w-[10rem]">
                                             <div class="font-medium text-gray-800 truncate">@si.Name</div>
                                             @if (!string.IsNullOrEmpty(si.Type))
                                             {
@@ -472,10 +477,13 @@ else
                                                 <div class="text-xs text-gray-600 mt-0.5 truncate"><span class="font-medium">Заметки:</span> @si.Notes</div>
                                             }
                                         </div>
-                                        <div class="flex gap-1 flex-shrink-0">
-                                            <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" title="Редактировать" @onclick="@(() => ShowEditItemModal(si))"><i class="fas fa-edit"></i></button>
-                                            <button type="button" class="cm-btn cm-btn-error cm-btn-sm" title="Удалить" @onclick="@(() => RemoveItem(si))"><i class="fas fa-trash"></i></button>
-                                        </div>
+                                        @if (_access.CanEdit)
+                                        {
+                                            <div class="flex flex-wrap gap-1 flex-shrink-0">
+                                                <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="@(() => ShowEditItemModal(si))">Изменить</Button>
+                                                <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="@(() => RemoveItem(si))">Удалить</Button>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             }
@@ -484,9 +492,12 @@ else
                 </div>
             </div>
         </div>
+    }
     </div>
 }
 
+@if (_isKeeper)
+{
 <!-- Use in Campaign Modal -->
 <Modal IsVisible="_showUseCampaignModal"
        OnClose="@(() => _showUseCampaignModal = false)"
@@ -503,8 +514,7 @@ else
         else
         {
             <div class="w-full">
-                <select @bind="_selectedCampaignId"
-                        class="w-full px-4 py-2 border border-primary-300 rounded-md bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors">
+                <select @bind="_selectedCampaignId" class="cm-input" aria-label="Кампания">
                     <option value="@Guid.Empty">-- Выберите кампанию --</option>
                     @foreach (var campaign in _campaigns)
                     {
@@ -518,7 +528,7 @@ else
         <button type="button" class="cm-btn cm-btn-secondary" @onclick="@(() => _showUseCampaignModal = false)">
             <span>Отмена</span>
         </button>
-        <button type="button" class="cm-btn cm-btn-success" disabled="@(_selectedCampaignId == Guid.Empty)" @onclick="AddToCampaign">
+        <button type="button" class="cm-btn cm-btn-primary" disabled="@(_selectedCampaignId == Guid.Empty)" @onclick="AddToCampaign">
             <span>Добавить в кампанию</span>
         </button>
     </FooterContent>
@@ -529,6 +539,13 @@ else
              ScenarioId="Id"
              Kind="CharacterKind.Npc"
              OnAdded="HandleCastAdded"/>
+
+<!-- Быстрый НПС: лист в библиотеку, в сценарий — связью с ролью и количеством -->
+<QuickNpcModal IsVisible="_showQuickNpc"
+               ScenarioId="Id"
+               DefaultEra="QuickNpcRules.EraFromText(_scenario?.Era)"
+               OnClose="() => _showQuickNpc = false"
+               OnCreated="HandleQuickNpcCreated"/>
 
 <!-- Add Pregen Modal (filtered to PlayerCharacter) -->
 <AddNpcModal @ref="_addPregenModal"
@@ -556,6 +573,14 @@ else
 
 <!-- Export Scenario Modal -->
 <ScenarioExportModal @ref="_exportModal"/>
+
+@* Показ раздатки игрокам поверх и обзора, и режима игры. Открытая раздатка — ?handout= в адресе. *@
+@if (_shownHandout is not null)
+{
+    <HandoutShowcase Handout="_shownHandout"
+                     OnClose="HideHandout"
+                     SecondScreenHref="@($"/scenarios/{Id}/handouts/{_shownHandout.Id}")"/>
+}
 }
 
 @code {
@@ -571,7 +596,63 @@ else
     [SupplyParameterFromQuery(Name = "location")]
     public Guid? LocationId { get; set; }
 
+    // Раздатка, показанная игрокам, — тоже в адресе: iPad развёрнут к столу, и пауза вкладки
+    // не должна посреди показа вернуть на экран записи Хранителя.
+    [SupplyParameterFromQuery(Name = "handout")]
+    public Guid? HandoutId { get; set; }
+
     private ScenarioExportModal? _exportModal;
+
+    private bool IsPlayLayout =>
+        _isKeeper && !_loading && _scenario is not null && _isPlayMode && _scenario.Locations.Count > 0;
+
+    private string HeaderTitle =>
+        _scenario?.Name ?? (_isKeeper && !_loading ? "Сценарий не найден" : "Сценарий");
+
+    /// <summary>
+    ///     Шапка страницы во всех состояниях. Кнопки есть только у загруженного сценария;
+    ///     в режиме игры их набор свой — вернуться в обзор вместо «Режим игры».
+    /// </summary>
+    private RenderFragment Header => @<PageHeader Title="@HeaderTitle">
+        <Actions>
+            @if (_isKeeper && _scenario is not null)
+            {
+                <a href="/scenarios" class="cm-btn cm-btn-secondary cm-btn-sm">
+                    <i class="fas fa-arrow-left"></i><span>Сценарии</span>
+                </a>
+                @if (IsPlayLayout)
+                {
+                    @if (!string.IsNullOrEmpty(_scenario.Era))
+                    {
+                        <span class="text-sm text-primary-500 whitespace-nowrap">@_scenario.Era</span>
+                    }
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="LeavePlayMode">
+                        <i class="fas fa-th-large"></i><span>Обзор</span>
+                    </button>
+                }
+                else
+                {
+                    @if (_scenario.Locations.Count > 0)
+                    {
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="EnterPlayMode">
+                            <i class="fas fa-map-marked-alt"></i><span>Режим игры</span>
+                        </button>
+                    }
+                    @if (_scenario.IsTemplate)
+                    {
+                        <Button Variant="secondary" Size="sm" Icon="fa-clipboard" OnClick="ShowUseCampaignModal">Добавить в кампанию</Button>
+                    }
+                    <Button Variant="secondary" Size="sm" Icon="fa-file-export" OnClick="ShowExportModal">Экспорт JSON</Button>
+                }
+                @if (_access.CanEdit)
+                {
+                    <a href="/scenarios/@Id/edit" class="cm-btn cm-btn-primary cm-btn-sm">
+                        <i class="fas fa-edit"></i><span>Редактировать</span>
+                    </a>
+                }
+            }
+        </Actions>
+    </PageHeader>;
 
     private async Task ShowExportModal()
     {
@@ -588,6 +669,13 @@ else
     private bool _loading = true;
     private string _markdownHtml = "";
     private bool _isKeeper;
+
+    /// <summary>
+    ///     Права на открытый сценарий — считает ScenarioService. Чужой сценарий кампании (в том
+    ///     числе опубликованный ваншот другого Хранителя) виден, но кнопок правки на нём нет.
+    /// </summary>
+    private ScenarioAccess _access;
+
     private bool _showUseCampaignModal;
     private List<Campaign> _campaigns = [];
     private Guid _selectedCampaignId = Guid.Empty;
@@ -616,6 +704,11 @@ else
             ? _scenario?.Locations.FirstOrDefault(l => l.Id == _selectedLocationId.Value)
             : null;
 
+    private ScenarioHandout? _shownHandout =>
+        HandoutId is { } handoutId
+            ? _scenario?.Handouts.FirstOrDefault(h => h.Id == handoutId)
+            : null;
+
     // Modal references
     private AddNpcModal? _addNpcModal;
     private AddNpcModal? _addPregenModal;
@@ -624,10 +717,60 @@ else
     private AddItemModal? _addItemModal;
     private EditItemModal? _editItemModal;
 
+    /// <summary>
+    ///     Данные страницы из пререндера — чтобы интерактивный рендер не читал сценарий, состав и
+    ///     прегенов из базы второй раз (см. корневой CLAUDE.md, «Данные пререндера»). Граф без циклов:
+    ///     сценарий без навигаций, у листов состава снята обратная ссылка (см. GetScenarioCastAsync).
+    ///     Геттер отдаёт снимок только из статического рендера, а <c>SkipLastSnapshot</c> не даёт
+    ///     поднять его после паузы circuit — за паузу сценарий могли поправить.
+    /// </summary>
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public ScenarioPagePrerender? PrerenderedScenario
+    {
+        get => RendererInfo.IsInteractive || _scenario is null
+            ? null
+            : new ScenarioPagePrerender(Id, _scenario, _cast, _scenarioPregens, _access);
+        set => _prerendered = value;
+    }
+
+    private ScenarioPagePrerender? _prerendered;
+
     protected override async Task OnInitializedAsync()
     {
         _isKeeper = await IdentityService.IsKeeper();
+
+        // Игроку страница показывает только «Доступ запрещён» — читать для него сценарий незачем.
+        if (!_isKeeper)
+        {
+            _loading = false;
+            return;
+        }
+
+        if (TakePrerendered() is { } prerendered)
+        {
+            ApplyLoaded(prerendered.Scenario, prerendered.Cast, prerendered.Pregens, prerendered.Access);
+            _loading = false;
+            return;
+        }
+
         await LoadScenario();
+    }
+
+    /// <summary>Снимок пререндера, если он от этого же сценария; берётся один раз.</summary>
+    private ScenarioPagePrerender? TakePrerendered()
+    {
+        var prerendered = _prerendered;
+        _prerendered = null;
+        return prerendered?.ScenarioId == Id ? prerendered : null;
+    }
+
+    private void ApplyLoaded(Scenario? scenario, List<ScenarioNpc> cast, List<CharacterStorageDto> pregens, ScenarioAccess access)
+    {
+        _scenario = scenario;
+        _cast = cast;
+        _scenarioPregens = pregens;
+        _access = access;
+        _markdownHtml = scenario?.Journal is { } journal ? MarkdownService.ConvertToHtml(journal) : "";
     }
 
     private async Task LoadScenario()
@@ -642,14 +785,13 @@ else
 
             await Task.WhenAll(scenarioTask, castTask, pregensTask);
 
-            _scenario = scenarioTask.Result;
-            _cast = castTask.Result;
-            _scenarioPregens = pregensTask.Result;
+            var scenario = scenarioTask.Result;
 
-            if (_scenario?.Journal is not null)
-            {
-                _markdownHtml = MarkdownService.ConvertToHtml(_scenario.Journal);
-            }
+            // Пересчитывается при каждой перезагрузке: публикация ваншота привязывает шаблон
+            // к кампании, и права после неё меняются.
+            var access = scenario is null ? ScenarioAccess.None : await ScenarioService.GetAccessAsync(scenario);
+
+            ApplyLoaded(scenario, castTask.Result, pregensTask.Result, access);
         }
         catch (Exception ex)
         {
@@ -676,11 +818,19 @@ else
         var uri = NavigationManager.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["mode"] = mode,
-            ["location"] = mode is null ? null : locationId
+            ["location"] = mode is null ? null : locationId,
+            ["handout"] = null
         });
 
         NavigationManager.NavigateTo(uri, false, true);
     }
+
+    /// <summary>Показать раздатку игрокам: режим и локация в адресе остаются, добавляется ?handout=.</summary>
+    private void ShowHandout(Guid handoutId) =>
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("handout", handoutId), false, true);
+
+    private void HideHandout() =>
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("handout", (Guid?)null), false, true);
 
     private static string FormatScheduledDateForInput(DateTime? date) =>
         date.HasValue ? date.Value.ToString("yyyy-MM-ddTHH:mm") : string.Empty;
@@ -742,7 +892,9 @@ else
     {
         try
         {
-            _campaigns = await CampaignService.GetAvailableCompaniesAsync();
+            // Сценарий можно положить только в свою кампанию (администратору — в любую):
+            // чужие сервис всё равно отклонит, поэтому и в списке их нет.
+            _campaigns = await ScenarioService.GetWritableCampaignsAsync(await CampaignService.GetAvailableCompaniesAsync());
             _selectedCampaignId = Guid.Empty;
             _showUseCampaignModal = true;
         }
@@ -763,9 +915,8 @@ else
 
         try
         {
-            var userEmail = IdentityService.GetCurrentUserEmail() ?? string.Empty;
-
-            var newScenario = await ScenarioService.CreateScenarioFromTemplateAsync(Id, _selectedCampaignId, userEmail);
+            // Автора сервис берёт сам, из текущего пользователя.
+            var newScenario = await ScenarioService.CreateScenarioFromTemplateAsync(Id, _selectedCampaignId);
 
             if (newScenario is not null)
             {
@@ -928,9 +1079,33 @@ else
         }
     }
 
+    // Карточка НПС сама решает, какие кнопки рисовать, по наличию обработчиков: без права
+    // правки их просто не передаём, и «Убрать»/роль/количество на ней не появляются.
+    private EventCallback<CharacterStorageDto> RemoveNpcHandler => _access.CanEdit
+        ? EventCallback.Factory.Create<CharacterStorageDto>(this, RemoveNpcFromScenario)
+        : default;
+
+    private EventCallback<(CharacterStorageDto Character, NpcRole Role, int Count)> CastChangedHandler => _access.CanEdit
+        ? EventCallback.Factory.Create<(CharacterStorageDto Character, NpcRole Role, int Count)>(this, HandleCastChanged)
+        : default;
+
+    private EventCallback<CharacterStorageDto> RemovePregenHandler => _access.CanEdit
+        ? EventCallback.Factory.Create<CharacterStorageDto>(this, RemovePregenFromScenario)
+        : default;
+
     private void CreateNewNpc()
     {
         NavigationManager.NavigateTo($"/character/create/npc?scenarioId={Id}");
+    }
+
+    private bool _showQuickNpc;
+
+    private void ShowQuickNpc() => _showQuickNpc = true;
+
+    private async Task HandleQuickNpcCreated(CharacterStorageDto _)
+    {
+        _showQuickNpc = false;
+        _cast = await ScenarioService.GetScenarioCastAsync(Id);
     }
 
     private void CreateNewPregen()

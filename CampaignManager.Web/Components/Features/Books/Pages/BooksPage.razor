@@ -3,9 +3,12 @@
 @using CampaignManager.Web.Components.Features.Books.Model
 @using CampaignManager.Web.Components.Features.Books.Services
 @using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Components.Shared.Model
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject BookService BookService
+@inject IdentityService IdentityService
 @inject ILogger<BooksPage> Logger
 @rendermode InteractiveServer
 
@@ -13,7 +16,10 @@
 
 <PageHeader Title="Книги">
     <Actions>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        @if (canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -39,39 +45,52 @@
         </Alert>
     }
 
-    @if (!paginatedBooks.Any())
+    @{ var pageItems = catalog.PageItems; }
+    @if (pageItems.Count == 0)
     {
-        <EmptyState
-            Title="Книги не найдены"
-            Message="Попробуйте изменить параметры фильтра или добавить новую книгу."
-            IconClass="fa-book">
-            <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить книгу</Button>
-            </ActionButton>
-        </EmptyState>
+        @if (canEdit)
+        {
+            <EmptyState
+                Title="Книги не найдены"
+                Message="Попробуйте изменить параметры фильтра или добавить новую книгу."
+                IconClass="fa-book">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить книгу</Button>
+                </ActionButton>
+            </EmptyState>
+        }
+        else
+        {
+            @* Справочник правят только Хранитель и администратор — игроку «добавить» не предлагаем. *@
+            <EmptyState
+                Title="Книги не найдены"
+                Message="Попробуйте изменить параметры фильтра."
+                IconClass="fa-book" />
+        }
     }
     else
     {
         <BooksListView
-            Books="@paginatedBooks"
-            ExpandedBookId="@expandedBookId"
+            Books="@pageItems"
+            ExpandedBookId="@catalog.ExpandedId"
             ShowType="@showType"
             ShowMythos="@showMythos"
             ShowOccultism="@showOccultism"
-            CurrentSortField="@sortField"
-            SortAscending="@sortAscending"
-            OnSortChanged="ToggleSort"
+            CanEdit="@canEdit"
+            CurrentSortField="@catalog.SortField"
+            SortAscending="@catalog.SortAscending"
+            OnSortChanged="catalog.ToggleSort"
             OnEdit="ShowEditModal"
             OnDelete="ShowDeleteModal"
-            OnToggleExpand="@((Book book) => ToggleBookDetails(book))" />
+            OnToggleExpand="catalog.ToggleExpanded" />
 
         <Pagination
-            CurrentPage="@currentPage"
-            TotalPages="@totalPages"
-            TotalItems="@filteredBooks.Count()"
-            ItemsPerPage="@booksPerPage"
+            CurrentPage="@catalog.CurrentPage"
+            TotalPages="@catalog.TotalPages"
+            TotalItems="@catalog.TotalItems"
+            ItemsPerPage="@catalog.PageSize"
             ItemsLabel="книг"
-            OnPageChanged="GoToPage" />
+            OnPageChanged="catalog.GoToPage" />
     }
 
     <Modal IsVisible="@showModal"
@@ -129,10 +148,34 @@
     // iPad их помещается столько же, сколько раньше помещалось шесть блочных.
     private const int booksPerPage = 25;
 
+    // Страница, сортировка и раскрытая строка — общие у всех каталогов; здесь только фильтры.
+    // Сортировка есть только у тех колонок, что остались в строке: категория и год
+    // уехали из неё — категорию задаёт фильтр, год живёт в раскрытии.
+    private readonly CatalogListState<Book> catalog;
+
+    public BooksPage()
+    {
+        catalog = new CatalogListState<Book>(
+            booksPerPage,
+            FilterBooks,
+            CatalogSort.By((Book b) => b.Name),
+            new Dictionary<string, CatalogSort<Book>>
+            {
+                [nameof(Book.Language)] = CatalogSort.By((Book b) => b.Language),
+                [nameof(Book.MythosRating)] = CatalogSort.By((Book b) => b.MythosRating),
+                [nameof(Book.Author)] = CatalogSort.By((Book b) => b.Author)
+            });
+    }
+
     private bool isSearchPanelVisible = true;
     private bool showModal;
     private bool showDeleteModal;
     private bool isEditMode;
+
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
 
     private List<Book>? books;
     private string searchQuery = string.Empty;
@@ -150,21 +193,9 @@
 
     private Book editBook = new() { Name = string.Empty, BookType = BookType.MythosBook };
     private Book? deleteBook;
-    private Guid? expandedBookId;
 
     private string? errorMessage;
     private string? modalErrorMessage;
-
-    private int currentPage = 1;
-    private int totalPages => Math.Max(1, (int)Math.Ceiling(filteredBooks.Count() / (double)booksPerPage));
-    private string? sortField;
-    private bool sortAscending = true;
-
-    private IQueryable<Book> filteredBooks => FilterBooks();
-    private IEnumerable<Book> paginatedBooks => filteredBooks
-        .Skip((currentPage - 1) * booksPerPage)
-        .Take(booksPerPage)
-        .ToList();
 
     private IEnumerable<string> Languages => books?
         .Where(b => !string.IsNullOrWhiteSpace(b.Language))
@@ -175,6 +206,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadBooksAsync();
     }
 
@@ -192,13 +224,13 @@
             books = [];
         }
 
-        currentPage = 1;
-        expandedBookId = null;
+        catalog.ResetPage();
+        catalog.CollapseAll();
     }
 
     private void ApplyFilters()
     {
-        currentPage = 1;
+        catalog.ResetPage();
         StateHasChanged();
     }
 
@@ -210,12 +242,12 @@
         ApplyFilters();
     }
 
-    private IQueryable<Book> FilterBooks()
+    private IEnumerable<Book> FilterBooks()
     {
         if (books is null)
-            return Enumerable.Empty<Book>().AsQueryable();
+            return [];
 
-        var query = books.AsQueryable();
+        IEnumerable<Book> query = books;
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
@@ -238,52 +270,13 @@
                                      b.Language.Equals(selectedLanguageFilter, StringComparison.OrdinalIgnoreCase));
         }
 
-        // Сортировка есть только у тех колонок, что остались в строке: категория и год
-        // уехали из неё — категорию задаёт фильтр, год живёт в раскрытии.
-        query = sortField switch
-        {
-            nameof(Book.Language) => sortAscending
-                ? query.OrderBy(b => b.Language)
-                : query.OrderByDescending(b => b.Language),
-            nameof(Book.MythosRating) => sortAscending
-                ? query.OrderBy(b => b.MythosRating)
-                : query.OrderByDescending(b => b.MythosRating),
-            nameof(Book.Author) => sortAscending
-                ? query.OrderBy(b => b.Author)
-                : query.OrderByDescending(b => b.Author),
-            _ => sortAscending
-                ? query.OrderBy(b => b.Name)
-                : query.OrderByDescending(b => b.Name)
-        };
-
         return query;
-    }
-
-    private void ToggleSort(string field)
-    {
-        if (sortField == field)
-        {
-            sortAscending = !sortAscending;
-        }
-        else
-        {
-            sortField = field;
-            sortAscending = true;
-        }
-
-        currentPage = 1;
-    }
-
-    private void GoToPage(int page)
-    {
-        if (page >= 1 && page <= totalPages)
-        {
-            currentPage = page;
-        }
     }
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editBook = new Book
         {
@@ -309,26 +302,14 @@
 
     private void ShowEditModal(Book book)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
-        editBook = new Book
-        {
-            Id = book.Id,
-            Name = book.Name,
-            BookType = book.BookType,
-            Language = book.Language,
-            Year = book.Year,
-            Author = book.Author,
-            SanityLoss = book.SanityLoss,
-            CthulhuMythosInitial = book.CthulhuMythosInitial,
-            CthulhuMythosFull = book.CthulhuMythosFull,
-            MythosRating = book.MythosRating,
-            StudyWeeks = book.StudyWeeks,
-            OccultismBonus = book.OccultismBonus,
-            Description = book.Description,
-            AlternativeNames = book.AlternativeNames?.ToList() ?? [],
-            PossibleSpells = book.PossibleSpells?.ToList() ?? [],
-            ImageUrl = book.ImageUrl
-        };
+        // Правим полную копию, а не экземпляр из кэша справочника: новое поле Book попадает
+        // в неё само. Списки из jsonb страхуем от null — форма и CleanBook ждут пустой список.
+        editBook = EntityCloner.Clone(book);
+        editBook.AlternativeNames ??= [];
+        editBook.PossibleSpells ??= [];
         modalErrorMessage = null;
         showModal = true;
     }
@@ -398,6 +379,8 @@
 
     private void ShowDeleteModal(Book book)
     {
+        if (!canEdit) return;
+
         deleteBook = book;
         showDeleteModal = true;
     }
@@ -432,10 +415,5 @@
             await LoadBooksAsync();
             ApplyFilters();
         }
-    }
-
-    private void ToggleBookDetails(Book book)
-    {
-        expandedBookId = expandedBookId == book.Id ? null : book.Id;
     }
 }

@@ -1,0 +1,359 @@
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.Combat.Services
+@using CampaignManager.Web.Components.Features.Spells.Model
+@using CampaignManager.Web.Components.Features.Spells.Services
+@inject SpellService SpellService
+
+@* Начальное чтение и полное изучение книги Мифов (стр. 172–174). Правила считает
+   MythosBookRules, рассудок и Мифы меняет SanityRules — здесь только подтверждение чисел. *@
+
+<Modal IsVisible="@IsVisible" OnClose="@OnClose" Title="@Title" MaxWidth="2xl">
+    <ChildContent>
+        @if (Book is { } book)
+        {
+            <div class="cm-stack">
+                <section>
+                    @if (_stage == MythosBookStage.InitialReading)
+                    {
+                        <p class="cm-text-body text-sm">
+                            Сначала — проверка языка книги: обычная для печатной книги моложе ста лет, трудная
+                            для рукописи, чрезвычайная для древнего ветхого тома (стр. 172). При провале сыщик
+                            ничего не понял: рассудок цел, Мифы не растут — просто закройте окно.
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="cm-text-body text-sm">
+                            Полное изучение без проверки чтения, но с новым броском потери рассудка
+                            (стр. 172–173).
+                            @if (MythosBookRules.NextStudyWeeks(book) is { } weeks)
+                            {
+                                <span>
+                                    На него уйдёт около <strong>@weeks нед.</strong>@(book.FullStudyCount > 0 ? " — повторное изучение вдвое дольше предыдущего" : "").
+                                </span>
+                            }
+                            Одновременно можно изучать только одну книгу.
+                        </p>
+                    }
+                </section>
+
+                <section>
+                    <h4 class="cm-section-title mb-2">Потеря рассудка</h4>
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div class="w-28">
+                            <label for="book-san-loss" class="cm-field-label">Потеряно</label>
+                            <input id="book-san-loss" type="number" min="0" max="99" class="cm-input"
+                                   data-testid="book-san-loss" disabled="@_disbelieves"
+                                   @bind="_sanityLoss" @bind:event="oninput" />
+                        </div>
+                        @if (CanRollSanity(book))
+                        {
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    disabled="@_disbelieves" @onclick="() => RollSanity(book)">
+                                <i class="fa-solid fa-dice mr-1"></i>Бросить @book.SanityLoss
+                            </button>
+                        }
+                    </div>
+                    <p class="cm-field-note">
+                        @if (string.IsNullOrWhiteSpace(book.SanityLoss))
+                        {
+                            <span>У книги не указана потеря рассудка — впишите по решению Хранителя.</span>
+                        }
+                        else
+                        {
+                            <span>По книге — @book.SanityLoss, без проверки Рассудка. Бросьте здесь или впишите результат своих костей.</span>
+                        }
+                    </p>
+                    <label class="flex items-start gap-2 mt-2 cursor-pointer">
+                        <input type="checkbox" class="cm-checkbox mt-0.5" @bind="_disbelieves" />
+                        <span class="text-sm text-gray-700">
+                            Сыщик не верит в Мифы: знание растит навык и снижает максимум Рассудка, но рассудка
+                            он не теряет — пока не уверует (стр. 177).
+                        </span>
+                    </label>
+                </section>
+
+                <section>
+                    <h4 class="cm-section-title mb-2">Мифы Ктулху и Рассудок</h4>
+                    @if (!SanityRules.HasMythosSkill(Character))
+                    {
+                        <Alert Type="warning" ShowIcon Small>
+                            На листе нет навыка «Мифы Ктулху» — прирост некуда записать. Добавьте навык в разделе «Навыки».
+                        </Alert>
+                    }
+                    <dl class="book-preview">
+                        <dt>Мифы Ктулху</dt>
+                        <dd>
+                            @CurrentMythos → <strong>@MythosAfter</strong>
+                            <span class="text-gray-500">(+@Gain — @GainReason(book))</span>
+                        </dd>
+                        <dt>Максимум Рассудка</dt>
+                        <dd>@(SanityRules.AbsoluteMaxSanity - CurrentMythos) → <strong>@MaxSanityAfter</strong></dd>
+                        <dt>Рассудок</dt>
+                        <dd>@CurrentSanity → <strong>@SanityAfter</strong></dd>
+                    </dl>
+                    @if (EffectiveLoss >= SanityRules.TemporaryInsanityThreshold)
+                    {
+                        <Alert Type="warning" ShowIcon Small class="mt-2">
+                            Потеря @EffectiveLoss от одной причины — после применения панель Рассудка попросит
+                            проверку ИНТ: при успехе сыщик впадает во временное безумие (стр. 152).
+                        </Alert>
+                    }
+                    @if (TriggersIndefinite)
+                    {
+                        <Alert Type="error" ShowIcon Small class="mt-2">
+                            За игровой день будет потеряно не меньше ⅕ Рассудка — бессрочное безумие (стр. 154).
+                        </Alert>
+                    }
+                </section>
+
+                @if (_stage == MythosBookStage.FullStudy)
+                {
+                    <section>
+                        <h4 class="cm-section-title mb-2">Язык книги</h4>
+                        @if (MythosBookRules.FindLanguageSkill(Character, book.Language) is { } language)
+                        {
+                            <label class="flex items-start gap-2 cursor-pointer">
+                                <input type="checkbox" class="cm-checkbox mt-0.5" @bind="_markLanguage" />
+                                <span class="text-sm text-gray-700">
+                                    Отметить «@language.Name» для фазы развития — полное изучение даёт отметку
+                                    языка, на котором написана книга (стр. 173).
+                                </span>
+                            </label>
+                        }
+                        else
+                        {
+                            <p class="cm-field-note">
+                                Полное изучение отмечает для фазы развития навык языка книги@(string.IsNullOrWhiteSpace(book.Language) ? "" : $" («{book.Language}»)"),
+                                но на листе он не нашёлся — отметьте его в разделе «Навыки» сами (стр. 173).
+                            </p>
+                        }
+                    </section>
+                }
+
+                @if (_spells.Count > 0)
+                {
+                    <section>
+                        <h4 class="cm-section-title mb-1">Заклинания книги</h4>
+                        <p class="cm-field-note mb-2">
+                            После начального чтения Хранитель называет заклинания книги. Выучить одно — это
+                            трудная проверка ИНТ и в среднем 2d6 недель (стр. 174). Отмеченные попадут в раздел
+                            «Заклинания» листа.
+                        </p>
+                        <div class="book-spells">
+                            @foreach (var choice in _spells)
+                            {
+                                <div @key="choice.BookName" class="book-spell">
+                                    <label class="flex items-start gap-2 cursor-pointer min-w-0">
+                                        <input type="checkbox" class="cm-checkbox mt-0.5"
+                                               disabled="@choice.AlreadyKnown"
+                                               @bind="choice.Learn" />
+                                        <span class="min-w-0">
+                                            <span class="block text-sm text-gray-800">@choice.BookName</span>
+                                            <span class="block text-xs text-gray-500">@SpellStatus(choice)</span>
+                                        </span>
+                                    </label>
+                                    @if (!choice.AlreadyKnown && choice.AutoMatch is null)
+                                    {
+                                        <select class="cm-input book-spell-map" aria-label="@($"Сопоставить «{choice.BookName}» с каталогом")"
+                                                value="@(choice.ManualMatchId?.ToString() ?? "")"
+                                                @onchange="e => MapManually(choice, e)">
+                                            <option value="">— только название —</option>
+                                            @foreach (var spell in _catalog)
+                                            {
+                                                <option value="@spell.Id">@spell.Name</option>
+                                            }
+                                        </select>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section>
+                    <label for="book-game-date" class="cm-field-label">
+                        Когда <span class="cm-field-hint">(игровое время, необязательно)</span>
+                    </label>
+                    <input id="book-game-date" type="text" class="cm-input" placeholder="март 1925"
+                           @bind="_gameDate" />
+                </section>
+            </div>
+        }
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">Отмена</button>
+        <button type="button" class="cm-btn cm-btn-primary" data-testid="book-apply"
+                disabled="@(!CanApply)" @onclick="Apply">
+            Применить к листу
+        </button>
+    </FooterContent>
+</Modal>
+
+@code {
+    [Parameter] [EditorRequired] public required Character Character { get; set; }
+    [Parameter] public MythosBookRecord? Book { get; set; }
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<MythosBookReadingEntry> OnApplied { get; set; }
+
+    private sealed class SpellChoice
+    {
+        public required string BookName { get; init; }
+        public Spell? AutoMatch { get; init; }
+        public Guid? ManualMatchId { get; set; }
+        public bool AlreadyKnown { get; init; }
+        public bool Learn { get; set; }
+    }
+
+    private MythosBookStage _stage;
+    private int? _sanityLoss;
+    private bool _disbelieves;
+    private bool _markLanguage = true;
+    private string? _gameDate;
+    private List<Spell> _catalog = [];
+    private List<SpellChoice> _spells = [];
+    private MythosBookRecord? _openedFor;
+
+    private string Title => Book is null
+        ? ""
+        : $"{(_stage == MythosBookStage.InitialReading ? "Начальное чтение" : Book.FullStudyCount > 0 ? "Повторное изучение" : "Полное изучение")}: «{Book.Name}»";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Модалка не размонтируется, а прячется: без сброса на экране остался бы прошлый бросок
+        // и выглядел бы как результат нового чтения.
+        if (!IsVisible || Book is null)
+        {
+            _openedFor = null;
+            return;
+        }
+
+        if (ReferenceEquals(_openedFor, Book))
+            return;
+
+        _openedFor = Book;
+        _stage = MythosBookRules.NextStage(Book);
+        // Число подставляем сразу, «нет» — это ноль; формулу костей Хранитель бросит или впишет,
+        // а пустое поле (книга не из каталога) он заполнит по своему решению.
+        _sanityLoss = int.TryParse(Book.SanityLoss?.Trim(), out var fixedLoss) ? fixedLoss
+            : !string.IsNullOrWhiteSpace(Book.SanityLoss) && SanityLossFormula.MaxLoss(Book.SanityLoss) == 0 ? 0
+            : null;
+        _disbelieves = false;
+        _markLanguage = true;
+        _gameDate = null;
+        _spells = [];
+
+        if (Book.PossibleSpells.Count == 0)
+            return;
+
+        if (_catalog.Count == 0)
+        {
+            _catalog = (await SpellService.GetAllSpellsAsync())
+                .OrderBy(s => s.Name, StringComparer.CurrentCulture)
+                .ToList();
+        }
+
+        _spells = Book.PossibleSpells
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .Select(name =>
+            {
+                var match = SpellCatalogMatcher.Match(_catalog, name);
+                return new SpellChoice
+                {
+                    BookName = name,
+                    AutoMatch = match,
+                    AlreadyKnown = SpellCatalogMatcher.IsKnown(Character.Spells, match?.Name ?? name, match?.AlternativeNames)
+                };
+            })
+            .ToList();
+    }
+
+    private int CurrentMythos => SanityRules.GetMythosValue(Character);
+
+    private int Gain => Book is null || !SanityRules.HasMythosSkill(Character)
+        ? 0
+        : Math.Min(MythosBookRules.MythosGain(Book, _stage, CurrentMythos), 99 - CurrentMythos);
+
+    private int MythosAfter => CurrentMythos + Gain;
+    private int MaxSanityAfter => Math.Max(0, SanityRules.AbsoluteMaxSanity - MythosAfter);
+    private int CurrentSanity => Math.Max(0, Character.DerivedAttributes.Sanity.Value);
+    private int EffectiveLoss => _disbelieves ? 0 : Math.Min(Math.Max(0, _sanityLoss ?? 0), CurrentSanity);
+    private int SanityAfter => Math.Min(CurrentSanity - EffectiveLoss, MaxSanityAfter);
+
+    /// <summary>
+    ///     Тот же порог, что покажет панель Рассудка после применения: потерянное за день против
+    ///     ⅕ Рассудка, который останется, — чтобы предупреждение здесь и там не расходилось.
+    /// </summary>
+    private bool TriggersIndefinite =>
+        EffectiveLoss > 0
+        && Character.State.SanityLossEpisode + EffectiveLoss >= SanityRules.IndefiniteInsanityThreshold(SanityAfter);
+
+    /// <summary>Потерю рассудка надо подтвердить числом — случайный ноль молча сберёг бы рассудок.</summary>
+    private bool CanApply => Book is not null && (_disbelieves || _sanityLoss is >= 0);
+
+    private string GainReason(MythosBookRecord book)
+    {
+        if (_stage == MythosBookStage.InitialReading)
+            return "МКН";
+
+        return MythosBookRules.GetsFullGain(book, CurrentMythos)
+            ? $"МКП: Мифы {CurrentMythos} ниже ЗМ {book.MythosRating}"
+            : $"только МКН: Мифы {CurrentMythos} не ниже ЗМ {book.MythosRating}";
+    }
+
+    private static bool CanRollSanity(MythosBookRecord book) =>
+        SanityLossFormula.MaxLoss(book.SanityLoss) > 0 && !int.TryParse(book.SanityLoss?.Trim(), out _);
+
+    /// <summary>Кириллическую «д» в формуле («1д6») разбор костей не знает — приводим к латинской.</summary>
+    private void RollSanity(MythosBookRecord book) =>
+        _sanityLoss = Math.Max(0, CombatService.RollDiceFormula(
+            (book.SanityLoss ?? "").Replace('д', 'd').Replace('Д', 'd')));
+
+    private void MapManually(SpellChoice choice, ChangeEventArgs e)
+    {
+        choice.ManualMatchId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        if (choice.ManualMatchId is not null)
+            choice.Learn = true;
+    }
+
+    private string SpellStatus(SpellChoice choice)
+    {
+        if (choice.AlreadyKnown)
+            return "уже на листе";
+
+        var spell = ResolveCatalog(choice);
+        if (spell is null)
+            return "в каталоге не найдено — ляжет на лист одним названием, или выберите из каталога";
+
+        var details = string.Join(" · ", new[] { spell.Cost, spell.CastingTime }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return details.Length > 0 ? $"каталог: {spell.Name} — {details}" : $"каталог: {spell.Name}";
+    }
+
+    private Spell? ResolveCatalog(SpellChoice choice) =>
+        choice.AutoMatch ?? (choice.ManualMatchId is { } id ? _catalog.FirstOrDefault(s => s.Id == id) : null);
+
+    private async Task Apply()
+    {
+        if (Book is null || !CanApply)
+            return;
+
+        var spells = _spells
+            .Where(c => c.Learn && !c.AlreadyKnown)
+            .Select(c => MythosBookRules.ToCharacterSpell(c.BookName, ResolveCatalog(c), Book.Name))
+            .ToList();
+
+        var entry = MythosBookRules.Apply(Character, Book, new MythosBookReading(
+            _stage,
+            _sanityLoss ?? 0,
+            _disbelieves,
+            _gameDate,
+            spells,
+            _markLanguage));
+
+        await OnApplied.InvokeAsync(entry);
+    }
+}

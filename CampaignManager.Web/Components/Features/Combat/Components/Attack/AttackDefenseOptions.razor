@@ -1,0 +1,66 @@
+@* Защита цели в ближнем бою: численное превосходство, уклонение или ответный удар, навык защиты
+   и урон контратаки (стр. 101–106). Рисуется, только когда выбраны ближний бой и цель. *@
+
+@{ var defender = State.SelectedDefender!; }
+
+<!-- Предупреждение о численном превосходстве -->
+@if (CombatService.HasNumericalSuperiority(defender))
+{
+    <div class="bg-warning-50 border border-warning-200 rounded-md p-2 mb-2 text-xs text-warning-800">
+        <i class="fa-solid fa-triangle-exclamation mr-1"></i>@defender.Name уже защищался в этом раунде (@defender.DefenseCountThisRound/@defender.AttacksPerRound) — атакующий получает <strong>1 бонусную кость</strong>.
+    </div>
+}
+
+<!-- Реакция защитника -->
+<div class="mb-3">
+    <label class="block text-xs font-medium text-gray-600 mb-1">Реакция защитника</label>
+    <div class="flex gap-3">
+        <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+            <input type="radio" name="defenderReaction" checked="@(State.DefenderReaction == CombatActionType.Dodge)"
+                   @onchange="() => SetDefenderReaction(CombatActionType.Dodge)" />
+            Уклонение
+        </label>
+        <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+            <input type="radio" name="defenderReaction" checked="@(State.DefenderReaction == CombatActionType.FightBack)"
+                   @onchange="() => SetDefenderReaction(CombatActionType.FightBack)" />
+            Ответный удар
+        </label>
+    </div>
+</div>
+
+<!-- Навык защиты -->
+<div class="mb-3">
+    <label class="block text-xs font-medium text-gray-600 mb-1">
+        Навык защиты (@(State.DefenderReaction == CombatActionType.Dodge ? "Уклонение" : "Ближний бой"))
+    </label>
+    <input type="number" @bind="State.DefenderSkillValue" @bind:after="Changed"
+           class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors" />
+</div>
+
+<!-- Формула урона контратаки (fight back) -->
+@if (State.DefenderReaction == CombatActionType.FightBack)
+{
+    <div class="mb-3">
+        <label class="block text-xs font-medium text-gray-600 mb-1">
+            Урон контратаки @defender.Name
+        </label>
+        <input type="text" @bind="State.CounterDamageFormula" @bind:after="Changed"
+               class="border border-primary-300 rounded-md px-2 py-1 text-sm text-primary-700 bg-primary-50 w-full focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+               placeholder="1D3, 1D6, ..." />
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public required AttackSetupState State { get; set; }
+
+    /// <summary>Что-то поменялось — панель перерисовывается целиком, как до разбиения на части.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private Task Changed() => OnChanged.InvokeAsync();
+
+    private Task SetDefenderReaction(CombatActionType reaction)
+    {
+        State.SetDefenderReaction(reaction);
+        return Changed();
+    }
+}

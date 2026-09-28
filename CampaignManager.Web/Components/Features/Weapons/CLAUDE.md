@@ -4,7 +4,7 @@ Master weapon catalog (independent entity). Источник правды по �
 «Оружие» книги правил CoC 7e (стр. 399–402).
 
 ## Key Services
-- `WeaponService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `WeaponService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
   `GetAllRangeWeaponsAsync()` фильтрует уже загруженный список в памяти: `WeaponType` —
   не набор флагов, объединить типы в одно значение нельзя.
 - `WeaponStatsReader` — **единственная точка, где спрашивают у оружия число**
@@ -70,7 +70,24 @@ Master weapon catalog (independent entity). Источник правды по �
 справочник у всех сразу. Именно этим и болел `WeaponComponent.SelectWeapon` до
 `WeaponFactory.CopyForCharacter`.
 
+## Права
+
+Справочник общий для всех кампаний, поэтому **смотреть может любой вошедший, править — только
+Хранитель и администратор**. Так же устроены предметы, заклинания и книги.
+
+- Граница — в сервисе: `Add/Update/DeleteWeaponAsync` первым делом зовут
+  `IdentityService.EnsureKeeperAsync`, и та бросает `UnauthorizedAccessException`. Страница под
+  простым `[Authorize]` — просмотр нужен игрокам, — так что спрятанная кнопка защитой не считается.
+- Страница спрашивает `IsKeeper()` один раз в `OnInitializedAsync` и прячет «Добавить» в шапке,
+  CTA пустого состояния и кнопки строк; `Show*Modal` без права просто ничего не открывают.
+- `WeaponsListView`/`WeaponTableRow` получают `CanEdit` (по умолчанию `false`). Без него колонка
+  действий пропадает **целиком** — и `<th>`, и `<td>`, а `colspan` раскрытой строки считается от
+  числа колонок, иначе раскрытие растягивало бы таблицу на несуществующий столбец.
+
 ## Страница каталога `/weapons`
+
+Страницу, сортировку и раскрытую строку держит общий `Shared/Model/CatalogListState<Weapon>`
+(см. `design-system-guide.md`, «Каталог»); у страницы свои только фильтры и модалки.
 
 Каждая колонка таблицы XVII — **отдельный столбец**, строка занимает одну строку:
 `Название · Тип · Урон · Дист. · Атаки · Боезапас · Осечка · Цена · действия`.
@@ -106,7 +123,11 @@ Master weapon catalog (independent entity). Источник правды по �
   Хранителя, так что проверять его глазами придётся на нарочно кривой строке.
 
 ## Notes
-- `WeaponsPage.ShowEditModal` копирует поля вручную. Добавил поле в `Weapon` — добавь и туда,
-  иначе редактирование молча его обнулит (так чуть не потерялся `IsRare`).
+- `WeaponsPage.ShowEditModal` правит полную копию записи — `Utilities/Services/EntityCloner.Clone`
+  (круговой прогон через System.Text.Json с настройками jsonb). Раньше поля перечислялись руками,
+  и забытое поле редактирование молча обнуляло (так чуть не потерялся `IsRare`); теперь новое
+  поле `Weapon` копируется само. Исключение — свойства под `[JsonIgnore]`, но на `Weapon` их и так
+  быть не должно (см. «Аддитивная схема»). Копия несёт `CreatedAt`/`LastUpdated` оригинала, поэтому
+  `CrudServiceHelper.UpdateAsync` больше не затирает их нулевой датой.
 - Сортировка по эпохе убрана вместе с колонкой: эпоху задаёт фильтр, сортировать по ней
   было нечего. По навыку — тоже, вместе с его колонкой.

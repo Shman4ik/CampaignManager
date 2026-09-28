@@ -24,6 +24,16 @@ public class Combatant
     public int CurrentSanity { get; set; }
 
     /// <summary>
+    /// МОЩ — для первого сотворения и встречных проверок МОЩ (стр. 176, 241); заклинания
+    /// тратят её навсегда. У участников из старого снапшота поле пустое — тогда МОЩ берёт
+    /// <c>CombatService.GetPower</c> из исходного листа или статблока.
+    /// </summary>
+    public int Power { get; set; }
+
+    /// <summary>Заклинание, которое боец творит несколько раундов; null — не творит.</summary>
+    public SpellcastInProgress? CastingSpell { get; set; }
+
+    /// <summary>
     ///     Сторона в бою. Союзный НПС стоит рядом с отрядом, а не среди монстров.
     /// </summary>
     public CombatSide Side { get; set; } = CombatSide.Enemy;
@@ -186,6 +196,7 @@ public class Combatant
 
         MaxSanity = character.DerivedAttributes.Sanity.MaxValue;
         CurrentSanity = character.DerivedAttributes.Sanity.Value;
+        Power = character.Characteristics.Power.Regular;
 
         CharacterSource = character;
 
@@ -231,6 +242,7 @@ public class Combatant
 
         MaxSanity = creature.CreatureCharacteristics.Power.Value;
         CurrentSanity = creature.CreatureCharacteristics.Power.Value;
+        Power = creature.CreatureCharacteristics.Power.Value;
 
         CreatureSource = creature;
 

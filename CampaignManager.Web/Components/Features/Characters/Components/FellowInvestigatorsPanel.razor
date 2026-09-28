@@ -122,6 +122,26 @@
         }
     }
 
+    /// <summary>Состав, прочитанный в пререндере, и лист, для которого он читался.</summary>
+    public sealed record PartyPrerender(Guid CharacterId, List<CharacterService.PartyMember> Party);
+
+    /// <summary>
+    ///     Состав из пререндера — чтобы circuit не читал его второй раз (см. корневой CLAUDE.md,
+    ///     «Данные пререндера»). После паузы не поднимается (<c>SkipLastSnapshot</c>): за это время
+    ///     сосед мог переименоваться или выйти из кампании.
+    /// </summary>
+    [PersistentState(RestoreBehavior = RestoreBehavior.SkipLastSnapshot)]
+    public PartyPrerender? PrerenderedParty
+    {
+        get => RendererInfo.IsInteractive || _loadedFor is not { } id ? null : new PartyPrerender(id, _party);
+        set
+        {
+            if (value is null) return;
+            _loadedFor = value.CharacterId;
+            _party = value.Party;
+        }
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (CharacterId is not { } id || id == Guid.Empty || _loadedFor == id)

@@ -3,6 +3,7 @@ using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Components;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
+using CampaignManager.Web.Components.Features.Checks.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
@@ -125,6 +126,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error initializing character sheet {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при инициализации: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
             _errorBoundary?.Recover();
@@ -145,7 +147,16 @@ public partial class CharacterPage
                 CampaignEra = campaign?.Era;
             }
 
-            if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
+            // Лист уже прочитан в пререндере — берём его оттуда, а не из базы второй раз. Слепок
+            // автосохранения приезжает вместе с ним: он снят с базы, а не с поправленного листа.
+            var prerendered = TakePrerenderedSheet();
+            if (prerendered is not null)
+            {
+                CharacterStorageDto = prerendered.Storage;
+                Character = prerendered.Storage.Character;
+                CampaignPlayer = prerendered.Player;
+            }
+            else if (CharacterId.HasValue && CharacterId.Value != Guid.Empty)
             {
                 CharacterStorageDto = await CharacterService.GetCharacterByIdAsync(CharacterId.Value);
                 Character = CharacterStorageDto?.Character;
@@ -164,23 +175,34 @@ public partial class CharacterPage
             // Слепок берём с того, что лежит в базе. Всё, что страница делает дальше —
             // восстановленный черновик и правка потолка Удачи у старых листов, — становится
             // обычным изменением и уходит в базу первым же автосохранением.
-            MarkSaved();
+            if (prerendered is not null)
+                _savedSnapshot = prerendered.SavedSnapshot;
+            else
+                MarkSaved();
 
             // Circuit вернулся с паузы — на странице снова несохранённая правка, а не копия из базы.
-            if (TryRestoreDraft())
+            // Черновик приезжает после любой паузы, даже если лист никто не трогал, поэтому
+            // уведомляем, только когда он действительно расходится с базой: иначе плашка
+            // появлялась бы после каждого возвращения на вкладку, простоявшую в фоне 30 секунд.
+            if (TryRestoreDraft() && HasUnsavedChanges)
                 ShowNotification("Восстановлены несохранённые изменения листа", "info");
 
             // Старые листы хранят потолок Удачи равным стартовому броску — правим при открытии.
             if (Character is not null)
                 DerivedAttributeRules.NormalizeLuckCap(Character);
 
-            if (CharacterStorageDto?.CampaignPlayerId is not null)
-                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
-            else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
-                CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
+            // У листа из пререндера слот игрока приехал вместе с ним.
+            if (prerendered is null)
+            {
+                if (CharacterStorageDto?.CampaignPlayerId is not null)
+                    CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
+                else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
+                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
+            }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error loading character {CharacterId}", CharacterId);
             ShowNotification($"Ошибка при загрузке персонажа: {ex.Message}", "error");
             Character = await CreateNewCharacterTemplateAsync();
         }
@@ -282,6 +304,7 @@ public partial class CharacterPage
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error saving character {CharacterId} ({Kind})", CharacterId, CurrentKind);
             ShowNotification($"Ошибка при сохранении: {ex.Message}", "error");
             _errorBoundary?.Recover();
         }
@@ -482,6 +505,33 @@ public partial class CharacterPage
     private void OpenDevelopmentPhase() => _showDevelopmentPhase = true;
 
     private void CloseDevelopmentPhase() => _showDevelopmentPhase = false;
+
+    // ── Проверка навыка (Checks/SkillCheckModal) ──────────────────────────────
+    // Диалог меняет сам объект листа (Удача, отметка развития), а в базу его уносит
+    // автосохранение — отдельного пути записи у проверки нет. Паузу circuit диалог не
+    // переживает, как и остальные модалки листа.
+
+    private bool _showSkillCheck;
+    private string? _checkTargetKey;
+    private string? _checkTargetName;
+
+    private void OpenSkillCheck(Skill skill) =>
+        ShowSkillCheck(CheckTarget.KeyFor(CheckTargetKind.Skill, skill.Name), skill.Name);
+
+    private void OpenCharacteristicCheck(CharacteristicKey key)
+    {
+        var abbreviation = InvestigatorCreationRules.Info(key).Abbreviation;
+        ShowSkillCheck(CheckTarget.KeyFor(CheckTargetKind.Characteristic, abbreviation), abbreviation);
+    }
+
+    private void ShowSkillCheck(string targetKey, string targetName)
+    {
+        _checkTargetKey = targetKey;
+        _checkTargetName = targetName;
+        _showSkillCheck = true;
+    }
+
+    private void CloseSkillCheck() => _showSkillCheck = false;
 
     /// <summary>
     ///     Фаза закончена: отметки стёрты внутри модалки, здесь пересчитываем производные

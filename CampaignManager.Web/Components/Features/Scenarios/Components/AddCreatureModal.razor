@@ -3,16 +3,17 @@
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Services
 @using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Extensions
 
 <Modal IsVisible="_isVisible"
        OnClose="Hide"
-       Title="Add Creature to Scenario"
+       Title="Добавить существо в сценарий"
        MaxWidth="lg"
        HeaderColorScheme="primary">
     <ChildContent>
         <div class="mb-4">
             <input type="text"
-                   placeholder="Search creatures..."
+                   placeholder="Поиск существ..."
                    @bind-value="_searchTerm"
                    @bind-value:event="oninput"
                    class="cm-input"/>
@@ -28,7 +29,7 @@
             @if (_availableCreatures == null || !_availableCreatures.Any())
             {
                 <div class="text-center p-4 text-gray-500">
-                    No creatures available.
+                    В бестиарии нет существ.
                 </div>
             }
             else
@@ -40,8 +41,8 @@
                         @onclick="() => SelectCreature(creature)">
                         <div class="flex items-center justify-between">
                             <h3 class="font-medium">@creature.Name</h3>
-                            <Button OnClick="() => SelectCreature(creature)" Variant="info" Size="sm">
-                                Select
+                            <Button OnClick="() => SelectCreature(creature)" Variant="outline-primary" Size="sm">
+                                Выбрать
                             </Button>
                         </div>
                         <div class="mt-2 text-sm text-gray-600">
@@ -50,10 +51,10 @@
                                 <div class="truncate">@creature.Description</div>
                             }
                             <div class="flex gap-2 mt-1">
-                                <div>Type: @creature.Type</div>
+                                <div>Тип: @creature.Type.ToRussianString()</div>
                                 @if (creature.CreatureCharacteristics != null)
                                 {
-                                    <div>HP: @creature.CreatureCharacteristics.HealPoint</div>
+                                    <div>ПЗ: @creature.CreatureCharacteristics.HealPoint</div>
                                 }
                             </div>
                         </div>
@@ -64,7 +65,7 @@
 
         <div class="space-y-3 border-t border-gray-200 pt-4">
             <div>
-                <label for="quantity" class="cm-field-label">Quantity</label>
+                <label for="quantity" class="cm-field-label">Количество</label>
                 <input type="number"
                        id="quantity"
                        @bind="_quantity"
@@ -73,7 +74,7 @@
             </div>
 
             <div>
-                <label for="location" class="cm-field-label">Location (Optional)</label>
+                <label for="location" class="cm-field-label">Расположение (опционально)</label>
                 <input type="text"
                        id="location"
                        @bind="_location"
@@ -81,7 +82,7 @@
             </div>
 
             <div>
-                <label for="notes" class="cm-field-label">Notes (Optional)</label>
+                <label for="notes" class="cm-field-label">Заметки (опционально)</label>
                 <textarea id="notes"
                           @bind="_notes"
                           class="cm-input !min-h-[80px]"></textarea>
@@ -89,8 +90,8 @@
         </div>
     </ChildContent>
     <FooterContent>
-        <Button OnClick="Hide" Variant="secondary">     Cancel </Button>
-		<Button OnClick="AddCreatureToScenario" Variant="primary" IsDisabled="@(_selectedCreature == null)">Add Creature</Button>
+        <Button OnClick="Hide" Variant="secondary">Отмена</Button>
+        <Button OnClick="AddCreatureToScenario" Variant="primary" IsDisabled="@(_selectedCreature == null)">Добавить существо</Button>
     </FooterContent>
 </Modal>
 
@@ -100,6 +101,7 @@
 
     [Inject] private ScenarioService ScenarioService { get; set; } = null!;
     [Inject] private CreatureService CreatureService { get; set; } = null!;
+    [Inject] private ILogger<AddCreatureModal> Logger { get; set; } = null!;
 
     private bool _isVisible;
     private string _searchTerm = string.Empty;
@@ -160,7 +162,7 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error loading creatures: {ex.Message}");
+            Logger.LogError(ex, "Error loading creatures for scenario {ScenarioId}", ScenarioId);
 
             try
             {
@@ -169,9 +171,9 @@
             }
             catch (Exception fallbackEx)
             {
-                Console.Error.WriteLine($"Fallback error loading creatures: {fallbackEx.Message}");
+                Logger.LogError(fallbackEx, "Fallback error loading creatures for scenario {ScenarioId}", ScenarioId);
                 _availableCreatures = [];
-                _loadError = "Failed to load creatures list. Please try again.";
+                _loadError = "Не удалось загрузить список существ. Попробуйте ещё раз.";
             }
         }
     }
@@ -208,7 +210,7 @@
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error adding creature to scenario: {ex.Message}");
+            Logger.LogError(ex, "Error adding creature {CreatureName} to scenario {ScenarioId}", _selectedCreature.Name, ScenarioId);
         }
     }
 

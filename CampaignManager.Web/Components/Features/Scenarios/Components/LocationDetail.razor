@@ -1,6 +1,8 @@
 @using CampaignManager.Web.Components.Features.Scenarios.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Music.Components
+@using CampaignManager.Web.Components.Features.Checks.Components
+@using CampaignManager.Web.Components.Features.Checks.Services
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
 @inject MarkdownService MarkdownService
@@ -45,25 +47,34 @@
                     @foreach (var check in Location.SkillChecks)
                     {
                         <div class="border border-gray-200 rounded-md overflow-hidden">
-                            <button type="button"
-                                    class="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                                    @onclick="() => ToggleSkillCheck(check.Id)">
-                                <span class="font-medium text-gray-800">@check.SkillName</span>
-                                @if (!string.IsNullOrEmpty(check.Difficulty))
-                                {
-                                    <span class="text-xs px-2 py-0.5 rounded-full @GetDifficultyClass(check.Difficulty)">
-                                        @GetDifficultyLabel(check.Difficulty)
-                                    </span>
-                                }
-                                <i class="fas @(_expandedChecks.Contains(check.Id) ? "fa-chevron-up" : "fa-chevron-down") ml-auto text-gray-400 text-xs"></i>
-                            </button>
+                            @* Кнопка «Проверить» стоит рядом со строкой, а не внутри неё: кнопка в кнопке —
+                               невалидная разметка, и тап по ней раскрывал бы строку. *@
+                            <div class="flex items-stretch bg-gray-50">
+                                <button type="button"
+                                        class="flex-1 min-w-0 flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                                        @onclick="() => ToggleSkillCheck(check.Id)">
+                                    <span class="font-medium text-gray-800">@check.SkillName</span>
+                                    @if (!string.IsNullOrEmpty(check.Difficulty))
+                                    {
+                                        <span class="text-xs px-2 py-0.5 rounded-full @GetDifficultyClass(check.Difficulty)">
+                                            @GetDifficultyLabel(check.Difficulty)
+                                        </span>
+                                    }
+                                    <i class="fas @(_expandedChecks.Contains(check.Id) ? "fa-chevron-up" : "fa-chevron-down") ml-auto text-gray-400 text-xs"></i>
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm shrink-0 m-1.5"
+                                        data-testid="@($"location-check-{check.Id}")"
+                                        @onclick="() => OpenCheck(check)">
+                                    <i class="fa-solid fa-dice-d20 mr-1"></i><span>Проверить</span>
+                                </button>
+                            </div>
                             @if (_expandedChecks.Contains(check.Id))
                             {
                                 <div class="px-4 py-3 border-t border-gray-200 space-y-2">
                                     @if (!string.IsNullOrEmpty(check.SuccessResult))
                                     {
                                         <div>
-                                            <span class="text-xs font-semibold text-green-700 uppercase">Успех:</span>
+                                            <span class="text-xs font-semibold text-success-700 uppercase">Успех:</span>
                                             <div class="text-sm text-gray-700 mt-0.5 markdown-content">
                                                 @((MarkupString)MarkdownService.ConvertToHtml(check.SuccessResult))
                                             </div>
@@ -72,7 +83,7 @@
                                     @if (!string.IsNullOrEmpty(check.FailureResult))
                                     {
                                         <div>
-                                            <span class="text-xs font-semibold text-red-700 uppercase">Провал:</span>
+                                            <span class="text-xs font-semibold text-error-700 uppercase">Провал:</span>
                                             <div class="text-sm text-gray-700 mt-0.5 markdown-content">
                                                 @((MarkupString)MarkdownService.ConvertToHtml(check.FailureResult))
                                             </div>
@@ -167,6 +178,14 @@
                             {
                                 <div class="text-sm text-gray-500 mt-1 line-clamp-2">@handout.Description</div>
                             }
+                            <HandoutKeeperNote Note="@handout.KeeperNote"/>
+                            @if (OnShowHandout.HasDelegate)
+                            {
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mt-2"
+                                        @onclick="() => OnShowHandout.InvokeAsync(handout.Id)">
+                                    <i class="fa-solid fa-expand"></i><span>Показать игрокам</span>
+                                </button>
+                            }
                         </div>
                     }
                 </div>
@@ -175,14 +194,34 @@
     }
 </div>
 
+@* Проверка навыка локации — общий диалог Checks. Сыщиков он берёт из кампании сценария сам;
+   их листы только читаются, отметки и Удачу Хранитель переносит на лист. *@
+<SkillCheckModal IsVisible="@(_checkToRoll is not null)"
+                 CampaignId="@CampaignId"
+                 InitialTargetName="@_checkToRoll?.SkillName"
+                 InitialDifficulty="@SkillCheckRules.ParseScenarioDifficulty(_checkToRoll?.Difficulty)"
+                 OnClose="() => _checkToRoll = null"/>
+
 @code {
     [Parameter] public ScenarioLocation? Location { get; set; }
+
+    /// <summary>Кампания сценария: из неё диалог проверки предлагает сыщиков. Нет кампании — только вручную.</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
     [Parameter] public ICollection<ScenarioCreature> ScenarioCreatures { get; set; } = [];
     [Parameter] public ICollection<ScenarioItem> ScenarioItems { get; set; } = [];
     [Parameter] public ICollection<CharacterStorageDto> Npcs { get; set; } = [];
     [Parameter] public ICollection<ScenarioHandout> Handouts { get; set; } = [];
 
+    /// <summary>«Показать игрокам»: страница открывает раздатку на весь экран (?handout= в адресе).</summary>
+    [Parameter] public EventCallback<Guid> OnShowHandout { get; set; }
+
     private HashSet<Guid> _expandedChecks = [];
+
+    /// <summary>Проверка, для которой открыт диалог; <c>null</c> — диалог закрыт.</summary>
+    private ScenarioSkillCheck? _checkToRoll;
+
+    private void OpenCheck(ScenarioSkillCheck check) => _checkToRoll = check;
 
     private void ToggleSkillCheck(Guid checkId)
     {
@@ -204,15 +243,15 @@
 
     private static string GetDifficultyClass(string? difficulty) => difficulty switch
     {
-        "Hard" => "bg-yellow-100 text-yellow-800",
-        "Extreme" => "bg-red-100 text-red-800",
-        _ => "bg-green-100 text-green-800"
+        "Hard" => "bg-warning-100 text-warning-800",
+        "Extreme" => "bg-error-100 text-error-800",
+        _ => "bg-success-100 text-success-800"
     };
 
-    private static string GetDifficultyLabel(string? difficulty) => difficulty switch
-    {
-        "Hard" => "Сложная",
-        "Extreme" => "Экстремальная",
-        _ => "Обычная"
-    };
+    /// <summary>
+    ///     Подпись сложности — та же, что у кнопок диалога проверки: «трудная», «чрезвычайная»
+    ///     (стр. 80). В данных сложность по-прежнему строка «Hard»/«Extreme».
+    /// </summary>
+    private static string GetDifficultyLabel(string? difficulty) =>
+        SkillCheckRules.DifficultyLabel(SkillCheckRules.ParseScenarioDifficulty(difficulty));
 }

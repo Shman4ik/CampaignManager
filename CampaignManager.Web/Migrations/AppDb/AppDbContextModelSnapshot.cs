@@ -288,6 +288,54 @@ namespace CampaignManager.Web.Migrations.AppDb
                     b.ToTable("CampaignPlayers", "games");
                 });
 
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KeeperNotes")
+                        .HasMaxLength(20000)
+                        .HasColumnType("character varying(20000)");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ScenarioCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ScenarioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Summary")
+                        .HasMaxLength(20000)
+                        .HasColumnType("character varying(20000)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScenarioId");
+
+                    b.HasIndex("CampaignId", "SessionDate");
+
+                    b.ToTable("CampaignSessions", "games");
+                });
+
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.Occupation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -973,6 +1021,24 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignSession", b =>
+                {
+                    b.HasOne("CampaignManager.Web.Components.Features.Campaigns.Models.Campaign", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
+                        .WithMany()
+                        .HasForeignKey("ScenarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Campaign");
+
+                    b.Navigation("Scenario");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", b =>

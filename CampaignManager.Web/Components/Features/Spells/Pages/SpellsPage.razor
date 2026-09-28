@@ -3,8 +3,11 @@
 @using CampaignManager.Web.Components.Features.Spells.Model
 @using CampaignManager.Web.Components.Features.Spells.Services
 @using CampaignManager.Web.Components.Shared
+@using CampaignManager.Web.Components.Shared.Model
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 @inject SpellService SpellService
+@inject IdentityService IdentityService
 @inject ILogger<SpellsPage> Logger
 @rendermode InteractiveServer
 
@@ -12,7 +15,10 @@
 
 <PageHeader Title="Заклинания">
     <Actions>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        @if (canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="ShowAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -36,37 +42,50 @@
         </Alert>
     }
 
-    @if (!paginatedSpells.Any())
+    @{ var pageItems = catalog.PageItems; }
+    @if (pageItems.Count == 0)
     {
-        <EmptyState
-            Title="Заклинания не найдены"
-            Message="Попробуйте изменить параметры фильтра или добавить новое заклинание."
-            IconClass="fa-hat-wizard">
-            <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить заклинание</Button>
-            </ActionButton>
-        </EmptyState>
+        @if (canEdit)
+        {
+            <EmptyState
+                Title="Заклинания не найдены"
+                Message="Попробуйте изменить параметры фильтра или добавить новое заклинание."
+                IconClass="fa-hat-wizard">
+                <ActionButton>
+                    <Button Variant="primary" Icon="fa-plus" OnClick="ShowAddModal">Добавить заклинание</Button>
+                </ActionButton>
+            </EmptyState>
+        }
+        else
+        {
+            @* Справочник правят только Хранитель и администратор — игроку «добавить» не предлагаем. *@
+            <EmptyState
+                Title="Заклинания не найдены"
+                Message="Попробуйте изменить параметры фильтра."
+                IconClass="fa-hat-wizard" />
+        }
     }
     else
     {
         <SpellsListView
-            Spells="@paginatedSpells"
-            ExpandedSpellId="@expandedSpellId"
+            Spells="@pageItems"
+            ExpandedSpellId="@catalog.ExpandedId"
             ShowType="@showType"
-            CurrentSortField="@sortField"
-            SortAscending="@sortAscending"
-            OnSortChanged="ToggleSort"
+            CanEdit="@canEdit"
+            CurrentSortField="@catalog.SortField"
+            SortAscending="@catalog.SortAscending"
+            OnSortChanged="catalog.ToggleSort"
             OnEdit="ShowEditModal"
             OnDelete="ShowDeleteModal"
-            OnToggleExpand="@((Spell spell) => ToggleSpellDetails(spell))" />
+            OnToggleExpand="catalog.ToggleExpanded" />
 
         <Pagination
-            CurrentPage="@currentPage"
-            TotalPages="@totalPages"
-            TotalItems="@filteredSpells.Count()"
-            ItemsPerPage="@spellsPerPage"
+            CurrentPage="@catalog.CurrentPage"
+            TotalPages="@catalog.TotalPages"
+            TotalItems="@catalog.TotalItems"
+            ItemsPerPage="@catalog.PageSize"
             ItemsLabel="заклинаний"
-            OnPageChanged="GoToPage" />
+            OnPageChanged="catalog.GoToPage" />
     }
 
     <Modal IsVisible="@showModal"
@@ -125,10 +144,32 @@
     // iPad их помещается столько же, сколько раньше помещалось шесть блочных.
     private const int spellsPerPage = 25;
 
+    // Страница, сортировка и раскрытая строка — общие у всех каталогов; здесь только фильтры.
+    private readonly CatalogListState<Spell> catalog;
+
+    public SpellsPage()
+    {
+        catalog = new CatalogListState<Spell>(
+            spellsPerPage,
+            FilterSpells,
+            CatalogSort.By((Spell spell) => spell.Name),
+            new Dictionary<string, CatalogSort<Spell>>
+            {
+                [nameof(Spell.SpellType)] = CatalogSort.By((Spell spell) => spell.SpellType),
+                [nameof(Spell.Cost)] = CatalogSort.By((Spell spell) => spell.Cost),
+                [nameof(Spell.CastingTime)] = CatalogSort.By((Spell spell) => spell.CastingTime)
+            });
+    }
+
     private bool isSearchPanelVisible = true;
     private bool showModal;
     private bool showDeleteModal;
     private bool isEditMode;
+
+    // Справочник общий для всех кампаний: смотреть может любой вошедший, править — только
+    // Хранитель и администратор. Сервис проверяет то же самое сам, здесь — чтобы не показывать
+    // игроку кнопки, которые всё равно откажут.
+    private bool canEdit;
 
     private List<Spell>? spells;
     private string searchQuery = string.Empty;
@@ -140,21 +181,9 @@
 
     private Spell editSpell = new() { Name = string.Empty, SpellType = string.Empty };
     private Spell? deleteSpell;
-    private Guid? expandedSpellId;
 
     private string? errorMessage;
     private string? modalErrorMessage;
-
-    private int currentPage = 1;
-    private int totalPages => Math.Max(1, (int)Math.Ceiling(filteredSpells.Count() / (double)spellsPerPage));
-    private string? sortField;
-    private bool sortAscending = true;
-
-    private IQueryable<Spell> filteredSpells => FilterSpells();
-    private IEnumerable<Spell> paginatedSpells => filteredSpells
-        .Skip((currentPage - 1) * spellsPerPage)
-        .Take(spellsPerPage)
-        .ToList();
 
     private IEnumerable<string> SpellTypes => spells?
         .Where(spell => !string.IsNullOrWhiteSpace(spell.SpellType))
@@ -165,6 +194,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        canEdit = await IdentityService.IsKeeper();
         await LoadSpellsAsync();
     }
 
@@ -182,13 +212,13 @@
             spells = new List<Spell>();
         }
 
-        currentPage = 1;
-        expandedSpellId = null;
+        catalog.ResetPage();
+        catalog.CollapseAll();
     }
 
     private void ApplyFilters()
     {
-        currentPage = 1;
+        catalog.ResetPage();
         StateHasChanged();
     }
 
@@ -199,14 +229,14 @@
         ApplyFilters();
     }
 
-    private IQueryable<Spell> FilterSpells()
+    private IEnumerable<Spell> FilterSpells()
     {
         if (spells == null)
         {
-            return Enumerable.Empty<Spell>().AsQueryable();
+            return [];
         }
 
-        var query = spells.AsQueryable();
+        IEnumerable<Spell> query = spells;
 
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
@@ -224,50 +254,13 @@
                                          spell.SpellType.Equals(selectedTypeFilter, StringComparison.OrdinalIgnoreCase));
         }
 
-        query = sortField switch
-        {
-            nameof(Spell.SpellType) => sortAscending
-                ? query.OrderBy(spell => spell.SpellType)
-                : query.OrderByDescending(spell => spell.SpellType),
-            nameof(Spell.Cost) => sortAscending
-                ? query.OrderBy(spell => spell.Cost)
-                : query.OrderByDescending(spell => spell.Cost),
-            nameof(Spell.CastingTime) => sortAscending
-                ? query.OrderBy(spell => spell.CastingTime)
-                : query.OrderByDescending(spell => spell.CastingTime),
-            _ => sortAscending
-                ? query.OrderBy(spell => spell.Name)
-                : query.OrderByDescending(spell => spell.Name)
-        };
-
         return query;
-    }
-
-    private void ToggleSort(string field)
-    {
-        if (sortField == field)
-        {
-            sortAscending = !sortAscending;
-        }
-        else
-        {
-            sortField = field;
-            sortAscending = true;
-        }
-
-        currentPage = 1;
-    }
-
-    private void GoToPage(int page)
-    {
-        if (page >= 1 && page <= totalPages)
-        {
-            currentPage = page;
-        }
     }
 
     private void ShowAddModal()
     {
+        if (!canEdit) return;
+
         isEditMode = false;
         editSpell = new Spell
         {
@@ -284,17 +277,13 @@
 
     private void ShowEditModal(Spell spell)
     {
+        if (!canEdit) return;
+
         isEditMode = true;
-        editSpell = new Spell
-        {
-            Id = spell.Id,
-            Name = spell.Name,
-            SpellType = spell.SpellType,
-            Cost = spell.Cost,
-            CastingTime = spell.CastingTime,
-            Description = spell.Description,
-            AlternativeNames = spell.AlternativeNames?.ToList() ?? new List<string>()
-        };
+        // Правим полную копию, а не экземпляр из кэша справочника: новое поле Spell попадает
+        // в неё само. Список из jsonb страхуем от null — форма и CleanSpell ждут пустой список.
+        editSpell = EntityCloner.Clone(spell);
+        editSpell.AlternativeNames ??= [];
         modalErrorMessage = null;
         showModal = true;
     }
@@ -357,6 +346,8 @@
 
     private void ShowDeleteModal(Spell spell)
     {
+        if (!canEdit) return;
+
         deleteSpell = spell;
         showDeleteModal = true;
     }
@@ -394,10 +385,5 @@
             await LoadSpellsAsync();
             ApplyFilters();
         }
-    }
-
-    private void ToggleSpellDetails(Spell spell)
-    {
-        expandedSpellId = expandedSpellId == spell.Id ? null : spell.Id;
     }
 }

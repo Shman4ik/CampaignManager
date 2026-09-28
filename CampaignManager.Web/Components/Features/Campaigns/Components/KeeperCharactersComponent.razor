@@ -1,15 +1,12 @@
 @using CampaignManager.Web.Components.Features.Campaigns.Models
-@using CampaignManager.Web.Components.Features.Campaigns.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Extensions
-@using CampaignManager.Web.Utilities.Services
-@inject CampaignService CampaignService
-@inject IdentityService UserInformationService
 @inject NavigationManager NavigationManager
 
-@rendermode InteractiveServer
+@* Данные — снимок HomeCampaignsPanel: листы игроков в нём есть только у кампаний, которые
+   пользователь ведёт. Своего @rendermode и походов в базу у блока нет. *@
 
-@if (IsUserAuthenticated && IsUserKeeper)
+@if (Campaigns is { IsAuthenticated: true, IsKeeper: true })
 {
     <div class="cm-section">
         <div class="cm-section-header">
@@ -39,7 +36,7 @@
                         </div>
                         <div class="kc-trigger-right">
                             <span class="kc-players-count">
-                                <i class="fa-solid fa-users mr-1"></i>@(campaign.Players?.Count ?? 0)
+                                <i class="fa-solid fa-users mr-1"></i>@campaign.PlayerCount
                             </span>
                             <i class="fa-solid @(expanded ? "fa-chevron-up" : "fa-chevron-down") kc-chevron"></i>
                         </div>
@@ -48,7 +45,7 @@
                     @if (expanded)
                     {
                         <div class="cm-accordion-body kc-accordion-body">
-                            @if (campaign.Players is null || campaign.Players.Count == 0)
+                            @if (campaign.Players.Count == 0)
                             {
                                 <p class="cm-empty">В этой кампании пока нет игроков.</p>
                             }
@@ -68,14 +65,14 @@
                                     <tbody>
                                         @foreach (var player in campaign.Players)
                                         {
-                                            @if (player.Characters is not null && player.Characters.Count > 0)
+                                            @if (player.Characters.Count > 0)
                                             {
                                                 @foreach (var character in player.Characters)
                                                 {
                                                     <tr>
                                                         <td data-label="Игрок">@player.PlayerName</td>
-                                                        <td data-label="Персонаж" class="font-medium">@character.CharacterName</td>
-                                                        <td data-label="Профессия">@character.Character.PersonalInfo.Occupation</td>
+                                                        <td data-label="Персонаж" class="font-medium">@character.Name</td>
+                                                        <td data-label="Профессия">@character.Occupation</td>
                                                         <td data-label="Тип">
                                                             <Badge Variant="@KindVariant(character.Kind)"
                                                                    Size="sm" Rounded="full" WithBorder="false">
@@ -117,28 +114,22 @@
 }
 
 @code {
-    private List<Campaign>? KeeperCampaigns;
-    private bool IsUserAuthenticated => CurrentUserId is not null;
-    private bool IsUserKeeper;
-    private string? CurrentUserId;
+    /// <summary>Снимок главной; <c>null</c> — ещё грузится.</summary>
+    [Parameter] public HomeCampaigns? Campaigns { get; set; }
+
+    private List<HomeCampaign>? KeeperCampaigns;
     private Dictionary<Guid, bool> _expandedCampaigns = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnParametersSet()
     {
-        CurrentUserId = UserInformationService.GetCurrentUserEmail();
-        if (IsUserAuthenticated)
-        {
-            var allCampaigns = await CampaignService.GetUserCampaignsAsync();
-            KeeperCampaigns = allCampaigns
-                .Where(c => c.KeeperEmail == CurrentUserId)
-                .ToList();
+        // Раскрытие аккордеонов считается один раз, когда приходит снимок, — иначе любая
+        // перерисовка родителя сворачивала бы то, что Хранитель раскрыл руками.
+        if (Campaigns is null || KeeperCampaigns is not null) return;
 
-            _expandedCampaigns = KeeperCampaigns.ToDictionary(
-                c => c.Id,
-                c => c.Status == CampaignStatus.Active);
-        }
-
-        IsUserKeeper = await UserInformationService.IsKeeper();
+        KeeperCampaigns = [.. Campaigns.Mine.Where(c => c.KeptByMe)];
+        _expandedCampaigns = KeeperCampaigns.ToDictionary(
+            c => c.Id,
+            c => c.Status == CampaignStatus.Active);
     }
 
     private void ToggleCampaign(Guid id)

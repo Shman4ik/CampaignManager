@@ -4,7 +4,7 @@ using CampaignManager.Web.Components.Features.Combat.Services;
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
 /// <summary>
-///     Необязательное правило «Пункты Удачи» («Зов Ктулху» 7e, стр. 96) — <b>единственное</b>
+///     Необязательное правило «Пункты Удачи» («Зов Ктулху» 7e, стр. 97) — <b>единственное</b>
 ///     место, где живёт его арифметика.
 ///     <para>
 ///         Один пункт Удачи уменьшает выпавшее число на единицу; потраченные пункты вычитаются
@@ -87,15 +87,4 @@ public static class LuckRules
         yield return (SuccessLevel.HardSuccess, target / 2);
         yield return (SuccessLevel.ExtremeSuccess, target / 5);
     }
-
-    /// <summary>Как называется уровень успеха на листе.</summary>
-    public static string LevelText(SuccessLevel level) => level switch
-    {
-        SuccessLevel.CriticalSuccess => "критический успех",
-        SuccessLevel.ExtremeSuccess => "чрезвычайный успех",
-        SuccessLevel.HardSuccess => "трудный успех",
-        SuccessLevel.RegularSuccess => "обычный успех",
-        SuccessLevel.Fumble => "крах",
-        _ => "провал"
-    };
 }

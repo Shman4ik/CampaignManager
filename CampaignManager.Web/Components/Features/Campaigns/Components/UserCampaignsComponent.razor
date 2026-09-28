@@ -1,43 +1,36 @@
 @using CampaignManager.Web.Components.Features.Campaigns.Models
-@using CampaignManager.Web.Components.Features.Campaigns.Services
-@using CampaignManager.Web.Components.Features.Characters.Model
-@using CampaignManager.Web.Components.Features.Characters.Services
-@using CampaignManager.Web.Model
-@using CampaignManager.Web.Utilities.Services
-@inject CampaignService CampaignService
-@inject CharacterService CharacterService
-@inject IdentityService UserInformationService
 @inject NavigationManager NavigationManager
 
-@rendermode InteractiveServer
+@* Данные — снимок HomeCampaignsPanel; своего @rendermode и походов в базу у блока нет. *@
 
 <div class="cm-section">
     <div class="cm-section-header">
         <span class="cm-section-title">Ваши кампании</span>
     </div>
 
-    @if (!IsUserAuthenticated)
+    @if (Campaigns is null)
+    {
+        <p class="cm-empty"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Загрузка...</p>
+    }
+    else if (!Campaigns.IsAuthenticated)
     {
         <div class="cm-info-banner">
             <i class="fa-solid fa-circle-info mr-1.5"></i>Войдите в систему, чтобы увидеть свои кампании.
         </div>
     }
-    else if (UserCampaigns is null)
-    {
-        <p class="cm-empty"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Загрузка...</p>
-    }
-    else if (UserCampaigns.Count == 0)
+    else if (Campaigns.Mine.Count == 0)
     {
         <p class="cm-empty">У вас пока нет доступных кампаний.</p>
     }
     else
     {
         <div class="campaigns-grid">
-            @foreach (var campaign in UserCampaigns)
+            @foreach (var campaign in Campaigns.Mine)
             {
-                var isKeeper = CurrentUserId == campaign.KeeperEmail;
-                var userCharacter = GetUserCharacter(campaign);
-                var npcs = isKeeper && _isKeeper ? GetCampaignNpcs(campaign.Id) : [];
+                var isKeeper = campaign.KeptByMe;
+                var canManage = isKeeper && Campaigns.IsKeeper;
+                var userCharacter = campaign.MyCharacter;
+                var npcs = canManage ? campaign.Npcs : [];
 
                 <div class="cm-card campaign-card">
                     <div class="campaign-card-header">
@@ -55,17 +48,17 @@
                                 <span class="campaign-meta-value" title="@campaign.KeeperEmail">@campaign.KeeperEmail</span>
                                 <span class="campaign-meta-sep">·</span>
                             }
-                            <span class="campaign-meta-count">Игроков: @(campaign.Players?.Count ?? 0)</span>
+                            <span class="campaign-meta-count">Игроков: @campaign.PlayerCount</span>
                         </div>
 
                         @if (userCharacter is not null)
                         {
                             <div class="campaign-row">
-                                <span class="campaign-row-text" title="@userCharacter.CharacterName">
-                                    <span class="campaign-row-name">@userCharacter.CharacterName</span>
-                                    @if (!string.IsNullOrWhiteSpace(userCharacter.Character.PersonalInfo.Occupation))
+                                <span class="campaign-row-text" title="@userCharacter.Name">
+                                    <span class="campaign-row-name">@userCharacter.Name</span>
+                                    @if (!string.IsNullOrWhiteSpace(userCharacter.Occupation))
                                     {
-                                        <span class="campaign-row-sub">@userCharacter.Character.PersonalInfo.Occupation</span>
+                                        <span class="campaign-row-sub">@userCharacter.Occupation</span>
                                     }
                                 </span>
                                 <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
@@ -75,7 +68,7 @@
                             </div>
                         }
 
-                        @if (userCharacter is null || (isKeeper && _isKeeper))
+                        @if (userCharacter is null || canManage)
                         {
                             <div class="campaign-actions">
                                 @if (userCharacter is null)
@@ -89,7 +82,7 @@
                                         Пустой лист
                                     </button>
                                 }
-                                @if (isKeeper && _isKeeper)
+                                @if (canManage)
                                 {
                                     <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm campaign-action-wide"
                                             @onclick="() => AddNpc(campaign.Id)">
@@ -99,15 +92,23 @@
                             </div>
                         }
 
-                        @if (isKeeper && _isKeeper && npcs.Count > 0)
+                        @* Журнал читают и игроки кампании, поэтому ссылка есть у всех: права проверяет
+                           CampaignJournalService. *@
+                        <div class="campaign-actions">
+                            <a href="/campaigns/@campaign.Id/journal" class="cm-btn cm-btn-secondary cm-btn-sm campaign-action-wide">
+                                <i class="fa-solid fa-book-open"></i>Журнал встреч
+                            </a>
+                        </div>
+
+                        @if (canManage && npcs.Count > 0)
                         {
                             <div class="campaign-npcs">
                                 <div class="campaign-npcs-title">NPC (@npcs.Count)</div>
                                 @foreach (var npc in npcs)
                                 {
                                     <div class="campaign-row">
-                                        <span class="campaign-row-text" title="@npc.CharacterName">
-                                            <span class="campaign-row-name">@npc.CharacterName</span>
+                                        <span class="campaign-row-text" title="@npc.Name">
+                                            <span class="campaign-row-name">@npc.Name</span>
                                         </span>
                                         <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm"
                                                 @onclick="() => EditCharacter(npc.Id)">
@@ -125,45 +126,8 @@
 </div>
 
 @code {
-    private List<Campaign>? UserCampaigns;
-    private bool IsUserAuthenticated => CurrentUserId is not null;
-    private string? CurrentUserId;
-    private bool _isKeeper;
-
-    /// <summary>НПС по кампаниям, где текущий пользователь — Хранитель.</summary>
-    private readonly Dictionary<Guid, List<CharacterStorageDto>> _campaignNpcs = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        CurrentUserId = UserInformationService.GetCurrentUserEmail();
-        if (IsUserAuthenticated)
-        {
-            UserCampaigns = await CampaignService.GetUserCampaignsAsync();
-            _isKeeper = await UserInformationService.IsKeeper();
-
-            if (_isKeeper)
-            {
-                foreach (var campaign in UserCampaigns?.Where(c => c.KeeperEmail == CurrentUserId) ?? [])
-                {
-                    var npcs = await CharacterService.GetNpcsAsync(campaign.Id);
-                    _campaignNpcs[campaign.Id] = npcs.Where(n => n.CampaignId == campaign.Id).ToList();
-                }
-            }
-        }
-    }
-
-    private CharacterStorageDto? GetUserCharacter(Campaign campaign) =>
-        campaign.Players?
-            .FirstOrDefault(p => p.PlayerEmail == CurrentUserId)
-            ?.Characters?
-            .Where(p => p.Status == CharacterStatus.Active)
-            .SingleOrDefault();
-
-    /// <summary>
-    ///     НПС кампании — отдельные листы с <c>CampaignId</c>, а не персонажи в слотах игроков.
-    /// </summary>
-    private List<CharacterStorageDto> GetCampaignNpcs(Guid campaignId) =>
-        _campaignNpcs.TryGetValue(campaignId, out var npcs) ? npcs : [];
+    /// <summary>Снимок главной; <c>null</c> — ещё грузится.</summary>
+    [Parameter] public HomeCampaigns? Campaigns { get; set; }
 
     private void EditCharacter(Guid characterId) =>
         NavigationManager.NavigateTo($"/character/{characterId}");

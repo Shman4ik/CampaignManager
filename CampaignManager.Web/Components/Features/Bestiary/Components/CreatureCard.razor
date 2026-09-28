@@ -2,34 +2,34 @@
 @using CampaignManager.Web.Extensions
 @inject NavigationManager NavigationManager
 
+@* Статблок существа. Короткие числа (СИЛ…МОЩ, ПЗ, ПМ) идут сеткой, число колонок которой
+   считает сама ширина (.cr-stats, auto-fill), а строки с оговорками — бонус к урону,
+   скорость, атаки за раунд, броня, потеря рассудка — каждая во всю ширину карточки.
+   Раньше всё лежало в grid-cols-2 внутри колонки 2/3 карточки, и на портрете iPad
+   (где список тогда уже шёл в две колонки) «Атак за раунд: 2 (может схватить…)»
+   рвалось на восемь строк, а левая и правая половины статблока разъезжались по высоте. *@
 <div class="cm-card overflow-hidden hover:shadow-md transition-shadow">
-    <div class="cm-card-header">
+    <div class="cm-card-header flex-wrap">
         <span class="cm-card-title truncate">@Creature.Name</span>
-        <div class="flex gap-1 flex-shrink-0">
+        <div class="flex flex-wrap gap-1 flex-shrink-0">
             <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => EditCreature(Creature)">Изменить</Button>
             <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => OnDelete.InvokeAsync(Creature)">Удалить</Button>
         </div>
     </div>
     <div class="cm-card-body">
-        <div class="text-sm text-gray-600 mb-3">
+        <div class="mb-3">
             <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">
                 @Creature.Type.ToRussianString()
             </Badge>
         </div>
 
-        <!-- Characteristics and Image row -->
-        <div class="flex flex-col md:flex-row gap-6 mb-4">
-            <!-- Characteristics section with fixed width -->
-            <div class="md:w-2/3">
-                <h3 class="font-medium mb-1">Характеристики:</h3>
-                <div class="grid grid-cols-2 text-sm gap-x-4">
-                    @foreach (var charItem in Characteristics.Where(c => c.Value != null &&
-                                                                         !string.IsNullOrWhiteSpace(c.Value.ToString())))
+        <div class="flex flex-col sm:flex-row gap-4 mb-3">
+            <div class="flex-1 min-w-0">
+                <h3 class="cm-section-title mb-1">Характеристики</h3>
+                <div class="cr-stats text-sm">
+                    @foreach (var stat in ShortStats)
                     {
-                        <div>
-                            <CharacteristicItem Label="@charItem.Label" Value="@charItem.Value"
-                                                DiceRoll="@charItem.DiceRoll"/>
-                        </div>
+                        <CharacteristicItem Label="@stat.Label" Value="@stat.Value" DiceRoll="@stat.DiceRoll"/>
                     }
                 </div>
             </div>
@@ -39,9 +39,9 @@
             @if (Creature.Images.Count > 0)
             {
                 var shown = Creature.Images[Math.Min(_imageIndex, Creature.Images.Count - 1)];
-                <div class="md:w-1/3 flex flex-col items-center gap-2">
+                <div class="sm:w-40 shrink-0 flex flex-col items-center gap-2">
                     <img src="@CreatureImage.ToSrc(shown.Url)" alt="@(shown.Caption ?? Creature.Name)"
-                         class="max-w-full h-auto max-h-48 object-contain rounded" loading="lazy"/>
+                         class="max-w-full h-auto max-h-40 object-contain rounded" loading="lazy"/>
                     @if (!string.IsNullOrWhiteSpace(shown.Caption))
                     {
                         <span class="text-xs text-gray-500 text-center">@shown.Caption</span>
@@ -64,29 +64,35 @@
                     }
                 </div>
             }
-            else
-            {
-                <div class="md:w-1/3"></div>
-                <!-- Empty placeholder to maintain layout when no image -->
-            }
         </div>
 
-        <!-- Full width description section -->
-        <div
-            class="w-full mt-4 text-gray-700 text-sm @(string.IsNullOrEmpty(Creature.Description) ? "" : "overflow-y-auto pr-2 custom-scrollbar")">
-            <h3 class="font-medium mb-1 text-sm font-semibold">Описание:</h3>
-            @(string.IsNullOrEmpty(Creature.Description)
-                ? "Описание отсутствует."
-                : Creature.Description)
+        @if (StatLines.Count > 0)
+        {
+            <dl class="text-sm space-y-0.5 mb-3">
+                @foreach (var line in StatLines)
+                {
+                    <div>
+                        <dt class="inline font-medium">@line.Label:</dt>
+                        <dd class="inline">@line.Value</dd>
+                    </div>
+                }
+            </dl>
+        }
+
+        <div class="mt-4 text-sm">
+            <h3 class="cm-section-title mb-1">Описание</h3>
+            <p class="cm-text-muted">
+                @(string.IsNullOrEmpty(Creature.Description)
+                    ? "Описание отсутствует."
+                    : Creature.Description)
+            </p>
         </div>
 
-        <!-- Full width special abilities section -->
         @if (Creature.SpecialAbilities.Count > 0)
         {
-            <div class="w-full mt-4">
-                <h3 class="font-medium mb-1 text-sm font-semibold">Особые умения:</h3>
-                <div
-                    class="text-sm text-gray-700 @(Creature.SpecialAbilities.Count > 3 ? "overflow-y-auto pr-2 custom-scrollbar" : "")">
+            <div class="mt-4">
+                <h3 class="cm-section-title mb-1">Особые умения</h3>
+                <div class="text-sm text-gray-700">
                     @foreach (var ability in Creature.SpecialAbilities)
                     {
                         <div class="mb-1"><span class="font-semibold">@ability.Key:</span> @ability.Value</div>
@@ -95,22 +101,20 @@
             </div>
         }
 
-        <!-- Full width skills section -->
         @if (Creature.Skills.Count > 0)
         {
-            <div class="w-full mt-4">
-                <h3 class="font-medium mb-1 text-sm font-semibold">Навыки:</h3>
+            <div class="mt-4">
+                <h3 class="cm-section-title mb-1">Навыки</h3>
                 <div class="text-sm text-gray-700">
                     @string.Join(", ", Creature.Skills.Select(FormatSkill))
                 </div>
             </div>
         }
 
-        <!-- Full width attacks section -->
         @if (Creature.Attacks.Count > 0)
         {
-            <div class="w-full mt-4">
-                <h3 class="font-medium mb-1 text-sm font-semibold">Атаки:</h3>
+            <div class="mt-4">
+                <h3 class="cm-section-title mb-1">Атаки</h3>
                 <div class="text-sm text-gray-700 space-y-1">
                     @foreach (var attack in Creature.Attacks)
                     {
@@ -118,7 +122,15 @@
                         <div class="mb-1">
                             <span class="font-semibold">@attack.Name</span>
                             <span class="text-gray-600">
-                                @attack.SkillValue% (@(attack.SkillValue / 2)/@(attack.SkillValue / 5)), урон @FormatDamage(attack)
+                                @if (attack.SkillValue > 0)
+                                {
+                                    @($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон {FormatDamage(attack)}")
+                                }
+                                else
+                                {
+                                    @* Особая атака без процента решается встречной проверкой или срабатывает сама. *@
+                                    @("без броска, см. описание")
+                                }
                             </span>
                             @if (attack.Kind is not CreatureAttackKind.Melee)
                             {
@@ -145,12 +157,16 @@
 
     private int _imageIndex;
 
-    private List<(string Label, object? Value, string? DiceRoll)> Characteristics { get; set; } = new();
+    /// <summary>Короткие числа статблока — идут сеткой.</summary>
+    private List<(string Label, object? Value, string? DiceRoll)> ShortStats { get; set; } = [];
+
+    /// <summary>Строки статблока с оговорками — каждая во всю ширину.</summary>
+    private List<(string Label, string Value)> StatLines { get; set; } = [];
 
     protected override void OnParametersSet()
     {
         var c = Creature.CreatureCharacteristics;
-        Characteristics =
+        List<(string Label, object? Value, string? DiceRoll)> shortStats =
         [
             ("СИЛ", c.Strength?.Value, c.Strength?.DiceRoll),
             ("ВЫН", c.Constitution?.Value, c.Constitution?.DiceRoll),
@@ -159,16 +175,21 @@
             ("ИНТ", c.Intelligence?.Value, c.Intelligence?.DiceRoll),
             ("МОЩ", c.Power?.Value, c.Power?.DiceRoll),
             ("ПЗ", c.HealPoint, null),
-            ("ПМ", c.ManaPoint, null),
-            ("Ср. бонус к урону", NullIfEmpty(c.AverageDamageBonus), null),
-            ("Ср. Комплекция", c.AverageComplexity, null),
-            ("Скорость", FormatSpeed(c), null),
-            ("Атак за раунд", FormatAttacksPerRound(c), null),
-            ("Броня", FormatArmor(c), null),
-            ("Уклонение", c.DodgeSkill > 0 ? $"{c.DodgeSkill}%" : null, null),
-            ("Потеря рассудка", NullIfEmpty(c.SanityLoss), null)
+            ("ПМ", c.ManaPoint, null)
         ];
-        base.OnParametersSet(); // Ensure base method is called
+        ShortStats = [.. shortStats.Where(s => !string.IsNullOrWhiteSpace(s.Value?.ToString()))];
+
+        List<(string Label, string? Value)> lines =
+        [
+            ("Ср. бонус к урону", NullIfEmpty(c.AverageDamageBonus)),
+            ("Ср. комплекция", c.AverageComplexity.ToString()),
+            ("Скорость", FormatSpeed(c)),
+            ("Атак за раунд", FormatAttacksPerRound(c)),
+            ("Броня", FormatArmor(c)),
+            ("Уклонение", c.DodgeSkill > 0 ? $"{c.DodgeSkill}%" : null),
+            ("Потеря рассудка", NullIfEmpty(c.SanityLoss))
+        ];
+        StatLines = [.. lines.Where(l => !string.IsNullOrWhiteSpace(l.Value)).Select(l => (l.Label, l.Value!))];
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

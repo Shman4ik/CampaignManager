@@ -159,6 +159,11 @@ public class CombatActionResult
     /// <summary>Сколько рассудка цель потеряла за игровой день с учётом этой проверки.</summary>
     public int? SanityLostToday { get; set; }
 
+    // ── Заклинание ─────────────────────────────────────────────────────
+
+    /// <summary>Подробности сотворения; заполнено только у <see cref="CombatActionType.CastSpell" />.</summary>
+    public SpellCastOutcome? Spell { get; set; }
+
     // ── Описание результата ────────────────────────────────────────────
     public string Summary { get; set; } = string.Empty;
 }

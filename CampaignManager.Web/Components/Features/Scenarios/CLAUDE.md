@@ -3,10 +3,71 @@
 A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` is nullable — scenarios can exist standalone).
 
 ## Key Services
-- `ScenarioService(dbContextFactory, IMemoryCache, CampaignService campaignService, logger)` — the only feature service with a direct dependency on another feature's service (`CampaignService`).
+- `ScenarioService(dbContextFactory, IMemoryCache, CampaignService campaignService, IdentityService identityService, logger)` — the only feature service with a direct dependency on another feature's service (`CampaignService`). Он же — единственное место правил доступа к сценариям (см. «Права» ниже).
 - `ScenarioImportService(ScenarioService, CharacterService, logger)` — перенос сценария целиком
   одним JSON-файлом. Ничего не пишет в базу сам: только через два сервиса выше, поэтому права,
   валидация и `Init()` отрабатывают как при ручном вводе.
+- `ScenarioHandoutService(dbContextFactory, identityService, scenarioService, logger)` — одна
+  раздатка для второго экрана, **с проверкой прав** (см. «Показ раздатки игрокам»). Кто ведёт
+  сценарий, решает не он, а `ScenarioService.GetAccessAsync` (`CanEdit`); сам сервис добавляет к
+  этому только игроков кампании сценария.
+
+## Показ раздатки игрокам
+iPad разворачивают к столу — на экране должна быть только раздатка.
+- `HandoutShowcase` — полноэкранный показ поверх всего (z-index 200: выше шапки и плеера, ниже
+  диалога переподключения): изображение целиком в экран, текст — крупным «листом бумаги»,
+  PDF — во фрейме, тёмный фон, «Закрыть». Название раздатки не показывается: это пометка Хранителя.
+- Кнопки «Показать игрокам» — у раздаток в `LocationDetail` и `KeyFactsPanel` (режим игры) и
+  «Показать» в блоке «Раздатки» обзора. Компоненты только зовут `OnShowHandout`; открытая
+  раздатка — `?handout=<id>` в адресе `ScenarioDetailPage` (как `mode`/`location`, см. ниже),
+  поэтому показ переживает паузу вкладки. `GoTo` сбрасывает `handout` при смене режима/локации.
+- Второй экран — `/scenarios/{id}/handouts/{handoutId}` (`ScenarioHandoutPage`): ссылка «Второй
+  экран» и «Скопировать адрес» в самом показе. Страница **статическая** и в лэйауте
+  `HandoutScreenLayout` без интерактивных островов (боковая панель, плеер): у неё нет circuit,
+  и телевизор у стола не накроет раздатку диалогом переподключения. Интерактивное туда не добавлять.
+- Смотреть второй экран может ведущий сценария — тот, кому `ScenarioService` даёт его править
+  (шаблон — любой Хранитель; сценарий кампании — её Хранитель или администратор), — и игроки
+  кампании сценария: это раздатка «на руки». Автор шаблона, ставшего чужим ваншотом, ведущим
+  больше не считается — как и на странице сценария. Листать соседние раздатки там нельзя
+  намеренно: у игрока это раскрыло бы ещё не выданные материалы.
+- **Текст раздатки — только для игроков.** Пометки Хранителю («выдать после второй ночи», «этот
+  сыщик узнает хижину — проверка Рассудка») живут в `ScenarioHandout.KeeperNote`, а не в
+  `Description`: раньше их писали в текст, и «Показать игрокам» зачитывало их вслух. Заметку
+  рисует `HandoutKeeperNote` — в режиме игры, на обзоре и в редакторе; в `HandoutShowcase` и
+  `ScenarioHandoutPage` её не ставить. Поле копируется при создании сценария из шаблона и
+  ходит через импорт/экспорт JSON (`keeperNote`).
+
+## Права
+
+Сценарии — **общая библиотека Хранителей**. Игрок не правит ничего. Правила живут ровно в одном
+месте — `ScenarioService.Evaluate`, всё остальное только собирает для него данные:
+
+| Сценарий | Править | Удалить |
+|---|---|---|
+| шаблон (`CampaignId == null`) | любой Хранитель | автор (`CreatorEmail`, без учёта регистра) или администратор |
+| шаблон без автора (`CreatorEmail == null`, старые записи) | любой Хранитель | только администратор |
+| сценарий кампании (`CampaignId != null`) | Хранитель этой кампании (`Campaign.KeeperEmail`) или администратор | он же |
+
+- **Каждый метод записи проверяет права сам**: `UpdateScenarioAsync`, `DeleteScenarioAsync`,
+  НПС (`Add/Update/RemoveNpc…`), существа, предметы, локации, ключевые факты, раздатки — через
+  `MayWriteAsync` по строке **из базы**, а не по объекту со страницы. Отказ — `LogWarning` и
+  `false` (`null` у создания): контракт методов не меняется, страницы и так обрабатывают неудачу.
+- `CreateScenarioAsync` и `CreateScenarioFromTemplateAsync` (`MayCreateAsync`): сценарий заводит
+  только Хранитель, а в кампанию — только её Хранитель. **Автора ставит сервис** по текущему
+  пользователю: страницы брали почту синхронным `GetCurrentUserEmail`, который в интерактивном
+  рендере отдаёт `null`, а импорт её не заполнял вовсе — отсюда шаблоны без автора.
+- `UpdateScenarioAsync` не даёт правкой сменить `CreatorEmail` и `CampaignId` — от них зависят
+  права. Кампанию сценарию назначает только публикация ваншота.
+- **Публикация шаблона привязывает его к кампании ваншота** того, кто опубликовал
+  (`CreateCampaignForOneShotAsync`). С этого момента это сценарий кампании: править и удалять его
+  может только опубликовавший Хранитель (и администратор), даже если автор шаблона — другой.
+- Страницам права отдаёт `GetAccessAsync(scenario)` / `GetAccessAsync(список)` (`ScenarioAccess`:
+  `CanEdit`, `CanDelete`; список читает Хранителей кампаний одним запросом). `ScenariosPage` прячет
+  «Изменить»/«Удалить» у карточки, `ScenarioDetailPage` — «Редактировать» и все кнопки правки
+  (анонс остаётся виден, но заблокирован), `ScenarioEditPage` вместо формы показывает `<Alert>`.
+  «Добавить в кампанию» предлагает только кампании из `GetWritableCampaignsAsync`, а
+  «В сценарий» в библиотеке НПС (`NPC/Components/CastNpcDialog`) — только сценарии из
+  `GetWritableScenariosAsync`.
 
 ## Импорт / экспорт JSON
 
@@ -44,6 +105,17 @@ A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` i
   - `ScenarioSkillCheck` — predefined skill checks tied to the scenario.
 
 ## Notes
+- **Данные страницы сценария переезжают из пререндера** снимком `ScenarioPagePrerender`
+  (`ScenarioDetailPage.PrerenderedScenario`, `SkipLastSnapshot`, см. корневой CLAUDE.md). Снимок —
+  JSON, поэтому граф без циклов: `GetScenarioCastAsync` снимает у листов обратную ссылку
+  `ScenarioCasts`, сценарий и прегены грузятся без навигаций. Игроку страница данных не читает
+  вовсе — ему показывается только «Доступ запрещён».
+- `GetScenarioByIdAsync` отдаёт **только строку сценария** — без `Cast` и `Pregens`. Состав и
+  прегены читаются отдельно (`GetScenarioCastAsync`, `CharacterService.GetScenarioPregensAsync`):
+  раньше навигации подгружались джойном и не читались никем, а страница сценария получала прегены
+  дважды. Нужен состав — зови `GetScenarioCastAsync`, а не возвращай `Include`.
+- Списки сценариев, НПС, существ и предметов читаются `AsNoTracking`: сохраняют их другие методы,
+  по свежей строке из базы (`FindAsync` + `SetValues`), так что трекинг чтения ничего не давал.
 - NPCs and creatures are modeled differently: NPCs are full `CharacterStorageDto` character sheets; creatures/monsters subclass `Creature`. Don't try to unify them.
 - Состав НПС меняют только `AddNpcToScenarioAsync` / `UpdateScenarioNpcAsync` /
   `RemoveNpcFromScenarioAsync`. «Убрать НПС из сценария» удаляет связь, а не лист —
@@ -69,9 +141,22 @@ A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` i
 - `AddCreatureModal` и `AddItemModal` используют одни и те же DOM-идентификаторы `quantity`,
   `location`, `notes`. Обе модалки всегда есть в разметке страницы сценария, поэтому
   `getElementById` попадает в первую (существа) — учитывайте это в автотестах и при отладке.
+- **Шапка `ScenarioDetailPage` одна на все состояния** — «нет доступа», загрузка, «не найден»,
+  обзор и режим игры — и описана один раз, свойством `Header` в `@code`. В разметке она стоит
+  дважды только потому, что режим игры — колонка `h-screen`, и шапка обязана быть её первой
+  строкой (иначе колонка съедет на 56px за экран). Своих `page-topbar` в режиме игры не заводить.
+- **Проверки навыков локации** в режиме игры (`LocationDetail`) — кнопка «Проверить» открывает общий
+  `Checks/Components/SkillCheckModal` с навыком и сложностью проверки. Сыщиков диалог берёт из
+  кампании сценария (`LocationDetail.CampaignId`) и только читает их листы. Сложность в
+  `ScenarioSkillCheck.Difficulty` — строка `"Hard"`/`"Extreme"`, её переводит
+  `SkillCheckRules.ParseScenarioDifficulty`, а подпись плашки и пункта в редакторе — по книге,
+  «Трудная»/«Чрезвычайная» (стр. 80), через тот же `SkillCheckRules.DifficultyLabel`, что у диалога.
+  Значения `"Hard"`/`"Extreme"` в данных не менялись — старые сценарии читаются как были.
 - Режим игры на `ScenarioDetailPage` — это `?mode=play&location=<guid>` в адресе, а не поля
   компонента. Circuit восстанавливает только `[PersistentState]`, поэтому раньше пауза вкладки
   (см. `js/circuit-persistence.js`) выбрасывала Хранителя из трёхпанельного режима в обзор посреди
   игры. Новое состояние режима игры добавлять туда же, в query, а не в приватное поле; менять его
   только через `GoTo(mode, locationId)` — она ходит с `replace: true`, чтобы переходы по локациям
-  не забивали историю.
+  не забивали историю. Показанная игрокам раздатка — третий параметр того же адреса, `handout`.
+- В карточке «НПС сценария» кнопка «Быстрый» открывает `NPC/Components/QuickNpcModal` со
+  `ScenarioId`: лист уходит в библиотеку, в сценарий — связью (см. `NPC/CLAUDE.md`).

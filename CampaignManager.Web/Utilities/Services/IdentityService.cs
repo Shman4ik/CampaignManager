@@ -9,14 +9,26 @@ using Microsoft.AspNetCore.Http;
 
 namespace CampaignManager.Web.Utilities.Services;
 
-public class IdentityService(
+public sealed class IdentityService(
     IHttpContextAccessor httpContextAccessor,
     AuthenticationStateProvider authenticationStateProvider,
     IDbContextFactory<AppIdentityDbContext> appIdentityDbContextFactory,
-    IDbContextFactory<AppDbContext> appDbContextFactory)
+    IDbContextFactory<AppDbContext> appDbContextFactory,
+    ILogger<IdentityService> logger)
 {
-    private ApplicationUser? _cachedUser;
-    private bool _userCacheLoaded;
+    /// <summary>
+    ///     Строка <c>AspNetUsers</c> текущего пользователя на время области — HTTP-запроса пререндера
+    ///     или circuit. Запоминается <b>задача</b>, а не результат: острова одной страницы стартуют
+    ///     одновременно, и пока первый ждёт базу, остальные при кэше «по результату» уходили бы за
+    ///     той же строкой сами — так главная и делала по три одинаковых SELECT на проход.
+    ///     <para>
+    ///         Роль и имя отсюда не берутся: для прав есть claims (их кормит <c>UserClaimsCache</c>,
+    ///         который сбрасывают при смене роли и имени), а эта строка нужна только тем, кому важно,
+    ///         есть ли пользователь в базе, или нужны поля, которых в claims нет.
+    ///     </para>
+    /// </summary>
+    private Task<ApplicationUser?>? _currentUser;
+
     /// <summary>
     /// Sync — works during SSR/prerender (HttpContext available).
     /// Returns null during interactive WebSocket rendering.
@@ -48,6 +60,22 @@ public class IdentityService(
     public async Task<bool> IsAdministrator()
     {
         return await GetCurrentUserRole() is PlayerRole.Administrator;
+    }
+
+    /// <summary>
+    ///     Серверная граница для правки общего контента — справочников оружия, предметов, заклинаний
+    ///     и книг: Хранитель и администратор проходят, остальным летит
+    ///     <see cref="UnauthorizedAccessException" />. Спрятанная в интерфейсе кнопка защитой не
+    ///     считается: метод сервиса можно вызвать и в обход неё.
+    /// </summary>
+    public async Task EnsureKeeperAsync(string operation)
+    {
+        if (await IsKeeper())
+            return;
+
+        var email = await GetCurrentUserEmailAsync();
+        logger.LogWarning("Denied keeper operation {Operation} for {Email}", operation, email ?? "<anonymous>");
+        throw new UnauthorizedAccessException($"Операция «{operation}» доступна только Хранителю");
     }
 
     public async Task<PlayerRole> GetCurrentUserRole()
@@ -87,12 +115,18 @@ public class IdentityService(
 
     public async Task<ApplicationUser?> GetUserAsync()
     {
-        if (_userCacheLoaded) return _cachedUser;
-
-        var userEmail = await GetCurrentUserEmailAsync();
-        _cachedUser = await GetUserByEmailFromDb(userEmail);
-        _userCacheLoaded = true;
-        return _cachedUser;
+        var load = _currentUser ??= LoadCurrentUserAsync();
+        try
+        {
+            return await load;
+        }
+        catch
+        {
+            // Упавшую загрузку не запоминаем, иначе circuit до конца жизни получал бы ту же ошибку.
+            if (ReferenceEquals(_currentUser, load))
+                _currentUser = null;
+            throw;
+        }
     }
 
     public async Task<ApplicationUser?> GetUserAsync(string? email)
@@ -100,18 +134,23 @@ public class IdentityService(
         if (email == null) return null;
 
         var currentEmail = await GetCurrentUserEmailAsync();
-        if (_userCacheLoaded && string.Equals(currentEmail, email, StringComparison.OrdinalIgnoreCase))
-            return _cachedUser;
+        if (string.Equals(currentEmail, email, StringComparison.OrdinalIgnoreCase))
+            return await GetUserAsync();
 
         return await GetUserByEmailFromDb(email);
     }
+
+    private async Task<ApplicationUser?> LoadCurrentUserAsync() =>
+        await GetUserByEmailFromDb(await GetCurrentUserEmailAsync());
 
     private async Task<ApplicationUser?> GetUserByEmailFromDb(string? email)
     {
         if (email == null) return null;
 
         await using var dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
-        return await dbContext.Users.SingleOrDefaultAsync(p => p.Email != null && p.Email.ToLower() == email.ToLower());
+        return await dbContext.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(p => p.Email != null && p.Email.ToLower() == email.ToLower());
     }
 
     public async Task<ApplicationUser?> CreateUserAsync(ApplicationUser user)
@@ -119,6 +158,9 @@ public class IdentityService(
         await using var dbContext = await appIdentityDbContextFactory.CreateDbContextAsync();
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync();
+
+        // Запомненное «пользователя нет» после создания строки стало бы неправдой.
+        _currentUser = null;
         return user;
     }
 }

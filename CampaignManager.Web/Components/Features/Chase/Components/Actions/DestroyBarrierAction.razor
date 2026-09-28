@@ -1,0 +1,51 @@
+@inject ChaseService ChaseService
+
+@* Разрушить преграду перед следующей локацией (стр. 135). *@
+
+<div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-warning-800">
+        Разрушить: @(NextLocation.BarrierName ?? "Преграда")
+        (ПЗ: @NextLocation.BarrierCurrentHitPoints / @NextLocation.BarrierHitPoints)
+    </div>
+    <p class="text-xs text-warning-700">
+        @if (Participant.IsInVehicle)
+        {
+            <span>Транспорт наносит 1d10 урона за каждый пункт Комплекции (@Math.Max(1, Participant.BuildValue) × 1d10). Введите суммарный урон.</span>
+        }
+        else
+        {
+            <span>Пешеход бьёт преграду вручную — урон задаёт Хранитель (в примере из книги это 1d3). Введите суммарный урон.</span>
+        }
+    </p>
+    <div class="grid grid-cols-2 gap-3">
+        <div>
+            <label class="text-xs text-gray-600">Урон (Комплекция @Participant.BuildValue × 1d10)</label>
+            <input type="number" min="0" @bind="Form.DamageRoll" placeholder="Введите урон"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+    </div>
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="Execute">
+            <span>Нанести урон</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseLocation NextLocation { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task Execute()
+    {
+        var result = ChaseService.AttemptDestroyBarrier(
+            Participant.Id, Participant.CurrentLocation + 1,
+            ChaseActionForm.Entered(Form.DamageRoll));
+        await OnResolved.InvokeAsync(result);
+    }
+}

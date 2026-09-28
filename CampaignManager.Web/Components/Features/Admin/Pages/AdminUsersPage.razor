@@ -1,6 +1,7 @@
 @page "/admin/users"
 @using CampaignManager.Web.Components.Features.Admin.Services
 @using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Extensions
 @using CampaignManager.Web.Model
 @using CampaignManager.Web.Utilities.Services
 @attribute [Authorize(Roles = "Administrator")]
@@ -51,15 +52,16 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">@user.Email</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">@user.UserName</td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <Badge Variant="@GetRoleBadgeColor(user.Role)">@user.Role</Badge>
+                            <Badge Variant="@GetRoleBadgeVariant(user.Role)">@user.Role.ToRussianString()</Badge>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            @* value — имя члена перечисления: по нему ChangeRoleAsync разбирает выбор. *@
                             <select value="@user.Role.ToString()"
                                     @onchange="@(e => ChangeRoleAsync(user.Email!, (string)e.Value!))"
                                     class="cm-input cm-input-sm">
                                 @foreach (var role in Enum.GetValues<PlayerRole>())
                                 {
-                                    <option value="@role.ToString()" selected="@(user.Role == role)">@role</option>
+                                    <option value="@role.ToString()" selected="@(user.Role == role)">@role.ToRussianString()</option>
                                 }
                             </select>
                         </td>
@@ -120,10 +122,12 @@
         }
     }
 
-    private static string GetRoleBadgeColor(PlayerRole role) => role switch
+    // Варианты Badge, а не имена цветов: «red»/«blue»/«gray» он не знает и красил всё в primary.
+    // Цвета те же, что у роли в личном кабинете (ProfilePage.RoleBadgeVariant).
+    private static string GetRoleBadgeVariant(PlayerRole role) => role switch
     {
-        PlayerRole.Administrator => "red",
-        PlayerRole.GameMaster => "blue",
-        _ => "gray"
+        PlayerRole.Administrator => "accent",
+        PlayerRole.GameMaster => "success",
+        _ => "secondary"
     };
 }

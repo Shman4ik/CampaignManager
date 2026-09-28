@@ -3,7 +3,17 @@
 Master spell catalog (independent entity).
 
 ## Key Services
-- `SpellService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `SpellService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
+- `SpellCatalogMatcher` (static) — находит заклинание каталога по свободной записи из списка
+  «Возможные заклинания» книги Мифов. Только точное совпадение после нормализации (регистр, «ё»,
+  кавычки, пробелы) по `Name` и `AlternativeNames`; кандидаты — вся строка, текст в «ёлочках» и
+  часть до скобки. Нечёткого поиска нет намеренно: не нашлось — Хранитель сопоставит руками в
+  модалке чтения книги, а не получит молча чужое заклинание. `IsKnown` — есть ли такое на листе.
+- `SpellStatsReader` (static) — разбирает `Cost` и `CastingTime` в подсказки для боя: ПМ, рассудок,
+  МОЩ, ПЗ формулами («8», «1d6», «10+1d6»; кириллическая «д» тоже) и раунды (0 — мгновенно, кости
+  раундов отдельно, флаг «в тексте минуты/часы/дни»). Это подсказка, не правда: «варьирует»,
+  «за каждый пункт», «(Урон×2+1) магии» остаются пустыми, и числа подтверждает Хранитель во
+  вкладке «Заклинание» боевого помощника (`Combat/CLAUDE.md`).
 
 ## Key Models
 - `Spell : BaseDataBaseEntity, INamedEntity` (declared in `SpellModel.cs`).
@@ -13,8 +23,11 @@ Master spell catalog (independent entity).
 Устроена так же, как каталоги оружия, предметов и книг (`Features/Weapons/CLAUDE.md`,
 `Features/Items/CLAUDE.md`, `Features/Books/CLAUDE.md`), и правки к ним имеет смысл
 вести вместе. Разметку списка держит `Components/SpellsListView.razor` (таблица +
-карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры,
-пагинацию и модалки.
+карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры
+и модалки. Страницу, сортировку и раскрытую строку держит общий
+`Shared/Model/CatalogListState<Spell>` (см. `design-system-guide.md`, «Каталог»).
+Модалка правит полную копию заклинания (`Utilities/Services/EntityCloner.Clone`), поэтому
+новое поле `Spell` в неё попадает само.
 
 - Колонки: `Название · Тип · Стоимость · Время сотворения · действия`. Их пять, а не
   девять, как у оружия, поэтому порог таблицы `lg` (1024): портрет iPad её вмещает —
@@ -34,6 +47,9 @@ Master spell catalog (independent entity).
   подобранные замером: стоимость вдвое длиннее времени сотворения, при равных долях
   у времени оставался пустой запас, а стоимость обрезалась.
 - Кнопки строки — иконки `cm-btn-sm cm-btn-icon` 36×36 с `aria-label`.
+- **Правят только Хранитель и администратор**, смотрят все — правило и его устройство те же,
+  что у оружия (`Features/Weapons/CLAUDE.md`, «Права»): проверка в `SpellService`, `CanEdit`
+  у `SpellsListView`/`SpellTableRow`, без него колонка действий исчезает целиком.
 - На странице 25 заклинаний вместо 6: плотная строка занимает одну строку текста.
 
 ## Notes

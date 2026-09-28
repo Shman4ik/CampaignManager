@@ -1,4 +1,5 @@
-﻿using CampaignManager.Web.Components.Features.Campaigns.Services;
+﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
+using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Model;
 using CampaignManager.Web.Utilities.DataBase;
@@ -15,12 +16,167 @@ public sealed class ScenarioService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
     CampaignService campaignService,
+    IdentityService identityService,
     ILogger<ScenarioService> logger)
 {
     private const string ScenariosCacheKey = "AllScenarios";
     private const string TemplatesCacheKey = "ScenarioTemplates";
     private const string PublishedCacheKey = "PublishedScenarios";
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
+
+    // ── Права ──────────────────────────────────────────────────────
+    //
+    // Единственное место, где живут правила доступа к сценариям (см. Scenarios/CLAUDE.md, «Права»).
+    // Сценарии — общая библиотека Хранителей:
+    //  • шаблон (CampaignId == null) правит любой Хранитель; удаляет автор (CreatorEmail, без учёта
+    //    регистра) или администратор; старые шаблоны без автора удаляет только администратор;
+    //  • сценарий кампании правит и удаляет Хранитель этой кампании (Campaign.KeeperEmail) или
+    //    администратор.
+    // Игрок не правит ничего. Каждый метод записи сверяется со строкой из базы, а не с объектом,
+    // который прислала страница: CampaignId и CreatorEmail в нём можно подменить.
+
+    /// <summary>Кто пишет: почта и роль текущего пользователя.</summary>
+    private sealed record Caller(string Email, PlayerRole Role)
+    {
+        public bool IsAdministrator => Role is PlayerRole.Administrator;
+        public bool IsKeeper => Role is PlayerRole.GameMaster or PlayerRole.Administrator;
+
+        public bool Is(string? email) =>
+            !string.IsNullOrWhiteSpace(email) && string.Equals(email.Trim(), Email, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    ///     Асинхронные методы <see cref="IdentityService" />, а не синхронный
+    ///     <c>GetCurrentUserEmail</c>: тот в интерактивном рендере отдаёт <c>null</c>.
+    /// </summary>
+    private async Task<Caller?> GetCallerAsync()
+    {
+        var email = await identityService.GetCurrentUserEmailAsync();
+        if (string.IsNullOrWhiteSpace(email)) return null;
+
+        return new Caller(email.Trim(), await identityService.GetCurrentUserRole());
+    }
+
+    /// <summary>Сами правила. Всё остальное в сервисе только собирает для них данные.</summary>
+    private static ScenarioAccess Evaluate(Caller? caller, Guid? campaignId, string? creatorEmail, string? campaignKeeperEmail)
+    {
+        if (caller is null || !caller.IsKeeper) return ScenarioAccess.None;
+        if (caller.IsAdministrator) return new ScenarioAccess(CanEdit: true, CanDelete: true);
+
+        if (campaignId is null)
+            return new ScenarioAccess(CanEdit: true, CanDelete: caller.Is(creatorEmail));
+
+        var keepsCampaign = caller.Is(campaignKeeperEmail);
+        return new ScenarioAccess(CanEdit: keepsCampaign, CanDelete: keepsCampaign);
+    }
+
+    private async Task<string?> GetCampaignKeeperEmailAsync(Guid? campaignId, AppDbContext? dbContext = null)
+    {
+        if (campaignId is not { } id) return null;
+
+        if (dbContext is not null) return await QueryAsync(dbContext);
+
+        await using var ownContext = await dbContextFactory.CreateDbContextAsync();
+        return await QueryAsync(ownContext);
+
+        Task<string?> QueryAsync(AppDbContext db) =>
+            db.Campaigns.Where(c => c.Id == id).Select(c => c.KeeperEmail).FirstOrDefaultAsync();
+    }
+
+    /// <summary>
+    ///     Права текущего пользователя на сценарий. Страницам — чтобы не показывать кнопки,
+    ///     которые сервис всё равно отклонит.
+    /// </summary>
+    public async Task<ScenarioAccess> GetAccessAsync(Scenario scenario)
+    {
+        var caller = await GetCallerAsync();
+        if (caller is null || !caller.IsKeeper) return ScenarioAccess.None;
+
+        var keeperEmail = await GetCampaignKeeperEmailAsync(scenario.CampaignId);
+        return Evaluate(caller, scenario.CampaignId, scenario.CreatorEmail, keeperEmail);
+    }
+
+    /// <summary>
+    ///     То же для списка: Хранители кампаний читаются одним запросом, а не по запросу на карточку.
+    /// </summary>
+    public async Task<Dictionary<Guid, ScenarioAccess>> GetAccessAsync(IReadOnlyCollection<Scenario> scenarios)
+    {
+        var caller = await GetCallerAsync();
+        if (caller is null || !caller.IsKeeper)
+            return scenarios.ToDictionary(s => s.Id, _ => ScenarioAccess.None);
+
+        List<Guid> campaignIds = [.. scenarios.Where(s => s.CampaignId is not null).Select(s => s.CampaignId!.Value).Distinct()];
+        Dictionary<Guid, string?> keepers = [];
+        if (campaignIds.Count > 0)
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            keepers = await dbContext.Campaigns
+                .Where(c => campaignIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.KeeperEmail);
+        }
+
+        return scenarios.ToDictionary(
+            s => s.Id,
+            s => Evaluate(caller, s.CampaignId, s.CreatorEmail,
+                s.CampaignId is { } id ? keepers.GetValueOrDefault(id) : null));
+    }
+
+    /// <summary>
+    ///     Сценарии, в которые текущий пользователь может писать, — для выбора в диалогах вне
+    ///     страницы сценария (занять НПС из библиотеки). Чужой сценарий кампании метод записи всё равно
+    ///     отклонит, поэтому в списке его нет. Права те же — <see cref="Evaluate" />, второй копии нет.
+    /// </summary>
+    public async Task<List<Scenario>> GetWritableScenariosAsync()
+    {
+        var scenarios = await GetAllScenariosAsync();
+        var access = await GetAccessAsync(scenarios);
+        return [.. scenarios.Where(s => access.GetValueOrDefault(s.Id).CanEdit)];
+    }
+
+    /// <summary>
+    ///     Кампании, куда текущий пользователь может положить сценарий: свои, а администратору — любые.
+    ///     Для выбора в «Добавить в кампанию» — чтобы не предлагать то, что сервис отклонит.
+    /// </summary>
+    public async Task<List<Campaign>> GetWritableCampaignsAsync(IEnumerable<Campaign> campaigns)
+    {
+        var caller = await GetCallerAsync();
+        return [.. campaigns.Where(c => Evaluate(caller, c.Id, creatorEmail: null, c.KeeperEmail).CanEdit)];
+    }
+
+    /// <summary>
+    ///     Проверка перед записью в уже существующий сценарий. <paramref name="stored" /> — строка
+    ///     из базы, а не то, что прислала страница. Отказ — предупреждение в лог и <c>false</c>:
+    ///     методы записи и так сообщают о неудаче результатом, а кнопки сюда страницы уже прячут.
+    /// </summary>
+    private async Task<bool> MayWriteAsync(AppDbContext dbContext, Scenario stored, bool delete = false)
+    {
+        var caller = await GetCallerAsync();
+        var keeperEmail = await GetCampaignKeeperEmailAsync(stored.CampaignId, dbContext);
+        var access = Evaluate(caller, stored.CampaignId, stored.CreatorEmail, keeperEmail);
+
+        var allowed = delete ? access.CanDelete : access.CanEdit;
+        if (!allowed)
+            logger.LogWarning("Denied {Operation} of scenario {ScenarioId} for {Email}",
+                delete ? "delete" : "edit", stored.Id, caller?.Email ?? "<anonymous>");
+
+        return allowed;
+    }
+
+    /// <summary>
+    ///     Проверка перед созданием сценария: заводит его только Хранитель, а в кампанию — только
+    ///     её Хранитель (или администратор). Возвращает вызывающего, если можно, иначе <c>null</c>.
+    /// </summary>
+    private async Task<Caller?> MayCreateAsync(AppDbContext dbContext, Guid? campaignId)
+    {
+        var caller = await GetCallerAsync();
+        var keeperEmail = await GetCampaignKeeperEmailAsync(campaignId, dbContext);
+        if (Evaluate(caller, campaignId, creatorEmail: null, keeperEmail).CanEdit)
+            return caller;
+
+        logger.LogWarning("Denied scenario creation in campaign {CampaignId} for {Email}",
+            campaignId, caller?.Email ?? "<anonymous>");
+        return null;
+    }
 
     /// <summary>
     ///     Gets all scenarios, optionally filtered by template status
@@ -36,7 +192,8 @@ public sealed class ScenarioService(
             if (cache.TryGetValue(cacheKey, out List<Scenario>? scenarios) && scenarios is not null) return scenarios;
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var query = dbContext.Scenarios.AsQueryable();
+            // Без трекинга: список уходит в общий кэш, и через этот контекст его никто не сохраняет.
+            var query = dbContext.Scenarios.AsNoTracking();
 
             if (templatesOnly) query = query.Where(s => s.IsTemplate);
 
@@ -68,6 +225,7 @@ public sealed class ScenarioService(
 
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             scenarios = await dbContext.Scenarios
+                .AsNoTracking()
                 .Include(s => s.Pregens)
                 .ThenInclude(n => n.CampaignPlayer)
                 .Where(s => s.IsPublished)
@@ -97,6 +255,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
+                .AsNoTracking()
                 .Where(s => s.CampaignId == campaignId)
                 .OrderBy(s => s.Name)
                 .ToListAsync();
@@ -109,7 +268,13 @@ public sealed class ScenarioService(
     }
 
     /// <summary>
-    ///     Gets a scenario by its ID
+    ///     Сценарий по идентификатору — сама строка, без <c>Cast</c> и <c>Pregens</c>.
+    ///     <para>
+    ///         Состав НПС и прегены читают отдельно — <see cref="GetScenarioCastAsync" /> и
+    ///         <c>CharacterService.GetScenarioPregensAsync</c>: ими пользуется страница сценария, а эти
+    ///         навигации из результата не читал никто. Раньше они всё равно подгружались джойном, и
+    ///         страница получала прегены дважды — отсюда и полный лист каждого прегена лишний раз.
+    ///     </para>
     /// </summary>
     public async Task<Scenario?> GetScenarioByIdAsync(Guid id)
     {
@@ -117,9 +282,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Scenarios
-                .Include(s => s.Cast)
-                .ThenInclude(sn => sn.Character)
-                .Include(s => s.Pregens)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
         catch (Exception ex)
@@ -139,6 +302,14 @@ public sealed class ScenarioService(
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var caller = await MayCreateAsync(dbContext, scenario.CampaignId);
+            if (caller is null) return null;
+
+            // Автор — тот, кто создаёт, а не то, что прислала страница: от него зависит, кто сможет
+            // удалить шаблон. Страницы брали почту синхронным GetCurrentUserEmail, который в
+            // интерактивном рендере отдаёт null, а импорт не заполнял её вовсе.
+            scenario.CreatorEmail = caller.Email;
             scenario.Init();
             await dbContext.Scenarios.AddAsync(scenario);
             await dbContext.SaveChangesAsync();
@@ -170,6 +341,13 @@ public sealed class ScenarioService(
 
             var existingScenario = await dbContext.Scenarios.FindAsync(scenario.Id);
             if (existingScenario is null) return false;
+            if (!await MayWriteAsync(dbContext, existingScenario)) return false;
+
+            // Автора и привязку к кампании правка не меняет: от них зависят права, и подменённый
+            // CampaignId иначе увёл бы общий шаблон в свою кампанию, а CreatorEmail — дал бы право
+            // его удалить. Кампанию сценарию назначает только публикация ваншота ниже.
+            scenario.CreatorEmail = existingScenario.CreatorEmail;
+            scenario.CampaignId = existingScenario.CampaignId;
 
             // Auto-create a campaign when a scenario is first published as a one-shot without one.
             // Reservations need a campaign to attach CampaignPlayer records to.
@@ -228,6 +406,7 @@ public sealed class ScenarioService(
 
             var scenario = await dbContext.Scenarios.FindAsync(id);
             if (scenario is null) return false;
+            if (!await MayWriteAsync(dbContext, scenario, delete: true)) return false;
 
             dbContext.Scenarios.Remove(scenario);
             await dbContext.SaveChangesAsync();
@@ -251,13 +430,16 @@ public sealed class ScenarioService(
     /// </summary>
     /// <param name="templateId">The ID of the template scenario</param>
     /// <param name="campaignId">The ID of the campaign</param>
-    /// <param name="creatorEmail">The email of the user creating the scenario</param>
     /// <returns>The newly created campaign scenario</returns>
-    public async Task<Scenario?> CreateScenarioFromTemplateAsync(Guid templateId, Guid campaignId, string creatorEmail)
+    public async Task<Scenario?> CreateScenarioFromTemplateAsync(Guid templateId, Guid campaignId)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            // Сценарий ложится в кампанию — значит, класть его может только её Хранитель.
+            var caller = await MayCreateAsync(dbContext, campaignId);
+            if (caller is null) return null;
 
             // Get the template scenario with all related entities
             var template = await dbContext.Scenarios
@@ -275,7 +457,7 @@ public sealed class ScenarioService(
                 Era = template.Era,
                 Journal = template.Journal,
                 IsTemplate = false,
-                CreatorEmail = creatorEmail,
+                CreatorEmail = caller.Email,
                 CampaignId = campaignId
             };
 
@@ -352,6 +534,7 @@ public sealed class ScenarioService(
                             Name = h.Name,
                             Description = h.Description,
                             FileUrl = h.FileUrl,
+                            KeeperNote = h.KeeperNote,
                             Order = h.Order
                         };
                     })
@@ -438,17 +621,28 @@ public sealed class ScenarioService(
 
     /// <summary>
     ///     Состав НПС сценария вместе с листами персонажей.
+    ///     <para>
+    ///         У листов снята обратная ссылка <c>ScenarioCasts</c>: EF заполняет её при <c>Include</c>,
+    ///         и граф «участие → лист → участие» замыкается. Странице она не нужна, а циклический граф
+    ///         не переживает JSON — состав уезжает из пререндера снимком <c>ScenarioPagePrerender</c>.
+    ///     </para>
     /// </summary>
     public async Task<List<ScenarioNpc>> GetScenarioCastAsync(Guid scenarioId)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            return await dbContext.ScenarioNpcs
+            var cast = await dbContext.ScenarioNpcs
+                .AsNoTracking()
                 .Include(sn => sn.Character)
                 .Where(sn => sn.ScenarioId == scenarioId)
                 .OrderBy(sn => sn.Character!.CharacterName)
                 .ToListAsync();
+
+            foreach (var entry in cast)
+                entry.Character?.ScenarioCasts.Clear();
+
+            return cast;
         }
         catch (Exception ex)
         {
@@ -470,6 +664,9 @@ public sealed class ScenarioService(
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var existing = await dbContext.ScenarioNpcs
                 .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
@@ -515,6 +712,9 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
+
             var cast = await dbContext.ScenarioNpcs
                 .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
 
@@ -542,6 +742,9 @@ public sealed class ScenarioService(
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+
+            var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var cast = await dbContext.ScenarioNpcs
                 .FirstOrDefaultAsync(sn => sn.ScenarioId == scenarioId && sn.CharacterId == characterId);
@@ -594,6 +797,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Creatures
+                .AsNoTracking()
                 .OrderBy(c => c.Name)
                 .ToListAsync();
         }
@@ -617,7 +821,7 @@ public sealed class ScenarioService(
 
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
-            if (scenario == null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             // Initialize the entity
             scenarioCreature.Init();
@@ -649,6 +853,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.Items
+                .AsNoTracking()
                 .OrderBy(i => i.Name)
                 .ToListAsync();
         }
@@ -672,7 +877,7 @@ public sealed class ScenarioService(
 
             // Verify the scenario exists
             var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);
-            if (scenario == null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             // Initialize the entity
             scenarioItem.Init();
@@ -704,7 +909,7 @@ public sealed class ScenarioService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var creatures = scenario.ScenarioCreatures?.ToList() ?? [];
             var toRemove = creatures.FirstOrDefault(c => c.Id == creatureId);
@@ -735,7 +940,7 @@ public sealed class ScenarioService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var scenario = await dbContext.Scenarios.FindAsync(scenarioCreature.ScenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var creatures = scenario.ScenarioCreatures?.ToList() ?? [];
             var index = creatures.FindIndex(c => c.Id == scenarioCreature.Id);
@@ -766,7 +971,7 @@ public sealed class ScenarioService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var items = scenario.ScenarioItems?.ToList() ?? [];
             var toRemove = items.FirstOrDefault(i => i.Id == itemId);
@@ -797,7 +1002,7 @@ public sealed class ScenarioService(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             var scenario = await dbContext.Scenarios.FindAsync(scenarioItem.ScenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var items = scenario.ScenarioItems?.ToList() ?? [];
             var index = items.FindIndex(i => i.Id == scenarioItem.Id);
@@ -839,7 +1044,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var locations = scenario.Locations?.ToList() ?? [];
             locations.Add(location);
@@ -863,7 +1068,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var locations = scenario.Locations?.ToList() ?? [];
             var index = locations.FindIndex(l => l.Id == location.Id);
@@ -890,7 +1095,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var locations = scenario.Locations?.ToList() ?? [];
             var toRemove = locations.FirstOrDefault(l => l.Id == locationId);
@@ -919,7 +1124,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var facts = scenario.KeyFacts?.ToList() ?? [];
             facts.Add(keyFact);
@@ -942,7 +1147,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var facts = scenario.KeyFacts?.ToList() ?? [];
             var index = facts.FindIndex(f => f.Id == keyFact.Id);
@@ -968,7 +1173,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var facts = scenario.KeyFacts?.ToList() ?? [];
             var toRemove = facts.FirstOrDefault(f => f.Id == keyFactId);
@@ -994,7 +1199,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             scenario.KeyFacts = facts;
             dbContext.Scenarios.Update(scenario);
@@ -1016,7 +1221,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var handouts = scenario.Handouts?.ToList() ?? [];
             handouts.Add(handout);
@@ -1039,7 +1244,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var handouts = scenario.Handouts?.ToList() ?? [];
             var index = handouts.FindIndex(h => h.Id == handout.Id);
@@ -1065,7 +1270,7 @@ public sealed class ScenarioService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var scenario = await dbContext.Scenarios.FindAsync(scenarioId);
-            if (scenario is null) return false;
+            if (scenario is null || !await MayWriteAsync(dbContext, scenario)) return false;
 
             var handouts = scenario.Handouts?.ToList() ?? [];
             var toRemove = handouts.FirstOrDefault(h => h.Id == handoutId);

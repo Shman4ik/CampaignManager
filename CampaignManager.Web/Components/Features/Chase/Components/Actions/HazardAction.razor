@@ -1,0 +1,135 @@
+@using CampaignManager.Web.Components.Features.KeeperScreen.Model
+
+@inject ChaseService ChaseService
+
+@* Помеха перед следующей локацией (стр. 133): проходят её в любом случае, провал — урон и 1d3
+   потерянных действий. Поля — общая ChaseActionForm панели действий. *@
+
+<div class="bg-warning-50 border border-warning-200 rounded-md p-3 space-y-3">
+    <div class="text-sm font-medium text-warning-800">
+        Помеха: @(NextLocation.HazardName ?? "Помеха")
+        — @ChaseService.GetDifficultyText(NextLocation.HazardDifficulty)
+        @if (!string.IsNullOrWhiteSpace(NextLocation.HazardDamageFormula))
+        {
+            <span class="text-xs text-warning-600"> (урон при провале: @NextLocation.HazardDamageFormula)</span>
+        }
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+        <SkillCheckFields SkillPlaceholder="@NextLocation.HazardSkillName"
+                          @bind-SkillName="Form.SkillName" @bind-SkillValue="Form.SkillValue" @bind-Roll="Form.Roll"/>
+        <div>
+            <label class="text-xs text-gray-600">
+                Бонусных костей
+                <span class="text-gray-400">(−1 действие каждая)</span>
+            </label>
+            <select @bind="Form.BonusDice" class="w-full text-sm border border-gray-300 rounded px-2 py-1.5">
+                <option value="0">0</option>
+                @if (Participant.MovementActionsRemaining >= 2)
+                {
+                    <option value="1">1</option>
+                }
+                @if (Participant.MovementActionsRemaining >= 3)
+                {
+                    <option value="2">2</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <!-- При провале -->
+    <div class="text-xs text-warning-700 bg-warning-100 rounded p-2">
+        При провале введите: урон (формула @(NextLocation.HazardDamageFormula ?? "—")) и потерянные действия (1d3).
+        Участник всё равно проходит через помеху.
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+            <label class="text-xs text-gray-600">
+                Тяжесть последствий
+                @if (Participant.IsInVehicle)
+                {
+                    <span class="text-gray-400">— таблица VI «Столкновения транспорта»</span>
+                }
+                else
+                {
+                    <span class="text-gray-400">— таблица III «Другие виды урона»</span>
+                }
+            </label>
+            <div class="flex flex-wrap gap-1 mt-1">
+                @if (Participant.IsInVehicle)
+                {
+                    @foreach (var tier in ChaseReference.CrashTiers)
+                    {
+                        <button type="button" @onclick="() => PickCrash(tier)"
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(Form.CrashTier == tier.Name ? "bg-warning-100 text-warning-800" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                            @tier.Name (@tier.BuildLossFormula)
+                        </button>
+                    }
+                }
+                else
+                {
+                    @foreach (var tier in OtherDamageReference.Tiers)
+                    {
+                        <button type="button" @onclick="() => PickDamage(tier)"
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                title="@tier.Examples">
+                            @tier.Name (@tier.Formula)
+                        </button>
+                    }
+                }
+            </div>
+            <p class="text-xs text-gray-400 mt-1">
+                Хранитель может не бросать, а взять типовое значение: мелкая авария при обычной
+                помехе, средняя при трудной, серьёзная при чрезвычайной.
+            </p>
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Урон при провале (если провал)</label>
+            <input type="number" min="0" @bind="Form.DamageRoll" placeholder="0"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+        <div>
+            <label class="text-xs text-gray-600">Потерянных действий 1d3 (если провал)</label>
+            <input type="number" min="0" max="3" @bind="Form.LostActionsRoll" placeholder="0"
+                   class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+        </div>
+    </div>
+
+    <div class="flex gap-2">
+        <button type="button" class="cm-btn cm-btn-warning cm-btn-sm" @onclick="Execute">
+            <span>Выполнить</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="OnCancel">
+            <span>Отмена</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required ChaseParticipant Participant { get; set; }
+    [Parameter, EditorRequired] public required ChaseLocation NextLocation { get; set; }
+    [Parameter, EditorRequired] public required ChaseActionForm Form { get; set; }
+    [Parameter] public EventCallback<ChaseActionResult> OnResolved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private void PickDamage(DamageTier tier) =>
+        Form.DamageRoll = CombatService.RollDiceFormula(tier.Formula);
+
+    private void PickCrash(CrashTier tier)
+    {
+        Form.CrashTier = tier.Name;
+        Form.BuildLossRoll = CombatService.RollDiceFormula(tier.BuildLossFormula);
+    }
+
+    private async Task Execute()
+    {
+        var skill = string.IsNullOrWhiteSpace(Form.SkillName) ? "Навык" : Form.SkillName;
+        var result = ChaseService.ResolveHazard(
+            Participant.Id, Participant.CurrentLocation + 1, skill, Form.SkillValue,
+            ChaseActionForm.Entered(Form.Roll),
+            Form.BonusDice,
+            ChaseActionForm.Entered(Form.DamageRoll),
+            ChaseActionForm.Entered(Form.LostActionsRoll));
+        await OnResolved.InvokeAsync(result);
+    }
+}

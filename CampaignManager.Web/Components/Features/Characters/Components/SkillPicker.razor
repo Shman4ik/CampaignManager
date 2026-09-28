@@ -3,6 +3,8 @@
 @using CampaignManager.Web.Components.Features.Skills.Services
 @inject SkillService SkillService
 
+@* Кнопки — штатные 36x36 (cm-btn-sm cm-btn-icon): на iPad прежние 26x24 промахивались.
+   Подписи нет места в подвале карточки навыков, поэтому смысл несут иконка и aria-label. *@
 @if (_manualMode)
 {
     <div class="flex flex-1 min-w-0 gap-2 items-center">
@@ -11,10 +13,16 @@
         <input type="text" @bind="ManualBaseValue" placeholder="БЗ"
                class="cm-input-sm !w-14 xl:!w-16" />
         <button type="button"
-                class="cm-btn cm-btn-secondary h-6 !min-h-0 !rounded !p-1 flex-shrink-0 text-[10px]"
-                title="Выбрать из справочника"
+                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                aria-label="Выбрать из справочника"
                 @onclick="SwitchToPickerMode">
-            <i class="fas fa-book"></i>
+            <i class="fas fa-book" aria-hidden="true"></i>
+        </button>
+        <button type="button"
+                class="cm-btn cm-btn-primary cm-btn-sm cm-btn-icon shrink-0"
+                aria-label="Добавить навык"
+                @onclick="AddManualSkill">
+            <i class="fas fa-plus" aria-hidden="true"></i>
         </button>
     </div>
 }
@@ -49,10 +57,10 @@ else
                 }
             </div>
             <button type="button"
-                    class="cm-btn cm-btn-secondary h-6 !min-h-0 !rounded !p-1 flex-shrink-0 text-[10px]"
-                    title="Ввести вручную"
+                    class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                    aria-label="Ввести навык вручную"
                     @onclick="SwitchToManualMode">
-                <i class="fas fa-pencil-alt"></i>
+                <i class="fas fa-pencil-alt" aria-hidden="true"></i>
             </button>
         </div>
     </div>
@@ -70,9 +78,9 @@ else
     /// <summary>Raised when a skill is picked from the DB or added manually</summary>
     [Parameter] public EventCallback<NewSkillInfo> OnSkillSelected { get; set; }
 
-    // Public bindable fields used in manual mode
-    public string ManualName { get; set; } = "";
-    public string ManualBaseValue { get; set; } = "";
+    // Поля ручного ввода
+    private string ManualName { get; set; } = "";
+    private string ManualBaseValue { get; set; } = "";
 
     private bool _manualMode;
     private string _searchText = "";
@@ -166,15 +174,19 @@ else
         ManualBaseValue = "";
     }
 
-    /// <summary>Returns manual entry info (for use by parent when in manual mode)</summary>
-    public NewSkillInfo? GetManualSkillInfo()
+    /// <summary>
+    ///     «+» ручного ввода: навык уходит карточке тем же колбэком, что и выбранный из справочника.
+    ///     Пустые поля — ничего не добавляем.
+    /// </summary>
+    private async Task AddManualSkill()
     {
-        if (!_manualMode || string.IsNullOrWhiteSpace(ManualName) || string.IsNullOrWhiteSpace(ManualBaseValue))
-            return null;
-        return new NewSkillInfo { Name = ManualName, BaseValue = ManualBaseValue };
-    }
+        if (string.IsNullOrWhiteSpace(ManualName) || string.IsNullOrWhiteSpace(ManualBaseValue))
+            return;
 
-    public bool IsManualMode => _manualMode;
+        await OnSkillSelected.InvokeAsync(new NewSkillInfo { Name = ManualName, BaseValue = ManualBaseValue });
+        ManualName = "";
+        ManualBaseValue = "";
+    }
 
     public record NewSkillInfo
     {

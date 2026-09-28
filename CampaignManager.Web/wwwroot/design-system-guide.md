@@ -17,6 +17,16 @@ CSS variables `--color-{palette}-{shade}` available for primary, secondary, acce
 | error | #C71D20 | Errors, destructive actions |
 | info | #4B7FAF | Info messages (= accent) |
 
+**Только эти палитры плюс нейтральный `gray-*`.** Дефолтные тейлвиндовские `blue-*`, `red-*`,
+`green-*`, `yellow-*`, `amber-*`, `orange-*`, `purple-*`, `emerald-*`, `slate-*` не используются:
+они ярче общего тона и на одном экране расходятся с `cm-btn-*`. Цвет несёт смысл —
+ошибка/опасность `error`, внимание `warning`, успех `success`, информация и выделение
+`accent`; вторая «нейтральная» краска, когда нужна пара к accent (раздатки рядом с фактами,
+Рассудок рядом с ПМ), — `secondary`. Класс — всегда полным литералом (`bg-error-100`), а не
+`$"bg-{color}-100"`: Tailwind собирает только то, что целиком встречается в исходниках.
+Эмодзи вместо иконок не ставить — только Font Awesome (`fa-triangle-exclamation`,
+`fa-check`, `fa-xmark`).
+
 ## CSS Variables
 
 ```
@@ -68,6 +78,9 @@ is the reference:
 - `PageHeader` is the 56px sticky topbar. Every page has one, including info pages. Page-level
   actions go in its `Actions` slot — never floating in the body — and are always `cm-btn-sm`
   (the topbar is only 56px tall).
+- `PageHeader` сам дописывает справа кнопку «Ширма» (ширма Хранителя, `Features/KeeperScreen`);
+  остальным пользователям она не видна. Выключает её только `ShowKeeperScreen="false"` на самой
+  `/reference`. Своих шапок в обход `PageHeader` не заводить — иначе кнопку ширмы придётся ставить руками.
 - `cm-page` is the content container: full width, 20px padding. Do **not** use
   `max-w-*` + `mx-auto` here — those are flex items of a column flex container, so `mx-auto`
   disables stretch and collapses sparse pages to their content width.
@@ -96,6 +109,49 @@ is the reference:
 | cm-text-muted | Secondary body copy inside cards |
 | cm-table | Data tables (catalogues, admin lists) |
 
+## Боковое меню
+
+`Components/Layout/Sidebar.razor` + `SidebarItem.razor`, стили — раздел «Рельс» в
+`design-system.css`.
+
+- **Свёрнутое меню — рельс с подписями, как в iPadOS** (`--sidebar-width-collapsed`, 76px):
+  иконка, под ней подпись 11px, видна всегда. Имя пункта в `title=` на планшете никто не
+  увидит, поэтому голых иконок в рельсе нет. Активный пункт подсвечен тем же акцентом, что и
+  в развёрнутом меню.
+- Подпись рельса — `ShortLabel` у `SidebarItem` (по умолчанию `Label`). Она обязана влезать
+  одной строкой без многоточия: не длиннее «Заклинания». Длиннее — задай короткий вариант
+  («Пользователи» → «Аккаунты»).
+- **Развёрнутое меню** (240px, настройка «Боковое меню развёрнуто» в кабинете) — полные
+  подписи справа от иконок и заголовки групп.
+- **769–1100px (портрет iPad)** — меню всегда рельс, стрелка открывает полное меню поверх
+  страницы с затемнением. Правила рельса там продублированы: правишь один блок — правь оба.
+- Счётчик на пункте (заявки) в рельсе — пилюля на плече иконки.
+- Нижняя навигация телефона (`MobileBottomNav`, ≤768px) подписывает вкладки тем же 11px.
+
+## Каталог (страница-список)
+
+Любая страница «список с фильтром» — оружие, существа, навыки, кампании, шаблоны
+сценариев — собирается из одних и тех же общих компонентов, в этом порядке:
+
+1. `<FilterPanel OnReset="…">` — поиск и селекты **внутри** панели, а не голой строкой над
+   списком. Поле поиска — обычный `cm-input` без иконки-лупы внутри, селекты — тоже
+   `cm-input`. Подпись — `cm-field-label` над полем; в однострочной панели плотного
+   каталога (оружие, предметы, книги, заклинания) вместо неё `placeholder` + `aria-label`.
+   Флажки фильтра — строкой высотой с поле, `label` обнимает чекбокс.
+2. `<LoadingIndicator/>` пока грузится.
+3. `<EmptyState>` вместо списка, когда пусто: основное действие «Добавить …» и, если пусто
+   из-за фильтра, «Очистить фильтры» рядом.
+4. Сам список и `<Pagination>` под ним (если список постраничный). Каждый обработчик
+   фильтра сбрасывает страницу на первую — иначе с пятой страницы поиск уводит в пустоту.
+
+Страницу, сортировку по колонке и раскрытую строку плотных каталогов (оружие, предметы,
+книги, заклинания) держит общий `Components/Shared/Model/CatalogListState<T>`: страница
+отдаёт ему свою функцию фильтра и ключи сортировки по колонкам (`CatalogSort.By`), а у себя
+оставляет только поля фильтров. Сброс страницы после фильтра — `catalog.ResetPage()`.
+Новый каталог того же вида собирается на нём же, а не на своей копии `currentPage`/`ToggleSort`.
+Модалка правки получает полную копию записи — `Utilities/Services/EntityCloner.Clone(entity)`,
+а не `new T { … }` с перечислением полей: забытое поле такая копия молча обнуляла.
+
 ## Button Semantics
 
 Colour carries meaning; do not pick it for variety.
@@ -111,8 +167,21 @@ Colour carries meaning; do not pick it for variety.
 
 `cm-btn-info` (blue) is **not** for ordinary actions — it used to be scattered across submit
 buttons and made the same action look different on every page. Blue stays for informational
-`Badge`/`Alert`. Row actions always carry a text label, never a bare icon: there is no hover
-tooltip on the iPad this app targets.
+`Badge`/`Alert`.
+
+Row actions carry a text label: there is no hover tooltip on the iPad this app targets, so a
+`title=` explains nothing. **The one exception is a dense catalogue table** (weapons, items,
+books, spells — rows with eight numeric columns): there edit and delete are bare icons, because
+a label on every row would eat a column. The exception is narrow:
+
+- only the universally read glyphs — pen (`fa-pen`) for edit, bin (`fa-trash-alt`) for delete;
+  any other action in the row still gets a visible label;
+- `cm-btn-sm cm-btn-icon` (36×36) plus `aria-label` naming the row («Изменить: Кольт .45»),
+  never `title=` alone;
+- the same row rendered as a card below the table breakpoint keeps the same icons, so one
+  catalogue does not switch conventions between orientations.
+
+Lists of cards, rows inside a page section and form rows are not dense tables — label them.
 
 ## CSS Button Classes
 
@@ -148,7 +217,7 @@ Usage: `<input class="cm-input" />`
 
 | Класс | Зачем |
 |---|---|
-| `cm-input-icon-left` | отступ слева под вложенную иконку (лупа в поиске) |
+| `cm-input-icon-left` | отступ слева под вложенную иконку. В поиске каталогов лупу не ставим — см. «Каталог» |
 | `cm-field-label-inline` | подпись слева от поля, а не над ним — снимает нижний отступ |
 | `cm-field-note` | подсказка под полем: правило из книги со ссылкой на страницу |
 
@@ -196,11 +265,26 @@ Dialog container. Scrollable body, header/footer slots.
 - `IsVisible` bool
 - `OnClose` EventCallback
 - `Title` string = ""
-- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl
-- `MaxHeight` string? = "70vh"
+- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl. Компонент переводит их в
+  полные литералы `max-w-*`; другое значение даёт 4xl. Интерполяцией (`$"max-w-{…}"`) класс
+  не собирать — Tailwind его не увидит, и модалка растянется на весь экран
+- `MaxHeight` string? = "70vh" — любое CSS-значение, идёт в `style` тела. `null` — тело без
+  своего предела. В любом случае окно не выше экрана: при длинном содержимом прокручивается
+  тело, шапка и подвал с кнопками остаются видны
 - `HeaderColorScheme` string = "primary"
-- `CloseOnBackdropClick` bool = true
+- `CloseOnBackdropClick` bool = true — `false` выключает и закрытие по фону, и Esc (крестик
+  в шапке остаётся). Ставить на диалоги посреди игры, где случайное касание мимо окна не
+  должно ничего пропускать (проверка ВЫН умирающих в бою)
 - `FooterContent` RenderFragment?
+
+Любой диалог — это `<Modal>`, а не свой `fixed inset-0` с белой панелью: у самодельных не было
+ни анимации, ни блокировки прокрутки страницы, ни закрытия по Esc, и шапка у каждого своя.
+
+### Tabs
+Вкладки над содержимым страницы. `<Tabs Items="…" @bind-ActiveKey="_tab"/>`, где `Items` —
+список `Tabs.Item(Key, Label, Icon?, Count?)`; счётчик показывается пилюлей, если больше нуля.
+Компонент ничего не хранит, содержимое вкладки страница рисует сама под ним. Вкладка 44px в
+высоту — тап-цель. Своих полос `border-b-2` на странице не заводить.
 
 ### ConfirmationModal
 Dangerous action confirmation. Optional type-to-confirm.
@@ -222,10 +306,9 @@ Dangerous action confirmation. Optional type-to-confirm.
 | Component | Parameters | Purpose |
 |-----------|-----------|---------|
 | NotificationAlert | Type, Message, OnClose | Dismissable notification |
-| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder |
-| LoadingIndicator | Message | Spinner |
+| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder. Сам является `cm-card` — ставится на место списка, не внутрь другой карточки. В ActionButton: основное действие (`primary`, «Добавить …») и, если пусто из-за фильтра, `secondary` «Очистить фильтры» |
+| LoadingIndicator | Message (по умолчанию «Загрузка…») | Единственный спиннер: своих `animate-spin` на страницах не рисовать |
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
 | FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
-| CustomInput | Label, Value, Type(text/number/checkbox), FullWidth, Disabled, OnValueChanged | Labeled form input |
 | InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |

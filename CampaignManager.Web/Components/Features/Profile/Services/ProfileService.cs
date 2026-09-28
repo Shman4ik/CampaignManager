@@ -1,6 +1,7 @@
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Profile.Model;
 using CampaignManager.Web.Utilities;
+using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class ProfileService(
     IDbContextFactory<AppIdentityDbContext> identityDbContextFactory,
     IDbContextFactory<AppDbContext> dbContextFactory,
     IdentityService identityService,
+    UserClaimsCache userClaimsCache,
     ILogger<ProfileService> logger)
 {
     public const int MaxDisplayNameLength = 64;
@@ -92,6 +94,10 @@ public sealed class ProfileService(
 
             user.UserName = trimmed;
             await identityDb.SaveChangesAsync();
+
+            // Имя попадает в claims из кэша, а страница после сохранения перезагружается ровно
+            // ради свежего claim — без сброса она показала бы старое имя до истечения TTL.
+            userClaimsCache.Invalidate(email);
 
             if (syncCampaigns)
             {

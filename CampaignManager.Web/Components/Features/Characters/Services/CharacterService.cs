@@ -279,14 +279,10 @@ public sealed class CharacterService(
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var query = dbContext.CharacterStorage
-                .Where(c => c.Kind == CharacterKind.Npc);
+            var query = Npcs(dbContext, includeArchived);
 
             if (campaignId.HasValue)
                 query = query.Where(c => c.CampaignId == null || c.CampaignId == campaignId.Value);
-
-            if (!includeArchived)
-                query = query.Where(c => c.Status != CharacterStatus.Archived);
 
             return await query
                 .OrderBy(c => c.CharacterName)
@@ -299,6 +295,53 @@ public sealed class CharacterService(
         }
     }
 
+    /// <summary>НПС кампании для списка: только имя, без листа.</summary>
+    public sealed record CampaignNpc(Guid Id, string Name, CharacterStatus Status, Guid CampaignId);
+
+    /// <summary>
+    ///     НПС всех кампаний, которые ведёт текущий пользователь, — одним запросом и без JSONB.
+    ///     Главной нужны только имена: раньше она звала <see cref="GetNpcsAsync" /> по разу на каждую
+    ///     кампанию Хранителя и тянула полные листы. Библиотечные НПС (<c>CampaignId == null</c>)
+    ///     сюда не входят — они ничьи.
+    /// </summary>
+    public async Task<List<CampaignNpc>> GetKeptCampaignNpcsAsync()
+    {
+        var email = await identityService.GetCurrentUserEmailAsync();
+        if (string.IsNullOrEmpty(email))
+            return [];
+
+        try
+        {
+            var emailLower = email.ToLower();
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync();
+            return await Npcs(dbContext, includeArchived: false)
+                .Where(c => c.CampaignId != null
+                            && (c.Campaign!.KeeperEmail ?? string.Empty).ToLower() == emailLower)
+                .OrderBy(c => c.CharacterName)
+                .Select(c => new CampaignNpc(c.Id, c.CharacterName, c.Status, c.CampaignId!.Value))
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error retrieving campaign NPCs of keeper {UserEmail}", email);
+            return [];
+        }
+    }
+
+    /// <summary>
+    ///     Что считается НПС в списках: вид <see cref="CharacterKind.Npc" />, архивные — только по
+    ///     просьбе. Одно место, чтобы списки НПС не разошлись в том, кого показывать. Читается без
+    ///     трекинга: списки ничего не сохраняют.
+    /// </summary>
+    private static IQueryable<CharacterStorageDto> Npcs(AppDbContext dbContext, bool includeArchived)
+    {
+        var query = dbContext.CharacterStorage
+            .AsNoTracking()
+            .Where(c => c.Kind == CharacterKind.Npc);
+
+        return includeArchived ? query : query.Where(c => c.Status != CharacterStatus.Archived);
+    }
+
     /// <summary>
     ///     Преген-заготовки: листы, ещё не отданные ни одному сценарию.
     /// </summary>
@@ -308,6 +351,7 @@ public sealed class CharacterService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             var query = dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.Kind == CharacterKind.Pregen && c.ScenarioId == null);
 
             if (!includeArchived)
@@ -356,6 +400,7 @@ public sealed class CharacterService(
             }
 
             var query = dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.Id != characterId && c.Status == CharacterStatus.Active);
 
             if (character.CampaignPlayerId is { } playerId)
@@ -419,6 +464,7 @@ public sealed class CharacterService(
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
             return await dbContext.CharacterStorage
+                .AsNoTracking()
                 .Where(c => c.ScenarioId == scenarioId
                             && c.Kind == CharacterKind.Pregen
                             && c.Status != CharacterStatus.Archived)

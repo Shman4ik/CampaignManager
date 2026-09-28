@@ -73,6 +73,11 @@
     private int _poolSize;
     private List<MusicTrack> _pinnedTracks = [];
 
+    // Теги и треки, под которые уже посчитан пул. Храним копии, а не ссылки: список тегов
+    // локации могут поправить на месте, и сравнение ссылок такую правку бы не заметило.
+    private string[]? _loadedTags;
+    private Guid[]? _loadedTrackIds;
+
     private bool _hasAnything => _poolSize > 0 || Tags.Count > 0 || TrackIds.Count > 0;
 
     private bool _isCurrentPool =>
@@ -82,6 +87,15 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Родитель перерисовывается чаще, чем меняется сцена, — пул пересчитываем, только
+        // когда поменялись теги или закреплённые треки (как ParticipantPicker).
+        if (_loadedTags is not null && _loadedTrackIds is not null
+            && _loadedTags.SequenceEqual(Tags) && _loadedTrackIds.SequenceEqual(TrackIds))
+            return;
+
+        _loadedTags = [.. Tags];
+        _loadedTrackIds = [.. TrackIds];
+
         var pool = await TrackService.ResolvePoolAsync(Tags, TrackIds);
         _poolSize = pool.Count;
 

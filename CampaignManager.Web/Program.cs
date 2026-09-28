@@ -250,6 +250,10 @@ builder.Services.AddAuthentication(options =>
                 {
                     logger.LogError(ex, "Failed to upsert user record for {Email}", email);
                 }
+
+                // Роль только что могла подняться до администратора (AdminEmails), а вход — и так
+                // та точка, где человек ждёт свежих прав: снимаем закэшированные роль и имя.
+                context.HttpContext.RequestServices.GetRequiredService<UserClaimsCache>().Invalidate(email);
             }
 
             logger.LogInformation("Successfully created authentication ticket for user: {Email}", email);
@@ -260,6 +264,9 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"))
     .AddPolicy("RequireKeeper", policy => policy.RequireRole("GameMaster", "Administrator"));
 builder.Services.AddCascadingAuthenticationState();
+// Трансформация идёт на каждый запрос, включая статику, — роль и имя она берёт из кэша
+// (см. UserClaimsCache), а не из базы. Кэш общий на процесс, поэтому singleton.
+builder.Services.AddSingleton<UserClaimsCache>();
 builder.Services.AddTransient<IClaimsTransformation, RoleClaimsTransformation>();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -296,6 +303,7 @@ builder.Services.AddScoped<CharacterGenerationService>();
 builder.Services.AddScoped<InvestigatorFactory>();
 builder.Services.AddScoped<OccupationService>();
 builder.Services.AddScoped<CampaignService>();
+builder.Services.AddScoped<CampaignJournalService>();
 builder.Services.AddScoped<IdentityService>();
 builder.Services.AddScoped<WeaponService>();
 builder.Services.AddScoped<SpellService>();
@@ -305,6 +313,7 @@ builder.Services.AddScoped<MarkdownService>();
 // Register scenario management services
 builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<ScenarioImportService>();
+builder.Services.AddScoped<ScenarioHandoutService>();
 builder.Services.AddScoped<CreatureService>();
 builder.Services.AddScoped<CreatureImportService>();
 builder.Services.AddScoped<ItemService>();
@@ -319,6 +328,10 @@ builder.Services.AddScoped<CombatService>();
 builder.Services.AddScoped<ChaseService>();
 builder.Services.AddScoped<CampaignManager.Web.Components.Features.Chase.Services.ChaseSessionService>();
 
+// Ширма Хранителя: кнопка в шапке и панель в лэйауте — разные острова одного circuit, и общий у них
+// только scoped-сервис. RegisterPersistentService не нужен: открытая ширма паузу не переживает намеренно.
+builder.Services.AddScoped<CampaignManager.Web.Components.Features.KeeperScreen.Services.KeeperScreenState>();
+
 // Register Admin and Wiki services
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<WikiHistoryService>();
@@ -329,6 +342,7 @@ builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<MinioService>();
 
 builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.LastCharacterService>();
+builder.Services.AddScoped<CampaignManager.Web.Components.Layout.Services.NavigationBadgeService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();

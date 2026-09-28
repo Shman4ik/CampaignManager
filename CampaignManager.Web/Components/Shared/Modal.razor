@@ -11,12 +11,15 @@
      aria-labelledby="modal-title"
      tabindex="-1">
 
-    <!-- Modal container with stop propagation -->
-    <div class="bg-white rounded-2xl shadow-2xl overflow-hidden w-full @MaxWidthClass @(IsVisible ? "animate-scaleIn" : "") transform transition-all duration-200"
+    <!-- Modal container with stop propagation.
+         Окно — колонка шапка/тело/подвал, ограниченная высотой экрана (.modal-dialog в
+         Modal.razor.css): при длинном содержимом прокручивается только тело, а шапка с
+         крестиком и подвал с кнопками всегда на экране. -->
+    <div class="modal-dialog bg-white rounded-2xl shadow-2xl overflow-hidden w-full flex flex-col @MaxWidthClass @(IsVisible ? "animate-scaleIn" : "") transform transition-all duration-200"
          @onclick:stopPropagation="true">
 
         <!-- Header -->
-        <div class="p-6 border-b border-gray-200 @HeaderBgClass text-white flex justify-between items-center">
+        <div class="shrink-0 p-6 border-b border-gray-200 @HeaderBgClass text-white flex justify-between items-center">
             <h3 id="modal-title" class="font-bold text-xl sm:text-2xl">@Title</h3>
             <button @onclick="OnClose"
                     @ref="closeButtonRef"
@@ -27,15 +30,18 @@
             </button>
         </div>
 
-        <!-- Body -->
-        <div class="p-6 sm:p-8 bg-white @(MaxHeight != null ? $"max-h-[{MaxHeight}] overflow-y-auto" : "")">
+        <!-- Body. MaxHeight — произвольное CSS-значение («70vh», «480px»), поэтому идёт в style,
+             а не классом: Tailwind видит только полные литералы, и собранный интерполяцией
+             max-h-[70vh] в styles.css не попадал — тело модалок не ограничивалось вовсе. -->
+        <div class="flex-auto min-h-0 overflow-y-auto p-6 sm:p-8 bg-white"
+             style="@(MaxHeight is null ? null : $"max-height: {MaxHeight}")">
             @ChildContent
         </div>
 
         <!-- Footer -->
         @if (FooterContent != null)
         {
-            <div class="p-6 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3 bg-gray-50">
+            <div class="shrink-0 p-6 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3 bg-gray-50">
                 @FooterContent
             </div>
         }
@@ -62,7 +68,23 @@
     private DotNetObjectReference<Modal>? dotNetRef;
     private bool wasVisible = false;
 
-    private string MaxWidthClass => $"max-w-{MaxWidth}";
+    // Полные литералы, а не $"max-w-{MaxWidth}": Tailwind собирает только классы, которые
+    // целиком встречаются в исходниках. Из интерполяции в styles.css попадали лишь те ширины,
+    // что случайно были написаны где-то ещё (md, 2xl, 7xl), а lg/xl/3xl/4xl — в том числе
+    // ширина по умолчанию — не существовали, и такие модалки растягивались на весь экран.
+    private string MaxWidthClass => MaxWidth switch
+    {
+        "sm" => "max-w-sm",
+        "md" => "max-w-md",
+        "lg" => "max-w-lg",
+        "xl" => "max-w-xl",
+        "2xl" => "max-w-2xl",
+        "3xl" => "max-w-3xl",
+        "5xl" => "max-w-5xl",
+        "6xl" => "max-w-6xl",
+        "7xl" => "max-w-7xl",
+        _ => "max-w-4xl"
+    };
 
     private string HeaderBgClass => HeaderColorScheme.ToLower() switch
     {

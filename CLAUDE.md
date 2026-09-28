@@ -64,6 +64,35 @@ don't undo either:
 
 **No test projects exist** in this solution.
 
+## Pull requests — только стеком
+
+Работу, в которой больше одного смыслового изменения, выкладываем **стеком**, а не одним
+большим PR и не пачкой параллельных PR от `master`. Стек — нативные
+[stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests)
+GitHub (public preview): каждый слой — своя ветка и свой PR поверх слоя ниже, GitHub рисует
+карту стека в каждом PR и умеет мёржить его частями. Управляет им расширение `gh stack`
+(`gh extension install github/gh-stack`, нужен `gh` ≥ 2.90 — на машине владельца уже стоит).
+
+- **Один слой — одна тема** (фиксы → дизайн → фичи → рефакторинг), чтобы каждый ревьюился и
+  мёржился отдельно. Правило, которое должно попасть в `master` первым, кладут в нижний слой.
+- Новый стек: `gh stack init --base master <ветка1> <ветка2> …` — существующие ветки
+  подхватываются, отсутствующие создаются; следующий слой — `gh stack add <ветка>`; выложить —
+  `gh stack submit --auto`. Без `--auto` открывается интерактивный редактор, а у агента
+  терминал не интерактивный. Состояние — `gh stack view`.
+- Ветки с уже открытыми PR: `gh stack init` с их именами, затем `gh stack submit --auto` —
+  PR найдутся сами и свяжутся в стек. Дорастить существующий стек готовыми ветками —
+  `gh stack link <номер стека> <ветка|PR> …` (из стека он ничего не удаляет).
+- Правка слоя: `gh stack checkout`/`gh stack bottom` → коммит в его ветку →
+  `gh stack rebase --upstack` (каскадный ребейз всего, что выше) → `gh stack push`.
+  Слои руками по одному не перебазировать и merge-коммитов не делать: `gh stack` требует
+  линейной истории.
+- Мёрж — снизу вверх: `gh stack merge <PR>` сливает все PR до выбранного включительно одной
+  операцией, оставшиеся выше GitHub сам перенацелит на `master`. После — `gh stack sync --prune`.
+- Слои можно делать параллельными агентами в отдельных worktree, но каждый стартует от ветки
+  слоя **ниже**, а в стек их ставит тот, кто собирает стек.
+- CI на PR в репозитории нет: перед `submit` каждый слой собирается (`dotnet build`, 0
+  предупреждений) и проверяется в браузере на iPad-вьюпортах, итог — в описании PR.
+
 ## Работа в контейнере Claude Code on the web
 
 В удалённом контейнере .NET SDK по умолчанию нет, а `dot.net` / `builds.dotnet.microsoft.com`
@@ -197,7 +226,10 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
 - Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
 - Design system guide (in Russian) at `wwwroot/design-system-guide.md`
-- Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, etc.
+- Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, Tabs, etc.
+  Страница-список собирается из них в одном порядке (FilterPanel → LoadingIndicator/EmptyState →
+  список → Pagination), вкладки — только `<Tabs>`, диалог — только `<Modal>`, свои спиннеры,
+  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `design-system-guide.md`.
 
 #### Уведомления — только `<Alert>`
 
@@ -238,6 +270,9 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
   `outline-primary`/`outline-error` = row edit/delete, `error` = destructive confirmation in a
   dialog, `success` = approving someone's request. `cm-btn-info` is not for buttons.
 - Header actions are always `cm-btn-sm` — the topbar is 56px tall.
+- `PageHeader` itself appends the Keeper's «Ширма» button (hidden from players) — one more reason
+  never to hand-roll a `page-topbar`: such a header would lose the button.
+  See `Features/KeeperScreen/CLAUDE.md`.
 - Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
   **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
   `cm-btn-error` and `<Button Variant="error">` render different reds.
@@ -305,10 +340,36 @@ the .NET 10 circuit persistence stack:
   don't rename them.
 - Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
   otherwise it silently disappears on resume.
+- **Лог.** Жизнь circuit'ов пишет `ActiveCircuitTracker` (Information, строка на событие): открыт,
+  потерял соединение, снова на связи, пауза, закрыт — со временем жизни. Своего события «пауза»
+  у `CircuitHandler` нет: её ловит колбэк `RegisterOnPersisting`, который
+  `ShutdownPauseCircuitHandler` вешает в области circuit (пререндер живёт в области HTTP-запроса
+  и туда не попадает). Категория `Microsoft.AspNetCore.Components.Server.Circuits` остаётся
+  заглушённой до Critical. Путь, статус и время каждого запроса — `Microsoft.AspNetCore.Hosting.Diagnostics`
+  на Information (по две строки на запрос: начало и конец); по ним видно, какая страница медленная.
 - **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
   а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
   активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
   переживает и паузу, и F5, и на него можно дать ссылку. Пример — `ScenarioDetailPage` (`?mode=play`).
+
+### Данные пререндера
+
+Интерактивная страница рендерится дважды: статически (пререндер) и заново в circuit, и
+`OnInitializedAsync` без мер читает базу оба раза. Тяжёлые страницы (главная — `HomeCampaignsPanel`,
+`ScenarioDetailPage`, `CharacterPage` и её `FellowInvestigatorsPanel`) передают прочитанное в
+пререндере тем же `[PersistentState]`, но **с `RestoreBehavior = RestoreBehavior.SkipLastSnapshot`**:
+снимок поднимается при старте circuit и **не** поднимается при возобновлении после паузы — за паузу
+данные могли устареть, там страница честно перечитывает базу.
+
+- Геттер отдаёт снимок только из статического рендера (`RendererInfo.IsInteractive ? null : …`):
+  иначе на каждой паузе в браузер уезжала бы копия, которую всё равно никто не поднимет.
+- Снимок — отдельное свойство, не то, что держит правки на паузу: у `CharacterPage` черновик
+  (`PersistedDraft`, `SkipInitialValue`) и лист из пререндера (`PrerenderedSheet`) разведены.
+- Граф — без циклов EF: плоский DTO (`HomeCampaigns`) или сущности без обратных навигаций
+  (`ScenarioPagePrerender`, см. `Scenarios/CLAUDE.md`). Цикл роняет пререндер исключением JSON.
+- Снимок едет в HTML страницы (зашифрованным) и обратно по SignalR при старте circuit — в пределах
+  `MaximumReceiveMessageSize` (2 МБ). Кандидат в снимок — страница с десятком запросов, а не любая.
+- Берётся один раз и только если он от той же сущности (`Id` в снимке сверяется с параметром).
 
 ### Design System Colors
 

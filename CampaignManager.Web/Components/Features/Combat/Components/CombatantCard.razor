@@ -157,6 +157,15 @@
             {
                 <span class="@BadgeNeutral">Отложен</span>
             }
+            @if (Combatant.CastingSpell is { } casting && !Combatant.IsDead)
+            {
+                @* Подпись целиком, без title: наведения на планшете нет *@
+                <span class="@(casting.Disrupted ? BadgeImpaired : BadgeNeutral)">
+                    <i class="fa-solid fa-wand-sparkles mr-1 opacity-70"></i>@(casting.Disrupted
+                        ? $"«{casting.Setup.SpellName}» сорвано"
+                        : $"Творит «{casting.Setup.SpellName}» → р. {casting.CompletesInRound}")
+                </span>
+            }
             @if (Combatant.JammedWeaponName != null)
             {
                 <span class="@BadgeNeutral" title="@Combatant.JammedWeaponName заклинило">
@@ -171,7 +180,7 @@
         <!-- HP -->
         <div>
             <div class="flex items-center justify-between text-xs mb-0.5">
-                <span class="text-gray-600 font-medium">ОЗ</span>
+                <span class="text-gray-600 font-medium">ПЗ</span>
                 <div class="flex items-center gap-1">
                     <button @onclick="() => AdjustHp(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-error-100 text-gray-600 hover:text-error-600 text-xs flex items-center justify-center">−</button>
                     <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.CurrentHitPoints / @Combatant.MaxHitPoints</span>
@@ -186,7 +195,7 @@
         <!-- MP -->
         <div>
             <div class="flex items-center justify-between text-xs mb-0.5">
-                <span class="text-gray-600 font-medium">ОМ</span>
+                <span class="text-gray-600 font-medium">ПМ</span>
                 <div class="flex items-center gap-1">
                     <button @onclick="() => AdjustMp(-1)" class="w-5 h-5 rounded bg-gray-100 hover:bg-error-100 text-gray-600 hover:text-error-600 text-xs flex items-center justify-center">−</button>
                     <span class="text-gray-900 font-semibold w-12 text-center">@Combatant.CurrentMagicPoints / @Combatant.MaxMagicPoints</span>
@@ -352,6 +361,7 @@
         || Combatant.IsProne || Combatant.IsGrappled
         || Combatant.IsAiming || Combatant.HasTakenCover || Combatant.IsDelayed
         || Combatant.JammedWeaponName != null
+        || Combatant.CastingSpell != null
         || Combatant.IsStabilized
         || Combatant.AttackBlockedInRound.HasValue
         || Combatant.AttacksPerRound > 1

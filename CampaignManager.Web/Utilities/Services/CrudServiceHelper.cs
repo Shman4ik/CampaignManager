@@ -45,7 +45,9 @@ public static class CrudServiceHelper
                     return cached;
 
                 await using var dbContext = await factory.CreateDbContextAsync();
-                var list = await dbContext.Set<T>().OrderBy(e => e.Name).ToListAsync();
+                // Без трекинга: список живёт в общем кэше, а контекст закрывается тут же — снимки
+                // change tracker'а над каждой строкой справочника были чистой тратой.
+                var list = await dbContext.Set<T>().AsNoTracking().OrderBy(e => e.Name).ToListAsync();
 
                 cache.Set(cacheKey, list, new MemoryCacheEntryOptions().SetAbsoluteExpiration(DefaultExpiration));
                 return list;

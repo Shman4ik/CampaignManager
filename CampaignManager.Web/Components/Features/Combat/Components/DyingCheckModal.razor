@@ -3,68 +3,77 @@
 
 @inject CombatService CombatService
 
-@if (IsVisible && DyingCombatants.Any())
-{
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div class="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-lg mx-4 p-5">
-            <h3 class="text-base font-bold text-error-700 mb-1">Проверки ВЫН — умирающие бойцы</h3>
-            <p class="text-xs text-gray-500 mb-4">CoC 7e: Каждый умирающий боец бросает ВЫН в конце раунда. Провал — смерть.</p>
+@* Общий <Modal>, но без закрытия по фону и Esc: проверку открывают посреди боя, и случайное
+   касание мимо окна не должно молча пропустить бросок умирающего. Закрыть можно только
+   явно — «Пропустить» или крестиком в шапке (оба зовут OnCancel). *@
+<Modal IsVisible="@(IsVisible && DyingCombatants.Any())"
+       OnClose="() => OnCancel.InvokeAsync()"
+       Title="Проверки ВЫН — умирающие бойцы"
+       HeaderColorScheme="error"
+       MaxWidth="lg"
+       CloseOnBackdropClick="false">
+    <ChildContent>
+        <p class="cm-text-muted text-sm mb-4">Каждый умирающий боец бросает ВЫН в конце раунда. Провал — смерть.</p>
 
-            <div class="space-y-3 mb-4">
-                @foreach (var dying in DyingCombatants)
-                {
-                    var roll = _rolls.ContainsKey(dying.Id) ? _rolls[dying.Id] : (int?)null;
-                    var success = roll.HasValue && roll.Value <= dying.ConstitutionValue;
-                    var failed = roll.HasValue && !success;
+        <div class="space-y-3">
+            @foreach (var dying in DyingCombatants)
+            {
+                var roll = _rolls.ContainsKey(dying.Id) ? _rolls[dying.Id] : (int?)null;
+                var success = roll.HasValue && roll.Value <= dying.ConstitutionValue;
+                var failed = roll.HasValue && !success;
 
-                    <div class="border rounded-md p-3 @(failed ? "border-error-300 bg-error-50" : success ? "border-success-300 bg-success-50" : "border-gray-200 bg-gray-50")">
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <span class="font-semibold text-sm text-gray-900">@dying.Name</span>
-                                <span class="text-xs text-gray-500 ml-2">ВЫН: @dying.ConstitutionValue</span>
-                            </div>
-                            @if (failed)
-                            {
-                                <span class="text-xs font-bold text-error-700 bg-error-100 rounded px-2 py-0.5"><i class="fa-solid fa-skull-crossbones mr-1"></i>Умер</span>
-                            }
-                            else if (success)
-                            {
-                                <span class="text-xs font-bold text-success-700 bg-success-100 rounded px-2 py-0.5"><i class="fa-solid fa-check mr-1"></i>Выжил</span>
-                            }
+                <div class="border rounded-md p-3 @(failed ? "border-error-300 bg-error-50" : success ? "border-success-300 bg-success-50" : "border-gray-200 bg-gray-50")">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <span class="font-semibold text-sm text-gray-900">@dying.Name</span>
+                            <span class="text-xs text-gray-500 ml-2">ВЫН: @dying.ConstitutionValue</span>
                         </div>
-                        <div class="flex items-center gap-2">
+                        @if (failed)
+                        {
+                            <span class="text-xs font-bold text-error-700 bg-error-100 rounded px-2 py-0.5"><i class="fa-solid fa-skull-crossbones mr-1"></i>Умер</span>
+                        }
+                        else if (success)
+                        {
+                            <span class="text-xs font-bold text-success-700 bg-success-100 rounded px-2 py-0.5"><i class="fa-solid fa-check mr-1"></i>Выжил</span>
+                        }
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="w-24 shrink-0">
                             <input type="number" min="1" max="100"
                                    value="@(roll?.ToString() ?? "")"
                                    @oninput="e => OnRollInput(dying.Id, e)"
-                                   class="border border-gray-300 rounded px-2 py-1 text-sm w-20 focus:outline-none"
-                                   placeholder="1–100" />
-                            <button @onclick="() => AutoRoll(dying.Id, dying.ConstitutionValue)"
-                                    class="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"><i class="fa-solid fa-dice-d20 mr-1"></i>авто</button>
-                            @if (roll.HasValue)
-                            {
-                                <span class="text-xs font-medium @(success ? "text-success-700" : "text-error-700")">
-                                    @roll.Value / @dying.ConstitutionValue — @(success ? "успех" : "провал!")
-                                </span>
-                            }
+                                   class="cm-input"
+                                   aria-label="@($"Бросок ВЫН: {dying.Name}")"
+                                   placeholder="1–100"/>
                         </div>
+                        <button type="button"
+                                class="cm-btn cm-btn-secondary cm-btn-sm"
+                                @onclick="() => AutoRoll(dying.Id, dying.ConstitutionValue)">
+                            <i class="fa-solid fa-dice-d20"></i><span>Бросить</span>
+                        </button>
+                        @if (roll.HasValue)
+                        {
+                            <span class="text-sm font-medium @(success ? "text-success-700" : "text-error-700")">
+                                @roll.Value / @dying.ConstitutionValue — @(success ? "успех" : "провал!")
+                            </span>
+                        }
                     </div>
-                }
-            </div>
-
-            <div class="flex gap-2">
-                <button type="button" class="cm-btn cm-btn-primary w-full"
-                        @onclick="ApplyAll"
-                        disabled="@(!AllRolled())">
-                    <span>Применить результаты</span>
-                </button>
-                <button type="button" class="cm-btn cm-btn-secondary"
-                        @onclick="() => OnCancel.InvokeAsync()">
-                    <span>Пропустить</span>
-                </button>
-            </div>
+                </div>
+            }
         </div>
-    </div>
-}
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary"
+                @onclick="() => OnCancel.InvokeAsync()">
+            <span>Пропустить</span>
+        </button>
+        <button type="button" class="cm-btn cm-btn-primary"
+                @onclick="ApplyAll"
+                disabled="@(!AllRolled())">
+            <span>Применить результаты</span>
+        </button>
+    </FooterContent>
+</Modal>
 
 @code {
     [Parameter] public bool IsVisible { get; set; }

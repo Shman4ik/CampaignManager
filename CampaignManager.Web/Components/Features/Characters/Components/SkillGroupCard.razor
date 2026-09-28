@@ -31,10 +31,10 @@
                 <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                      data-testid="@($"skill-row-{skill.Name}")">
                     <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                        <button @onclick="@(() => RemoveSkill(skill))"
+                        <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                 aria-label="@($"Удалить навык {skill.Name}")"
-                                class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
-                            <i class="fas fa-times text-xs"></i>
+                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
+                            <i class="fas fa-trash-alt" aria-hidden="true"></i>
                         </button>
                         <div class="min-w-0 flex-grow text-sm leading-snug">
                             @if (skill.SkillModelId.HasValue)
@@ -47,6 +47,7 @@
                             }
                             <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
                         </div>
+                        @CheckButton(skill)
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                         @* Мифы Ктулху и Средства не отмечают — им место под галочку не положено (стр. 92) *@
@@ -96,10 +97,10 @@
                     <div @key="skill" class="flex flex-col gap-2 py-1 px-1 -mx-1 rounded hover:bg-gray-50 transition-colors duration-150"
                          data-testid="@($"skill-row-{skill.Name}")">
                         <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
-                            <button @onclick="@(() => RemoveSkill(skill))"
+                            <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                     aria-label="@($"Удалить навык {skill.Name}")"
-                                    class="text-gray-400 hover:text-red-500 flex-shrink-0 transition-colors duration-200">
-                                <i class="fas fa-times text-xs"></i>
+                                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
+                                <i class="fas fa-trash-alt" aria-hidden="true"></i>
                             </button>
                             <div class="min-w-0 flex-grow text-sm leading-snug">
                                 @if (skill.SkillModelId.HasValue)
@@ -118,6 +119,7 @@
                                           title="Смежная специализация перешла порог — этот навык поднимается на @specBonus (но не выше самого порога)">+@specBonus</span>
                                 }
                             </div>
+                            @CheckButton(skill)
                         </div>
                         <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                             @if (DevelopmentPhaseRules.CanBeChecked(skill.Name))
@@ -162,17 +164,17 @@
                                          AllGroupSkills="@allInGroup"
                                          OnRemove="EventCallback.Factory.Create<Skill>(this, RemoveSkill)"
                                          OnValueChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecValueChanged)"
-                                         OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)" />
+                                         OnUsedChanged="EventCallback.Factory.Create<SpecializationGroup.SkillChangeArgs>(this, OnSpecUsedChanged)"
+                                         OnCheckRequested="@OnCheckRequested" />
                 }
             }
         </div>
 
-        <!-- Add skill form -->
+        @* Добавление навыка. Кнопка «+» живёт в ручном вводе SkillPicker: из справочника навык
+           добавляется выбором строки, и «+» рядом с поиском раньше просто ничего не делал. *@
         <div class="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-2">
-            <SkillPicker @ref="_picker"
-                         CategoryFilter="@GroupCategory"
+            <SkillPicker CategoryFilter="@GroupCategory"
                          OnSkillSelected="OnPickerSkillSelected" />
-            <button type="button" class="cm-btn cm-btn-success h-6 w-6 !min-h-0 !rounded-full !p-0 flex-shrink-0 text-xs" @onclick="AddSkill"><i class="fas fa-plus"></i></button>
         </div>
     </div>
 </div>
@@ -183,7 +185,23 @@
     /// <summary>Значение навыка отредактировали — лист может пересчитать зависящее от него.</summary>
     [Parameter] public EventCallback<Skill> OnSkillValueEdited { get; set; }
 
-    private SkillPicker? _picker;
+    /// <summary>
+    ///     Кубик в строке навыка — странице открыть диалог проверки (Checks/SkillCheckModal).
+    ///     Тап по имени навыка занят справкой (SkillInfoPopover), поэтому у проверки своя кнопка.
+    /// </summary>
+    [Parameter] public EventCallback<Skill> OnCheckRequested { get; set; }
+
+    private RenderFragment CheckButton(Skill skill) => __builder =>
+    {
+        if (!OnCheckRequested.HasDelegate) return;
+        <button type="button"
+                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                aria-label="@($"Проверка: {skill.Name}")"
+                data-testid="@($"skill-check-{skill.Name}")"
+                @onclick="() => OnCheckRequested.InvokeAsync(skill)">
+            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+        </button>
+    };
 
     private static readonly Dictionary<string, SkillCategory> GroupToCategory = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -211,28 +229,6 @@
             SkillModelId = info.SkillModelId,
             ParentSkillName = info.ParentSkillName
         });
-    }
-
-    private void AddSkill()
-    {
-        if (_picker is { IsManualMode: true })
-        {
-            var info = _picker.GetManualSkillInfo();
-            if (info is not null)
-            {
-                Group.Skills.Add(new Skill
-                {
-                    Name = info.Name,
-                    BaseValue = info.BaseValue,
-                    Value = new AttributeValue(0),
-                    SkillModelId = info.SkillModelId
-                });
-                _picker.ManualName = "";
-                _picker.ManualBaseValue = "";
-            }
-            return;
-        }
-        // Picker mode: addition happens via OnPickerSkillSelected; "+" is a no-op there
     }
 
     private void RemoveSkill(Skill skill)

@@ -1,0 +1,78 @@
+@using CampaignManager.Web.Components.Features.Characters.Services
+@using CampaignManager.Web.Components.Features.KeeperScreen.Model
+
+@* Ширма → «Рассудок» (гл. 8, стр. 152–154). Пороги безумия — из SanityRules, той же точки,
+   что у панели рассудка на листе; здесь только их пересказ и примеры потерь. *@
+
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Проверка Рассудка (стр. 152)</h3>
+        <ul class="list-disc pl-5 space-y-2 text-sm text-gray-700">
+            <li>Успех — выпало не больше текущего Рассудка. Потеря записывается как «успех/провал»: 0/1D6.</li>
+            <li>Ни бонусных и штрафных костей, ни Удачи, ни повторной проверки.</li>
+            <li>Крах — теряется максимум возможного (стр. 153).</li>
+            <li>Одна встреча — одна проверка: толпа упырей стоит столько же, сколько один.</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Провал — непроизвольное действие</h3>
+        <ul class="list-disc pl-5 space-y-2 text-sm text-gray-700">
+            @foreach (var action in SanityReference.InvoluntaryActions)
+            {
+                <li>@action</li>
+            }
+        </ul>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Пороги безумия (стр. 153–154)</h3>
+        <ul class="list-disc pl-5 space-y-2 text-sm text-gray-700">
+            <li><strong>@SanityRules.TemporaryInsanityThreshold и больше за один раз</strong> — проверка ИНТ.
+                Успех: сыщик осознал увиденное и временно безумен на 1d10 часов. Провал: разум отгородился,
+                сыщик в своём уме.</li>
+            <li><strong>Не меньше 1/5 текущего Рассудка за игровой день</strong> — бессрочное безумие.
+                «День» кончается, когда сыщик добрался до безопасного места и пришёл в себя.</li>
+            <li><strong>Рассудок 0</strong> — неизлечимое безумие, сыщик выходит из игры.</li>
+            <li>Максимум Рассудка — 99 минус Мифы Ктулху.</li>
+        </ul>
+        <div class="flex items-end gap-3 flex-wrap mt-3">
+            <div class="w-28">
+                <label class="cm-field-label" for="ks-sanity">Рассудок</label>
+                <input id="ks-sanity" type="number" min="0" max="99" class="cm-input" data-testid="ks-sanity"
+                       @bind="_sanity" @bind:event="oninput"/>
+            </div>
+            <p class="text-sm text-gray-700 mb-2" data-testid="ks-sanity-threshold">
+                @if (_sanity is { } sanity and > 0)
+                {
+                    <span>Бессрочное безумие — потеря <strong>@SanityRules.IndefiniteInsanityThreshold(sanity)</strong> и больше за день.</span>
+                }
+                else
+                {
+                    <span>Впишите текущий Рассудок сыщика.</span>
+                }
+            </p>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Примеры потерь (стр. 153)</h3>
+        <div class="overflow-x-auto">
+            <table class="cm-table">
+                <tbody>
+                @foreach (var example in SanityReference.LossExamples)
+                {
+                    <tr>
+                        <td class="font-semibold whitespace-nowrap">@example.Loss</td>
+                        <td>@example.Situation</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+@code {
+    private int? _sanity = 50;
+}
