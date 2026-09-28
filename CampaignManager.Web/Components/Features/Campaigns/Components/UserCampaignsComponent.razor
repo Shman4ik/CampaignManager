@@ -35,6 +35,10 @@
                 <div class="cm-card campaign-card">
                     <div class="campaign-card-header">
                         <span class="campaign-card-name" title="@campaign.Name">@campaign.Name</span>
+                        @* Число игроков — в шапке, а не отдельной серой строкой в теле карточки. *@
+                        <span class="campaign-card-count" aria-label="Игроков: @campaign.PlayerCount">
+                            <i class="fa-solid fa-user" aria-hidden="true"></i>@campaign.PlayerCount
+                        </span>
                         @if (isKeeper)
                         {
                             <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">Хранитель</Badge>
@@ -42,14 +46,10 @@
                     </div>
                     <div class="campaign-card-body">
                         @* Свою же почту в роли Хранителя не повторяем — об этом говорит бейдж в шапке. *@
-                        <div class="campaign-meta">
-                            @if (!isKeeper)
-                            {
-                                <span class="campaign-meta-value" title="@campaign.KeeperEmail">@campaign.KeeperEmail</span>
-                                <span class="campaign-meta-sep">·</span>
-                            }
-                            <span class="campaign-meta-count">Игроков: @campaign.PlayerCount</span>
-                        </div>
+                        @if (!isKeeper)
+                        {
+                            <div class="campaign-meta" title="@campaign.KeeperEmail">Хранитель: @campaign.KeeperEmail</div>
+                        }
 
                         @if (userCharacter is not null)
                         {
@@ -68,37 +68,21 @@
                             </div>
                         }
 
-                        @if (userCharacter is null || canManage)
+                        @* Главное действие — одно: открыть своего сыщика или завести его. Пустой лист —
+                           второй вариант того же действия, поэтому стоит рядом. *@
+                        @if (userCharacter is null)
                         {
                             <div class="campaign-actions">
-                                @if (userCharacter is null)
-                                {
-                                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
-                                            @onclick="() => StartWizard(campaign.Id)">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i>Создать сыщика
-                                    </button>
-                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
-                                            @onclick="() => CreateNewCharacter(campaign.Id)">
-                                        Пустой лист
-                                    </button>
-                                }
-                                @if (canManage)
-                                {
-                                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm campaign-action-wide"
-                                            @onclick="() => AddNpc(campaign.Id)">
-                                        <i class="fa-solid fa-plus"></i>Добавить NPC
-                                    </button>
-                                }
+                                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm"
+                                        @onclick="() => StartWizard(campaign.Id)">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i>Создать сыщика
+                                </button>
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                        @onclick="() => CreateNewCharacter(campaign.Id)">
+                                    Пустой лист
+                                </button>
                             </div>
                         }
-
-                        @* Журнал читают и игроки кампании, поэтому ссылка есть у всех: права проверяет
-                           CampaignJournalService. *@
-                        <div class="campaign-actions">
-                            <a href="/campaigns/@campaign.Id/journal" class="cm-btn cm-btn-secondary cm-btn-sm campaign-action-wide">
-                                <i class="fa-solid fa-book-open"></i>Журнал встреч
-                            </a>
-                        </div>
 
                         @if (canManage && npcs.Count > 0)
                         {
@@ -117,6 +101,22 @@
                                     </div>
                                 }
                             </div>
+                        }
+                    </div>
+
+                    @* Второстепенное — компактной строкой в подвале, а не кнопками во всю ширину.
+                       Журнал читают и игроки кампании, поэтому ссылка есть у всех: права
+                       проверяет CampaignJournalService. *@
+                    <div class="campaign-card-footer">
+                        <a href="/campaigns/@campaign.Id/journal" class="cm-btn cm-btn-secondary cm-btn-sm">
+                            <i class="fa-solid fa-book-open"></i>Журнал
+                        </a>
+                        @if (canManage)
+                        {
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
+                                    @onclick="() => AddNpc(campaign.Id)">
+                                <i class="fa-solid fa-plus"></i>NPC
+                            </button>
                         }
                     </div>
                 </div>
