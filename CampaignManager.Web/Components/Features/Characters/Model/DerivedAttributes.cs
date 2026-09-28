@@ -8,7 +8,7 @@ public class DerivedAttributes
     public AttributeWithMaxValue HitPoints { get; set; } = new(0, 0);
 
     /// <summary>
-    ///     Очки магии персонажа
+    ///     Пункты магии (ПМ) персонажа
     /// </summary>
     public AttributeWithMaxValue MagicPoints { get; set; } = new(0, 0);
 
