@@ -9,6 +9,7 @@ using CampaignManager.Web.Components.Features.Weapons.Model;
 using CampaignManager.Web.Utilities.DataBase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -17,9 +18,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CampaignManager.Web.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928061730_CreatureImages")]
+    partial class CreatureImages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -286,54 +289,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("CampaignPlayers", "games");
-                });
-
-            modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignSession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CampaignId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("KeeperNotes")
-                        .HasMaxLength(20000)
-                        .HasColumnType("character varying(20000)");
-
-                    b.Property<DateTimeOffset>("LastUpdated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ScenarioCompleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("ScenarioId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("SessionDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Summary")
-                        .HasMaxLength(20000)
-                        .HasColumnType("character varying(20000)");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ScenarioId");
-
-                    b.HasIndex("CampaignId", "SessionDate");
-
-                    b.ToTable("CampaignSessions", "games");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Characters.Model.Occupation", b =>
@@ -1021,24 +976,6 @@ namespace CampaignManager.Web.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Campaign");
-                });
-
-            modelBuilder.Entity("CampaignManager.Web.Components.Features.Campaigns.Models.CampaignSession", b =>
-                {
-                    b.HasOne("CampaignManager.Web.Components.Features.Campaigns.Models.Campaign", "Campaign")
-                        .WithMany()
-                        .HasForeignKey("CampaignId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", "Scenario")
-                        .WithMany()
-                        .HasForeignKey("ScenarioId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Campaign");
-
-                    b.Navigation("Scenario");
                 });
 
             modelBuilder.Entity("CampaignManager.Web.Components.Features.Scenarios.Model.Scenario", b =>

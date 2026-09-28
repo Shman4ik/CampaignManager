@@ -338,6 +338,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasColumnType("jsonb")
                 .HasDefaultValueSql("'[]'::jsonb");
 
+            // Иллюстрации — список, первая служит обложкой
+            entity.Property(c => c.Images)
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb");
+
             // Store CombatDescriptions as JSONB (legacy)
             entity.Property(c => c.CombatDescriptions)
                 .HasColumnType("jsonb");

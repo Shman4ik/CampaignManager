@@ -315,6 +315,7 @@ builder.Services.AddScoped<ScenarioService>();
 builder.Services.AddScoped<ScenarioImportService>();
 builder.Services.AddScoped<ScenarioHandoutService>();
 builder.Services.AddScoped<CreatureService>();
+builder.Services.AddScoped<CreatureImportService>();
 builder.Services.AddScoped<ItemService>();
 builder.Services.AddScoped<MusicTrackService>();
 builder.Services.AddScoped<MusicPlaybackService>();

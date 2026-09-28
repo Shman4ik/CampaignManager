@@ -34,11 +34,34 @@
                 </div>
             </div>
 
-            @if (!string.IsNullOrEmpty(Creature.ImageUrl))
+            @* Первая картинка — обложка; остальные тапом по миниатюре, а не по наведению:
+               на iPad за столом наведения нет. *@
+            @if (Creature.Images.Count > 0)
             {
-                <div class="sm:w-40 shrink-0 flex items-start justify-center">
-                    <img src="@GetImageUrl(Creature.ImageUrl)" alt="@Creature.Name"
+                var shown = Creature.Images[Math.Min(_imageIndex, Creature.Images.Count - 1)];
+                <div class="sm:w-40 shrink-0 flex flex-col items-center gap-2">
+                    <img src="@CreatureImage.ToSrc(shown.Url)" alt="@(shown.Caption ?? Creature.Name)"
                          class="max-w-full h-auto max-h-40 object-contain rounded" loading="lazy"/>
+                    @if (!string.IsNullOrWhiteSpace(shown.Caption))
+                    {
+                        <span class="text-xs text-gray-500 text-center">@shown.Caption</span>
+                    }
+                    @if (Creature.Images.Count > 1)
+                    {
+                        <div class="flex flex-wrap justify-center gap-1">
+                            @for (var i = 0; i < Creature.Images.Count; i++)
+                            {
+                                var index = i;
+                                var image = Creature.Images[index];
+                                <button type="button"
+                                        class="h-11 w-11 rounded border overflow-hidden @(index == _imageIndex ? "border-accent-500 ring-2 ring-accent-500/30" : "border-gray-200")"
+                                        aria-label="@($"Картинка {index + 1}: {image.Caption ?? Creature.Name}")"
+                                        @onclick="() => _imageIndex = index">
+                                    <img src="@CreatureImage.ToSrc(image.Url)" alt="" class="h-full w-full object-cover" loading="lazy"/>
+                                </button>
+                            }
+                        </div>
+                    }
                 </div>
             }
         </div>
@@ -99,7 +122,15 @@
                         <div class="mb-1">
                             <span class="font-semibold">@attack.Name</span>
                             <span class="text-gray-600">
-                                @attack.SkillValue% (@(attack.SkillValue / 2)/@(attack.SkillValue / 5)), урон @FormatDamage(attack)
+                                @if (attack.SkillValue > 0)
+                                {
+                                    @($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон {FormatDamage(attack)}")
+                                }
+                                else
+                                {
+                                    @* Особая атака без процента решается встречной проверкой или срабатывает сама. *@
+                                    @("без броска, см. описание")
+                                }
                             </span>
                             @if (attack.Kind is not CreatureAttackKind.Melee)
                             {
@@ -123,6 +154,8 @@
     [Parameter] public required Creature Creature { get; set; }
 
     [Parameter] public EventCallback<Creature> OnDelete { get; set; }
+
+    private int _imageIndex;
 
     /// <summary>Короткие числа статблока — идут сеткой.</summary>
     private List<(string Label, object? Value, string? DiceRoll)> ShortStats { get; set; } = [];
@@ -207,13 +240,6 @@
         var note = string.IsNullOrWhiteSpace(c.ArmorNote) ? null : c.ArmorNote;
         if (c.Armor > 0) return note is null ? $"{c.Armor}" : $"{c.Armor} — {note}";
         return note ?? "нет";
-    }
-
-    private string GetImageUrl(string? imageUrl)
-    {
-        if (string.IsNullOrEmpty(imageUrl))
-            return string.Empty;
-        return imageUrl.StartsWith("https://") ? imageUrl : $"/api/minio/image/{imageUrl}";
     }
 
     // Редактирование существа

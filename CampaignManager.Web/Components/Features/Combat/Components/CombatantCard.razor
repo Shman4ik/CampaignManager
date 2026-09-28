@@ -1,4 +1,5 @@
 ﻿@using CampaignManager.Web.Components.Features.Combat.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Combat.Services
 @using CampaignManager.Web.Components.Features.Weapons.Services
 @using CampaignManager.Web.Extensions
@@ -272,7 +273,7 @@
                     {
                         <div class="bg-gray-50 border border-gray-100 p-1.5 rounded text-xs">
                             <span class="font-semibold text-gray-800">@attack.Name</span>
-                            <span class="text-gray-500 ml-1">@(attack.IsMelee ? "Ближний" : "Дальний") @attack.SkillValue% &middot; @attack.DamageFormula</span>
+                            <span class="text-gray-500 ml-1">@AttackSummary(attack)</span>
                             @if (!string.IsNullOrEmpty(attack.Description))
                             {
                                 <span class="text-gray-400 ml-1">@attack.Description</span>
@@ -388,5 +389,27 @@
         if (pct > 50) return "bg-success-600";
         if (pct > 25) return "bg-warning-600";
         return "bg-error-600";
+    }
+
+    // Строка как в статблоке: вид, навык и урон вместе с бонусом — «2d6» без «+ БкУ» у твари
+    // с БкУ +2d6 вдвое занижает урон при чтении глазами.
+    private static string AttackSummary(CreatureAttack attack)
+    {
+        var kind = attack.Kind switch
+        {
+            CreatureAttackKind.Ranged => "Дальний",
+            CreatureAttackKind.Maneuver => "Манёвр",
+            CreatureAttackKind.Special => "Особая",
+            _ => "Ближний"
+        };
+        var skill = attack.SkillValue > 0 ? $"{attack.SkillValue}%" : "без броска";
+        var damage = attack.DamageBonus switch
+        {
+            CreatureDamageBonusMode.OnlyBonus => "урон = БкУ",
+            CreatureDamageBonusMode.Full => $"{attack.DamageFormula} + БкУ",
+            CreatureDamageBonusMode.Half => $"{attack.DamageFormula} + ½ БкУ",
+            _ => attack.DamageFormula == "0" ? null : attack.DamageFormula
+        };
+        return damage is null ? $"{kind} {skill}" : $"{kind} {skill} · {damage}";
     }
 }

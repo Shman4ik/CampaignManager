@@ -135,7 +135,10 @@ public sealed class AttackSetupState
         }
         else if (SelectedAttacker.CreatureSource != null)
         {
-            foreach (var attack in SelectedAttacker.CreatureSource.Attacks)
+            // Особая атака без процента (поглощение, гипноз, вихрь ллойгора) бросков атаки не знает:
+            // её разрешает встречная проверка или автоматический эффект из описания. С навыком 0%
+            // она всегда промахивалась бы, поэтому в выбор атаки не попадает — остаётся в карточке бойца.
+            foreach (var attack in SelectedAttacker.CreatureSource.Attacks.Where(a => a.SkillValue > 0))
             {
                 AttackOptions.Add(new AttackOption
                 {

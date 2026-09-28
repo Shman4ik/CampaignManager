@@ -13,6 +13,10 @@
 
 <PageHeader Title="Существа">
     <Actions>
+        <AuthorizeView Roles="Administrator,GameMaster">
+            <Button Variant="secondary" Size="sm" Icon="fa-file-import" OnClick="ShowImportModal">Импорт JSON</Button>
+        </AuthorizeView>
+        <Button Variant="secondary" Size="sm" Icon="fa-file-export" OnClick="ShowExportModal">Экспорт JSON</Button>
         <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewCreature">Добавить</Button>
     </Actions>
 </PageHeader>
@@ -92,6 +96,11 @@
                    ConfirmText="Удалить"
                    IconType="error" />
 
+<AuthorizeView Roles="Administrator,GameMaster">
+    <CreatureImportModal @ref="_importModal" OnImported="LoadData"/>
+</AuthorizeView>
+<CreatureExportModal @ref="_exportModal"/>
+
 
 
 @code {
@@ -104,6 +113,9 @@
     // Модальное окно удаления
     private bool _showDeleteModal;
     private Creature? _creatureToDelete;
+
+    private CreatureImportModal? _importModal;
+    private CreatureExportModal? _exportModal;
 
     private int _currentPage = 1;
     // 12, а не 6: при шести существах на страницу найти нужное без поиска значило
@@ -166,6 +178,14 @@
     {
         _currentPage = page;
         await LoadData();
+    }
+
+    private void ShowImportModal() => _importModal?.Show();
+
+    private async Task ShowExportModal()
+    {
+        if (_exportModal is not null)
+            await _exportModal.Show();
     }
 
     // Создание нового существа

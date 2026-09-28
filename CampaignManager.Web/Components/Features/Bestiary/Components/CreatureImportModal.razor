@@ -1,0 +1,158 @@
+@namespace CampaignManager.Web.Components.Features.Bestiary.Components
+@using CampaignManager.Web.Components.Features.Bestiary.Model
+@using CampaignManager.Web.Components.Features.Bestiary.Services
+@inject CreatureImportService CreatureImportService
+
+<Modal IsVisible="_isVisible"
+       OnClose="Hide"
+       Title="Импорт бестиария из JSON"
+       MaxWidth="4xl"
+       HeaderColorScheme="primary">
+    <ChildContent>
+        <div class="space-y-4">
+            @if (_result is null)
+            {
+                <Alert Type="info" Title="Как это работает">
+                    Вставьте список существ — статблок, атаки, навыки и особые умения заведутся за один раз.
+                    Подходит и одно существо без обёртки. Существо сопоставляется по названию; картинки
+                    остаются как были, если в файле нет поля <code>images</code>. Готовый JSON нужного вида
+                    отдаёт кнопка «Экспорт JSON».
+                </Alert>
+
+                <div>
+                    <label for="bestiaryImportJson" class="cm-field-label">JSON бестиария</label>
+                    <textarea id="bestiaryImportJson" @bind="_json" class="cm-input font-mono text-xs" rows="16"
+                              placeholder="@Placeholder"></textarea>
+                </div>
+
+                <label class="flex items-center gap-2 cm-text-sm cursor-pointer py-1">
+                    <input type="checkbox" class="h-5 w-5" @bind="_overwrite"/>
+                    <span>Обновлять существ, которые уже есть в бестиарии</span>
+                </label>
+
+                @if (!string.IsNullOrEmpty(_error))
+                {
+                    <Alert Type="error" Title="Импорт не выполнен">@_error</Alert>
+                }
+            }
+            else
+            {
+                @if (_result.DryRun)
+                {
+                    <Alert Type="info" Title="Проверка — ничего не сохранено">
+                        Будет заведено — @_result.Created, обновлено — @_result.Updated@(_result.Renamed > 0 ? $" (из них переименовано — {_result.Renamed})" : ""), пропущено — @_result.Skipped.
+                    </Alert>
+                }
+                else
+                {
+                    <Alert Type="success" Title="Бестиарий пополнен">
+                        Заведено — @_result.Created, обновлено — @_result.Updated@(_result.Renamed > 0 ? $" (из них переименовано — {_result.Renamed})" : ""), пропущено — @_result.Skipped.
+                    </Alert>
+                }
+
+                @if (_result.Warnings.Count > 0)
+                {
+                    <Alert Type="warning" Title="Замечания">
+                        <ul class="list-disc list-inside space-y-1">
+                            @foreach (var warning in _result.Warnings)
+                            {
+                                <li>@warning</li>
+                            }
+                        </ul>
+                    </Alert>
+                }
+            }
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <div class="flex justify-end gap-2">
+            @if (_result is null)
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="secondary">Отмена</Button>
+                <Button ButtonType="button" OnClick="() => Import(true)" Variant="secondary"
+                        IsDisabled="@(_isImporting || string.IsNullOrWhiteSpace(_json))">Проверить</Button>
+                <Button ButtonType="button" OnClick="() => Import(false)" Variant="primary"
+                        IsDisabled="@(_isImporting || string.IsNullOrWhiteSpace(_json))">
+                    @(_isImporting ? "Импортирую…" : "Импортировать")
+                </Button>
+            }
+            else if (_result.DryRun)
+            {
+                <Button ButtonType="button" OnClick="BackToEdit" Variant="secondary">Назад к JSON</Button>
+                <Button ButtonType="button" OnClick="() => Import(false)" Variant="primary" IsDisabled="_isImporting">
+                    @(_isImporting ? "Импортирую…" : "Импортировать")
+                </Button>
+            }
+            else
+            {
+                <Button ButtonType="button" OnClick="Hide" Variant="primary">Закрыть</Button>
+            }
+        </div>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    private const string Placeholder =
+        """{ "creatures": [ { "name": "Глубоководный", "type": "MythicMonsters", "characteristics": { "healPoint": 13 }, "attacks": [ { "name": "Ближний бой", "skillValue": 45, "damageFormula": "1d6", "damageBonus": "Full" } ] } ] }""";
+
+    /// <summary>Вызывается после импорта, чтобы страница перечитала список существ.</summary>
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private bool _isVisible;
+    private bool _isImporting;
+    private bool _overwrite = true;
+    private string _json = string.Empty;
+    private string? _error;
+    private CreatureImportResult? _result;
+
+    // Show()/Hide() зовёт родительская страница, параметры при этом не меняются — Blazor сам
+    // компонент не перерисует, поэтому StateHasChanged здесь обязателен (см. Scenarios/CLAUDE.md).
+    public void Show()
+    {
+        _json = string.Empty;
+        _error = null;
+        _result = null;
+        _isImporting = false;
+        _overwrite = true;
+        _isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        _isVisible = false;
+        StateHasChanged();
+    }
+
+    private void BackToEdit() => _result = null;
+
+    private async Task Import(bool dryRun)
+    {
+        if (string.IsNullOrWhiteSpace(_json)) return;
+
+        _isImporting = true;
+        _error = null;
+
+        try
+        {
+            var result = await CreatureImportService.ImportAsync(_json, _overwrite, dryRun);
+
+            if (!result.Success)
+            {
+                _result = null;
+                _error = result.Error ?? "Неизвестная ошибка импорта.";
+                return;
+            }
+
+            _result = result;
+            if (!dryRun)
+                await OnImported.InvokeAsync();
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+}
