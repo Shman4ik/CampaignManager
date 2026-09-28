@@ -30,13 +30,11 @@ CSS variables `--color-{palette}-{shade}` available for primary, secondary, acce
 ## CSS Variables
 
 ```
---cm-background: #F8F9FA          --cm-background-alpha: rgba(248,249,250,0.95)
---cm-text-foreground: #0f172a     --cm-overlay: rgba(0,0,0,0.5)
---cm-border-color: #e2e8f0        --cm-border-color-hover: #cbd5e1
---cm-radius-md: 0.375rem          --cm-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05)
---cm-shadow-error: 0 4px 12px rgba(199,29,32,0.25)
+--cm-background: #F8F9FA          --cm-text-foreground: #0f172a
+--cm-overlay: rgba(0,0,0,0.5)     --cm-border-color: #e2e8f0
+--cm-border-color-hover: #cbd5e1  --cm-radius-md: 0.375rem
+--cm-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05)
 --cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-800))
---cm-gradient-error: linear-gradient(135deg, #A8191B, #C71D20)
 --font-family-primary: 'Inter', system-ui, sans-serif
 --font-family-serif: 'Bookman Old Style', 'Book Antiqua', Georgia, serif
 ```
@@ -106,6 +104,7 @@ is the reference:
 | cm-count-badge | Attention count on a button or nav item |
 | cm-field-label | Form field label; `cm-field-hint` for the "(optional)" part |
 | cm-checkbox | Checkbox |
+| cm-tap-target | `<label>` around a small control in a dense row: 36×36 touch area via `::after`, layout size unchanged |
 | cm-text-muted | Secondary body copy inside cards |
 | cm-table | Data tables (catalogues, admin lists) |
 

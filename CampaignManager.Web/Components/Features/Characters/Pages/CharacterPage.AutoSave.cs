@@ -43,8 +43,8 @@ public partial class CharacterPage : IAsyncDisposable
     private SaveIndicator? AutoSaveIndicator => _autoSaveState switch
     {
         AutoSaveState.Saving => new SaveIndicator("fa-solid fa-rotate fa-spin", "Сохранение…", "text-gray-500"),
-        AutoSaveState.Saved => new SaveIndicator("fa-solid fa-check", "Сохранено", "text-emerald-600"),
-        AutoSaveState.Failed => new SaveIndicator("fa-solid fa-triangle-exclamation", "Не сохранено", "text-red-600"),
+        AutoSaveState.Saved => new SaveIndicator("fa-solid fa-check", "Сохранено", "text-success-600"),
+        AutoSaveState.Failed => new SaveIndicator("fa-solid fa-triangle-exclamation", "Не сохранено", "text-error-600"),
         _ => null
     };
 
