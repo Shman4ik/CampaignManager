@@ -1,0 +1,167 @@
+@using CampaignManager.Web.Components.Features.Characters.Model
+@using CampaignManager.Web.Components.Features.Characters.Services
+
+@* Новая фобия или мания (таблицы IX/X, стр. 158–159). Строки таблиц лежат в InsanityTables;
+   бросок или вписанный номер только подставляет название и описание в поля — Хранитель
+   правит их перед сохранением, в запись уходит то, что осталось в полях. *@
+
+<Modal IsVisible="@IsVisible" OnClose="@OnClose" Title="@DialogTitle" MaxWidth="2xl">
+    <ChildContent>
+        <div class="cm-stack">
+            <section>
+                <span class="cm-field-label">Что приобрёл сыщик</span>
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Фобия или мания">
+                    @foreach (var kind in Kinds)
+                    {
+                        <button type="button" @key="kind"
+                                class="cm-btn cm-btn-sm @(_kind == kind ? "cm-btn-primary" : "cm-btn-secondary")"
+                                aria-pressed="@(_kind == kind ? "true" : "false")"
+                                data-testid="@($"condition-kind-{kind.ToString().ToLowerInvariant()}")"
+                                @onclick="() => SelectKind(kind)">
+                            @(kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")
+                            · табл. @InsanityTables.TableNumeral(kind)
+                        </button>
+                    }
+                </div>
+            </section>
+
+            <section>
+                <div class="flex flex-wrap items-end gap-3">
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mb-1" data-testid="condition-roll"
+                            @onclick="Roll">
+                        <i class="fa-solid fa-dice mr-1"></i>Бросить 1d100
+                    </button>
+                    <div class="w-24">
+                        <label for="condition-roll-value" class="cm-field-label">Выпало</label>
+                        <input id="condition-roll-value" type="number" min="1" max="100" class="cm-input"
+                               data-testid="condition-roll-value"
+                               value="@_roll" @onchange="SetRollFromInput"/>
+                    </div>
+                    <div class="flex-1 min-w-[14rem]">
+                        <label for="condition-pick" class="cm-field-label">
+                            Или выберите подходящую <span class="cm-field-hint">— табл. @InsanityTables.TableNumeral(_kind), стр. @InsanityTables.TablePage(_kind)</span>
+                        </label>
+                        <select id="condition-pick" class="cm-input" data-testid="condition-pick"
+                                value="@(_roll?.ToString() ?? "")" @onchange="SetRollFromInput">
+                            <option value="">— строка таблицы —</option>
+                            @foreach (var entry in InsanityTables.Conditions(_kind))
+                            {
+                                <option value="@entry.Number">@entry.Number. @entry.Name — @entry.Description</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <p class="cm-field-note mt-1">
+                    Книга разрешает и бросок 1d100, и выбор Хранителя: фобию лучше связать с тем, что сыщик
+                    только что пережил.
+                </p>
+            </section>
+
+            <section>
+                <div class="mb-3">
+                    <label for="condition-name" class="cm-field-label">Название</label>
+                    <input id="condition-name" type="text" class="cm-input" data-testid="condition-name"
+                           placeholder="@(_kind == InsanityConditionKind.Phobia ? "Например, Клаустрофобия" : "Например, Клептомания")"
+                           @bind="_name" @bind:event="oninput"/>
+                </div>
+                <div>
+                    <label for="condition-description" class="cm-field-label">
+                        Описание <span class="cm-field-hint">— и при каких обстоятельствах появилась</span>
+                    </label>
+                    <textarea id="condition-description" rows="2" class="cm-input" data-testid="condition-description"
+                              @bind="_description" @bind:event="oninput"></textarea>
+                </div>
+            </section>
+        </div>
+    </ChildContent>
+    <FooterContent>
+        <button type="button" class="cm-btn cm-btn-secondary" @onclick="OnClose">Отмена</button>
+        <button type="button" class="cm-btn cm-btn-primary" data-testid="condition-save"
+                disabled="@string.IsNullOrWhiteSpace(_name)" @onclick="SaveAsync">
+            <i class="fa-solid fa-plus mr-1"></i>Добавить
+        </button>
+    </FooterContent>
+</Modal>
+
+@code {
+    private static readonly InsanityConditionKind[] Kinds = [InsanityConditionKind.Phobia, InsanityConditionKind.Mania];
+
+    [Parameter] [EditorRequired] public required Character Character { get; set; }
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>С чем открыть диалог: кнопка «Фобия»/«Мания» или строка приступа, давшая её.</summary>
+    [Parameter] public InsanityConditionKind Kind { get; set; }
+
+    /// <summary>Запись добавлена в лист — родитель закрывает диалог и перерисовывает список.</summary>
+    [Parameter] public EventCallback OnAdded { get; set; }
+
+    private InsanityConditionKind _kind;
+    private int? _roll;
+    private string _name = "";
+    private string _description = "";
+    private bool _wasVisible;
+
+    private string DialogTitle => _kind == InsanityConditionKind.Phobia ? "Новая фобия" : "Новая мания";
+
+    protected override void OnParametersSet()
+    {
+        // Диалог прячется, а не размонтируется: без сброса прошлые поля встретили бы следующее открытие.
+        if (IsVisible && !_wasVisible)
+        {
+            _kind = Kind;
+            _roll = null;
+            _name = "";
+            _description = "";
+        }
+
+        _wasVisible = IsVisible;
+    }
+
+    private void SelectKind(InsanityConditionKind kind)
+    {
+        if (_kind == kind)
+            return;
+
+        _kind = kind;
+        // Тот же номер в другой таблице — другая строка: поля заполняются заново уже из неё.
+        if (_roll is { } roll)
+            Fill(roll);
+    }
+
+    private void Roll() => Fill(Dice.Roll(1, InsanityTables.ConditionDie));
+
+    private void SetRollFromInput(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var roll) && InsanityTables.FindCondition(_kind, roll) is not null)
+            Fill(roll);
+        else
+            _roll = null;
+    }
+
+    /// <summary>Новый бросок — явное действие Хранителя, поэтому поля перезаписываются строкой таблицы.</summary>
+    private void Fill(int roll)
+    {
+        if (InsanityTables.FindCondition(_kind, roll) is not { } entry)
+            return;
+
+        _roll = roll;
+        _name = entry.Name;
+        _description = entry.Description;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+            return;
+
+        Character.InsanityConditions.Add(new InsanityCondition
+        {
+            Kind = _kind,
+            Name = _name.Trim(),
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim()
+        });
+
+        await OnAdded.InvokeAsync();
+    }
+}

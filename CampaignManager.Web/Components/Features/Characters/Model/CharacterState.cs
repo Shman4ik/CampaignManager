@@ -62,4 +62,14 @@ public class CharacterState
     ///     Фаза развития снижает каждое значение на 1.
     /// </summary>
     public List<MythosHabituation> MythosHabituations { get; set; } = [];
+
+    /// <summary>
+    ///     По правилам положен приступ безумия, а его ещё не разыграли: сыщик только что обезумел
+    ///     (любое безумие начинается с приступа, стр. 154) или потерял рассудок в затаённом
+    ///     безумии (стр. 156). Ставит и снимает только <c>SanityRules</c>.
+    /// </summary>
+    public bool InsanityBoutDue { get; set; }
+
+    /// <summary>Последний разыгранный приступ; null у старых листов и у тех, кто ещё не сходил с ума.</summary>
+    public InsanityBout? LastInsanityBout { get; set; }
 }

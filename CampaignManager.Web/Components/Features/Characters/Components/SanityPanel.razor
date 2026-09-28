@@ -1,240 +1,351 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 
-<div class="sanity-panel">
-    @{
-        var maxSan = SanityRules.ComputeMaxSanity(Character);
-        var current = Math.Clamp(Character.DerivedAttributes.Sanity.Value, 0, maxSan);
-        if (current != Character.DerivedAttributes.Sanity.Value)
-        {
-            Character.DerivedAttributes.Sanity.Value = current;
-        }
-        if (Character.DerivedAttributes.Sanity.MaxValue != maxSan)
-        {
-            Character.DerivedAttributes.Sanity.MaxValue = maxSan;
-        }
-        var pct = maxSan > 0 ? Math.Clamp((int)((double)current / maxSan * 100), 0, 100) : 0;
-        var barColor = pct <= 25 ? "bg-red-600" : pct <= 50 ? "bg-yellow-500" : "bg-purple-500";
-        var mythos = SanityRules.GetMythosValue(Character);
-        var indefThreshold = SanityRules.IndefiniteInsanityThreshold(current);
-        var dayLoss = Character.State.SanityLossEpisode;
-        var lastLoss = Character.State.LastSanityLoss;
-        // Два разных правила с разными окнами: ИНТ — по одной причине, бессрочное — за игровой день.
-        var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
-        var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
-        var permanentlyInsane = SanityRules.IsPermanentlyInsane(Character);
-    }
+@* Панель живёт внутри секции листа «Рассудок и безумие»: рамку и отступ даёт CharacterSection,
+   поэтому своей карточки здесь нет — блоки разделены линейкой cm-stack, а не вложенными рамками.
+   Правила (пороги, приступ, таблицы) — в SanityRules и InsanityTables, здесь только разметка. *@
 
-    @if (permanentlyInsane)
+@{
+    var maxSan = SanityRules.ComputeMaxSanity(Character);
+    var current = Math.Clamp(Character.DerivedAttributes.Sanity.Value, 0, maxSan);
+    if (current != Character.DerivedAttributes.Sanity.Value)
     {
-        <Alert Type="error" Icon="fa-skull" ShowIcon Small>
-            Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 153).
-        </Alert>
+        Character.DerivedAttributes.Sanity.Value = current;
     }
+    if (Character.DerivedAttributes.Sanity.MaxValue != maxSan)
+    {
+        Character.DerivedAttributes.Sanity.MaxValue = maxSan;
+    }
+    var pct = maxSan > 0 ? Math.Clamp((int)((double)current / maxSan * 100), 0, 100) : 0;
+    // secondary — цвет Рассудка на всём листе (см. строку «Рассудок» в DerivedAttributesTable),
+    // а на низком запасе полоса переходит в статусные цвета.
+    var barColor = pct <= 25 ? "bg-error-700" : pct <= 50 ? "bg-warning-500" : "bg-secondary-500";
+    var mythos = SanityRules.GetMythosValue(Character);
+    var indefThreshold = SanityRules.IndefiniteInsanityThreshold(current);
+    var dayLoss = Character.State.SanityLossEpisode;
+    var lastLoss = Character.State.LastSanityLoss;
+    // Два разных правила с разными окнами: ИНТ — по одной причине, бессрочное — за игровой день.
+    var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
+    var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
+    var permanentlyInsane = SanityRules.IsPermanentlyInsane(Character);
+    var insane = SanityRules.IsInsane(Character);
+    // Флаг сверяется с отметками: снять безумие можно и мимо SanityRules (чекбоксы в «Личных
+    // данных», самолечение в фазе развития), и тогда напоминание о приступе висело бы зря.
+    var boutDue = Character.State.InsanityBoutDue && insane && !permanentlyInsane;
+    var activeConditions = Character.InsanityConditions.Count(c => c.Active);
+}
 
-    <!-- Текущий / Максимум -->
-    <div class="mb-3">
-        <div class="flex items-baseline justify-between mb-1">
-            <span class="text-sm font-semibold text-gray-700">Рассудок</span>
-            <span class="text-sm text-gray-600">
-                <span class="font-bold text-purple-700">@current</span>
-                <span class="text-gray-400">/ @maxSan</span>
-                <span class="text-xs text-gray-400 ml-1">(99 − Мифы Ктулху @mythos)</span>
-            </span>
-        </div>
-        <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-            <div class="@barColor h-2.5 transition-all duration-300" style="width: @(pct)%"></div>
-        </div>
-    </div>
+<div class="sanity-panel cm-stack">
+    <section>
+        @if (permanentlyInsane)
+        {
+            <Alert Type="error" Icon="fa-skull" ShowIcon Small>
+                Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 153).
+            </Alert>
+        }
 
-    <!-- Ручное изменение -->
-    <div class="flex flex-wrap items-center gap-1.5 mb-3">
-        <div class="flex items-center rounded-md border border-gray-300 overflow-hidden">
-            <button type="button"
-                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border-r border-gray-300 text-sm transition-colors"
-                    @onclick="ApplyManualLoss" title="Отнять">
-                <i class="fa-solid fa-minus"></i>
-            </button>
-            <input type="number" min="1" max="99"
-                   class="w-12 text-center text-sm py-1 focus:outline-none"
-                   @bind="_manualAmount" @bind:event="oninput" />
-            <button type="button"
-                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border-l border-gray-300 text-sm transition-colors"
-                    @onclick="ApplyManualHeal" title="Прибавить">
-                <i class="fa-solid fa-plus"></i>
-            </button>
+        <!-- Текущий / Максимум -->
+        <div class="mb-3">
+            <div class="flex items-baseline justify-between mb-1">
+                <span class="text-sm font-semibold text-primary-700">Рассудок</span>
+                <span class="text-sm text-primary-600">
+                    <span class="font-bold text-secondary-700">@current</span>
+                    <span class="text-primary-400">/ @maxSan</span>
+                    <span class="text-xs text-primary-400 ml-1">(99 − Мифы Ктулху @mythos)</span>
+                </span>
+            </div>
+            <div class="w-full bg-primary-200 rounded-full h-2.5 overflow-hidden">
+                <div class="@barColor h-2.5 transition-all duration-300" style="width: @(pct)%"></div>
+            </div>
         </div>
-        <span class="text-xs text-gray-400">кубики:</span>
-        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 3))">−1d3</button>
-        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 4))">−1d4</button>
-        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 6))">−1d6</button>
-        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 10))">−1d10</button>
-    </div>
 
-    <!-- Потери: по одной причине и за игровой день -->
-    <div class="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-            <span class="text-xs font-semibold text-gray-600 uppercase">Потери рассудка</span>
+        <!-- Ручное изменение: одно нажатие — одна причина потери -->
+        <div class="flex flex-wrap items-center gap-1.5 mb-3">
+            <div class="flex items-center gap-1">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                        aria-label="Отнять указанное число пунктов рассудка" @onclick="ApplyManualLoss">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <div class="w-16">
+                    <input type="number" min="1" max="99" class="cm-input text-center"
+                           aria-label="Сколько пунктов рассудка"
+                           @bind="_manualAmount" @bind:event="oninput" />
+                </div>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                        aria-label="Прибавить указанное число пунктов рассудка" @onclick="ApplyManualHeal">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+            <span class="text-xs text-primary-400 ml-1">кубики:</span>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 3))">−1d3</button>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 4))">−1d4</button>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 6))">−1d6</button>
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="() => ApplyLoss(RollDice(1, 10))">−1d10</button>
+        </div>
+
+        <!-- Потери: по одной причине и за игровой день -->
+        <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="text-sm text-primary-700 space-y-0.5">
+                <div>
+                    За игровой день: <span class="font-bold text-primary-900">@dayLoss</span>
+                    <span class="text-xs text-primary-500">(порог бессрочного: @indefThreshold)</span>
+                </div>
+                <div>
+                    От последней причины: <span class="font-bold text-primary-900">@lastLoss</span>
+                    <span class="text-xs text-primary-500">(порог проверки ИНТ: @SanityRules.TemporaryInsanityThreshold)</span>
+                </div>
+            </div>
             <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="ResetDay">
                 <i class="fa-solid fa-rotate-left mr-1"></i>Новый день
             </button>
         </div>
-        <div class="text-sm text-gray-700">
-            За игровой день: <span class="font-bold text-gray-900">@dayLoss</span>
-            <span class="text-xs text-gray-500">(порог бессрочного: @indefThreshold)</span>
-        </div>
-        <div class="text-sm text-gray-700">
-            От последней причины: <span class="font-bold text-gray-900">@lastLoss</span>
-            <span class="text-xs text-gray-500">(порог проверки ИНТ: @SanityRules.TemporaryInsanityThreshold)</span>
-        </div>
+
         @if (triggersTemp)
         {
-            <div class="mt-2 px-2 py-1 bg-purple-50 border border-purple-200 rounded text-xs text-purple-800">
-                <div>
-                    ⚠ Потеряно @lastLoss пунктов по одной причине — пройдите проверку <strong>ИНТ</strong>:
-                    при успехе сыщик впадает во временное безумие (1d10 часов).
-                </div>
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm mt-1.5" @onclick="ClearLastLoss">
-                    Проверка пройдена
-                </button>
-            </div>
-        }
-        @if (triggersIndef)
-        {
-            <Alert Type="error" ShowIcon Small class="mt-2 !mb-0">
-                Потеряно ≥1/5 от текущего Рассудка за игровой день — <strong>бессрочное безумие</strong>.
+            <Alert Type="warning" ShowIcon Icon="fa-triangle-exclamation" Small class="mt-3 !mb-0" data-testid="int-check-prompt">
+                <ChildContent>
+                    Потеряно @lastLoss пунктов по одной причине — проверка <strong>ИНТ</strong> (стр. 153).
+                    Успех: сыщик осознал увиденное и временно безумен (1d10 часов), всё начинается с приступа.
+                    Провал: разум отгородился от ужаса.
+                </ChildContent>
+                <Actions>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="int-success"
+                                @onclick="IntCheckSucceeded">
+                            Успех ИНТ: безумие
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="int-failure"
+                                @onclick="ClearLastLoss">
+                            Провал ИНТ: в своём уме
+                        </button>
+                    </div>
+                </Actions>
             </Alert>
         }
-    </div>
+        @if (triggersIndef && Character.State.HasIndefiniteInsanity)
+        {
+            <Alert Type="error" ShowIcon Small class="mt-3 !mb-0" data-testid="indefinite-prompt">
+                Потеряно ≥1/5 от текущего Рассудка за игровой день — <strong>бессрочное безумие</strong>
+                (стр. 153). Отмечено.
+            </Alert>
+        }
+        else if (triggersIndef)
+        {
+            <Alert Type="error" ShowIcon Small class="mt-3 !mb-0" data-testid="indefinite-prompt">
+                <ChildContent>
+                    Потеряно ≥1/5 от текущего Рассудка за игровой день — <strong>бессрочное безумие</strong>
+                    (стр. 153). Оно, как и любое безумие, начинается с приступа.
+                </ChildContent>
+                <Actions>
+                    <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" data-testid="indefinite-mark"
+                            @onclick="MarkIndefiniteAndOpenBout">
+                        Отметить и бросить приступ
+                    </button>
+                </Actions>
+            </Alert>
+        }
+    </section>
 
-    <!-- Состояние безумия -->
-    <div class="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <label class="flex items-start gap-2 p-2 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-50">
-            <input type="checkbox" class="mt-0.5 w-3.5 h-3.5 accent-purple-600"
-                   checked="@Character.State.HasTemporaryInsanity"
-                   @onchange="@(e => ToggleTemporary(e.Value is true))" />
-            <div>
-                <div class="text-xs font-semibold text-gray-700">Временное безумие</div>
-                @if (Character.State.HasTemporaryInsanity && Character.State.TemporaryInsanityStartedAt.HasValue)
-                {
-                    <div class="text-[10px] text-gray-500">с @Character.State.TemporaryInsanityStartedAt.Value.ToLocalTime().ToString("g")</div>
-                }
-            </div>
-        </label>
-        <label class="flex items-start gap-2 p-2 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-50">
-            <input type="checkbox" class="mt-0.5 w-3.5 h-3.5 accent-purple-700"
-                   checked="@Character.State.HasIndefiniteInsanity"
-                   @onchange="@(e => ToggleIndefinite(e.Value is true))" />
-            <div>
-                <div class="text-xs font-semibold text-gray-700">Бессрочное безумие</div>
-                @if (Character.State.HasIndefiniteInsanity && Character.State.IndefiniteInsanityStartedAt.HasValue)
-                {
-                    <div class="text-[10px] text-gray-500">с @Character.State.IndefiniteInsanityStartedAt.Value.ToLocalTime().ToString("g")</div>
-                }
-            </div>
-        </label>
-    </div>
+    <!-- Безумие: отметки, приступ, затаённое безумие, безумие от Мифов -->
+    <section data-testid="insanity-state">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h6 class="cm-section-title">Безумие</h6>
+            <button type="button" class="cm-btn cm-btn-sm @(boutDue ? "cm-btn-primary" : "cm-btn-secondary")"
+                    data-testid="open-insanity-bout" @onclick="OpenBout">
+                <i class="fa-solid fa-dice-d20 mr-1"></i>Приступ безумия
+            </button>
+        </div>
 
-    <!-- Безумие от Мифов: счётчик и начисление навыка -->
-    <div class="mb-4">
-        <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="text-gray-700">Случаев безумия от Мифов:</span>
-            <span class="font-bold text-gray-900">@Character.State.MythosInsanityCount</span>
+        @if (boutDue)
+        {
+            <Alert Type="warning" ShowIcon Icon="fa-triangle-exclamation" Small data-testid="bout-due">
+                <ChildContent>
+                    Положен <strong>приступ безумия</strong>: любое безумие начинается с него (стр. 154), а в
+                    затаённом безумии его вызывает любая потеря рассудка (стр. 156).
+                </ChildContent>
+                <Actions>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="OpenBout">
+                            Бросить приступ
+                        </button>
+                        <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="bout-dismiss"
+                                @onclick="DismissBout">
+                            Разыграли без броска
+                        </button>
+                    </div>
+                </Actions>
+            </Alert>
+        }
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+            <label class="flex items-center gap-2.5 px-2 min-h-[40px] rounded-md cursor-pointer @(Character.State.HasTemporaryInsanity ? "bg-secondary-50" : "hover:bg-primary-50")">
+                <input type="checkbox" class="cm-checkbox"
+                       checked="@Character.State.HasTemporaryInsanity"
+                       @onchange="@(e => SetTemporary(e.Value is true))" />
+                <span class="min-w-0">
+                    <span class="block text-sm font-semibold text-primary-800">Временное безумие</span>
+                    @if (Character.State.HasTemporaryInsanity && Character.State.TemporaryInsanityStartedAt.HasValue)
+                    {
+                        <span class="block text-xs text-primary-500">
+                            с @Character.State.TemporaryInsanityStartedAt.Value.ToLocalTime().ToString("g") · длится 1d10 часов
+                        </span>
+                    }
+                </span>
+            </label>
+            <label class="flex items-center gap-2.5 px-2 min-h-[40px] rounded-md cursor-pointer @(Character.State.HasIndefiniteInsanity ? "bg-secondary-100" : "hover:bg-primary-50")">
+                <input type="checkbox" class="cm-checkbox"
+                       checked="@Character.State.HasIndefiniteInsanity"
+                       @onchange="@(e => SetIndefinite(e.Value is true))" />
+                <span class="min-w-0">
+                    <span class="block text-sm font-semibold text-primary-800">Бессрочное безумие</span>
+                    @if (Character.State.HasIndefiniteInsanity && Character.State.IndefiniteInsanityStartedAt.HasValue)
+                    {
+                        <span class="block text-xs text-primary-500">
+                            с @Character.State.IndefiniteInsanityStartedAt.Value.ToLocalTime().ToString("g") · до излечения
+                        </span>
+                    }
+                </span>
+            </label>
+        </div>
+
+        @if (Character.State.LastInsanityBout is { } bout && InsanityTables.FindBout(bout.Mode, bout.Roll) is { } boutEntry)
+        {
+            <p class="text-sm text-primary-700 mt-2" data-testid="last-bout">
+                <i class="fa-solid fa-clock-rotate-left text-primary-400 mr-1"></i>
+                Последний приступ: <strong>@boutEntry.Title</strong>
+                (табл. @InsanityTables.TableNumeral(bout.Mode), @bout.Roll)@(bout.Duration is { } d ? $" — {InsanityTables.DurationText(bout.Mode, d)}" : "")
+                <span class="text-xs text-primary-400">· @bout.RolledAt.ToLocalTime().ToString("g")</span>
+            </p>
+        }
+
+        @if (insane && !permanentlyInsane)
+        {
+            <p class="cm-field-note mt-2">
+                Затаённое безумие (стр. 156): игрок управляет сыщиком, но любая потеря рассудка, даже
+                в 1 пункт, — новый приступ. Хранитель может насылать галлюцинации; распознать их
+                помогает проверка на реальность — проверка Рассудка, при провале −1 рассудка (стр. 160).
+            </p>
+        }
+
+        <div class="flex flex-wrap items-center gap-2 text-sm mt-3">
+            <span class="text-primary-700">Случаев безумия от Мифов:</span>
+            <span class="font-bold text-primary-900">@Character.State.MythosInsanityCount</span>
             <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="RecordMythosInsanity">
                 <i class="fa-solid fa-plus mr-1"></i>Записать (+@NextMythosGain к Мифам)
             </button>
             @if (Character.State.MythosInsanityCount > 0)
             {
-                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="UndoMythosInsanity"
-                        title="Ошиблись — откатить последний случай">
-                    <i class="fa-solid fa-rotate-left"></i>
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="UndoMythosInsanity">
+                    <i class="fa-solid fa-rotate-left mr-1"></i>Откатить
                 </button>
             }
         </div>
-        <p class="text-xs text-gray-500 mt-1">
+        <p class="cm-field-note mt-1">
             Первый случай даёт +5 к навыку «Мифы Ктулху», каждый следующий +1 (стр. 160–161);
             максимум Рассудка падает вместе с этим.
         </p>
-    </div>
+    </section>
 
     <!-- Привыкание к ужасному: пределы потери по видам тварей из бестиария -->
-    <div class="mb-4">
+    <section>
         <MythosHabituationPanel Character="@Character" OnSanityLoss="@ApplyLoss" />
-    </div>
+    </section>
 
     <!-- Фобии и мании -->
-    <div>
-        <div class="flex items-center justify-between mb-2">
-            <h6 class="text-xs font-semibold text-gray-600 uppercase">Фобии и мании</h6>
-            <div class="flex gap-1">
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Phobia)">
+    <section data-testid="insanity-conditions">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h6 class="cm-section-title">Фобии и мании</h6>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="add-phobia"
+                        @onclick="() => OpenCondition(InsanityConditionKind.Phobia)">
                     <i class="fa-solid fa-plus mr-1"></i>Фобия
                 </button>
-                <button type="button" class="cm-btn cm-btn-primary cm-btn-sm" @onclick="() => StartAdd(InsanityConditionKind.Mania)">
+                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="add-mania"
+                        @onclick="() => OpenCondition(InsanityConditionKind.Mania)">
                     <i class="fa-solid fa-plus mr-1"></i>Мания
                 </button>
             </div>
         </div>
 
-        @if (_addingKind.HasValue)
-        {
-            <div class="mb-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                <div class="text-xs text-gray-600 mb-1">Новая @(_addingKind == InsanityConditionKind.Phobia ? "фобия" : "мания") (бросьте 1d100 по таблице @(_addingKind == InsanityConditionKind.Phobia ? "IX" : "X"))</div>
-                <input type="text" class="cm-input cm-input-sm w-full mb-1" placeholder="Название" @bind="_newName" />
-                <input type="text" class="cm-input cm-input-sm w-full mb-2" placeholder="Описание (необязательно)" @bind="_newDescription" />
-                <div class="flex gap-1">
-                    <button type="button" class="cm-btn cm-btn-success cm-btn-sm" @onclick="ConfirmAdd">Добавить</button>
-                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" @onclick="CancelAdd">Отмена</button>
-                </div>
-            </div>
-        }
-
         @if (Character.InsanityConditions.Count == 0)
         {
-            <div class="text-xs text-gray-400 italic">Нет записей</div>
+            <div class="text-xs text-primary-400 italic">Нет записей</div>
         }
         else
         {
-            <div class="space-y-1">
+            <div>
                 @foreach (var c in Character.InsanityConditions.OrderByDescending(x => x.Active).ThenBy(x => x.AcquiredAt))
                 {
-                    <div class="flex items-start gap-2 p-2 rounded-md border @(c.Active ? "border-purple-200 bg-purple-50" : "border-gray-200 bg-gray-50 opacity-60")">
-                        <span class="text-[10px] uppercase font-bold @(c.Kind == InsanityConditionKind.Phobia ? "text-red-700" : "text-orange-700")">
+                    <div @key="c.Id" class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 border-t border-t-gray-200 first:border-t-0 @(c.Active ? "" : "opacity-60")">
+                        <Badge Variant="@(c.Kind == InsanityConditionKind.Phobia ? "error" : "warning")" Size="sm">
                             @(c.Kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")
-                        </span>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm font-semibold text-gray-900 @(c.Active ? "" : "line-through")">@c.Name</div>
+                        </Badge>
+                        <div class="flex-1 min-w-[10rem]">
+                            <div class="text-sm font-semibold text-primary-900 @(c.Active ? "" : "line-through")">@c.Name</div>
                             @if (!string.IsNullOrWhiteSpace(c.Description))
                             {
-                                <div class="text-xs text-gray-600">@c.Description</div>
+                                <div class="text-xs text-primary-600">@c.Description</div>
                             }
-                            <div class="text-[10px] text-gray-400">@c.AcquiredAt.ToLocalTime().ToString("d")</div>
+                            <div class="text-xs text-primary-400">
+                                @c.AcquiredAt.ToLocalTime().ToString("d")@(c.Active ? "" : " · вылечено")
+                            </div>
                         </div>
-                        <div class="flex gap-1">
-                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-gray-300 hover:bg-gray-100"
-                                    title="@(c.Active ? "Вылечено" : "Активно")"
+                        <div class="flex gap-2">
+                            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm"
                                     @onclick="() => c.Active = !c.Active">
-                                <i class="fa-solid @(c.Active ? "fa-check" : "fa-rotate-left")"></i>
+                                <i class="fa-solid @(c.Active ? "fa-check" : "fa-rotate-left") mr-1"></i>@(c.Active ? "Вылечено" : "Вернуть")
                             </button>
-                            <button type="button" class="text-xs px-1.5 py-0.5 rounded bg-white border border-red-300 text-red-600 hover:bg-red-50"
+                            <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm"
                                     @onclick="() => Character.InsanityConditions.Remove(c)">
-                                <i class="fa-solid fa-trash"></i>
+                                <i class="fa-solid fa-trash mr-1"></i>Удалить
                             </button>
                         </div>
                     </div>
                 }
             </div>
         }
-    </div>
+
+        @if (activeConditions > 0)
+        {
+            <ul class="cm-field-note list-disc pl-4 mt-2 space-y-1">
+                @if (insane)
+                {
+                    <li>
+                        Пока сыщик безумен: рядом объект фобии — всё, кроме боя и бегства, со штрафной костью
+                        (не для проверок Рассудка и на реальность); объект мании — штрафная кость ко всем броскам,
+                        пока сыщик не утолит влечение или не уйдёт от него (стр. 157).
+                    </li>
+                }
+                <li>
+                    Лечение (стр. 165): раз в месяц игрового времени психоаналитик проходит проверку Психоанализа,
+                    при успехе сыщик — проверку Рассудка; оба успеха снимают фобию или манию. Крах в любой из
+                    проверок — −1d6 рассудка. Успешный Психоанализ помогает и на время справиться с приступом
+                    фобии (стр. 160).
+                </li>
+            </ul>
+        }
+    </section>
 </div>
+
+<InsanityBoutModal Character="@Character"
+                   IsVisible="@_boutOpen"
+                   OnClose="CloseBout"
+                   OnRecorded="CloseBout"
+                   OnAcquire="AcquireFromBout" />
+
+<AddInsanityConditionModal Character="@Character"
+                           IsVisible="@_conditionOpen"
+                           Kind="@_conditionKind"
+                           OnClose="CloseCondition"
+                           OnAdded="CloseCondition" />
 
 @code {
     [Parameter] public required Character Character { get; set; }
 
-    private InsanityConditionKind? _addingKind;
-    private string _newName = "";
-    private string _newDescription = "";
     private int _manualAmount = 1;
+    private bool _boutOpen;
+    private bool _conditionOpen;
+    private InsanityConditionKind _conditionKind = InsanityConditionKind.Phobia;
 
     private static int RollDice(int count, int sides) => Dice.Roll(count, sides);
 
@@ -243,17 +354,9 @@
 
     /// <summary>
     ///     Одно нажатие — одна причина: и бросок кубика, и ручная сумма считаются единой потерей.
+    ///     Пороги и «новый приступ в затаённом безумии» считает <see cref="SanityRules.ApplyLoss" />.
     /// </summary>
-    private void ApplyLoss(int amount)
-    {
-        var maxSan = SanityRules.ComputeMaxSanity(Character);
-        var current = Math.Clamp(Character.DerivedAttributes.Sanity.Value, 0, maxSan);
-        var newVal = Math.Max(0, current - amount);
-        var actualLoss = current - newVal;
-        Character.DerivedAttributes.Sanity.Value = newVal;
-        Character.State.SanityLossEpisode += actualLoss;
-        Character.State.LastSanityLoss = actualLoss;
-    }
+    private void ApplyLoss(int amount) => SanityRules.ApplyLoss(Character, amount);
 
     private void ApplyHeal(int amount)
     {
@@ -268,6 +371,20 @@
     }
 
     private void ClearLastLoss() => Character.State.LastSanityLoss = 0;
+
+    /// <summary>Успех проверки ИНТ: временное безумие, и первым делом — приступ (стр. 153–154).</summary>
+    private void IntCheckSucceeded()
+    {
+        SanityRules.SetTemporaryInsanity(Character, true);
+        ClearLastLoss();
+        OpenBout();
+    }
+
+    private void MarkIndefiniteAndOpenBout()
+    {
+        SanityRules.SetIndefiniteInsanity(Character, true);
+        OpenBout();
+    }
 
     private int NextMythosGain => Character.State.MythosInsanityCount == 0 ? 5 : 1;
 
@@ -295,46 +412,28 @@
         Character.DerivedAttributes.Sanity.MaxValue = SanityRules.ComputeMaxSanity(Character);
     }
 
-    private void ToggleTemporary(bool v)
+    private void SetTemporary(bool value) => SanityRules.SetTemporaryInsanity(Character, value);
+
+    private void SetIndefinite(bool value) => SanityRules.SetIndefiniteInsanity(Character, value);
+
+    private void OpenBout() => _boutOpen = true;
+
+    private void CloseBout() => _boutOpen = false;
+
+    private void DismissBout() => SanityRules.DismissBout(Character);
+
+    /// <summary>Строка приступа дала фобию или манию — сразу к таблице IX/X.</summary>
+    private void AcquireFromBout(InsanityConditionKind kind)
     {
-        Character.State.HasTemporaryInsanity = v;
-        Character.State.TemporaryInsanityStartedAt = v ? DateTime.UtcNow : null;
+        _boutOpen = false;
+        OpenCondition(kind);
     }
 
-    private void ToggleIndefinite(bool v)
+    private void OpenCondition(InsanityConditionKind kind)
     {
-        Character.State.HasIndefiniteInsanity = v;
-        Character.State.IndefiniteInsanityStartedAt = v ? DateTime.UtcNow : null;
+        _conditionKind = kind;
+        _conditionOpen = true;
     }
 
-    private void StartAdd(InsanityConditionKind kind)
-    {
-        _addingKind = kind;
-        _newName = "";
-        _newDescription = "";
-    }
-
-    private void CancelAdd()
-    {
-        _addingKind = null;
-    }
-
-    private void ConfirmAdd()
-    {
-        if (_addingKind is null || string.IsNullOrWhiteSpace(_newName))
-        {
-            _addingKind = null;
-            return;
-        }
-
-        Character.InsanityConditions.Add(new InsanityCondition
-        {
-            Kind = _addingKind.Value,
-            Name = _newName.Trim(),
-            Description = string.IsNullOrWhiteSpace(_newDescription) ? null : _newDescription.Trim()
-        });
-        _addingKind = null;
-        _newName = "";
-        _newDescription = "";
-    }
+    private void CloseCondition() => _conditionOpen = false;
 }
