@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Authentication;
 namespace CampaignManager.Web.Utilities.Authorization;
 
 /// <summary>
-///     Подмешивает в принципал то, чем владеет приложение, а не Google: роль и отображаемое имя.
+///     Подмешивает в принципал то, чем владеет приложение, а не Auth0: роль и отображаемое имя.
 ///     Оба значения живут в <see cref="ApplicationUser" />, а кука после входа знает только то,
-///     что отдал Google, — см. Features/Profile/CLAUDE.md.
+///     что отдал Auth0, — см. Features/Profile/CLAUDE.md.
 ///     <para>
 ///         Вызывается на каждый HTTP-запрос, включая статику, поэтому читает не базу, а
 ///         <see cref="UserClaimsCache" /> — почему это важно, написано там.
@@ -44,7 +44,7 @@ public sealed class RoleClaimsTransformation(UserClaimsCache userClaimsCache) : 
     }
 
     /// <summary>
-    ///     Имя из базы важнее имени из Google: первое пользователь меняет в личном кабинете,
+    ///     Имя из базы важнее имени из Auth0: первое пользователь меняет в личном кабинете,
     ///     второе застыло на момент входа. Claim именно заменяется, а не добавляется вторым —
     ///     <see cref="ClaimsIdentity.Name" /> читает первый claim своего типа, так что
     ///     добавленный следом не увидел бы никто.

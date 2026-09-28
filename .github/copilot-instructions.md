@@ -1,6 +1,6 @@
 ﻿# CampaignManager — Copilot Instructions
 
-Call of Cthulhu 7e tabletop RPG manager. .NET 10 Blazor Server + PostgreSQL (JSONB-heavy) + Google OAuth + Tailwind CSS.
+Call of Cthulhu 7e tabletop RPG manager. .NET 10 Blazor Server + PostgreSQL (JSONB-heavy) + Auth0 (OIDC) + Tailwind CSS.
 
 ## Commands
 

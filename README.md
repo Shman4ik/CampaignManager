@@ -7,7 +7,7 @@
 - **.NET 10** — Blazor Server с InteractiveServer render mode
 - **PostgreSQL** — база данных, EF Core с JSONB для хранения сложных структур
 - **Tailwind CSS 3** — стилизация с кастомной дизайн-системой
-- **Google OAuth** — аутентификация
+- **Auth0** (OpenID Connect) — аутентификация: Google-аккаунт или почта с паролем
 - **.NET Aspire** — оркестрация сервисов
 - **Minio** — S3-совместимое хранилище файлов
 - **OpenTelemetry** — observability
@@ -46,7 +46,7 @@
 Задайте переменные окружения или используйте `appsettings.json`:
 
 - `ConnectionStrings:DefaultConnection` — строка подключения к PostgreSQL
-- `Authentication:Google:ClientId` / `ClientSecret` — Google OAuth
+- `Authentication:Auth0:Domain` / `ClientId` / `ClientSecret` — приложение Auth0 (Regular Web Application)
 
 ### Команды
 

@@ -7,8 +7,8 @@
     Обёртка над `dotnet ef database update` для двух контекстов приложения.
     Закрывает три места, где команда падает не по делу:
 
-    1. Design-time поднимает Program.cs целиком, поэтому без Google OAuth каждый запуск
-       падает с «The value cannot be an empty string. (Parameter 'ClientId')».
+    1. Design-time поднимает Program.cs целиком, поэтому без настроек Auth0 каждый запуск
+       падает на проверке параметров OIDC (пустой ClientId).
        Скрипт подставляет пустышки — на миграции они никак не влияют.
     2. Без ASPNETCORE_ENVIRONMENT=Development не читается appsettings.Development.json,
        и строка подключения оказывается пустой: «Value cannot be null. (Parameter 'Host')».
@@ -72,8 +72,9 @@ if ($running) {
 
 # ── Design-time конфигурация ─────────────────────────────────────────────────
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
-if (-not $env:Authentication__Google__ClientId)     { $env:Authentication__Google__ClientId = 'dummy-client-id' }
-if (-not $env:Authentication__Google__ClientSecret) { $env:Authentication__Google__ClientSecret = 'dummy-client-secret' }
+if (-not $env:Authentication__Auth0__Domain)       { $env:Authentication__Auth0__Domain = 'dummy.auth0.com' }
+if (-not $env:Authentication__Auth0__ClientId)     { $env:Authentication__Auth0__ClientId = 'dummy-client-id' }
+if (-not $env:Authentication__Auth0__ClientSecret) { $env:Authentication__Auth0__ClientSecret = 'dummy-client-secret' }
 if ($ConnectionString) { $env:ConnectionStrings__DefaultConnection = $ConnectionString }
 
 # ── dotnet-ef ────────────────────────────────────────────────────────────────

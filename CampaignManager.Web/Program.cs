@@ -23,11 +23,13 @@ using Microsoft.AspNetCore.DataProtection;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Npgsql;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -87,32 +89,28 @@ builder.Services.AddDbContextFactory<AppDbContext>((sp, options) =>
 builder.Services.AddDbContextFactory<AppIdentityDbContext>(options =>
     options.UseNpgsql(dataSource));
 
-// Google reports email_verified as a JSON boolean, but has historically also sent it as a string.
-static bool IsEmailVerified(System.Text.Json.JsonElement payload)
-{
-    if (!payload.TryGetProperty("email_verified", out var verified))
-        return false;
+// Без MapInboundClaims email_verified приходит под своим именем из ID token, строкой "true"/"false".
+static bool IsEmailVerified(ClaimsPrincipal? principal) =>
+    bool.TryParse(principal?.FindFirst("email_verified")?.Value, out var verified) && verified;
 
-    return verified.ValueKind switch
-    {
-        System.Text.Json.JsonValueKind.True => true,
-        System.Text.Json.JsonValueKind.String => bool.TryParse(verified.GetString(), out var parsed) && parsed,
-        _ => false
-    };
-}
+// Вход — через Auth0 (OIDC). Google остаётся одним из способов входа, но уже внутри Auth0, рядом с
+// почтой и паролем. Сессия приложения — по-прежнему своя кука: Auth0 нужен только в момент входа и выхода.
+var auth0Domain = builder.Configuration["Authentication:Auth0:Domain"] ?? string.Empty;
+var auth0ClientId = builder.Configuration["Authentication:Auth0:ClientId"] ?? string.Empty;
 
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
 })
     .AddCookie(options =>
     {
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        // Lax is enough for the Google redirect flow (top-level GET callback) and keeps the browser's
-        // built-in CSRF protection: with None the auth cookie rides along on every cross-site request.
+        // Lax is enough for the Auth0 redirect flow (top-level GET callback, see ResponseMode below) and
+        // keeps the browser's built-in CSRF protection: with None the auth cookie rides along on every
+        // cross-site request.
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true; // Mark as essential for GDPR compliance
         options.Cookie.Name = ".CampaignManager.Auth"; // Explicit cookie name
@@ -121,74 +119,110 @@ builder.Services.AddAuthentication(options =>
         options.LoginPath = "/"; // Redirect to home if not authenticated
         options.AccessDeniedPath = "/"; // Redirect to home on access denied
     })
-    .AddGoogle(options =>
+    .AddOpenIdConnect(options =>
     {
-        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? string.Empty;
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? string.Empty;
-        options.ClaimActions.MapJsonKey("urn:google:profile", "link");
-        options.ClaimActions.MapJsonKey("urn:google:image", "picture");
+        options.Authority = $"https://{auth0Domain}/";
+        options.ClientId = auth0ClientId;
+        options.ClientSecret = builder.Configuration["Authentication:Auth0:ClientSecret"] ?? string.Empty;
+        options.ResponseType = OpenIdConnectResponseType.Code;
+        // Код возвращается GET-редиректом, а не form_post (умолчание обработчика): form_post — это
+        // кросс-сайтовый POST со страницы Auth0, и Lax-куки корреляции и nonce браузер на него не отправит.
+        options.ResponseMode = OpenIdConnectResponseMode.Query;
+        options.Scope.Clear();
+        options.Scope.Add("openid");
+        options.Scope.Add("profile");
+        options.Scope.Add("email");
+        // Claims остаются под именами из ID token ("email", "name", "sub"), куку из них собирает
+        // OnTokenValidated ниже. Всё нужное есть в ID token, поэтому userinfo не запрашиваем.
+        options.MapInboundClaims = false;
+        options.GetClaimsFromUserInfoEndpoint = false;
+        // id_token уходит в Auth0 как id_token_hint при выходе.
         options.SaveTokens = true;
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
-        // The Google callback is a top-level GET redirect, so Lax cookies are sent back as expected.
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
         options.CorrelationCookie.IsEssential = true;
         options.CorrelationCookie.Name = ".CampaignManager.Correlation";
+        options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.NonceCookie.SameSite = SameSiteMode.Lax;
+        options.NonceCookie.IsEssential = true;
+        options.NonceCookie.Name = ".CampaignManager.Nonce.";
 
-        // Add OAuth scopes
-        options.Scope.Add("profile");
-        options.Scope.Add("email");
+        // login_hint обработчик сам не передаёт (только prompt и max_age) — его кладёт в параметры
+        // вызова AccountEndpoints для тихого входа.
+        options.Events.OnRedirectToIdentityProvider = context =>
+        {
+            var loginHint = context.Properties.GetParameter<string>(OpenIdConnectParameterNames.LoginHint);
+            if (!string.IsNullOrWhiteSpace(loginHint))
+                context.ProtocolMessage.LoginHint = loginHint;
+
+            return Task.CompletedTask;
+        };
+
+        // Выход закрывает и сессию Auth0, иначе следующий вход молча пустил бы под тем же
+        // пользователем и переключиться на другую учётку было бы нельзя.
+        options.Events.OnRedirectToIdentityProviderForSignOut = context =>
+        {
+            // end_session_endpoint в discovery Auth0 публикует только с включённой настройкой тенанта
+            // «RP-Initiated Logout End Session Endpoint Discovery», а сам эндпоинт есть всегда.
+            if (string.IsNullOrEmpty(context.ProtocolMessage.IssuerAddress))
+                context.ProtocolMessage.IssuerAddress = $"https://{auth0Domain}/oidc/logout";
+
+            // С post_logout_redirect_uri Auth0 требует id_token_hint или client_id, а у кук, выданных
+            // ещё при прямом входе через Google, id_token нет.
+            context.ProtocolMessage.ClientId = auth0ClientId;
+            return Task.CompletedTask;
+        };
 
         // Handle authentication failures gracefully
         options.Events.OnRemoteFailure = context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            logger.LogWarning("Google OAuth authentication failed: {Error} - {ErrorDescription}",
+            logger.LogWarning("Auth0 authentication failed: {Error} - {ErrorDescription}",
                 context.Failure?.Message,
                 context.Request.Query["error_description"]);
 
-            // Check if this is a silent auth attempt
             var properties = context.Properties;
             var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true
                            && mode == AccountEndpoints.SilentModeValue;
 
             var isAccessDenied = context.Failure?.Message.Contains("not authorized", StringComparison.OrdinalIgnoreCase) == true;
 
-            if (isSilent)
+            // Отказ проверяем раньше тихого режима: OnTokenValidated отказывает вместе со свойствами
+            // входа, и без этого запрет при тихом входе выглядел бы как «автовход не удался».
+            if (isAccessDenied)
             {
-                // For silent failures, redirect back with error status
+                context.Response.Redirect("/?authStatus=accessDenied");
+            }
+            else if (isSilent)
+            {
+                // For silent failures (prompt=none → login_required), redirect back with error status
                 var returnUrl = properties?.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var url) == true
                     ? url
                     : "/";
                 context.Response.Redirect($"{returnUrl}?authStatus=silentFailed");
-                context.HandleResponse();
-            }
-            else if (isAccessDenied)
-            {
-                context.Response.Redirect("/?authStatus=accessDenied");
-                context.HandleResponse();
             }
             else
             {
-                // For interactive failures, show error page or redirect
                 context.Response.Redirect("/?authStatus=failed");
-                context.HandleResponse();
             }
 
+            context.HandleResponse();
             return Task.CompletedTask;
         };
 
         // Validate user against allowed emails/domains whitelist and bootstrap admin
-        options.Events.OnCreatingTicket = async context =>
+        options.Events.OnTokenValidated = async context =>
         {
             var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-            var email = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            var email = context.Principal?.FindFirst("email")?.Value;
 
             // Every authorization decision in this app keys off the email (whitelist, admin bootstrap,
-            // campaign ownership), so an unverified address must never be accepted.
-            if (email is null || !IsEmailVerified(context.User))
+            // campaign ownership), so an unverified address must never be accepted: an Auth0 password
+            // account registered to someone else's address would otherwise inherit their campaigns.
+            if (email is null || !IsEmailVerified(context.Principal))
             {
-                logger.LogWarning("Access denied for {Email}: Google did not report a verified email.", email ?? "<no email>");
-                context.Fail("Access denied: the Google account email is not verified, so this account is not authorized.");
+                logger.LogWarning("Access denied for {Email}: Auth0 did not report a verified email.", email ?? "<no email>");
+                context.Fail("Access denied: the account email is not verified, so this account is not authorized.");
                 return;
             }
 
@@ -196,7 +230,7 @@ builder.Services.AddAuthentication(options =>
             var allowedEmails = config.GetSection("Authorization:AllowedEmails").Get<string[]>() ?? [];
             var allowedDomains = config.GetSection("Authorization:AllowedDomains").Get<string[]>() ?? [];
 
-            if ((allowedEmails.Length > 0 || allowedDomains.Length > 0) && email is not null)
+            if (allowedEmails.Length > 0 || allowedDomains.Length > 0)
             {
                 var emailDomain = email.Split('@').LastOrDefault() ?? string.Empty;
                 var isAllowed = allowedEmails.Contains(email, StringComparer.OrdinalIgnoreCase)
@@ -210,51 +244,58 @@ builder.Services.AddAuthentication(options =>
                 }
             }
 
+            var name = context.Principal?.FindFirst("name")?.Value ?? email;
+
             // Upsert user record and bootstrap admin from config
-            if (email is not null)
+            try
             {
-                try
-                {
-                    var name = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? email;
-                    var adminEmails = config.GetSection("Authorization:AdminEmails").Get<string[]>() ?? [];
-                    var isAdmin = adminEmails.Contains(email, StringComparer.OrdinalIgnoreCase);
+                var adminEmails = config.GetSection("Authorization:AdminEmails").Get<string[]>() ?? [];
+                var isAdmin = adminEmails.Contains(email, StringComparer.OrdinalIgnoreCase);
 
-                    var identityFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppIdentityDbContext>>();
-                    await using var identityDb = await identityFactory.CreateDbContextAsync();
-                    var user = await identityDb.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
-                    if (user is null)
+                var identityFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppIdentityDbContext>>();
+                await using var identityDb = await identityFactory.CreateDbContextAsync();
+                var user = await identityDb.Users.SingleOrDefaultAsync(u => u.Email != null && u.Email.ToLower() == email.ToLower());
+                if (user is null)
+                {
+                    user = new CampaignManager.Web.Model.ApplicationUser
                     {
-                        user = new CampaignManager.Web.Model.ApplicationUser
-                        {
-                            Email = email,
-                            UserName = name,
-                            Role = isAdmin
-                                ? CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator
-                                : CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Player
-                        };
-                        identityDb.Users.Add(user);
+                        Email = email,
+                        UserName = name,
+                        Role = isAdmin
+                            ? CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator
+                            : CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Player
+                    };
+                    identityDb.Users.Add(user);
+                    await identityDb.SaveChangesAsync();
+                    logger.LogInformation("Created new user record for {Email}", email);
+                }
+                else
+                {
+                    if (isAdmin && user.Role != CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator)
+                    {
+                        user.Role = CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator;
                         await identityDb.SaveChangesAsync();
-                        logger.LogInformation("Created new user record for {Email}", email);
-                    }
-                    else
-                    {
-                        if (isAdmin && user.Role != CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator)
-                        {
-                            user.Role = CampaignManager.Web.Components.Features.Characters.Model.PlayerRole.Administrator;
-                            await identityDb.SaveChangesAsync();
-                            logger.LogInformation("Bootstrapped admin role for {Email}", email);
-                        }
+                        logger.LogInformation("Bootstrapped admin role for {Email}", email);
                     }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to upsert user record for {Email}", email);
-                }
-
-                // Роль только что могла подняться до администратора (AdminEmails), а вход — и так
-                // та точка, где человек ждёт свежих прав: снимаем закэшированные роль и имя.
-                context.HttpContext.RequestServices.GetRequiredService<UserClaimsCache>().Invalidate(email);
             }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to upsert user record for {Email}", email);
+            }
+
+            // Роль только что могла подняться до администратора (AdminEmails), а вход — и так
+            // та точка, где человек ждёт свежих прав: снимаем закэшированные роль и имя.
+            context.HttpContext.RequestServices.GetRequiredService<UserClaimsCache>().Invalidate(email);
+
+            // В куку идут те же claims, что раньше выдавал прямой вход через Google: приложение везде
+            // читает ClaimTypes.Email и ClaimTypes.Name, и куки, выданные до переезда, устроены так же.
+            List<Claim> claims = [new(ClaimTypes.Email, email), new(ClaimTypes.Name, name)];
+            if (context.Principal?.FindFirst("sub")?.Value is { } subject)
+                claims.Add(new Claim(ClaimTypes.NameIdentifier, subject));
+
+            context.Principal = new ClaimsPrincipal(
+                new ClaimsIdentity(claims, context.Scheme.Name, ClaimTypes.Name, ClaimTypes.Role));
 
             logger.LogInformation("Successfully created authentication ticket for user: {Email}", email);
         };

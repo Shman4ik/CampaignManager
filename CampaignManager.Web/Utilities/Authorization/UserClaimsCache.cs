@@ -19,7 +19,7 @@ namespace CampaignManager.Web.Utilities.Authorization;
 ///         Кто меняет роль или имя, обязан позвать <see cref="Invalidate" /> — иначе новое значение
 ///         доедет до claims только через <see cref="Lifetime" />. Сейчас это
 ///         <c>AdminService.SetUserRoleAsync</c>, <c>ProfileService.UpdateDisplayNameAsync</c> и
-///         вход через Google в <c>Program.cs</c> (там роль поднимается до администратора).
+///         вход через Auth0 в <c>Program.cs</c> (там роль поднимается до администратора).
 ///     </para>
 /// </summary>
 public sealed class UserClaimsCache(
