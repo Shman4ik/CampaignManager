@@ -23,7 +23,21 @@
             {
                 <tr class="border-b border-gray-100 hover:bg-primary-50/50 transition-colors duration-150">
                     <td class="py-1 pr-1">
-                        <span class="inline-block px-1.5 py-0.5 text-xs font-semibold text-primary-700 bg-primary-100 rounded">@GetShortName(prop.Name)</span>
+                        @* Тап по сокращению — проверка этой характеристики (Checks/SkillCheckModal).
+                           Кнопка прозрачная и во всю ячейку: вид плашки прежний, а попасть пальцем легко. *@
+                        @if (OnCheckRequested.HasDelegate && Enum.TryParse<CharacteristicKey>(prop.Name, out var key))
+                        {
+                            <button type="button" class="attr-check"
+                                    aria-label="@($"Проверка {GetShortName(prop.Name)}")"
+                                    data-testid="char-@(prop.Name.ToLower())-check"
+                                    @onclick="() => OnCheckRequested.InvokeAsync(key)">
+                                <span class="inline-block px-1.5 py-0.5 text-xs font-semibold text-primary-700 bg-primary-100 rounded">@GetShortName(prop.Name)</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="inline-block px-1.5 py-0.5 text-xs font-semibold text-primary-700 bg-primary-100 rounded">@GetShortName(prop.Name)</span>
+                        }
                     </td>
                     <td class="py-1 px-0.5">
                         <input type="number"
@@ -46,6 +60,9 @@
 @code {
     [Parameter] public required Characteristics Characteristics { get; set; }
     [Parameter] public EventCallback<AttributeValue> OnUpdate { get; set; }
+
+    /// <summary>Тап по сокращению характеристики — открыть проверку. Без подписчика плашка просто текст.</summary>
+    [Parameter] public EventCallback<CharacteristicKey> OnCheckRequested { get; set; }
 
     private string GetShortName(string fullName)
     {

@@ -3,6 +3,7 @@ using CampaignManager.Web.Components.Features.Campaigns.Services;
 using CampaignManager.Web.Components.Features.Characters.Components;
 using CampaignManager.Web.Components.Features.Characters.Model;
 using CampaignManager.Web.Components.Features.Characters.Services;
+using CampaignManager.Web.Components.Features.Checks.Model;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Features.Skills.Services;
 using CampaignManager.Web.Components.Features.Weapons.Model;
@@ -488,6 +489,33 @@ public partial class CharacterPage
     private void OpenDevelopmentPhase() => _showDevelopmentPhase = true;
 
     private void CloseDevelopmentPhase() => _showDevelopmentPhase = false;
+
+    // ── Проверка навыка (Checks/SkillCheckModal) ──────────────────────────────
+    // Диалог меняет сам объект листа (Удача, отметка развития), а в базу его уносит
+    // автосохранение — отдельного пути записи у проверки нет. Паузу circuit диалог не
+    // переживает, как и остальные модалки листа.
+
+    private bool _showSkillCheck;
+    private string? _checkTargetKey;
+    private string? _checkTargetName;
+
+    private void OpenSkillCheck(Skill skill) =>
+        ShowSkillCheck(CheckTarget.KeyFor(CheckTargetKind.Skill, skill.Name), skill.Name);
+
+    private void OpenCharacteristicCheck(CharacteristicKey key)
+    {
+        var abbreviation = InvestigatorCreationRules.Info(key).Abbreviation;
+        ShowSkillCheck(CheckTarget.KeyFor(CheckTargetKind.Characteristic, abbreviation), abbreviation);
+    }
+
+    private void ShowSkillCheck(string targetKey, string targetName)
+    {
+        _checkTargetKey = targetKey;
+        _checkTargetName = targetName;
+        _showSkillCheck = true;
+    }
+
+    private void CloseSkillCheck() => _showSkillCheck = false;
 
     /// <summary>
     ///     Фаза закончена: отметки стёрты внутри модалки, здесь пересчитываем производные

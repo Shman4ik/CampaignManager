@@ -4,6 +4,12 @@ Top-level container a Keeper creates to run a game: players, era, status.
 
 ## Key Services
 - `CampaignService(dbContextFactory, identityService, httpContextAccessor, logger)`.
+  `GetKeeperCampaignsAsync` берёт email через `GetCurrentUserEmailAsync`: его зовёт групповая
+  проверка в ширме Хранителя, которая рендерится уже в живом circuit, без пререндера, а
+  синхронный `GetCurrentUserEmail` читает `HttpContext` и там может вернуть `null`.
+  `GetAllCampaignsAsync` (им пользуется `Combat/Components/CampaignSelector`) пока синхронный.
+- Сыщики кампании для проверок и боя — `GetCampaignWithCharactersAsync` (игроки со всеми листами):
+  так их берут `Combat/Components/ParticipantPicker` и `Checks/Model/CheckInvestigator.FromCampaign`.
 
 ## Key Models
 - `Campaign : BaseDataBaseEntity` — `Name`, `Status` (`CampaignStatus`, default `Planning`), `KeeperEmail`, `Era` (`Eras`, default `Classic`), `Players` (`List<CampaignPlayer>`).

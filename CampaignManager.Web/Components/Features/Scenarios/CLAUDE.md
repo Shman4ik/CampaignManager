@@ -103,6 +103,12 @@ A prepared adventure/one-shot: optionally linked to a `Campaign` (`CampaignId` i
   обзор и режим игры — и описана один раз, свойством `Header` в `@code`. В разметке она стоит
   дважды только потому, что режим игры — колонка `h-screen`, и шапка обязана быть её первой
   строкой (иначе колонка съедет на 56px за экран). Своих `page-topbar` в режиме игры не заводить.
+- **Проверки навыков локации** в режиме игры (`LocationDetail`) — кнопка «Проверить» открывает общий
+  `Checks/Components/SkillCheckModal` с навыком и сложностью проверки. Сыщиков диалог берёт из
+  кампании сценария (`LocationDetail.CampaignId`) и только читает их листы. Сложность в
+  `ScenarioSkillCheck.Difficulty` — строка `"Hard"`/`"Extreme"`, её переводит
+  `SkillCheckRules.ParseScenarioDifficulty`. Подписи «Сложная»/«Экстремальная» у плашек локации
+  расходятся с книгой («трудная»/«чрезвычайная», стр. 80) — диалог пишет по книге.
 - Режим игры на `ScenarioDetailPage` — это `?mode=play&location=<guid>` в адресе, а не поля
   компонента. Circuit восстанавливает только `[PersistentState]`, поэтому раньше пауза вкладки
   (см. `js/circuit-persistence.js`) выбрасывала Хранителя из трёхпанельного режима в обзор посреди

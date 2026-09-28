@@ -437,18 +437,43 @@ public sealed partial class CombatService
     // ───────────────────── Правила CoC 7e ─────────────────────
 
     /// <summary>
-    /// Рассчитывает уровень успеха по правилам CoC 7e (стр. 86–87).
+    /// Рассчитывает уровень успеха по правилам CoC 7e (стр. 86–87) для проверки обычной сложности.
     /// </summary>
-    public static SuccessLevel CalculateSuccessLevel(int roll, int skillValue)
+    public static SuccessLevel CalculateSuccessLevel(int roll, int skillValue) =>
+        CalculateSuccessLevel(roll, skillValue, SuccessLevel.RegularSuccess);
+
+    /// <summary>
+    /// Уровень успеха проверки заданной сложности — <b>единственное</b> место, где живут пороги
+    /// (стр. 87–89). Достигнутый уровень считается от полного значения навыка, а пройдена ли
+    /// проверка, решает сравнение с <paramref name="difficulty" />.
+    /// <para>
+    /// Сложность влияет только на порог краха: 96–100 — крах, если для успеха нужно выбросить
+    /// меньше 50, а при трудной и чрезвычайной проверке это половина и пятая часть навыка, а не он
+    /// сам (стр. 88: «Работа в библиотеке» 55, трудная проверка — нужно 27, крах на 96–100).
+    /// </para>
+    /// </summary>
+    public static SuccessLevel CalculateSuccessLevel(int roll, int skillValue, SuccessLevel difficulty)
     {
         if (roll == 1) return SuccessLevel.CriticalSuccess;
         if (roll == 100) return SuccessLevel.Fumble;
-        if (roll >= 96 && skillValue < 50) return SuccessLevel.Fumble;
+        if (roll >= 96 && GetTargetNumber(skillValue, difficulty) < 50) return SuccessLevel.Fumble;
         if (roll > skillValue) return SuccessLevel.Failure;
         if (skillValue >= 5 && roll <= skillValue / 5) return SuccessLevel.ExtremeSuccess;
         if (skillValue >= 2 && roll <= skillValue / 2) return SuccessLevel.HardSuccess;
         return SuccessLevel.RegularSuccess;
     }
+
+    /// <summary>
+    /// Наибольшее число, которое при этой сложности ещё успех: навык, его половина или пятая
+    /// часть с округлением вниз (стр. 80). Для критического уровня — только 01.
+    /// </summary>
+    public static int GetTargetNumber(int skillValue, SuccessLevel difficulty) => difficulty switch
+    {
+        SuccessLevel.HardSuccess => skillValue / 2,
+        SuccessLevel.ExtremeSuccess => skillValue / 5,
+        SuccessLevel.CriticalSuccess => 1,
+        _ => skillValue
+    };
 
     /// <summary>
     /// Уровень успеха, необходимый для попадания на данной дальности (CoC 7e, стр. 110).

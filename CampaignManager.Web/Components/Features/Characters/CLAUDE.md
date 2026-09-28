@@ -185,6 +185,13 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `CreateCharacterAsync`, и `CopyPregenToScenarioAsync` выставляют оба.
 - Копия листа делается ровно в одном месте — `CopyPregenToScenarioAsync` (преген расходуется
   бронью). НПС в сценарий не копируется: там связь `ScenarioNpc`, см. `Scenarios/CLAUDE.md`.
+- **Проверка навыка с листа** — общий `Checks/Components/SkillCheckModal` (см. `Checks/CLAUDE.md`).
+  Кубик в строке навыка (`SkillGroupCard` / `SpecializationGroup`, параметр `OnCheckRequested`) и
+  тап по сокращению характеристики (`AttributeRowsTable.OnCheckRequested` через
+  `UnifiedPersonalInfoCard.OnCharacteristicCheck`) открывают его в `CharacterPage` с подставленной
+  целью. Имя навыка остаётся справкой (`SkillInfoPopover`) — у проверки своя кнопка. Трата Удачи и
+  отметка развития из диалога меняют объект листа, в базу их уносит автосохранение: своего пути
+  записи у диалога нет.
 - Фаза развития живёт в модалке `DevelopmentPhaseModal` (кнопка в шапке секции «Навыки»).
   Список отмеченных навыков она снимает **один раз на открытие**: пока Хранитель бросает кости,
   состав таблицы не должен меняться под руками. Отметки стираются кнопкой

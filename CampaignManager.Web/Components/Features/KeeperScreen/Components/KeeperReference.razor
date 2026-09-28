@@ -1,0 +1,59 @@
+@using CampaignManager.Web.Components.Features.Checks.Components
+@using CampaignManager.Web.Components.Features.KeeperScreen.Components.Blocks
+@using CampaignManager.Web.Components.Features.KeeperScreen.Model
+@using CampaignManager.Web.Components.Features.KeeperScreen.Services
+@inject KeeperScreenState Screen
+
+@* Содержимое ширмы: вкладки разделов и один раздел под ними. Одно и то же и в выезжающей панели
+   (KeeperScreenHost), и на странице /reference. Своей карточки не рисует — рамку даёт место:
+   панель или cm-card страницы. Вкладки — крупные cm-btn-sm с подписью: наведения на планшете нет. *@
+
+<nav class="flex flex-wrap gap-2 mb-4" aria-label="Разделы ширмы Хранителя">
+    @foreach (var info in KeeperScreenBlocks.All)
+    {
+        var active = info.Block == ActiveBlock;
+        <button type="button"
+                class="cm-btn cm-btn-sm @(active ? "cm-btn-primary" : "cm-btn-secondary")"
+                aria-current="@(active ? "true" : null)"
+                data-testid="@($"keeper-screen-tab-{info.Slug}")"
+                @onclick="() => ActiveBlockChanged.InvokeAsync(info.Block)">
+            <i class="fa-solid @info.Icon mr-1" aria-hidden="true"></i><span>@info.Label</span>
+        </button>
+    }
+</nav>
+
+<div data-testid="@($"keeper-screen-block-{KeeperScreenBlocks.Slug(ActiveBlock)}")">
+    @switch (ActiveBlock)
+    {
+        case KeeperScreenBlock.Dice:
+            <DiceBlock/>
+            break;
+        case KeeperScreenBlock.Push:
+            <PushBlock/>
+            break;
+        case KeeperScreenBlock.Luck:
+            <LuckBlock/>
+            break;
+        case KeeperScreenBlock.Damage:
+            <DamageBlock/>
+            break;
+        case KeeperScreenBlock.Firearms:
+            <FirearmsBlock/>
+            break;
+        case KeeperScreenBlock.Sanity:
+            <SanityBlock/>
+            break;
+        case KeeperScreenBlock.GroupCheck:
+            <GroupCheckPanel CampaignId="@Screen.GroupCheckCampaignId"
+                             CampaignIdChanged="id => Screen.GroupCheckCampaignId = id"/>
+            break;
+        default:
+            <ChecksBlock/>
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public KeeperScreenBlock ActiveBlock { get; set; }
+    [Parameter] public EventCallback<KeeperScreenBlock> ActiveBlockChanged { get; set; }
+}
