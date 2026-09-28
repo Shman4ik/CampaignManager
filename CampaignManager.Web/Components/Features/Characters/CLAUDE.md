@@ -155,6 +155,10 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   `cm-btn-sm cm-btn-icon` с `aria-label`, строки выпадающего списка — не ниже 36px. «+» живёт
   **только в ручном вводе**: из справочника навык добавляется выбором строки, а «+» рядом с поиском
   раньше ничего не делал.
+  Имя навыка (кнопка справки, 19px) и галочка «использован» (16px) расширены **невидимо**: у имени —
+  `::after` по 8px сверху и снизу (`SkillInfoPopover.razor.css`), галочка обёрнута в
+  `<label class="cm-tap-target">` (36×36 по касанию). Раскладка masonry от этого не меняется;
+  делать им настоящие отступы нельзя — каждая строка навыка выросла бы на десяток пикселей.
 - `WeaponComponent`: таблица (с `lg`) — только в `overflow-x-auto`, без рамки; ниже `lg` каждое
   оружие — строка через линейку (`border-t … first:border-t-0`), а не мини-карточка с рамкой.
   Корзина в строке — `cm-btn-sm cm-btn-icon cm-btn-outline-error` с `aria-label`, как в
