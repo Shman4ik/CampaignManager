@@ -3,10 +3,14 @@
 @inject NavigationManager NavigationManager
 
 @* Карточка листа НПС или прегена. Одна и та же и в библиотеке, и в сценарии:
-   отличаются только переданные обработчики. *@
+   отличаются только переданные обработчики.
+   Framed="false" — строка списка без своей рамки, для места внутри чужой карточки
+   (секции «НПС сценария» и «Преген-персонажи» на странице сценария): карточка в
+   карточке съедала ~35px ширины двойным отступом и читалась как мусор. Родитель
+   разделяет такие строки линейкой. В сетке библиотеки /npcs карточка своя (Framed="true"). *@
 
-<div class="cm-card overflow-hidden hover:shadow-md transition-shadow">
-    <div class="cm-card-header flex-wrap">
+<div class="@(Framed ? "cm-card overflow-hidden hover:shadow-md transition-shadow" : "")">
+    <div class="@(Framed ? "cm-card-header flex-wrap" : "flex flex-wrap items-center justify-between gap-2 mb-3")">
         <span class="cm-card-title break-words">@Character.CharacterName</span>
         <div class="flex flex-wrap gap-1">
             <button type="button" class="cm-btn cm-btn-outline-primary cm-btn-sm" @onclick="() => Edit()">
@@ -32,7 +36,7 @@
             }
         </div>
     </div>
-    <div class="cm-card-body">
+    <div class="@(Framed ? "cm-card-body" : "")">
         <!-- Вид, владелец, занятость -->
         <div class="flex flex-wrap gap-1.5 mb-3">
             <Badge Variant="@(Character.Kind == CharacterKind.Npc ? "error" : "info")" Size="sm" Rounded="full" WithBorder="false">
@@ -71,20 +75,18 @@
         @if (OnCastChanged.HasDelegate)
         {
             <div class="flex flex-wrap items-end gap-2 mb-3">
-                <div>
-                    <label class="block text-xs text-gray-600 mb-1">Роль в сценарии</label>
-                    <select value="@Role" @onchange="HandleRoleChanged"
-                            class="text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-accent-500">
+                <div class="w-44">
+                    <label class="cm-field-label">Роль в сценарии</label>
+                    <select value="@Role" @onchange="HandleRoleChanged" class="cm-input">
                         @foreach (var role in Enum.GetValues<NpcRole>())
                         {
                             <option value="@role">@role.ToRussianString()</option>
                         }
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs text-gray-600 mb-1">Сколько</label>
-                    <input type="number" min="1" max="20" value="@Count" @onchange="HandleCountChanged"
-                           class="w-20 text-sm px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-accent-500"/>
+                <div class="w-20">
+                    <label class="cm-field-label">Сколько</label>
+                    <input type="number" min="1" max="20" value="@Count" @onchange="HandleCountChanged" class="cm-input"/>
                 </div>
             </div>
         }
@@ -102,7 +104,7 @@
 
         @if (!string.IsNullOrEmpty(Character.Character.Backstory))
         {
-            <div class="w-full mt-4 text-gray-700 text-sm overflow-y-auto pr-2 custom-scrollbar" style="max-height: 100px;">
+            <div class="w-full mt-4 text-gray-700 text-sm overflow-y-auto pr-2 custom-scrollbar max-h-[100px]">
                 <h3 class="font-semibold mb-1 text-sm">Предыстория:</h3>
                 @Character.Character.Backstory
             </div>
@@ -112,6 +114,12 @@
 
 @code {
     [Parameter] public required CharacterStorageDto Character { get; set; }
+
+    /// <summary>
+    ///     Рисовать ли собственную карточку. <c>false</c> — строка без рамки для места внутри
+    ///     чужой карточки; разделять такие строки линейкой — дело родителя.
+    /// </summary>
+    [Parameter] public bool Framed { get; set; } = true;
 
     /// <summary>Кому принадлежит лист: библиотека, кампания или сценарий.</summary>
     [Parameter] public string? OwnerLabel { get; set; }

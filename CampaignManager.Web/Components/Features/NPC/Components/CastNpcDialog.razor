@@ -7,33 +7,25 @@
 @inject NavigationManager NavigationManager
 
 @* Занимает НПС в сценарии. Лист персонажа не копируется — создаётся только связь,
-   поэтому правки НПС видны сразу во всех сценариях, где он занят. *@
+   поэтому правки НПС видны сразу во всех сценариях, где он занят.
+   Страница рисует диалог только пока он нужен, поэтому IsVisible всегда true. *@
 
-<div class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-medium text-gray-900">НПС в сценарии</h3>
-            <button type="button" @onclick="OnCancel" class="text-gray-400 hover:text-gray-600 p-1">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-
-        <p class="text-sm text-gray-500 mb-4">
+<Modal IsVisible="true" OnClose="OnCancel" Title="НПС в сценарии" MaxWidth="md" MaxHeight="null">
+    <ChildContent>
+        <p class="cm-text-muted mb-4">
             «@CharacterName» появится в выбранном сценарии. Лист остаётся один: правки увидят
             все сценарии, где он занят.
         </p>
 
         @if (_isLoading)
         {
-            <div class="flex justify-center p-4">
-                <LoadingIndicator/>
-            </div>
+            <LoadingIndicator/>
         }
         else if (_scenarios.Count == 0)
         {
-            <div class="text-center text-gray-500 my-4">
-                <p>Нет доступных сценариев.</p>
-                <Button OnClick="CreateNewScenario" Variant="primary" Size="sm" AdditionalClasses="mt-2">
+            <div class="text-center my-4">
+                <p class="cm-text-muted">Нет доступных сценариев.</p>
+                <Button OnClick="CreateNewScenario" Variant="primary" Size="sm" Icon="fa-plus" AdditionalClasses="mt-2">
                     Создать новый сценарий
                 </Button>
             </div>
@@ -51,7 +43,7 @@
                 </select>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="grid grid-cols-2 gap-3">
                 <div>
                     <label for="roleSelect" class="cm-field-label">Роль</label>
                     <select @bind="_role" id="roleSelect" class="cm-input">
@@ -70,18 +62,17 @@
 
         @if (!string.IsNullOrEmpty(_errorMessage))
         {
-            <Alert Type="error" ShowIcon>@_errorMessage</Alert>
+            <Alert Type="error" ShowIcon class="mt-4 !mb-0">@_errorMessage</Alert>
         }
-
-        <div class="flex justify-end gap-2">
-            <Button OnClick="OnCancel" Variant="secondary" Size="sm">Отмена</Button>
-            @if (_scenarios.Count > 0)
-            {
-                <Button OnClick="SaveAsync" Variant="primary" Size="sm" IsDisabled="@(!IsFormValid)">Добавить</Button>
-            }
-        </div>
-    </div>
-</div>
+    </ChildContent>
+    <FooterContent>
+        <Button OnClick="OnCancel" Variant="secondary">Отмена</Button>
+        @if (_scenarios.Count > 0)
+        {
+            <Button OnClick="SaveAsync" Variant="primary" IsDisabled="@(!IsFormValid)">Добавить</Button>
+        }
+    </FooterContent>
+</Modal>
 
 @code {
     /// <summary>Лист НПС, который занимаем в сценарии.</summary>
@@ -137,5 +128,6 @@
         await OnSaved.InvokeAsync();
     }
 
-    private void CreateNewScenario() => NavigationManager.NavigateTo("/scenarios/create");
+    // Маршрут создания — /scenarios/new; прежний /scenarios/create вёл на «ничего не найдено».
+    private void CreateNewScenario() => NavigationManager.NavigateTo("/scenarios/new");
 }

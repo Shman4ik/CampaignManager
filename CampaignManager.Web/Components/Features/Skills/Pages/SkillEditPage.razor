@@ -24,9 +24,18 @@
 </PageHeader>
 
 <div class="cm-page">
+    @* Ошибка — над формой: сохраняют из шапки, и под длинной формой её бы не заметили. *@
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <Alert Type="error" ShowIcon>@_errorMessage</Alert>
+    }
+
     <div class="cm-card">
         <div class="cm-card-body">
-            <EditForm Model="_skill" OnValidSubmit="SaveSkill" FormName="SkillForm">
+            @* id обязателен: «Сохранить» живёт в шапке, вне формы, и находит её по form="SkillForm".
+               FormName id не выставляет — без этого кнопка в шапке ничего не отправляла, и форма
+               держала вторую пару «Отмена/Сохранить» внизу. *@
+            <EditForm id="SkillForm" Model="_skill" OnValidSubmit="SaveSkill" FormName="SkillForm">
                 <DataAnnotationsValidator/>
 
                 <!-- Name and Base Value -->
@@ -36,9 +45,9 @@
                             Название навыка *
                         </label>
                         <InputText id="name" @bind-Value="_skill.Name"
-                                   class="w-full border border-primary-300 rounded-lg px-3 py-2 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                                   class="cm-input"
                                    placeholder="Введите название навыка"/>
-                        <ValidationMessage For="() => _skill.Name" class="text-red-500 text-xs mt-1"/>
+                        <ValidationMessage For="() => _skill.Name" class="text-error-600 text-xs mt-1"/>
                     </div>
 
                     <div>
@@ -46,9 +55,9 @@
                             Базовое значение (%) *
                         </label>
                         <InputNumber id="baseValue" @bind-Value="_skill.BaseValue"
-                                     class="w-full border border-primary-300 rounded-lg px-3 py-2 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                                     class="cm-input"
                                      min="0" max="100"/>
-                        <ValidationMessage For="() => _skill.BaseValue" class="text-red-500 text-xs mt-1"/>
+                        <ValidationMessage For="() => _skill.BaseValue" class="text-error-600 text-xs mt-1"/>
                     </div>
                 </div>
 
@@ -59,47 +68,34 @@
                             Категория навыка *
                         </label>
                         <InputSelect id="category" @bind-Value="_skill.Category"
-                                     class="w-full border border-primary-300 rounded-lg px-3 py-2 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors">
+                                     class="cm-input">
                             @foreach (var category in EnumExtensions.GetEnumTypes<SkillCategory>())
                             {
                                 <option value="@category">@category.ToRussianString()</option>
                             }
                         </InputSelect>
-                        <ValidationMessage For="() => _skill.Category" class="text-red-500 text-xs mt-1"/>
+                        <ValidationMessage For="() => _skill.Category" class="text-error-600 text-xs mt-1"/>
                     </div>
 
-                    <div class="space-y-3">
-                        <div class="flex items-center">
-                            <InputCheckbox id="isUncommon" @bind-Value="_skill.IsUncommon"
-                                           class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="isUncommon" class="ml-2 block text-sm text-gray-700">
-                                Необычный навык
-                            </label>
-                        </div>
-
-                        <div class="flex items-center">
-                            <InputCheckbox id="canRetry" @bind-Value="_skill.CanRetry"
-                                           class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="canRetry" class="ml-2 block text-sm text-gray-700">
-                                Можно повторить проверку
-                            </label>
-                        </div>
-
-                        <div class="flex items-center">
-                            <InputCheckbox id="is1920" @bind-Value="_skill.Is1920"
-                                           class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="is1920" class="ml-2 block text-sm text-gray-700">
-                                Классический сеттинг (1920-е)
-                            </label>
-                        </div>
-
-                        <div class="flex items-center">
-                            <InputCheckbox id="isModern" @bind-Value="_skill.IsModern"
-                                           class="h-4 w-4 accent-accent-500 border-primary-300 rounded"/>
-                            <label for="isModern" class="ml-2 block text-sm text-gray-700">
-                                Современный сеттинг
-                            </label>
-                        </div>
+                    @* Флажок — это вся строка в 40px: label обнимает чекбокс, так что попасть
+                       пальцем можно по подписи, а не только по квадратику. *@
+                    <div>
+                        <label class="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-primary-700">
+                            <InputCheckbox @bind-Value="_skill.IsUncommon" class="cm-checkbox"/>
+                            Необычный навык
+                        </label>
+                        <label class="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-primary-700">
+                            <InputCheckbox @bind-Value="_skill.CanRetry" class="cm-checkbox"/>
+                            Можно повторить проверку
+                        </label>
+                        <label class="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-primary-700">
+                            <InputCheckbox @bind-Value="_skill.Is1920" class="cm-checkbox"/>
+                            Классический сеттинг (1920-е)
+                        </label>
+                        <label class="flex min-h-[40px] cursor-pointer items-center gap-2 text-sm text-primary-700">
+                            <InputCheckbox @bind-Value="_skill.IsModern" class="cm-checkbox"/>
+                            Современный сеттинг
+                        </label>
                     </div>
                 </div>
 
@@ -109,9 +105,9 @@
                         Описание
                     </label>
                     <InputTextArea id="description" @bind-Value="_skill.Description"
-                                   class="w-full border border-primary-300 rounded-lg px-3 py-2 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                                   class="cm-input"
                                    rows="3" placeholder="Описание навыка..."/>
-                    <ValidationMessage For="() => _skill.Description" class="text-red-500 text-xs mt-1"/>
+                    <ValidationMessage For="() => _skill.Description" class="text-error-600 text-xs mt-1"/>
                 </div>
 
                 <!-- Time Required -->
@@ -120,83 +116,76 @@
                         Время выполнения
                     </label>
                     <InputText id="timeRequired" @bind-Value="_skill.TimeRequired"
-                               class="w-full border border-primary-300 rounded-lg px-3 py-2 bg-primary-50 focus:outline-none focus:ring-2 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
+                               class="cm-input"
                                placeholder="Например: 1 раунд, 10 минут, 1 час..."/>
                 </div>
 
                 <!-- Usage Examples -->
                 <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Примеры использования
-                    </label>
+                    <div class="cm-field-label">Примеры использования</div>
                     <div class="space-y-2">
                         @for (int i = 0; i < _skill.UsageExamples.Count; i++)
                         {
                             var index = i;
-                            <div class="flex items-center space-x-2">
-                                <InputText @bind-Value="_skill.UsageExamples[index]"
-                                           class="flex-1 border border-primary-300 rounded px-3 py-1 text-sm bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                           placeholder="Пример использования навыка..."/>
-                                <button type="button" class="cm-btn cm-btn-error cm-btn-sm !p-1 !min-h-0" @onclick="() => RemoveUsageExample(index)"><i class="fas fa-trash"></i></button>
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <InputText @bind-Value="_skill.UsageExamples[index]" class="cm-input" placeholder="Пример использования навыка..."/>
+                                </div>
+                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0"
+                                        aria-label="@($"Удалить пример {index + 1}")"
+                                        @onclick="() => RemoveUsageExample(index)">
+                                    <i class="fas fa-trash-alt"></i><span>Удалить</span>
+                                </button>
                             </div>
                         }
-                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="AddUsageExample">Добавить пример</Button>
+                        <Button Variant="secondary" Size="sm" Icon="fa-plus" OnClick="AddUsageExample">Добавить пример</Button>
                     </div>
                 </div>
 
                 <!-- Failure Consequences -->
                 <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Последствия провала
-                    </label>
+                    <div class="cm-field-label">Последствия провала</div>
                     <div class="space-y-2">
                         @for (int i = 0; i < _skill.FailureConsequences.Count; i++)
                         {
                             var index = i;
-                            <div class="flex items-center space-x-2">
-                                <InputText @bind-Value="_skill.FailureConsequences[index]"
-                                           class="flex-1 border border-primary-300 rounded px-3 py-1 text-sm bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                           placeholder="Последствие провала..."/>
-                                <button type="button" class="cm-btn cm-btn-error cm-btn-sm !p-1 !min-h-0" @onclick="() => RemoveFailureConsequence(index)"><i class="fas fa-trash"></i></button>
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <InputText @bind-Value="_skill.FailureConsequences[index]" class="cm-input" placeholder="Последствие провала..."/>
+                                </div>
+                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0"
+                                        aria-label="@($"Удалить последствие {index + 1}")"
+                                        @onclick="() => RemoveFailureConsequence(index)">
+                                    <i class="fas fa-trash-alt"></i><span>Удалить</span>
+                                </button>
                             </div>
                         }
-                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="AddFailureConsequence">Добавить последствие</Button>
+                        <Button Variant="secondary" Size="sm" Icon="fa-plus" OnClick="AddFailureConsequence">Добавить последствие</Button>
                     </div>
                 </div>
 
                 <!-- Opposing Skills -->
                 <div class="mb-6">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">
-                        Противоположные навыки
-                    </label>
+                    <div class="cm-field-label">Противоположные навыки</div>
                     <div class="space-y-2">
                         @for (int i = 0; i < _skill.OpposingSkills.Count; i++)
                         {
                             var index = i;
-                            <div class="flex items-center space-x-2">
-                                <InputText @bind-Value="_skill.OpposingSkills[index]"
-                                           class="flex-1 border border-primary-300 rounded px-3 py-1 text-sm bg-primary-50 focus:outline-none focus:ring-1 focus:ring-accent-500/25 focus:border-accent-500 hover:border-primary-400 hover:bg-white transition-colors"
-                                           placeholder="Название противоположного навыка..."/>
-                                <button type="button" class="cm-btn cm-btn-error cm-btn-sm !p-1 !min-h-0" @onclick="() => RemoveOpposingSkill(index)"><i class="fas fa-trash"></i></button>
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <InputText @bind-Value="_skill.OpposingSkills[index]" class="cm-input" placeholder="Название противоположного навыка..."/>
+                                </div>
+                                <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm shrink-0"
+                                        aria-label="@($"Удалить противоположный навык {index + 1}")"
+                                        @onclick="() => RemoveOpposingSkill(index)">
+                                    <i class="fas fa-trash-alt"></i><span>Удалить</span>
+                                </button>
                             </div>
                         }
-                        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="AddOpposingSkill">Добавить противоположный навык</Button>
+                        <Button Variant="secondary" Size="sm" Icon="fa-plus" OnClick="AddOpposingSkill">Добавить противоположный навык</Button>
                     </div>
                 </div>
 
-                <!-- Form Actions -->
-                <div class="flex justify-between items-center pt-4 border-t">
-                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="Cancel"><span>Отмена</span></button>
-
-                    <div class="space-x-2">
-                        <button type="submit" class="cm-btn cm-btn-primary" disabled="@_saving"><i class="fas @(_saving ? "fa-spinner fa-spin" : "fa-save")"></i> <span>@(_saving ? "Сохранение..." : "Сохранить")</span></button>
-                    </div>
-                </div>
-
-                @if (!string.IsNullOrEmpty(_errorMessage))
-                {
-                    <Alert Type="error" ShowIcon class="mt-4 !mb-0">@_errorMessage</Alert>
-                }
             </EditForm>
         </div>
     </div>

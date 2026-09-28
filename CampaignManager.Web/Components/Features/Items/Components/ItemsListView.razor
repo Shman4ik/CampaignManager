@@ -28,11 +28,14 @@
             <tbody>
             @foreach (var item in Items)
             {
-                <tr class="@(ExpandedItemId == item.Id ? "it-row-open" : null) cursor-pointer"
-                    @onclick="() => OnToggleExpand.InvokeAsync(item)">
+                var canExpand = CanExpand(item);
+                <tr class="@(ExpandedItemId == item.Id ? "it-row-open" : null) @(canExpand ? "cursor-pointer" : null)"
+                    @onclick="() => ToggleAsync(item)">
                     <td>
                         <div class="flex items-center gap-1.5">
-                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            @* Стрелка — только у строки, которой есть что раскрыть; у остальных
+                               пустое место той же ширины, чтобы названия стояли ровно. *@
+                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center @(canExpand ? "text-primary-300" : "invisible")"></i>
                             <span class="font-semibold text-gray-900">@item.Name</span>
                             @if (ShowEra)
                             {
@@ -61,30 +64,14 @@
                     }
                 </tr>
 
-                @if (ExpandedItemId == item.Id)
+                @* Строка деталей — только под картинку: длинное описание раскрывается на месте,
+                   в самой ячейке (.it-row-open > .it-desc), а эпоха — бейдж у названия. *@
+                @if (ExpandedItemId == item.Id && !string.IsNullOrEmpty(item.ImageUrl))
                 {
                     <tr class="it-details">
                         <td colspan="@ColumnCount">
-                            <div class="flex flex-wrap gap-x-8 gap-y-1.5 text-primary-600">
-                                @if (!ShowEra)
-                                {
-                                    <div>
-                                        <span class="it-label">Эпоха</span>
-                                        @ItemEraText.Describe(item.Era)
-                                    </div>
-                                }
-                                @if (!string.IsNullOrEmpty(item.ImageUrl))
-                                {
-                                    <div class="basis-full">
-                                        <span class="it-label">Изображение</span>
-                                        <img src="@item.ImageUrl" alt="@item.Name" class="it-image" />
-                                    </div>
-                                }
-                                @if (!HasDetails(item))
-                                {
-                                    <div class="text-primary-400">Всё об этом предмете уже показано в строке.</div>
-                                }
-                            </div>
+                            <span class="it-label">Изображение</span>
+                            <img src="@item.ImageUrl" alt="@item.Name" class="it-image" />
                         </td>
                     </tr>
                 }
@@ -97,11 +84,12 @@
     <div class="divide-y divide-primary-100 md:hidden">
         @foreach (var item in Items)
         {
+            var canExpand = CanExpand(item);
             <div class="px-3 py-2">
                 <div class="flex items-start gap-2">
-                    <div class="min-w-0 flex-1 cursor-pointer" @onclick="() => OnToggleExpand.InvokeAsync(item)">
+                    <div class="min-w-0 flex-1 @(canExpand ? "cursor-pointer" : null)" @onclick="() => ToggleAsync(item)">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center text-primary-300"></i>
+                            <i class="fas @(ExpandedItemId == item.Id ? "fa-caret-down" : "fa-caret-right") w-2 text-center @(canExpand ? "text-primary-300" : "invisible")"></i>
                             <span class="font-semibold text-gray-900">@item.Name</span>
                             @if (ShowEra)
                             {
@@ -132,23 +120,11 @@
                     }
                 </div>
 
-                @if (ExpandedItemId == item.Id)
+                @if (ExpandedItemId == item.Id && !string.IsNullOrEmpty(item.ImageUrl))
                 {
                     <dl class="it-card-details">
-                        @if (!ShowEra)
-                        {
-                            <dt>Эпоха</dt>
-                            <dd>@ItemEraText.Describe(item.Era)</dd>
-                        }
-                        @if (!string.IsNullOrEmpty(item.ImageUrl))
-                        {
-                            <dt>Изображение</dt>
-                            <dd><img src="@item.ImageUrl" alt="@item.Name" class="it-image" /></dd>
-                        }
-                        @if (!HasDetails(item))
-                        {
-                            <dt class="col-span-2 font-normal normal-case tracking-normal">Всё об этом предмете уже показано в строке.</dt>
-                        }
+                        <dt>Изображение</dt>
+                        <dd><img src="@item.ImageUrl" alt="@item.Name" class="it-image" /></dd>
                     </dl>
                 }
             </div>
@@ -182,7 +158,22 @@
 
     private static string TypeOrDash(Item item) => string.IsNullOrEmpty(item.Type) ? "—" : item.Type;
 
-    // Описание в раскрытии не повторяется: открытая строка просто перестаёт его обрезать.
-    // Здесь — только то, чего в строке нет вообще.
-    private bool HasDetails(Item item) => !ShowEra || !string.IsNullOrEmpty(item.ImageUrl);
+    /// <summary>
+    ///     С какой длины описание в строке обрезается многоточием. Колонка описания — 55% таблицы;
+    ///     на портрете iPad (самая узкая таблица) в неё входит около 60 знаков.
+    /// </summary>
+    private const int ClippedDescriptionLength = 60;
+
+    // Раскрывать есть что только у предмета с картинкой или с описанием длиннее строки:
+    // эпоха — бейдж у названия (а при фильтре по одной эпохе её называет сам фильтр), тип
+    // и короткое описание уже видны. Раньше раскрытие у большинства предметов показывало
+    // одну эпоху либо фразу «всё уже показано в строке» — лишний клик ради ничего.
+    private static bool CanExpand(Item item) =>
+        !string.IsNullOrEmpty(item.ImageUrl)
+        || (item.Description?.Length ?? 0) > ClippedDescriptionLength;
+
+    private Task ToggleAsync(Item item) =>
+        CanExpand(item) || ExpandedItemId == item.Id
+            ? OnToggleExpand.InvokeAsync(item)
+            : Task.CompletedTask;
 }

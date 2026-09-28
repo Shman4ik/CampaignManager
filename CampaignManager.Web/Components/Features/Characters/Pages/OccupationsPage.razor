@@ -21,22 +21,17 @@
 <div class="cm-page">
     <FilterPanel Title="Фильтры" @bind-IsExpanded="_isFilterVisible" OnReset="ClearFilters">
         <ChildContent>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <div class="flex-grow">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <div class="flex-1 min-w-0">
                     <label for="searchQuery" class="cm-field-label">Поиск</label>
-                    <div class="relative">
-                        <input type="text" id="searchQuery"
-                               class="cm-input w-full cm-input-icon-left"
-                               placeholder="Поиск по названию..." @bind="_searchTerm" @bind:event="oninput" />
-                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                            <i class="fas fa-search text-gray-400 text-xs"></i>
-                        </div>
-                    </div>
+                    <input type="search" id="searchQuery"
+                           class="cm-input"
+                           placeholder="Поиск по названию..." @bind="_searchTerm" @bind:event="oninput" />
                 </div>
-                <div class="w-full sm:w-56">
+                <div class="w-full sm:w-56 shrink-0">
                     <label for="formulaFilter" class="cm-field-label">Формула очков</label>
                     <select id="formulaFilter"
-                            class="cm-input w-full"
+                            class="cm-input"
                             @bind="_selectedFormula">
                         <option value="">Все формулы</option>
                         @foreach (var formula in EnumExtensions.GetEnumTypes<OccupationSkillPointFormula>())
@@ -55,15 +50,16 @@
     }
     else if (FilteredOccupations.Count == 0)
     {
+        @* Как у остальных каталогов: основное действие «Добавить» есть всегда, а «Очистить
+           фильтры» — вторичной рядом, когда пусто из-за фильтра. *@
         <EmptyState IconClass="fa-briefcase"
                     Title="Профессии не найдены"
-                    Message="@(!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedFormula) ? "Нет профессий, соответствующих критериям поиска." : "В базе данных нет профессий.")">
+                    Message="@(HasActiveFilters ? "Нет профессий, соответствующих критериям поиска." : "Справочник профессий пуст. Добавьте профессию или загрузите книжные кнопкой «Синхронизировать с правилами».")">
             <ActionButton>
-                @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_selectedFormula))
+                <Button Variant="primary" Icon="fa-plus" OnClick="OpenAddModal">Добавить профессию</Button>
+                @if (HasActiveFilters)
                 {
-                    <button type="button" class="cm-btn cm-btn-secondary" @onclick="ClearFilters">
-                        <span>Очистить фильтры</span>
-                    </button>
+                    <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
                 }
             </ActionButton>
         </EmptyState>
@@ -141,7 +137,7 @@
             <div>
                 <label class="cm-field-label">Название</label>
                 <InputText @bind-Value="_formModel.Name" class="cm-input" placeholder="Название профессии" />
-                <ValidationMessage For="() => _formModel.Name" class="text-red-500 text-xs mt-1" />
+                <ValidationMessage For="() => _formModel.Name" class="text-error-600 text-xs mt-1" />
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -250,6 +246,8 @@
     private string _searchTerm = "";
     private string _selectedFormula = "";
     private bool _isFilterVisible = true;
+
+    private bool HasActiveFilters => !string.IsNullOrWhiteSpace(_searchTerm) || !string.IsNullOrEmpty(_selectedFormula);
 
     // Modal state
     private bool _showModal;
