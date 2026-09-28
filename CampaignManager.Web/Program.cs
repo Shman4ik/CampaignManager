@@ -147,10 +147,14 @@ builder.Services.AddAuthentication(options =>
         options.NonceCookie.IsEssential = true;
         options.NonceCookie.Name = ".CampaignManager.Nonce.";
 
-        // login_hint обработчик сам не передаёт (только prompt и max_age) — его кладёт в параметры
-        // вызова AccountEndpoints для тихого входа.
+        // connection и login_hint обработчик сам не передаёт (только prompt и max_age) — их кладёт
+        // в параметры вызова AccountEndpoints.CreateChallenge.
         options.Events.OnRedirectToIdentityProvider = context =>
         {
+            var connection = context.Properties.GetParameter<string>(AccountEndpoints.ConnectionParameter);
+            if (!string.IsNullOrWhiteSpace(connection))
+                context.ProtocolMessage.SetParameter(AccountEndpoints.ConnectionParameter, connection);
+
             var loginHint = context.Properties.GetParameter<string>(OpenIdConnectParameterNames.LoginHint);
             if (!string.IsNullOrWhiteSpace(loginHint))
                 context.ProtocolMessage.LoginHint = loginHint;
@@ -181,30 +185,10 @@ builder.Services.AddAuthentication(options =>
                 context.Failure?.Message,
                 context.Request.Query["error_description"]);
 
-            var properties = context.Properties;
-            var isSilent = properties?.Items.TryGetValue(AccountEndpoints.AuthModeItemKey, out var mode) == true
-                           && mode == AccountEndpoints.SilentModeValue;
-
             var isAccessDenied = context.Failure?.Message.Contains("not authorized", StringComparison.OrdinalIgnoreCase) == true;
 
-            // Отказ проверяем раньше тихого режима: OnTokenValidated отказывает вместе со свойствами
-            // входа, и без этого запрет при тихом входе выглядел бы как «автовход не удался».
-            if (isAccessDenied)
-            {
-                context.Response.Redirect("/?authStatus=accessDenied");
-            }
-            else if (isSilent)
-            {
-                // For silent failures (prompt=none → login_required), redirect back with error status
-                var returnUrl = properties?.Items.TryGetValue(AccountEndpoints.FailureRedirectItemKey, out var url) == true
-                    ? url
-                    : "/";
-                context.Response.Redirect($"{returnUrl}?authStatus=silentFailed");
-            }
-            else
-            {
-                context.Response.Redirect("/?authStatus=failed");
-            }
+            // Повтора после неудачного автовхода не будет: его держит метка попытки (см. AutoLogin).
+            context.Response.Redirect(isAccessDenied ? "/?authStatus=accessDenied" : "/?authStatus=failed");
 
             context.HandleResponse();
             return Task.CompletedTask;
@@ -428,6 +412,8 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions { ForwardedHeaders = Forward
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+// Между ними: страница под [Authorize] без сессии тоже сначала пробует автовход через Google.
+app.UseAutoLogin();
 app.UseAuthorization();
 app.UseRateLimiter();
 
