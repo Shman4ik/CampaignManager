@@ -77,14 +77,14 @@ public class Combatant
 
     /// <summary>
     /// Потеряно рассудка за текущий игровой день. Потеря не менее ⅕ текущего
-    /// рассудка за день означает бессрочное безумие (стр. 153).
+    /// рассудка за день означает бессрочное безумие (стр. 154).
     /// </summary>
     public int SanityLostToday { get; set; }
 
     /// <summary>Часов, оставшихся до конца временного безумия (1d10 при наступлении).</summary>
     public int TemporaryInsanityHours { get; set; }
 
-    /// <summary>Неизлечимое безумие: рассудок упал до нуля (стр. 153).</summary>
+    /// <summary>Неизлечимое безумие: рассудок упал до нуля (стр. 154).</summary>
     public bool HasPermanentInsanity { get; set; }
     public string DamageBonus { get; set; } = "0";
     public int Build { get; set; }

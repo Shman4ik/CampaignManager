@@ -21,12 +21,13 @@
     // а на низком запасе полоса переходит в статусные цвета.
     var barColor = pct <= 25 ? "bg-error-700" : pct <= 50 ? "bg-warning-500" : "bg-secondary-500";
     var mythos = SanityRules.GetMythosValue(Character);
-    var indefThreshold = SanityRules.IndefiniteInsanityThreshold(current);
     var dayLoss = Character.State.SanityLossEpisode;
+    // Пятая часть — от Рассудка на начало дня, а не от оставшегося (см. SanityRules)
+    var indefThreshold = SanityRules.IndefiniteInsanityThreshold(SanityRules.SanityAtDayStart(current, dayLoss));
     var lastLoss = Character.State.LastSanityLoss;
     // Два разных правила с разными окнами: ИНТ — по одной причине, бессрочное — за игровой день.
     var triggersTemp = lastLoss >= SanityRules.TemporaryInsanityThreshold;
-    var triggersIndef = dayLoss >= indefThreshold && dayLoss > 0;
+    var triggersIndef = SanityRules.IsIndefiniteInsanityLoss(current, dayLoss);
     var permanentlyInsane = SanityRules.IsPermanentlyInsane(Character);
     var insane = SanityRules.IsInsane(Character);
     // Флаг сверяется с отметками: снять безумие можно и мимо SanityRules (чекбоксы в «Личных
@@ -40,7 +41,7 @@
         @if (permanentlyInsane)
         {
             <Alert Type="error" Icon="fa-skull" ShowIcon Small>
-                Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 153).
+                Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 154).
             </Alert>
         }
 

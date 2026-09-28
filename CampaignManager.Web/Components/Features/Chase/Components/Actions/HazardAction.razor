@@ -61,7 +61,7 @@
                     @foreach (var tier in ChaseReference.CrashTiers)
                     {
                         <button type="button" @onclick="() => PickCrash(tier)"
-                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(Form.CrashTier == tier.Name ? "bg-warning-100 text-warning-800" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
+                                class="px-2 py-1 text-xs rounded font-medium transition-colors @(Form.BuildLossRoll > 0 && Form.CrashTier == tier.Name ? "bg-warning-100 text-warning-800" : "bg-gray-100 text-gray-600 hover:bg-gray-200")">
                             @tier.Name (@tier.BuildLossFormula)
                         </button>
                     }
@@ -83,6 +83,14 @@
                 помехе, средняя при трудной, серьёзная при чрезвычайной.
             </p>
         </div>
+        @if (Participant.IsInVehicle)
+        {
+            <div class="col-span-2">
+                <label class="text-xs text-gray-600">Потеря Комплекции транспорта (если провал)</label>
+                <input type="number" min="0" @bind="Form.BuildLossRoll" placeholder="0"
+                       class="w-full text-sm border border-gray-300 rounded px-2 py-1.5" />
+            </div>
+        }
         <div>
             <label class="text-xs text-gray-600">Урон при провале (если провал)</label>
             <input type="number" min="0" @bind="Form.DamageRoll" placeholder="0"
@@ -129,7 +137,8 @@
             ChaseActionForm.Entered(Form.Roll),
             Form.BonusDice,
             ChaseActionForm.Entered(Form.DamageRoll),
-            ChaseActionForm.Entered(Form.LostActionsRoll));
+            ChaseActionForm.Entered(Form.LostActionsRoll),
+            Participant.IsInVehicle ? ChaseActionForm.Entered(Form.BuildLossRoll) : null);
         await OnResolved.InvokeAsync(result);
     }
 }
