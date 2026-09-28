@@ -395,6 +395,14 @@ the .NET 10 circuit persistence stack:
 (`https://cthulhu.dmnet.dev`). У каждого в Allowed Callback URLs — `/signin-oidc`, в Allowed Logout
 URLs — `/signout-callback-oidc`.
 
+Домен входа — кастомный `auth.cthulhu.dmnet.dev` (CNAME в DNS dmnet.dev на Porkbun, сертификат
+выпускает Auth0, в тенанте он домен по умолчанию); его и пишем в `Authentication:Auth0:Domain`.
+Каноничный `cthulhu-dmnet.eu.auth0.com` остаётся за CLI. Google-клиент «Campaign manager» живёт в
+проекте `dnd-project-371311`: в его redirect URIs — `/login/callback` обоих доменов Auth0, а само
+приложение Google обязано быть **In production** — в Testing через Google входят только test users.
+Redirect URI и публикацию Google меняют только в консоли: у `gcloud` для обычных OAuth-клиентов
+команд нет (`gcloud iam oauth-clients` — это Workforce Identity, другое).
+
 - **Все права держатся на почте** (белый список, `AdminEmails`, `KeeperEmail`, `PlayerEmail`…),
   поэтому проверку `email_verified` в `OnTokenValidated` не убирать никогда: учётка с паролем на
   чужой адрес иначе унаследует чужие кампании. Тестовым пользователям `email_verified: true`
