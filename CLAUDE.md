@@ -413,8 +413,18 @@ Redirect URI и публикацию Google меняют только в кон�
   добавить там же.
 - `ResponseMode = Query`, а не `form_post` по умолчанию: куки корреляции и nonce — `Lax`, а
   `form_post` — кросс-сайтовый POST с домена Auth0, на который браузер их не отправит.
-- Обычный вход — `prompt=login` (`select_account`, как у Google, Auth0 не понимает), тихий —
-  `prompt=none` плюс `login_hint`, который пробрасывает `OnRedirectToIdentityProvider`.
+- **Автовход идёт через Google, а не через `prompt=none`.** Тихий вход Auth0 проверяет только
+  сессию самого Auth0 (три дня без активности) и к Google за ней не ходит — после переезда он почти
+  всегда кончался кнопкой «Войти». Браузер помнит способ прошлого входа (кука
+  `.CampaignManager.LastLogin` на год: способ и почта, не сессия), и загрузку страницы без сессии
+  middleware `UseAutoLogin` уводит в Auth0 с `connection=google-oauth2` и `login_hint` — Google
+  возвращает обратно без единого клика. Попытка одна на сессию браузера (`.CampaignManager.AutoLogin`),
+  выход куку забывает. Подробности — `Utilities/Authorization/AutoLogin.cs`.
+- `prompt` не шлём вовсе: сменить учётку позволяет выход, он гасит и сессию Auth0.
+  `/api/account/login?method=google|email` ведёт мимо страницы Auth0 прямо к Google или к форме
+  пароля; `connection` и `login_hint` в запрос к Auth0 ставит `OnRedirectToIdentityProvider`.
+- На `localhost` Auth0 всегда спрашивает согласие («Authorize App → Accept») — это его правило для
+  локальных адресов, на проде экрана нет.
 - Выход гасит и сессию Auth0 (`/oidc/logout` с `client_id`), иначе следующий вход молча пускает
   под прежней учёткой и переключиться между тестовыми пользователями нельзя.
 - Страница входа Auth0 — внешний сайт: агент в браузере пароли туда не вводит. Проверки под

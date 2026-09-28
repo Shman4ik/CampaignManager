@@ -1,9 +1,7 @@
-@using Microsoft.AspNetCore.WebUtilities
 @using CampaignManager.Web.Utilities.Services
 @using CampaignManager.Web.Components.Layout.Services
 @rendermode InteractiveServer
 @inject NavigationManager Nav
-@inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IdentityService IdentityService
 @inject NavigationBadgeService NavigationBadges
@@ -78,137 +76,40 @@
                 </button>
             </Authorized>
             <NotAuthorized>
-                @if (_checkingAuth)
-                {
-                    <div class="sidebar-item sidebar-item--footer sidebar-item--muted">
-                        <span class="sidebar-icon"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span>
-                        <span class="sidebar-rail-label">Проверка</span>
-                    </div>
-                }
-                else
-                {
-                    <button type="button" class="sidebar-item sidebar-item--footer sidebar-item--button"
-                            @onclick="ManualLogin">
-                        @* Способ входа (Google или почта с паролем) выбирается уже на странице Auth0. *@
-                        <span class="sidebar-icon"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span>
-                        <span class="sidebar-rail-label">Войти</span>
-                    </button>
-                }
+                @* Сюда попадают, только если автовход не помог или его не было (см. AutoLogin).
+                   Способ входа (Google или почта с паролем) выбирается уже на странице Auth0. *@
+                <button type="button" class="sidebar-item sidebar-item--footer sidebar-item--button"
+                        @onclick="Login">
+                    <span class="sidebar-icon"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span>
+                    <span class="sidebar-rail-label">Войти</span>
+                </button>
             </NotAuthorized>
         </AuthorizeView>
     </div>
 </div>
 
 @code {
-    private bool _checkingAuth = true;
-    private bool _silentLoginFailed;
-    private bool _accessDenied;
-    private bool _loginFailed;
     private int _pendingCount;
-
-    protected override void OnInitialized()
-    {
-        var uri = Nav.ToAbsoluteUri(Nav.Uri);
-        var q = QueryHelpers.ParseQuery(uri.Query);
-        if (q.TryGetValue("authStatus", out var s))
-        {
-            _silentLoginFailed = s == "silentFailed";
-            _accessDenied      = s == "accessDenied";
-            _loginFailed       = s == "failed";
-        }
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
-        // Clean up authStatus from URL
-        if (_silentLoginFailed || _accessDenied || _loginFailed)
-        {
-            if (_silentLoginFailed)
-            {
-                try
-                {
-                    var m = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-                    await m.InvokeVoidAsync("noteSilentFailure");
-                }
-                catch { }
-            }
-            Nav.NavigateTo(Nav.Uri.Split('?')[0], replace: true);
-        }
-
+        // Счётчик заявок нужен и нижней навигации; оба сервиса отдают ей тот же ответ,
+        // так что в базу за ним ходим один раз на circuit.
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        if (!user.Identity?.IsAuthenticated ?? true)
-        {
-            // Attempt silent login once
-            try
-            {
-                var m = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-                var skip = await m.InvokeAsync<bool>("shouldSkipSilentLogin");
-                if (!skip)
-                {
-                    await m.InvokeVoidAsync("markSilentAttempt");
-                    var returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
-                    var hint = await m.InvokeAsync<string?>("getLoginHint");
-                    var loginUrl = $"/api/account/login?mode=silent&returnUrl={Uri.EscapeDataString(returnUrl)}";
-                    if (!string.IsNullOrEmpty(hint))
-                        loginUrl += $"&loginHint={Uri.EscapeDataString(hint)}";
-                    Nav.NavigateTo(loginUrl, true);
-                    return;
-                }
-            }
-            catch { }
-
-            _checkingAuth = false;
-            StateHasChanged();
+        if (authState.User.Identity?.IsAuthenticated != true || !await IdentityService.IsAdministrator())
             return;
-        }
 
-        // Authenticated — load extras. Счётчик заявок и настройки нужны и нижней навигации;
-        // оба сервиса отдают ей тот же ответ, так что в базу за ними ходим один раз на circuit.
-        _checkingAuth = false;
-        var isAdmin = await IdentityService.IsAdministrator();
-        if (isAdmin)
-            _pendingCount = await NavigationBadges.GetPendingApplicationsCountAsync();
-
-        // Save login hint
-        try
-        {
-            var email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-            if (!string.IsNullOrEmpty(email))
-            {
-                var m = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-                await m.InvokeVoidAsync("saveLoginHint", email);
-            }
-        }
-        catch { }
-
+        _pendingCount = await NavigationBadges.GetPendingApplicationsCountAsync();
         StateHasChanged();
     }
 
-    private async Task Logout()
-    {
-        try
-        {
-            var m = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-            await m.InvokeVoidAsync("setSkipSilentLogin");
-            await m.InvokeVoidAsync("clearLoginHint");
-        }
-        catch { }
-        Nav.NavigateTo("api/account/logout", true);
-    }
+    private void Logout() => Nav.NavigateTo("api/account/logout", true);
 
-    private async Task ManualLogin()
+    private void Login()
     {
-        try
-        {
-            var m = await JS.InvokeAsync<IJSObjectReference>("import", "/js/topbar-auth.js");
-            await m.InvokeVoidAsync("clearSilentFlags");
-        }
-        catch { }
         var returnUrl = "/" + Nav.ToBaseRelativePath(Nav.Uri);
-        Nav.NavigateTo($"/api/account/login?mode=interactive&returnUrl={Uri.EscapeDataString(returnUrl)}", true);
+        Nav.NavigateTo($"/api/account/login?returnUrl={Uri.EscapeDataString(returnUrl)}", true);
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authentication;
+﻿using CampaignManager.Web.Utilities.Authorization;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -33,17 +34,15 @@ public static class AccountEndpoints
             .AllowAnonymous();
     }
 
-    internal const string AuthModeItemKey = "campaignmanager:authMode";
-    internal const string FailureRedirectItemKey = "campaignmanager:failureRedirect";
-    internal const string SilentModeValue = "silent";
-    private const string InteractiveModeValue = "interactive";
+    /// <summary>Параметр Auth0 /authorize, который ведёт мимо его страницы прямо к выбранному способу входа.</summary>
+    internal const string ConnectionParameter = "connection";
 
     /// <summary>
     /// Initiates Auth0 (OpenID Connect) login flow
     /// </summary>
     /// <param name="returnUrl">URL to redirect to after successful authentication (default: "/")</param>
-    /// <param name="mode">Authentication mode: 'silent' (no user interaction) or 'interactive' (show login prompt)</param>
-    /// <param name="loginHint">Optional email hint for Auth0 to pre-fill the account during silent authentication</param>
+    /// <param name="method">Login method: 'google' goes straight to Google, 'email' to the password form;
+    /// without it Auth0 shows its page with every method</param>
     /// <param name="httpContext">HTTP context for the current request</param>
     /// <returns>
     /// <list type="bullet">
@@ -52,49 +51,49 @@ public static class AccountEndpoints
     /// </returns>
     /// <response code="302">Redirects to Auth0 authentication page</response>
     /// <remarks>
-    /// The 'silent' mode uses the 'prompt=none' OIDC parameter which attempts to authenticate
-    /// without showing the Auth0 login page. This is useful for automatic re-authentication.
-    /// The 'interactive' mode (default) always shows the Auth0 login page ('prompt=login'), so the
-    /// user can pick another account even while an Auth0 session is alive.
+    /// No 'prompt' is sent: with a live Auth0 session the user comes straight back. Switching accounts
+    /// needs no forced login page, because logout ends the Auth0 session as well.
     /// </remarks>
     private static async Task<ChallengeHttpResult> HandleLogin(
         string? returnUrl,
-        string? mode,
-        string? loginHint,
+        string? method,
         HttpContext httpContext)
     {
         // Clear existing cookies
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
-        var normalizedReturnUrl = NormalizeReturnUrl(returnUrl, httpContext);
+        // Using TypedResults.Challenge marks this as an API endpoint for .NET 10
+        return TypedResults.Challenge(
+            CreateChallenge(httpContext, returnUrl, AutoLogin.ParseMethod(method)),
+            [OpenIdConnectDefaults.AuthenticationScheme]);
+    }
 
-        var selectedMode = string.IsNullOrWhiteSpace(mode)
-            ? InteractiveModeValue
-            : mode.Trim().ToLowerInvariant();
-        var isSilent = string.Equals(selectedMode, SilentModeValue, StringComparison.Ordinal);
-
-        // Set redirect path after authentication
+    /// <summary>
+    /// Свойства входа через Auth0 — общие у кнопок входа и у автовхода (<see cref="AutoLogin" />).
+    /// </summary>
+    internal static OpenIdConnectChallengeProperties CreateChallenge(
+        HttpContext httpContext,
+        string? returnUrl,
+        LoginMethod? method)
+    {
         var properties = new OpenIdConnectChallengeProperties
         {
-            RedirectUri = normalizedReturnUrl,
-            IsPersistent = true,
-            // select_account, как было у Google, Auth0 не понимает; login показывает страницу входа
-            // даже при живой сессии Auth0 — иначе сменить учётку было бы нечем.
-            Prompt = isSilent ? "none" : "login"
+            RedirectUri = NormalizeReturnUrl(returnUrl, httpContext),
+            IsPersistent = true
         };
 
-        properties.Items[AuthModeItemKey] = isSilent ? SilentModeValue : InteractiveModeValue;
-        properties.Items[FailureRedirectItemKey] = normalizedReturnUrl;
-
-        // Параметр, а не Items: в state он не нужен, в запрос к Auth0 его ставит
+        // Параметры, а не Items: в state они не нужны, в запрос к Auth0 их ставит
         // OnRedirectToIdentityProvider в Program.cs.
-        if (isSilent && !string.IsNullOrWhiteSpace(loginHint))
-        {
-            properties.SetParameter(OpenIdConnectParameterNames.LoginHint, loginHint);
-        }
+        if (method is { } selected)
+            properties.SetParameter(ConnectionParameter, AutoLogin.GetConnectionName(selected));
 
-        // Using TypedResults.Challenge marks this as an API endpoint for .NET 10
-        return TypedResults.Challenge(properties, [OpenIdConnectDefaults.AuthenticationScheme]);
+        // Почта прошлого входа: Google по ней сразу берёт нужный аккаунт, без списка аккаунтов,
+        // а форма пароля подставляет её в поле. Другому способу входа она ни к чему.
+        if (AutoLogin.GetRemembered(httpContext.Request) is { } remembered
+            && (method is null || method == remembered.Method))
+            properties.SetParameter(OpenIdConnectParameterNames.LoginHint, remembered.Email);
+
+        return properties;
     }
 
     /// <summary>
@@ -111,8 +110,9 @@ public static class AccountEndpoints
     /// <response code="302">Redirects through Auth0 logout back to the specified return URL</response>
     /// <response code="400">Cross-site logout request was rejected</response>
     /// <remarks>
-    /// This endpoint clears the authentication cookie and ends the Auth0 session, so the next login
-    /// asks for an account again instead of silently reusing the previous one.
+    /// This endpoint clears the authentication cookie, forgets how this browser logged in and ends the
+    /// Auth0 session, so the browser no longer logs in by itself and the next login asks for an account
+    /// again instead of silently reusing the previous one.
     /// The return URL is validated the same way as on login, so it can only point back at this host.
     /// Note: This does not sign the user out of Google itself.
     /// </remarks>
@@ -128,6 +128,8 @@ public static class AccountEndpoints
         var normalizedReturnUrl = NormalizeReturnUrl(returnUrl, httpContext);
 
         AuthenticationProperties properties = new() { RedirectUri = normalizedReturnUrl };
+
+        AutoLogin.Forget(httpContext);
 
         // Сначала своя кука, затем Auth0: обработчик OIDC сам уводит на /oidc/logout, а оттуда
         // через /signout-callback-oidc браузер возвращается на normalizedReturnUrl.
