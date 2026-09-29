@@ -8,6 +8,7 @@
 @inject CreatureService CreatureService
 @inject NavigationManager NavigationManager
 @inject ILogger<CreaturesPage> Logger
+@inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 <PageTitle>Существа</PageTitle>
 
@@ -70,13 +71,17 @@
     }
     else
     {
-        @* Две колонки только с xl (1280): на портрете iPad lg срабатывает ровно на 1024,
-           и статблок ужимался до 410px. Здесь читают цифры посреди боя — лучше длинная
-           страница из широких карточек, чем две колонки рваного статблока. *@
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        @* Галерея плиток: колонок столько, сколько влезает по 13rem (.cr-grid) — пять в альбоме
+           iPad, четыре в портрете. Раскрытая карточка встаёт во всю ширину ряда, а dense-укладка
+           подтягивает плитки после неё в дыру, что остаётся в её прежнем ряду. *@
+        <div class="cr-grid">
             @foreach (var creature in _creatures)
             {
-                <CreatureCard Creature="@creature" OnDelete="@(c => ConfirmDelete(c))"/>
+                <CreatureCard @key="creature.Id"
+                              Creature="@creature"
+                              Expanded="@(creature.Id == Open)"
+                              OnToggle="ToggleCreature"
+                              OnDelete="@(c => ConfirmDelete(c))"/>
             }
         </div>
         <Pagination CurrentPage="@_currentPage"
@@ -117,10 +122,18 @@
     private CreatureImportModal? _importModal;
     private CreatureExportModal? _exportModal;
 
+    /// <summary>
+    ///     Раскрытое существо. В адресе, а не в поле: так раскрытая карточка переживает паузу
+    ///     circuit'а и F5, и на неё можно дать ссылку.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "open")]
+    public Guid? Open { get; set; }
+
+    private Guid? _scrollTo;
+
     private int _currentPage = 1;
-    // 12, а не 6: при шести существах на страницу найти нужное без поиска значило
-    // листать «дальше» посреди боя.
-    private readonly int _pageSize = 12;
+    // 20 плиток — ровно четыре ряда и в альбоме iPad (пять колонок), и в портрете (четыре).
+    private readonly int _pageSize = 20;
     private int _totalItems;
     private int TotalPages => (int)Math.Ceiling((double)_totalItems / _pageSize);
 
@@ -128,6 +141,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // После F5 или по ссылке с ?open= раскрытая карточка может быть далеко внизу.
+        _scrollTo = Open;
         await LoadData();
     }
 
@@ -149,6 +164,26 @@
         }
     }
 
+
+    // Одно раскрытое существо за раз: второе раскрытие сворачивает первое, иначе длинные
+    // статблоки двух тварей разносили бы сетку на несколько экранов.
+    private void ToggleCreature(Creature creature)
+    {
+        var next = creature.Id == Open ? (Guid?)null : creature.Id;
+        _scrollTo = next;
+        NavigationManager.NavigateTo(NavigationManager.GetUriWithQueryParameter("open", next), replace: true);
+    }
+
+    // Раскрытая карточка уходит в начало следующего ряда, и тапнутое место уезжает из-под
+    // пальца — подтягиваем её заголовок к шапке, если он оказался не на виду.
+    // Ждём рендера, где Open уже новый: NavigateTo меняет его не сразу, и рендер сразу после
+    // клика ещё рисует плитку — прокрутка тогда искала бы карточку, которой нет.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loading || _scrollTo is not { } id || id != Open) return;
+        _scrollTo = null;
+        await JSRuntime.InvokeVoidAsync("revealElement", $"creature-{id}");
+    }
 
     // Каждый фильтр возвращает на первую страницу: с пятой страницы узкий поиск
     // иначе уводил в пустой список, хотя подходящие существа есть.
