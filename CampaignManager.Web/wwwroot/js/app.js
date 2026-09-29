@@ -114,3 +114,28 @@ window.getViewportHeight = function () {
 window.getViewportWidth = function () {
     return window.innerWidth || document.documentElement.clientWidth;
 };
+// Показать элемент, если его верх не на виду: под липкими панелями или ниже середины экрана.
+// Липкие здесь шапка страницы и FilterPanel (обе на top: 0), поэтому отступ — нижний край
+// самой высокой из них в прилипшем положении, а не фиксированные 56px шапки.
+// Раскрытая карточка бестиария уезжает в следующий ряд сетки, и без этого её пришлось бы искать.
+window.revealElement = function (elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    let offset = 0;
+    document.querySelectorAll('.page-topbar, .sticky').forEach(sticky => {
+        const style = getComputedStyle(sticky);
+        if (style.position !== 'sticky') return;
+        offset = Math.max(offset, (parseFloat(style.top) || 0) + sticky.offsetHeight);
+    });
+    offset += 12;
+
+    const top = element.getBoundingClientRect().top;
+    if (top >= offset && top <= window.innerHeight * 0.5) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+        top: top + window.pageYOffset - offset,
+        behavior: reduceMotion ? 'auto' : 'smooth'
+    });
+};

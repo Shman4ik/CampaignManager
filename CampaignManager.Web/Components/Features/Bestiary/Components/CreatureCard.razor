@@ -2,59 +2,83 @@
 @using CampaignManager.Web.Extensions
 @inject NavigationManager NavigationManager
 
-@* Статблок существа. Короткие числа (СИЛ…МОЩ, ПЗ, ПМ) идут сеткой, число колонок которой
-   считает сама ширина (.cr-stats, auto-fill), а строки с оговорками — бонус к урону,
-   скорость, атаки за раунд, броня, потеря рассудка — каждая во всю ширину карточки.
-   Раньше всё лежало в grid-cols-2 внутри колонки 2/3 карточки, и на портрете iPad
-   (где список тогда уже шёл в две колонки) «Атак за раунд: 2 (может схватить…)»
-   рвалось на восемь строк, а левая и правая половины статблока разъезжались по высоте. *@
-<div class="cm-card overflow-hidden hover:shadow-md transition-shadow">
-    <div class="cm-card-header flex-wrap">
-        <span class="cm-card-title truncate">@Creature.Name</span>
-        <div class="flex flex-wrap gap-1 flex-shrink-0">
-            <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => EditCreature(Creature)">Изменить</Button>
-            <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => OnDelete.InvokeAsync(Creature)">Удалить</Button>
-        </div>
-    </div>
-    <div class="cm-card-body">
-        <div class="mb-3">
-            <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">
-                @Creature.Type.ToRussianString()
-            </Badge>
-        </div>
-
-        <div class="flex flex-col sm:flex-row gap-4 mb-3">
-            <div class="flex-1 min-w-0">
-                <h3 class="cm-section-title mb-1">Характеристики</h3>
-                <div class="cr-stats text-sm">
-                    @foreach (var stat in ShortStats)
-                    {
-                        <CharacteristicItem Label="@stat.Label" Value="@stat.Value" DiceRoll="@stat.DiceRoll"/>
-                    }
+@* Существо в каталоге — в двух видах.
+   Свёрнутое — плитка-обложка: картинка на всю ширину, имя поверх неё и три числа, которые
+   Хранитель ищет глазами первыми (ПЗ, броня, потеря рассудка). Тап по плитке раскрывает её.
+   Раскрытое — карточка во всю ширину сетки (col-span-full): большая картинка слева,
+   полный статблок справа. Раскрытым бывает одно существо сразу, и держит его страница
+   (?open=), а не карточка: поле карточки паузу circuit'а не переживает. *@
+@if (!Expanded)
+{
+    <div class="cm-card cr-tile overflow-hidden">
+        <button type="button" class="cr-tile-button" aria-expanded="false"
+                aria-label="@($"{Creature.Name}: раскрыть статблок")"
+                @onclick="() => OnToggle.InvokeAsync(Creature)">
+            <div class="cr-tile-media">
+                @if (Creature.Images.Count > 0)
+                {
+                    <img src="@CreatureImage.ToSrc(Creature.Images[0].Url)" alt="" loading="lazy"/>
+                }
+                else
+                {
+                    <div class="cr-tile-placeholder"><i class="fas fa-skull"></i></div>
+                }
+                @if (Creature.Images.Count > 1)
+                {
+                    <span class="cr-tile-count"><i class="fas fa-images"></i> @Creature.Images.Count</span>
+                }
+                <div class="cr-tile-caption">
+                    <span class="cr-tile-name">@Creature.Name</span>
+                    <span class="cr-tile-type">@Creature.Type.ToRussianString()</span>
                 </div>
             </div>
+            <dl class="cr-tile-stats">
+                <div><dt>ПЗ</dt><dd>@(Creature.CreatureCharacteristics.HealPoint > 0 ? Creature.CreatureCharacteristics.HealPoint.ToString() : "—")</dd></div>
+                <div><dt>Броня</dt><dd>@TileArmor</dd></div>
+                <div><dt>Рассудок</dt><dd>@(NullIfEmpty(Creature.CreatureCharacteristics.SanityLoss) ?? "—")</dd></div>
+            </dl>
+        </button>
+    </div>
+}
+else
+{
+    <article id="@($"creature-{Creature.Id}")" class="cm-card cr-open col-span-full">
+        <div class="cm-card-header flex-wrap">
+            <button type="button" class="cr-open-title" aria-expanded="true"
+                    @onclick="() => OnToggle.InvokeAsync(Creature)">
+                <i class="fas fa-chevron-up text-primary-400 text-sm"></i>
+                <span class="font-serif text-lg font-semibold text-primary-800 truncate">@Creature.Name</span>
+                <Badge Variant="info" Size="sm" Rounded="full" WithBorder="false">@Creature.Type.ToRussianString()</Badge>
+            </button>
+            <div class="flex flex-wrap gap-1 flex-shrink-0">
+                <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => EditCreature(Creature)">Изменить</Button>
+                <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => OnDelete.InvokeAsync(Creature)">Удалить</Button>
+                <Button Variant="secondary" Size="sm" Icon="fa-compress-alt" OnClick="() => OnToggle.InvokeAsync(Creature)">Свернуть</Button>
+            </div>
+        </div>
 
+        <div class="cm-card-body md:flex md:items-start gap-6">
             @* Первая картинка — обложка; остальные тапом по миниатюре, а не по наведению:
                на iPad за столом наведения нет. *@
             @if (Creature.Images.Count > 0)
             {
                 var shown = Creature.Images[Math.Min(_imageIndex, Creature.Images.Count - 1)];
-                <div class="sm:w-40 shrink-0 flex flex-col items-center gap-2">
+                <figure class="cr-open-media mb-4 md:mb-0">
                     <img src="@CreatureImage.ToSrc(shown.Url)" alt="@(shown.Caption ?? Creature.Name)"
-                         class="max-w-full h-auto max-h-40 object-contain rounded" loading="lazy"/>
+                         class="cr-open-image"/>
                     @if (!string.IsNullOrWhiteSpace(shown.Caption))
                     {
-                        <span class="text-xs text-gray-500 text-center">@shown.Caption</span>
+                        <figcaption class="text-xs text-gray-500 text-center mt-2">@shown.Caption</figcaption>
                     }
                     @if (Creature.Images.Count > 1)
                     {
-                        <div class="flex flex-wrap justify-center gap-1">
+                        <div class="flex flex-wrap justify-center gap-2 mt-3">
                             @for (var i = 0; i < Creature.Images.Count; i++)
                             {
                                 var index = i;
                                 var image = Creature.Images[index];
                                 <button type="button"
-                                        class="h-11 w-11 rounded border overflow-hidden @(index == _imageIndex ? "border-accent-500 ring-2 ring-accent-500/30" : "border-gray-200")"
+                                        class="h-14 w-14 rounded-md border overflow-hidden @(index == _imageIndex ? "border-accent-500 ring-2 ring-accent-500/30" : "border-gray-200 opacity-70")"
                                         aria-label="@($"Картинка {index + 1}: {image.Caption ?? Creature.Name}")"
                                         @onclick="() => _imageIndex = index">
                                     <img src="@CreatureImage.ToSrc(image.Url)" alt="" class="h-full w-full object-cover" loading="lazy"/>
@@ -62,98 +86,117 @@
                             }
                         </div>
                     }
-                </div>
+                </figure>
             }
-        </div>
 
-        @if (StatLines.Count > 0)
-        {
-            <dl class="text-sm space-y-0.5 mb-3">
-                @foreach (var line in StatLines)
-                {
-                    <div>
-                        <dt class="inline font-medium">@line.Label:</dt>
-                        <dd class="inline">@line.Value</dd>
-                    </div>
-                }
-            </dl>
-        }
-
-        <div class="mt-4 text-sm">
-            <h3 class="cm-section-title mb-1">Описание</h3>
-            <p class="cm-text-muted">
-                @(string.IsNullOrEmpty(Creature.Description)
-                    ? "Описание отсутствует."
-                    : Creature.Description)
-            </p>
-        </div>
-
-        @if (Creature.SpecialAbilities.Count > 0)
-        {
-            <div class="mt-4">
-                <h3 class="cm-section-title mb-1">Особые умения</h3>
-                <div class="text-sm text-gray-700">
-                    @foreach (var ability in Creature.SpecialAbilities)
+            @* Короткие числа (СИЛ…МОЩ, ПЗ, ПМ) идут сеткой, число колонок которой считает сама
+               ширина (.cr-stats, auto-fill), а строки с оговорками — бонус к урону, скорость,
+               атаки за раунд, броня, потеря рассудка — каждая во всю ширину колонки. *@
+            <div class="flex-1 min-w-0">
+                <h3 class="cm-section-title mb-1">Характеристики</h3>
+                <div class="cr-stats text-sm mb-3">
+                    @foreach (var stat in ShortStats)
                     {
-                        <div class="mb-1"><span class="font-semibold">@ability.Key:</span> @ability.Value</div>
+                        <CharacteristicItem Label="@stat.Label" Value="@stat.Value" DiceRoll="@stat.DiceRoll"/>
                     }
                 </div>
-            </div>
-        }
 
-        @if (Creature.Skills.Count > 0)
-        {
-            <div class="mt-4">
-                <h3 class="cm-section-title mb-1">Навыки</h3>
-                <div class="text-sm text-gray-700">
-                    @string.Join(", ", Creature.Skills.Select(FormatSkill))
+                @if (StatLines.Count > 0)
+                {
+                    <dl class="text-sm space-y-0.5 mb-3">
+                        @foreach (var line in StatLines)
+                        {
+                            <div>
+                                <dt class="inline font-medium">@line.Label:</dt>
+                                <dd class="inline">@line.Value</dd>
+                            </div>
+                        }
+                    </dl>
+                }
+
+                <div class="mt-4 text-sm">
+                    <h3 class="cm-section-title mb-1">Описание</h3>
+                    <p class="cm-text-muted">
+                        @(string.IsNullOrEmpty(Creature.Description)
+                            ? "Описание отсутствует."
+                            : Creature.Description)
+                    </p>
                 </div>
-            </div>
-        }
 
-        @if (Creature.Attacks.Count > 0)
-        {
-            <div class="mt-4">
-                <h3 class="cm-section-title mb-1">Атаки</h3>
-                <div class="text-sm text-gray-700 space-y-1">
-                    @foreach (var attack in Creature.Attacks)
-                    {
-                        @* Строка как в книге: «Ближний бой 60% (30/12), урон 2d6 + БкУ» (стр. 278) *@
-                        <div class="mb-1">
-                            <span class="font-semibold">@attack.Name</span>
-                            <span class="text-gray-600">
-                                @if (attack.SkillValue > 0)
-                                {
-                                    @($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон {FormatDamage(attack)}")
-                                }
-                                else
-                                {
-                                    @* Особая атака без процента решается встречной проверкой или срабатывает сама. *@
-                                    @("без броска, см. описание")
-                                }
-                            </span>
-                            @if (attack.Kind is not CreatureAttackKind.Melee)
+                @if (Creature.SpecialAbilities.Count > 0)
+                {
+                    <div class="mt-4">
+                        <h3 class="cm-section-title mb-1">Особые умения</h3>
+                        <div class="text-sm text-gray-700">
+                            @foreach (var ability in Creature.SpecialAbilities)
                             {
-                                <span class="ml-1">
-                                    <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">@KindLabel(attack.Kind)</Badge>
-                                </span>
-                            }
-                            @if (!string.IsNullOrEmpty(attack.Description))
-                            {
-                                <span class="text-gray-500 block ml-4">@attack.Description</span>
+                                <div class="mb-1"><span class="font-semibold">@ability.Key:</span> @ability.Value</div>
                             }
                         </div>
-                    }
-                </div>
+                    </div>
+                }
+
+                @if (Creature.Skills.Count > 0)
+                {
+                    <div class="mt-4">
+                        <h3 class="cm-section-title mb-1">Навыки</h3>
+                        <div class="text-sm text-gray-700">
+                            @string.Join(", ", Creature.Skills.Select(FormatSkill))
+                        </div>
+                    </div>
+                }
+
+                @if (Creature.Attacks.Count > 0)
+                {
+                    <div class="mt-4">
+                        <h3 class="cm-section-title mb-1">Атаки</h3>
+                        <div class="text-sm text-gray-700 space-y-1">
+                            @foreach (var attack in Creature.Attacks)
+                            {
+                                @* Строка как в книге: «Ближний бой 60% (30/12), урон 2d6 + БкУ» (стр. 278) *@
+                                <div class="mb-1">
+                                    <span class="font-semibold">@attack.Name</span>
+                                    <span class="text-gray-600">
+                                        @if (attack.SkillValue > 0)
+                                        {
+                                            @($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон {FormatDamage(attack)}")
+                                        }
+                                        else
+                                        {
+                                            @* Особая атака без процента решается встречной проверкой или срабатывает сама. *@
+                                            @("без броска, см. описание")
+                                        }
+                                    </span>
+                                    @if (attack.Kind is not CreatureAttackKind.Melee)
+                                    {
+                                        <span class="ml-1">
+                                            <Badge Variant="secondary" Size="sm" Rounded="full" WithBorder="false">@KindLabel(attack.Kind)</Badge>
+                                        </span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(attack.Description))
+                                    {
+                                        <span class="text-gray-500 block ml-4">@attack.Description</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
-        }
-    </div>
-</div>
+        </div>
+    </article>
+}
 
 @code {
     [Parameter] public required Creature Creature { get; set; }
 
     [Parameter] public EventCallback<Creature> OnDelete { get; set; }
+
+    /// <summary>Раскрыт ли полный статблок. Держит страница — раскрытым бывает одно существо.</summary>
+    [Parameter] public bool Expanded { get; set; }
+
+    /// <summary>Тап по плитке или по заголовку раскрытой карточки.</summary>
+    [Parameter] public EventCallback<Creature> OnToggle { get; set; }
 
     private int _imageIndex;
 
@@ -190,6 +233,18 @@
             ("Потеря рассудка", NullIfEmpty(c.SanityLoss))
         ];
         StatLines = [.. lines.Where(l => !string.IsNullOrWhiteSpace(l.Value)).Select(l => (l.Label, l.Value!))];
+    }
+
+    // На плитке нет места для оговорки брони, но и «нет» там, где тварь регенерирует или
+    // не берёт огнестрел, соврало бы: такая броня помечена «особая», подробности — в статблоке.
+    private string TileArmor
+    {
+        get
+        {
+            var c = Creature.CreatureCharacteristics;
+            if (c.Armor > 0) return c.Armor.ToString();
+            return string.IsNullOrWhiteSpace(c.ArmorNote) ? "нет" : "особая";
+        }
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
