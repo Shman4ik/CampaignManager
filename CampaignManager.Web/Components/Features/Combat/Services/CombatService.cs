@@ -261,9 +261,22 @@ public sealed partial class CombatService
 
     // ───────────────────── Броски кубиков ─────────────────────
 
-    public static int RollD100() => RandomNumberGenerator.GetInt32(1, 101);
+    public static int RollD100() => NextInt(1, 101);
 
-    public static int RollDice(int sides) => RandomNumberGenerator.GetInt32(1, sides + 1);
+    public static int RollDice(int sides) => NextInt(1, sides + 1);
+
+    /// <summary>
+    /// Шов для тестов правил (<c>tests/CampaignManager.Rules.Tests</c>): подменяет генератор
+    /// на время одного теста. Значение живёт в <see cref="AsyncLocal{T}" />, поэтому параллельные
+    /// тесты друг другу не мешают, а в приложении оно всегда пустое — бросает
+    /// <see cref="RandomNumberGenerator" />, как и раньше.
+    /// </summary>
+    internal static readonly AsyncLocal<Func<int, int, int>?> RandomOverride = new();
+
+    /// <summary>Целое из [<paramref name="minInclusive" />, <paramref name="maxExclusive" />).</summary>
+    private static int NextInt(int minInclusive, int maxExclusive) =>
+        RandomOverride.Value?.Invoke(minInclusive, maxExclusive)
+        ?? RandomNumberGenerator.GetInt32(minInclusive, maxExclusive);
 
     /// <summary>
     /// Бросок d100 с бонусными и штрафными костями (CoC 7e, стр. 89).
@@ -279,12 +292,12 @@ public sealed partial class CombatService
         var net = Math.Max(0, bonusDice) - Math.Max(0, penaltyDice);
         var extraDice = Math.Abs(net);
 
-        var units = RandomNumberGenerator.GetInt32(0, 10);
+        var units = NextInt(0, 10);
 
         var candidates = new int[extraDice + 1];
         for (var i = 0; i < candidates.Length; i++)
         {
-            var tens = RandomNumberGenerator.GetInt32(0, 10) * 10;
+            var tens = NextInt(0, 10) * 10;
             var value = tens + units;
             candidates[i] = value == 0 ? 100 : value;
         }
