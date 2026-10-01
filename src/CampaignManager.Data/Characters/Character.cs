@@ -34,7 +34,7 @@ public sealed class Character : ICreatedAt, IUpdatedAt
 
     public Guid? PortraitFileId { get; set; }
 
-    /// <summary>Документ листа; тип документа делает T1.7.</summary>
+    /// <summary>Документ листа — <c>Core.Characters.CharacterSheet</c>: <c>CmJson.ReadSheet(Sheet, SheetVersion)</c> / <c>CmJson.Write</c>.</summary>
     public required JsonDocument Sheet { get; set; }
 
     public int SheetVersion { get; set; }
