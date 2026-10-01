@@ -3,7 +3,10 @@
 Creature/monster catalog for Call of Cthulhu 7e (independent entity — not owned by a Campaign or Scenario).
 
 ## Key Services
-- `CreatureService(dbContextFactory, IMemoryCache, logger)` — CRUD + cached lookups.
+- `CreatureService(dbContextFactory, IMemoryCache, identityService, logger)` — CRUD + cached lookups.
+  Правят только Хранитель и администратор — как у оружия (`Weapons/CLAUDE.md`, «Права»):
+  `Create/Update/DeleteCreatureAsync` зовут `EnsureKeeperAsync`, `CreatureCard` получает `CanEdit`,
+  без него «Изменить»/«Удалить» не рисуются. Импорт пишет через те же методы.
 - `CreatureImportService(creatureService, logger)` — обмен бестиарием одним JSON (`{ "creatures": [...] }`,
   голый массив или одно существо). Кнопки «Импорт JSON»/«Экспорт JSON» на `/bestiary`, экспорт одного
   существа — кнопка «JSON» на странице правки. Формат — `Model/CreatureImportDto.cs`; вложенные части —

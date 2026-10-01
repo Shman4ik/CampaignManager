@@ -81,7 +81,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `SpecializationRules` (static) — бонус +10 смежным специализациям. Список навыков, где
   специализации делятся прогрессом, закрытый (Ближний бой, Стрельба, Языки, Выживание) —
   книга прямо противопоставляет им Науку, так что вешать бонус на любую группу нельзя.
-- `OccupationService(dbContextFactory, IMemoryCache, logger)` — occupation catalog (skill point formulas, tags).
+- `OccupationService(dbContextFactory, IMemoryCache, identityService, logger)` — occupation catalog (skill point formulas, tags).
+  Правят и синхронизируют только Хранитель и администратор: каждый метод записи, включая
+  `SyncWithRulebookAsync`, зовёт `EnsureKeeperAsync`; `/occupations` прячет кнопки по `IsKeeper()`.
   `SyncWithRulebookAsync` — апсерт по имени из `Occupation.GetDefaultOccupations()`, за кнопкой
   «Синхронизировать с правилами» на `/occupations`. Это **единственный** способ доставить книжные
   данные в живую базу: миграции нигде не применяются автоматически, а доступ к базе на чтение.

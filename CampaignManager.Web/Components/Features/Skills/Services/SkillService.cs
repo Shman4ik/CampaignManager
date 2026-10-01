@@ -11,11 +11,13 @@ using System.Text.Json;
 namespace CampaignManager.Web.Components.Features.Skills.Services;
 
 /// <summary>
-/// Service for managing skills in the system
+/// Справочник навыков. Читают все вошедшие, правят только Хранитель и администратор —
+/// проверка стоит в каждом методе записи, а не только в разметке страницы.
 /// </summary>
 public sealed class SkillService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<SkillService> logger)
 {
     private const string SkillsCacheKey = "AllSkills";
@@ -217,6 +219,8 @@ public sealed class SkillService(
     /// </summary>
     public async Task<Result<SkillModel>> CreateSkillAsync(SkillModel skill)
     {
+        await identityService.EnsureKeeperAsync("добавление навыка в справочник");
+
         if (string.IsNullOrWhiteSpace(skill.Name))
             return Result<SkillModel>.Fail("Название навыка не может быть пустым");
 
@@ -231,6 +235,8 @@ public sealed class SkillService(
     /// </summary>
     public async Task<Result> UpdateSkillAsync(SkillModel skill)
     {
+        await identityService.EnsureKeeperAsync("изменение навыка в справочнике");
+
         if (string.IsNullOrWhiteSpace(skill.Name))
             return Result.Fail("Название навыка не может быть пустым");
 
@@ -245,6 +251,8 @@ public sealed class SkillService(
     /// </summary>
     public async Task<Result> DeleteSkillAsync(Guid id)
     {
+        await identityService.EnsureKeeperAsync("удаление навыка из справочника");
+
         var success = await CrudServiceHelper.DeleteAsync<SkillModel>(dbContextFactory, cache, SkillsCacheKey, id, logger);
         return success
             ? Result.Ok()

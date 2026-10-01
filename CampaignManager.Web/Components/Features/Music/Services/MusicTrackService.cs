@@ -9,10 +9,13 @@ namespace CampaignManager.Web.Components.Features.Music.Services;
 /// <summary>
 ///     Фонотека Хранителя — каталожный сервис в том же виде, что Items/Spells/Books:
 ///     весь CRUD делегирован в <see cref="CrudServiceHelper" />, чтение кэшируется на 15 минут.
+///     Правят только Хранитель и администратор — проверка в каждом методе записи: страница прячет
+///     кнопки, но импорт и загрузку пачкой можно позвать и в обход неё.
 /// </summary>
 public sealed class MusicTrackService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<MusicTrackService> logger)
 {
     private const string TracksCacheKey = "AllMusicTracks";
@@ -32,6 +35,7 @@ public sealed class MusicTrackService(
 
     public async Task<MusicTrack?> CreateTrackAsync(MusicTrack track)
     {
+        await identityService.EnsureKeeperAsync("добавление трека в фонотеку");
         track.Tags = MusicSource.NormalizeTags(track.Tags);
         var created = await CrudServiceHelper.CreateAsync(dbContextFactory, cache, TracksCacheKey, track, logger);
         if (created is not null) OnLibraryChanged?.Invoke();
@@ -40,6 +44,7 @@ public sealed class MusicTrackService(
 
     public async Task<bool> UpdateTrackAsync(MusicTrack track)
     {
+        await identityService.EnsureKeeperAsync("изменение трека в фонотеке");
         track.Tags = MusicSource.NormalizeTags(track.Tags);
         var updated = await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, TracksCacheKey, track, logger);
         if (updated) OnLibraryChanged?.Invoke();
@@ -48,6 +53,7 @@ public sealed class MusicTrackService(
 
     public async Task<bool> DeleteTrackAsync(Guid id)
     {
+        await identityService.EnsureKeeperAsync("удаление трека из фонотеки");
         var deleted = await CrudServiceHelper.DeleteAsync<MusicTrack>(dbContextFactory, cache, TracksCacheKey, id, logger);
         if (deleted) OnLibraryChanged?.Invoke();
         return deleted;

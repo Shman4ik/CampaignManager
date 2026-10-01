@@ -6,12 +6,14 @@
 
 ## Key Services
 
-- `MusicTrackService(dbContextFactory, IMemoryCache, logger)` — каталожный CRUD в общем виде,
+- `MusicTrackService(dbContextFactory, IMemoryCache, identityService, logger)` — каталожный CRUD в общем виде,
   весь через `Utilities/Services/CrudServiceHelper` с ключом `AllMusicTracks`. Сверху —
   `GetAllTagsAsync()` и `ResolvePoolAsync(tags, trackIds)` (пул сцены).
   Событие **`OnLibraryChanged`** — панель плеера живёт в лэйауте и свой `OnInitializedAsync`
   отрабатывает один раз за circuit, поэтому без подписки первый заведённый трек не показал бы
   её до перезагрузки страницы.
+  Методы записи зовут `EnsureKeeperAsync`: страница `/music` закрыта для игрока только разметкой,
+  а импорт и загрузка пачкой пишут через этот же сервис.
 - `MusicPlaybackService(trackService, logger)` — состояние плеера: что играет, из какого пула,
   что уже звучало. Устроен как `CombatService`/`ChaseService`: событие `OnChange` вместо
   параметров и один снимок под `[PersistentState]`. Зарегистрирован в `Program.cs` и через
