@@ -20,6 +20,11 @@ Entity Framework Core and Auth0 (OpenID Connect) authentication.
 Сессия, которая берёт задачу 2.0, начинает с README: там же статус решений D1–D7. **v1 заморожен**
 (D2): в нём только исправления того, что мешает играть; новое делается сразу в 2.0.
 
+Код 2.0 — `src/`, `tests/CampaignManager.{Core,Server}.Tests`, `tools/`; правила работы с ним —
+[src/CLAUDE.md](src/CLAUDE.md). Всё ниже про `CampaignManager.Web` — это v1. Корневые
+`Directory.Build.props`/`Directory.Packages.props` относятся только к 2.0: проекты v1 исключены
+по имени, их csproj по-прежнему держат версии пакетов сами.
+
 ## Development Commands
 
 ```bash
@@ -72,7 +77,8 @@ don't undo either:
 - Building therefore requires `npx` (and network access on the first run). The Dockerfile copies
   Node into the SDK stage for exactly this reason.
 
-**No test projects exist** in this solution.
+Tests: `tests/CampaignManager.Rules.Tests` pins v1 book rules (T0.2); the 2.0 test projects are
+described in [src/CLAUDE.md](src/CLAUDE.md). `dotnet test` from the root runs all of them.
 
 ## Pull requests
 

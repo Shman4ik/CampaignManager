@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    Razor-компоненты и страницы, дизайн-система (Tailwind), JS-модули. Ходит только в интерфейсы
+    Contracts и в Core — ни в Data, ни в Server (проверяет ArchitectureTests в Server.Tests).
+  -->
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CampaignManager.Core\CampaignManager.Core.csproj" />
+    <ProjectReference Include="..\CampaignManager.Contracts\CampaignManager.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Watch Include="./Styles/tailwind.css" Exclude="./wwwroot/**/*;obj/**/*;bin/**/*" />
+  </ItemGroup>
+
+  <!--
+    wwwroot/styles.css собирается Tailwind на каждой сборке и в git не лежит; сервер отдаёт его
+    как _content/CampaignManager.UI/styles.css. Таргет перенесён из v1 со всеми его оговорками
+    (корневой CLAUDE.md, «Tailwind CSS»):
+    - генерация обязана пройти до ResolveProjectStaticWebAssets — он питается @(Content) и сам
+      висит на BeforeTargets="AssignTargetPaths";
+    - файл добавляется в @(Content) руками: глоб wwwroot/** раскрывается при вычислении проекта,
+      и файл, созданный позже, до статических ассетов не доходит — сборка и деплой проходят,
+      а сайт отдаёт 404 на стили;
+    - и он же убирается из глоба при вычислении: со второй сборки файл уже на диске, глоб его
+      подбирает, Include в таргете добавляет вторую копию, и статические ассеты падают с
+      «Two assets found targeting the same path». Убирать внутри таргета поздно.
+  -->
+  <ItemGroup>
+    <Content Remove="wwwroot\styles.css" />
+  </ItemGroup>
+
+  <Target Name="Tailwind" BeforeTargets="ResolveProjectStaticWebAssets">
+    <Exec Condition="'$(Configuration)' != 'Release'"
+          Command="npx --yes tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css" />
+    <Exec Condition="'$(Configuration)' == 'Release'"
+          EnvironmentVariables="NODE_ENV=production"
+          Command="npx --yes tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css --minify" />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/styles.css')"
+           Text="Tailwind did not produce wwwroot/styles.css." />
+    <ItemGroup>
+      <Content Remove="wwwroot\styles.css" />
+      <Content Include="wwwroot\styles.css" />
+    </ItemGroup>
+  </Target>
+
+</Project>
