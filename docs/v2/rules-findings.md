@@ -126,4 +126,100 @@
 
 ## Погоня и разборщики
 
-_Пока пусто._
+Тесты — `tests/CampaignManager.Rules.Tests/Chase/` и `.../Parsers/`. Где не сказано иное,
+файлы погони — `CampaignManager.Web/Components/Features/Chase/Services/`.
+
+**F-P01 · Уровень успеха от урезанного порога.** `ChaseService.cs:570-574` (помеха),
+`:655-658` (преграда), `ChaseService.Rules.cs:184-186` (водитель с раной), `:372-374` (след),
+`:409-411` (укрытие). Порог трудной и чрезвычайной проверки считается `GetDifficultyThreshold`
+(`ChaseService.cs:1230`) как ½ и ⅕ навыка, и уже от него — `CalculateSuccessLevel(roll, threshold)`.
+Прошёл или нет — верно, но уровень в результате и в журнале занижен: навык 60, трудная
+проверка, бросок 10 → «трудный успех»; навык 100, чрезвычайная, бросок 20 → «обычный».
+Книга (стр. 87–89): уровень — от полного навыка, сложность решает только, хватает ли его;
+общая функция `CalculateSuccessLevel(roll, skill, difficulty)` так и считает.
+Тесты: `ObstacleTests.ResolveHazard_HarderDifficulty_LevelFromCutThreshold`,
+`VehicleTests.ResolveDriverControlCheck_LevelFromHalfSkill`,
+`OptionalRulesTests.ResolveTrackingCheck_LevelFromCutThreshold`.
+
+**F-P02 · «1д6» в помехе — ноль урона.** `ChaseService.cs:613-616` бросает формулу помехи через
+`CombatService.RollDiceFormula`, а тот понимает только латинскую `D`
+(`CombatService.cs:415`, `^([+-]?)(\d*)D(\d+)$`). Вписанная в редактор локации «1д6» молча
+даёт урон 0, кости не бросаются, в журнале урона нет. По книге (стр. 133) провал помехи
+наносит её урон. Тест: `ObstacleTests.ResolveHazard_CyrillicDiceFormula_DealsZero`.
+
+**F-P03 · Удаление участника выше текущего пропускает ход.** `ChaseService.cs:174-180`: индекс
+хода после удаления не сдвигается, поэтому удалили того, кто уже ходил, — ход перескакивает через
+текущего. По книге (стр. 131–132) ход идёт по порядку ЛВК, удаление чужого участника его не
+меняет. Тест: `TurnOrderTests.RemoveParticipant_AboveCurrent_SkipsCurrentTurn`.
+
+**F-P04 · Ход — индекс по отфильтрованному списку активных.** `ChaseService.cs:465-490`:
+`CurrentTurnIndex` указывает в `Participants.Where(IsActive)`. Выбыл уже ходивший (ранен,
+пойман, спрятался) — список сдвигается, и ход прямо посреди действия переходит к следующему.
+Тест: `TurnOrderTests.GetActiveParticipant_ActorAboveDropsOut_TurnJumpsToNext`.
+
+**F-P05 · Отложенное действие переставляет навсегда.** `ChaseService.Rules.cs:684-718` меняет
+участников местами в самом `Participants`, а `NextRound` (`ChaseService.cs:492-498`) порядок по
+ЛВК не восстанавливает. По книге (стр. 132) уступить можно только в этом раунде.
+Тест: `TurnOrderTests.DelayAction_OrderStaysSwappedInNextRound`.
+
+**F-P06 · Транспорт ломает преграду Комплекцией водителя.** `ChaseService.cs:753` берёт
+`participant.BuildValue` (Комплекция персонажа; у НПС за рулём часто 0 → одна кость), а таран —
+`EffectiveBuild`, Комплекцию машины (`ChaseService.Rules.cs:94`). По книге (стр. 135) транспорт
+наносит 1d10 за каждый пункт своей Комплекции. Тесты:
+`ObstacleTests.AttemptDestroyBarrier_VehicleNoRoll_RollsDriverBuildNotVehicleBuild`,
+`ObstacleTests.AttemptDestroyBarrier_VehicleWithoutDriverBuild_RollsOneDie`.
+
+**F-P07 · Остаток урона машины теряется.** `ChaseService.cs:1104-1105` применяет
+`TargetVehicleDamage` (остаток до десятка) только вместе с потерей Комплекции
+(`TargetBuildLoss is > 0`). Удар меньше 10 по целой машине не копится: два тарана по 6 оставляют
+её целой, по книге (стр. 136) — 12 урона, минус 1 Комплекции и 2 в остатке. Отдача атакующему
+(`ChaseService.Rules.cs:105-107`) считается без его собственного остатка и остаток не пишет.
+Тесты: `VehicleTests.ApplyResult_CollisionBelowTen_CarryIsLost`,
+`VehicleTests.ResolveVehicleCollision_Recoil_IgnoresAttackerCarry`.
+
+**F-P08 · Порог Вождения при укрытии — в обход функции.** `ChaseService.Rules.cs:416`:
+`actualRoll <= drivingThreshold`. Скрытность при этом идёт через `CalculateSuccessLevel`.
+Расходится только на 01: по общей функции это всегда критический успех, а инлайн при пороге
+Вождения 0 (навык 0, или до 4 при чрезвычайной сложности) его проваливает. На 96–100 итог
+совпадает: бросок выше порога инлайн и так проваливает, а 100 — крах Скрытности. Тест:
+`OptionalRulesTests.ResolveHide_InVehicle_CriticalFailsDrivingWithZeroThreshold`.
+
+**F-P09 · Встречную ЛВК в погоне нельзя вписать — по коду.** Сервис броски принимает
+(`ChaseService.Rules.cs:641`, это покрыто `TurnOrderTests.ResolveDexterityTie_*`), но кнопка
+«Бросить встречную ЛВК» (`Components/ChaseOptionalRules.razor:209-210`) всегда передаёт
+`null, null` — Хранитель не может вписать броски игроков. Тестом не воспроизводится: это разметка.
+Вторая половина пункта 9 AUDIT — 1d6 раундов починки оружия — живёт в бою
+(`CombatService.cs:1040`), а не в погоне.
+
+**F-P10 · Журнал смены способа передвижения врёт про СКО.** `ChaseService.Rules.cs:510-514`
+берёт СКО из статблока («полёт 20»), если Хранитель её не вписал, но текст записи
+(`:530-532`) смотрит на вписанное значение и сообщает «своей СКО нет — половина обычной».
+По книге (стр. 141) и по самому коду своя СКО важнее половины. Тест:
+`ParticipantTests.ChangeMovementMode_StatBlockSpeed_LogSaysHalf`.
+
+**F-P11 · Предел привыкания считает «1д6», бросок — нет.** `Bestiary/Services/SanityLossFormula.cs:46`
+понимает `[dд]` и для «1/1д6» даёт предел 6, а потеря рассудка бросается
+`CombatService.RollDiceFormula` / `MaximizeDiceFormula` (`CombatService.cs:1470-1472`) — для «1д6»
+это 0, и при провале, и при крахе. Книга (стр. 167): предел — максимум провальной части, та же
+формула, что бросается. Тест: `SanityLossFormulaTests.MaxLoss_CyrillicDice_CountsButRollIsZero`.
+
+**F-P12 · Разборщик урона и бросок формулы понимают разное.** `Utilities/Services/DamageFormulaParser.cs:23-28`
+против `CombatService.RollDiceFormula` (`CombatService.cs:325`): голое число «5» и «1 d 6» с
+пробелами бросок понимает (5 и 1d6), разборщик оставляет неразобранными; русскую «д» — наоборот.
+Одна и та же строка урона даёт разный итог в зависимости от того, разобрана ли она в
+`DamageInfo`. Это частный случай «формулы костей разбираются в пяти местах» (AUDIT, «Кости и
+уровни успеха»). Тесты: `DamageFormulaParserTests.Parse_DisagreesWithRollDiceFormula`,
+`DamageFormulaParserTests.Parse_CyrillicDice_RollsThroughExpression`.
+
+**F-P13 · «Шок» считается разобранным.** `Utilities/Services/DamageFormulaParser.cs:178-192`:
+известный эффект сам по себе делает формулу разобранной, поэтому «Шок» даёт `IsParsed = true`
+с пустым списком костей. Комментарий шага 4 (`:86`) и описание `WeaponStatsParser.cs:12-13`
+обещают, что такая строка остаётся текстом. Противоречие внутри кода, не книги. Тест:
+`DamageFormulaParserTests.Parse_EffectOnly_IsParsedDespiteComment`.
+
+Каталог оружия в файлах репозитория не лежит — только в базе. Все различные значения колонок
+«Дальность» (28), «Атак» (17), «Боезапас» (33) и «Стоимость» (75) вместе с результатом разбора
+сохранились в удалённой миграции `WeaponStatsBackfill` (коммит `9a4e0d7`); по ним идут
+`WeaponStatsParserTests.*_EveryCatalogValue_MatchesBackfill` — текущий разборщик даёт ровно то
+же, что записано в базу. Колонок «Урон» и «Осечка» целиком в файлах нет: осечка проверена по
+порогам из миграции приведения каталога (`8e3de69`), урон — по формам из комментариев и миграций.
