@@ -1,43 +1,35 @@
 @namespace CampaignManager.Web.Components.Shared
 
-<div class="sticky top-0 z-10 cm-card mb-4">
-    <div class="cm-card-header">
-        <div class="flex items-center gap-2">
-            <span class="cm-section-title">@Title</span>
-            <button @onclick="TogglePanel" class="text-gray-500 hover:text-gray-700 transition-colors text-sm">
-                <i class="fas @(IsExpanded ? "fa-chevron-up" : "fa-chevron-down")"></i>
-            </button>
-        </div>
-        <div class="flex gap-2">
-            @* Кнопка сброса выглядит одинаково на всех страницах с фильтрами,
-               поэтому её рисует сама панель — странице достаточно передать OnReset. *@
-            @if (OnReset.HasDelegate && IsExpanded)
-            {
-                <Button Variant="outline-primary" Size="sm" Icon="fa-undo-alt" OnClick="OnReset">Сбросить</Button>
-            }
-            @ActionButtons
-        </div>
-    </div>
+@* Фильтр — одна строка в карточке: поля, флажки и «Сбросить» в конце. Шапки «Фильтры»
+   с кнопкой свернуть больше нет: она съедала полосу высотой с саму строку, а сворачивать
+   однострочную панель незачем. Подписей над полями тоже нет — смысл поля несут placeholder,
+   aria-label и первый пункт селекта («Все типы»).
+   Содержимое — прямые элементы флекс-строки с переносом: страница задаёт им только ширину
+   (поиск — flex-1 min-w-[12rem], селект — w-56 shrink-0). Блок, которому нужна своя строка
+   (чипы тегов), — w-full order-last, тогда «Сбросить» остаётся в первой.
+   Липнет под шапку страницы (top-14 — её 56px), а не к top: 0: под шапкой однострочная
+   панель скрылась бы целиком. revealElement в js/app.js учитывает её высоту сам. *@
+<div class="sticky top-14 z-10 cm-card mb-4">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+        @ChildContent
 
-    @if (IsExpanded)
-    {
-        <div class="cm-card-body">
-            @ChildContent
-        </div>
-    }
+        @* Кнопка сброса выглядит одинаково на всех страницах с фильтрами,
+           поэтому её рисует сама панель — странице достаточно передать OnReset. *@
+        @if (OnReset.HasDelegate || ActionButtons is not null)
+        {
+            <div class="ms-auto flex shrink-0 gap-2">
+                @if (OnReset.HasDelegate)
+                {
+                    <Button Variant="outline-primary" Size="sm" Icon="fa-undo-alt" OnClick="OnReset">Сбросить</Button>
+                }
+                @ActionButtons
+            </div>
+        }
+    </div>
 </div>
 
 @code {
-    [Parameter] public string Title { get; set; } = "Фильтры";
-    [Parameter] public bool IsExpanded { get; set; } = true;
-    [Parameter] public EventCallback<bool> IsExpandedChanged { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? ActionButtons { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
-
-    private async Task TogglePanel()
-    {
-        IsExpanded = !IsExpanded;
-        await IsExpandedChanged.InvokeAsync(IsExpanded);
-    }
 }

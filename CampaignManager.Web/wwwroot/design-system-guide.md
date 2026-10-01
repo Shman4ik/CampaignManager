@@ -131,10 +131,15 @@ is the reference:
 сценариев — собирается из одних и тех же общих компонентов, в этом порядке:
 
 1. `<FilterPanel OnReset="…">` — поиск и селекты **внутри** панели, а не голой строкой над
-   списком. Поле поиска — обычный `cm-input` без иконки-лупы внутри, селекты — тоже
-   `cm-input`. Подпись — `cm-field-label` над полем; в однострочной панели плотного
-   каталога (оружие, предметы, книги, заклинания) вместо неё `placeholder` + `aria-label`.
-   Флажки фильтра — строкой высотой с поле, `label` обнимает чекбокс.
+   списком. Панель — **одна строка** с переносом, на всех страницах одинаковая: без шапки
+   «Фильтры», без сворачивания, «Сбросить» в конце строки. Поля — её прямые дети, ширину
+   задаёт обёртка (`.cm-input` прибит к `width: 100%`): поиск `min-w-[12rem] flex-1`,
+   селект `w-56 shrink-0` (на телефоне `w-full sm:w-56`). Поле поиска — `type="search"`,
+   `cm-input` без иконки-лупы; селекты — тоже `cm-input`. Подписей `cm-field-label` над
+   полями нет: смысл несут `placeholder`, `aria-label` и первый пункт селекта («Все типы»).
+   Флажки фильтра — строкой высотой с поле, `label` обнимает чекбокс. Блок, которому нужна
+   своя строка (чипы тегов в фонотеке), — `w-full order-last`: «Сбросить» остаётся в первой.
+   Панель липнет под шапку страницы (`top-14`) — поиск под рукой при прокрутке длинного списка.
 2. `<LoadingIndicator/>` пока грузится.
 3. `<EmptyState>` вместо списка, когда пусто: основное действие «Добавить …» и, если пусто
    из-за фильтра, «Очистить фильтры» рядом.
@@ -306,6 +311,6 @@ Dangerous action confirmation. Optional type-to-confirm.
 | EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder. Сам является `cm-card` — ставится на место списка, не внутрь другой карточки. В ActionButton: основное действие (`primary`, «Добавить …») и, если пусто из-за фильтра, `secondary` «Очистить фильтры» |
 | LoadingIndicator | Message (по умолчанию «Загрузка…») | Единственный спиннер: своих `animate-spin` на страницах не рисовать |
 | Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
-| FilterPanel | Title, IsExpanded, IsExpandedChanged, OnReset, ActionButtons(RF) | Collapsible filters; OnReset рисует стандартную кнопку «Сбросить» |
+| FilterPanel | ChildContent, OnReset, ActionButtons(RF) | Однострочный липкий фильтр; OnReset рисует стандартную кнопку «Сбросить» |
 | SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
 | InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |
