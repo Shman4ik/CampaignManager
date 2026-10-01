@@ -36,7 +36,7 @@ CSS variables `--color-{palette}-{shade}` available for primary, secondary, acce
 --cm-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05)
 --cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-800))
 --font-family-primary: 'Inter', system-ui, sans-serif
---font-family-serif: 'Bookman Old Style', 'Book Antiqua', Georgia, serif
+--font-family-serif: 'Bitter', Georgia, 'Times New Roman', serif
 ```
 
 ## Typography — Heading Classes

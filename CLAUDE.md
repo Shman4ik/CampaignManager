@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CampaignManager is a tabletop RPG (Call of Cthulhu 7e) management system built with .NET 10 Blazor Server. It manages
 campaigns, characters, scenarios, and game assets (creatures, items, weapons, spells, skills). Uses PostgreSQL with
-Entity Framework Core, Auth0 (OpenID Connect) authentication, and .NET Aspire for orchestration.
+Entity Framework Core and Auth0 (OpenID Connect) authentication.
 
 ## CampaignManager 2.0
 
@@ -26,8 +26,6 @@ Entity Framework Core, Auth0 (OpenID Connect) authentication, and .NET Aspire fo
 # Run the web application (preferred)
 dotnet run --project CampaignManager.Web
 
-# Run via .NET Aspire AppHost
-dotnet run --project CampaignManager.AppHost
 
 # Build
 dotnet build
@@ -228,11 +226,11 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - All interactive components use `@rendermode InteractiveServer`
 - **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
 - Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
-- Design system guide (in Russian) at `wwwroot/design-system-guide.md`
+- Design system guide (in Russian) at `docs/design-system.md`
 - Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, Tabs, etc.
   Страница-список собирается из них в одном порядке (FilterPanel → LoadingIndicator/EmptyState →
   список → Pagination), вкладки — только `<Tabs>`, диалог — только `<Modal>`, свои спиннеры,
-  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `design-system-guide.md`.
+  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `docs/design-system.md`.
 
 #### Уведомления — только `<Alert>`
 
@@ -279,7 +277,7 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
 - Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
   **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
   `cm-btn-error` and `<Button Variant="error">` render different reds.
-- Full details and the class inventory: `wwwroot/design-system-guide.md`.
+- Full details and the class inventory: `docs/design-system.md`.
 
 ### Target device: iPad Pro M2
 
@@ -380,7 +378,7 @@ the .NET 10 circuit persistence stack:
 - **Secondary**: Warm stone brown (#78716C) — backgrounds, accents
 - **Accent**: Muted steel blue (#4B7FAF) — highlights, badges, info
 - **Status**: Success (#2C9D49), Warning (#D97706), Error (#C71D20)
-- **Fonts**: Inter (primary), Bookman Old Style (serif headings), JetBrains Mono (code)
+- **Fonts**: Inter (primary), Bitter (serif headings), JetBrains Mono (code)
 
 ### Naming Conventions
 

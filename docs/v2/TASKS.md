@@ -210,7 +210,7 @@ iPad-вьюпорте.
 
 **Зависит от:** T1.1, D1.
 
-**Входы.** `wwwroot/design-system-guide.md` и `css/design-system.css` v1; корневой `CLAUDE.md`
+**Входы.** `docs/design-system.md` и `css/design-system.css` v1; корневой `CLAUDE.md`
 (каркас страницы, кнопки, Alert, одна карточка, iPad); AUDIT, «Платформа и UI» — мёртвые классы,
 дубли, недостающие компоненты.
 
@@ -568,8 +568,8 @@ origin для аудио, перемотка, жест пользователя 
 
 **Зависит от:** T3.2 + две недели без отката.
 
-**Шаги.** Удалить `CampaignManager.Web`, `CampaignManager.AppHost`/`ServiceDefaults` (D6.2),
-`.ai/`, устаревшие `.github/copilot-instructions.md` и `.github/skills/`. Переписать
+**Шаги.** Удалить `CampaignManager.Web`, `CampaignManager.ServiceDefaults` (D6.2; AppHost, `.ai/`,
+`copilot-instructions.md` и скиллы Aspire уже убраны уборкой репозитория) и `scripts/`. Переписать
 корневой `CLAUDE.md` под 2.0, оставив только общее (iPad, дизайн, стек PR, Auth0, Neon). Снять
 схемы `games` и `identity` — **отдельным шагом владельца**, после свежего бэкапа Neon. Обновить
 память проекта.

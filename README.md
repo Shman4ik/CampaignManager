@@ -8,7 +8,6 @@
 - **PostgreSQL** — база данных, EF Core с JSONB для хранения сложных структур
 - **Tailwind CSS 3** — стилизация с кастомной дизайн-системой
 - **Auth0** (OpenID Connect) — аутентификация: Google-аккаунт или почта с паролем
-- **.NET Aspire** — оркестрация сервисов
 - **Minio** — S3-совместимое хранилище файлов
 - **OpenTelemetry** — observability
 
@@ -23,15 +22,22 @@
 - **Предметы, Оружие, Заклинания, Навыки** — справочники игровых сущностей
 - **NPC** — управление неигровыми персонажами
 
-## Структура проекта
+## CampaignManager 2.0
 
-| Проект | Описание |
+Приложение переписывается: новая схема базы, Blazor WebAssembly поверх HTTP API, позже — мобильное
+приложение на Avalonia. Текущая версия (v1) заморожена до переключения. План, решения и задачи —
+[docs/v2/README.md](docs/v2/README.md).
+
+## Структура репозитория
+
+| Папка | Что там |
 |---|---|
-| **CampaignManager.Web** | Основное Blazor Server приложение |
-| **CampaignManager.AppHost** | .NET Aspire оркестрация |
-| **CampaignManager.ServiceDefaults** | Общая конфигурация (OpenTelemetry, health checks, resilience) |
-
-Архитектура — feature-based vertical slicing: `Components/Features/{Feature}/{Components,Models,Pages,Services}/`.
+| `CampaignManager.Web/` | v1 — Blazor Server приложение; фичи в `Components/Features/{Feature}/` |
+| `CampaignManager.ServiceDefaults/` | OpenTelemetry и health checks для v1 (в 2.0 уходит) |
+| `src/` | проекты 2.0 (появятся с задачи T1.1) |
+| `tests/` | тесты: `CampaignManager.Rules.Tests` — правила книги на коде v1 |
+| `docs/` | план 2.0 (`v2/`), гайд дизайн-системы (`design-system.md`), исходники логотипа (`assets/`) |
+| `scripts/` | вспомогательные скрипты v1 |
 
 ## Запуск
 
@@ -54,11 +60,9 @@
 # Запуск приложения
 dotnet run --project CampaignManager.Web
 
-# Запуск через .NET Aspire
-dotnet run --project CampaignManager.AppHost
-
-# Сборка
+# Сборка и тесты
 dotnet build
+dotnet test
 
 # Миграции базы данных
 dotnet ef migrations add <Name> --project CampaignManager.Web --context AppDbContext
@@ -72,16 +76,12 @@ Tailwind CSS компилируется автоматически при сбо
 
 ## Деплой
 
-Docker-образ собирается и публикуется в GitHub Container Registry через CI/CD pipeline (`.github/workflows/docker-build-deploy.yml`). Автоматический деплой на сервер при push в `master`.
+На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). При push в `master` Docker-образ публикуется в GitHub Container Registry, а тег коммитится в GitOps-репозиторий (`.github/workflows/docker-build-deploy.yml`).
 
 ```bash
 docker pull ghcr.io/shman4ik/campaign-manager:latest
 docker run -p 8080:8080 ghcr.io/shman4ik/campaign-manager:latest
 ```
-
-## API
-
-Swagger UI доступен по адресу `/swagger`.
 
 ## Правовая информация
 
