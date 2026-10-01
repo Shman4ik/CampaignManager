@@ -80,13 +80,23 @@
                     </div>
                 }
 
-                @* Footer link *@
-                <div class="pt-1 border-t border-gray-100">
+                @* Footer: ссылка на справочник и проверка навыка — в строке листа для неё места нет *@
+                <div class="pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
                     <a href="/skills/detail/@SkillModelId"
                        class="text-xs text-primary-600 hover:text-primary-800 hover:underline"
                        @onclick:stopPropagation="true">
                         Подробнее <i class="fas fa-arrow-right text-[9px]"></i>
                     </a>
+                    @if (OnCheck.HasDelegate)
+                    {
+                        <button type="button"
+                                class="cm-btn cm-btn-primary cm-btn-sm"
+                                data-testid="@($"skill-check-{SkillName}")"
+                                @onclick="CheckAsync"
+                                @onclick:stopPropagation="true">
+                            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i> Проверка
+                        </button>
+                    }
                 </div>
             </div>
         }
@@ -107,6 +117,9 @@
     [Parameter] public required string SkillName { get; set; }
     [Parameter] public required Guid SkillModelId { get; set; }
     [Parameter] public int Value { get; set; }
+
+    /// <summary>Кнопка «Проверка» в справке — открыть диалог проверки навыка (Checks/SkillCheckModal).</summary>
+    [Parameter] public EventCallback OnCheck { get; set; }
 
     private bool _isOpen;
     private bool _isLoading;
@@ -152,6 +165,12 @@
     }
 
     private void ClosePopover() => _isOpen = false;
+
+    private async Task CheckAsync()
+    {
+        ClosePopover();
+        await OnCheck.InvokeAsync();
+    }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
