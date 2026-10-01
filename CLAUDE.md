@@ -8,6 +8,18 @@ CampaignManager is a tabletop RPG (Call of Cthulhu 7e) management system built w
 campaigns, characters, scenarios, and game assets (creatures, items, weapons, spells, skills). Uses PostgreSQL with
 Entity Framework Core, Auth0 (OpenID Connect) authentication, and .NET Aspire for orchestration.
 
+## CampaignManager 2.0
+
+Готовится переписывание с новой схемой базы, API и мобильным приложением на Avalonia. Документы:
+
+- [docs/v2/README.md](docs/v2/README.md) — цели, решения, архитектура;
+- [docs/v2/TASKS.md](docs/v2/TASKS.md) — карточки задач для сессий;
+- [docs/v2/SCHEMA.md](docs/v2/SCHEMA.md) — схема и перенос данных;
+- [docs/v2/AUDIT.md](docs/v2/AUDIT.md) — что не так в v1, с доказательствами.
+
+Сессия, которая берёт задачу 2.0, начинает с README: там же статус решений D1–D7. Пока не
+подтверждено D2 («пишем рядом, v1 заморожен»), v1 развивается как обычно.
+
 ## Development Commands
 
 ```bash
