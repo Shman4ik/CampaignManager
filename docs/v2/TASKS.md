@@ -14,6 +14,13 @@
 
 ### T0.1 — Отдельная база для разработки (ветка Neon)
 
+**Сделано 2026-10-01.** Neon-проект `DnD` (`old-wood-199224`): прод — ветка `main`
+(`ep-white-leaf-435379`), разработка — ветка `dev` (`br-dry-sea-a2gytz51`, compute
+`ep-fragrant-frog-a2m4la0x`). `appsettings.Development.json` основного чекаута и MCP `postgres`
+(только чтение) смотрят на `dev`. Освежить `dev` данными прода (dev затирается):
+`npx neonctl@latest branches reset dev --parent --project-id old-wood-199224`; в Git Bash для
+`neonctl api /...` нужен `MSYS_NO_PATHCONV=1`. Ниже — исходная карточка.
+
 **Цель.** Ни одна сессия 2.0 не пишет в боевую базу. Сейчас localhost и прод работают с одной базой
 Neon (`ep-white-leaf-435379…/neondb`, память `postgres-mcp-dev-db`).
 
