@@ -5,6 +5,7 @@ using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
+using CampaignManager.Web.Utilities.Services;
 using Microsoft.AspNetCore.Components;
 
 namespace CampaignManager.Web.Components.Features.Characters.Pages;
@@ -22,6 +23,7 @@ public partial class InvestigatorWizardPage
     [Inject] private InvestigatorFactory Factory { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private ILogger<InvestigatorWizardPage> Logger { get; set; } = default!;
+    [Inject] private IdentityService IdentityService { get; set; } = default!;
 
     /// <summary>Кампания, в которой игрок заводит сыщика.</summary>
     [SupplyParameterFromQuery(Name = "campaignId")]
@@ -55,6 +57,7 @@ public partial class InvestigatorWizardPage
     private SkillsModel _catalog = new();
     private List<OccupationSlot> _slots = [];
     private CampaignPlayer? _campaignPlayer;
+    private bool _isKeeper;
     private bool _eraLocked;
     private bool _loading = true;
     private bool _isBusy;
@@ -87,10 +90,18 @@ public partial class InvestigatorWizardPage
         _ => CharacterKind.PlayerCharacter
     };
 
+    /// <summary>
+    ///     Сыщика некуда положить: в адресе нет кампании или у вошедшего нет в ней места игрока.
+    ///     Проверяется до первого шага — иначе игрок проходил бы все семь и получал отказ на «Создать».
+    /// </summary>
+    private bool MissingPlayerSlot => CreationKind is CharacterKind.PlayerCharacter && _campaignPlayer is null;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            _isKeeper = await IdentityService.IsKeeper();
+
             if (_restoredDraft is not null)
             {
                 _draft = _restoredDraft;

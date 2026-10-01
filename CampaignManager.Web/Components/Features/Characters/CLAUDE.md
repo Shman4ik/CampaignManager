@@ -4,9 +4,12 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 
 ## Key Services
 - `CharacterService(dbContextFactory, identityService, logger, IMemoryCache)` — CRUD.
-  `CreateCharacterAsync` требует явный `CharacterKind` и ровно одного владельца
-  (`campaignPlayerId` / `campaignId` / `scenarioId` — или ничего, тогда НПС попадает в общую
-  библиотеку). Списки: `GetNpcsAsync`, `GetPregenTemplatesAsync`, `GetScenarioPregensAsync`.
+  `CreateCharacterAsync` требует явный `CharacterKind` и владельца, который к нему подходит
+  (`OwnerViolation`, иначе `InvalidOperationException`): лист игрока — **только** с
+  `campaignPlayerId`; преген — с `scenarioId` или без ключей (заготовка), игроку он достаётся
+  бронью; НПС — с `campaignId` или без ключей (общая библиотека). Пустой ключ раньше молча делал
+  лист игрока «библиотечным»: его не показывал ни один список, а читать мог любой вошедший.
+  Списки: `GetNpcsAsync`, `GetPregenTemplatesAsync`, `GetScenarioPregensAsync`.
   Кого считать НПС в списке (вид `Npc`, архив — по просьбе), решает один `Npcs(...)` внутри
   сервиса; `GetKeptCampaignNpcsAsync` — имена НПС всех кампаний текущего Хранителя одним запросом
   и без JSONB (для главной).
@@ -320,7 +323,14 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - **Маршрут именно `/character/wizard`, а не `/character/create/wizard`.** У `CharacterPage` есть
   `@page "/character/create/{Kind}"` со строковым параметром: он перехватил бы любой третий сегмент.
 - Владельца помощник берёт из query (`campaignId`, `scenarioId`, `kind`) — теми же правилами, что и
-  `CharacterPage`: НПС попадает в сценарий связью, преген — полем `ScenarioId`.
+  `CharacterPage`: НПС попадает в сценарий связью, преген — полем `ScenarioId`. `campaignId` у
+  сыщика — кампания, где ищется место игрока, у НПС — кампания-владелец (`CharacterPage.OpenWizard`
+  передаёт выбранного в пикере владельца, иначе НПС из помощника уходил в библиотеку).
+- **Сыщика без места игрока помощник не начинает.** Нет `campaignId` или у вошедшего нет в этой
+  кампании слота — вместо шагов `NoPlayerSlotState`, как и в `CharacterPage` (`MissingPlayerSlot`;
+  туда же попадает `/character/create/{что-угодно}` и ненайденный `/character/{id}`). Раньше оба
+  пути давали заполнить лист, и Хранитель сохранял его ничьим: так появились «Доктор Элиас Уэйн»
+  (смоук-тест помощника на общей базе) и листы с подписью «Unknown».
 - **Любой бросок можно не бросать, а вписать.** За столом кости настоящие, поэтому у каждого броска
   (характеристики, набор варианта 3, проверка ОБР, Удача, 1d10 варианта 6) рядом с кнопкой есть поле
   ввода. Добавляя в помощник новый бросок, оставляй такую же пару — это требование, а не удобство.
@@ -379,6 +389,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   bypass both rules.
 - `GetCharacterByIdAsync` returns `null` both for "does not exist" and for "no access" on purpose — the caller must
   not be able to probe which characters exist.
+- «Ничейный» лист игрока (`Kind = PlayerCharacter` без `CampaignPlayerId`) правило выше считает
+  библиотекой — поэтому такой строки быть не должно вовсе: создание её не пропускает
+  (`OwnerViolation`), а `ReleasePregenAsync` обнуляет ключ только у `Kind = Pregen`.
 - `ReservePregenAsync` deliberately does **not** use that helper: reserving a pregen is a player writing to an
   unbound row, and it is constrained by its own rules (`Kind = Pregen`, ещё не забронирован, привязан к сценарию).
 - Use `identityService.GetCurrentUserEmailAsync()` in authorization paths, never the synchronous

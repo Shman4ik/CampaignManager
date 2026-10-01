@@ -8,17 +8,20 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 
-<PageTitle>@(Character?.PersonalInfo.Name ?? NewCharacterTitle)</PageTitle>
+<PageTitle>@SheetTitle</PageTitle>
 
 <ErrorBoundary @ref="_errorBoundary">
     <ChildContent>
         <!-- Standard page header with in-page navigation -->
-        <PageHeader Title="@(Character?.PersonalInfo.Name ?? NewCharacterTitle)">
+        <PageHeader Title="@SheetTitle">
             <Actions>
                 @if (CurrentKind is not CharacterKind.PlayerCharacter)
                 {
                     <Badge Variant="accent" Size="sm" Rounded="full" WithBorder="false">@CurrentKind.ToRussianString()</Badge>
                 }
+                @* Листа нет — нечего листать и сохранять (см. MissingPlayerSlot). *@
+                @if (!MissingPlayerSlot)
+                {
                     <!-- Adaptive in-page navigation -->
                     <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                         <!-- Mobile dropdown menu (visible on small screens) -->
@@ -112,6 +115,7 @@
                             }
                         </div>
                     </div>
+                }
             </Actions>
         </PageHeader>
 
@@ -157,6 +161,10 @@
                 <div class="flex justify-center p-12">
                     <LoadingIndicator/>
                 </div>
+            }
+            else if (MissingPlayerSlot)
+            {
+                <NoPlayerSlotState IsKeeper="_isKeeper"/>
             }
             else if (Character != null)
             {

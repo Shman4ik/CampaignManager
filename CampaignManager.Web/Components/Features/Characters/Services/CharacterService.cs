@@ -58,10 +58,10 @@ public sealed class CharacterService(
     }
 
     /// <summary>
-    ///     Создаёт лист персонажа. Вид (<paramref name="kind" />) и владелец задаются явно —
-    ///     ровно один из <paramref name="campaignPlayerId" />, <paramref name="campaignId" />,
-    ///     <paramref name="scenarioId" /> или ни одного (НПС в общей библиотеке).
+    ///     Создаёт лист персонажа. Вид (<paramref name="kind" />) и владелец задаются явно и
+    ///     должны сочетаться — см. <see cref="OwnerViolation" />.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Владелец не подходит к виду листа.</exception>
     public async Task<CharacterStorageDto> CreateCharacterAsync(
         Character character,
         CharacterKind kind,
@@ -75,6 +75,10 @@ public sealed class CharacterService(
             var userEmail = await identityService.GetCurrentUserEmailAsync();
             if (string.IsNullOrEmpty(userEmail))
                 throw new UnauthorizedAccessException("User must be authenticated to create a character");
+
+            if (OwnerViolation(kind, campaignPlayerId, campaignId, scenarioId) is { } violation)
+                throw new InvalidOperationException(violation);
+
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
 
             // A character may only be attached to a player slot the caller actually controls, and only a
@@ -127,6 +131,31 @@ public sealed class CharacterService(
             throw;
         }
     }
+
+    /// <summary>
+    ///     Почему новый лист этого вида нельзя отдать такому владельцу; <c>null</c> — можно.
+    ///     <list type="bullet">
+    ///         <item><description>лист игрока — только на место игрока в кампании;</description></item>
+    ///         <item><description>преген — сценарию или общей библиотеке (игроку он достаётся бронью, <see cref="ReservePregenAsync" />);</description></item>
+    ///         <item><description>НПС — кампании или общей библиотеке (в сценарий он попадает связью <c>ScenarioNpc</c>).</description></item>
+    ///     </list>
+    ///     Без этой проверки пустой ключ владельца молча превращал лист игрока в «общую библиотеку»:
+    ///     читать его мог любой вошедший, а в списках он не показывался нигде.
+    /// </summary>
+    private static string? OwnerViolation(CharacterKind kind, Guid? campaignPlayerId, Guid? campaignId, Guid? scenarioId) =>
+        kind switch
+        {
+            CharacterKind.PlayerCharacter when campaignPlayerId is null =>
+                "Лист сыщика создаётся только на место игрока в кампании",
+            CharacterKind.PlayerCharacter when campaignId is not null || scenarioId is not null =>
+                "Лист сыщика принадлежит игроку кампании, а не кампании или сценарию",
+            CharacterKind.Pregen when campaignPlayerId is not null || campaignId is not null =>
+                "Преген принадлежит сценарию или общей библиотеке, игроку он достаётся бронью",
+            CharacterKind.Npc when campaignPlayerId is not null || scenarioId is not null =>
+                "НПС принадлежит кампании или общей библиотеке, в сценарий он добавляется связью",
+            CharacterKind.PlayerCharacter or CharacterKind.Pregen or CharacterKind.Npc => null,
+            _ => $"Неизвестный вид персонажа: {kind}"
+        };
 
     /// <summary>
     ///     Loads a character by id. Returns null when it does not exist or the current user has no access
@@ -656,6 +685,9 @@ public sealed class CharacterService(
 
         if (pregen is null)
             throw new InvalidOperationException("Персонаж не найден");
+        // У листа игрока тот же ключ — освобождение превратило бы его в ничей лист.
+        if (pregen.Kind != CharacterKind.Pregen)
+            throw new InvalidOperationException("Освободить можно только преген");
         if (!pregen.CampaignPlayerId.HasValue)
             throw new InvalidOperationException("Персонаж не забронирован");
 
