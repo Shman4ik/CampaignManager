@@ -81,7 +81,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `SpecializationRules` (static) — бонус +10 смежным специализациям. Список навыков, где
   специализации делятся прогрессом, закрытый (Ближний бой, Стрельба, Языки, Выживание) —
   книга прямо противопоставляет им Науку, так что вешать бонус на любую группу нельзя.
-- `OccupationService(dbContextFactory, IMemoryCache, logger)` — occupation catalog (skill point formulas, tags).
+- `OccupationService(dbContextFactory, IMemoryCache, identityService, logger)` — occupation catalog (skill point formulas, tags).
+  Правят и синхронизируют только Хранитель и администратор: каждый метод записи, включая
+  `SyncWithRulebookAsync`, зовёт `EnsureKeeperAsync`; `/occupations` прячет кнопки по `IsKeeper()`.
   `SyncWithRulebookAsync` — апсерт по имени из `Occupation.GetDefaultOccupations()`, за кнопкой
   «Синхронизировать с правилами» на `/occupations`. Это **единственный** способ доставить книжные
   данные в живую базу: миграции нигде не применяются автоматически, а доступ к базе на чтение.
@@ -404,6 +406,16 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - «Ничейный» лист игрока (`Kind = PlayerCharacter` без `CampaignPlayerId`) правило выше считает
   библиотекой — поэтому такой строки быть не должно вовсе: создание её не пропускает
   (`OwnerViolation`), а `ReleasePregenAsync` обнуляет ключ только у `Kind = Pregen`.
+- **Роль Хранителя — ещё не право на чужой сценарий или кампанию.** Всё, что кладёт лист в сценарий
+  или кампанию либо убирает оттуда, сверяется с правилами самих сценариев (`ScenarioService.Evaluate`,
+  см. `Scenarios/CLAUDE.md`, «Права») по строке из базы: `CreateCharacterAsync` с `campaignId`
+  (её Хранитель или администратор) или `scenarioId`, `CopyPregenToScenarioAsync` (целевой сценарий),
+  `RemovePregenFromScenarioAsync`. `ReleasePregenAsync` снимает бронь только владельцу брони и
+  ведущему сценария (сценарий удалён — Хранителю кампании слота). `ScenarioService` сюда не
+  внедряется — он через `CampaignService` сам зависит от `CharacterService`, — поэтому
+  `Caller`/`Evaluate` у него `internal static`.
+  Правка уже существующего прегена или НПС (`UpdateCharacterAsync`, `SetCharacterStatusAsync`)
+  по-прежнему пускает любого Хранителя — это правило ниже, `CanAccessCharacterAsync`.
 - `ReservePregenAsync` deliberately does **not** use that helper: reserving a pregen is a player writing to an
   unbound row, and it is constrained by its own rules (`Kind = Pregen`, ещё не забронирован, привязан к сценарию).
 - Use `identityService.GetCurrentUserEmailAsync()` in authorization paths, never the synchronous

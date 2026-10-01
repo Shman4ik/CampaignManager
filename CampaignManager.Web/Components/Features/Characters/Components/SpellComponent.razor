@@ -1,6 +1,7 @@
 ﻿@using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Spells.Model
 @using CampaignManager.Web.Components.Features.Spells.Services
+@using CampaignManager.Web.Utilities.Services
 @inject SpellService SpellService
 
 @* Блок всегда рендерится внутри секции листа персонажа, поэтому своей карточки
@@ -279,7 +280,10 @@
 
     private void SelectSpell(Spell spell)
     {
-        newSpell = spell;
+        // Копия, а не сам экземпляр: список пришёл из общего IMemoryCache SpellService, а поля
+        // формы ниже привязаны к newSpell — правка стоимости «для листа» иначе меняла бы
+        // справочник у всех, пока кэш не истечёт. Так же оружие копирует WeaponFactory.
+        newSpell = EntityCloner.Clone(spell);
         suggestedSpells.Clear();
     }
 
