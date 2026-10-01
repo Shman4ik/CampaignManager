@@ -109,8 +109,9 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
   сценария — одно `CampaignPlayerId`); НПС — без `CampaignPlayerId` и `ScenarioId`. Мягче, чем
   `OwnerViolation` при создании, потому что описывает и то, во что строка превращается потом.
   Новый `CharacterKind` без правки ограничения база не примет — это намеренно.
-  Миграция падает, пока в базе есть нарушители: перед `database update` выполняется
-  `docs/fix-character-owners.sql` (разбор найденных в 2026-10 строк — в его шапке).
+  Миграция применена к живой базе 2026-10-01, после переноса семи нарушителей разовым скриптом
+  (`docs/fix-character-owners.sql` из #91, разбор строк — в его шапке; после применения удалён).
+  Новой базе ничего не нужно: ограничение ставится на пустую таблицу.
 - `Character` — composed of `PersonalInfo`, `Characteristics` (STR/DEX/CON/etc with `.Regular`/`.Half`/`.Fifth`), `DerivedAttributes` (HP/MP/Sanity/Luck as `AttributeWithMaxValue`), `Skills` (`SkillsModel` → `SkillGroup[]` → `Skill[]`, each with `.Regular`/`.Half`/`.Fifth`), `State` (`CharacterState` — IsUnconscious, HasSeriousInjury, IsDying, etc.), `Weapons` (`List<Weapon>`), `Spells` (`List<Spell>`), plus `BiographyInfo`, `Equipment`/`EquipmentItem`, `Finances`, `InsanityCondition`.
 - `Occupation : BaseDataBaseEntity, INamedEntity`. Навыки лежат в трёх полях: `OccupationSkills`
   (jsonb `List<string>` — названные книгой навыки), `SkillChoices` (jsonb
