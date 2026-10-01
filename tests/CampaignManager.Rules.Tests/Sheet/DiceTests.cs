@@ -1,5 +1,6 @@
 using CampaignManager.Rules.Tests.Infrastructure;
-using CampaignManager.Web.Components.Features.Characters.Services;
+// Псевдоним: имя Dice занято пространством имён тестов костей боя (CampaignManager.Rules.Tests.Dice).
+using SheetDice = CampaignManager.Web.Components.Features.Characters.Services.Dice;
 
 namespace CampaignManager.Rules.Tests.Sheet;
 
@@ -12,7 +13,7 @@ public sealed class DiceTests
     {
         using var dice = ScriptedRandom.Use(2, 5, 6);
 
-        Assert.Equal(13, Dice.Roll(3, 6));
+        Assert.Equal(13, SheetDice.Roll(3, 6));
         Assert.Equal(0, dice.Remaining);
     }
 
@@ -21,7 +22,7 @@ public sealed class DiceTests
     {
         using var dice = ScriptedRandom.Use(4);
 
-        Assert.Equal(0, Dice.Roll(0, 6));
+        Assert.Equal(0, SheetDice.Roll(0, 6));
         Assert.Equal(1, dice.Remaining);
     }
 
@@ -34,7 +35,7 @@ public sealed class DiceTests
     {
         using var dice = ScriptedRandom.Use(values);
 
-        Assert.Equal(expected, Dice.Percentile());
+        Assert.Equal(expected, SheetDice.Percentile());
     }
 
     [Theory]
@@ -44,7 +45,7 @@ public sealed class DiceTests
     {
         using var dice = ScriptedRandom.Use(values);
 
-        Assert.Equal(expected, Dice.Percentile(bonusDice));
+        Assert.Equal(expected, SheetDice.Percentile(bonusDice));
         Assert.Equal(0, dice.Remaining);
     }
 }
