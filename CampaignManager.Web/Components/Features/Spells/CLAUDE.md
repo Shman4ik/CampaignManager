@@ -54,3 +54,8 @@ Master spell catalog (independent entity).
 
 ## Notes
 - A character's known spells are just `Character.Spells` (`List<Spell>`) — same catalog type, no separate character-specific spell model (unlike Skills/Weapons, which have character-specific wrapper types).
+- **В лист и в форму уходит копия, а не экземпляр каталога**: `GetAllSpellsAsync` отдаёт список из
+  общего `IMemoryCache`. Подсказка «Добавить новое заклинание» на листе (`SpellComponent.SelectSpell`)
+  берёт `EntityCloner.Clone`, иначе поля формы правили бы справочник у всех до истечения кэша.
+- В `@for` по «Другим названиям» (`SpellFormFields`, как и в `BookFormFields`) лямбды берут
+  локальную копию индекса (`var i = index`): переменная цикла к моменту клика равна `Count`.
