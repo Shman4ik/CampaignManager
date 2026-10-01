@@ -20,18 +20,11 @@
                 <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                     <button type="button" @onclick="@(() => OnRemove.InvokeAsync(skill))"
                             aria-label="@($"Удалить навык {skill.Name}")"
-                            class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
-                        <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                            class="cm-tap-target w-5 h-5 text-gray-400 hover:text-error-600 transition-colors duration-200">
+                        <i class="fas fa-times text-xs" aria-hidden="true"></i>
                     </button>
                     <div class="min-w-0 flex-grow text-sm leading-snug">
-                        @if (skill.SkillModelId.HasValue)
-                        {
-                            <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
-                        }
-                        else
-                        {
-                            <span class="font-medium break-normal">@skill.Name</span>
-                        }
+                        @SkillName(skill)
                         <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
                         @if (bonus > 0)
                         {
@@ -39,16 +32,6 @@
                                   title="Смежная специализация перешла порог — этот навык поднимается на @bonus (но не выше самого порога)">+@bonus</span>
                         }
                     </div>
-                    @if (OnCheckRequested.HasDelegate)
-                    {
-                        <button type="button"
-                                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
-                                aria-label="@($"Проверка: {skill.Name}")"
-                                data-testid="@($"skill-check-{skill.Name}")"
-                                @onclick="() => OnCheckRequested.InvokeAsync(skill)">
-                            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
-                        </button>
-                    }
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                     <label class="cm-tap-target">
@@ -85,8 +68,29 @@
     [Parameter] public EventCallback<SkillChangeArgs> OnValueChanged { get; set; }
     [Parameter] public EventCallback<SkillChangeArgs> OnUsedChanged { get; set; }
 
-    /// <summary>Кубик в строке — открыть проверку навыка, как в SkillGroupCard.</summary>
+    /// <summary>Проверка навыка — через имя, как в SkillGroupCard: кнопка в справке или тап по имени.</summary>
     [Parameter] public EventCallback<Skill> OnCheckRequested { get; set; }
+
+    private RenderFragment SkillName(Skill skill) => __builder =>
+    {
+        if (skill.SkillModelId.HasValue)
+        {
+            <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular"
+                              OnCheck="@(OnCheckRequested.HasDelegate ? EventCallback.Factory.Create(this, () => OnCheckRequested.InvokeAsync(skill)) : default)" />
+        }
+        else if (OnCheckRequested.HasDelegate)
+        {
+            <button type="button"
+                    class="cm-tap-target font-medium text-primary-600 hover:text-primary-800 hover:underline"
+                    aria-label="@($"Проверка: {skill.Name}")"
+                    data-testid="@($"skill-check-{skill.Name}")"
+                    @onclick="() => OnCheckRequested.InvokeAsync(skill)">@skill.Name</button>
+        }
+        else
+        {
+            <span class="font-medium break-normal">@skill.Name</span>
+        }
+    };
 
     public record SkillChangeArgs(Skill Skill, ChangeEventArgs Args);
 

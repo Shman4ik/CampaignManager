@@ -33,21 +33,13 @@
                     <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                         <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                 aria-label="@($"Удалить навык {skill.Name}")"
-                                class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
-                            <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                                class="cm-tap-target w-5 h-5 text-gray-400 hover:text-error-600 transition-colors duration-200">
+                            <i class="fas fa-times text-xs" aria-hidden="true"></i>
                         </button>
                         <div class="min-w-0 flex-grow text-sm leading-snug">
-                            @if (skill.SkillModelId.HasValue)
-                            {
-                                <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
-                            }
-                            else
-                            {
-                                <span class="font-medium">@skill.Name</span>
-                            }
+                            @SkillName(skill)
                             <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
                         </div>
-                        @CheckButton(skill)
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                         @* Мифы Ктулху и Средства не отмечают — им место под галочку не положено (стр. 92) *@
@@ -101,18 +93,11 @@
                         <div class="flex items-center gap-2 flex-grow min-w-0 pr-2">
                             <button type="button" @onclick="@(() => RemoveSkill(skill))"
                                     aria-label="@($"Удалить навык {skill.Name}")"
-                                    class="cm-btn cm-btn-sm cm-btn-icon cm-btn-outline-error shrink-0">
-                                <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                                    class="cm-tap-target w-5 h-5 text-gray-400 hover:text-error-600 transition-colors duration-200">
+                                <i class="fas fa-times text-xs" aria-hidden="true"></i>
                             </button>
                             <div class="min-w-0 flex-grow text-sm leading-snug">
-                                @if (skill.SkillModelId.HasValue)
-                                {
-                                    <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular" />
-                                }
-                                else
-                                {
-                                    <span class="font-medium break-normal">@skill.Name</span>
-                                }
+                                @SkillName(skill)
                                 <span class="text-xs text-gray-400 ml-0.5">(@skill.BaseValue)</span>
                                 @{ var specBonus = SpecializationRules.BonusFor(skill, allInGroup, specGroup.Key); }
                                 @if (specBonus > 0)
@@ -121,7 +106,6 @@
                                           title="Смежная специализация перешла порог — этот навык поднимается на @specBonus (но не выше самого порога)">+@specBonus</span>
                                 }
                             </div>
-                            @CheckButton(skill)
                         </div>
                         <div class="flex items-center gap-2 flex-shrink-0 w-auto justify-start">
                             @if (DevelopmentPhaseRules.CanBeChecked(skill.Name))
@@ -190,22 +174,37 @@
     [Parameter] public EventCallback<Skill> OnSkillValueEdited { get; set; }
 
     /// <summary>
-    ///     Кубик в строке навыка — странице открыть диалог проверки (Checks/SkillCheckModal).
-    ///     Тап по имени навыка занят справкой (SkillInfoPopover), поэтому у проверки своя кнопка.
+    ///     Проверка навыка — странице открыть диалог (Checks/SkillCheckModal). Своей кнопки в строке
+    ///     у неё нет, чтобы строки оставались плотными: проверка — кнопка в справке по тапу на имя
+    ///     (SkillInfoPopover), а у навыка вне справочника справки нет, и тап по имени сразу проверяет.
     /// </summary>
     [Parameter] public EventCallback<Skill> OnCheckRequested { get; set; }
 
-    private RenderFragment CheckButton(Skill skill) => __builder =>
+    private RenderFragment SkillName(Skill skill) => __builder =>
     {
-        if (!OnCheckRequested.HasDelegate) return;
-        <button type="button"
-                class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
-                aria-label="@($"Проверка: {skill.Name}")"
-                data-testid="@($"skill-check-{skill.Name}")"
-                @onclick="() => OnCheckRequested.InvokeAsync(skill)">
-            <i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
-        </button>
+        if (skill.SkillModelId.HasValue)
+        {
+            <SkillInfoPopover SkillName="@skill.Name" SkillModelId="@skill.SkillModelId.Value" Value="@skill.Value.Regular"
+                              OnCheck="@CheckCallback(skill)" />
+        }
+        else if (OnCheckRequested.HasDelegate)
+        {
+            <button type="button"
+                    class="cm-tap-target font-medium text-primary-600 hover:text-primary-800 hover:underline"
+                    aria-label="@($"Проверка: {skill.Name}")"
+                    data-testid="@($"skill-check-{skill.Name}")"
+                    @onclick="() => OnCheckRequested.InvokeAsync(skill)">@skill.Name</button>
+        }
+        else
+        {
+            <span class="font-medium break-normal">@skill.Name</span>
+        }
     };
+
+    private EventCallback CheckCallback(Skill skill) =>
+        OnCheckRequested.HasDelegate
+            ? EventCallback.Factory.Create(this, () => OnCheckRequested.InvokeAsync(skill))
+            : default;
 
     private static readonly Dictionary<string, SkillCategory> GroupToCategory = new(StringComparer.OrdinalIgnoreCase)
     {
