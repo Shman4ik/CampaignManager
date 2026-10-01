@@ -1,5 +1,6 @@
 ﻿using CampaignManager.Web.Components.Features.Campaigns.Models;
 using CampaignManager.Web.Components.Features.Characters.Model;
+using CampaignManager.Web.Components.Features.Scenarios.Services;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities.DataBase;
@@ -57,6 +58,46 @@ public sealed class CharacterService(
                || string.Equals(owner.KeeperEmail, userEmail, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Права на сценарий и кампанию, куда кладут преген или НПС. «Хранитель» — это роль, а не право
+    // на чужой сценарий: правила те же, что у самих сценариев, и живут в ScenarioService.Evaluate
+    // (см. Scenarios/CLAUDE.md, «Права»). Сценарий и кампания читаются из базы по ключу.
+
+    private async Task<ScenarioService.Caller?> GetCallerAsync()
+    {
+        var email = await identityService.GetCurrentUserEmailAsync();
+        if (string.IsNullOrWhiteSpace(email)) return null;
+
+        return new ScenarioService.Caller(email.Trim(), await identityService.GetCurrentUserRole());
+    }
+
+    /// <summary>
+    ///     Может ли текущий пользователь вести этот сценарий: шаблон — любой Хранитель, сценарий
+    ///     кампании — её Хранитель или администратор. Несуществующий сценарий — <c>false</c>.
+    /// </summary>
+    private async Task<bool> MayWriteScenarioAsync(AppDbContext dbContext, Guid scenarioId)
+    {
+        var scenario = await dbContext.Scenarios
+            .Where(s => s.Id == scenarioId)
+            .Select(s => new { s.CampaignId, s.CreatorEmail, KeeperEmail = s.Campaign != null ? s.Campaign.KeeperEmail : null })
+            .FirstOrDefaultAsync();
+        if (scenario is null) return false;
+
+        return ScenarioService.Evaluate(await GetCallerAsync(), scenario.CampaignId, scenario.CreatorEmail, scenario.KeeperEmail)
+            .CanEdit;
+    }
+
+    /// <summary>Хранитель этой кампании или администратор. Несуществующая кампания — <c>false</c>.</summary>
+    private async Task<bool> MayWriteCampaignAsync(AppDbContext dbContext, Guid campaignId)
+    {
+        var campaign = await dbContext.Campaigns
+            .Where(c => c.Id == campaignId)
+            .Select(c => new { c.KeeperEmail })
+            .FirstOrDefaultAsync();
+        if (campaign is null) return false;
+
+        return ScenarioService.Evaluate(await GetCallerAsync(), campaignId, creatorEmail: null, campaign.KeeperEmail).CanEdit;
+    }
+
     /// <summary>
     ///     Создаёт лист персонажа. Вид (<paramref name="kind" />) и владелец задаются явно и
     ///     должны сочетаться — см. <see cref="OwnerViolation" />.
@@ -85,6 +126,19 @@ public sealed class CharacterService(
             // keeper may add unbound rows (NPC and pregen templates) to the shared library.
             if (!await CanAccessCharacterAsync(dbContext, campaignPlayerId, CharacterAccess.Write))
                 throw new UnauthorizedAccessException("Недостаточно прав для создания этого персонажа");
+
+            // НПС кампании и преген сценария кладутся только туда, что вызывающий ведёт сам.
+            if (campaignId is { } ownerCampaignId && !await MayWriteCampaignAsync(dbContext, ownerCampaignId))
+            {
+                logger.LogWarning("Denied creating {Kind} in campaign {CampaignId} for {UserEmail}", kind, ownerCampaignId, userEmail);
+                throw new UnauthorizedAccessException("Недостаточно прав для этой кампании");
+            }
+
+            if (scenarioId is { } ownerScenarioId && !await MayWriteScenarioAsync(dbContext, ownerScenarioId))
+            {
+                logger.LogWarning("Denied creating {Kind} in scenario {ScenarioId} for {UserEmail}", kind, ownerScenarioId, userEmail);
+                throw new UnauthorizedAccessException("Недостаточно прав для этого сценария");
+            }
 
             CharacterStorageDto storageDto = new()
             {
@@ -534,6 +588,12 @@ public sealed class CharacterService(
             if (!await CanAccessCharacterAsync(dbContext, source.CampaignPlayerId, CharacterAccess.Write))
                 throw new UnauthorizedAccessException("Недостаточно прав для добавления прегена в сценарий");
 
+            if (!await MayWriteScenarioAsync(dbContext, scenarioId))
+            {
+                logger.LogWarning("Denied copying pregen {PregenId} to scenario {ScenarioId} for {UserEmail}", pregenId, scenarioId, userEmail);
+                throw new UnauthorizedAccessException("Недостаточно прав для этого сценария");
+            }
+
             source.Init();
             source.Status = CharacterStatus.Active;
             source.ScenarioId = scenarioId;
@@ -667,7 +727,8 @@ public sealed class CharacterService(
 
     /// <summary>
     ///     Releases a reserved pregen so it becomes available again.
-    ///     Allowed for: the player who owns the pregen, global Keeper/Admin.
+    ///     Allowed for: the player who owns the reservation and whoever leads the scenario
+    ///     (<see cref="ScenarioService.Evaluate" />: its campaign's keeper or an administrator).
     /// </summary>
     /// <exception cref="UnauthorizedAccessException">User is not authenticated or lacks permission.</exception>
     /// <exception cref="InvalidOperationException">Pregen not found or not reserved.</exception>
@@ -692,11 +753,18 @@ public sealed class CharacterService(
         if (!pregen.CampaignPlayerId.HasValue)
             throw new InvalidOperationException("Персонаж не забронирован");
 
+        // Снять бронь может сам игрок и тот, кто ведёт этот сценарий, — а не любой Хранитель.
+        // Сценарий удалён (у прегена остался только слот игрока) — решает Хранитель кампании слота.
         var isOwner = string.Equals(pregen.CampaignPlayer?.PlayerEmail, userEmail, StringComparison.OrdinalIgnoreCase);
-        var isKeeperOrAdmin = user.Role is PlayerRole.GameMaster or PlayerRole.Administrator;
+        var leadsGame = !isOwner && (pregen.ScenarioId is { } scenarioId
+            ? await MayWriteScenarioAsync(dbContext, scenarioId)
+            : pregen.CampaignPlayer is { } slot && await MayWriteCampaignAsync(dbContext, slot.CampaignId));
 
-        if (!isOwner && !isKeeperOrAdmin)
-            throw new UnauthorizedAccessException("Недостаточно прав для освобождения персонажа");
+        if (!isOwner && !leadsGame)
+        {
+            logger.LogWarning("Denied releasing pregen {PregenId} for {UserEmail}", pregenId, userEmail);
+            throw new UnauthorizedAccessException("Снять бронь может только сам игрок или ведущий этого сценария");
+        }
 
         pregen.CampaignPlayerId = null;
         pregen.LastUpdated = DateTime.UtcNow;
@@ -728,7 +796,8 @@ public sealed class CharacterService(
             if (pregen is null)
                 throw new KeyNotFoundException($"Pregen with ID {pregenId} not found");
 
-            if (!await CanAccessCharacterAsync(dbContext, pregen.CampaignPlayerId, CharacterAccess.Write))
+            if (!await CanAccessCharacterAsync(dbContext, pregen.CampaignPlayerId, CharacterAccess.Write)
+                || (pregen.ScenarioId is { } scenarioId && !await MayWriteScenarioAsync(dbContext, scenarioId)))
             {
                 logger.LogWarning("Denied removal of pregen {CharacterId} from its scenario", pregenId);
                 throw new UnauthorizedAccessException("Недостаточно прав для изменения этого персонажа");
