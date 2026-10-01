@@ -5,9 +5,9 @@
 @inject NavigationManager NavigationManager
 
 @* Список кампаний — из снимка HomeCampaignsPanel (там же отсеяны те, где пользователь уже
-   состоит); сам блок только вступает в кампанию. *@
+   состоит); сам блок только вступает в кампанию. Анониму снимок списка не отдаёт вовсе. *@
 
-@if (Campaigns is { Available.Count: > 0 })
+@if (Campaigns is { IsAuthenticated: true, Available.Count: > 0 })
 {
     <div class="cm-section">
         <div class="cm-section-header">
@@ -30,34 +30,28 @@
                         <span class="text-xs" style="color:var(--color-primary-400);">@campaign.CreatedAt.ToString("dd.MM.yyyy")</span>
                     </div>
                     <div class="cm-card-body" style="display:flex;flex-direction:column;gap:0.5rem;">
-                        <div class="cm-meta">
-                            <span class="cm-meta-label">Хранитель:</span>
-                            <span>@campaign.KeeperEmail</span>
-                        </div>
-
-                        @if (Campaigns.IsAuthenticated)
+                        @if (campaign.KeeperName is { } keeperName)
                         {
-                            <div style="display:flex;flex-direction:column;gap:0.375rem;">
-                                <label class="text-xs font-semibold" style="color:var(--color-primary-600);">Ваше имя</label>
-                                <input type="text"
-                                       class="cm-input cm-input-sm"
-                                       placeholder="Введите имя..."
-                                       value="@UserName"
-                                       @oninput="@(e => UserName = e.Value?.ToString())"/>
-                                <button type="button"
-                                        class="cm-btn cm-btn-primary cm-btn-sm"
-                                        disabled="@(string.IsNullOrWhiteSpace(UserName))"
-                                        @onclick="async () => await JoinCampaignAsync(campaign.Id, UserName ?? string.Empty)">
-                                    <i class="fa-solid fa-right-to-bracket mr-1"></i>Присоединиться
-                                </button>
+                            <div class="cm-meta">
+                                <span class="cm-meta-label">Хранитель:</span>
+                                <span>@keeperName</span>
                             </div>
                         }
-                        else
-                        {
-                            <p class="text-xs text-center" style="color:var(--color-primary-400);">
-                                <a href="/api/account/login" style="color:var(--color-accent-600);">Войдите</a>, чтобы присоединиться
-                            </p>
-                        }
+
+                        <div style="display:flex;flex-direction:column;gap:0.375rem;">
+                            <label class="text-xs font-semibold" style="color:var(--color-primary-600);">Ваше имя</label>
+                            <input type="text"
+                                   class="cm-input cm-input-sm"
+                                   placeholder="Введите имя..."
+                                   value="@UserName"
+                                   @oninput="@(e => UserName = e.Value?.ToString())"/>
+                            <button type="button"
+                                    class="cm-btn cm-btn-primary cm-btn-sm"
+                                    disabled="@(string.IsNullOrWhiteSpace(UserName))"
+                                    @onclick="async () => await JoinCampaignAsync(campaign.Id, UserName ?? string.Empty)">
+                                <i class="fa-solid fa-right-to-bracket mr-1"></i>Присоединиться
+                            </button>
+                        </div>
                     </div>
                 </div>
             }
