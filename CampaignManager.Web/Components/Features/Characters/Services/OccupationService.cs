@@ -6,9 +6,14 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace CampaignManager.Web.Components.Features.Characters.Services;
 
+/// <summary>
+///     Справочник профессий. Читают все вошедшие, правят и синхронизируют с книгой только Хранитель
+///     и администратор — проверка стоит в каждом методе записи, а не только в разметке страницы.
+/// </summary>
 public sealed class OccupationService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<OccupationService> logger)
 {
     private const string OccupationsCacheKey = "AllOccupations";
@@ -19,14 +24,23 @@ public sealed class OccupationService(
     public Task<Occupation?> GetByIdAsync(Guid id) =>
         CrudServiceHelper.GetByIdAsync<Occupation>(dbContextFactory, id, logger);
 
-    public Task<Occupation?> CreateAsync(Occupation occupation) =>
-        CrudServiceHelper.CreateAsync(dbContextFactory, cache, OccupationsCacheKey, occupation, logger);
+    public async Task<Occupation?> CreateAsync(Occupation occupation)
+    {
+        await identityService.EnsureKeeperAsync("добавление профессии в справочник");
+        return await CrudServiceHelper.CreateAsync(dbContextFactory, cache, OccupationsCacheKey, occupation, logger);
+    }
 
-    public Task<bool> UpdateAsync(Occupation occupation) =>
-        CrudServiceHelper.UpdateAsync(dbContextFactory, cache, OccupationsCacheKey, occupation, logger);
+    public async Task<bool> UpdateAsync(Occupation occupation)
+    {
+        await identityService.EnsureKeeperAsync("изменение профессии в справочнике");
+        return await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, OccupationsCacheKey, occupation, logger);
+    }
 
-    public Task<bool> DeleteAsync(Guid id) =>
-        CrudServiceHelper.DeleteAsync<Occupation>(dbContextFactory, cache, OccupationsCacheKey, id, logger);
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        await identityService.EnsureKeeperAsync("удаление профессии из справочника");
+        return await CrudServiceHelper.DeleteAsync<Occupation>(dbContextFactory, cache, OccupationsCacheKey, id, logger);
+    }
 
     /// <summary>
     ///     Что сделала синхронизация справочника с правилами. <c>Untouched</c> — профессии,
@@ -45,6 +59,8 @@ public sealed class OccupationService(
     /// </summary>
     public async Task<SyncResult> SyncWithRulebookAsync()
     {
+        await identityService.EnsureKeeperAsync("синхронизация справочника профессий с книгой правил");
+
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();

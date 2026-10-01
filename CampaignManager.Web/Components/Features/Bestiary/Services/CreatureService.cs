@@ -7,11 +7,13 @@ using Microsoft.Extensions.Caching.Memory;
 namespace CampaignManager.Web.Components.Features.Bestiary.Services;
 
 /// <summary>
-///     Service for managing creatures in the system
+///     Бестиарий. Читают все вошедшие, правят только Хранитель и администратор —
+///     проверка стоит в каждом методе записи, а не только в разметке страницы.
 /// </summary>
 public sealed class CreatureService(
     IDbContextFactory<AppDbContext> dbContextFactory,
     IMemoryCache cache,
+    IdentityService identityService,
     ILogger<CreatureService> logger)
 {
     private const string CreaturesCacheKey = "AllCreatures";
@@ -84,18 +86,27 @@ public sealed class CreatureService(
     /// <summary>
     ///     Creates a new creature, rejecting duplicates by name
     /// </summary>
-    public Task<Creature?> CreateCreatureAsync(Creature creature) =>
-        CrudServiceHelper.CreateAsync(dbContextFactory, cache, CreaturesCacheKey, creature, logger);
+    public async Task<Creature?> CreateCreatureAsync(Creature creature)
+    {
+        await identityService.EnsureKeeperAsync("добавление существа в бестиарий");
+        return await CrudServiceHelper.CreateAsync(dbContextFactory, cache, CreaturesCacheKey, creature, logger);
+    }
 
     /// <summary>
     ///     Updates an existing creature
     /// </summary>
-    public Task<bool> UpdateCreatureAsync(Creature creature) =>
-        CrudServiceHelper.UpdateAsync(dbContextFactory, cache, CreaturesCacheKey, creature, logger);
+    public async Task<bool> UpdateCreatureAsync(Creature creature)
+    {
+        await identityService.EnsureKeeperAsync("изменение существа в бестиарии");
+        return await CrudServiceHelper.UpdateAsync(dbContextFactory, cache, CreaturesCacheKey, creature, logger);
+    }
 
     /// <summary>
     ///     Deletes a creature by its ID
     /// </summary>
-    public Task<bool> DeleteCreatureAsync(Guid id) =>
-        CrudServiceHelper.DeleteAsync<Creature>(dbContextFactory, cache, CreaturesCacheKey, id, logger);
+    public async Task<bool> DeleteCreatureAsync(Guid id)
+    {
+        await identityService.EnsureKeeperAsync("удаление существа из бестиария");
+        return await CrudServiceHelper.DeleteAsync<Creature>(dbContextFactory, cache, CreaturesCacheKey, id, logger);
+    }
 }

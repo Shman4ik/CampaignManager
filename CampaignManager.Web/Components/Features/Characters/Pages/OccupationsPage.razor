@@ -2,19 +2,24 @@
 @using CampaignManager.Web.Components.Features.Characters.Model
 @using CampaignManager.Web.Components.Features.Characters.Services
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 
 @inject OccupationService OccupationService
+@inject IdentityService IdentityService
 @inject ILogger<OccupationsPage> Logger
 @rendermode InteractiveServer
 <PageTitle>Профессии</PageTitle>
 
 <PageHeader Title="Профессии">
     <Actions>
-        <Button Variant="secondary" Size="sm" Icon="fa-book" OnClick="() => _showSyncModal = true">
-            Синхронизировать с правилами
-        </Button>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="OpenAddModal">Добавить</Button>
+        @if (_canEdit)
+        {
+            <Button Variant="secondary" Size="sm" Icon="fa-book" OnClick="() => _showSyncModal = true">
+                Синхронизировать с правилами
+            </Button>
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="OpenAddModal">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -46,13 +51,16 @@
     }
     else if (FilteredOccupations.Count == 0)
     {
-        @* Как у остальных каталогов: основное действие «Добавить» есть всегда, а «Очистить
-           фильтры» — вторичной рядом, когда пусто из-за фильтра. *@
+        @* Как у остальных каталогов: основное действие «Добавить» есть всегда, когда можно править,
+           а «Очистить фильтры» — вторичной рядом, когда пусто из-за фильтра. *@
         <EmptyState IconClass="fa-briefcase"
                     Title="Профессии не найдены"
-                    Message="@(HasActiveFilters ? "Нет профессий, соответствующих критериям поиска." : "Справочник профессий пуст. Добавьте профессию или загрузите книжные кнопкой «Синхронизировать с правилами».")">
+                    Message="@(HasActiveFilters ? "Нет профессий, соответствующих критериям поиска." : _canEdit ? "Справочник профессий пуст. Добавьте профессию или загрузите книжные кнопкой «Синхронизировать с правилами»." : "Справочник профессий пуст.")">
             <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="OpenAddModal">Добавить профессию</Button>
+                @if (_canEdit)
+                {
+                    <Button Variant="primary" Icon="fa-plus" OnClick="OpenAddModal">Добавить профессию</Button>
+                }
                 @if (HasActiveFilters)
                 {
                     <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
@@ -68,10 +76,13 @@
                 <div class="cm-card hover:shadow-md transition-shadow">
                     <div class="cm-card-header">
                         <span class="cm-card-title truncate">@occ.Name</span>
-                        <div class="flex gap-1 flex-shrink-0">
-                            <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => OpenEditModal(occ)">Изменить</Button>
-                            <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => ConfirmDelete(occ)">Удалить</Button>
-                        </div>
+                        @if (_canEdit)
+                        {
+                            <div class="flex gap-1 flex-shrink-0">
+                                <Button Variant="outline-primary" Size="sm" Icon="fa-edit" OnClick="() => OpenEditModal(occ)">Изменить</Button>
+                                <Button Variant="outline-error" Size="sm" Icon="fa-trash-alt" OnClick="() => ConfirmDelete(occ)">Удалить</Button>
+                            </div>
+                        }
                     </div>
                     <div class="cm-card-body">
                         <div class="space-y-1.5 text-sm">
@@ -277,8 +288,15 @@
         }
     }
 
+    /// <summary>
+    ///     Смотрят справочник все, правят и синхронизируют Хранитель и администратор. Это только
+    ///     разметка: границу держит <see cref="OccupationService" />, он сам зовёт <c>EnsureKeeperAsync</c>.
+    /// </summary>
+    private bool _canEdit;
+
     protected override async Task OnInitializedAsync()
     {
+        _canEdit = await IdentityService.IsKeeper();
         await LoadData();
     }
 
@@ -307,6 +325,7 @@
 
     private void OpenAddModal()
     {
+        if (!_canEdit) return;
         _editingOccupation = null;
         _formModel = new OccupationFormModel();
         _showModal = true;
@@ -314,6 +333,7 @@
 
     private void OpenEditModal(Occupation occ)
     {
+        if (!_canEdit) return;
         _editingOccupation = occ;
         _formModel = new OccupationFormModel
         {
@@ -392,6 +412,7 @@
 
     private void ConfirmDelete(Occupation occ)
     {
+        if (!_canEdit) return;
         _occupationToDelete = occ;
         _showDeleteModal = true;
     }
@@ -476,7 +497,7 @@
     private async Task SyncWithRulebook()
     {
         _showSyncModal = false;
-        if (_syncing) return;
+        if (_syncing || !_canEdit) return;
 
         try
         {

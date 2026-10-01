@@ -34,9 +34,11 @@ public sealed class ScenarioService(
     //    администратор.
     // Игрок не правит ничего. Каждый метод записи сверяется со строкой из базы, а не с объектом,
     // который прислала страница: CampaignId и CreatorEmail в нём можно подменить.
+    // Caller и Evaluate — internal ради CharacterService (прегены и НПС сценария и кампании): внедрить
+    // ScenarioService он не может — тот через CampaignService уже зависит от него самого.
 
     /// <summary>Кто пишет: почта и роль текущего пользователя.</summary>
-    private sealed record Caller(string Email, PlayerRole Role)
+    internal sealed record Caller(string Email, PlayerRole Role)
     {
         public bool IsAdministrator => Role is PlayerRole.Administrator;
         public bool IsKeeper => Role is PlayerRole.GameMaster or PlayerRole.Administrator;
@@ -57,8 +59,12 @@ public sealed class ScenarioService(
         return new Caller(email.Trim(), await identityService.GetCurrentUserRole());
     }
 
-    /// <summary>Сами правила. Всё остальное в сервисе только собирает для них данные.</summary>
-    private static ScenarioAccess Evaluate(Caller? caller, Guid? campaignId, string? creatorEmail, string? campaignKeeperEmail)
+    /// <summary>
+    ///     Сами правила. Всё остальное в сервисе только собирает для них данные. Право на кампанию
+    ///     (её Хранитель или администратор) — тот же вызов с <paramref name="campaignId" /> кампании
+    ///     и без автора: так его считает и <see cref="GetWritableCampaignsAsync" />.
+    /// </summary>
+    internal static ScenarioAccess Evaluate(Caller? caller, Guid? campaignId, string? creatorEmail, string? campaignKeeperEmail)
     {
         if (caller is null || !caller.IsKeeper) return ScenarioAccess.None;
         if (caller.IsAdministrator) return new ScenarioAccess(CanEdit: true, CanDelete: true);

@@ -3,9 +3,11 @@
 @using CampaignManager.Web.Components.Features.Bestiary.Model
 @using CampaignManager.Web.Components.Features.Bestiary.Services
 @using CampaignManager.Web.Extensions
+@using CampaignManager.Web.Utilities.Services
 @attribute [Authorize]
 
 @inject CreatureService CreatureService
+@inject IdentityService IdentityService
 @inject NavigationManager NavigationManager
 @inject ILogger<CreaturesPage> Logger
 @inject IJSRuntime JSRuntime
@@ -14,11 +16,15 @@
 
 <PageHeader Title="Существа">
     <Actions>
-        <AuthorizeView Roles="Administrator,GameMaster">
+        @if (_canEdit)
+        {
             <Button Variant="secondary" Size="sm" Icon="fa-file-import" OnClick="ShowImportModal">Импорт JSON</Button>
-        </AuthorizeView>
+        }
         <Button Variant="secondary" Size="sm" Icon="fa-file-export" OnClick="ShowExportModal">Экспорт JSON</Button>
-        <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewCreature">Добавить</Button>
+        @if (_canEdit)
+        {
+            <Button Variant="primary" Size="sm" Icon="fa-plus" OnClick="CreateNewCreature">Добавить</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -55,9 +61,12 @@
     {
         <EmptyState IconClass="fa-skull"
                     Title="Существа не найдены"
-                    Message="@(HasActiveFilters ? "Нет существ, соответствующих критериям поиска." : "В бестиарии пока нет существ. Добавьте первое, чтобы начать.")">
+                    Message="@(HasActiveFilters ? "Нет существ, соответствующих критериям поиска." : _canEdit ? "В бестиарии пока нет существ. Добавьте первое, чтобы начать." : "В бестиарии пока нет существ.")">
             <ActionButton>
-                <Button Variant="primary" Icon="fa-plus" OnClick="CreateNewCreature">Добавить существо</Button>
+                @if (_canEdit)
+                {
+                    <Button Variant="primary" Icon="fa-plus" OnClick="CreateNewCreature">Добавить существо</Button>
+                }
                 @if (HasActiveFilters)
                 {
                     <Button Variant="secondary" Icon="fa-undo-alt" OnClick="ClearFilters">Очистить фильтры</Button>
@@ -76,6 +85,7 @@
                 <CreatureCard @key="creature.Id"
                               Creature="@creature"
                               Expanded="@(creature.Id == Open)"
+                              CanEdit="_canEdit"
                               OnToggle="ToggleCreature"
                               OnDelete="@(c => ConfirmDelete(c))"/>
             }
@@ -97,9 +107,10 @@
                    ConfirmText="Удалить"
                    IconType="error" />
 
-<AuthorizeView Roles="Administrator,GameMaster">
+@if (_canEdit)
+{
     <CreatureImportModal @ref="_importModal" OnImported="LoadData"/>
-</AuthorizeView>
+}
 <CreatureExportModal @ref="_exportModal"/>
 
 
@@ -134,8 +145,15 @@
 
     private bool HasActiveFilters => !string.IsNullOrEmpty(_searchTerm) || _selectedType != "";
 
+    /// <summary>
+    ///     Смотрят бестиарий все, правят Хранитель и администратор. Это только разметка: границу
+    ///     держит <see cref="CreatureService" />, который сам зовёт <c>EnsureKeeperAsync</c>.
+    /// </summary>
+    private bool _canEdit;
+
     protected override async Task OnInitializedAsync()
     {
+        _canEdit = await IdentityService.IsKeeper();
         // После F5 или по ссылке с ?open= раскрытая карточка может быть далеко внизу.
         _scrollTo = Open;
         await LoadData();
@@ -210,7 +228,10 @@
         await LoadData();
     }
 
-    private void ShowImportModal() => _importModal?.Show();
+    private void ShowImportModal()
+    {
+        if (_canEdit) _importModal?.Show();
+    }
 
     private async Task ShowExportModal()
     {
@@ -221,12 +242,14 @@
     // Создание нового существа
     private void CreateNewCreature()
     {
+        if (!_canEdit) return;
         NavigationManager.NavigateTo("/bestiary/creatures/edit");
     }
 
     // Удаление существа
     private void ConfirmDelete(Creature creature)
     {
+        if (!_canEdit) return;
         _creatureToDelete = creature;
         _showDeleteModal = true;
     }

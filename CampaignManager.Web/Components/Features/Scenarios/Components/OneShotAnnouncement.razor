@@ -132,7 +132,7 @@
                                                 }
                                             </div>
                                         </div>
-                                        @if (isMine || (isReserved && _isKeeperOrAdmin))
+                                        @if (isMine || (isReserved && _access.GetValueOrDefault(scenario.Id).CanEdit))
                                         {
                                             <button type="button" class="cm-btn cm-btn-outline-error cm-btn-sm" @onclick="() => OpenReleaseConfirm(pregen)">Освободить</button>
                                         }
@@ -192,7 +192,12 @@
 @code {
     private List<Scenario>? _scenarios;
     private string? _currentUserEmail;
-    private bool _isKeeperOrAdmin;
+
+    /// <summary>
+    ///     Права на каждый анонс: чужую бронь снимает только ведущий сценария
+    ///     (<c>CharacterService.ReleasePregenAsync</c>), а не любой Хранитель.
+    /// </summary>
+    private Dictionary<Guid, ScenarioAccess> _access = [];
     private bool _showConfirm;
     private bool _showReleaseConfirm;
     private CharacterStorageDto? _pendingPregen;
@@ -216,14 +221,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _currentUserEmail = IdentityService.GetCurrentUserEmail();
-        _isKeeperOrAdmin = await IdentityService.IsKeeper();
+        // Асинхронно: синхронный GetCurrentUserEmail в интерактивном рендере отдаёт null,
+        // и своя бронь не узнавалась — «Освободить» у игрока пропадала.
+        _currentUserEmail = await IdentityService.GetCurrentUserEmailAsync();
         await LoadScenariosAsync();
     }
 
     private async Task LoadScenariosAsync()
     {
         _scenarios = await ScenarioService.GetPublishedScenariosAsync();
+        _access = await ScenarioService.GetAccessAsync(_scenarios);
     }
 
     private void NavigateToCharacter(Guid characterId)

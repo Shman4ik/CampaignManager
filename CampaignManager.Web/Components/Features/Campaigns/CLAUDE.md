@@ -3,7 +3,7 @@
 Top-level container a Keeper creates to run a game: players, era, status.
 
 ## Key Services
-- `CampaignService(dbContextFactory, identityService, characterService, httpContextAccessor, logger)`.
+- `CampaignService(dbContextFactory, identityService, characterService, httpContextAccessor, userClaimsCache, logger)`.
   `GetKeeperCampaignsAsync` берёт email через `GetCurrentUserEmailAsync`: его зовёт групповая
   проверка в ширме Хранителя, которая рендерится уже в живом circuit, без пререндера, а
   синхронный `GetCurrentUserEmail` читает `HttpContext` и там может вернуть `null`.
@@ -15,9 +15,13 @@ Top-level container a Keeper creates to run a game: players, era, status.
   островом и грузил `Campaigns → Players → Characters` с полными листами сам (6 SQL на проход, плюс
   по запросу НПС на каждую кампанию Хранителя). Теперь три параллельных запроса: свои кампании (листы —
   только свой активный и все листы кампаний, которые ведёшь), доступные для вступления и НПС своих
-  кампаний (`CharacterService.GetKeptCampaignNpcsAsync`, без JSONB). `AspNetUsers` не читается —
-  почта и роль из claims. Новый блок главной про кампании берёт данные из снимка, а не зовёт сервис
+  кампаний (`CharacterService.GetKeptCampaignNpcsAsync`, без JSONB). Почта и роль — из claims.
+  Новый блок главной про кампании берёт данные из снимка, а не зовёт сервис
   сам; снимок плоский (без EF-навигаций), потому что переезжает из пререндера через `[PersistentState]`.
+- **Главная открыта без входа, поэтому анониму снимок пуст** — ни одного запроса, ни одной кампании.
+  **Почт Хранителей в снимке нет**: `HomeCampaign`/`HomeAvailableCampaign` несут `KeeperName` —
+  `ApplicationUser.UserName` через `UserClaimsCache`, а если имя не задано или само почта (так его
+  заводит вход без `name` у провайдера), `null`, и строка «Хранитель:» просто не рисуется.
 - Сыщики кампании для проверок и боя — `GetCampaignWithCharactersAsync` (игроки со всеми листами):
   так их берут `Combat/Components/ParticipantPicker` и `Checks/Model/CheckInvestigator.FromCampaign`.
 - `CampaignJournalService(dbContextFactory, identityService, logger)` — журнал встреч кампании

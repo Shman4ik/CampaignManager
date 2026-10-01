@@ -8,6 +8,18 @@ CampaignManager is a tabletop RPG (Call of Cthulhu 7e) management system built w
 campaigns, characters, scenarios, and game assets (creatures, items, weapons, spells, skills). Uses PostgreSQL with
 Entity Framework Core, Auth0 (OpenID Connect) authentication, and .NET Aspire for orchestration.
 
+## CampaignManager 2.0
+
+Готовится переписывание с новой схемой базы, API и мобильным приложением на Avalonia. Документы:
+
+- [docs/v2/README.md](docs/v2/README.md) — цели, решения, архитектура;
+- [docs/v2/TASKS.md](docs/v2/TASKS.md) — карточки задач для сессий;
+- [docs/v2/SCHEMA.md](docs/v2/SCHEMA.md) — схема и перенос данных;
+- [docs/v2/AUDIT.md](docs/v2/AUDIT.md) — что не так в v1, с доказательствами.
+
+Сессия, которая берёт задачу 2.0, начинает с README: там же статус решений D1–D7. **v1 заморожен**
+(D2): в нём только исправления того, что мешает играть; новое делается сразу в 2.0.
+
 ## Development Commands
 
 ```bash
@@ -64,34 +76,25 @@ don't undo either:
 
 **No test projects exist** in this solution.
 
-## Pull requests — только стеком
+## Pull requests
 
-Работу, в которой больше одного смыслового изменения, выкладываем **стеком**, а не одним
-большим PR и не пачкой параллельных PR от `master`. Стек — нативные
+Обычно задача — **один PR** от `master`, сразу готовый к ревью, не черновик (draft).
+
+Для **очень крупной** работы, которую тяжело ревьюить одним куском, есть
 [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests)
-GitHub (public preview): каждый слой — своя ветка и свой PR поверх слоя ниже, GitHub рисует
-карту стека в каждом PR и умеет мёржить его частями. Управляет им расширение `gh stack`
-(`gh extension install github/gh-stack`, нужен `gh` ≥ 2.90 — на машине владельца уже стоит).
+GitHub: каждый слой — своя ветка и свой PR поверх слоя ниже. Управляет ими расширение `gh stack`
+(уже стоит на машине владельца): `gh stack init --base master <ветки…>`,
+`gh stack submit --auto` (без `--auto` откроется интерактивный редактор), `gh stack merge <PR>`.
+Это возможность, а не правило: без явной нужды стек не заводить. `gh stack submit` создаёт PR
+черновиками — после него `gh pr ready <номер>`.
 
-- **Один слой — одна тема** (фиксы → дизайн → фичи → рефакторинг), чтобы каждый ревьюился и
-  мёржился отдельно. Правило, которое должно попасть в `master` первым, кладут в нижний слой.
-- Новый стек: `gh stack init --base master <ветка1> <ветка2> …` — существующие ветки
-  подхватываются, отсутствующие создаются; следующий слой — `gh stack add <ветка>`; выложить —
-  `gh stack submit --auto`. Без `--auto` открывается интерактивный редактор, а у агента
-  терминал не интерактивный. Состояние — `gh stack view`.
-- Ветки с уже открытыми PR: `gh stack init` с их именами, затем `gh stack submit --auto` —
-  PR найдутся сами и свяжутся в стек. Дорастить существующий стек готовыми ветками —
-  `gh stack link <номер стека> <ветка|PR> …` (из стека он ничего не удаляет).
-- Правка слоя: `gh stack checkout`/`gh stack bottom` → коммит в его ветку →
-  `gh stack rebase --upstack` (каскадный ребейз всего, что выше) → `gh stack push`.
-  Слои руками по одному не перебазировать и merge-коммитов не делать: `gh stack` требует
-  линейной истории.
-- Мёрж — снизу вверх: `gh stack merge <PR>` сливает все PR до выбранного включительно одной
-  операцией, оставшиеся выше GitHub сам перенацелит на `master`. После — `gh stack sync --prune`.
-- Слои можно делать параллельными агентами в отдельных worktree, но каждый стартует от ветки
-  слоя **ниже**, а в стек их ставит тот, кто собирает стек.
-- CI на PR в репозитории нет: перед `submit` каждый слой собирается (`dotnet build`, 0
-  предупреждений) и проверяется в браузере на iPad-вьюпортах, итог — в описании PR.
+- CI на PR — `.github/workflows/ci.yml`: на каждый PR, включая верхние слои стека (их база —
+  ветка ниже, поэтому фильтра по базе у воркфлоу нет), гоняет
+  `dotnet build CampaignManager.slnx -c Release -warnaserror` с включённым NuGet Audit и
+  `dotnet test`. Новый тестовый проект достаточно добавить в `.slnx` — воркфлоу не трогать.
+  В job поднят `postgres:17`, строка подключения — в `CM_TEST_DB` (решение D7 плана 2.0).
+- CI проверяет только сборку и тесты: изменения UI перед PR всё так же проверяются в браузере
+  на iPad-вьюпортах, итог — в описании PR.
 
 ## Работа в контейнере Claude Code on the web
 

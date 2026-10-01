@@ -8,7 +8,12 @@ namespace CampaignManager.Web.Components.Features.Campaigns.Models;
 ///     <c>CampaignService.GetHomeCampaignsAsync</c> и раздаёт три блока главной.
 ///     <c>UserEmail</c> — почта вошедшего (<c>null</c> — аноним), <c>IsKeeper</c> — роль Хранителя
 ///     или администратора из claims, <c>Mine</c> — кампании, где пользователь состоит игроком (новые
-///     сверху), <c>Available</c> — незавершённые кампании, куда он ещё не вступил.
+///     сверху), <c>Available</c> — незавершённые кампании, куда он ещё не вступил. У анонима оба
+///     списка пусты: главная открыта без входа.
+///     <para>
+///         Почт Хранителей в снимке нет — только отображаемое имя (<c>KeeperName</c>), а если оно не
+///         задано или само похоже на почту, <c>null</c>: адрес чужого человека на главной не нужен.
+///     </para>
 ///     <para>
 ///         Плоский и без EF-навигаций намеренно: снимок переезжает из пререндера в интерактивный
 ///         рендер через <c>[PersistentState]</c> (JSON), а граф <c>Campaign → Players → Characters</c>
@@ -26,8 +31,8 @@ public sealed record HomeCampaigns(
 }
 
 /// <summary>
-///     Кампания пользователя на главной. <c>KeptByMe</c> — пользователь Хранитель именно этой
-///     кампании; <c>MyCharacter</c> — его активный лист в ней. <c>Players</c> (игроки со всеми
+///     Кампания пользователя на главной. <c>KeeperName</c> — имя Хранителя, только у чужих кампаний.
+///     <c>KeptByMe</c> — пользователь Хранитель именно этой кампании; <c>MyCharacter</c> — его активный лист в ней. <c>Players</c> (игроки со всеми
 ///     листами) и <c>Npcs</c> (НПС кампании — листы с <c>CampaignId</c>, а не слоты игроков)
 ///     заполнены только у кампаний, которые пользователь ведёт; у чужих они пусты.
 /// </summary>
@@ -35,7 +40,7 @@ public sealed record HomeCampaign(
     Guid Id,
     string Name,
     CampaignStatus Status,
-    string? KeeperEmail,
+    string? KeeperName,
     bool KeptByMe,
     int PlayerCount,
     HomeCharacter? MyCharacter,
@@ -54,4 +59,4 @@ public sealed record HomeCharacter(
     CharacterStatus Status);
 
 /// <summary>Кампания, в которую можно вступить.</summary>
-public sealed record HomeAvailableCampaign(Guid Id, string Name, DateTimeOffset CreatedAt, string? KeeperEmail);
+public sealed record HomeAvailableCampaign(Guid Id, string Name, DateTimeOffset CreatedAt, string? KeeperName);

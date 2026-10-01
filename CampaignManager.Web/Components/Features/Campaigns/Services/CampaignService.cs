@@ -4,6 +4,7 @@ using CampaignManager.Web.Components.Features.Characters.Services;
 using CampaignManager.Web.Components.Shared.Model;
 using CampaignManager.Web.Model;
 using CampaignManager.Web.Utilities;
+using CampaignManager.Web.Utilities.Authorization;
 using CampaignManager.Web.Utilities.DataBase;
 using CampaignManager.Web.Utilities.Services;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class CampaignService(
     IdentityService identityService,
     CharacterService characterService,
     IHttpContextAccessor httpContextAccessor,
+    UserClaimsCache userClaimsCache,
     ILogger<CampaignService> logger)
 {
     /// <summary>
@@ -25,19 +27,23 @@ public sealed class CampaignService(
     ///         <c>Campaigns → Players → Characters</c> с полными листами (два SQL на вызов, шесть на
     ///         проход), плюс по запросу НПС на каждую кампанию Хранителя. Теперь три независимых
     ///         запроса идут параллельно: свои кампании (листы — только те, что показываются), доступные
-    ///         для вступления и НПС своих кампаний без JSONB. Строку <c>AspNetUsers</c> не читаем
-    ///         вовсе: почта и роль есть в claims.
+    ///         для вступления и НПС своих кампаний без JSONB. Почта и роль вошедшего — из claims;
+    ///         <c>AspNetUsers</c> читается только ради имён чужих Хранителей, и то через
+    ///         <see cref="UserClaimsCache" />.
+    ///     </para>
+    ///     <para>
+    ///         Анониму — пустой снимок без единого запроса: главная открыта без входа, а список
+    ///         кампаний раньше показывал ему и названия, и почты Хранителей.
     ///     </para>
     /// </summary>
     public async Task<HomeCampaigns> GetHomeCampaignsAsync()
     {
         var email = await identityService.GetCurrentUserEmailAsync();
         var emailLower = email?.ToLower();
+        if (emailLower is null)
+            return new HomeCampaigns(null, false, [], []);
 
         var availableTask = GetAvailableForAsync(emailLower);
-        if (emailLower is null)
-            return new HomeCampaigns(null, false, [], await availableTask);
-
         var mineTask = GetMineAsync(emailLower);
         var isKeeper = await identityService.IsKeeper();
         var npcsTask = isKeeper
@@ -96,6 +102,8 @@ public sealed class CampaignService(
                 })
                 .ToListAsync();
 
+            var keeperNames = await GetKeeperNamesAsync(rows.Where(c => !c.KeptByMe).Select(c => c.KeeperEmail));
+
             return
             [
                 .. rows.Select(c =>
@@ -114,7 +122,7 @@ public sealed class CampaignService(
                         c.Id,
                         c.Name,
                         c.Status,
-                        c.KeeperEmail,
+                        c.KeptByMe ? null : KeeperName(keeperNames, c.KeeperEmail),
                         c.KeptByMe,
                         c.Players.Count,
                         myCharacter,
@@ -130,23 +138,22 @@ public sealed class CampaignService(
         }
     }
 
-    /// <summary>Незавершённые кампании, в которых пользователя ещё нет (анониму — все незавершённые).</summary>
-    private async Task<List<HomeAvailableCampaign>> GetAvailableForAsync(string? emailLower)
+    /// <summary>Незавершённые кампании, в которых пользователя ещё нет.</summary>
+    private async Task<List<HomeAvailableCampaign>> GetAvailableForAsync(string emailLower)
     {
         try
         {
             await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-            var query = dbContext.Campaigns
+            var rows = await dbContext.Campaigns
                 .AsNoTracking()
-                .Where(c => c.Status != CampaignStatus.Completed);
-
-            if (emailLower is not null)
-                query = query.Where(c => !c.Players.Any(p => p.PlayerEmail.ToLower() == emailLower));
-
-            return await query
+                .Where(c => c.Status != CampaignStatus.Completed
+                            && !c.Players.Any(p => p.PlayerEmail.ToLower() == emailLower))
                 .OrderByDescending(c => c.CreatedAt)
-                .Select(c => new HomeAvailableCampaign(c.Id, c.Name, c.CreatedAt, c.KeeperEmail))
+                .Select(c => new { c.Id, c.Name, c.CreatedAt, c.KeeperEmail })
                 .ToListAsync();
+
+            var keeperNames = await GetKeeperNamesAsync(rows.Select(c => c.KeeperEmail));
+            return [.. rows.Select(c => new HomeAvailableCampaign(c.Id, c.Name, c.CreatedAt, KeeperName(keeperNames, c.KeeperEmail)))];
         }
         catch (Exception ex)
         {
@@ -154,6 +161,28 @@ public sealed class CampaignService(
             return [];
         }
     }
+
+    /// <summary>
+    ///     Отображаемые имена Хранителей (<c>ApplicationUser.UserName</c>) по их почтам — через кэш
+    ///     claims: Хранителей на главной единицы, и их строки там почти всегда уже лежат.
+    /// </summary>
+    private async Task<Dictionary<string, string>> GetKeeperNamesAsync(IEnumerable<string?> keeperEmails)
+    {
+        Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var email in keeperEmails.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var name = (await userClaimsCache.GetAsync(email))?.DisplayName?.Trim();
+            // Имя по умолчанию — почта (так его заводит вход, если провайдер не прислал name).
+            // Её не показываем: ради этого имя и подставляется.
+            if (!string.IsNullOrEmpty(name) && !name.Contains('@'))
+                names[email] = name;
+        }
+
+        return names;
+    }
+
+    private static string? KeeperName(Dictionary<string, string> names, string? keeperEmail) =>
+        keeperEmail is not null && names.TryGetValue(keeperEmail, out var name) ? name : null;
 
     /// <summary>
     ///     Retrieves a campaign player associated with the current user if they are authenticated.
