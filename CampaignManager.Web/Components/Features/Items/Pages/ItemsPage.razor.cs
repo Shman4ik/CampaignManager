@@ -35,8 +35,6 @@ public partial class ItemsPage
     // игроку кнопки, которые всё равно откажут.
     private bool canEdit;
 
-    private bool isSearchPanelVisible = true;
-
     // List to hold all items fetched from the service
     private List<Item>? items; // Nullable to indicate loading state
     private List<string>? itemTypes; // Available item types
