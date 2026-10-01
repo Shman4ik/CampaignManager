@@ -21,7 +21,7 @@ General equipment/item catalog (independent entity).
 имеет смысл вести парой — расхождения здесь всегда были не замыслом, а недоделкой.
 Разметку списка держит `Components/ItemsListView.razor`, страница отвечает за фильтры
 и модалки. Страницу, сортировку и раскрытую строку держит общий
-`Shared/Model/CatalogListState<Item>` (см. `design-system-guide.md`, «Каталог»).
+`Shared/Model/CatalogListState<Item>` (см. `docs/design-system.md`, «Каталог»).
 
 - Колонки: `Название · Тип · Описание · действия`. Их четыре, поэтому таблица
   помещается и в портрет iPad — порог `md` (768), а не `xl`, как у оружия с его

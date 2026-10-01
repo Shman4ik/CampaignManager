@@ -70,7 +70,7 @@ Creature/monster catalog for Call of Cthulhu 7e (independent entity — not owne
   в `ScenarioService`) переносит их вместе с навыками — раньше навыки при добавлении в сценарий терялись.
 
 ## Страница каталога `/bestiary`
-- Каркас общий для каталогов (см. «Каталог» в `wwwroot/design-system-guide.md`): `FilterPanel`,
+- Каркас общий для каталогов (см. «Каталог» в `docs/design-system.md`): `FilterPanel`,
   `LoadingIndicator`, `EmptyState`, `Pagination`. Фильтры сбрасывают страницу на первую.
 - По умолчанию страница — **галерея плиток** (`.cr-grid` в `CreaturesPage.razor.css`, `auto-fill`
   по 13rem: пять колонок в альбоме iPad, четыре в портрете). Плитка — обложка 4:5, имя поверх,
