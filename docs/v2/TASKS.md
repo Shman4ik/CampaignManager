@@ -86,6 +86,18 @@ Neon (`ep-white-leaf-435379…/neondb`, память `postgres-mcp-dev-db`).
 
 ### T1.1 — Каркас решения 2.0
 
+**Сделано 2026-10-01.** Проекты `src/` (Core, Contracts, ApiClient, Data, Server, UI, Web.Client),
+`tests/CampaignManager.{Core,Server}.Tests`, `tools/CampaignManager.Migrate`; `/dev/ping` проходит
+до ветки Neon `dev` и проверен на iPad 1366×1024 и 1024×1366, в том числе обрезанная Release-сборка.
+Правила работы с кодом 2.0 и найденные по ходу грабли — [src/CLAUDE.md](../../src/CLAUDE.md).
+Отличия от карточки:
+- корневые `Directory.*.props` для проектов v1 выключены по имени — Dockerfile v1 делает `COPY . .`;
+- Tailwind пока v3 без токенов: выбор v3/v4 и дизайн-система — T1.6;
+- `/` — заглушка со ссылкой на `/dev/ping` (главную делает T2.2);
+- в `Server.Tests`, кроме архитектуры, — тесты платформы: `/health` вне Development, ProblemDetails
+  на неизвестный маршрут API, 404 со страницей, отсутствие пререндера, статическая `/Error`, ping
+  на Postgres из `CM_TEST_DB`.
+
 **Цель.** Пустые, но связанные проекты из README («Архитектура»), через которые проходит один
 настоящий запрос: страница → `ApiClient` → API → `Data` → Postgres.
 

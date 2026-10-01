@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    @* favicon — с прозрачными углами; apple-touch-icon — глухой квадрат без скругления:
+       iOS скругляет иконку на домашнем экране сам, а прозрачность заливает чёрным. *@
+    <link rel="icon" type="image/png" sizes="32x32" href="@Assets["favicon-32.png"]" />
+    <link rel="icon" type="image/png" sizes="64x64" href="@Assets["favicon.png"]" />
+    <link rel="apple-touch-icon" sizes="180x180" href="@Assets["apple-touch-icon.png"]" />
+    <ResourcePreloader />
+    <link rel="stylesheet" href="@Assets["_content/CampaignManager.UI/styles.css"]" />
+    <link rel="stylesheet" href="@Assets["CampaignManager.Server.styles.css"]" />
+    <ImportMap />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    @* Пререндера нет (D1), поэтому до загрузки WebAssembly страница была бы пустой.
+       Заглушку прячет CSS, как только отрисовалась оболочка (Styles/tailwind.css в UI). *@
+    <div id="app-loading" class="flex min-h-screen items-center justify-center text-slate-500">Загрузка…</div>
+    <Routes @rendermode="PageRenderMode" />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+</html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = null!;
+
+    // Всё приложение — WebAssembly без пререндера (D1). Статически сервер рендерит только
+    // страницы с [ExcludeFromInteractiveRouting]: страницу ошибки, которой нельзя зависеть
+    // от того, загрузится ли клиент.
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.AcceptsInteractiveRouting() ? new InteractiveWebAssemblyRenderMode(prerender: false) : null;
+}
