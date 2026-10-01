@@ -1,3 +1,4 @@
+using CampaignManager.Data.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,15 +10,23 @@ public static class CmDatabase
     public const string ConnectionStringName = "DefaultConnection";
 
     /// <summary>
-    /// Настройки контекста — одни для сервера, <c>dotnet ef</c> и тестов.
+    /// Настройки контекста — одни для сервера, <c>dotnet ef</c>, переноса и тестов.
     /// Журнал миграций — свой, <c>cm.__ef_migrations_history</c>: общий <c>public</c> v1 делит
     /// между двумя контекстами, и чистка «чужих» строк в нём уже ломала <c>database update</c>.
+    /// Имена — <c>snake_case</c> (SCHEMA, правило 4), поэтому сырой SQL пишется без кавычек.
     /// </summary>
-    public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder options, string connectionString) =>
-        options.UseNpgsql(connectionString,
-            npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", CmDbContext.Schema));
+    public static DbContextOptionsBuilder Configure(
+        DbContextOptionsBuilder options,
+        string connectionString,
+        TimeProvider? timeProvider = null) =>
+        options
+            .UseNpgsql(connectionString,
+                npgsql => npgsql.MigrationsHistoryTable("__ef_migrations_history", CmDbContext.Schema))
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(new TimestampsInterceptor(timeProvider ?? TimeProvider.System));
 
     /// <summary>Контекст на запрос (scoped): в API, в отличие от circuit v1, фабрика не нужна.</summary>
     public static IServiceCollection AddCmData(this IServiceCollection services, string connectionString) =>
-        services.AddDbContext<CmDbContext>(options => Configure(options, connectionString));
+        services.AddDbContext<CmDbContext>((provider, options) =>
+            Configure(options, connectionString, provider.GetService<TimeProvider>()));
 }
