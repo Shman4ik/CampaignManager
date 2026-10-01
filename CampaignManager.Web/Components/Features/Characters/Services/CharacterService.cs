@@ -140,7 +140,8 @@ public sealed class CharacterService(
     ///         <item><description>НПС — кампании или общей библиотеке (в сценарий он попадает связью <c>ScenarioNpc</c>).</description></item>
     ///     </list>
     ///     Без этой проверки пустой ключ владельца молча превращал лист игрока в «общую библиотеку»:
-    ///     читать его мог любой вошедший, а в списках он не показывался нигде.
+    ///     читать его мог любой вошедший, а в списках он не показывался нигде. Ту же границу, чуть
+    ///     мягче, держит база — CHECK <c>CK_Characters_Owner</c> (см. <c>AppDbContext</c>).
     /// </summary>
     private static string? OwnerViolation(CharacterKind kind, Guid? campaignPlayerId, Guid? campaignId, Guid? scenarioId) =>
         kind switch

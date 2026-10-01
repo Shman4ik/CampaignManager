@@ -103,6 +103,14 @@ Player character sheets for Call of Cthulhu 7e, persisted as JSONB via `Characte
 - `CharacterStorageDto.Kind` (`CharacterKind`: `PlayerCharacter` / `Pregen` / `Npc`) — **единственный**
   признак вида персонажа, обычная колонка. Не выводить вид из статуса, из набора внешних ключей или
   из полей внутри JSONB: ровно так эта модель и запуталась до упрощения.
+- **Владельца к виду привязывает база** — CHECK `CK_Characters_Owner` (`AppDbContext`, миграция
+  `AddCharacterOwnerCheck`): сыщик — только с `CampaignPlayerId` и без двух других ключей; преген —
+  без `CampaignId` (забронированный держит и `ScenarioId`, и `CampaignPlayerId`, а после удаления
+  сценария — одно `CampaignPlayerId`); НПС — без `CampaignPlayerId` и `ScenarioId`. Мягче, чем
+  `OwnerViolation` при создании, потому что описывает и то, во что строка превращается потом.
+  Новый `CharacterKind` без правки ограничения база не примет — это намеренно.
+  Миграция падает, пока в базе есть нарушители: перед `database update` выполняется
+  `docs/fix-character-owners.sql` (разбор найденных в 2026-10 строк — в его шапке).
 - `Character` — composed of `PersonalInfo`, `Characteristics` (STR/DEX/CON/etc with `.Regular`/`.Half`/`.Fifth`), `DerivedAttributes` (HP/MP/Sanity/Luck as `AttributeWithMaxValue`), `Skills` (`SkillsModel` → `SkillGroup[]` → `Skill[]`, each with `.Regular`/`.Half`/`.Fifth`), `State` (`CharacterState` — IsUnconscious, HasSeriousInjury, IsDying, etc.), `Weapons` (`List<Weapon>`), `Spells` (`List<Spell>`), plus `BiographyInfo`, `Equipment`/`EquipmentItem`, `Finances`, `InsanityCondition`.
 - `Occupation : BaseDataBaseEntity, INamedEntity`. Навыки лежат в трёх полях: `OccupationSkills`
   (jsonb `List<string>` — названные книгой навыки), `SkillChoices` (jsonb
