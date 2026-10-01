@@ -1,0 +1,71 @@
+# Сборка и тесты на каждый PR. Деплой — отдельно, в docker-build-deploy.yml.
+name: CI
+
+on:
+  # Без фильтра по базе: у верхних слоёв стека (gh stack) база — ветка слоя ниже, а не master,
+  # и с `branches: [master]` они остались бы без проверки.
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # Интеграционные тесты 2.0 (решение D7 в docs/v2/README.md) берут базу отсюда, а без
+      # переменной пропускаются. Юнит-тестам контейнер не нужен, но и не мешает.
+      CM_TEST_DB: Host=localhost;Port=5432;Database=campaignmanager_test;Username=postgres;Password=postgres
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: campaignmanager_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Версия явно, а не из global.json: setup-dotnet по нему с rollForward поставил бы
+      # не ту мажорную версию, а все проекты — net10.0.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # Tailwind собирается MSBuild-таргетом через npx. Версия — та же, что в Dockerfile.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # Lock-файлов нет, поэтому кэш setup-dotnet (cache: true) недоступен — ключ по csproj.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', 'NuGet.config', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # NuGet Audit не глушим: уязвимый пакет при -warnaserror должен ронять PR.
+      - name: Build
+        run: dotnet build CampaignManager.slnx -c Release -warnaserror
+
+      # Без аргумента: dotnet test сам найдёт решение и все тестовые проекты в нём,
+      # и при VSTest, и при Microsoft.Testing.Platform.
+      - name: Test
+        run: dotnet test -c Release --no-build
