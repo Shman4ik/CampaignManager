@@ -61,10 +61,14 @@ Top-level container a Keeper creates to run a game: players, era, status.
 
 ## Владение персонажами
 `CharacterStorageDto` (JSONB-обёртка листа) лежит в общем `CampaignManager.Web/Model/`, а кто им
-владеет, описывает ровно один ключ:
+владеет, описывает ключ, положенный его виду (единственное исключение — забронированный преген:
+у него и `ScenarioId`, и `CampaignPlayerId`):
 - `CampaignPlayerId` — лист игрока в этой кампании (`Kind = PlayerCharacter`, либо забронированный преген);
+  у листа игрока он обязателен — без него лист читается как общая библиотека;
 - `CampaignId` — НПС кампании (`Kind = Npc`); `null` — НПС из общей библиотеки, доступный везде;
 - `ScenarioId` — преген, созданный для сценария (см. `Scenarios/CLAUDE.md`).
+
+Сочетания держит CHECK `CK_Characters_Owner` — подробности в `Characters/CLAUDE.md`.
 
 НПС кампании **не занимает слот игрока**: на главной их отдаёт
 `CharacterService.GetKeptCampaignNpcsAsync` (все НПС кампаний Хранителя одним запросом), а не

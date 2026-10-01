@@ -115,7 +115,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Настройка Character
         modelBuilder.Entity<CharacterStorageDto>(entity =>
         {
-            entity.ToTable("Characters");
+            // Владелец по виду листа. При создании то же правило строже проверяет
+            // CharacterService.OwnerViolation; здесь — всё, что может оказаться в строке потом:
+            // забронированный преген держит и сценарий, и место игрока, а после удаления сценария
+            // (SetNull ниже) — одно место игрока. Лист игрока без места игрока не допускается
+            // никогда: правило доступа приняло бы его за общую библиотеку.
+            // Выражение — одной строкой: перевод строки внутри попал бы в снимок модели, и
+            // checkout с другими окончаниями строк видел бы несохранённое изменение схемы.
+            entity.ToTable("Characters", t => t.HasCheckConstraint(
+                "CK_Characters_Owner",
+                """("Kind" = 'PlayerCharacter' AND "CampaignPlayerId" IS NOT NULL AND "CampaignId" IS NULL AND "ScenarioId" IS NULL)"""
+                + """ OR ("Kind" = 'Pregen' AND "CampaignId" IS NULL)"""
+                + """ OR ("Kind" = 'Npc' AND "CampaignPlayerId" IS NULL AND "ScenarioId" IS NULL)"""));
 
             // Связь с CampaignPlayer (игрок в контексте кампании)
             entity.HasOne(c => c.CampaignPlayer)
