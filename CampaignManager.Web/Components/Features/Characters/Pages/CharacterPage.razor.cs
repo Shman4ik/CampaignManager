@@ -66,8 +66,28 @@ public partial class CharacterPage
         _ => "Новый персонаж"
     };
 
+    /// <summary>Имя с листа, а пока его нет (у чистого листа оно пустое, а не null) — вид нового листа.</summary>
+    private string SheetTitle => string.IsNullOrWhiteSpace(Character?.PersonalInfo.Name)
+        ? NewCharacterTitle
+        : Character.PersonalInfo.Name;
+
+    /// <summary>Кампания, выбранная владельцем нового НПС; <c>null</c> — общая библиотека.</summary>
+    private Guid? NpcOwnerCampaignId =>
+        CreationKind is CharacterKind.Npc && Guid.TryParse(_ownerCampaignId, out var chosen) ? chosen : null;
+
     /// <summary>Выбор владельца показываем только при создании НПС.</summary>
     private bool ShowOwnerPicker => CharacterStorageDto is null && CreationKind is CharacterKind.Npc && _isKeeper;
+
+    /// <summary>
+    ///     Новый лист игрока, которому некуда лечь: кампании в адресе нет, у вошедшего нет в ней
+    ///     места игрока или открытый по адресу лист не нашёлся. Такой лист не сохранить
+    ///     (см. <c>CharacterService.CreateCharacterAsync</c>), поэтому вместо него страница
+    ///     объясняет, где заводят сыщика.
+    /// </summary>
+    private bool MissingPlayerSlot => !_isLoading
+                                      && CharacterStorageDto is null
+                                      && CreationKind is CharacterKind.PlayerCharacter
+                                      && CampaignPlayer is null;
 
     private Character? Character { get; set; }
     private CharacterStorageDto? CharacterStorageDto { get; set; }
@@ -145,6 +165,11 @@ public partial class CharacterPage
             {
                 var campaign = await CampaignService.GetCampaignWithCharactersAsync(CampaignId.Value);
                 CampaignEra = campaign?.Era;
+
+                // Место игрока нужно раньше чистого листа: подпись «Игрок» шаблон берёт из него,
+                // а без него показывал «Unknown» до первого сохранения.
+                if (CharacterId is null && CreationKind is CharacterKind.PlayerCharacter)
+                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
             }
 
             // Лист уже прочитан в пререндере — берём его оттуда, а не из базы второй раз. Слепок
@@ -162,7 +187,7 @@ public partial class CharacterPage
                 Character = CharacterStorageDto?.Character;
                 if (Character == null)
                 {
-                    ShowNotification($"Персонаж с ID {CharacterId.Value} не найден. Создан новый шаблон.", "warning");
+                    ShowNotification($"Персонаж с ID {CharacterId.Value} не найден.", "warning");
                     Character = await CreateNewCharacterTemplateAsync();
                     CharacterId = null;
                 }
@@ -192,13 +217,8 @@ public partial class CharacterPage
                 DerivedAttributeRules.NormalizeLuckCap(Character);
 
             // У листа из пререндера слот игрока приехал вместе с ним.
-            if (prerendered is null)
-            {
-                if (CharacterStorageDto?.CampaignPlayerId is not null)
-                    CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
-                else if (CampaignPlayer is null && CampaignId.HasValue && CreationKind is CharacterKind.PlayerCharacter)
-                    CampaignPlayer = await CampaignService.GetCampaignPlayerAsync(CampaignId.Value);
-            }
+            if (prerendered is null && CharacterStorageDto?.CampaignPlayerId is not null)
+                CampaignPlayer = await CharacterService.GetCampaignPlayerAsync(CharacterStorageDto.CampaignPlayerId.Value);
         }
         catch (Exception ex)
         {
@@ -269,15 +289,13 @@ public partial class CharacterPage
                 return;
             }
 
-            Guid? ownerCampaignId = CreationKind is CharacterKind.Npc && Guid.TryParse(_ownerCampaignId, out var chosen)
-                ? chosen
-                : null;
-
+            // Каждому виду — только его ключ владельца: слот игрока, оставшийся в поле от
+            // прежнего листа, не должен уехать в НПС или преген.
             var created = await CharacterService.CreateCharacterAsync(
                 Character,
                 CreationKind,
-                CampaignPlayer?.Id,
-                ownerCampaignId,
+                CreationKind is CharacterKind.PlayerCharacter ? CampaignPlayer?.Id : null,
+                NpcOwnerCampaignId,
                 CreationKind is CharacterKind.Pregen ? ScenarioId : null);
 
             Character.Id = created.Id;
@@ -393,7 +411,9 @@ public partial class CharacterPage
     private void OpenWizard()
     {
         var query = new List<string>();
-        if (CampaignId is { } campaignId)
+        // У помощника один параметр кампании на оба случая: место игрока для сыщика и
+        // владелец для НПС. Без второго НПС, заведённый помощником, уходил в общую библиотеку.
+        if ((NpcOwnerCampaignId ?? CampaignId) is { } campaignId)
             query.Add($"campaignId={campaignId}");
         if (ScenarioId is { } scenarioId)
             query.Add($"scenarioId={scenarioId}");
