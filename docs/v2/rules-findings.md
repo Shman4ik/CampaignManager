@@ -13,7 +13,47 @@
 
 ## Лист сыщика
 
-_Пока пусто._
+Пути — от `CampaignManager.Web/Components/Features/`. Тесты — `tests/CampaignManager.Rules.Tests/Sheet/`.
+
+- **F-S01** · `Characters/Services/InvestigatorCreationRules.cs:13–16, 84–85` · `MinAge`
+  цитирует книгу «от 15 до 90 лет», а `MaxAge = 89`; `BandFor` для возраста вне 15–89 (0, 14, 90)
+  молча возвращает строку «Молодой» 20–39 — без вычетов и с одной проверкой ОБР. Помощник
+  зажимает возраст в 15–89, поэтому сейчас это не всплывает. · Книга (стр. 30, по цитате в
+  комментарии v1): возраст от 15 до 90 лет; 90 лет в таблицу не попадают, а возраст вне её — ошибка
+  ввода, а не «молодой». ·
+  `InvestigatorCreationRulesTests.BandFor_OutsideTable_FallsBackToYoung`.
+- **F-S02** · `Characters/Services/WoundRules.cs:23–38` · `ApplyDamage` с уроном одной атаки не
+  меньше максимума ПЗ ставит серьёзную рану и «при смерти». Бой (`Combat/Services/CombatService.cs:1330–1337`)
+  в том же случае объявляет мгновенную смерть — два движка расходятся. · Книга (стр. 118): урон одной
+  атаки ≥ максимума ПЗ — смерть (по комментарию `CombatService`). · `WoundRulesTests.ApplyDamage_AtLeastMaxHp_MarksDying_NotDead`.
+- **F-S03** · `Characters/Services/LuckRules.cs:65–75, 84–89` · При навыке 5–9 (и 2–3 для трудного
+  уровня) порог уровня равен 1, и вариант «чрезвычайный успех» выкупает бросок до 01 — а 01 по
+  `CombatService.CalculateSuccessLevel` уже критический успех. Ярлык варианта и уровень итогового
+  броска расходятся. · Книга (стр. 97, по комментарию `LuckRules` и `Characters/CLAUDE.md`):
+  критический успех Удачей не покупается — v1 сам отказывает в нём в `CanSpendOn`. · `LuckRulesTests.Options_SmallTarget_ExtremeOptionLandsOnCriticalRoll`.
+- **F-S04** · `Characters/Services/SpecializationRules.cs:17–27` · Закрытый список родителей
+  содержит старое имя «Языки», а справочник навыков и профессии называют родителя «Язык,
+  иностранный» (`StartsWith` не совпадает): иностранные языки бонус смежной специализации не
+  получают никогда. · Книга (стр. 76–77) и комментарий v1: языки делят прогресс наравне с ближним
+  боем, стрельбой и выживанием. · `SpecializationRulesTests.BonusFor_ForeignLanguageParentFromCatalog_GetsNoBonus`.
+- **F-S05** · `Characters/Services/SanityRules.cs:181–188` · `RecordMythosInsanity` на листе без
+  навыка «Мифы Ктулху» увеличивает счётчик случаев и возвращает 5, хотя `AddMythos` ничего не
+  записал; следующий случай даст уже +1. · Книга (стр. 160–161): первый случай +5, следующие +1;
+  v1 противоречит себе — `AddMythos` для того же листа честно возвращает 0. · `SanityRulesTests.RecordMythosInsanity_NoMythosSkill_CountsCaseAndReportsGainAnyway`.
+- **F-S06** · `Characters/Services/FinanceRules.cs:94–109` (и `DevelopmentPhaseRules.cs:249–252`,
+  пересчёт денег в фазе развития) · `TryParseMoney` выбрасывает всё, кроме цифр, точки и запятой, и
+  запятую делает десятичной: «$1,500» → 1,5 (фаза развития превращает 1 500 долларов в 41,50),
+  «-50» → 50 (минус теряется), «1/2» → 12. Сам v1 пишет суммы без разделителя тысяч, так что ломается
+  ручной ввод Хранителя. · Книга (стр. 94, по комментарию v1): к оставшимся наличным прибавляется
+  столбец «Наличные» — от неверно прочитанного остатка. ·
+  `FinanceRulesTests.TryParseMoney_Quirks`, `DevelopmentPhaseRulesTests.RecalculateFinances_ThousandsComma_ReadAsDecimal`.
+- **F-S07** · `Characters/Services/OccupationSkillResolver.cs:152–157, 204–233` · Для названных
+  навыков профессии есть и слот `Unresolved`, и разбор «Родитель (специализация)», а для вариантов
+  `SkillChoices` — нет: вариант, которого нет в справочнике (например «Искусство/ремесло (актёрская
+  игра)» у Детектива полиции, если такой специализации нет в базе), молча выпадает, а группа без
+  единого найденного варианта исчезает целиком — профессия получает меньше восьми слотов без всякой
+  пометки. · Книга (стр. 37): ровно восемь профессиональных навыков плюс Средства; v1 сам требует
+  это от данных (`RequiredSkillCount`). · `OccupationSkillResolverTests.BuildSlots_ChoiceOptionsMissingFromCatalog_DroppedSilently`.
 
 ## Кости и бой
 
