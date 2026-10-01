@@ -133,6 +133,21 @@ Neon (`ep-white-leaf-435379…/neondb`, память `postgres-mcp-dev-db`).
 
 ### T1.2 — Схема `cm` в `Data`
 
+**Сделано 2026-10-01.** `CmDbContext` со всеми 34 таблицами SCHEMA.md по модулям (`Data/Identity`,
+`Files`, `Campaigns`, `Catalogs`, `Music`, `Scenarios`, `Characters`, `Encounters`, `Admin`), миграция
+`InitialCmSchema` применена на пустом Postgres 17 и на ветке Neon `dev` (PostgreSQL 15.19; v1 не тронут).
+`Server.Tests/Schema` поднимают схему в своей одноразовой базе и проверяют владельца листа, членство
+игрока, один активный лист, `SET NULL (campaign_id)`, одного Хранителя, CHECK из enum, `lower(name)`,
+одну активную сцену (`NULLS NOT DISTINCT`), `xmin`, перехватчик времени и совпадение модели с миграцией.
+Правила работы со схемой — [src/CLAUDE.md](../../src/CLAUDE.md), «База». Отличия от карточки:
+- enum'ы колонок положены в `Core/<Модуль>` (их возьмут `Contracts` и документы T1.7);
+  `Era`, `Characteristic`, `Difficulty` — в корне `Core`: если T1.7 заведёт свои, оставить одну копию;
+- `DataProtectionKey` — стандартная сущность пакета, `CmDbContext` реализует `IDataProtectionKeyContext`;
+- defaults в DDL есть, но EF их не использует (`HasDbDefault`): иначе «нулевое» значение подменялось бы
+  default'ом базы;
+- расхождения миграции с текстом DDL (CHECK у `eras`, индексы на FK, `xmin` у `music_tracks`) записаны
+  в SCHEMA.md под «DDL».
+
 **Цель.** `CmDbContext` и первая миграция по SCHEMA.md.
 
 **Зависит от:** T1.1, T0.1, D3.
