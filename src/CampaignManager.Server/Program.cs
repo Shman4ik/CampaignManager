@@ -8,6 +8,7 @@ using CampaignManager.Server.Identity;
 using CampaignManager.Server.Music;
 using CampaignManager.Server.Platform;
 using CampaignManager.Server.Profile;
+using CampaignManager.Server.Scenarios;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,7 @@ builder.AddCatalogsModule();
 builder.AddProfileModule();
 builder.AddAdminModule();
 builder.AddMusicModule();
+builder.AddScenariosModule();
 
 var app = builder.Build();
 
@@ -35,6 +37,7 @@ app.MapCatalogsApi();
 app.MapProfileApi();
 app.MapAdminApi();
 app.MapMusicApi();
+app.MapScenariosApi();
 app.MapClientApp();
 
 app.Run();

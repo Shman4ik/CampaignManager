@@ -1,0 +1,165 @@
+@page "/scenarios"
+@page "/scenarios/new"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Библиотека сценариев — общая для Хранителей (в v1 «Шаблоны сценариев»; сценарии кампаний в 2.0 стали
+   прохождениями, T2.5c). /scenarios/new — та же страница с открытой формой нового сценария: адрес v1 сохранён.
+   Кнопки — по флагам из API (удалить — автор или администратор). Импорт JSON — T2.5d. *@
+<PageHeader Title="Сценарии">
+    <Actions>
+        @if (_list?.CanCreate == true)
+        {
+            <Button Small="true" Icon="fa-plus" Href="@ScenarioLinks.New" data-testid="new-scenario">Новый сценарий</Button>
+        }
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <FilterPanel OnReset="() => _search = string.Empty">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию, месту, описанию…" aria-label="Поиск"
+               data-testid="scenario-search" @bind="_search" @bind:event="oninput" />
+    </FilterPanel>
+
+    <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
+                  IsEmpty="l => l.Items.Count == 0">
+        <Empty>
+            <EmptyState Icon="fa-masks-theater" Title="Сценариев пока нет." Message="Заведите первый — он будет доступен всем Хранителям.">
+                <Actions><Button Icon="fa-plus" Href="@ScenarioLinks.New">Новый сценарий</Button></Actions>
+            </EmptyState>
+        </Empty>
+        <ChildContent>
+            @{ var found = Filter(list.Items); }
+            @if (found.Count == 0)
+            {
+                <EmptyState Icon="fa-magnifying-glass" Title="Ничего не найдено.">
+                    <Actions>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => _search = string.Empty">Очистить поиск</Button>
+                    </Actions>
+                </EmptyState>
+            }
+            else
+            {
+                @* Три колонки — только с xl: на портрете iPad (1024) карточки сжимались до ~230px (знание v1). *@
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="scenario-list">
+                    @foreach (var scenario in found)
+                    {
+                        <article class="cm-card flex flex-col" @key="scenario.Id" data-testid="scenario-card">
+                            <div class="cm-card-header">
+                                <a class="cm-card-title min-w-0 break-words hover:underline" href="@ScenarioLinks.Workspace(scenario.Id)">@scenario.Name</a>
+                            </div>
+                            <div class="cm-card-body flex flex-1 flex-col gap-2">
+                                <div class="flex flex-wrap gap-1.5">
+                                    @if (scenario.Era is { } era)
+                                    {
+                                        <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
+                                    }
+                                    @if (scenario.SettingDate is { } date)
+                                    {
+                                        <Badge Tone="Tone.Neutral">@date</Badge>
+                                    }
+                                    @if (scenario.Setting is { } setting)
+                                    {
+                                        <Badge Tone="Tone.Info" Icon="fa-location-dot" class="max-w-full whitespace-normal">@setting</Badge>
+                                    }
+                                    @if (scenario.SourceScenarioName is { } source)
+                                    {
+                                        <Badge Tone="Tone.Warning" Icon="fa-code-branch" class="max-w-full whitespace-normal">Переделка «@source»</Badge>
+                                    }
+                                </div>
+                                <p class="line-clamp-3 text-sm text-primary-600">@(scenario.Summary ?? "Описания нет.")</p>
+                                <div class="cm-meta mt-auto">
+                                    <span><span class="cm-meta-label">Локаций:</span> @scenario.LocationCount</span>
+                                    <span><span class="cm-meta-label">НПС:</span> @scenario.NpcCount</span>
+                                    <span><span class="cm-meta-label">Раздаток:</span> @scenario.HandoutCount</span>
+                                    @if (scenario.PregenCount > 0)
+                                    {
+                                        <span><span class="cm-meta-label">Прегенов:</span> @scenario.PregenCount</span>
+                                    }
+                                    @if (scenario.RunCount > 0)
+                                    {
+                                        <span><span class="cm-meta-label">Прохождений:</span> @scenario.RunCount</span>
+                                    }
+                                </div>
+                                <div class="cm-field-note">Изменён @LocalTime.Date(scenario.UpdatedAt)</div>
+                            </div>
+                            <div class="cm-card-footer flex-wrap gap-2">
+                                <Button Small="true" Icon="fa-book-open" Href="@ScenarioLinks.Workspace(scenario.Id)">Открыть</Button>
+                                @if (scenario.CanDelete)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" Busy="@(_busy == scenario.Id)"
+                                            OnClick="() => DeleteAsync(scenario)">Удалить</Button>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+<ScenarioFormModal Open="IsNew" OnClose="() => Navigation.NavigateTo(ScenarioLinks.List, replace: true)" OnCreated="Created" />
+
+@code {
+    private AsyncContent<ScenarioListDto>? _content;
+    private ScenarioListDto? _list;
+    private string _search = "";
+    private Guid? _busy;
+
+    private bool IsNew => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/') == ScenarioLinks.New;
+
+    private async Task<ScenarioListDto> LoadAsync(CancellationToken cancellationToken)
+    {
+        _list = await Api.ListAsync(cancellationToken);
+        StateHasChanged(); // кнопка «Новый сценарий» в шапке — вне AsyncContent
+        return _list;
+    }
+
+    private List<ScenarioSummaryDto> Filter(IReadOnlyList<ScenarioSummaryDto> items)
+    {
+        var needle = CatalogCodeTable.NormalizeName(_search);
+        if (needle.Length == 0)
+            return [.. items];
+
+        return
+        [
+            .. items.Where(s => new[] { s.Name, s.Setting, s.SettingDate, s.Summary }
+                .Any(text => text is not null && CatalogCodeTable.NormalizeName(text).Contains(needle, StringComparison.Ordinal))),
+        ];
+    }
+
+    private void Created(Guid id) => Navigation.NavigateTo(ScenarioLinks.Workspace(id), replace: true);
+
+    private async Task DeleteAsync(ScenarioSummaryDto scenario)
+    {
+        var message = scenario.RunCount > 0
+            ? "Сценарий проходят в кампаниях — сервер его не удалит, пока есть прохождения."
+            : "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС останутся в библиотеке, прегены — тоже.";
+        if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{scenario.Name}»?", message))
+            return;
+
+        _busy = scenario.Id;
+        try
+        {
+            await Api.DeleteAsync(scenario.Id);
+            Toasts.Success("Сценарий удалён.");
+            if (_content is not null)
+                await _content.ReloadAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+}

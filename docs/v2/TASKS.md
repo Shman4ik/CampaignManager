@@ -744,6 +744,30 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
 **Входы.** AUDIT, «Сценарии, кампании, права»; `Scenarios/CLAUDE.md` v1.
 
 **T2.5a — Библиотека и рабочее место.**
+
+**Сделано 2026-10-02.** Модуль `Scenarios` во всех слоях: `Contracts/Scenarios` (маршруты, DTO, `IScenariosApi`, `ScenarioLimits`),
+`ApiClient/Scenarios`, `Server/Scenarios` (`ScenarioService` — библиотека, рабочее место одним запросом, шапка и текст с
+`If-Match`, удаление, порядок; `ScenarioPartsService` — локации, проверки, факты, раздатки, твари, предметы по строке;
+`ScenarioCastService` — состав НПС и прегены), `UI/Scenarios` (`/scenarios`, `/scenarios/new`, `/scenarios/{id}` с десятью
+вкладками в `?tab=`, `/scenarios/{id}/edit`), `Catalogs/CatalogPickerModal<T>`, `Scenarios/CastNpcDialog` и «В сценарий» на
+карточке `/npcs`; подписи — `Core/Scenarios/ScenarioText`; `Server/Characters/CharacterSummaries` — одна сборка карточек для
+`/npcs` и сценария. `AccessPolicy`: `ForScenario` (строки списка), `CanBrowseScenariosAsync`. Миграций нет. Тесты —
+`Server.Tests/Scenarios/ScenariosApiTests` (права автора, чужого Хранителя, игрока и админа; правка одной вкладки не затирает
+другую; дерево; проверки; твари и реквизит; состав и прегены; раздатка), `UI.Tests/ScenarioTests`. Знание —
+[Server/Scenarios/CLAUDE.md](../../src/CampaignManager.Server/Scenarios/CLAUDE.md), [UI/Scenarios/CLAUDE.md](../../src/CampaignManager.UI/Scenarios/CLAUDE.md).
+Отличия от карточки и v1:
+- шапка и основной текст — разные адреса с одной версией корня; у строк частей версии (`xmin`) нет — правка одной строки с
+  двух устройств «последняя побеждает» (в пределах строки, не сценария);
+- «Описание» — форма шапки в окне, «Текст» — правка на месте с предпросмотром и черновиком в `localStorage`;
+- порядок строк — режим «Порядок» с «Выше»/«Ниже» (перетаскивания нет);
+- тварь — только из бестиария, своей твари без бестиария и правки статблока сценария нет (как в v1); «Идти за бестиарием»
+  сбрасывает перенесённую свою версию;
+- прегены из библиотеки — копией заготовки; «Убрать» — в архив библиотеки, забронированного в незавершённом прохождении — 409;
+- удаление сценария с прохождениями — 409 с текстом (в схеме `RESTRICT`), прегены сценария остаются в библиотеке;
+- раздатка — только картинка (`FileTypes` без PDF; вопрос владельцу в PR);
+- «Использовать в кампании» и анонс ваншота на странице сценария не переносились — это прохождения (T2.5c).
+Стыки записаны в T2.5b, T2.5c, T2.5d и T2.6a.
+
 - **Стык с T2.4 готов:** состав НПС и прегены рисует `UI/Characters/Library/CharacterSummaryCard` (`Framed="false"` в карточке
   секции, роль и количество — `ChildContent`, «Убрать» — `OnArchive` с `ArchiveLabel`); быстрый НПС —
   `UI/Characters/Creation/QuickNpcModal` с `ScenarioId` (роль и количество уже в форме, лист и `scenario_npcs` пишет
@@ -761,6 +785,13 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
 - Права — по `AccessPolicy`, флаги приходят в DTO.
 
 **T2.5b — Режим игры и раздатки.**
+- **Стык с T2.5a готов:** рабочее место — `UI/Scenarios/ScenarioPage` (вкладки в `?tab=`); режим игры — тот же адрес с
+  `?mode=play&location=&handout=` (`ScenarioLinks.Play`, параметры пока никто не читает). Сценарий целиком — `GET
+  /api/v1/scenarios/{id}` (`ScenarioDto`: локации в порядке дерева с проверками, `MusicTags` и `TrackIds`, факты, раздатки с
+  `KeeperNote`, твари с итоговым статблоком, предметы, состав). Дерево с глубиной и путём — `UI/Scenarios/LocationTree`.
+  Подписи проверки — `ScenarioLabels.Target`/`Difficulty`; навык проверки — `SkillId` (ключ для `CheckSubjects`). Второго
+  экрана нет: раздатку отдаёт только рабочее место — нужен свой адрес с `ForHandoutAsync` и без `keeper_note`. Правка
+  музыки локации — новый адрес (правка локации `LocationInput` теги и треки не трогает).
 - Режим игры в адресе: `?mode=play&location=&handout=`, переходы с `replace: true`.
 - Проверки локации открывают общий диалог проверки (T2.7) по сыщикам кампании **прохождения**.
 - «Показать игрокам» и второй экран `/scenarios/{id}/handouts/{handoutId}` — статическая страница
@@ -775,6 +806,10 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
   последний элемент колонки `.cm-main` (UI/Music/CLAUDE.md).
 
 **T2.5c — Прохождения и ваншоты.** `RunService`:
+- **Стык с T2.5a:** прегены сценария — `ScenarioDto.Pregens` (`IsReserved` — бронь в незавершённом прохождении,
+  `ScenarioService.ReservedPregensAsync`); «Убрать» забронированного уже отказывает (409), удаление сценария с прохождениями —
+  409 `in-use`. «Играть в кампании»/«Объявить ваншот» — кнопки на вкладке «Описание» (`ScenarioDescriptionTab`), там же
+  счётчик `RunCount`.
 - «играть в кампании» — прохождение без копии содержимого;
 - «объявить ваншот» — одной транзакцией кампания `OneShot`, Хранитель-участник, прохождение с
   `signup_open`;
@@ -784,6 +819,10 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
 - анонс правится в одной форме прохождения.
 
 **T2.5d — Импорт и экспорт JSON.**
+- **Стык с T2.5a:** запись частей уже есть по строке (`ScenarioPartsService`, `ScenarioCastService`), но импорт должен идти
+  **одной транзакцией** — общий код валидации частей (`Apply*` в `ScenarioPartsService`) стоит вынести, а не звать N
+  эндпоинтов. Кнопки «Импорт JSON» на `/scenarios` (панель фильтров) и «Экспорт JSON» в шапке рабочего места. Эпоха
+  сценария — колонка `era`, время действия — текст `setting_date`.
 - Формат v1 сохраняется: без id, родитель по имени, НПС из библиотеки по имени, навыки без
   учёта регистра и «ё».
 - Импорт — одна транзакция.
@@ -810,6 +849,9 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
 - состояние — `encounters.state` с версией, автосохранение через API с `ETag`.
 
 **Применение пишет в лист**: ПЗ, рассудок, ПМ, МОЩ, привыкание. В v1 итог боя в лист не попадал.
+
+- **Стык с T2.5a:** НПС сценария — `ScenarioDto.Npcs` (лист, роль, количество), твари — `ScenarioDto.Creatures` с итоговым
+  статблоком (своя версия поверх бестиария) и `Count`. Выбор из списка — `Catalogs/CatalogPickerModal<T>`.
 
 Общий UI: `ParticipantPicker`, `ParticipantSelect`, `ParticipantRow` со `StatBar`, `EncounterLog`,
 оболочка страницы, предпросмотр результата.

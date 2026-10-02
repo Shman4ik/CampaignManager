@@ -1,0 +1,147 @@
+@inherits ScenarioTabBase
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Platform
+@inject ICharactersApi CharactersApi
+
+@* «НПС» — состав: связи с листами библиотеки, роль и количество — у появления (CharacterSummaryCard в одной карточке,
+   строками через линейку — карточка в карточке читалась мусором, знание v1). «Убрать» удаляет связь, не лист.
+   Добавить: «Из библиотеки» (выбор), «Быстрый» (лист и связь одной записью), «Новый» — помощник или чистый лист
+   с возвратом сюда. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Состав НПС</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" Href="@CreationLinks.Create(CharacterKind.Npc, null, Scenario.Id)">Новый</Button>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-bolt" data-testid="quick-npc" OnClick="() => _quickOpen = true">Быстрый</Button>
+                <Button Small="true" Icon="fa-link" data-testid="add-npc" OnClick="OpenPicker">Из библиотеки</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Npcs.Count == 0)
+    {
+        <EmptyState Icon="fa-masks-theater" Title="НПС пока нет." Message="НПС занимается из библиотеки связью: правка листа видна во всех сценариях." />
+    }
+    else
+    {
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack" data-testid="npc-list">
+                @foreach (var npc in Scenario.Npcs)
+                {
+                    <CharacterSummaryCard @key="npc.Character.Id" Character="npc.Character" Framed="false" ArchiveLabel="Убрать" Busy="Busy"
+                                          OnArchive="CanEdit ? RemoveCallback : default">
+                        <div class="flex flex-wrap items-center gap-2" data-testid="npc-cast">
+                            <Badge Tone="ScenarioLabels.RoleTone(npc.Role)" Solid="true">@ScenarioText.Of(npc.Role)</Badge>
+                            @if (npc.Count > 1)
+                            {
+                                <Badge Tone="Tone.Neutral">× @npc.Count</Badge>
+                            }
+                            @if (npc.Notes is { } notes)
+                            {
+                                <span class="text-sm text-primary-600">@notes</span>
+                            }
+                            @if (CanEdit)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" Disabled="Busy" OnClick="() => _casting = npc">Роль</Button>
+                            }
+                        </div>
+                    </CharacterSummaryCard>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="НПС из библиотеки" Load="LoadNpcsAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="Meta" Also="c => [c.Occupation, c.CampaignName]" Empty="В библиотеке нет свободных НПС — заведите нового."
+                    Busy="_adding" Error="@_addError" OnPick="CastAsync" OnClose="() => _picking = false">
+    <div class="grid grid-cols-2 gap-3 sm:w-96">
+        <Field Label="Роль">
+            <select class="cm-input" data-testid="pick-role" @bind="_role">
+                @foreach (var role in Enum.GetValues<NpcRole>())
+                {
+                    <option value="@role">@ScenarioText.Of(role)</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Сколько">
+            <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" @bind="_count" />
+        </Field>
+    </div>
+</CatalogPickerModal>
+
+<CastNpcDialog Open="_casting is not null" Character="_casting?.Character" ScenarioId="Scenario.Id" Role="_casting?.Role ?? NpcRole.Neutral"
+               Count="_casting?.Count ?? 1" Notes="@_casting?.Notes" OnClose="() => _casting = null" OnSaved="CastSavedAsync" />
+
+@if (_quickOpen)
+{
+    <QuickNpcModal Open="true" Era="Scenario.Era ?? Era.Classic" ScenarioId="Scenario.Id" OnClose="() => _quickOpen = false" OnCreated="QuickCreatedAsync" />
+}
+
+@code {
+    private bool _picking;
+    private bool _adding;
+    private string? _addError;
+    private NpcRole _role;
+    private int _count = 1;
+    private ScenarioNpcDto? _casting;
+    private bool _quickOpen;
+
+    private EventCallback<CharacterSummaryDto> RemoveCallback => EventCallback.Factory.Create<CharacterSummaryDto>(this, RemoveAsync);
+
+    private static string? Meta(CharacterSummaryDto c) =>
+        string.Join(" · ", new[] { c.Occupation, c.CampaignName is { } campaign ? $"кампания «{campaign}»" : null }.OfType<string>()) is { Length: > 0 } meta
+            ? meta
+            : null;
+
+    private void OpenPicker()
+    {
+        (_role, _count, _addError) = (NpcRole.Neutral, 1, null);
+        _picking = true;
+    }
+
+    private async Task<IReadOnlyList<CharacterSummaryDto>> LoadNpcsAsync(CancellationToken cancellationToken)
+    {
+        var cast = Scenario.Npcs.Select(n => n.Character.Id).ToHashSet();
+        return [.. (await CharactersApi.ListAsync(CharacterKind.Npc, archived: false, cancellationToken)).Where(c => !cast.Contains(c.Id))];
+    }
+
+    private async Task CastAsync(CharacterSummaryDto npc)
+    {
+        _adding = true;
+        _addError = null;
+        try
+        {
+            await Api.CastNpcAsync(Scenario.Id, npc.Id, new NpcCastInput(_role, Math.Clamp(_count, 1, CharacterLimits.MaxCastCount)));
+            _picking = false;
+            await SavedAsync($"«{npc.Name}» в составе.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _addError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private async Task CastSavedAsync(Guid _)
+    {
+        _casting = null;
+        await SavedAsync("Роль сохранена.");
+    }
+
+    private async Task QuickCreatedAsync(Guid _)
+    {
+        _quickOpen = false;
+        await SavedAsync("НПС создан и занят в сценарии.");
+    }
+
+    private Task RemoveAsync(CharacterSummaryDto npc) =>
+        DeleteAsync($"Убрать «{npc.Name}» из сценария?", "Лист останется в библиотеке НПС — его можно занять снова.",
+            () => Api.RemoveNpcAsync(Scenario.Id, npc.Id), "НПС убран из состава.", "Убрать");
+}

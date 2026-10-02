@@ -9,6 +9,7 @@ using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Music;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Contracts.Profile;
+using CampaignManager.Contracts.Scenarios;
 
 namespace CampaignManager.Contracts;
 
@@ -88,4 +89,24 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(PinnedTagsDto))]
 [JsonSerializable(typeof(PinnedTagsRequest))]
 [JsonSerializable(typeof(MusicPoolDto))]
+[JsonSerializable(typeof(ScenarioListDto))]
+[JsonSerializable(typeof(ScenarioInput))]
+[JsonSerializable(typeof(ScenarioTextInput))]
+[JsonSerializable(typeof(ScenarioSavedDto))]
+[JsonSerializable(typeof(ScenarioDto))]
+[JsonSerializable(typeof(ScenarioLocationDto))]
+[JsonSerializable(typeof(LocationInput))]
+[JsonSerializable(typeof(ScenarioCheckDto))]
+[JsonSerializable(typeof(CheckInput))]
+[JsonSerializable(typeof(KeyFactDto))]
+[JsonSerializable(typeof(KeyFactInput))]
+[JsonSerializable(typeof(HandoutDto))]
+[JsonSerializable(typeof(HandoutInput))]
+[JsonSerializable(typeof(ScenarioCreatureDto))]
+[JsonSerializable(typeof(ScenarioCreatureInput))]
+[JsonSerializable(typeof(ScenarioItemDto))]
+[JsonSerializable(typeof(ScenarioItemInput))]
+[JsonSerializable(typeof(NpcCastInput))]
+[JsonSerializable(typeof(AddPregenRequest))]
+[JsonSerializable(typeof(ReorderRequest))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

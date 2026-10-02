@@ -1,0 +1,86 @@
+@inherits ScenarioTabBase
+
+@* «Раздатки» — строки одной карточки: миниатюра, название (пометка Хранителя), начало текста для игроков, пометка
+   Хранителю отдельной плашкой. «Показать игрокам» и второй экран /scenarios/{id}/handouts/{handoutId} — T2.5b
+   (адрес показа — ScenarioLinks.Play(…, handoutId)). *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Раздатки</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                @if (Scenario.Handouts.Count > 1)
+                {
+                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
+                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+                }
+                <Button Small="true" Icon="fa-plus" data-testid="add-handout" OnClick="() => Open(null)">Раздатка</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Handouts.Count == 0)
+    {
+        <EmptyState Icon="fa-file-image" Title="Раздаток пока нет." Message="Письма, вырезки, карты — то, что сыщики получают на руки." />
+    }
+    else
+    {
+        var ids = Scenario.Handouts.Select(h => h.Id).ToList();
+        <div class="cm-card" data-testid="handout-list">
+            @foreach (var handout in Scenario.Handouts)
+            {
+                var index = ids.IndexOf(handout.Id);
+                <div class="flex flex-wrap items-start gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="handout.Id" data-testid="handout-row">
+                    @if (handout.FileUrl is { } url)
+                    {
+                        <img src="@url" alt="" class="h-16 w-16 shrink-0 rounded-md border border-primary-200 object-cover" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-primary-200 bg-primary-50 text-primary-400">
+                            <i class="fa-solid fa-file-lines text-xl" aria-hidden="true"></i>
+                        </span>
+                    }
+                    <div class="flex min-w-48 flex-1 flex-col gap-1">
+                        <span class="font-semibold text-primary-900">@handout.Name</span>
+                        @if (handout.PlayerText is { } text)
+                        {
+                            <p class="line-clamp-3 whitespace-pre-line text-sm text-primary-700">@text</p>
+                        }
+                        @if (handout.KeeperNote is { } note)
+                        {
+                            <p class="text-sm text-warning-800"><i class="fa-solid fa-user-secret mr-1" aria-hidden="true"></i>Хранителю: @note</p>
+                        }
+                    </div>
+                    <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
+                                    OnUp="() => MoveAsync(ScenarioPart.Handouts, ids, handout.Id, -1)"
+                                    OnDown="() => MoveAsync(ScenarioPart.Handouts, ids, handout.Id, 1)"
+                                    OnEdit="() => Open(handout)" OnDelete="() => RemoveAsync(handout)" />
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<HandoutFormModal Open="_formOpen" ScenarioId="Scenario.Id" Handout="_editing" OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
+
+@code {
+    private bool _formOpen;
+    private HandoutDto? _editing;
+
+    private void Open(HandoutDto? handout)
+    {
+        _editing = handout;
+        _formOpen = true;
+    }
+
+    private async Task SavedFormAsync()
+    {
+        var wasNew = _editing is null;
+        _formOpen = false;
+        await SavedAsync(wasNew ? "Раздатка добавлена." : "Раздатка сохранена.");
+    }
+
+    private Task RemoveAsync(HandoutDto handout) =>
+        DeleteAsync($"Удалить раздатку «{handout.Name}»?", "Картинка останется в файлах — сирот убирает администратор.",
+            () => Api.DeleteHandoutAsync(Scenario.Id, handout.Id), "Раздатка удалена.");
+}

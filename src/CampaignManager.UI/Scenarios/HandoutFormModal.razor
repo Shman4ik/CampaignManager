@@ -1,0 +1,112 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Раздатка: название — пометка Хранителя (игрокам не показывается); текст для игроков — то, что зачитывают и
+   показывают; пометка Хранителю — только ему, никогда не в показ и не на второй экран (знание v1: пометки писали
+   в текст, и «Показать игрокам» зачитывало их вслух). Картинка — файл cm.files. При ошибке форма остаётся открытой
+   с правками; пока идёт запись, кнопки выключены (v1: второй тап заводил раздатку дважды); название — по oninput,
+   иначе «Добавить» включалась только после blur. *@
+<Modal Open="Open" Title="@(Handout is null ? "Новая раздатка" : $"Раздатка: {Handout.Name}")" Size="ModalSize.Large" OnClose="CloseAsync"
+       data-testid="handout-form">
+    <ChildContent>
+        <form id="handout-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Hint="(видит только Хранитель)" Error="@_nameError">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="handout-name" @bind="_name" @bind:event="oninput"
+                       placeholder="Письмо №1, карта леса…" />
+            </Field>
+            <Field Label="Картинка" Group="true">
+                <ImagePicker FileId="_fileId" Url="_fileUrl" OnChanged="FileChanged" />
+            </Field>
+            <Field Label="Текст для игроков" Note="Его показывают и зачитывают. Подсказки себе — в пометку ниже.">
+                <textarea class="cm-input" rows="6" maxlength="@ScenarioLimits.TextLength" data-testid="handout-text" @bind="_playerText"></textarea>
+            </Field>
+            <Field Label="Пометка Хранителю" Note="Игрокам не показывается никогда: «выдать после второй ночи».">
+                <textarea class="cm-input" rows="3" maxlength="@ScenarioLimits.TextLength" data-testid="handout-note" @bind="_keeperNote"></textarea>
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="handout-error">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="handout-form" Busy="_saving" Disabled="@string.IsNullOrWhiteSpace(_name)" data-testid="handout-save">
+            @(Handout is null ? "Добавить" : "Сохранить")
+        </Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private string _name = "";
+    private string? _playerText;
+    private string? _keeperNote;
+    private Guid? _fileId;
+    private string? _fileUrl;
+    private string? _nameError;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public HandoutDto? Handout { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _name = Handout?.Name ?? "";
+            _playerText = Handout?.PlayerText;
+            _keeperNote = Handout?.KeeperNote;
+            _fileId = Handout?.FileId;
+            _fileUrl = Handout?.FileUrl;
+            _nameError = null;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private void FileChanged(StoredFileDto? file)
+    {
+        _fileId = file?.Id;
+        _fileUrl = file?.Url;
+    }
+
+    private async Task SaveAsync()
+    {
+        _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        if (_nameError is not null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var input = new HandoutInput(_name.Trim(), _playerText, _keeperNote, _fileId);
+            if (Handout is null)
+                await Api.AddHandoutAsync(ScenarioId, input);
+            else
+                await Api.UpdateHandoutAsync(ScenarioId, Handout.Id, input);
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

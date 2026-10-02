@@ -1,0 +1,99 @@
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Ключевой факт: вид (предыстория, зловещая истина, хронология, награды), заголовок и содержание в Markdown. В v1
+   факты правились прямо в списке и сохранялись по одному — та же строка, но форма теперь одна на «Новый» и
+   «Изменить». *@
+<Modal Open="Open" Title="@(Fact is null ? "Новый факт" : "Ключевой факт")" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="fact-form">
+    <ChildContent>
+        <form id="fact-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-[14rem_1fr]">
+                <Field Label="Вид">
+                    <select class="cm-input" @bind="_type">
+                        @foreach (var type in Enum.GetValues<KeyFactType>())
+                        {
+                            <option value="@type">@ScenarioText.Of(type)</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Заголовок" Error="@_titleError">
+                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="fact-title" @bind="_title" @bind:event="oninput" />
+                </Field>
+            </div>
+            <Field Label="Содержание" Hint="(Markdown)">
+                <textarea class="cm-input" rows="8" maxlength="@ScenarioLimits.TextLength" data-testid="fact-content" @bind="_content"></textarea>
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="fact-form" Busy="_saving" data-testid="fact-save">@(Fact is null ? "Добавить" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private KeyFactType _type;
+    private string _title = "";
+    private string? _content;
+    private string? _titleError;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public KeyFactDto? Fact { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _type = Fact?.Type ?? KeyFactType.Truth;
+            _title = Fact?.Title ?? "";
+            _content = Fact?.Content;
+            _titleError = null;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _titleError = string.IsNullOrWhiteSpace(_title) ? "Заголовок обязателен." : null;
+        if (_titleError is not null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var input = new KeyFactInput(_type, _title.Trim(), _content);
+            if (Fact is null)
+                await Api.AddFactAsync(ScenarioId, input);
+            else
+                await Api.UpdateFactAsync(ScenarioId, Fact.Id, input);
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

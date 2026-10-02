@@ -1,0 +1,170 @@
+@inherits ScenarioTabBase
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.UI.Platform
+@inject BrowserStorage Storage
+
+@* «Текст» — основной текст Хранителя в Markdown (v1 «Журнал»). Читается Markdown-ом, правится на месте с
+   предпросмотром. Запись — отдельный адрес с версией корня: шапку и части она не трогает, а правку текста с
+   другого устройства не затирает (409 и «Перечитать»). Набранное, пока не записано, живёт черновиком в
+   localStorage (cm.scenario-text:{id}): текст длинный, обрыв связи или «Перечитать» не должны его съесть. *@
+<section class="cm-section">
+    <div class="cm-card">
+        @if (_editing)
+        {
+            <div class="cm-card-header flex-wrap gap-2">
+                <span class="cm-card-title">Текст Хранителя</span>
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
+                        @(_preview ? "Редактор" : "Просмотр")
+                    </Button>
+                </div>
+            </div>
+            <div class="cm-card-body flex flex-col gap-3">
+                @if (_preview)
+                {
+                    <Markdown Text="@_draft" class="min-h-40" />
+                }
+                else
+                {
+                    <textarea class="cm-input min-h-[50vh] font-mono text-sm" maxlength="@ScenarioLimits.BodyLength" data-testid="scenario-text"
+                              aria-label="Текст сценария" value="@_draft" @onchange="DraftChangedAsync"></textarea>
+                    <p class="cm-field-note">Markdown: «#» — заголовок, «**жирный**», «- » — список. Пустая строка — новый абзац.</p>
+                }
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">
+                        <ChildContent>@_error</ChildContent>
+                        <Actions>
+                            @if (_stale)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" OnClick="ReloadAsync">Перечитать</Button>
+                            }
+                        </Actions>
+                    </Alert>
+                }
+            </div>
+            <div class="cm-card-footer flex-wrap gap-2">
+                <Button Variant="ButtonVariant.Secondary" Disabled="_saving" OnClick="CancelAsync">Отмена</Button>
+                <Button Icon="fa-floppy-disk" Busy="_saving" data-testid="save-text" OnClick="SaveAsync">Сохранить</Button>
+            </div>
+        }
+        else
+        {
+            <div class="cm-card-body">
+                @if (string.IsNullOrWhiteSpace(Scenario.BodyMd))
+                {
+                    <p class="cm-text-muted">Текста пока нет.</p>
+                }
+                else
+                {
+                    <Markdown Text="@Scenario.BodyMd" data-testid="scenario-body" />
+                }
+            </div>
+            @if (CanEdit)
+            {
+                <div class="cm-card-footer">
+                    <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-text" OnClick="EditAsync">Изменить текст</Button>
+                </div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    private bool _editing;
+    private bool _preview;
+    private bool _saving;
+    private bool _stale;
+    private string? _error;
+    private string _draft = "";
+
+    /// <summary>Версия, с которой начата правка: её уносит If-Match.</summary>
+    private uint _version;
+
+    private bool _rebase;
+
+    protected override void OnParametersSet()
+    {
+        // После «Перечитать» правка продолжается от свежей версии корня.
+        if (_rebase && Scenario.Version != _version)
+        {
+            _version = Scenario.Version;
+            _rebase = false;
+        }
+    }
+
+    private string DraftKey => $"cm.scenario-text:{Scenario.Id}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Несохранённый черновик прошлой правки — сразу в редактор.
+        if (CanEdit && await Storage.GetAsync(DraftKey) is { } draft && draft != (Scenario.BodyMd ?? ""))
+        {
+            _draft = draft;
+            _version = Scenario.Version;
+            _editing = true;
+            _error = "Восстановлен несохранённый текст с этого устройства. Сохраните его или нажмите «Отмена».";
+        }
+    }
+
+    private Task EditAsync()
+    {
+        _draft = Scenario.BodyMd ?? "";
+        _version = Scenario.Version;
+        _editing = true;
+        _preview = false;
+        _error = null;
+        _stale = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task DraftChangedAsync(ChangeEventArgs e)
+    {
+        _draft = e.Value?.ToString() ?? "";
+        await Storage.SetAsync(DraftKey, _draft);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        _stale = false;
+        try
+        {
+            await Api.SaveTextAsync(Scenario.Id, _draft, _version);
+            await Storage.RemoveAsync(DraftKey);
+            _editing = false;
+            await SavedAsync("Текст сохранён.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+            _stale = ex is ApiException { IsStale: true };
+            if (_stale)
+                _error += " Ваш текст сохранён черновиком на этом устройстве — после «Перечитать» он останется в поле.";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>«Перечитать» после конфликта: свежая версия с сервера, набранный текст — из черновика.</summary>
+    private async Task ReloadAsync()
+    {
+        _rebase = true;
+        await OnChanged.InvokeAsync();
+        _stale = false;
+        _error = "Сценарий перечитан. В поле — ваш текст; текст с другого устройства виден после «Отмена».";
+    }
+
+    private async Task CancelAsync()
+    {
+        await Storage.RemoveAsync(DraftKey);
+        _editing = false;
+        _error = null;
+    }
+}

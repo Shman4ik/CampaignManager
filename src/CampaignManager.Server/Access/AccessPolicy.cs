@@ -202,13 +202,21 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
             .Select(s => new { s.AuthorId })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (scenario is null)
-        {
-            return Access.None;
-        }
-
-        return new Access(CanRead: true, CanEdit: true, CanDelete: user.IsAdmin || scenario.AuthorId == user.Id);
+        return scenario is null ? Access.None : ForScenario(user, scenario.AuthorId);
     }
+
+    /// <summary>
+    /// То же правило, что <see cref="ForScenarioAsync"/>, для уже прочитанной строки — список сценариев считает
+    /// флаги без запроса на каждую.
+    /// </summary>
+    public static Access ForScenario(SignedInUser user, Guid? authorId) =>
+        user.IsKeeper
+            ? new Access(CanRead: true, CanEdit: true, CanDelete: user.IsAdmin || authorId == user.Id)
+            : Access.None;
+
+    /// <summary>Библиотека сценариев (<c>/scenarios</c>) — Хранитель по роли; флаги строк — <see cref="ForScenario"/>.</summary>
+    public async Task<bool> CanBrowseScenariosAsync(CancellationToken cancellationToken = default) =>
+        await currentUser.GetAsync(cancellationToken) is { IsKeeper: true };
 
     /// <summary>Завести сценарий — Хранитель по роли; он и становится автором.</summary>
     public async Task<bool> CanCreateScenarioAsync(CancellationToken cancellationToken = default) =>

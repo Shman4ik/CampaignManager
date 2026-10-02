@@ -36,7 +36,7 @@ public static class CreationLinks
 
     /// <summary>Куда вернуться без создания: сыщик — на главную, сценарий — в сценарий, НПС и прегены — в библиотеку.</summary>
     public static string Back(CharacterKind kind, Guid? scenarioId) => scenarioId is { } scenario
-        ? $"scenarios/{scenario}"
+        ? Scenarios.ScenarioLinks.Workspace(scenario, kind is CharacterKind.Pregen ? Scenarios.ScenarioLinks.Tabs.Pregens : Scenarios.ScenarioLinks.Tabs.Npcs)
         : kind is CharacterKind.Player ? "" : "npcs";
 
     /// <summary>Черновик помощника в <c>localStorage</c>: свой на каждое место (кампания, сценарий, библиотека).</summary>
