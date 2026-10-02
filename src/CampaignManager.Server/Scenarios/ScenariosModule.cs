@@ -15,6 +15,7 @@ public static class ScenariosModule
         builder.Services.AddScoped<ScenarioCastService>();
         builder.Services.AddScoped<ScenarioExchangeService>();
         builder.Services.AddScoped<ScenarioPlayService>();
+        builder.Services.AddScoped<RunService>();
         return builder;
     }
 
@@ -52,8 +53,6 @@ public static class ScenariosModule
             return TypedResults.NoContent();
         }).WithName("ReorderScenarioPart");
 
-        group.MapGet(ScenariosRoutes.RunsPattern, (Guid scenarioId, ScenarioPlayService p, CancellationToken ct) =>
-            p.ListRunsAsync(scenarioId, ct)).WithName("ListScenarioRuns");
         group.MapPut(ScenariosRoutes.LocationMusicPattern, (Guid scenarioId, Guid locationId, LocationMusicInput input, ScenarioPlayService p,
             CancellationToken ct) => p.SetLocationMusicAsync(scenarioId, locationId, input, ct)).WithName("SetScenarioLocationMusic");
         group.MapGet(ScenariosRoutes.HandoutScreenPattern, async Task<IResult> (Guid scenarioId, Guid handoutId, HttpContext http,
@@ -143,6 +142,7 @@ public static class ScenariosModule
         }).WithName("RemoveScenarioPregen");
 
         ScenarioExchangeEndpoints.Map(group);
+        RunEndpoints.Map(group);
         return app;
     }
 }

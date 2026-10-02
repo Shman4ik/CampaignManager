@@ -38,7 +38,7 @@ public sealed class ScenarioPlayTests : KitContext
         {
             [nameof(IScenariosApi.ListRunsAsync)] = _ => Task.FromResult<IReadOnlyList<ScenarioRunDto>>(
             [
-                new(RunId, TableFakes.CampaignId, "Маски", ScenarioRunStatus.Running, null),
+                new(RunId, TableFakes.CampaignId, "Маски", CampaignKind.Campaign, ScenarioRunStatus.Running, null, null, false, [], true, true),
             ]),
         }));
         Services.AddSingleton<ICharactersApi>(new TableFakes.Characters());

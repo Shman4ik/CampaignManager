@@ -1,5 +1,4 @@
 using CampaignManager.Contracts.Scenarios;
-using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Music;
 using CampaignManager.Data;
 using CampaignManager.Data.Scenarios;
@@ -10,50 +9,14 @@ using Microsoft.EntityFrameworkCore;
 namespace CampaignManager.Server.Scenarios;
 
 /// <summary>
-/// Режим игры (T2.5b): прохождения, из которых берутся сыщики для проверок, музыка локации и раздатка для показа
-/// игрокам (второй экран). Знание модуля — <c>Scenarios/CLAUDE.md</c>.
+/// Режим игры (T2.5b): музыка локации и раздатка для показа игрокам (второй экран). Прохождения, из которых режим игры
+/// берёт сыщиков для проверок, читает <see cref="RunService"/> (T2.5c). Знание модуля — <c>Scenarios/CLAUDE.md</c>.
 /// </summary>
 public sealed class ScenarioPlayService(
     CmDbContext dbContext,
     AccessPolicy access,
-    CurrentUser currentUser,
     ILogger<ScenarioPlayService> logger)
 {
-    /// <summary>
-    /// Прохождения сценария в кампаниях, которые ведёт вошедший (администратору — все): только там ему отдадут сыщиков
-    /// (<c>GET /campaigns/{id}/investigators</c> — Хранителю кампании). Незавершённые — первыми, свежие — выше.
-    /// Создание прохождений и анонс — T2.5c.
-    /// </summary>
-    public async Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken)
-    {
-        await access.ForScenarioAsync(scenarioId, cancellationToken).Demand(Operation.Read);
-        var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
-
-        var rows = await dbContext.ScenarioRuns.AsNoTracking()
-            .Where(r => r.ScenarioId == scenarioId)
-            .Select(r => new
-            {
-                r.Id,
-                r.CampaignId,
-                CampaignName = dbContext.Campaigns.Where(c => c.Id == r.CampaignId).Select(c => c.Name).First(),
-                r.Status,
-                r.ScheduledAt,
-                r.CreatedAt,
-                Role = dbContext.CampaignMembers.Where(m => m.CampaignId == r.CampaignId && m.UserId == user.Id)
-                    .Select(m => (CampaignRole?)m.Role).FirstOrDefault(),
-            })
-            .ToListAsync(cancellationToken);
-
-        return
-        [
-            .. rows
-                .Where(r => AccessPolicy.ForCampaign(user, r.Role).CanEdit)
-                .OrderBy(r => r.Status == ScenarioRunStatus.Finished)
-                .ThenByDescending(r => r.ScheduledAt ?? r.CreatedAt)
-                .Select(r => new ScenarioRunDto(r.Id, r.CampaignId, r.CampaignName, r.Status, r.ScheduledAt)),
-        ];
-    }
-
     /// <summary>
     /// Музыка локации — оба списка целиком: настроения нормализуются (как теги фонотеки — «Бой» и «бой» один пул), прибитые
     /// треки — только из фонотеки. Трек, удалённый из фонотеки, уходит из локации сам (каскад <c>location_tracks</c>).

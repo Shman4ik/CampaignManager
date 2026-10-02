@@ -30,6 +30,21 @@ public static class ScenarioLabels
         _ => Tone.Neutral,
     };
 
+    /// <summary>«Объявлено» — состояние прохождения меткой (слово — <see cref="ScenarioText.Of(Core.Campaigns.ScenarioRunStatus)"/>).</summary>
+    public static string RunStatus(Core.Campaigns.ScenarioRunStatus status)
+    {
+        var text = ScenarioText.Of(status);
+        return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+    }
+
+    public static Tone RunTone(Core.Campaigns.ScenarioRunStatus status) => status switch
+    {
+        Core.Campaigns.ScenarioRunStatus.Announced => Tone.Info,
+        Core.Campaigns.ScenarioRunStatus.Running => Tone.Success,
+        Core.Campaigns.ScenarioRunStatus.Finished => Tone.Stone,
+        _ => Tone.Neutral,
+    };
+
     /// <summary>Тон метки вида факта — один на вкладку «Факты» и панель режима игры.</summary>
     public static Tone FactTone(KeyFactType type) => type switch
     {

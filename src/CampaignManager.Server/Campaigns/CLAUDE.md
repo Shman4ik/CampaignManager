@@ -4,7 +4,8 @@
 `JournalService`, `HomeService`. Маршруты, DTO и `ICampaignsApi` — `Contracts/Campaigns`, клиент —
 `ApiClient/Campaigns`, страницы — [UI/Campaigns/CLAUDE.md](../../CampaignManager.UI/Campaigns/CLAUDE.md).
 Таблицы — `campaigns`, `campaign_members`, `campaign_sessions` (+ чтение `scenario_runs`,
-`run_reservations`, `characters`) из T1.2; миграций модуль не добавил.
+`run_reservations`, `characters`) из T1.2; миграций модуль не добавил. Кампанию-ваншот вместе с Хранителем и прохождением
+заводит «Объявить ваншот» (`RunService`, модуль Scenarios, T2.5c), игрока в неё добавляет и бронь прегена.
 
 ## API
 
@@ -82,7 +83,11 @@
 4. доступные: не завершённые, где меня нет, **и ваншоты тоже** (решение владельца: в ваншот вступают и
    участником, и бронью прегена), с `Kind` для бейджа;
 5. ваншоты: прохождения с `signup_open` (их видит любой вошедший — бронировать может каждый), прегены
-   сценария прохождения кроме архивных, брони с именем забронировавшего.
+   сценария прохождения кроме архивных, брони с именем забронировавшего. Флаги кнопок брони (T2.5c) — правилом
+   `AccessPolicy` по прочитанным строкам: `CanReserve` — я не веду эту игру и брони у меня в ней ещё нет;
+   `CanRelease` — бронь моя, или я Хранитель кампании прохождения, или администратор; `MyCharacterId` — моя копия листа.
+   Саму бронь и её снятие пишет `RunService` модуля Scenarios ([Scenarios/CLAUDE.md](../Scenarios/CLAUDE.md)); после брони
+   ваншот появляется и среди «моих кампаний» с копией листа как активным сыщиком.
 
 ## Тесты
 
@@ -90,4 +95,5 @@
 `CampaignsApiTests` (создание, права правки и удаления, вступление и псевдоним, выход и лист, Хранителя не
 убрать, удаление кампании, почты, аноним), `JournalApiTests` (заметки, 404 постороннему, админ, номер,
 прохождение своей кампании, ссылки фазы развития), `HomeApiTests`. Правило участника — в
-`AccessPolicyTests` (`Members_rename_themselves_and_keeper_manages_players`).
+`AccessPolicyTests` (`Members_rename_themselves_and_keeper_manages_players`). Флаги брони на главной —
+`Scenarios/RunsApiTests` (вместе с самой бронью).
