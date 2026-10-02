@@ -610,8 +610,8 @@ public sealed class ScenarioExchangeService(
                 var outcome = ScenarioImportOutcome.Reused;
                 if (Find(library, source.Name) is { } existing)
                 {
+                    // Что параметры из файла к занятому листу не применяются, отчёт пишет один раз, а не в каждой строке.
                     characterId = existing;
-                    message = "занят лист из библиотеки — параметры из файла к нему не применялись";
                 }
                 else
                 {
