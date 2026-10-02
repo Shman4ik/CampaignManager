@@ -16,6 +16,9 @@ dotnet run --project tools/CampaignManager.Migrate -- --settings <файл> --re
   `AccessKey`, `SecretKey`, `Secure`, `SourceBucket` (боевой `campain-manager`, только чтение), `TargetBucket`
   (`campaign-manager-dev` для ветки dev). Собирать скриптом из `CampaignManager.Web/appsettings*.json` основного
   чекаута, не печатая. На проде (T3.2) источник и цель — один бакет, тогда объекты не копируются вовсе.
+- **Повторный прогон на `dev`, когда объекты уже в `campaign-manager-dev`**: `SourceBucket` = `TargetBucket` =
+  `campaign-manager-dev` и ключ 2.0 из `src/CampaignManager.Server/appsettings.Development.json` (у него права только
+  на этот бакет, боевой он не читает). Перенос только сверяет объекты в цели — размеры и «не нашлось» те же.
 - **`--reset`** — очистить всё в `cm`, кроме журнала миграций, и перенести заново. Без него непустая `cm` — ошибка.
 - `--skip-files` — без MinIO (строки `files` заводятся без размера); `--keeper-time-zone` (по умолчанию
   `Europe/Prague`) — см. «Дата игры»; `--note` — строка в начало отчёта.
