@@ -12,11 +12,13 @@
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
-| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
+| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
 | `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
-| `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui`, `/dev/checks` (T2.7) |
+| `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5, загрузка и отдача; сироты — в админке), `/dev/ui`, `/dev/checks` (T2.7) |
 | `Campaigns/` | главная, кампании, участники, журнал — [CLAUDE.md](Campaigns/CLAUDE.md) |
 | `Catalogs/` | справочники: общая `CatalogPage<T>`, страницы семи справочников, импорт и экспорт — [CLAUDE.md](Catalogs/CLAUDE.md) |
+| `Profile/` | личный кабинет `/profile` — [CLAUDE.md](Profile/CLAUDE.md) |
+| `Admin/` | `/admin/users`, `/admin/applications`, `/admin/files`, счётчик заявок `AdminBadges` — [CLAUDE.md](Admin/CLAUDE.md) |
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
@@ -116,8 +118,10 @@
   `AuthenticationState` (`MeAuthenticationStateProvider`, `/api/v1/me`) и показывает
   `NavMenu.VisibleTo(user)`: гость — только «Главная», игрок — разделы под входом, Хранитель — свои,
   администратор (несёт и роль Keeper) — всё. Меню только прячет — защищает сервер (`AccessPolicy`).
-  Роли сверяются по `nameof(UserRole.…)`. Счётчик заявок — `Badges` (адрес пункта → число), его
-  наполнит админка (T2.9).
+  Роли сверяются по `nameof(UserRole.…)`. Счётчики на пунктах — `Badges` (адрес пункта → число); сейчас
+  один — заявки на Хранителя (`Admin/AdminBadges`, наполняет `MainLayout` при входе администратора).
+- Принципал меняется и без перезагрузки: `IUserSession.RefreshAsync()` перечитывает `/me` (новое имя из кабинета,
+  снятая с себя роль администратора) — меню и `AuthorizeView` перерисуются сами.
 - **Кабинет, «Войти», «Выйти» — не пункты `NavMenu`**, а `UserMenu` в слоте `Footer`: в рельсе —
   кабинет с инициалом и «Выйти» (без сессии — «Войти» с `returnUrl` текущей страницы), в листе
   «Ещё» — имя, роль, «Выйти» и кабинет. Вход и выход — серверные адреса, `forceLoad: true`.

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Core.Identity;
+using CampaignManager.UI.Identity;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace CampaignManager.Web.Client.Identity;
@@ -11,13 +12,21 @@ namespace CampaignManager.Web.Client.Identity;
 /// читается заново. Роль в принципале — только чтобы прятать кнопки: защищает сервер.
 /// </summary>
 public sealed class MeAuthenticationStateProvider(IIdentityApi identityApi, ILogger<MeAuthenticationStateProvider> logger)
-    : AuthenticationStateProvider
+    : AuthenticationStateProvider, IUserSession
 {
     private static readonly AuthenticationState Anonymous = new(new ClaimsPrincipal(new ClaimsIdentity()));
 
     private Task<AuthenticationState>? _state;
 
     public override Task<AuthenticationState> GetAuthenticationStateAsync() => _state ??= LoadAsync();
+
+    /// <summary>Перечитать <c>/me</c> (новое имя после кабинета) и оповестить меню и <c>AuthorizeView</c>.</summary>
+    public Task RefreshAsync()
+    {
+        _state = LoadAsync();
+        NotifyAuthenticationStateChanged(_state);
+        return _state;
+    }
 
     private async Task<AuthenticationState> LoadAsync()
     {

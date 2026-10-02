@@ -2,18 +2,18 @@
 @using CampaignManager.Contracts.Files
 @using Microsoft.AspNetCore.Components.Forms
 @inject IFilesApi FilesApi
-@inject DialogService Dialogs
 
 @*
     Проверка модуля файлов (T1.5): загрузка через ApiClient, отдача картинки и звука со своего
-    origin, перемотка трека (Range) и отчёт о сиротах. Настоящие экраны — у модулей (фонотека T2.8,
-    админка T2.9); здесь только сквозная проверка, как /dev/ping.
+    origin, перемотка трека (Range). Настоящие экраны — у модулей (фонотека T2.8); сироты — в админке,
+    /admin/files (T2.9). Здесь только сквозная проверка, как /dev/ping.
 *@
 <PageHeader Title="Проверка файлов" />
 
 <div class="cm-page">
     <p class="cm-text-muted mb-4">
         Загрузка → <code class="font-mono">POST @FilesRoutes.Upload</code> → MinIO; отдача — <code class="font-mono">GET /api/v1/files/{id}</code> с Range.
+        Сироты — в админке: <a class="text-accent-700 underline" href="admin/files">Файлы</a>.
     </p>
 
     @if (_error is not null)
@@ -74,73 +74,12 @@
             </div>
         </section>
     }
-
-    <section class="cm-section">
-        <div class="cm-section-header"><h2 class="cm-section-title">Сироты</h2></div>
-        <div class="cm-card">
-            <div class="cm-card-body">
-                <p class="cm-text-muted mb-3">
-                    Файлы старше суток, на которые никто не ссылается. Сначала отчёт, удаление — отдельной кнопкой
-                    и только того, что в отчёте.
-                </p>
-                <div class="flex flex-wrap gap-2">
-                    <Button Variant="ButtonVariant.Secondary" Icon="fa-magnifying-glass" Disabled="@_busy" OnClick="LoadOrphansAsync">Найти сирот</Button>
-                    @if (_orphans is { Files.Count: > 0 } report)
-                    {
-                        <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" Disabled="@_busy" OnClick="DeleteOrphansAsync">
-                            Удалить @report.Files.Count (@FormatSize(report.TotalBytes))
-                        </Button>
-                    }
-                </div>
-
-                @if (_orphans is { Files.Count: 0 })
-                {
-                    <p class="mt-3 text-primary-500">Сирот нет.</p>
-                }
-
-                @if (_deleted is { } deleted)
-                {
-                    <Alert Tone="Tone.Success" Small="true" class="mt-3 mb-0">
-                        Удалено: @deleted.Deleted.Count. Пропущено (уже не сироты): @deleted.Skipped.Count.
-                        @if (deleted.ObjectsNotDeleted.Count > 0)
-                        {
-                            <span>Объекты не удалились: @string.Join(", ", deleted.ObjectsNotDeleted).</span>
-                        }
-                    </Alert>
-                }
-            </div>
-
-            @if (_orphans is { Files.Count: > 0 } orphans)
-            {
-                <div class="cm-table-wrap border-t border-primary-200">
-                    <table class="cm-table">
-                        <thead>
-                            <tr><th>Файл</th><th>Тип</th><th class="text-right">Размер</th><th>Загружен</th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var file in orphans.Files)
-                            {
-                                <tr>
-                                    <td>@(file.OriginalName ?? file.ExternalUrl)</td>
-                                    <td>@file.ContentType</td>
-                                    <td class="text-right">@(file.SizeBytes is { } size ? FormatSize(size) : "—")</td>
-                                    <td>@file.CreatedAt.ToLocalTime().ToString("d MMMM yyyy, HH:mm", CultureInfo.CurrentCulture)</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </div>
-    </section>
 </div>
 
 @code {
     private const long MaxUploadBytes = 50L * 1024 * 1024;
 
     private readonly List<StoredFileDto> _files = [];
-    private OrphanFilesReport? _orphans;
-    private DeleteOrphansResponse? _deleted;
     private string? _externalUrl;
     private string? _error;
     private bool _busy;
@@ -164,27 +103,6 @@
         Add(await FilesApi.AddExternalAsync(_externalUrl));
         _externalUrl = null;
     });
-
-    private Task LoadOrphansAsync() => RunAsync(async () =>
-    {
-        _deleted = null;
-        _orphans = await FilesApi.GetOrphansAsync();
-    });
-
-    private async Task DeleteOrphansAsync()
-    {
-        if (_orphans is not { Files.Count: > 0 } report
-            || !await Dialogs.ConfirmDeleteAsync("Удалить сирот?", $"Файлов: {report.Files.Count}, {FormatSize(report.TotalBytes)}."))
-        {
-            return;
-        }
-
-        await RunAsync(async () =>
-        {
-            _deleted = await FilesApi.DeleteOrphansAsync([.. report.Files.Select(f => f.Id)]);
-            _orphans = await FilesApi.GetOrphansAsync();
-        });
-    }
 
     private void Add(StoredFileDto file)
     {

@@ -3,6 +3,7 @@ using CampaignManager.ApiClient;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Core.Identity;
 using CampaignManager.UI;
+using CampaignManager.UI.Identity;
 using CampaignManager.Web.Client.Identity;
 using CampaignManager.Web.Client;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -29,6 +30,8 @@ builder.Services.AddAuthorizationCore(options =>
     options.AddPolicy(Policies.Admin, policy => policy.RequireRole(nameof(UserRole.Admin)));
 });
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<AuthenticationStateProvider, MeAuthenticationStateProvider>();
+builder.Services.AddScoped<MeAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<MeAuthenticationStateProvider>());
+builder.Services.AddScoped<IUserSession>(sp => sp.GetRequiredService<MeAuthenticationStateProvider>());
 
 await builder.Build().RunAsync();

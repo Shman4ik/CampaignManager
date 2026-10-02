@@ -18,6 +18,10 @@ public sealed class ApiProblemException(int statusCode, string code, string mess
     public static ApiProblemException Invalid(string message) =>
         new(StatusCodes.Status400BadRequest, ApiProblemCodes.Invalid, message);
 
+    /// <summary>409 «так нельзя по смыслу»: состояние не то (заявка уже рассмотрена, последний администратор).</summary>
+    public static ApiProblemException Conflict(string message) =>
+        new(StatusCodes.Status409Conflict, ApiProblemCodes.Conflict, message);
+
     public static ApiProblemException Duplicate(string message) =>
         new(StatusCodes.Status409Conflict, ApiProblemCodes.Duplicate, message);
 

@@ -1,0 +1,141 @@
+@page "/admin/files"
+@attribute [Authorize(Policy = Policies.Admin)]
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@inject IFilesApi FilesApi
+@inject DialogService Dialogs
+@inject ToastService Toasts
+
+@* Файлы-«сироты» — строки cm.files, на которые ничто не ссылается (старше суток). Сначала отчёт, удаление —
+   отдельной кнопкой и только того, что в отчёте: сервер повторяет условие в самом DELETE, и файл, на
+   который сослались после отчёта, уйдёт в «пропущено». Перенесено с /dev/files (T1.5). API — модуль
+   файлов (Server/Files/CLAUDE.md, «Сироты»). *@
+<PageHeader Title="Файлы" />
+
+<div class="cm-page">
+    <section class="cm-section" aria-labelledby="orphans-title">
+        <div class="cm-section-header"><h2 id="orphans-title" class="cm-section-title">Сироты</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body">
+                <p class="cm-text-muted mb-3">
+                    Картинки и треки старше суток, на которые не ссылаются ни лист, ни сценарий, ни справочник, ни фонотека.
+                    Обычно это загрузки из форм, которые так и не сохранили, и замены старых картинок.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-magnifying-glass" Busy="_busy" OnClick="LoadAsync">
+                        @(_report is null ? "Найти сирот" : "Искать заново")
+                    </Button>
+                    @if (_report is { Files.Count: > 0 } report)
+                    {
+                        <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" Disabled="_busy" OnClick="DeleteAsync">
+                            Удалить @report.Files.Count (@FormatSize(report.TotalBytes))
+                        </Button>
+                    }
+                </div>
+
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0 mt-3">@_error</Alert>
+                }
+
+                @if (_deleted is { } deleted)
+                {
+                    <Alert Tone="Tone.Success" Small="true" class="mb-0 mt-3">
+                        Удалено: @deleted.Deleted.Count. Пропущено (уже не сироты): @deleted.Skipped.Count.
+                        @if (deleted.ObjectsNotDeleted.Count > 0)
+                        {
+                            <span>Хранилище не удалило объекты: @string.Join(", ", deleted.ObjectsNotDeleted).</span>
+                        }
+                    </Alert>
+                }
+
+                @if (_report is { Files.Count: 0 })
+                {
+                    <p class="mt-3 text-primary-500">Сирот нет.</p>
+                }
+            </div>
+
+            @if (_report is { Files.Count: > 0 } orphans)
+            {
+                <div class="border-t border-primary-200">
+                    <DataTable Items="orphans.Files" RowKey="f => f.Id" AriaLabel="Сироты">
+                        <Columns>
+                            <DataColumn TItem="StoredFileDto" Title="Файл" SortBy="f => f.OriginalName ?? f.ExternalUrl">
+                                <span class="break-all">@(context.OriginalName ?? context.ExternalUrl)</span>
+                            </DataColumn>
+                            <DataColumn TItem="StoredFileDto" Title="Тип">@context.ContentType</DataColumn>
+                            <DataColumn TItem="StoredFileDto" Title="Размер" AlignEnd="true" SortBy="f => f.SizeBytes ?? 0">
+                                <span class="whitespace-nowrap">@(context.SizeBytes is { } size ? FormatSize(size) : "—")</span>
+                            </DataColumn>
+                            <DataColumn TItem="StoredFileDto" Title="Загружен" SortBy="f => f.CreatedAt" DefaultSort="false">
+                                <span class="whitespace-nowrap">@LocalTime.DateTime(context.CreatedAt)</span>
+                            </DataColumn>
+                        </Columns>
+                        <CardTemplate>
+                            <div class="break-all font-semibold text-primary-800">@(context.OriginalName ?? context.ExternalUrl)</div>
+                            <div class="cm-meta">
+                                <span>@context.ContentType</span>
+                                <span>@(context.SizeBytes is { } size ? FormatSize(size) : "—")</span>
+                                <span>@LocalTime.DateTime(context.CreatedAt)</span>
+                            </div>
+                        </CardTemplate>
+                    </DataTable>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private OrphanFilesReport? _report;
+    private DeleteOrphansResponse? _deleted;
+    private string? _error;
+    private bool _busy;
+
+    private Task LoadAsync() => RunAsync(async () =>
+    {
+        _deleted = null;
+        _report = await FilesApi.GetOrphansAsync();
+    });
+
+    private async Task DeleteAsync()
+    {
+        if (_report is not { Files.Count: > 0 } report
+            || !await Dialogs.ConfirmDeleteAsync("Удалить сирот?", $"Файлов: {report.Files.Count}, {FormatSize(report.TotalBytes)}. Строки и объекты в хранилище."))
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            _deleted = await FilesApi.DeleteOrphansAsync([.. report.Files.Select(f => f.Id)]);
+            _report = await FilesApi.GetOrphansAsync();
+            Toasts.Success($"Удалено файлов: {_deleted.Deleted.Count}.");
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.0} МБ",
+        >= 1024 => $"{bytes / 1024.0:0} КБ",
+        _ => $"{bytes} Б",
+    };
+}

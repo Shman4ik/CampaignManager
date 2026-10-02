@@ -1,0 +1,194 @@
+@page "/admin/users"
+@attribute [Authorize(Policy = Policies.Admin)]
+@implements IDisposable
+@using CampaignManager.Contracts.Admin
+@using CampaignManager.Core.Identity
+@using CampaignManager.UI.Platform
+@inject IAdminApi Api
+@inject AdminBadges Badges
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject IUserSession Session
+
+@* Пользователи и смена роли. Список целиком одним запросом (людей десятки) — поиск, фильтр и страницы на
+   клиенте. Роль меняется сразу и видна человеку со следующего запроса: роль сервер читает из базы
+   на каждый запрос, кэша claims v1 больше нет. Знание — Admin/CLAUDE.md. *@
+<PageHeader Title="Пользователи">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-inbox" Href="@AdminPages.Applications">
+            Заявки
+            @if (Pending > 0)
+            {
+                <span class="cm-count-badge">@Pending</span>
+            }
+        </Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <FilterPanel OnReset="ResetFilters">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по имени или почте…" aria-label="Поиск по имени или почте"
+               @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
+        <select class="cm-input w-full shrink-0 sm:w-56" aria-label="Роль" @bind="_role" @bind:after="ResetPage">
+            <option value="">Все роли</option>
+            @foreach (var role in Enum.GetValues<UserRole>())
+            {
+                <option value="@role">@RoleLabels.Role(role)</option>
+            }
+        </select>
+    </FilterPanel>
+
+    <AsyncContent Load="LoadAsync" LoadingMessage="Загружаю пользователей…" Context="loaded">
+        @{
+            var shown = Filter(_users);
+            var page = shown.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
+        }
+        <div class="cm-card">
+            <DataTable Items="page" RowKey="u => u.Id" AriaLabel="Пользователи" EmptyText="Нет пользователей по этим условиям.">
+                <Columns>
+                    <DataColumn TItem="AdminUserDto" Title="Пользователь">
+                        <div class="font-semibold text-primary-800">@context.DisplayName</div>
+                        <div class="text-sm text-primary-500">@context.Email</div>
+                    </DataColumn>
+                    <DataColumn TItem="AdminUserDto" Title="Роль">
+                        @RoleSelect(context)
+                    </DataColumn>
+                    <DataColumn TItem="AdminUserDto" Title="Последний вход">
+                        <span class="whitespace-nowrap">@(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : "не входил")</span>
+                    </DataColumn>
+                    <DataColumn TItem="AdminUserDto" Title="Заметки">
+                        @Notes(context)
+                    </DataColumn>
+                </Columns>
+                <CardTemplate>
+                    <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+                        <div class="min-w-0 flex-1 basis-48">
+                            <div class="truncate font-semibold text-primary-800">@context.DisplayName</div>
+                            <div class="truncate text-sm text-primary-500">@context.Email</div>
+                            <div class="text-sm text-primary-500">
+                                Вход: @(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : "не входил")
+                            </div>
+                            <div class="mt-1">@Notes(context)</div>
+                        </div>
+                        <div class="w-full sm:w-48">@RoleSelect(context)</div>
+                    </div>
+                </CardTemplate>
+            </DataTable>
+            <Pagination CurrentPage="_page" CurrentPageChanged="p => _page = p" PageSize="PageSize" TotalItems="shown.Count" />
+        </div>
+    </AsyncContent>
+</div>
+
+@code {
+    private const int PageSize = 20;
+
+    private List<AdminUserDto> _users = [];
+    private string? _search;
+    private UserRole? _role;
+    private int _page = 1;
+    private Guid? _busyUser;
+    // Отменённая смена роли: select уже показывает выбранное, разметка — нет. Новый ключ пересоздаёт его.
+    private int _selectGeneration;
+
+    private int Pending => Badges.Counts.GetValueOrDefault(AdminPages.Applications);
+
+    // Счётчик в шапке: при прямой загрузке страницы сводку оболочка дочитывает уже после первой отрисовки.
+    protected override void OnInitialized() => Badges.Changed += OnBadgesChanged;
+
+    private void OnBadgesChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Badges.Changed -= OnBadgesChanged;
+
+    private async Task<List<AdminUserDto>> LoadAsync(CancellationToken cancellationToken)
+    {
+        _users = [.. await Api.GetUsersAsync(cancellationToken)];
+        return _users;
+    }
+
+    private RenderFragment RoleSelect(AdminUserDto user) =>
+        @<select class="cm-input" aria-label="@($"Роль: {user.DisplayName}")" value="@user.Role" disabled="@(_busyUser == user.Id)"
+                 @key="(user.Id, user.Role, _selectGeneration)"
+                 @onchange="e => ChangeRoleAsync(user, e.Value?.ToString())">
+            @foreach (var role in Enum.GetValues<UserRole>())
+            {
+                <option value="@role" selected="@(role == user.Role)">@RoleLabels.Role(role)</option>
+            }
+        </select>;
+
+    private static RenderFragment Notes(AdminUserDto user) =>
+        @<div class="flex flex-wrap gap-1.5">
+            @if (user.IsMe)
+            {
+                <Badge Tone="Tone.Neutral">Это вы</Badge>
+            }
+            @if (user.HasPendingApplication)
+            {
+                <Badge Tone="Tone.Warning" Icon="fa-hourglass-half">Заявка ждёт</Badge>
+            }
+        </div>;
+
+    private List<AdminUserDto> Filter(IEnumerable<AdminUserDto> users)
+    {
+        var search = _search?.Trim();
+        return
+        [
+            .. users.Where(u => (_role is null || u.Role == _role)
+                                && (string.IsNullOrEmpty(search)
+                                    || u.DisplayName.Contains(search, StringComparison.CurrentCultureIgnoreCase)
+                                    || u.Email.Contains(search, StringComparison.OrdinalIgnoreCase))),
+        ];
+    }
+
+    private void ResetPage() => _page = 1;
+
+    private void ResetFilters()
+    {
+        _search = null;
+        _role = null;
+        _page = 1;
+    }
+
+    private async Task ChangeRoleAsync(AdminUserDto user, string? value)
+    {
+        if (!Enum.TryParse<UserRole>(value, out var role) || role == user.Role)
+        {
+            return;
+        }
+
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
+            $"{user.DisplayName}: {RoleLabels.Role(role).ToLowerInvariant()}?",
+            $"Роль сменится с «{RoleLabels.Role(user.Role)}» на «{RoleLabels.Role(role)}». {RoleLabels.RoleDescription(role)}")
+        {
+            ConfirmText = "Сменить роль",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = user.IsMe ? "Это ваша собственная роль." : null,
+        });
+        if (!confirmed)
+        {
+            _selectGeneration++;
+            return;
+        }
+
+        _busyUser = user.Id;
+        try
+        {
+            var updated = await Api.ChangeRoleAsync(user.Id, role);
+            _users[_users.FindIndex(u => u.Id == user.Id)] = updated;
+            Toasts.Success($"{updated.DisplayName} — {RoleLabels.Role(updated.Role).ToLowerInvariant()}.");
+            if (updated.IsMe)
+            {
+                // Снял с себя администратора — меню должно спрятать админку сразу.
+                await Session.RefreshAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _selectGeneration++;
+            Toasts.Error(ApiErrors.Describe(ex), "Роль не изменена");
+        }
+        finally
+        {
+            _busyUser = null;
+        }
+    }
+}

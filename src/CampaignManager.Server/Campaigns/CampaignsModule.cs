@@ -13,7 +13,6 @@ public static class CampaignsModule
         services.AddScoped<CampaignService>();
         services.AddScoped<JournalService>();
         services.AddScoped<HomeService>();
-        services.AddExceptionHandler<CampaignRejectedExceptionHandler>();
         return builder;
     }
 

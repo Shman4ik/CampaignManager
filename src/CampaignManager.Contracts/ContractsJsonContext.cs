@@ -1,10 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
+using CampaignManager.Contracts.Profile;
 
 namespace CampaignManager.Contracts;
 
@@ -55,4 +57,16 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CatalogList<CreatureDto>))]
 [JsonSerializable(typeof(CatalogFile<CreatureDto>))]
 [JsonSerializable(typeof(CatalogImportReport))]
+[JsonSerializable(typeof(ProfileDto))]
+[JsonSerializable(typeof(UpdateDisplayNameRequest))]
+[JsonSerializable(typeof(SubmitKeeperApplicationRequest))]
+[JsonSerializable(typeof(PreferencesDto))]
+[JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(AdminSummaryDto))]
+[JsonSerializable(typeof(IReadOnlyList<AdminUserDto>))]
+[JsonSerializable(typeof(AdminUserDto))]
+[JsonSerializable(typeof(ChangeRoleRequest))]
+[JsonSerializable(typeof(IReadOnlyList<KeeperApplicationDto>))]
+[JsonSerializable(typeof(KeeperApplicationDto))]
+[JsonSerializable(typeof(RejectApplicationRequest))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
