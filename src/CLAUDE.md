@@ -185,3 +185,59 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 входа — `dotnet run --project src/CampaignManager.Server --no-build --urls https://localhost:8081`.
 `/dev/ping` —
 сквозная проверка: страница → `ApiClient` → `GET /api/v1/ping` → `Data` → Postgres.
+
+## Beta-стенд
+
+**https://beta.cthulhu.dmnet.dev** — 2.0 на живой системе, по мере влития карточек (T0.4). Прод v1
+(`cthulhu.dmnet.dev`) и его выкатка не затронуты.
+
+- **Выкатка.** Push в `master`, задевший `src/**`, `Directory.*.props`, `global.json`, `NuGet.config` или сам
+  воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-beta-deploy.yml` собирает
+  `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и коммитит тег в приватный
+  `Shman4ik/dmnet-gitops`, `workloads/campaign-manager-beta/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`,
+  тот же, что у v1). Argo CD (Application `campaign-manager-beta`, namespace `campaign-manager-beta`)
+  катит его за ~90 с. Старые версии пакета чистятся, последние 10 остаются.
+- **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .`. Внутри — только
+  `src/`; Node скопирован в SDK-стадию ради Tailwind (MSBuild-таргет `UI` сам делает `npm ci`).
+  Рантайм — `aspnet:10.0-noble-chiseled-extra`, порт 8080, без shell. Проверка локально:
+  `wslc run --rm -p 58080:8080 --env-file <файл> campaign-manager-v2` и `curl localhost:58080/health`.
+- **Окружение — `Production`**, отдельного `Beta` нет: стенд должен вести себя как будущий прод
+  (страница ошибки, HSTS, без отладки WebAssembly), а страницы `/dev/*` — обычные страницы UI и
+  открываются в любом окружении. `appsettings.<Env>.json` всё равно в `.gitignore`, так что настройки —
+  только переменными окружения.
+- **Прокси.** TLS снимает Traefik, поэтому в Deployment `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`:
+  без него `UseForwardedHeaders` доверяет только loopback, и `redirect_uri` в Auth0 уходит с `http://`.
+  Пробы — `httpGet /health` (без проверки базы: холодный старт Neon не должен убивать под).
+- **Секреты** — SealedSecret `campaign-manager-beta-env` в dmnet-gitops (зашифрован ключом кластера под
+  namespace `campaign-manager-beta`): `ConnectionStrings__DefaultConnection` — **ветка Neon `dev`**,
+  `Authentication__Auth0__{Domain,ClientId,ClientSecret}` — **dev-приложение Auth0** (в нём разрешены
+  `https://beta.cthulhu.dmnet.dev/signin-oidc` и `/signout-callback-oidc`). Значения копируются
+  скриптом из `CampaignManager.Web/appsettings.Development.json` основного чекаута и шифруются
+  `kubeseal --raw` на VPS, не попадая ни в вывод, ни в git. Добавить ключ, не расшифровывая остальные:
+
+  ```bash
+  printf '%s' "$VALUE" | ssh vps 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubeseal --raw \
+    --namespace campaign-manager-beta --name campaign-manager-beta-env --from-file=/dev/stdin'
+  ```
+
+  и вывод — строкой под `encryptedData` в `workloads/campaign-manager-beta/campaign-manager-beta-env.sealed.yaml`
+  (PR в dmnet-gitops). Несекретное (`Minio__Endpoint`, `Minio__BucketName`…) — в `env` Deployment.
+- **Файлы** — бакет `campaign-manager-dev` на `s3.dmnet.dev` (заводит T1.3), не боевой `campain-manager`.
+  `Minio__AccessKey`/`Minio__SecretKey` в секрет ещё не положены: до них сервер работает, а запросы к
+  файлам отвечают ошибкой с именем недостающей настройки. Ключ — отдельный пользователь MinIO с правами
+  только на этот бакет, а не корневой.
+- **База — та же ветка `dev`, что у локальной разработки**, и её сбрасывает и наполняет T1.3 (`--reset`,
+  `neonctl branches reset dev --parent`) — данные беты в любой момент могут быть заменены, это нормально.
+  **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её на `dev`
+  **до слияния** своего PR — иначе бета после выкатки упадёт на первом запросе к новой таблице:
+
+  ```bash
+  CM_DB="<строка ветки dev из appsettings.Development.json>" dotnet ef database update --project src/CampaignManager.Data
+  ```
+
+  После сброса ветки `dev` от `main` схемы `cm` нет — накатить той же командой (и перенос T1.3).
+- **Откат** — revert коммита `campaign-manager-beta 0.2.N` в dmnet-gitops (или ручной `newTag` на
+  прежнюю версию, PR в dmnet-gitops): Argo вернёт прежний образ. Миграцию откат не отменяет.
+- **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан, как и у прода:
+  войти может любой с подтверждённой почтой и станет игроком на данных `dev`. Первые админы —
+  `Authorization__AdminEmails__0` в секрет тем же `kubeseal --raw`, если роли из переноса не хватит.
