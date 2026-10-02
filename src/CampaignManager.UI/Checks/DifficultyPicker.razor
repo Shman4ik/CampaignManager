@@ -1,0 +1,31 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Checks
+@using CampaignManager.Core.Dice
+
+@* Три уровня сложности (стр. 80) кнопками, а не выпадающим списком: за столом это один тап. Рядом с
+   каждым — сколько нужно выбросить, если значение уже известно (Check.Target, Core). *@
+<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Сложность проверки">
+    @foreach (var difficulty in CheckRules.Difficulties)
+    {
+        var active = difficulty == Value;
+        <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)" Disabled="@Disabled"
+                role="radio" aria-checked="@(active ? "true" : "false")" data-testid="@($"check-difficulty-{difficulty}")"
+                OnClick="() => ValueChanged.InvokeAsync(difficulty)">
+            @CheckRules.DifficultyLabel(difficulty)@TargetSuffix(difficulty)
+        </Button>
+    }
+</div>
+
+@code {
+    [Parameter] public Difficulty Value { get; set; }
+
+    [Parameter] public EventCallback<Difficulty> ValueChanged { get; set; }
+
+    /// <summary>Значение навыка — тогда у кнопок появляется «≤ 27».</summary>
+    [Parameter] public int? SkillValue { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private string TargetSuffix(Difficulty difficulty) =>
+        SkillValue is { } value ? $" ≤ {Check.Target(value, difficulty)}" : "";
+}

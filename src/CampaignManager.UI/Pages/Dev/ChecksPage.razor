@@ -1,0 +1,203 @@
+@page "/dev/checks"
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+@inject UiEnvironment Environment
+@inject ToastService Toasts
+
+@* Диалог проверки и групповая проверка на тестовом листе — только в Development. Лист сыщика делает
+   T2.3, сценарий — T2.5; до них диалог показывается здесь: на документе листа из Core, со справочником,
+   как его получит страница. Трату Удачи и отметку применяет страница (CheckRules.Apply) — диалог лист
+   не пишет. Данные выдуманы, на сервер страница не ходит. *@
+@if (!Environment.IsDevelopment)
+{
+    <PageHeader Title="Страница не найдена" />
+    <div class="cm-page">
+        <EmptyState Icon="fa-map-signs" Title="По этому адресу ничего нет" />
+    </div>
+    return;
+}
+
+<PageHeader Title="Проверки">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="Reset">Сбросить лист</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Лист сыщика</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack">
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-2" data-testid="dev-sheet">
+                    <div><span class="cm-meta-label">Сыщик</span> <strong>@_sheet.Personal.Name</strong></div>
+                    <div><span class="cm-meta-label">Удача</span> <strong data-testid="dev-sheet-luck">@_sheet.Current.Luck</strong></div>
+                    <div>
+                        <span class="cm-meta-label">Отмечены</span>
+                        <span data-testid="dev-sheet-checked">@(CheckedSkills.Count == 0 ? "—" : string.Join(", ", CheckedSkills))</span>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <Button Icon="fa-dice-d20" data-testid="dev-check-sheet" OnClick="() => OpenSheet(null)">Проверка</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => OpenSheet($"skill:{SpotHidden.Id}"))">Внимание</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => OpenSheet("char:DEX"))">ЛВК</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => OpenSheet($"skill:{Handgun.Id}"))">Стрельба (пистолет)</Button>
+                </div>
+                <p class="cm-field-note">
+                    Диалог листа: трата Удачи и отметка развития приходят странице (OnSheetChange), она применяет их
+                    CheckRules.Apply — так будет делать лист сыщика (T2.3).
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Режим игры и без листа</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body flex flex-wrap gap-2">
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-users" data-testid="dev-check-party" OnClick="OpenParty">
+                    Проверка в локации: Внимание, трудная
+                </Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-keyboard" data-testid="dev-check-manual" OnClick="OpenManual">
+                    Значение вручную
+                </Button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Кости в бою — панель на странице</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body">
+                <SkillCheckPanel Sheet="@_sheet" Catalog="@Catalog" InCombat="true" InitialKey="@($"skill:{Brawl.Id}")" />
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Групповая проверка состава</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body">
+                <GroupCheckPanel Party="@Party" Catalog="@Catalog" />
+            </div>
+        </div>
+    </section>
+</div>
+
+<SkillCheckModal @bind-Open="_open" Title="@_title" Sheet="@(_mode == Mode.Sheet ? _sheet : null)" Catalog="@(_mode == Mode.Manual ? null : Catalog)"
+                 Party="@(_mode == Mode.Party ? Party : null)" InitialKey="@_initialKey" InitialName="@_initialName"
+                 InitialDifficulty="@_difficulty" OnSheetChange="ApplyChange" />
+
+@code {
+    private enum Mode { Sheet, Party, Manual }
+
+    private static readonly List<SkillDefinition> Skills = BuildSkills();
+    private static readonly SkillCatalog Catalog = new(Skills);
+    private static SkillDefinition SpotHidden => Skills.First(s => s.Name == "Внимание");
+    private static SkillDefinition Handgun => Skills.First(s => s.Name == "Стрельба (пистолет)");
+    private static SkillDefinition Brawl => Skills.First(s => s.Name == "Ближний бой (драка)");
+
+    private CharacterSheet _sheet = Harvey();
+    private IReadOnlyList<CheckInvestigator> Party => [new(Guid.Parse("0199a000-0000-7000-8000-000000000001"), _sheet.Personal.Name, _sheet, "Аня"), Nora];
+
+    private static readonly CheckInvestigator Nora = new(Guid.Parse("0199a000-0000-7000-8000-000000000002"), "Нора Флинн", NoraSheet(), "Илья");
+
+    private bool _open;
+    private Mode _mode;
+    private string _title = "Проверка";
+    private string? _initialKey;
+    private string? _initialName;
+    private Difficulty _difficulty;
+
+    private List<string> CheckedSkills =>
+        _sheet.Skills.Where(s => s.Checked).Select(s => s.DisplayName(Catalog)).ToList();
+
+    private void OpenSheet(string? key) => Open(Mode.Sheet, $"Проверка — {_sheet.Personal.Name}", key, null, Difficulty.Regular);
+
+    private void OpenParty() => Open(Mode.Party, "Проверка: Внимание", $"skill:{SpotHidden.Id}", SpotHidden.Name, Difficulty.Hard);
+
+    private void OpenManual() => Open(Mode.Manual, "Проверка", null, null, Difficulty.Regular);
+
+    private void Open(Mode mode, string title, string? key, string? name, Difficulty difficulty)
+    {
+        _mode = mode;
+        _title = title;
+        _initialKey = key;
+        _initialName = name;
+        _difficulty = difficulty;
+        _open = true;
+    }
+
+    private void ApplyChange(CheckSheetChange change)
+    {
+        if (CheckRules.Apply(_sheet, Catalog, change))
+            Toasts.Success(change.LuckCost > 0 ? $"Удача −{change.LuckCost}: лист сохранился бы сам." : "Навык отмечен: лист сохранился бы сам.");
+    }
+
+    private void Reset() => _sheet = Harvey();
+
+    private static CharacterSheet Harvey() => new()
+    {
+        Personal = new PersonalInfo { Name = "Харви Уолтерс", Occupation = "Журналист", Age = 42 },
+        Characteristics = new Characteristics { Str = 50, Con = 60, Siz = 65, Dex = 55, App = 50, Int = 80, Pow = 60, Edu = 85 },
+        Current = new CurrentValues { HitPoints = 12, MagicPoints = 12, Sanity = 60, Luck = 45 },
+        Skills =
+        [
+            Row("Внимание", 65), Row("Слух", 40), Row("Психология", 55), Row("Работа в библиотеке", 70),
+            Row("Стрельба (пистолет)", 35), Row("Ближний бой (драка)", 45), Row("Мифы Ктулху", 6), Row("Средства", 30),
+            Row("Красноречие", 7),
+        ],
+    };
+
+    private static CharacterSheet NoraSheet() => new()
+    {
+        Personal = new PersonalInfo { Name = "Нора Флинн", Occupation = "Антиквар", Age = 33 },
+        Characteristics = new Characteristics { Str = 40, Con = 55, Siz = 50, Dex = 70, App = 65, Int = 75, Pow = 70, Edu = 80 },
+        Current = new CurrentValues { HitPoints = 10, MagicPoints = 14, Sanity = 70, Luck = 60 },
+        Skills = [Row("Внимание", 50), Row("Слух", 60), Row("Психология", 30)],
+    };
+
+    private static SheetSkill Row(string name, int value) => new() { SkillId = Skills.First(s => s.Name == name).Id, Value = value };
+
+    /// <summary>Кусок справочника навыков с книжными кодами (SkillCodes) — как его отдаст API справочников (T2.1).</summary>
+    private static List<SkillDefinition> BuildSkills()
+    {
+        List<SkillDefinition> skills = [];
+        var next = 1;
+
+        SkillDefinition Add(string name, int baseValue, SkillCategory category, Guid? parent = null, string? formula = null)
+        {
+            var skill = new SkillDefinition(Guid.Parse($"0199a001-0000-7000-8000-{next++:000000000000}"), name)
+            {
+                Code = SkillCodes.FromName(name),
+                BaseValue = baseValue,
+                Category = category,
+                ParentId = parent,
+                BaseFormula = formula,
+            };
+            skills.Add(skill);
+            return skill;
+        }
+
+        Add("Внимание", 25, SkillCategory.InformationGathering);
+        Add("Слух", 20, SkillCategory.InformationGathering);
+        Add("Работа в библиотеке", 20, SkillCategory.InformationGathering);
+        Add("Психология", 10, SkillCategory.Social);
+        Add("Красноречие", 5, SkillCategory.Social);
+        Add("Убеждение", 10, SkillCategory.Social);
+        Add("Средства", 0, SkillCategory.Social);
+        Add("Мифы Ктулху", 0, SkillCategory.Knowledge);
+        Add("Оккультизм", 5, SkillCategory.Knowledge);
+        Add("Уклонение", 0, SkillCategory.CombatGeneral, formula: "DEX/2");
+        var fighting = Add("Ближний бой", 0, SkillCategory.CombatGeneral);
+        Add("Ближний бой (драка)", 25, SkillCategory.CombatGeneral, fighting.Id);
+        var firearms = Add("Стрельба", 0, SkillCategory.CombatFirearms);
+        Add("Стрельба (пистолет)", 20, SkillCategory.CombatFirearms, firearms.Id);
+        Add("Стрельба (винтовка/дробовик)", 25, SkillCategory.CombatFirearms, firearms.Id);
+        Add("Скрытность", 20, SkillCategory.Actions);
+        Add("Лазание", 20, SkillCategory.Actions);
+        Add("Первая помощь", 30, SkillCategory.Healing);
+        return skills;
+    }
+}

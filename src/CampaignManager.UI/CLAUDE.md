@@ -14,7 +14,9 @@
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
 | `Platform/` | `ApiActivity` — состояние связи и записи |
-| `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui` |
+| `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui`, `/dev/checks` (T2.7) |
+| `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
+| `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
 
 Службы кита регистрирует `AddCampaignManagerUi(isDevelopment)` (зовёт `Web.Client`).
@@ -167,6 +169,8 @@
 - **Один диалог — `<Modal>`** (нативный `<dialog>`: фокус, Esc, подложка, верхний слой; прокрутку
   страницы блокирует `ModalWindow.razor.js`). Своих `fixed inset-0` не заводить. **Закрытый Modal
   ничего не рендерит.** Закрывает страница (`Open = false` в `OnClose`).
+- `Placement`: `Center` (по умолчанию), `Sheet` — лист снизу (меню «Ещё»), `Drawer` — панель справа во всю
+  высоту (ширма Хранителя: справочник поверх экрана, страница под ним остаётся).
 - `Dismissible="false"` — подложка и Esc не закрывают (крестик остаётся): диалоги посреди игры, где
   случайное касание не должно ничего пропускать (проверка ВЫН умирающих). Chrome закрывает окно на
   втором Esc сам — JS открывает его обратно.
@@ -195,7 +199,8 @@
 листа v1). `RollInput` — поле «выпало» и кнопка «Бросить» (`IDiceRoller` из DI), уровень успеха —
 только `Check.Evaluate` (Core), подписи — `RulesText`. Если успех ниже требуемой сложности —
 «нужен трудный успех». В v1 было четыре реализации; новая проверка в бою, погоне, листе — этот
-компонент.
+компонент. Тон и подпись уровня — `LevelText` (общий с диалогом проверки). Проверка навыка целиком
+(сложность, кости, Удача, повтор, отметка) — не своя разметка вокруг `RollInput`, а `Checks/SkillCheckPanel`.
 
 ## Связь вместо circuit
 

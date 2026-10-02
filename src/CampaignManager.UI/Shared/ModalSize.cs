@@ -9,9 +9,12 @@ public enum ModalSize
     ExtraLarge,
 }
 
-/// <summary>Где окно: по центру или листом снизу (меню «Ещё» на телефоне).</summary>
+/// <summary>Где окно: по центру, листом снизу (меню «Ещё» на телефоне) или панелью справа (ширма Хранителя).</summary>
 public enum ModalPlacement
 {
     Center,
     Sheet,
+
+    /// <summary>Панель во всю высоту справа: справочник поверх экрана, страница под ним не уходит.</summary>
+    Drawer,
 }

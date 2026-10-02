@@ -32,6 +32,11 @@ public static class LuckRules
     /// <summary>
     /// Уровни, до которых бросок можно дотянуть, от дешёвого к дорогому. Достигнутые не попадают; слишком
     /// дорогие остаются с <c>Affordable = false</c> — игрок должен видеть цену, которую не потянул.
+    /// <para>
+    /// Уровень, порог которого — 01, не предлагается вовсе: 01 всегда критический успех, а его Удачей не
+    /// покупают (стр. 97). Так при навыке 5–9 нет «чрезвычайного», при 2–3 — «трудного», при 1 — ничего.
+    /// В v1 такой вариант был и выкупал бросок до 01 (F-S03, исправлено в T2.7).
+    /// </para>
     /// </summary>
     public static IReadOnlyList<SpendOption> Options(int roll, int target, int currentLuck)
     {
@@ -43,7 +48,7 @@ public static class LuckRules
 
         foreach (var (level, threshold) in Thresholds(target))
         {
-            if (level <= current || threshold < 1)
+            if (level <= current || threshold <= 1)
                 continue;
 
             var cost = roll - threshold;

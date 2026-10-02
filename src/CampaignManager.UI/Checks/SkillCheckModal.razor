@@ -1,0 +1,54 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+
+@* Диалог проверки — SkillCheckPanel в общем Modal. На каждое открытие панель создаётся заново (@key):
+   итог прошлой проверки не должен встретить игрока в новой. Лист диалог не пишет — см. OnSheetChange. *@
+<Modal Open="@Open" OnClose="CloseAsync" Title="@Title" Size="ModalSize.Large" data-testid="skill-check-modal">
+    <ChildContent>
+        <SkillCheckPanel @key="_session" Sheet="@Sheet" Catalog="@Catalog" Party="@Party" InitialKey="@InitialKey"
+                         InitialName="@InitialName" InitialDifficulty="@InitialDifficulty" InCombat="@InCombat"
+                         OnSheetChange="@OnSheetChange" />
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Закрыть</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private int _session;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public string Title { get; set; } = "Проверка";
+
+    [Parameter] public CharacterSheet? Sheet { get; set; }
+
+    [Parameter] public SkillCatalog? Catalog { get; set; }
+
+    [Parameter] public IReadOnlyList<CheckInvestigator>? Party { get; set; }
+
+    [Parameter] public string? InitialKey { get; set; }
+
+    [Parameter] public string? InitialName { get; set; }
+
+    [Parameter] public Difficulty InitialDifficulty { get; set; }
+
+    [Parameter] public bool InCombat { get; set; }
+
+    /// <summary>Трата Удачи и отметка — родителю: он применяет <see cref="CheckRules.Apply"/> и сохраняет лист.</summary>
+    [Parameter] public EventCallback<CheckSheetChange> OnSheetChange { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+            _session++;
+
+        _wasOpen = Open;
+    }
+
+    private Task CloseAsync() => OpenChanged.InvokeAsync(false);
+}

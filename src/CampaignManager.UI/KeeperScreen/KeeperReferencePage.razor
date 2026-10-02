@@ -1,0 +1,28 @@
+@page "/reference"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@inject NavigationManager Navigation
+
+@* Ширма Хранителя страницей — для закладки на планшете. Содержимое то же, что в панели (KeeperReference);
+   открытый раздел — в адресе (?block=…), чтобы на него можно было дать ссылку и вернуться после F5.
+   Права — политикой Keeper: игрок получает «Нет доступа» от Routes, гость — вход. Кнопку «Ширма» в
+   шапке здесь не показываем (ShowModuleButtons="false") — она открыла бы то же самое поверх. *@
+<PageHeader Title="Ширма Хранителя" ShowModuleButtons="false" />
+
+<div class="cm-page">
+    <div class="cm-card">
+        <div class="cm-card-body">
+            <KeeperReference ActiveBlock="@ActiveBlock" ActiveBlockChanged="SelectBlock" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "block")]
+    public string? Block { get; set; }
+
+    private KeeperScreenBlock ActiveBlock => KeeperScreenBlocks.FromSlug(Block);
+
+    /// <summary><c>replace: true</c> — переключение разделов не забивает историю «назад».</summary>
+    private void SelectBlock(KeeperScreenBlock block) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("block", KeeperScreenBlocks.Slug(block)), replace: true);
+}
