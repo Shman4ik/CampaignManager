@@ -14,16 +14,25 @@ namespace CampaignManager.Core.Encounters;
 /// </summary>
 public static class EncounterQueue
 {
-    /// <summary>Полный порядок участников по правилу очереди (выбывшие тоже — они могут вернуться).</summary>
+    /// <summary>
+    /// Полный порядок участников по правилу очереди (выбывшие тоже — они могут вернуться). Бой (T2.6b) добавляет два ключа:
+    /// с бросками инициативы (необязательное правило, стр. 122) первым идёт уровень успеха броска, без них огнестрел
+    /// наготове даёт +50 (стр. 110). Погоня их не ставит — для неё порядок прежний.
+    /// </summary>
     public static List<Guid> Order(EncounterState state) =>
     [
         .. state.Participants
             .Select((participant, index) => (participant, index))
-            .OrderByDescending(x => x.participant.Initiative)
+            .OrderByDescending(x => state.Combat.InitiativeRolled ? (int)(x.participant.Combat.InitiativeLevel ?? Dice.SuccessLevel.Failure) : 0)
+            .ThenByDescending(x => EffectiveInitiative(state, x.participant))
             .ThenByDescending(x => x.participant.Stats.Dex)
             .ThenBy(x => x.index)
             .Select(x => x.participant.Id),
     ];
+
+    /// <summary>Инициатива для очереди: огнестрел наготове — +50 (стр. 110); при бросках инициативы он даёт бонусную кость, а не +50.</summary>
+    public static int EffectiveInitiative(EncounterState state, EncounterParticipant participant) =>
+        participant.Initiative + (participant.Combat.FirearmReady && !state.Combat.InitiativeRolled ? 50 : 0);
 
     /// <summary>Начать сцену: раунд 1, ход первого в очереди, кто не выбыл.</summary>
     public static void Start(EncounterState state, DateTimeOffset now)
@@ -146,7 +155,8 @@ public static class EncounterQueue
     {
         for (var i = Math.Max(0, from); i < state.TurnOrder.Count; i++)
         {
-            if (state.Find(state.TurnOrder[i]) is { IsOut: false } participant)
+            // Мёртвый (T2.6b) ход не получает, как и выбывший.
+            if (state.Find(state.TurnOrder[i]) is { IsOut: false, Dead: false } participant)
                 return participant.Id;
         }
 

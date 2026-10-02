@@ -40,7 +40,7 @@ public sealed class EncounterComponentTests : KitContext
             .Add(c => c.OnCancel, () => cancelled = true));
 
         var cells = cut.FindAll("tbody td").Select(td => td.TextContent.Trim()).ToList();
-        Assert.Equal(["Гуль", "Урон 8", "13", "5", "серьёзная рана"], cells);
+        Assert.Equal(["Гуль", "Урон 8", "13", "5", "серьёзная рана, падает, нужна проверка ВЫН"], cells);
         Assert.Equal(13, ghoul.HitPoints);
         Assert.DoesNotContain("Запишется в лист", cut.Markup, StringComparison.Ordinal); // у твари листа нет
 
@@ -76,7 +76,8 @@ public sealed class EncounterComponentTests : KitContext
         var (state, ghoul) = Scene();
         EncounterEngine.Apply(state, new EncounterResolution
         {
-            Effects = [new EncounterEffect { Kind = EncounterEffectKind.Damage, ParticipantId = ghoul.Id, Amount = 13 }],
+            // 13 за раз — уже мгновенная смерть (F-S02); 7 (серьёзная рана) и 6 — при смерти.
+            Effects = [new EncounterEffect { Kind = EncounterEffectKind.Damage, ParticipantId = ghoul.Id, Amount = 7, Check = true }, new EncounterEffect { Kind = EncounterEffectKind.Damage, ParticipantId = ghoul.Id, Amount = 6 }],
         }, Now);
 
         var cut = Render<ParticipantRow>(p => p.Add(c => c.Participant, ghoul).Add(c => c.Active, true));

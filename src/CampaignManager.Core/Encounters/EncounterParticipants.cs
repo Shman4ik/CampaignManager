@@ -60,6 +60,7 @@ public static class EncounterParticipants
             MagicPoints = statblock.MagicPoints,
             MaxMagicPoints = statblock.MagicPoints,
             SanityLoss = string.IsNullOrWhiteSpace(statblock.SanityLoss) ? null : statblock.SanityLoss,
+            Profile = CombatProfiles.FromStatblock(statblock),
         };
     }
 
@@ -98,6 +99,23 @@ public static class EncounterParticipants
         participant.MajorWound = sheet.Condition.MajorWound;
         participant.Unconscious = sheet.Condition.Unconscious;
         participant.Dying = sheet.Condition.Dying;
+        participant.Stabilized = sheet.Condition.Stabilized;
+        participant.Dead = sheet.Condition.Dead;
+        participant.Profile = CombatProfiles.FromSheet(sheet, catalog);
+    }
+
+    /// <summary>Раны участника для <see cref="WoundRules"/> — те же поля, что у листа.</summary>
+    public static WoundStatus Wounds(EncounterParticipant participant) => new(
+        participant.HitPoints, participant.MajorWound, participant.Unconscious, participant.Dying, participant.Stabilized, participant.Dead);
+
+    public static void SetWounds(EncounterParticipant participant, WoundStatus status)
+    {
+        participant.HitPoints = status.HitPoints;
+        participant.MajorWound = status.MajorWound;
+        participant.Unconscious = status.Unconscious;
+        participant.Dying = status.Dying;
+        participant.Stabilized = status.Stabilized;
+        participant.Dead = status.Dead;
     }
 
     /// <summary>Сторона НПС по его роли в сценарии (знание v1): союзник — с сыщиками, враг — против, иначе нейтрален.</summary>

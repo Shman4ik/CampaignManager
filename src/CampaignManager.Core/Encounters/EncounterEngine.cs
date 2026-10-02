@@ -107,11 +107,11 @@ public static class EncounterEngine
 
             if (!copies.TryGetValue(original.Id, out var copy))
             {
-                copy = original with { Stats = original.Stats with { } };
+                copy = original with { Stats = original.Stats with { }, Combat = original.Combat.Copy() };
                 copies[original.Id] = copy;
             }
 
-            lines.Add(Describe(copy, effect));
+            lines.Add(Describe(state.Round, copy, effect));
         }
 
         return lines;
@@ -131,7 +131,7 @@ public static class EncounterEngine
         foreach (var effect in resolution.Effects)
         {
             if (state.Find(effect.ParticipantId) is { } participant)
-                lines.Add(Describe(participant, effect).ToLogLine());
+                lines.Add(Describe(state.Round, participant, effect).ToLogLine());
         }
 
         List<SheetWrite> writes = [];
@@ -255,32 +255,17 @@ public static class EncounterEngine
     /// <see cref="Preview"/> зовёт его на копии. Правила — листа (<see cref="WoundRules"/>): та же серьёзная рана и то же
     /// сознание, что запишутся в лист.
     /// </summary>
-    private static EffectPreview Describe(EncounterParticipant p, EncounterEffect effect)
+    private static EffectPreview Describe(int round, EncounterParticipant p, EncounterEffect effect)
     {
         string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
         var detail = string.IsNullOrWhiteSpace(effect.Detail) ? null : effect.Detail;
 
+        // Раны, лечение и состояние боя (T2.6b) — CombatEffects: правила ран там одни с листом (WoundRules).
+        if (CombatEffects.Describe(round, p, effect) is { } combat)
+            return combat;
+
         switch (effect.Kind)
         {
-            case EncounterEffectKind.Damage:
-            {
-                var before = p.HitPoints;
-                var amount = Math.Max(0, effect.Amount);
-                var major = amount > 0 && WoundRules.IsMajorWound(amount, p.MaxHitPoints);
-                p.HitPoints = Math.Max(0, p.HitPoints - amount);
-                p.MajorWound |= major;
-                (p.Unconscious, p.Dying) = WoundRules.Consciousness(p.HitPoints, p.MajorWound);
-                var note = EncounterSheetEffects.WoundNote(major, p.Unconscious, p.Dying).TrimStart(',', ' ');
-                return new EffectPreview(p.Id, p.Name, $"Урон {Number(amount)}", Number(before), Number(p.HitPoints),
-                    Join(detail, note.Length > 0 ? note : null));
-            }
-            case EncounterEffectKind.Heal:
-            {
-                var before = p.HitPoints;
-                p.HitPoints = Math.Min(p.MaxHitPoints, p.HitPoints + Math.Max(0, effect.Amount));
-                (p.Unconscious, p.Dying) = WoundRules.Consciousness(p.HitPoints, p.MajorWound);
-                return new EffectPreview(p.Id, p.Name, $"Лечение {Number(effect.Amount)}", Number(before), Number(p.HitPoints), detail);
-            }
             case EncounterEffectKind.MagicPoints:
             {
                 var before = p.MagicPoints;

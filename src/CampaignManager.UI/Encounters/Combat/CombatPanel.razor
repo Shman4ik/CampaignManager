@@ -1,0 +1,83 @@
+@* Панель боя (T2.6b) — ChildContent оболочки сцены: вкладки действий (открытая — в адресе, ?tab=), над ними — проверки ВЫН
+   умирающих в конце раунда (стр. 118). Каждая вкладка зовёт правило Core и кладёт результат на предпросмотр оболочки.
+   Кости в бою — общий SkillCheckPanel с InCombat (повторов нет, стр. 102). *@
+<section class="cm-section" data-testid="combat-panel">
+    <div class="cm-section-header"><h2 class="cm-section-title">Действие</h2></div>
+
+    @if (CombatRules.DyingChecksDue(State) is { Count: > 0 } dying)
+    {
+        <Alert Tone="Tone.Error" ShowIcon="true" Icon="fa-heart-crack" data-testid="dying-checks">
+            <strong>При смерти — проверка ВЫН в конце раунда</strong> (провал — смерть; первая помощь в этом раунде стабилизирует, стр. 118).
+            <div class="mt-2 flex flex-col gap-2">
+                @foreach (var p in dying)
+                {
+                    <div class="flex flex-wrap items-center gap-2" @key="p.Id">
+                        <span class="min-w-32 font-medium">@p.Name</span>
+                        <RollInput Label="@($"ВЫН {p.Name}")" Value="p.Stats.Con" Roll="@_dying.GetValueOrDefault(p.Id)" RollChanged="r => _dying[p.Id] = r" />
+                        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => DyingCheckAsync(p)" data-testid="dying-check">Проверка ВЫН</Button>
+                    </div>
+                }
+            </div>
+        </Alert>
+    }
+
+    <div class="cm-card">
+        <div class="overflow-x-auto px-2 pt-2">
+            <Tabs Items="Items" ActiveKey="@ActiveTab" ActiveKeyChanged="TabChanged" AriaLabel="Действия боя" />
+        </div>
+        <div class="cm-card-body">
+            @switch (ActiveTab)
+            {
+                case "maneuver":
+                    <ManeuverPanel />
+                    break;
+                case "spell":
+                    <SpellPanel />
+                    break;
+                case "sanity":
+                    <CombatSanityPanel />
+                    break;
+                case "wounds":
+                    <WoundsPanel />
+                    break;
+                case "actions":
+                    <ActionsPanel />
+                    break;
+                case "dice":
+                    <SkillCheckPanel InCombat="true" />
+                    break;
+                default:
+                    <AttackPanel />
+                    break;
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private readonly Dictionary<Guid, D100Roll?> _dying = [];
+
+    /// <summary>Открытая вкладка (<c>?tab=</c>).</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    [Parameter] public EventCallback<string> TabChanged { get; set; }
+
+    private string ActiveTab => Items.Any(i => i.Key == Tab) ? Tab! : "attack";
+
+    private IReadOnlyList<Tabs.Item> Items =>
+    [
+        new("attack", "Атака", "fa-hand-fist"),
+        new("maneuver", "Манёвр", "fa-people-pulling"),
+        new("spell", "Заклинание", "fa-wand-sparkles", State.Participants.Count(p => p.Combat.Casting is not null)),
+        new("sanity", "Рассудок", "fa-brain"),
+        new("wounds", "Раны", "fa-kit-medical", State.Participants.Count(p => p.Dying && !p.Dead)),
+        new("actions", "Прочее", "fa-ellipsis"),
+        new("dice", "Кости", "fa-dice-d20"),
+    ];
+
+    private async Task DyingCheckAsync(EncounterParticipant p)
+    {
+        await ProposeAsync(CombatRules.DyingCheck(State, p.Id, _dying.GetValueOrDefault(p.Id), Dice));
+        _dying.Remove(p.Id);
+    }
+}

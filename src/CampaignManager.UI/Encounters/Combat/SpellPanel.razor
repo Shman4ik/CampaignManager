@@ -1,0 +1,203 @@
+@* Заклинание в бою (гл. 9, стр. 174–177; «Гримуар», стр. 241). Цена — числа, которые подтверждает Хранитель: текст книги
+   лишь подсказывает их (SpellStatsReader), кости бросаются или вписываются. Мгновенное и однораундовое — сотворение сразу;
+   от двух раундов — долгое сотворение, его завершают или срывают здесь же. Правила — CombatRules.CastSpell/CompleteCasting/
+   InterruptCasting; эффект заклинания на цель — «Эффект Хранителя». Своей карточки не рисует. *@
+<div class="flex flex-col gap-3" data-testid="spell-panel">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field Label="Заклинатель">
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Заклинатель" Value="ActorId" ValueChanged="SelectActor" />
+        </Field>
+        @if (Actor is { Combat.Casting: null } picker)
+        {
+            <Field Label="Заклинание">
+                <select class="cm-input" aria-label="Заклинание" data-testid="spell-select" value="@_spellIndex" @onchange="SelectSpell">
+                    <option value="-1">— своё —</option>
+                    @for (var i = 0; i < picker.Profile.Spells.Count; i++)
+                    {
+                        <option value="@i">@picker.Profile.Spells[i].Name</option>
+                    }
+                </select>
+            </Field>
+        }
+    </div>
+
+    @if (Actor is { Combat.Casting: { } casting } caster)
+    {
+        <Alert Tone="Tone.Info" Small="true" class="mb-0" Icon="fa-hat-wizard" ShowIcon="true">
+            @caster.Name творит «@casting.SpellName» с раунда @casting.StartedRound — сработает в раунде @casting.CompletesInRound.
+            @(casting.Disrupted ? " Сотворение сорвано раной: эффекта не будет, ПМ и рассудок платятся (стр. 177)." : "")
+        </Alert>
+        @Rolls(caster)
+        <div class="flex flex-wrap gap-2">
+            <Button Icon="fa-wand-sparkles" OnClick="CompleteAsync" data-testid="spell-complete">@(casting.Disrupted ? "Оплатить срыв" : "Сработало")</Button>
+            @if (!casting.Disrupted)
+            {
+                <Button Variant="ButtonVariant.Secondary" OnClick="InterruptAsync">Бросить сотворение</Button>
+            }
+        </div>
+    }
+    else if (Actor is { } actor)
+    {
+        @if (_spellIndex < 0)
+        {
+            <Field Label="Название"><input class="cm-input" value="@_name" @onchange="SetName" /></Field>
+        }
+        else if (Spell is { } spell)
+        {
+            <p class="cm-meta">Цена по книге: @(string.IsNullOrWhiteSpace(spell.Cost) ? "—" : spell.Cost) · время: @(string.IsNullOrWhiteSpace(spell.CastingTime) ? "—" : spell.CastingTime)</p>
+        }
+        <div class="flex flex-wrap items-end gap-3">
+            @CostField("ПМ", _mp, _mpFormula, v => _mp = v)
+            @CostField("Рассудок", _san, _sanFormula, v => _san = v)
+            @CostField("МОЩ", _pow, _powFormula, v => _pow = v)
+            @CostField("ПЗ", _hp, _hpFormula, v => _hp = v)
+            <Field Label="Раундов сотворения" class="w-32" Note="0 — мгновенно">
+                <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" value="@_rounds" @onchange="e => _rounds = int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : 1" />
+            </Field>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field Label="Цель (необязательно)">
+                <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId" Label="Цель заклинания" Placeholder="— без цели —" Value="_targetId" ValueChanged="v => _targetId = v" />
+            </Field>
+            <div class="flex flex-col gap-1 pt-1 text-sm">
+                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" checked="@_resists" @onchange="e => _resists = e.Value is true" disabled="@(_targetId is null)" /> Цель сопротивляется МОЩ</label>
+                @if (actor.Kind == ParticipantKind.Investigator)
+                {
+                    <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" checked="@_firstCast" @onchange="e => _firstCast = e.Value is true" /> Первое сотворение (трудная МОЩ)</label>
+                    @if (_firstCast)
+                    {
+                        <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" checked="@_pushed" @onchange="e => _pushed = e.Value is true" /> Повторная проверка</label>
+                    }
+                }
+            </div>
+        </div>
+        @Rolls(actor)
+        <div>
+            <Button Icon="fa-wand-sparkles" Disabled="@(SpellName.Length == 0)" OnClick="CastAsync" data-testid="spell-cast">
+                @(_rounds >= 2 ? "Начать сотворение" : "Сотворить")
+            </Button>
+        </div>
+    }
+</div>
+
+@code {
+    private int _spellIndex = -1;
+    private string _name = "";
+    private int _mp, _san, _pow, _hp;
+    private string? _mpFormula, _sanFormula, _powFormula, _hpFormula;
+    private int _rounds = 1;
+    private Guid? _targetId;
+    private bool _resists, _firstCast, _pushed;
+    private D100Roll? _castingRoll, _casterPowerRoll, _targetPowerRoll, _conRoll, _intRoll;
+    private int? _pushMultiplier;
+
+    private CombatSpell? Spell => Actor is { } actor && _spellIndex >= 0 && _spellIndex < actor.Profile.Spells.Count ? actor.Profile.Spells[_spellIndex] : null;
+
+    private string SpellName => (Spell?.Name ?? _name).Trim();
+
+    protected override void OnActorChanged()
+    {
+        _spellIndex = Actor?.Profile.Spells.Count > 0 ? 0 : -1;
+        FillFromSpell();
+    }
+
+    private void SetName(ChangeEventArgs e) => _name = e.Value?.ToString() ?? "";
+
+    private void SelectSpell(ChangeEventArgs e)
+    {
+        _spellIndex = int.TryParse(e.Value?.ToString(), out var i) ? i : -1;
+        FillFromSpell();
+    }
+
+    /// <summary>Подсказка из текста книги: число — сразу, кости — бросить или вписать (SpellStatsReader — не правда, а подсказка).</summary>
+    private void FillFromSpell()
+    {
+        var cost = SpellStatsReader.ParseCost(Spell?.Cost);
+        (_mp, _mpFormula) = Amount(cost.MagicPoints);
+        (_san, _sanFormula) = Amount(cost.Sanity);
+        (_pow, _powFormula) = Amount(cost.Power);
+        (_hp, _hpFormula) = Amount(cost.HitPoints);
+        var time = SpellStatsReader.ParseCastingTime(Spell?.CastingTime);
+        _rounds = time.Rounds ?? 1;
+        _castingRoll = _conRoll = _intRoll = _casterPowerRoll = _targetPowerRoll = null;
+    }
+
+    private static (int, string?) Amount(string? formula) =>
+        formula is null ? (0, null) : SpellStatsReader.FixedAmount(formula) is { } fixedAmount ? (fixedAmount, null) : (0, formula);
+
+    private SpellCastSetup Setup() => new()
+    {
+        CasterId = ActorId!.Value, SpellName = SpellName, TargetId = _targetId, MagicPoints = _mp, Sanity = _san, Power = _pow, HitPoints = _hp,
+        CastingRounds = _rounds, FirstCast = _firstCast, Pushed = _firstCast && _pushed, TargetResists = _resists && _targetId is not null,
+        CastingRoll = _castingRoll, PushMultiplier = _pushMultiplier, CasterPowerRoll = _casterPowerRoll, TargetPowerRoll = _targetPowerRoll,
+        ConRoll = _conRoll, IntRoll = _intRoll,
+    };
+
+    private async Task CastAsync()
+    {
+        if (ActorId is null || SpellName.Length == 0)
+            return;
+        await ProposeAsync(CombatRules.CastSpell(State, Setup(), Dice).Resolution);
+        _castingRoll = _conRoll = _intRoll = _casterPowerRoll = _targetPowerRoll = null;
+    }
+
+    private async Task CompleteAsync()
+    {
+        if (ActorId is { } id)
+            await ProposeAsync(CombatRules.CompleteCasting(State, id, Setup(), Dice).Resolution);
+    }
+
+    private async Task InterruptAsync()
+    {
+        if (ActorId is { } id)
+            await ProposeAsync(CombatRules.InterruptCasting(State, id, Setup(), Dice).Resolution);
+    }
+
+    private RenderFragment CostField(string label, int value, string? formula, Action<int> set) =>
+        @<Field Label="@label" class="w-28" Note="@(formula is null ? null : $"по книге {formula}")">
+            <div class="flex items-center gap-1">
+                <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" aria-label="@($"Цена: {label}")" value="@value"
+                       @onchange="e => set(int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : 0)" />
+                @if (formula is not null)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" AriaLabel="@($"Бросить {formula}")"
+                            OnClick="() => set(Math.Max(0, DiceFormula.Roll(formula, Dice)))" />
+                }
+            </div>
+        </Field>;
+
+    private RenderFragment Rolls(EncounterParticipant caster) =>
+        @<details class="encounter-rolls">
+            <summary>Броски со стола (необязательно)</summary>
+            <div class="mt-2 flex flex-col gap-3">
+                @if (_firstCast)
+                {
+                    <Field Label="@($"МОЩ {caster.Stats.Pow} — трудная")" Group="true">
+                        <RollInput Label="Первое сотворение" Value="caster.Stats.Pow" Difficulty="Difficulty.Hard" Roll="_castingRoll" RollChanged="r => _castingRoll = r" />
+                    </Field>
+                    @if (_pushed)
+                    {
+                        <Field Label="Множитель цены, 1d6"><EnteredNumber Label="Множитель" Value="_pushMultiplier" ValueChanged="v => _pushMultiplier = v" /></Field>
+                    }
+                }
+                @if (_resists && _targetId is { } targetId && State.Find(targetId) is { } target)
+                {
+                    <Field Label="@($"МОЩ заклинателя {caster.Stats.Pow}")" Group="true">
+                        <RollInput Label="МОЩ заклинателя" Value="caster.Stats.Pow" Roll="_casterPowerRoll" RollChanged="r => _casterPowerRoll = r" />
+                    </Field>
+                    <Field Label="@($"МОЩ цели {target.Stats.Pow}")" Group="true">
+                        <RollInput Label="МОЩ цели" Value="target.Stats.Pow" Roll="_targetPowerRoll" RollChanged="r => _targetPowerRoll = r" />
+                    </Field>
+                }
+                <Field Label="@($"ВЫН {caster.Stats.Con} — если ПЗ за нехватку ПМ дадут серьёзную рану")" Group="true">
+                    <RollInput Label="ВЫН" Value="caster.Stats.Con" Roll="_conRoll" RollChanged="r => _conRoll = r" />
+                </Field>
+                @if (caster.Sanity is not null)
+                {
+                    <Field Label="@($"ИНТ {caster.Stats.Int} — если рассудка 5+")" Group="true">
+                        <RollInput Label="ИНТ" Value="caster.Stats.Int" Roll="_intRoll" RollChanged="r => _intRoll = r" />
+                    </Field>
+                }
+            </div>
+        </details>;
+}

@@ -30,7 +30,7 @@ public sealed class EncounterSheetEffectsTests
 
         Assert.Equal(3, sheet.Current.HitPoints);
         Assert.True(sheet.Condition.MajorWound);
-        Assert.Equal(["ПЗ 14 → 11", "ПЗ 11 → 3, серьёзная рана"], lines);
+        Assert.Equal(["ПЗ 14 → 11", "ПЗ 11 → 3, серьёзная рана, падает, нужна проверка ВЫН"], lines);
     }
 
     [Fact]

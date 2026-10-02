@@ -1,0 +1,302 @@
+@* Атака: ближний бой или стрельба — по выбранному оружию участника (CombatProfile: оружие листа, атаки статблока, драка).
+   Правила — CombatRules.Melee/Ranged (Core), кости — таблица AttackModifiers (её же читает ширма). Любой бросок можно
+   вписать в «Броски со стола»; невписанное бросит правило. Результат — на предпросмотр, меняет участников только
+   «Применить» (в v1 атака тратила патрон, ход и защиту цели ещё до него, F-C02). Своей карточки не рисует. *@
+<div class="flex flex-col gap-3" data-testid="attack-panel">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field Label="Кто атакует">
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто атакует" Value="ActorId" ValueChanged="SelectActor" />
+        </Field>
+        <Field Label="Чем">
+            <select class="cm-input" aria-label="Оружие или атака" data-testid="attack-weapon" value="@_attackKey" @onchange="SelectAttack" disabled="@(Actor is null)">
+                @foreach (var attack in Attacks)
+                {
+                    <option value="@attack.Key">@attack.Name — @attack.Skill% (@KindText(attack))</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Цель">
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget" />
+        </Field>
+    </div>
+
+    @if (Actor is { } actor && Attack is { } chosen)
+    {
+        <p class="cm-meta">
+            Урон @chosen.Damage@(chosen.DamageBonus switch { CreatureDamageBonusMode.Full or CreatureDamageBonusMode.OnlyBonus => $" + БкУ ({actor.Stats.DamageBonus})", CreatureDamageBonusMode.Half => $" + ½ БкУ ({actor.Stats.DamageBonus})", _ => "" })
+            @(chosen.Impaling ? " · проникающее" : "")
+            @if (CombatRules.AmmoLeft(actor, chosen) is { } ammo)
+            {
+                <span> · патронов @ammo из @chosen.AmmoCapacity</span>
+            }
+            @if (chosen.Malfunction is { } malfunction)
+            {
+                <span> · осечка @malfunction</span>
+            }
+            @if (chosen.BaseRangeMeters is { } range)
+            {
+                <span> · дальность @range м (большая — @(range * 2), сверхдальняя — @(range * 4))</span>
+            }
+        </p>
+        @if (!string.IsNullOrWhiteSpace(chosen.Description))
+        {
+            <p class="cm-meta">@chosen.Description</p>
+        }
+        @if ((CombatRules.AttackBlockReason(State, actor) ?? (chosen.IsRanged ? CombatRules.WeaponBlockReason(actor, chosen) : null)) is { } blocked)
+        {
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0">@blocked</Alert>
+        }
+    }
+
+    @if (Attack is { IsRanged: false })
+    {
+        <div class="flex flex-wrap gap-4">
+            <Field Label="Цель защищается" Group="true">
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.Dodge)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
+                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.FightBack)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
+                </div>
+            </Field>
+            @SurprisePicker(includeAutoHit: true)
+        </div>
+    }
+    else if (Attack is { IsRanged: true })
+    {
+        <div class="flex flex-wrap gap-4">
+            <Field Label="Дальность" Group="true" Note="Сложность, а не урезанный навык (стр. 110)">
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="@Pick(_range == RangeBand.Base)" OnClick="() => _range = RangeBand.Base">Базовая</Button>
+                    <Button Small="true" Variant="@Pick(_range == RangeBand.Long)" OnClick="() => _range = RangeBand.Long">Большая</Button>
+                    <Button Small="true" Variant="@Pick(_range == RangeBand.Extreme)" OnClick="() => _range = RangeBand.Extreme">Сверхдальняя</Button>
+                </div>
+            </Field>
+            <Field Label="Режим" Group="true">
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="@Pick(_mode == FiringMode.Single)" OnClick="() => SetMode(FiringMode.Single)">Выстрел</Button>
+                    <Button Small="true" Variant="@Pick(_mode == FiringMode.PistolBurst)" OnClick="() => SetMode(FiringMode.PistolBurst)">Серия</Button>
+                    @if (Attack.Automatic)
+                    {
+                        <Button Small="true" Variant="@Pick(_mode == FiringMode.Volley)" OnClick="() => SetMode(FiringMode.Volley)">Очередь</Button>
+                    }
+                </div>
+            </Field>
+            <Field Label="Патронов" class="w-24">
+                <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" value="@_shots" @onchange="SetShots" />
+            </Field>
+            @SurprisePicker(includeAutoHit: false)
+        </div>
+        <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            @Toggle("В упор", _pointBlank, v => _pointBlank = v)
+            @Toggle("Целился", _aiming, v => _aiming = v)
+            @Toggle("Цель укрылась", _takingCover, v => _takingCover = v)
+            @Toggle("За преградой", _behindCover, v => _behindCover = v)
+            @Toggle("Быстро движется", _fastMoving, v => _fastMoving = v)
+            @Toggle("В гуще ближнего боя", _intoMelee, v => _intoMelee = v)
+            @Toggle("Зарядил и выстрелил", _reloadAndFire, v => _reloadAndFire = v)
+        </div>
+    }
+
+    <div class="flex flex-wrap items-start gap-4">
+        <Field Label="Кости Хранителя" Group="true">
+            <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
+        </Field>
+        <Field Label="Броня преграды" class="w-28" Note="стр. 125">
+            <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" value="@_coverArmor" @onchange="SetCoverArmor" />
+        </Field>
+        <div class="pt-6 text-sm">@Toggle("Мимо брони (магия, яд)", _ignoresArmor, v => _ignoresArmor = v)</div>
+    </div>
+
+    @if (Ready && AttackDiceNow() is { } dice)
+    {
+        <p class="cm-meta" data-testid="attack-dice">
+            Кости атаки: @(dice.Reasons.Count == 0 ? "без бонусных и штрафных" : string.Join(", ", dice.Reasons))@RequirementText
+        </p>
+    }
+
+    <details class="encounter-rolls">
+        <summary>Броски со стола (необязательно)</summary>
+        <div class="mt-2 flex flex-col gap-3">
+            @if (Ready && AttackDiceNow() is { } d)
+            {
+                <Field Label="Атака" Group="true">
+                    <RollInput Label="Атака" Value="@Skill" Difficulty="@AttackDifficulty" BonusDice="@d.BonusDice" PenaltyDice="@d.PenaltyDice"
+                               Roll="_attackRoll" RollChanged="r => _attackRoll = r" />
+                </Field>
+                @if (Attack is { IsRanged: false } && _surprise == SurpriseMode.TargetReady && Target is { } t)
+                {
+                    <Field Label="@(_reaction == DefenseReaction.Dodge ? "Уклонение цели" : "Контратака цели")" Group="true">
+                        <RollInput Label="Защита" Value="@(_reaction == DefenseReaction.Dodge ? t.Stats.Dodge : t.Profile.FightBack)" Roll="_defenseRoll" RollChanged="r => _defenseRoll = r" />
+                    </Field>
+                }
+            }
+            <div class="flex flex-wrap gap-3">
+                <Field Label="Урон оружия"><EnteredNumber Label="Урон оружия" Value="_damage" ValueChanged="v => _damage = v" /></Field>
+                <Field Label="Бонус к урону"><EnteredNumber Label="Бонус к урону" Value="_bonus" ValueChanged="v => _bonus = v" /></Field>
+                <Field Label="Проникающая"><EnteredNumber Label="Проникающая" Value="_extra" ValueChanged="v => _extra = v" /></Field>
+                @if (Attack is { IsRanged: true })
+                {
+                    <Field Label="Починка при осечке, 1d6"><EnteredNumber Label="Раунды починки" Value="_jamRounds" ValueChanged="v => _jamRounds = v" /></Field>
+                }
+            </div>
+            @if (Target is { } target)
+            {
+                <Field Label="@($"ВЫН цели при серьёзной ране ({target.Stats.Con})")" Group="true">
+                    <RollInput Label="ВЫН цели" Value="@target.Stats.Con" Roll="_conRoll" RollChanged="r => _conRoll = r" />
+                </Field>
+            }
+            @if (Attack is { IsRanged: false } && _reaction == DefenseReaction.FightBack && Actor is { } a)
+            {
+                <div class="flex flex-wrap gap-3">
+                    <Field Label="Урон контратаки"><EnteredNumber Label="Урон контратаки" Value="_counterDamage" ValueChanged="v => _counterDamage = v" /></Field>
+                    <Field Label="Её бонус к урону"><EnteredNumber Label="Бонус контратаки" Value="_counterBonus" ValueChanged="v => _counterBonus = v" /></Field>
+                </div>
+                <Field Label="@($"ВЫН атакующего при серьёзной ране ({a.Stats.Con})")" Group="true">
+                    <RollInput Label="ВЫН атакующего" Value="@a.Stats.Con" Roll="_counterConRoll" RollChanged="r => _counterConRoll = r" />
+                </Field>
+            }
+        </div>
+    </details>
+
+    <div>
+        <Button Icon="fa-hand-fist" Disabled="@(!Ready)" OnClick="ResolveAsync" data-testid="attack-resolve">Провести атаку</Button>
+    </div>
+</div>
+
+@code {
+    private string? _attackKey;
+    private Guid? _targetId;
+    private DefenseReaction _reaction;
+    private SurpriseMode _surprise;
+    private RangeBand _range;
+    private FiringMode _mode;
+    private int _shots = 1;
+    private int _net;
+    private int _coverArmor;
+    private bool _ignoresArmor, _pointBlank, _aiming, _takingCover, _behindCover, _fastMoving, _intoMelee, _reloadAndFire;
+    private D100Roll? _attackRoll, _defenseRoll, _conRoll, _counterConRoll;
+    private int? _damage, _bonus, _extra, _jamRounds, _counterDamage, _counterBonus;
+
+    private IReadOnlyList<CombatAttack> Attacks => Actor?.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Ranged).ToList() ?? [];
+
+    private CombatAttack? Attack => Actor is { } actor ? Attacks.FirstOrDefault(a => a.Key == _attackKey) ?? Attacks.FirstOrDefault() ?? CombatRules.Unarmed(actor) : null;
+
+    private EncounterParticipant? Target => _targetId is { } id ? State.Find(id) : null;
+
+    private int Skill => Attack?.Skill ?? 0;
+
+    private bool Ready => Actor is not null && Target is not null && Attack is not null;
+
+    private Difficulty AttackDifficulty => Attack is { IsRanged: true } && Ready
+        ? CombatRules.DifficultyOf(CombatRules.RangedRequirement(State, RangedSetup()).Required)
+        : Difficulty.Regular;
+
+    private string RequirementText
+    {
+        get
+        {
+            if (Attack is not { IsRanged: true } || !Ready)
+                return "";
+            var (required, impossible) = CombatRules.RangedRequirement(State, RangedSetup());
+            return impossible ? " · попадание невозможно (стр. 114)" : required > SuccessLevel.Regular ? $" · нужен {RulesText.Of(required)}" : "";
+        }
+    }
+
+    protected override void OnActorChanged()
+    {
+        _attackKey = null;
+        _attackRoll = null;
+        _shots = 1;
+        _mode = FiringMode.Single;
+        // Цель по умолчанию — первый живой противник (по стороне).
+        if (Actor is { } actor && (Target is null or { Dead: true } || Target.Id == actor.Id || Target.Side == actor.Side))
+            _targetId = State.Participants.FirstOrDefault(p => p.Side != actor.Side && p.Id != actor.Id && !p.Dead)?.Id;
+    }
+
+    private void SelectAttack(ChangeEventArgs e)
+    {
+        _attackKey = e.Value?.ToString();
+        _attackRoll = null;
+        _mode = FiringMode.Single;
+    }
+
+    private void SelectTarget(Guid? id)
+    {
+        _targetId = id;
+        _defenseRoll = null;
+        _conRoll = null;
+    }
+
+    private void SetMode(FiringMode mode)
+    {
+        _mode = mode;
+        if (mode == FiringMode.Volley && Actor is { } actor)
+            _shots = CombatRules.VolleySize(Skill);
+        else
+            _shots = 1;
+    }
+
+    private void SetShots(ChangeEventArgs e) => _shots = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 1;
+
+    private void SetCoverArmor(ChangeEventArgs e) => _coverArmor = int.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : 0;
+
+    private AttackDice? AttackDiceNow() => Attack is { IsRanged: true } ? CombatRules.RangedDice(State, RangedSetup()) : CombatRules.MeleeDice(State, MeleeSetup());
+
+    private MeleeAttackSetup MeleeSetup()
+    {
+        var (bonus, penalty) = Split(_net);
+        return new MeleeAttackSetup
+        {
+            AttackerId = ActorId!.Value, DefenderId = _targetId!.Value, AttackKey = Attack?.Key, Reaction = _reaction, Surprise = _surprise,
+            KeeperBonusDice = bonus, KeeperPenaltyDice = penalty, CoverArmor = _coverArmor, IgnoresArmor = _ignoresArmor,
+            AttackRoll = _attackRoll, DefenseRoll = _defenseRoll, DamageRoll = _damage, DamageBonusRoll = _bonus, ExtraImpaleRoll = _extra,
+            ConRoll = _conRoll, CounterDamageRoll = _counterDamage, CounterBonusRoll = _counterBonus, CounterConRoll = _counterConRoll,
+        };
+    }
+
+    private RangedAttackSetup RangedSetup()
+    {
+        var (bonus, penalty) = Split(_net);
+        return new RangedAttackSetup
+        {
+            AttackerId = ActorId!.Value, DefenderId = _targetId!.Value, AttackKey = Attack?.Key, Range = _range, Surprise = _surprise,
+            KeeperBonusDice = bonus, KeeperPenaltyDice = penalty, PointBlank = _pointBlank, Aiming = _aiming, TargetTakingCover = _takingCover,
+            TargetBehindCover = _behindCover, TargetFastMoving = _fastMoving, FiringIntoMelee = _intoMelee, ReloadAndFire = _reloadAndFire,
+            FiringMode = _mode, ShotsFired = _shots, CoverArmor = _coverArmor, IgnoresArmor = _ignoresArmor,
+            AttackRoll = _attackRoll, DamageRoll = _damage, DamageBonusRoll = _bonus, ExtraImpaleRoll = _extra, ConRoll = _conRoll, JamRounds = _jamRounds,
+        };
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (!Ready)
+            return;
+
+        var outcome = Attack is { IsRanged: true } ? CombatRules.Ranged(State, RangedSetup(), Dice) : CombatRules.Melee(State, MeleeSetup(), Dice);
+        await ProposeAsync(outcome.Resolution);
+        _attackRoll = _defenseRoll = _conRoll = _counterConRoll = null;
+        _damage = _bonus = _extra = _jamRounds = _counterDamage = _counterBonus = null;
+        _aiming = _takingCover = false;
+    }
+
+    private static string KindText(CombatAttack attack) => attack.Kind == CombatAttackKind.Ranged ? "стрельба" : "ближний бой";
+
+    private static ButtonVariant Pick(bool on) => on ? ButtonVariant.Primary : ButtonVariant.Secondary;
+
+    private RenderFragment SurprisePicker(bool includeAutoHit) =>
+        @<Field Label="Цель готова?" Group="true" Note="стр. 104–105">
+            <div class="flex flex-wrap gap-2">
+                <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.TargetReady)" OnClick="() => _surprise = SurpriseMode.TargetReady">Начеку</Button>
+                <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.BonusDie)" OnClick="() => _surprise = SurpriseMode.BonusDie">Врасплох</Button>
+                @if (includeAutoHit)
+                {
+                    <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.AutoHit)" OnClick="() => _surprise = SurpriseMode.AutoHit">Беззащитна</Button>
+                }
+            </div>
+        </Field>;
+
+    private RenderFragment Toggle(string label, bool value, Action<bool> set) =>
+        @<label class="flex min-h-9 items-center gap-2">
+            <input type="checkbox" class="cm-checkbox" checked="@value" @onchange="e => set(e.Value is true)" />
+            <span>@label</span>
+        </label>;
+}

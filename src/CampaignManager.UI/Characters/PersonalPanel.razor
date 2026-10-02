@@ -133,11 +133,20 @@
             </Field>
             <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-heart-crack" data-testid="apply-damage" OnClick="ApplyDamage">Нанести</Button>
         </div>
-        <p class="cm-field-note">Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку (стр. 117).</p>
-        @if (_lastHitWasMajor)
+        <p class="cm-field-note">
+            Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку, смерть — от @Math.Max(1, derived.MaxHitPoints) (стр. 117–118).
+        </p>
+        @if (_lastHit is { InstantDeath: true })
+        {
+            <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="mt-2 mb-0" Icon="fa-skull">
+                Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong> (стр. 118).
+            </Alert>
+        }
+        else if (_lastHit is { MajorWound: true })
         {
             <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-2 mb-0">
-                Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает, нужна проверка ВЫН, иначе он теряет сознание.
+                Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает, нужна проверка ВЫН, иначе он теряет сознание
+                (отметка «Без сознания» ниже).@(Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка ВЫН в конце следующего." : "")
             </Alert>
         }
 
@@ -150,7 +159,9 @@
                 <div class="flex flex-col">
                     @ConditionRow("Серьёзная рана", "fa-heart-crack", Sheet.Condition.MajorWound, v => { Sheet.Condition.MajorWound = v; WoundRules.UpdateConsciousness(Sheet); })
                     @ConditionRow("Без сознания", "fa-moon", Sheet.Condition.Unconscious, v => Sheet.Condition.Unconscious = v)
-                    @ConditionRow("При смерти", "fa-skull", Sheet.Condition.Dying, v => Sheet.Condition.Dying = v)
+                    @ConditionRow("При смерти", "fa-skull", Sheet.Condition.Dying, v => { Sheet.Condition.Dying = v; if (!v) Sheet.Condition.Stabilized = false; })
+                    @ConditionRow("Стабилизирован", "fa-kit-medical", Sheet.Condition.Stabilized, v => Sheet.Condition.Stabilized = v)
+                    @ConditionRow("Мёртв", "fa-cross", Sheet.Condition.Dead, v => Sheet.Condition.Dead = v)
                 </div>
                 <div class="flex flex-col">
                     @ConditionRow("Врем. безумие", "fa-brain", Sheet.Condition.TemporaryInsanity, v => Sheet.Condition.TemporaryInsanity = v)
@@ -165,7 +176,7 @@
     private sealed record CurrentRow(string Key, string Label, int Max, Func<int> Get, Action<int> Put, bool Warns);
 
     private int _damage = 1;
-    private bool _lastHitWasMajor;
+    private DamageOutcome? _lastHit;
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
@@ -217,7 +228,7 @@
         if (row.Key == "hp")
         {
             if (Sheet.Current.HitPoints > 0)
-                _lastHitWasMajor = false;
+                _lastHit = null;
             WoundRules.UpdateConsciousness(Sheet);
         }
 
@@ -229,7 +240,7 @@
         if (_damage <= 0)
             return;
 
-        _lastHitWasMajor = WoundRules.ApplyDamage(Sheet, _damage);
+        _lastHit = WoundRules.ApplyDamage(Sheet, _damage);
         Context.Changed();
     }
 

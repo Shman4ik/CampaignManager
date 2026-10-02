@@ -262,6 +262,19 @@ public sealed record SheetCondition : DocumentPart
     public bool Unconscious { get; set; }
     public bool MajorWound { get; set; }
     public bool Dying { get; set; }
+
+    /// <summary>
+    /// Умирающий временно стабилизирован первой помощью (стр. 118): 1 ПЗ, ВЫН раз в час, ждёт Медицину. Добавлено в
+    /// T2.6b без смены версии: в старом документе поля нет — значит, false.
+    /// </summary>
+    public bool Stabilized { get; set; }
+
+    /// <summary>
+    /// Мёртв: урон одной атаки не меньше максимума ПЗ или провал ВЫН умирающего (стр. 118, F-S02). Добавлено в T2.6b
+    /// без смены версии, как и <see cref="Stabilized"/>.
+    /// </summary>
+    public bool Dead { get; set; }
+
     public bool TemporaryInsanity { get; set; }
     public bool IndefiniteInsanity { get; set; }
 
