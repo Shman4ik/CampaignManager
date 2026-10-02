@@ -194,11 +194,27 @@ public static class EncounterEngine
         });
     }
 
-    /// <summary>Запись в лист не прошла — эффект остаётся в очереди с текстом ошибки, повторит следующая попытка.</summary>
-    public static void FailSheetWrite(EncounterState state, Guid writeId, string error)
+    /// <summary>
+    /// Запись в лист не прошла — эффект остаётся в очереди с текстом ошибки. Временная беда (нет связи) — повторит
+    /// следующая попытка; <paramref name="blocked"/> (листа нет, нет прав) — ждёт решения Хранителя.
+    /// </summary>
+    public static void FailSheetWrite(EncounterState state, Guid writeId, string error, bool blocked = false)
     {
         if (state.SheetWrites.FirstOrDefault(w => w.Id == writeId) is { } write)
+        {
             write.Error = error;
+            write.Blocked = blocked;
+        }
+    }
+
+    /// <summary>«Повторить»: заблокированная запись снова в работе.</summary>
+    public static void RetrySheetWrite(EncounterState state, Guid writeId)
+    {
+        if (state.SheetWrites.FirstOrDefault(w => w.Id == writeId) is { } write)
+        {
+            write.Blocked = false;
+            write.Error = null;
+        }
     }
 
     /// <summary>Хранитель отказался записывать в лист (лист удалён, нет прав): эффект остаётся только в сцене.</summary>
@@ -256,7 +272,7 @@ public static class EncounterEngine
                 (p.Unconscious, p.Dying) = WoundRules.Consciousness(p.HitPoints, p.MajorWound);
                 var note = EncounterSheetEffects.WoundNote(major, p.Unconscious, p.Dying).TrimStart(',', ' ');
                 return new EffectPreview(p.Id, p.Name, $"Урон {Number(amount)}", Number(before), Number(p.HitPoints),
-                    Join(detail, note));
+                    Join(detail, note.Length > 0 ? note : null));
             }
             case EncounterEffectKind.Heal:
             {

@@ -1,0 +1,45 @@
+@* Полоса запаса: ПЗ, ПМ, Рассудок, Удача — подпись, «текущее / максимум» цифрами и полоса. Цифры видны всегда
+   (наведения на iPad нет, полоса без чисел ничего не говорит). Цвета — те же, что у состояния листа: ПЗ — error,
+   ПМ — accent, Рассудок — камень, Удача — success; у ПЗ и Рассудка на половине запаса полоса желтеет, на четверти —
+   густо-красная (FillClass — одна копия, ею же красит полосы лист). *@
+<div class="cm-stat" data-testid="@TestId">
+    <div class="cm-stat-head">
+        <span class="cm-stat-label">@Label</span>
+        <span class="cm-stat-value">@Value<span class="cm-stat-max">/@Max</span></span>
+    </div>
+    <div class="cm-stat-track" role="meter" aria-label="@Label" aria-valuemin="0" aria-valuemax="@Max" aria-valuenow="@Value">
+        <div class="@FillClass(Kind, Percent(Value, Max))" style="width: @(Percent(Value, Max))%"></div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public int Max { get; set; }
+
+    [Parameter] public StatKind Kind { get; set; } = StatKind.HitPoints;
+
+    [Parameter] public string? TestId { get; set; }
+
+    public static int Percent(int value, int max) => max <= 0 ? 100 : Math.Clamp(value * 100 / max, 0, 100);
+
+    /// <summary>Класс заливки — целыми литералами: Tailwind не увидит собранное имя.</summary>
+    public static string FillClass(StatKind kind, int percent)
+    {
+        var warns = kind is StatKind.HitPoints or StatKind.Sanity;
+        if (warns && percent <= 25)
+            return "h-full rounded-full bg-error-700";
+        if (warns && percent <= 50)
+            return "h-full rounded-full bg-warning-500";
+
+        return kind switch
+        {
+            StatKind.HitPoints => "h-full rounded-full bg-error-500",
+            StatKind.MagicPoints => "h-full rounded-full bg-accent-500",
+            StatKind.Sanity => "h-full rounded-full bg-secondary-500",
+            _ => "h-full rounded-full bg-success-500",
+        };
+    }
+}

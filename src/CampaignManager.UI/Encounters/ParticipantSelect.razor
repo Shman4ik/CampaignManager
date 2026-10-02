@@ -1,0 +1,75 @@
+@using CampaignManager.Core.Encounters
+
+@* Выбор участника сцены — один на все панели (в v1 — 14 одинаковых <select> в семи панелях боя и пять в погоне).
+   Один — выпадающий список (Value); несколько — ряд кнопок-переключателей 36px (Values, Multiple="true"): цели эффекта,
+   группа на проверку рассудка. Фильтр — Where (например, только с листом); выбывшие помечены, но выбрать их можно. *@
+@if (Multiple)
+{
+    <fieldset class="flex flex-wrap gap-2" aria-label="@Label">
+        @foreach (var participant in Options)
+        {
+            var on = Values.Contains(participant.Id);
+            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm encounter-chip" aria-pressed="@(on ? "true" : "false")"
+                    data-testid="participant-chip" @onclick="() => ToggleAsync(participant.Id)">
+                @participant.Name
+                @if (participant.IsOut)
+                {
+                    <span class="text-xs opacity-80">(выбыл)</span>
+                }
+            </button>
+        }
+        @if (Options.Count > 1)
+        {
+            <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm" @onclick="AllAsync">
+                @(Options.All(p => Values.Contains(p.Id)) ? "Снять всех" : "Все")
+            </button>
+        }
+    </fieldset>
+}
+else
+{
+    <select class="cm-input" aria-label="@Label" data-testid="participant-select" value="@(Value?.ToString() ?? "")" @onchange="SelectAsync">
+        <option value="">@Placeholder</option>
+        @foreach (var participant in Options)
+        {
+            <option value="@participant.Id">@participant.Name@(participant.IsOut ? " (выбыл)" : "")</option>
+        }
+    </select>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<EncounterParticipant> Participants { get; set; } = [];
+
+    [Parameter] public Func<EncounterParticipant, bool>? Where { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Участник";
+
+    [Parameter] public string Placeholder { get; set; } = "— выберите —";
+
+    [Parameter] public bool Multiple { get; set; }
+
+    [Parameter] public Guid? Value { get; set; }
+
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    /// <summary>Выбранные (Multiple). Компонент отдаёт новый набор на каждую правку.</summary>
+    [Parameter] public IReadOnlySet<Guid> Values { get; set; } = new HashSet<Guid>();
+
+    [Parameter] public EventCallback<IReadOnlySet<Guid>> ValuesChanged { get; set; }
+
+    private IReadOnlyList<EncounterParticipant> Options => Where is null ? Participants : [.. Participants.Where(Where)];
+
+    private Task SelectAsync(ChangeEventArgs e) =>
+        ValueChanged.InvokeAsync(Guid.TryParse(e.Value?.ToString(), out var id) ? id : null);
+
+    private Task ToggleAsync(Guid id)
+    {
+        var next = new HashSet<Guid>(Values);
+        if (!next.Add(id))
+            next.Remove(id);
+        return ValuesChanged.InvokeAsync(next);
+    }
+
+    private Task AllAsync() =>
+        ValuesChanged.InvokeAsync(Options.All(p => Values.Contains(p.Id)) ? new HashSet<Guid>() : Options.Select(p => p.Id).ToHashSet());
+}

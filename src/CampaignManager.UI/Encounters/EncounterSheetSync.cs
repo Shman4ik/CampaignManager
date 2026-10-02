@@ -68,13 +68,13 @@ public sealed class EncounterSheetSync(ICharactersApi characters)
     public async Task<bool> FlushAsync(EncounterState state, SkillCatalog catalog, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         var changed = false;
-        foreach (var write in state.SheetWrites.ToList())
+        foreach (var write in state.SheetWrites.Where(w => !w.Blocked).ToList())
         {
             var result = await WriteAsync(write, catalog, cancellationToken);
             if (result.Sheet is { } sheet)
                 EncounterEngine.CompleteSheetWrite(state, write.Id, sheet, catalog, result.Lines, now);
             else
-                EncounterEngine.FailSheetWrite(state, write.Id, result.Error ?? "Не удалось записать в лист.");
+                EncounterEngine.FailSheetWrite(state, write.Id, result.Error ?? "Не удалось записать в лист.", result.Permanent);
             changed = true;
         }
 

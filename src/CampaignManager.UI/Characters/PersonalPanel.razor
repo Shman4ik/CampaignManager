@@ -233,26 +233,16 @@
         Context.Changed();
     }
 
-    private static int Percent(CurrentRow row) => row.Max <= 0 ? 100 : Math.Clamp(row.Get() * 100 / row.Max, 0, 100);
+    private static int Percent(CurrentRow row) => StatBar.Percent(row.Get(), row.Max);
 
-    // Классы — целыми литералами: Tailwind не увидит собранное имя. ПЗ — error, ПМ — accent, Рассудок — камень,
-    // Удача — success; у ПЗ и Рассудка на половине запаса полоса желтеет, на четверти — густо-красная.
-    private static string BarClass(CurrentRow row)
+    /// <summary>Цвет полосы — одна копия правила с полосами участников сцены (<see cref="StatBar.FillClass"/>).</summary>
+    private static string BarClass(CurrentRow row) => StatBar.FillClass(row.Key switch
     {
-        var percent = Percent(row);
-        if (row.Warns && percent <= 25)
-            return "h-full rounded-full bg-error-700";
-        if (row.Warns && percent <= 50)
-            return "h-full rounded-full bg-warning-500";
-
-        return row.Key switch
-        {
-            "hp" => "h-full rounded-full bg-error-500",
-            "mp" => "h-full rounded-full bg-accent-500",
-            "san" => "h-full rounded-full bg-secondary-500",
-            _ => "h-full rounded-full bg-success-500",
-        };
-    }
+        "hp" => StatKind.HitPoints,
+        "mp" => StatKind.MagicPoints,
+        "san" => StatKind.Sanity,
+        _ => StatKind.Luck,
+    }, Percent(row));
 
     private RenderFragment ConditionRow(string label, string icon, bool value, Action<bool> set) =>
         @<label class="@Css.Join("sheet-condition", value ? "sheet-condition-on" : null)">

@@ -257,6 +257,9 @@ public sealed record SheetWrite : DocumentPart
 
     /// <summary>Последняя ошибка записи (нет связи, нет прав); null — ещё не пробовали или пишем.</summary>
     public string? Error { get; set; }
+
+    /// <summary>Повтор не поможет (листа нет, нет прав): сама запись больше не пробует — решает Хранитель.</summary>
+    public bool Blocked { get; set; }
 }
 
 /// <summary>
