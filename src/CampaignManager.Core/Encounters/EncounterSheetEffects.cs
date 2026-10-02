@@ -17,7 +17,9 @@ public static class EncounterSheetEffects
     /// <summary>Пишется ли эффект в лист (остальные — только состояние сцены: очередь, выбывание).</summary>
     public static bool TouchesSheet(EncounterEffectKind kind) => kind is
         EncounterEffectKind.Damage or EncounterEffectKind.Heal or EncounterEffectKind.MagicPoints
-        or EncounterEffectKind.SanityLoss or EncounterEffectKind.Power;
+        or EncounterEffectKind.SanityLoss or EncounterEffectKind.Power
+        or EncounterEffectKind.FirstAid or EncounterEffectKind.Medicine or EncounterEffectKind.DyingCheck
+        or EncounterEffectKind.Recovery or EncounterEffectKind.Luck;
 
     /// <summary>Применяет эффекты к листу по порядку. Возвращает строки итога для журнала («ПЗ 12 → 7, серьёзная рана»).</summary>
     public static List<string> Apply(CharacterSheet sheet, SkillCatalog catalog, IEnumerable<EncounterEffect> effects)
@@ -39,16 +41,31 @@ public static class EncounterSheetEffects
         {
             case EncounterEffectKind.Damage:
             {
-                var before = current.HitPoints;
-                var major = WoundRules.ApplyDamage(sheet, Math.Max(0, effect.Amount));
-                return $"ПЗ {before} → {current.HitPoints}{WoundNote(major, sheet.Condition)}";
+                // Один конвейер ран (WoundRules): мгновенная смерть, серьёзная рана с исходом ВЫН, при смерти (F-S02).
+                var outcome = WoundRules.ApplyDamage(sheet, Math.Max(0, effect.Amount), effect.Check);
+                var note = outcome.Note();
+                return $"ПЗ {outcome.Before.HitPoints} → {outcome.After.HitPoints}{(note.Length > 0 ? ", " + note : "")}";
             }
             case EncounterEffectKind.Heal:
             {
-                var before = current.HitPoints;
-                current.HitPoints = Math.Min(DerivedAttributeRules.MaxHitPoints(sheet), current.HitPoints + Math.Max(0, effect.Amount));
-                WoundRules.UpdateConsciousness(sheet);
-                return $"ПЗ {before} → {current.HitPoints}";
+                var before = WoundRules.Read(sheet);
+                WoundRules.Write(sheet, WoundRules.Heal(before, DerivedAttributeRules.MaxHitPoints(sheet), effect.Amount));
+                return $"ПЗ {before.HitPoints} → {current.HitPoints}";
+            }
+            case EncounterEffectKind.FirstAid:
+                return Heal(sheet, "Первая помощь", WoundRules.FirstAid(WoundRules.Read(sheet), DerivedAttributeRules.MaxHitPoints(sheet)));
+            case EncounterEffectKind.Medicine:
+                return Heal(sheet, "Медицина", WoundRules.Medicine(WoundRules.Read(sheet), DerivedAttributeRules.MaxHitPoints(sheet), effect.Amount));
+            case EncounterEffectKind.DyingCheck:
+                return Heal(sheet, effect.Check == true ? "ВЫН — успех" : "ВЫН — провал", WoundRules.DyingCheck(WoundRules.Read(sheet), effect.Check == true));
+            case EncounterEffectKind.Recovery:
+                return Heal(sheet, "Лечение раны", WoundRules.WeeklyRecovery(WoundRules.Read(sheet), DerivedAttributeRules.MaxHitPoints(sheet),
+                    effect.Level ?? Dice.SuccessLevel.Failure, effect.Amount));
+            case EncounterEffectKind.Luck:
+            {
+                var before = current.Luck;
+                current.Luck = Math.Clamp(current.Luck + effect.Amount, 0, 99);
+                return $"Удача {before} → {current.Luck}";
             }
             case EncounterEffectKind.MagicPoints:
             {
@@ -96,8 +113,20 @@ public static class EncounterSheetEffects
 
         var status = SanityRules.Status(sheet, catalog);
         var prompts = new List<string>();
-        if (lost > 0 && status.NeedsIntCheck)
+        if (lost > 0 && status.NeedsIntCheck && effect.Check is { } intPassed)
+        {
+            // Проверку ИНТ провели в сцене (стр. 153): успех — сыщик осознал ужас, временное безумие и приступ.
+            SanityRules.ResolveIntCheck(sheet, intPassed);
+            prompts.Add(intPassed ? "ИНТ — успех: временное безумие, приступ — на листе" : "ИНТ — провал: разум отгородился");
+        }
+        else if (lost > 0 && status.NeedsIntCheck)
+        {
             prompts.Add("проверка ИНТ на временное безумие");
+        }
+        else if (effect.Check is not null && lost < amount)
+        {
+            prompts.Add("привыкание урезало потерю ниже 5 — проверка ИНТ не нужна");
+        }
         if (lost > 0 && status.IndefiniteLoss && !sheet.Condition.IndefiniteInsanity)
             prompts.Add("⅕ рассудка за день — бессрочное безумие");
         if (status.PermanentlyInsane)
@@ -105,6 +134,13 @@ public static class EncounterSheetEffects
 
         var promptText = prompts.Count > 0 ? $" ({string.Join("; ", prompts)})" : "";
         return $"Рассудок {before} → {sheet.Current.Sanity}{habituationNote}{promptText}";
+    }
+
+    private static string Heal(CharacterSheet sheet, string label, HealOutcome outcome)
+    {
+        WoundRules.Write(sheet, outcome.After);
+        var state = WoundRules.StateText(outcome.After);
+        return $"{label}: ПЗ {outcome.Before.HitPoints} → {outcome.After.HitPoints}, {outcome.Refusal ?? outcome.Text}{(state is null ? "" : $" ({state})")}";
     }
 
     internal static string WoundNote(bool majorWound, SheetCondition condition) =>

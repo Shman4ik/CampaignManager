@@ -37,6 +37,26 @@ public static class EncounterText
         EncounterEffectKind.SanityLoss => "Рассудок",
         EncounterEffectKind.Power => "МОЩ",
         EncounterEffectKind.Out => "Выбывание",
+        EncounterEffectKind.FirstAid => "Первая помощь",
+        EncounterEffectKind.Medicine => "Медицина",
+        EncounterEffectKind.DyingCheck => "ВЫН умирающего",
+        EncounterEffectKind.Recovery => "Лечение раны",
+        EncounterEffectKind.Luck => "Удача",
+        EncounterEffectKind.Awake => "Сознание",
+        EncounterEffectKind.Attack => "Атака",
+        EncounterEffectKind.Defense => "Защита",
+        EncounterEffectKind.Autofire => "Очередь",
+        EncounterEffectKind.Ammo => "Патроны",
+        EncounterEffectKind.Jam => "Заклинивание",
+        EncounterEffectKind.Aim => "Прицел",
+        EncounterEffectKind.Cover => "Укрытие",
+        EncounterEffectKind.Prone => "Положение",
+        EncounterEffectKind.Grapple => "Захват",
+        EncounterEffectKind.Disarm => "Разоружение",
+        EncounterEffectKind.Disadvantage => "Невыгодное положение",
+        EncounterEffectKind.Ready => "Огнестрел наготове",
+        EncounterEffectKind.Casting => "Сотворение",
+        EncounterEffectKind.Treated => "Лечение по ране",
         _ => kind.ToString(),
     };
 
@@ -51,6 +71,13 @@ public static class EncounterText
         EncounterLogKind.Sheet => "Лист",
         EncounterLogKind.Note => "Заметка",
         EncounterLogKind.Finished => "Конец",
+        EncounterLogKind.Attack => "Атака",
+        EncounterLogKind.Maneuver => "Манёвр",
+        EncounterLogKind.Spell => "Заклинание",
+        EncounterLogKind.Sanity => "Рассудок",
+        EncounterLogKind.Medical => "Раны",
+        EncounterLogKind.Action => "Действие",
+        EncounterLogKind.Initiative => "Инициатива",
         _ => kind.ToString(),
     };
 
@@ -58,6 +85,10 @@ public static class EncounterText
     public static EncounterLogCategory Category(EncounterLogKind kind) => kind switch
     {
         EncounterLogKind.Effect => EncounterLogCategory.Violence,
+        EncounterLogKind.Attack or EncounterLogKind.Maneuver => EncounterLogCategory.Violence,
+        EncounterLogKind.Spell => EncounterLogCategory.Magic,
+        EncounterLogKind.Sanity => EncounterLogCategory.Sanity,
+        EncounterLogKind.Action => EncounterLogCategory.Movement,
         EncounterLogKind.Delayed => EncounterLogCategory.Movement,
         _ => EncounterLogCategory.System,
     };

@@ -47,6 +47,9 @@ public sealed record EncounterState : DocumentPart
     /// </summary>
     public List<SheetWrite> SheetWrites { get; set; } = [];
 
+    /// <summary>Бой (T2.6b): необязательные правила и броски инициативы. Погоне не нужно — остаётся пустым.</summary>
+    public CombatSettings Combat { get; set; } = new();
+
     [JsonIgnore]
     public EncounterParticipant? Active =>
         ActiveParticipantId is { } id ? Participants.FirstOrDefault(p => p.Id == id) : null;
@@ -134,6 +137,18 @@ public sealed record EncounterParticipant : DocumentPart
 
     public bool Dying { get; set; }
 
+    /// <summary>Умирающий временно стабилизирован первой помощью (T2.6b, <see cref="Characters.WoundRules"/>).</summary>
+    public bool Stabilized { get; set; }
+
+    /// <summary>Мёртв (T2.6b): урон одной атаки ≥ максимума ПЗ или провал ВЫН умирающего.</summary>
+    public bool Dead { get; set; }
+
+    /// <summary>Чем участник воюет: атаки (оружие листа, атаки статблока), навыки лечения, заклинания (T2.6b). Снимок.</summary>
+    public CombatProfile Profile { get; set; } = new();
+
+    /// <summary>Что с ним сейчас в бою: атаки и защиты раунда, прицел, укрытие, захват, патроны, сотворение (T2.6b).</summary>
+    public CombatantState Combat { get; set; } = new();
+
     /// <summary>Потеря рассудка при встрече с тварью «успех/провал» — по ней привыкание у сыщиков.</summary>
     public string? SanityLoss { get; set; }
 
@@ -213,6 +228,66 @@ public enum EncounterEffectKind
 
     /// <summary>Выбыл из очереди (<see cref="EncounterEffect.Flag"/> = true) или вернулся (false).</summary>
     Out,
+
+    // ── Бой (T2.6b). Раны и лечение — WoundRules, остальное — CombatEffects. ──
+
+    /// <summary>Успешная первая помощь: умирающему — стабилизация, остальным +1 ПЗ (стр. 118).</summary>
+    FirstAid,
+
+    /// <summary>Успешная Медицина: +<see cref="EncounterEffect.Amount"/> (1d3) ПЗ; умирающему после первой помощи — «при смерти» снято.</summary>
+    Medicine,
+
+    /// <summary>Проверка ВЫН умирающего: <see cref="EncounterEffect.Check"/> — исход (раунд или час — по стабилизации).</summary>
+    DyingCheck,
+
+    /// <summary>Недельное лечение серьёзной раны: <see cref="EncounterEffect.Level"/> и выпавшее 1d3/2d3 (стр. 119).</summary>
+    Recovery,
+
+    /// <summary>Трата Удачи (<see cref="EncounterEffect.Amount"/> &lt; 0): остаться в сознании (необязательное правило, стр. 123).</summary>
+    Luck,
+
+    /// <summary>Сознание в сцене: <see cref="EncounterEffect.Flag"/> true — остаётся в сознании за Удачу до конца раунда, false — нокаут.</summary>
+    Awake,
+
+    /// <summary>Атака в этом раунде (счёт атак; <see cref="EncounterEffect.Flag"/> — прицел потрачен).</summary>
+    Attack,
+
+    /// <summary>Защита в этом раунде (уклонение или контратака) — для численного превосходства (стр. 106).</summary>
+    Defense,
+
+    /// <summary>Проверка очереди в этом раунде (нарастающая сложность, стр. 114).</summary>
+    Autofire,
+
+    /// <summary>Патроны оружия <see cref="EncounterEffect.Key"/>: <see cref="EncounterEffect.Amount"/> — сколько станет в магазине.</summary>
+    Ammo,
+
+    /// <summary>Оружие <see cref="EncounterEffect.Key"/> заклинило: <see cref="EncounterEffect.Amount"/> — раундов починки осталось (0 — исправно).</summary>
+    Jam,
+
+    /// <summary>Прицелился (<see cref="EncounterEffect.Flag"/>) или прицел потерян.</summary>
+    Aim,
+
+    /// <summary>Укрылся от огня: штрафная кость стрелкам в этом раунде, потеря атаки в раунде <see cref="EncounterEffect.Amount"/> (стр. 111).</summary>
+    Cover,
+
+    /// <summary>Повален (<see cref="EncounterEffect.Flag"/>) или поднялся.</summary>
+    Prone,
+
+    /// <summary>Схвачен участником <see cref="EncounterEffect.OtherId"/> (<see cref="EncounterEffect.Flag"/>) или освободился.</summary>
+    Grapple,
+
+    Disarm,
+
+    Disadvantage,
+
+    /// <summary>Огнестрел наготове: +50 к инициативе (стр. 110).</summary>
+    Ready,
+
+    /// <summary>Начал долгое сотворение (<see cref="EncounterEffect.Casting"/>) или закончил/бросил (null).</summary>
+    Casting,
+
+    /// <summary>Первая помощь или Медицина уже оказаны по этой ране (<see cref="EncounterEffect.Key"/>: firstAid, firstAidTried, medicine).</summary>
+    Treated,
 }
 
 /// <summary>Один эффект на одного участника. Плоская запись с видом, а не иерархия типов: новый вид — член enum'а.</summary>
@@ -236,6 +311,25 @@ public sealed record EncounterEffect : DocumentPart
 
     /// <summary>Запись потери твари «0/1d6» — из неё предел привыкания.</summary>
     public string? SanityLossFormula { get; set; }
+
+    /// <summary>
+    /// Исход проверки, которую несёт эффект (T2.6b): ВЫН при серьёзной ране у <see cref="EncounterEffectKind.Damage"/>,
+    /// ИНТ при потере 5+ у <see cref="EncounterEffectKind.SanityLoss"/>, ВЫН умирающего у <see cref="EncounterEffectKind.DyingCheck"/>.
+    /// null — проверку не проводили.
+    /// </summary>
+    public bool? Check { get; set; }
+
+    /// <summary>Уровень проверки, когда от него зависит число (лечение серьёзной раны).</summary>
+    public Dice.SuccessLevel? Level { get; set; }
+
+    /// <summary>Ключ внутри участника: id атаки (патроны, заклинивание), вид лечения.</summary>
+    public string? Key { get; set; }
+
+    /// <summary>Второй участник эффекта: кто держит в захвате.</summary>
+    public Guid? OtherId { get; set; }
+
+    /// <summary>Долгое сотворение, которое начинается (<see cref="EncounterEffectKind.Casting"/>).</summary>
+    public SpellCasting? Casting { get; set; }
 }
 
 /// <summary>
@@ -310,6 +404,28 @@ public enum EncounterLogKind
     Note,
 
     Finished,
+
+    // ── Бой (T2.6b) ──
+
+    /// <summary>Атака ближнего боя или стрельба.</summary>
+    Attack,
+
+    Maneuver,
+
+    /// <summary>Заклинание: начато, сотворено, сорвано.</summary>
+    Spell,
+
+    /// <summary>Проверка Рассудка.</summary>
+    Sanity,
+
+    /// <summary>Первая помощь, Медицина, проверки умирающих, выздоровление.</summary>
+    Medical,
+
+    /// <summary>Укрытие, прицел, перезарядка, починка, бегство, Удача против обморока.</summary>
+    Action,
+
+    /// <summary>Броски инициативы (необязательное правило, стр. 122).</summary>
+    Initiative,
 }
 
 /// <summary>Категория записи — цвет в журнале: движение, препятствие, насилие, рассудок, служебное (знание v1 погони).</summary>

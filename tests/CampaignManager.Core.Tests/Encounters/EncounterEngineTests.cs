@@ -146,7 +146,7 @@ public sealed class EncounterEngineTests
 
         Assert.Equal(0, investigator.HitPoints);
         Assert.True(investigator.Dying);
-        Assert.False(investigator.Unconscious);
+        Assert.True(investigator.Unconscious); // при смерти — и без сознания (стр. 118)
         Assert.Equal(0, creature.HitPoints);
         Assert.True(creature.Unconscious); // обычный урон: только без сознания
         Assert.False(creature.Dying);
