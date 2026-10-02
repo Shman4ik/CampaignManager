@@ -11,9 +11,10 @@
 | Метод и адрес | Что | Права (`AccessPolicy`) |
 |---|---|---|
 | `GET /api/v1/encounters?kind=` | активные сцены вошедшего (раунд, участников, кампания) — «продолжить» | только свои; не Хранителю — пусто |
-| `POST /api/v1/encounters` | `{ kind, campaignId? }` → 201 `EncounterDto`; второй активный **бой** в той же кампании — 409 `conflict`; погонь — сколько угодно | `CanStartEncounterAsync` (Хранитель; в кампании — её Хранитель) |
+| `POST /api/v1/encounters` | `{ kind, campaignId?, runId? }` → 201 `EncounterDto`; второй активный **бой** в той же кампании — 409 `conflict`; погонь — сколько угодно | `CanStartEncounterAsync` (Хранитель; в кампании — её Хранитель) |
 | `GET /api/v1/encounters/{id}` | документ, версия, кампания; `ETag`, `no-store` | `ForEncounterAsync` Read (ведущий, администратор) |
 | `PUT /api/v1/encounters/{id}/state` | документ целиком, `If-Match` → `{ version, updatedAt }` | `ForEncounterAsync` Edit |
+| `PUT /api/v1/encounters/{id}/run` | `{ runId? }` — привязать сцену к прохождению сценария её кампании или снять (T2.6d); `If-Match` → `{ version, updatedAt }`; прохождение не из кампании сцены — 400 | `ForEncounterAsync` Edit |
 | `POST /api/v1/encounters/{id}/finish` | статус `Finished`, `If-Match` | `ForEncounterAsync` Edit |
 
 ## Правила

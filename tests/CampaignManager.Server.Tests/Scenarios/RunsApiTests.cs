@@ -285,4 +285,37 @@ public sealed class RunsApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         Assert.False(await db.RunReservations.AnyAsync(r => r.RunId == table.Run.Id, Cancellation));
         Assert.Equal(CharacterStatus.Active, (await db.Characters.SingleAsync(c => c.Id == annas.CharacterId, Cancellation)).Status);
     }
+
+    [Fact]
+    public async Task Campaign_runs_list_unfinished_runs_with_scenario_for_the_campaign_keeper_only()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper, "Хранитель");
+        var otherKeeper = await app.AddUserAsync(UserRole.Keeper, "Чужой");
+        var player = await app.AddUserAsync(UserRole.Player, "Аня");
+        var campaign = await app.AddCampaignAsync(keeper, player);
+        var elsewhere = await app.AddCampaignAsync(otherKeeper);
+        var fog = await Scenarios(keeper).CreateAsync(new ScenarioInput("Туман", Era: Era.Classic), Cancellation);
+        var masks = await Scenarios(keeper).CreateAsync(new ScenarioInput("Маски", Era: Era.Classic), Cancellation);
+        var played = await Scenarios(keeper).CreateAsync(new ScenarioInput("Сыгранный", Era: Era.Classic), Cancellation);
+
+        var fogRun = await Runs(keeper).PlayInCampaignAsync(fog.Id, new PlayInCampaignRequest(campaign.Id), Cancellation);
+        var masksRun = await Runs(keeper).PlayInCampaignAsync(masks.Id, new PlayInCampaignRequest(campaign.Id), Cancellation);
+        var playedRun = await Runs(keeper).PlayInCampaignAsync(played.Id, new PlayInCampaignRequest(campaign.Id), Cancellation);
+        await Runs(keeper).UpdateAsync(playedRun.Id, new RunInput(ScenarioRunStatus.Finished, null, null, false), Cancellation);
+        await Runs(otherKeeper).PlayInCampaignAsync(fog.Id, new PlayInCampaignRequest(elsewhere.Id), Cancellation);
+
+        var runs = await Runs(keeper).ListForCampaignAsync(campaign.Id, Cancellation);
+
+        // Только этой кампании и только незавершённые; у каждого — сценарий.
+        Assert.Equal([fogRun.Id, masksRun.Id], runs.Select(r => r.Id).Order());
+        Assert.Equal(new[] { "Маски", "Туман" }, runs.Select(r => r.ScenarioName).Order());
+        Assert.All(runs, r => Assert.Equal(campaign.Id, r.CampaignId));
+        Assert.Equal(fog.Id, runs.Single(r => r.Id == fogRun.Id).ScenarioId);
+
+        // Игрок кампании видит её, но не правит; посторонний Хранитель кампании не видит.
+        await Fails(HttpStatusCode.Forbidden, () => Runs(player).ListForCampaignAsync(campaign.Id, Cancellation));
+        await Fails(HttpStatusCode.NotFound, () => Runs(otherKeeper).ListForCampaignAsync(campaign.Id, Cancellation));
+        await Fails(HttpStatusCode.NotFound, () => Runs(keeper).ListForCampaignAsync(Guid.NewGuid(), Cancellation));
+    }
 }

@@ -55,7 +55,8 @@
 {
     <ParticipantPicker Open="_pickerOpen" OnClose="() => _pickerOpen = false" Sources="_sources"
                        Context="@(new ParticipantPickerContext(_session.Encounter.CampaignId, _session.Catalog))"
-                       UsedCharacterIds="UsedCharacterIds" OnPicked="AddParticipantsAsync" />
+                       UsedCharacterIds="UsedCharacterIds" OnPicked="AddParticipantsAsync"
+                       RunId="_session.Encounter.RunId" OnRunChosen="id => _session.SetRunAsync(id)" />
 }
 
 @code {
@@ -83,6 +84,12 @@
 
     /// <summary>Кампания (<c>?campaign=</c>): продолжить её сцену или начать в ней.</summary>
     [Parameter] public Guid? CampaignId { get; set; }
+
+    /// <summary>
+    /// Прохождение сценария (<c>?run=</c>, из режима игры): сцену в <see cref="CampaignId"/> начинают сразу с ним, а идущую
+    /// без прохождения привязывают к нему.
+    /// </summary>
+    [Parameter] public Guid? RunId { get; set; }
 
     /// <summary>Панели правил боя и погоны (T2.6b/c) — получают <see cref="EncounterSession"/> каскадом.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -150,7 +157,16 @@
             if (match is not null)
             {
                 await OpenAsync(match.Id);
+                if (RunId is { } attach && _session is { Encounter.RunId: null } opened)
+                    await opened.SetRunAsync(attach);
                 return;
+            }
+
+            if (CampaignId is { } runCampaign && RunId is not null && !AllowsMany)
+            {
+                // Из режима игры («Бой» с ?run=): сцена начинается сразу, с этим прохождением и его кампанией.
+                if (await TryStartWithRunAsync(runCampaign))
+                    return;
             }
 
             _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit)];
@@ -227,6 +243,23 @@
             _draftChoice = draft;
     }
 
+    private async Task<bool> TryStartWithRunAsync(Guid campaignId)
+    {
+        try
+        {
+            var started = await Api.StartAsync(new StartEncounterRequest(Kind, campaignId, RunId));
+            _loadedFor = started.Id;
+            await OpenAsync(started.Id);
+            return true;
+        }
+        catch (HttpRequestException error)
+        {
+            // Нельзя начать (не Хранитель кампании, чужое прохождение) — обычное «Начать» с причиной.
+            _notice = ApiErrors.Describe(error);
+            return false;
+        }
+    }
+
     private Task StartAsync() => StartInAsync(_startCampaign);
 
     private async Task StartInAsync(Guid? campaignId)
@@ -234,7 +267,7 @@
         _starting = true;
         try
         {
-            var started = await Api.StartAsync(new StartEncounterRequest(Kind, campaignId));
+            var started = await Api.StartAsync(new StartEncounterRequest(Kind, campaignId, campaignId == CampaignId ? RunId : null));
             Navigation.NavigateTo($"{Route}?id={started.Id}");
         }
         catch (HttpRequestException error)

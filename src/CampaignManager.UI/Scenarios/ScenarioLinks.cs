@@ -1,3 +1,5 @@
+using CampaignManager.Contracts.Scenarios;
+
 namespace CampaignManager.UI.Scenarios;
 
 /// <summary>
@@ -43,6 +45,9 @@ public static class ScenarioLinks
         + (locationId is { } location ? $"&location={location}" : "")
         + (handoutId is { } handout ? $"&handout={handout}" : "")
         + (runId is { } run ? $"&run={run}" : "");
+
+    /// <summary>Бой прохождения (T2.6d): <c>/combat?campaign=&amp;run=</c> — сцена в кампании прохождения стартует сразу с ним.</summary>
+    public static string Combat(ScenarioRunDto run) => $"combat?campaign={run.CampaignId}&run={run.Id}";
 
     /// <summary>Второй экран раздатки — статическая страница сервера (телевизор, проектор, телефон игрока).</summary>
     public static string HandoutScreen(Guid scenarioId, Guid handoutId) => $"scenarios/{scenarioId}/handouts/{handoutId}";

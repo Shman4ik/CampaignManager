@@ -20,6 +20,9 @@ public static class EncountersRoutes
     /// <summary><c>PUT</c> <see cref="EncounterState"/> с <c>If-Match</c> → <see cref="EncounterSavedDto"/>.</summary>
     public const string StatePattern = EncounterPattern + "/state";
 
+    /// <summary><c>PUT</c> <see cref="SetEncounterRunRequest"/> с <c>If-Match</c> — прохождение сцены (<c>run_id</c>) → <see cref="EncounterSavedDto"/>.</summary>
+    public const string RunPattern = EncounterPattern + "/run";
+
     /// <summary><c>POST</c> с <c>If-Match</c> — завершить сцену (статус <c>Finished</c>): место под новую освобождается.</summary>
     public const string FinishPattern = EncounterPattern + "/finish";
 
@@ -28,6 +31,8 @@ public static class EncountersRoutes
     public static string Encounter(Guid encounterId) => $"{Encounters}/{encounterId}";
 
     public static string State(Guid encounterId) => $"{Encounter(encounterId)}/state";
+
+    public static string Run(Guid encounterId) => $"{Encounter(encounterId)}/run";
 
     public static string Finish(Guid encounterId) => $"{Encounter(encounterId)}/finish";
 }
@@ -52,6 +57,9 @@ public sealed class EncounterDto
 
     public string? CampaignName { get; set; }
 
+    /// <summary>Прохождение сценария, по которому идёт сцена (бой выбирает сценарий по нему); нет — сцена сама по себе.</summary>
+    public Guid? RunId { get; set; }
+
     /// <summary>Версия строки (<c>xmin</c>) — для <c>If-Match</c>.</summary>
     public uint Version { get; set; }
 
@@ -75,7 +83,11 @@ public sealed record EncounterSummaryDto(
     IReadOnlyList<string> ParticipantNames);
 
 /// <summary>Новая сцена: вид и кампания (null — вне кампании). У Хранителя один активный бой на кампанию; погонь — сколько угодно.</summary>
-public sealed record StartEncounterRequest(EncounterKind Kind, Guid? CampaignId);
+/// <param name="RunId">Прохождение сценария в этой кампании (из режима игры сценария); без кампании — 400.</param>
+public sealed record StartEncounterRequest(EncounterKind Kind, Guid? CampaignId, Guid? RunId = null);
+
+/// <summary>Привязать сцену к прохождению сценария её кампании или снять привязку (<c>null</c>).</summary>
+public sealed record SetEncounterRunRequest(Guid? RunId);
 
 public sealed record EncounterSavedDto(uint Version, DateTimeOffset UpdatedAt);
 
@@ -93,6 +105,9 @@ public interface IEncountersApi
     Task<EncounterDto> GetAsync(Guid encounterId, CancellationToken cancellationToken = default);
 
     Task<EncounterSavedDto> SaveStateAsync(Guid encounterId, EncounterState state, uint version, CancellationToken cancellationToken = default);
+
+    /// <summary>Привязать сцену к прохождению (или снять): версия строки меняется — вернётся новая.</summary>
+    Task<EncounterSavedDto> SetRunAsync(Guid encounterId, Guid? runId, uint version, CancellationToken cancellationToken = default);
 
     Task<EncounterSavedDto> FinishAsync(Guid encounterId, uint version, CancellationToken cancellationToken = default);
 }

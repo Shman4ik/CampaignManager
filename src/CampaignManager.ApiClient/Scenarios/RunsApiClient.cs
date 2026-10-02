@@ -10,6 +10,12 @@ public sealed class RunsApiClient(HttpClient http) : IRunsApi
 {
     private static ContractsJsonContext Json => ContractsJsonContext.Default;
 
+    public async Task<IReadOnlyList<ScenarioRunDto>> ListForCampaignAsync(Guid campaignId, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(RunsRoutes.CampaignRuns(campaignId), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.IReadOnlyListScenarioRunDto, cancellationToken, withCode: true);
+    }
+
     public Task<ScenarioRunDto> PlayInCampaignAsync(Guid scenarioId, PlayInCampaignRequest request, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, ScenariosRoutes.Runs(scenarioId), request, Json.PlayInCampaignRequest, Json.ScenarioRunDto, cancellationToken);
 

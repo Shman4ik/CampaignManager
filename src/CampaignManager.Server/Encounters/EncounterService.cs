@@ -76,12 +76,18 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
         }
 
         await access.CanStartEncounterAsync(request.CampaignId, cancellationToken).Demand();
+        if (request.RunId is { } startRun)
+        {
+            await RequireRunOfCampaignAsync(startRun, request.CampaignId, cancellationToken);
+        }
+
         var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
 
         var encounter = new Encounter
         {
             KeeperId = user.Id,
             CampaignId = request.CampaignId,
+            RunId = request.RunId,
             Kind = request.Kind,
             Status = EncounterStatus.Active,
             State = CmJson.Write(new EncounterState()),
@@ -122,6 +128,7 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
             Status = encounter.Status,
             CampaignId = encounter.CampaignId,
             CampaignName = row.CampaignName,
+            RunId = encounter.RunId,
             Version = encounter.Version,
             State = CmJson.ReadEncounterState(encounter.State, encounter.StateVersion),
             UpdatedAt = encounter.UpdatedAt,
@@ -147,6 +154,39 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
             encounter.State = CmJson.Write(state);
             encounter.StateVersion = EncounterState.CurrentVersion;
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Привязать сцену к прохождению сценария её кампании (T2.6d) или снять (<c>null</c>). Запись строки меняет версию
+    /// (<c>xmin</c>), поэтому, как и запись состояния, идёт с <c>If-Match</c> и возвращает новую.
+    /// </summary>
+    public async Task<EncounterSavedDto> SetRunAsync(Guid encounterId, Guid? runId, uint? ifMatch, CancellationToken cancellationToken)
+    {
+        await access.ForEncounterAsync(encounterId, cancellationToken).Demand(Operation.Edit);
+        var campaignId = await dbContext.Encounters.Where(e => e.Id == encounterId).Select(e => e.CampaignId).SingleAsync(cancellationToken);
+        if (runId is { } run)
+        {
+            await RequireRunOfCampaignAsync(run, campaignId, cancellationToken);
+        }
+
+        return await WriteAsync(encounterId, ifMatch, encounter =>
+        {
+            if (encounter.Status != EncounterStatus.Active)
+            {
+                throw ApiProblemException.Conflict("Сцена уже завершена — начните новую.");
+            }
+
+            encounter.RunId = runId;
+        }, cancellationToken);
+    }
+
+    private async Task RequireRunOfCampaignAsync(Guid runId, Guid? campaignId, CancellationToken cancellationToken)
+    {
+        if (campaignId is not { } campaign
+            || !await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.CampaignId == campaign, cancellationToken))
+        {
+            throw ApiProblemException.Invalid("Прохождение не из кампании этой сцены.");
+        }
     }
 
     /// <summary>Завершить: статус <c>Finished</c>, место под новую сцену этого вида освобождается. Повтор — без ошибки.</summary>

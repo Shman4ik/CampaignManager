@@ -45,6 +45,10 @@ public static class EncountersModule
                 CancellationToken ct) => encounters.SaveStateAsync(encounterId, state, HttpIfMatch.Version(request), ct))
             .RequireAuthorization().WithName("SaveEncounterState").WithTags(Tag);
 
+        app.MapPut(EncountersRoutes.RunPattern, (Guid encounterId, SetEncounterRunRequest body, HttpRequest request, EncounterService encounters,
+                CancellationToken ct) => encounters.SetRunAsync(encounterId, body.RunId, HttpIfMatch.Version(request), ct))
+            .RequireAuthorization().WithName("SetEncounterRun").WithTags(Tag);
+
         app.MapPost(EncountersRoutes.FinishPattern, (Guid encounterId, HttpRequest request, EncounterService encounters,
                 CancellationToken ct) => encounters.FinishAsync(encounterId, HttpIfMatch.Version(request), ct))
             .RequireAuthorization().WithName("FinishEncounter").WithTags(Tag);

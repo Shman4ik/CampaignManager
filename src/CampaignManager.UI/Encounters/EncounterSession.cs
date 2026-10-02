@@ -173,6 +173,40 @@ public sealed class EncounterSession(IEncountersApi api, EncounterSheetSync shee
         }
     }
 
+    /// <summary>
+    /// Прохождение сценария у сцены (T2.6d). Строка меняет версию, поэтому несохранённый документ уходит первым, а новая
+    /// версия возвращается в сцену — иначе следующая запись состояния получила бы 409 от самой себя.
+    /// </summary>
+    public async Task SetRunAsync(Guid? runId)
+    {
+        if (Encounter.RunId == runId)
+            return;
+
+        await SaveAsync();
+        if (SaveState is not EncounterSaveState.Saved)
+            return;
+
+        try
+        {
+            var saved = await api.SetRunAsync(Encounter.Id, runId, Encounter.Version);
+            Encounter.Version = saved.Version;
+            Encounter.UpdatedAt = saved.UpdatedAt;
+            Encounter.RunId = runId;
+            Error = null;
+        }
+        catch (ApiException error) when (error.IsStale)
+        {
+            SaveState = EncounterSaveState.Conflict;
+            Error = error.Message;
+        }
+        catch (HttpRequestException error)
+        {
+            Error = ApiErrors.Describe(error);
+        }
+
+        Changed?.Invoke();
+    }
+
     /// <summary>Конфликт: записать вкладку поверх — с версией, прочитанной сейчас.</summary>
     public async Task OverwriteAsync()
     {
