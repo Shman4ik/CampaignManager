@@ -3,6 +3,20 @@ name: Build and Deploy
 on:
   push:
     branches: ["master"]
+    # Only what goes into the v1 image. Every deploy restarts the pod and drops the Keeper's
+    # circuits mid-session, so a docs-only or v2-only merge must not redeploy production.
+    # Directory.Packages.props is left out on purpose: v1 projects do not import it
+    # (see Directory.Build.props), while Directory.Build.props itself is imported.
+    paths:
+      - "CampaignManager.Web/**"
+      - "CampaignManager.ServiceDefaults/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "Directory.Build.props"
+      - "global.json"
+      - "NuGet.config"
+      - ".github/workflows/docker-build-deploy.yml"
+  workflow_dispatch:
 
 concurrency:
   group: build-and-deploy
@@ -10,7 +24,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -42,6 +56,8 @@ jobs:
           tags: |
             ghcr.io/shman4ik/campaign-manager:latest
             ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
+          cache-from: type=gha,scope=v1
+          cache-to: type=gha,mode=max,scope=v1
 
       - name: Check out dmnet-gitops
         uses: actions/checkout@v7
