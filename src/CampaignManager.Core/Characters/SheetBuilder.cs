@@ -30,6 +30,44 @@ public sealed record ImportedCharacter
 
     /// <summary>Навыки «имя → значение» как в книге: имя справочника, старое написание v1 или «Родитель (уточнение)».</summary>
     public IReadOnlyDictionary<string, int> Skills { get; init; } = new Dictionary<string, int>();
+
+    // ── Сверх формата v1 (T2.5d): то, что экспорт отдаёт у прегенов, — иначе преген терял оружие и биографию ──
+
+    public string? Birthplace { get; init; }
+    public string? Residence { get; init; }
+
+    /// <summary>Графы биографии; <see cref="Backstory"/>, если задана, побеждает предысторию отсюда.</summary>
+    public Biography? Biography { get; init; }
+
+    public IReadOnlyList<ImportedWeapon> Weapons { get; init; } = [];
+
+    /// <summary>Заклинания — свой экземпляр листа; ссылку на справочник (<see cref="SheetSpell.CatalogSpellId"/>) ставит вызывающий.</summary>
+    public IReadOnlyList<SheetSpell> Spells { get; init; } = [];
+
+    public IReadOnlyList<EquipmentItem> Equipment { get; init; } = [];
+
+    public Finances? Finances { get; init; }
+}
+
+/// <summary>
+/// Оружие из файла: текст книги и навык по имени (как навыки листа). <see cref="CatalogWeaponId"/> — запись справочника с
+/// тем же именем, её находит вызывающий: в Core справочника оружия нет.
+/// </summary>
+public sealed record ImportedWeapon
+{
+    public string Name { get; init; } = "";
+
+    /// <summary>Навык по имени справочника или старому написанию; не нашёлся — оружие без навыка.</summary>
+    public string? Skill { get; init; }
+
+    public string Damage { get; init; } = "";
+    public string Range { get; init; } = "";
+    public string Attacks { get; init; } = "";
+    public string Ammo { get; init; } = "";
+    public string Malfunction { get; init; } = "";
+    public bool Impaling { get; init; }
+    public string Notes { get; init; } = "";
+    public Guid? CatalogWeaponId { get; init; }
 }
 
 /// <summary>Лист импорта и навыки, которых нет в справочнике (они легли на лист своими навыками — отчёт импорта).</summary>
@@ -165,6 +203,10 @@ public static class SheetBuilder
     public static ImportedSheet FromImport(ImportedCharacter data, SkillCatalog catalog)
     {
         var characteristics = ClampCharacteristics(data.Characteristics);
+        var biography = data.Biography is { } given ? given with { } : new Biography();
+        if (!string.IsNullOrWhiteSpace(data.Backstory))
+            biography.Backstory = data.Backstory.Trim();
+
         var sheet = new CharacterSheet
         {
             Personal = new PersonalInfo
@@ -173,12 +215,34 @@ public static class SheetBuilder
                 Occupation = data.Occupation?.Trim() ?? "",
                 Age = Math.Max(0, data.Age),
                 Gender = data.Gender?.Trim() ?? "",
+                Birthplace = data.Birthplace?.Trim() ?? "",
+                Residence = data.Residence?.Trim() ?? "",
             },
             Characteristics = characteristics,
-            Biography = new Biography { Backstory = data.Backstory?.Trim() ?? "" },
+            Biography = biography,
+            Spells = [.. data.Spells.Select(s => s with { AlternativeNames = [.. s.AlternativeNames] })],
+            Equipment = [.. data.Equipment.Select(e => e with { })],
+            Finances = data.Finances is { } finances ? finances with { } : new Finances(),
         };
 
         var resolver = new SkillNameResolver(catalog);
+        foreach (var weapon in data.Weapons)
+        {
+            sheet.Weapons.Add(new SheetWeapon
+            {
+                CatalogWeaponId = weapon.CatalogWeaponId,
+                Name = weapon.Name.Trim(),
+                SkillId = resolver.CatalogId(weapon.Skill),
+                Damage = weapon.Damage,
+                Range = weapon.Range,
+                Attacks = weapon.Attacks,
+                Ammo = weapon.Ammo,
+                Malfunction = weapon.Malfunction,
+                Impaling = weapon.Impaling,
+                Notes = weapon.Notes,
+            });
+        }
+
         List<string> own = [];
         foreach (var (rawName, rawValue) in data.Skills)
         {
@@ -225,6 +289,82 @@ public static class SheetBuilder
             sheet.Current.Sanity = Math.Min(data.Sanity, DerivedAttributeRules.Compute(sheet, catalog).MaxSanity);
 
         return new ImportedSheet(sheet, own);
+    }
+
+    /// <summary>
+    /// Обратное <see cref="FromImport"/> — лист в формат файла сценария (экспорт, T2.5d). Пишется только то, что
+    /// <see cref="FromImport"/> читает, и так, чтобы импорт экспорта дал тот же экспорт: ПЗ, ПМ, БкУ, Комплекция,
+    /// Скорость и Уклонение — итоговые (с поправками книги), навыки — только строки <b>не на базе</b> (база — пустая
+    /// графа бланка, импорт её строкой не заведёт), Уклонение — полем, а не навыком. Отметки развития, состояние
+    /// (раны, безумие), книги Мифов и знакомые сыщики в формат не входят: это игра, а не заготовка.
+    /// </summary>
+    public static ImportedCharacter ToImport(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var derived = DerivedAttributeRules.Compute(sheet, catalog);
+        var dodge = catalog.FindByCode(SkillCodes.Dodge);
+        var skills = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var row in sheet.Skills)
+        {
+            if (dodge is not null && row.SkillId == dodge.Id)
+                continue;
+
+            if (catalog.Find(row.SkillId) is { } known && row.Value == SkillCatalog.BaseValueOf(known, sheet.Characteristics))
+                continue;
+
+            var name = row.DisplayName(catalog).Trim();
+            if (name.Length > 0)
+                skills[name] = row.Value;
+        }
+
+        // Незнакомые графы старых листов (Extra) — не заготовка: в файл не идут.
+        var biography = sheet.Biography with { Backstory = "", Extra = null };
+        var onlyBackstory = biography == new Biography();
+        var finances = sheet.Finances;
+        var noFinances = finances.Cash is null && finances.PocketMoney is null
+                                               && string.IsNullOrWhiteSpace(finances.Assets) && string.IsNullOrWhiteSpace(finances.Note);
+
+        return new ImportedCharacter
+        {
+            Name = sheet.Personal.Name,
+            Occupation = Blank(sheet.Personal.Occupation),
+            Age = sheet.Personal.Age,
+            Gender = Blank(sheet.Personal.Gender),
+            Backstory = Blank(sheet.Biography.Backstory),
+            Characteristics = sheet.Characteristics with { },
+            HitPoints = derived.MaxHitPoints,
+            MagicPoints = derived.MaxMagicPoints,
+            Sanity = sheet.Current.Sanity,
+            Luck = sheet.Current.Luck,
+            DamageBonus = derived.DamageBonus,
+            Build = derived.Build.ToString(CultureInfo.InvariantCulture),
+            MoveSpeed = derived.Move,
+            Dodge = derived.Dodge,
+            Skills = skills,
+            Birthplace = Blank(sheet.Personal.Birthplace),
+            Residence = Blank(sheet.Personal.Residence),
+            Biography = onlyBackstory ? null : biography,
+            Weapons =
+            [
+                .. sheet.Weapons.Select(w => new ImportedWeapon
+                {
+                    Name = w.Name,
+                    Skill = catalog.Find(w.SkillId)?.Name,
+                    Damage = w.Damage,
+                    Range = w.Range,
+                    Attacks = w.Attacks,
+                    Ammo = w.Ammo,
+                    Malfunction = w.Malfunction,
+                    Impaling = w.Impaling,
+                    Notes = w.Notes,
+                    CatalogWeaponId = w.CatalogWeaponId,
+                }),
+            ],
+            Spells = [.. sheet.Spells.Select(s => s with { AlternativeNames = [.. s.AlternativeNames] })],
+            Equipment = [.. sheet.Equipment.Select(e => e with { })],
+            Finances = noFinances ? null : finances with { },
+        };
+
+        static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     /// <summary>

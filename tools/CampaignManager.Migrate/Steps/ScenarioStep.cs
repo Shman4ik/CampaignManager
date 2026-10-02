@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using CampaignManager.Core;
 using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Catalogs;
@@ -169,11 +168,7 @@ public static partial class ScenarioStep
     }
 
     /// <summary>Эпоха из свободного текста v1 («Июнь 1925 года», «1930-е»): год 1890–1949 — классика.</summary>
-    public static Era? EraOf(string? text) =>
-        text is not null && YearPattern().Match(text) is { Success: true } m
-        && int.Parse(m.Value, CultureInfo.InvariantCulture) is >= 1890 and < 1950
-            ? Era.Classic
-            : null;
+    public static Era? EraOf(string? text) => ScenarioEra.FromSettingDate(text);
 
     /// <summary>
     /// Время игры v1 «как ввели» (без пояса) — в UTC из пояса Хранителя; смещение — на саму дату (летом в Праге
@@ -418,9 +413,6 @@ public static partial class ScenarioStep
             counts.Items++;
         }
     }
-
-    [GeneratedRegex(@"1[89]\d\d")]
-    private static partial Regex YearPattern();
 
     private sealed class Counts
     {

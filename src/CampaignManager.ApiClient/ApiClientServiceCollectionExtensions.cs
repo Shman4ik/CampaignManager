@@ -59,6 +59,7 @@ public static class ApiClientServiceCollectionExtensions
         services.AddHttpClient<ICatalogApi<MusicTrackDto>, MusicTracksApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IMusicApi, MusicApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IScenariosApi, ScenariosApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IScenarioExchangeApi, ScenarioExchangeApiClient>(http => http.BaseAddress = baseAddress);
         return services;
     }
 }

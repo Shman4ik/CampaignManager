@@ -317,7 +317,7 @@ public sealed class ScenarioService(
     internal static string Required(string? value, int limit, string field) =>
         Text(value, limit, field) ?? throw ApiProblemException.Invalid($"{field} — обязательно.");
 
-    private static void ApplyHeader(Scenario scenario, ScenarioInput input)
+    internal static void ApplyHeader(Scenario scenario, ScenarioInput input)
     {
         if (input.Era is { } era && !Enum.IsDefined(era))
         {
@@ -352,7 +352,7 @@ public sealed class ScenarioService(
     }
 
     /// <summary>Локации деревом в глубину: родитель, затем его дети по порядку. Висячий родитель — на верхний уровень.</summary>
-    private static IEnumerable<ScenarioLocation> OrderTree(IReadOnlyList<ScenarioLocation> locations)
+    internal static IEnumerable<ScenarioLocation> OrderTree(IReadOnlyList<ScenarioLocation> locations)
     {
         var ids = locations.Select(l => l.Id).ToHashSet();
         var children = locations.ToLookup(l => l.ParentId is { } parent && ids.Contains(parent) ? parent : (Guid?)null);

@@ -13,6 +13,7 @@ public static class ScenariosModule
         builder.Services.AddScoped<ScenarioService>();
         builder.Services.AddScoped<ScenarioPartsService>();
         builder.Services.AddScoped<ScenarioCastService>();
+        builder.Services.AddScoped<ScenarioExchangeService>();
         return builder;
     }
 
@@ -128,6 +129,7 @@ public static class ScenariosModule
             return TypedResults.NoContent();
         }).WithName("RemoveScenarioPregen");
 
+        ScenarioExchangeEndpoints.Map(group);
         return app;
     }
 }

@@ -223,6 +223,45 @@ public sealed class SheetBuilderTests
     }
 
     [Fact]
+    public void ToImport_IsFixedPointOfFromImport_AndSkipsSkillsAtBase()
+    {
+        // Лист, как его ведут на деле (T2.5d, экспорт сценария): строка на базе, специализация вне справочника, свой
+        // навык, Уклонение строкой, поправка ПЗ из книги, оружие, заклинание, графы биографии.
+        var sheet = new CharacterSheet
+        {
+            Personal = new PersonalInfo { Name = "Профессор", Occupation = "Профессор", Age = 52, Birthplace = "Бостон" },
+            Characteristics = Same with { },
+            Current = new CurrentValues { HitPoints = 3, MagicPoints = 12, Sanity = 41, Luck = 45 },
+            Overrides = new SheetOverrides { MaxHitPoints = 20 },
+            Skills =
+            [
+                Skill("Внимание", 65),
+                Skill("Слух", Def("Слух").BaseValue),
+                Skill("Уклонение", 50),
+                Specialization("Наука", "геология", 30),
+                new SheetSkill { Name = "Хиромантия", Value = 20 },
+            ],
+            Weapons = [new SheetWeapon { Name = "Револьвер", SkillId = Id("Стрельба (пистолет)"), Damage = "1d10", Ammo = "6" }],
+            Spells = [new SheetSpell { Name = "Знак Воорта", Cost = "5 ПМ" }],
+            Biography = new Biography { Backstory = "Ведёт раскопки", Appearance = "Седой" },
+        };
+
+        var exported = SheetBuilder.ToImport(sheet, Catalog);
+        var again = SheetBuilder.ToImport(SheetBuilder.FromImport(exported, Catalog).Sheet, Catalog);
+
+        Assert.DoesNotContain("Слух", exported.Skills.Keys); // на базе — пустая графа бланка
+        Assert.DoesNotContain("Уклонение", exported.Skills.Keys); // Уклонение — полем
+        Assert.Equal((20, 50), (exported.HitPoints, exported.Dodge));
+        Assert.Equal(exported.Skills.OrderBy(p => p.Key, StringComparer.Ordinal), again.Skills.OrderBy(p => p.Key, StringComparer.Ordinal));
+        Assert.Equal((exported.HitPoints, exported.MagicPoints, exported.Sanity, exported.Luck, exported.DamageBonus, exported.Build, exported.MoveSpeed, exported.Dodge),
+            (again.HitPoints, again.MagicPoints, again.Sanity, again.Luck, again.DamageBonus, again.Build, again.MoveSpeed, again.Dodge));
+        Assert.Equal(exported.Biography, again.Biography);
+        Assert.Equal("Стрельба (пистолет)", Assert.Single(again.Weapons).Skill);
+        Assert.Equal("Знак Воорта", Assert.Single(again.Spells).Name);
+        Assert.Equal("Бостон", again.Birthplace);
+    }
+
+    [Fact]
     public void FromImport_PrintedValues_OverridesOnlyWhereFormulaDiffers()
     {
         var c = Same with { };
