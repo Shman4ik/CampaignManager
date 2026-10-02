@@ -1,0 +1,214 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.UI.Campaigns
+@using CampaignManager.UI.Platform
+@inject IRunsApi Runs
+@inject ICampaignsApi Campaigns
+
+@* Одна форма прохождения (T2.5c): «Играть в кампании», «Объявить ваншот» и правка — анонс, дата, состояние, запись. В v1 анонс
+   правился в двух формах сценария с разной обработкой даты, а сохранение затирало правки локаций с другой вкладки; здесь
+   прохождение — своя строка и свой адрес. Время — в поясе браузера (LocalTime.ToInput/FromInput), сервер хранит UTC.
+   Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
+<Modal Open="Open" Title="@Title" Size="ModalSize.Medium" OnClose="CloseAsync">
+    <ChildContent>
+        <form id="run-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            @if (Mode == RunFormMode.PlayInCampaign)
+            {
+                <Field Label="Кампания" Error="@_campaignError"
+                       Note="Кампании, которые вы ведёте. Содержимое сценария не копируется: правка сценария видна во всех прохождениях.">
+                    @if (_campaigns is null)
+                    {
+                        <LoadingIndicator Message="Загружаю кампании…" />
+                    }
+                    else if (_campaigns.Count == 0)
+                    {
+                        <p class="cm-text-muted">Нет кампаний, которые вы ведёте. Заведите кампанию на странице «Кампании» или объявите ваншот.</p>
+                    }
+                    else
+                    {
+                        <select class="cm-input" data-testid="run-campaign" @bind="_campaignId">
+                            <option value="">Выберите кампанию</option>
+                            @foreach (var campaign in _campaigns)
+                            {
+                                <option value="@campaign.Id">@campaign.Name · @CampaignLabels.Kind(campaign.Kind)</option>
+                            }
+                        </select>
+                    }
+                </Field>
+            }
+            @if (Mode == RunFormMode.OneShot)
+            {
+                <Field Label="Название кампании" Hint="(необязательно)" Note="@($"Пусто — «{ScenarioName} (ваншот)». Вы станете её Хранителем.")">
+                    <input class="cm-input" maxlength="@CampaignLimits.NameLength" data-testid="oneshot-name" @bind="_campaignName" />
+                </Field>
+                @if (PregenCount == 0)
+                {
+                    <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" class="mb-0">
+                        У сценария нет прегенов — бронировать будет нечего. Добавьте их на вкладке «Прегены»; в ваншот можно и просто вступить.
+                    </Alert>
+                }
+            }
+            @if (Mode == RunFormMode.Edit)
+            {
+                <Field Label="Состояние">
+                    <select class="cm-input" data-testid="run-status" @bind="_status">
+                        @foreach (var status in Enum.GetValues<ScenarioRunStatus>())
+                        {
+                            <option value="@status">@ScenarioLabels.RunStatus(status)</option>
+                        }
+                    </select>
+                </Field>
+            }
+
+            <Field Label="Дата и время игры" Hint="(необязательно)" Note="Время — по часам этого устройства.">
+                <input type="datetime-local" class="cm-input" data-testid="run-date" @bind="_scheduledAt" />
+            </Field>
+
+            @if (Mode != RunFormMode.PlayInCampaign)
+            {
+                <Field Label="Анонс" Hint="(Markdown)" Note="Его видят на главной все, пока открыта запись: что за игра, где и когда, кого ждут.">
+                    <textarea class="cm-input" rows="6" maxlength="@RunLimits.AnnouncementLength" data-testid="run-announcement" @bind="_announcement"></textarea>
+                </Field>
+            }
+            @if (Mode == RunFormMode.Edit)
+            {
+                <label class="flex min-h-11 items-start gap-2">
+                    <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" data-testid="run-signup" disabled="@(_status == ScenarioRunStatus.Finished)" @bind="_signupOpen" />
+                    <span>
+                        Открыта запись на прегенов
+                        <span class="block text-sm text-primary-500">
+                            @(_status == ScenarioRunStatus.Finished
+                                ? "Завершённое прохождение запись закрывает само."
+                                : "Ваншот на главной: игроки бронируют прегенов сценария и получают копию листа.")
+                        </span>
+                    </span>
+                </label>
+            }
+            @if (Mode == RunFormMode.OneShot)
+            {
+                <p class="cm-text-muted text-sm">Запись откроется сразу: ваншот появится на главной у всех, и игроки смогут забронировать прегенов.</p>
+            }
+
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="run-form" Busy="_saving" data-testid="run-save"
+                Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is not { Count: > 0 })">@SaveText</Button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public RunFormMode Mode { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public string ScenarioName { get; set; } = "";
+
+    [Parameter] public int PregenCount { get; set; }
+
+    /// <summary>Правка этого прохождения (<see cref="RunFormMode.Edit"/>).</summary>
+    [Parameter] public ScenarioRunDto? Run { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback<ScenarioRunDto> OnSaved { get; set; }
+
+    private bool _wasOpen;
+    private IReadOnlyList<CampaignSummaryDto>? _campaigns;
+    private Guid? _campaignId;
+    private string? _campaignName;
+    private ScenarioRunStatus _status;
+    private DateTime? _scheduledAt;
+    private string? _announcement;
+    private bool _signupOpen;
+    private string? _campaignError;
+    private string? _error;
+    private bool _saving;
+
+    private string Title => Mode switch
+    {
+        RunFormMode.PlayInCampaign => "Играть в кампании",
+        RunFormMode.OneShot => "Объявить ваншот",
+        _ => $"Прохождение: {Run?.CampaignName}",
+    };
+
+    private string SaveText => Mode switch
+    {
+        RunFormMode.PlayInCampaign => "Начать прохождение",
+        RunFormMode.OneShot => "Объявить",
+        _ => "Сохранить",
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Форма заполняется при открытии, а не на каждую перерисовку страницы.
+        if (Open && !_wasOpen)
+        {
+            _wasOpen = true;
+            _campaignId = null;
+            _campaignName = null;
+            _status = Run?.Status ?? ScenarioRunStatus.Planned;
+            _scheduledAt = LocalTime.ToInput(Run?.ScheduledAt);
+            _announcement = Run?.Announcement;
+            _signupOpen = Run?.SignupOpen ?? false;
+            _campaignError = null;
+            _error = null;
+            _campaigns = null;
+            if (Mode == RunFormMode.PlayInCampaign)
+            {
+                try
+                {
+                    _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit && c.Status != CampaignStatus.Completed)];
+                }
+                catch (HttpRequestException ex)
+                {
+                    _campaigns = [];
+                    _error = ApiErrors.Describe(ex);
+                }
+            }
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Mode == RunFormMode.PlayInCampaign && _campaignId is null)
+        {
+            _campaignError = "Выберите кампанию.";
+            return;
+        }
+
+        _campaignError = null;
+        _saving = true;
+        _error = null;
+        try
+        {
+            var at = LocalTime.FromInput(_scheduledAt);
+            var saved = Mode switch
+            {
+                RunFormMode.PlayInCampaign => await Runs.PlayInCampaignAsync(ScenarioId, new PlayInCampaignRequest(_campaignId!.Value, at)),
+                RunFormMode.OneShot => await Runs.AnnounceOneShotAsync(ScenarioId, new AnnounceOneShotRequest(_campaignName, at, _announcement)),
+                _ => await Runs.UpdateAsync(Run!.Id, new RunInput(_status, at, _announcement, _signupOpen)),
+            };
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

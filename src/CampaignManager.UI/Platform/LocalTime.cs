@@ -24,4 +24,17 @@ public static class LocalTime
 
     /// <summary>Дата без пояса: «2 октября 2026».</summary>
     public static string Date(DateOnly value) => value.ToString("d MMMM yyyy", Russian);
+
+    /// <summary>Значение для <c>&lt;input type="datetime-local"&gt;</c>: момент в поясе браузера, без смещения.</summary>
+    public static System.DateTime? ToInput(DateTimeOffset? value) =>
+        value is { } moment ? System.DateTime.SpecifyKind(moment.ToLocalTime().DateTime, DateTimeKind.Unspecified) : null;
+
+    /// <summary>
+    /// Обратно из <c>datetime-local</c>: «настенное» время браузера — момент в UTC (так его хранит сервер). Смещение берётся
+    /// на саму дату, поэтому игра после перехода на зимнее время не съезжает на час.
+    /// </summary>
+    public static DateTimeOffset? FromInput(System.DateTime? value) =>
+        value is { } local
+            ? new DateTimeOffset(System.DateTime.SpecifyKind(local, DateTimeKind.Unspecified), TimeZoneInfo.Local.GetUtcOffset(local)).ToUniversalTime()
+            : null;
 }

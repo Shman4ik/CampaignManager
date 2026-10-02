@@ -1,9 +1,14 @@
 @using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Scenarios
 @using CampaignManager.UI.Platform
+@inject IRunsApi Runs
+@inject DialogService Dialogs
+@inject ToastService Toasts
 
 @* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и прегены — кто какого занял.
-   Бронь и её снятие (кнопки строк) делает модуль прохождений (T2.5c): данные для них уже здесь
-   (IsReserved, IsMine). Длинный анонс прокручивается внутри карточки, а не растягивает главную. *@
+   Бронь (T2.5c): «Забронировать» у свободного прегена, пока у меня нет брони в этой игре и я её не веду (CanReserve);
+   у своего — «Лист» (копия прегена у меня в кампании) и «Снять бронь»; ведущий снимает любую (CanRelease). Флаги — с
+   сервера, решает он же. Длинный анонс прокручивается внутри карточки, а не растягивает главную. *@
 <article class="cm-card flex flex-col" aria-labelledby="@($"run-{Run.RunId}")">
     <div class="cm-card-header">
         <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48 truncate">@Run.ScenarioName</h3>
@@ -47,10 +52,10 @@
                 <ul>
                     @foreach (var pregen in Run.Pregens)
                     {
-                        <li class="flex items-center gap-3 border-t border-primary-200 py-2 first:border-t-0" @key="pregen.Id">
+                        <li class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 py-2 first:border-t-0" @key="pregen.Id">
                             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 font-semibold text-primary-600"
                                   aria-hidden="true">@Initial(pregen.Name)</span>
-                            <span class="min-w-0 flex-1">
+                            <span class="min-w-0 flex-1 basis-32">
                                 <span class="block truncate font-semibold text-primary-800">@pregen.Name</span>
                                 @if (pregen.Occupation is not null)
                                 {
@@ -63,12 +68,28 @@
                             }
                             else if (pregen.IsReserved)
                             {
-                                <Badge Tone="Tone.Neutral">Занят@(pregen.ReservedBy is { } by ? $": {by}" : "")</Badge>
+                                <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">Занят@(pregen.ReservedBy is { } by ? $": {by}" : "")</Badge>
                             }
-                            else
+                            else if (!Run.CanReserve)
                             {
                                 <Badge Tone="Tone.Info">Свободен</Badge>
                             }
+                            <span class="flex flex-wrap justify-end gap-2">
+                                @if (pregen.MyCharacterId is { } sheet)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-id-card" Href="@($"character/{sheet}")">Лист</Button>
+                                }
+                                @if (!pregen.IsReserved && Run.CanReserve)
+                                {
+                                    <Button Small="true" Icon="fa-hand" Busy="@(_busy == pregen.Id)" Disabled="@(_busy is not null)"
+                                            data-testid="reserve" OnClick="() => ReserveAsync(pregen)">Забронировать</Button>
+                                }
+                                @if (pregen.CanRelease)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-user-xmark" Busy="@(_busy == pregen.Id)"
+                                            Disabled="@(_busy is not null)" data-testid="release" OnClick="() => ReleaseAsync(pregen)">Снять бронь</Button>
+                                }
+                            </span>
                         </li>
                     }
                 </ul>
@@ -78,7 +99,62 @@
 </article>
 
 @code {
+    private Guid? _busy;
+
     [Parameter, EditorRequired] public HomeOneShotDto Run { get; set; } = null!;
+
+    /// <summary>Бронь взята или снята — главной перечитать себя (ваншот появится среди моих кампаний).</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task ReserveAsync(HomePregenDto pregen)
+    {
+        _busy = pregen.Id;
+        try
+        {
+            await Runs.ReserveAsync(Run.RunId, pregen.Id);
+            Toasts.Success($"«{pregen.Name}» ваш: копия листа — в кампании ваншота, правьте её как свою.");
+            await OnChanged.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+
+    private async Task ReleaseAsync(HomePregenDto pregen)
+    {
+        var whose = pregen.IsMine ? "Ваша копия листа" : $"Копия листа у игрока{(pregen.ReservedBy is { } by ? $" «{by}»" : "")}";
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Снять бронь «{pregen.Name}»?",
+                $"Преген снова свободен. {whose} уйдёт в архив.")
+            {
+                ConfirmText = "Снять бронь",
+                Details = null,
+            }))
+        {
+            return;
+        }
+
+        _busy = pregen.Id;
+        try
+        {
+            await Runs.ReleaseAsync(Run.RunId, pregen.Id);
+            Toasts.Success("Бронь снята.");
+            await OnChanged.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
 
     private static string Initial(string name) => string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
 }
