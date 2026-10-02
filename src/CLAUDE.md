@@ -183,6 +183,5 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 `.claude/launch.json`, конфигурация `v2` — `https://localhost:8080`, тот же порт, что у v1 (он
 разрешён в dev-приложении Auth0), поэтому v1 и v2 запускаются по очереди. Второй экземпляр без
 входа — `dotnet run --project src/CampaignManager.Server --no-build --urls https://localhost:8081`.
-Порты 55339–55438 на машине владельца заняты Hyper-V (`netsh int ipv4 show excludedportrange
-protocol=tcp`) — контейнер Postgres для тестов туда не пробросить. `/dev/ping` —
+`/dev/ping` —
 сквозная проверка: страница → `ApiClient` → `GET /api/v1/ping` → `Data` → Postgres.
