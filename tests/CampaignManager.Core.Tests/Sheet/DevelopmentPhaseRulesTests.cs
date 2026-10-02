@@ -17,7 +17,7 @@ public sealed class DevelopmentPhaseRulesTests
     [Trait("page", "92")]
     [InlineData(SkillCodes.Mythos, false)]
     [InlineData(SkillCodes.CreditRating, false)]
-    [InlineData("skill.vnimanie", true)]
+    [InlineData("skill.spot-hidden", true)]
     [InlineData(null, true)] // свой навык
     public void CanBeChecked_MythosAndCreditRatingNever(string? code, bool expected) =>
         Assert.Equal(expected, DevelopmentPhaseRules.CanBeChecked(code));
