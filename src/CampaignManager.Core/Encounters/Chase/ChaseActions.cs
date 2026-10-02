@@ -107,9 +107,8 @@ public static class ChaseActions
         var hazard = chase.Location(location)?.Hazard;
         var name = hazard?.Name ?? "Помеха";
         var difficulty = hazard?.Difficulty ?? Difficulty.Regular;
-        var bonus = Math.Clamp(check.BonusDice, 0, 2);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Hazard, check.BonusDice, check.PenaltyDice);
         var boost = runner.Boost;
-        var penalty = check.PenaltyDice + (boost?.PenaltyDice ?? 0) + DrivingPenalty(runner);
         var destination = Math.Clamp(location, 1, Math.Max(1, chase.LastLocation));
 
         var test = Test(check with { Difficulty = difficulty, BonusDice = bonus, PenaltyDice = penalty }, dice);
@@ -153,7 +152,8 @@ public static class ChaseActions
         var barrier = chase.Location(location)?.Barrier;
         var name = barrier?.Name ?? "Преграда";
         var difficulty = barrier?.Difficulty ?? Difficulty.Regular;
-        var test = Test(check with { Difficulty = difficulty, PenaltyDice = check.PenaltyDice + DrivingPenalty(runner) }, dice);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Barrier, check.BonusDice, check.PenaltyDice);
+        var test = Test(check with { Difficulty = difficulty, BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [test.Line];
 
         List<EncounterEffect> effects = [Effect(EncounterEffectKind.ChaseActionsSpent, actorId, 1)];
@@ -275,7 +275,8 @@ public static class ChaseActions
     {
         var (actor, _, _) = Context(state, actorId);
         var target = Target(state, targetId);
-        var attack = Test(check with { PenaltyDice = check.PenaltyDice + (stopped ? 0 : 1) }, dice);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Ranged, check.BonusDice, check.PenaltyDice, stopped: stopped);
+        var attack = Test(check with { BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [attack.Line, stopped ? "Остановился, чтобы выстрелить: одно действие." : "Стреляет на ходу: штрафная кость, без действия."];
 
         List<EncounterEffect> effects = [Effect(EncounterEffectKind.ChaseAttack, actorId, 1)];
@@ -311,7 +312,7 @@ public static class ChaseActions
     public static ChaseOutcome Maneuver(EncounterState state, Guid actorId, Guid targetId, ChaseCheck check, ChaseDefence? defence,
         ChaseMishap? effect, IDiceRoller dice)
     {
-        var (actor, runner, _) = Context(state, actorId);
+        var (actor, _, _) = Context(state, actorId);
         var target = Target(state, targetId);
         var (buildPenalty, impossible) = ManeuverBuildPenalty(ChaseRules.Build(state, actorId), ChaseRules.Build(state, targetId));
         if (impossible)
@@ -324,7 +325,8 @@ public static class ChaseActions
             }, null, SuccessLevel.Failure, false);
         }
 
-        var attack = Test(check with { PenaltyDice = check.PenaltyDice + buildPenalty + (runner.IsDriver ? DrivingPenalty(runner) : 0) }, dice);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Maneuver, check.BonusDice, check.PenaltyDice, targetId);
+        var attack = Test(check with { BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [attack.Line];
         if (buildPenalty > 0)
             lines.Add($"Цель крупнее: {ChaseText.PenaltyDice(buildPenalty)}.");
@@ -359,7 +361,8 @@ public static class ChaseActions
         var (actor, runner, _) = Context(state, actorId);
         var target = Target(state, targetId);
         var vehicle = runner.Vehicle ?? throw new InvalidOperationException("Таранить можно только за рулём.");
-        var attack = Test(check with { PenaltyDice = check.PenaltyDice + DrivingPenalty(runner) }, dice);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Ram, check.BonusDice, check.PenaltyDice);
+        var attack = Test(check with { BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [attack.Line];
         var hit = Defend(attack, target, defence, dice, lines);
 
@@ -411,7 +414,8 @@ public static class ChaseActions
     {
         var (actor, _, _) = Context(state, actorId);
         var target = Target(state, targetId);
-        var attack = Test(check with { PenaltyDice = check.PenaltyDice + 1 + (stopped ? 0 : 1) }, dice);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Tyres, check.BonusDice, check.PenaltyDice, stopped: stopped);
+        var attack = Test(check with { BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [attack.Line, "Шина — маленькая цель: штрафная кость." + (stopped ? " Остановился: одно действие." : " На ходу: ещё одна штрафная.")];
 
         List<EncounterEffect> effects = [Effect(EncounterEffectKind.ChaseAttack, actorId, 1)];
@@ -446,7 +450,7 @@ public static class ChaseActions
     public static ChaseOutcome DriverControl(EncounterState state, Guid driverId, ChaseCheck check, bool unconscious, ChaseMishap? crash,
         IDiceRoller dice)
     {
-        var (actor, runner, _) = Context(state, driverId);
+        var (actor, _, _) = Context(state, driverId);
         List<string> lines = [];
         CheckTest test;
         if (unconscious)
@@ -455,7 +459,8 @@ public static class ChaseActions
         }
         else
         {
-            test = Test(check with { Skill = $"Управление ({check.Skill})", Difficulty = Difficulty.Hard, PenaltyDice = check.PenaltyDice + DrivingPenalty(runner) }, dice);
+            var (bonus, penalty) = ActionDice(state, driverId, ChaseActionKind.DriverControl, check.BonusDice, check.PenaltyDice);
+            test = Test(check with { Skill = $"Управление ({check.Skill})", Difficulty = Difficulty.Hard, BonusDice = bonus, PenaltyDice = penalty }, dice);
         }
 
         lines.Add(test.Line);
@@ -577,9 +582,9 @@ public static class ChaseActions
     /// </summary>
     public static ChaseOutcome Hide(EncounterState state, Guid actorId, ChaseCheck stealth, int? driving, IDiceRoller dice)
     {
-        var (actor, runner, chase) = Context(state, actorId);
-        var penalty = driving is not null ? DrivingPenalty(runner) : 0;
-        var test = Test(stealth with { PenaltyDice = stealth.PenaltyDice + penalty }, dice);
+        var (actor, _, chase) = Context(state, actorId);
+        var (bonus, penalty) = ActionDice(state, actorId, ChaseActionKind.Hide, stealth.BonusDice, stealth.PenaltyDice, inVehicle: driving is not null);
+        var test = Test(stealth with { BonusDice = bonus, PenaltyDice = penalty }, dice);
         List<string> lines = [test.Line];
         var hidden = test.Success;
         if (driving is { } drivingValue && test.Roll is { } roll)
@@ -719,6 +724,32 @@ public static class ChaseActions
     }
 
     // ───────────────────── Общее ─────────────────────
+
+    /// <summary>
+    /// Кости проверки действия — одна копия для резолва и для поля броска на экране (чтобы «Бросить» на экране бросал с теми
+    /// же костями, что и правило): бонусные за осторожность у помехи (не больше двух, стр. 133), штрафные разгона (стр. 138),
+    /// поломки транспорта (стр. 143), стрельбы на ходу и маленькой цели (стр. 139), разницы Комплекции в манёвре (стр. 136).
+    /// </summary>
+    public static (int Bonus, int Penalty) ActionDice(EncounterState state, Guid actorId, ChaseActionKind action, int bonusDice = 0,
+        int penaltyDice = 0, Guid? targetId = null, bool stopped = true, bool inVehicle = false)
+    {
+        var runner = state.Chase?.Runner(actorId);
+        var driving = runner is null ? 0 : DrivingPenalty(runner);
+        bonusDice = Math.Max(0, bonusDice);
+        penaltyDice = Math.Max(0, penaltyDice);
+        return action switch
+        {
+            ChaseActionKind.Hazard => (Math.Min(2, bonusDice), penaltyDice + (runner?.Boost?.PenaltyDice ?? 0) + driving),
+            ChaseActionKind.Barrier or ChaseActionKind.Ram or ChaseActionKind.DriverControl => (bonusDice, penaltyDice + driving),
+            ChaseActionKind.Maneuver => (bonusDice, penaltyDice + driving + (targetId is { } target
+                ? ManeuverBuildPenalty(ChaseRules.Build(state, actorId), ChaseRules.Build(state, target)).PenaltyDice
+                : 0)),
+            ChaseActionKind.Ranged => (bonusDice, penaltyDice + (stopped ? 0 : 1)),
+            ChaseActionKind.Tyres => (bonusDice, penaltyDice + 1 + (stopped ? 0 : 1)),
+            ChaseActionKind.Hide => (bonusDice, penaltyDice + (inVehicle ? driving : 0)),
+            _ => (bonusDice, penaltyDice),
+        };
+    }
 
     /// <summary>Штрафная кость водителю сломанного транспорта (стр. 143) — к проверкам управления.</summary>
     public static int DrivingPenalty(ChaseRunner runner) => runner.IsDriver ? VehicleRules.PenaltyDice(runner.Vehicle) : 0;

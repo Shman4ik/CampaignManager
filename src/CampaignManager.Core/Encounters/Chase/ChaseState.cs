@@ -80,6 +80,9 @@ public sealed record ChaseState : DocumentPart
     /// <summary>Кто назначил последнюю внезапную помеху: true — игроки, false — Хранитель, null — ещё никто (стр. 137).</summary>
     public bool? SuddenHazardByPlayers { get; set; }
 
+    /// <summary>Пары с равной ЛВК, чей порядок уже решён встречной проверкой (стр. 132), — больше не спрашиваем.</summary>
+    public List<ChaseTie> Ties { get; set; } = [];
+
     public ChaseRunner? Runner(Guid participantId) => Runners.FirstOrDefault(r => r.ParticipantId == participantId);
 
     public ChaseLocation? Location(int number) => Locations.FirstOrDefault(l => l.Number == number);
@@ -215,4 +218,12 @@ public sealed record ChaseBoost : DocumentPart
     public int LocationsLeft { get; set; }
 
     public int PenaltyDice { get; set; }
+}
+
+/// <summary>Решённая ничья по ЛВК: кто из двоих ходит первым.</summary>
+public sealed record ChaseTie : DocumentPart
+{
+    public Guid First { get; set; }
+
+    public Guid Second { get; set; }
 }

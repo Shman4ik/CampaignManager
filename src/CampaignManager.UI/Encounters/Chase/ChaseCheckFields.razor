@@ -1,0 +1,94 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+
+@* Поля проверки погони: навык (подставляется из листа участника), значение (можно поправить; у твари без навыка — ЛВК,
+   ½ или ⅕, стр. 142) и бросок — RollInput, вписать или бросить; кости — те же, что возьмёт правило (ChaseActions.ActionDice).
+   Состояние — в ChaseCheckInput панели: навык и значение переходят из действия в действие, бросок обнуляется. *@
+<div class="flex flex-col gap-2">
+    <div class="flex flex-wrap items-end gap-2">
+        @if (!FixedSkill)
+        {
+            <Field Label="Навык" class="w-full sm:w-56">
+                <select class="cm-input" value="@Input.Key" @onchange="SelectSkill" aria-label="@($"{Label}: навык")">
+                    @foreach (var option in ChaseSkills.Options(Catalog))
+                    {
+                        <option value="@option.Key">@option.Label</option>
+                    }
+                </select>
+            </Field>
+        }
+        <Field Label="@(FixedSkill ? Input.Label : "Значение")" class="w-28">
+            <input type="number" inputmode="numeric" min="0" max="200" class="cm-input" aria-label="@($"{Label}: значение")"
+                   value="@(Input.Value?.ToString(CultureInfo.InvariantCulture))" @onchange="SetValue" />
+        </Field>
+        @if (Participant.SourceCharacterId is null)
+        {
+            <div class="mb-1 flex flex-wrap gap-1" role="group" aria-label="Нет навыка — от ЛВК">
+                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Capable)">ЛВК</Button>
+                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Uncertain)">½ ЛВК</Button>
+                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Unlikely)">⅕ ЛВК</Button>
+            </div>
+        }
+    </div>
+    @if (Participant.SourceCharacterId is null && !FixedSkill)
+    {
+        <p class="cm-meta">Навыка у твари нет — ЛВК, если способность подразумевается; ½ — если неясно; ⅕ — если её нет (стр. 142).</p>
+    }
+    <Field Label="Бросок" Group="true">
+        <RollInput Value="Input.Value" Difficulty="Difficulty" BonusDice="BonusDice" PenaltyDice="PenaltyDice" Label="@Label"
+                   Roll="Input.Roll" RollChanged="SetRoll" />
+    </Field>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ChaseCheckInput Input { get; set; } = null!;
+
+    [Parameter, EditorRequired] public EncounterParticipant Participant { get; set; } = null!;
+
+    [Parameter, EditorRequired] public SkillCatalog Catalog { get; set; } = null!;
+
+    [Parameter, EditorRequired] public ChaseSkills Skills { get; set; } = null!;
+
+    [Parameter] public Difficulty Difficulty { get; set; }
+
+    [Parameter] public int BonusDice { get; set; }
+
+    [Parameter] public int PenaltyDice { get; set; }
+
+    /// <summary>Навык задан действием (Вождение у тарана, ВЫН у скорости) — выбора нет, только значение.</summary>
+    [Parameter] public bool FixedSkill { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Проверка";
+
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private Task SelectSkill(ChangeEventArgs e)
+    {
+        Input.Key = e.Value?.ToString() ?? ChaseSkills.Dex;
+        Input.Label = ChaseSkills.LabelOf(Catalog, Input.Key);
+        Input.Value = Skills.Value(Participant, Catalog, Input.Key);
+        Input.Roll = null;
+        return OnChange.InvokeAsync();
+    }
+
+    private Task SetValue(ChangeEventArgs e)
+    {
+        Input.Value = int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value >= 0 ? value : null;
+        return OnChange.InvokeAsync();
+    }
+
+    private Task Substitute(SkillAptitude aptitude)
+    {
+        Input.Value = ChaseSkills.Substitute(Participant, aptitude);
+        return OnChange.InvokeAsync();
+    }
+
+    private Task SetRoll(D100Roll? roll)
+    {
+        Input.Roll = roll;
+        return OnChange.InvokeAsync();
+    }
+}

@@ -1,0 +1,140 @@
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+@inject IDiceRoller Dice
+
+@* Часть 5 — необязательные правила (стр. 137–139), включаются галочками. Случайная помеха — бросок 1d100 на локацию
+   (тяжёлая дорога — штрафная кость, автострада — бонусная), найденная помеха уходит в предпросмотр. Внезапная помеха —
+   общая проверка Удачи; стороны назначают её по очереди (Core). Броски можно вписать. Своей карточки не рисует. *@
+<div class="flex flex-col gap-4" data-testid="chase-options">
+    <div class="flex flex-col gap-2">
+        <label class="flex items-center gap-2 cm-tap-target">
+            <input type="checkbox" checked="@Chase.FloorIt" @onchange="e => Toggle(c => c.FloorIt = e.Value is true)" />
+            <span>«Педаль в пол» — 2–5 локаций за действие транспорта (стр. 137)</span>
+        </label>
+        <label class="flex items-center gap-2 cm-tap-target">
+            <input type="checkbox" checked="@Chase.RandomHazards" @onchange="e => Toggle(c => c.RandomHazards = e.Value is true)" />
+            <span>Случайные помехи и преграды (стр. 137)</span>
+        </label>
+        <label class="flex items-center gap-2 cm-tap-target">
+            <input type="checkbox" checked="@Chase.SuddenHazards" @onchange="e => Toggle(c => c.SuddenHazards = e.Value is true)" />
+            <span>Внезапные помехи (стр. 137)</span>
+        </label>
+    </div>
+
+    @if (Chase.RandomHazards)
+    {
+        <div class="flex flex-col gap-2 border-t border-primary-200 pt-3">
+            <h3 class="font-semibold text-primary-900">Случайная помеха</h3>
+            <p class="cm-meta">01–59 — чисто, от 60 — обычная, от 85 — трудная, от 96 — чрезвычайная.</p>
+            <div class="flex flex-wrap items-end gap-2">
+                <Field Label="Локация" class="w-24">
+                    <input type="number" inputmode="numeric" min="1" max="@Chase.LastLocation" class="cm-input" value="@_location"
+                           @onchange="e => _location = Math.Clamp(Number(e) ?? 1, 1, Chase.LastLocation)" />
+                </Field>
+                <Field Label="Дорога" class="w-full sm:w-56">
+                    <select class="cm-input" value="@_road" @onchange="e => _road = int.TryParse(e.Value?.ToString(), out var r) ? r : 0">
+                        <option value="0">обычная</option>
+                        <option value="-1">тяжёлая (штрафная кость)</option>
+                        <option value="1">автострада (бонусная кость)</option>
+                    </select>
+                </Field>
+            </div>
+            <Field Label="Бросок" Group="true">
+                <RollInput BonusDice="@(_road > 0 ? 1 : 0)" PenaltyDice="@(_road < 0 ? 1 : 0)" Label="Случайная помеха" Roll="_randomRoll" RollChanged="r => _randomRoll = r" />
+            </Field>
+            <div><Button Small="true" Icon="fa-dice" OnClick="RandomAsync" data-testid="random-hazard">Бросок на помеху</Button></div>
+        </div>
+    }
+
+    @if (Chase.SuddenHazards)
+    {
+        <div class="flex flex-col gap-2 border-t border-primary-200 pt-3">
+            <h3 class="font-semibold text-primary-900">Внезапная помеха</h3>
+            <p class="cm-meta">
+                Общая проверка Удачи: успех — где и когда, решают игроки; провал — помеху придумывает Хранитель, и она угрожает сыщикам.
+                @(Chase.SuddenHazardByPlayers switch { true => "Последней назначали игроки — очередь Хранителя.", false => "Последним назначал Хранитель — очередь игроков.", _ => "Первую может назначить любая сторона." })
+            </p>
+            <div class="flex flex-wrap items-end gap-2">
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Кто назначает">
+                    <Button Small="true" Variant="@(_byPlayers ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _byPlayers = true">Игроки</Button>
+                    <Button Small="true" Variant="@(!_byPlayers ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _byPlayers = false">Хранитель</Button>
+                </div>
+                <Field Label="Удача группы" Note="наименьшая у сыщиков" class="w-32">
+                    <input type="number" inputmode="numeric" min="1" max="99" class="cm-input" value="@(_luck ?? GroupLuck)"
+                           @onchange="e => _luck = Number(e)" />
+                </Field>
+            </div>
+            <Field Label="Бросок" Group="true">
+                <RollInput Value="@(_luck ?? GroupLuck)" Label="Удача группы" Roll="_luckRoll" RollChanged="r => _luckRoll = r" />
+            </Field>
+            @if (ChaseRules.SuddenHazardRejection(Chase, _byPlayers) is { } rejection)
+            {
+                <Alert Tone="Tone.Info" Small="true" class="mb-0">@rejection</Alert>
+            }
+            else
+            {
+                <div><Button Small="true" Icon="fa-clover" Disabled="@((_luck ?? GroupLuck) is null)" OnClick="SuddenAsync">Проверка Удачи</Button></div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private int _location = 1;
+    private int _road;
+    private D100Roll? _randomRoll;
+    private bool _byPlayers = true;
+    private int? _luck;
+    private D100Roll? _luckRoll;
+
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    private ChaseState Chase => Session.State.Chase!;
+
+    /// <summary>Общая проверка Удачи — по наименьшей Удаче сыщиков в погоне.</summary>
+    private int? GroupLuck => Session.State.Participants
+        .Where(p => p.Kind == ParticipantKind.Investigator && p.Luck is not null && !p.IsOut)
+        .Select(p => p.Luck)
+        .Min();
+
+    protected override void OnParametersSet()
+    {
+        if (_location <= 1 && Session.State.Active is { } active && Chase.Runner(active.Id) is { } runner)
+            _location = Math.Min(Chase.LastLocation, runner.Location + 1);
+    }
+
+    private Task Toggle(Action<ChaseState> change) => Session.ChangeAsync(state => change(state.Chase!));
+
+    private async Task RandomAsync()
+    {
+        var outcome = ChaseActions.RandomHazard(Session.State, _location, _randomRoll?.Result, _road > 0 ? 1 : 0, _road < 0 ? 1 : 0, Dice);
+        _randomRoll = null;
+        await Session.ChangeAsync(state =>
+        {
+            if (outcome.Resolution.Effects.Count > 0)
+                EncounterEngine.Propose(state, outcome.Resolution);
+            else
+                EncounterEngine.Apply(state, outcome.Resolution, Session.Now);
+        });
+    }
+
+    private async Task SuddenAsync()
+    {
+        if ((_luck ?? GroupLuck) is not { } luck)
+            return;
+
+        var outcome = ChaseActions.SuddenHazard(luck, _luckRoll?.Result, _byPlayers, Dice);
+        var byPlayers = _byPlayers;
+        _luckRoll = null;
+        _byPlayers = !_byPlayers;
+        await Session.ChangeAsync(state =>
+        {
+            ChaseRules.DeclareSuddenHazard(state.Chase!, byPlayers);
+            EncounterEngine.Apply(state, outcome.Resolution, Session.Now);
+        });
+    }
+
+    private static int? Number(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : null;
+}

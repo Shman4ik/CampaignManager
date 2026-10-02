@@ -1,0 +1,85 @@
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+
+@* Трасса погони: локации в ряд, у каждой — что мешает в неё войти (помеха — молния, преграда — шлагбаум) и кто в ней.
+   Широкая трасса прокручивается в своём блоке (overflow-x-auto), страница вбок не едет. Имена бегущих — подписью, а не
+   в title (в v1 ChaseTrack держал имя только во всплывающей подсказке — на iPad его не увидеть). Роль — цветом и словом:
+   убегающий — зелёный, преследователь — красный (единственное место, где цвет погони несёт свой смысл). Своей карточки
+   не рисует. *@
+<div class="overflow-x-auto pb-2" data-testid="chase-track">
+    <ol class="chase-track">
+        @foreach (var location in Chase.Locations)
+        {
+            var here = Runners.Where(x => x.Runner.Location == location.Number).ToList();
+            <li @key="location.Number" class="@Css.Join("chase-location", here.Any(x => x.Participant.Id == ActiveId) ? "chase-location-active" : null)">
+                @if (OnEdit.HasDelegate)
+                {
+                    <button type="button" class="chase-location-head" @onclick="() => OnEdit.InvokeAsync(location.Number)"
+                            aria-label="@($"Локация {location.Number}: изменить")">
+                        <span class="font-mono font-bold">@location.Number</span>
+                        <i class="fa-solid fa-pen text-xs text-primary-500" aria-hidden="true"></i>
+                    </button>
+                }
+                else
+                {
+                    <div class="chase-location-head"><span class="font-mono font-bold">@location.Number</span></div>
+                }
+                @if (!string.IsNullOrWhiteSpace(location.Name))
+                {
+                    <div class="cm-meta px-2">@location.Name</div>
+                }
+                @if (location.Barrier is { } barrier)
+                {
+                    <div class="chase-obstacle chase-obstacle-barrier">
+                        <i class="fa-solid fa-road-barrier" aria-hidden="true"></i>
+                        <span>@barrier.Name · @ChaseText.Of(barrier.Difficulty)@(barrier.CanBreak ? $" · ПЗ {barrier.HitPointsLeft}/{barrier.HitPoints}" : "")</span>
+                    </div>
+                }
+                else if (location.Hazard is { } hazard)
+                {
+                    <div class="chase-obstacle chase-obstacle-hazard">
+                        <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+                        <span>@hazard.Name · @ChaseText.Of(hazard.Difficulty)</span>
+                    </div>
+                }
+                <div class="flex flex-col gap-1 p-2">
+                    @foreach (var (participant, runner) in here)
+                    {
+                        <span @key="participant.Id"
+                              class="@Css.Join("chase-runner", runner.Role == ChaseRole.Prey ? "chase-runner-prey" : "chase-runner-pursuer",
+                                         participant.Id == ActiveId ? "chase-runner-active" : null, participant.IsOut ? "chase-runner-out" : null)">
+                            @if (runner.Vehicle is not null || runner.IsPassenger)
+                            {
+                                <i class="fa-solid fa-car-side" aria-hidden="true"></i>
+                            }
+                            @participant.Name
+                            @if (participant.IsOut)
+                            {
+                                <span class="text-xs">(@OutText(participant))</span>
+                            }
+                        </span>
+                    }
+                </div>
+            </li>
+        }
+    </ol>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EncounterState State { get; set; } = null!;
+
+    [Parameter] public EventCallback<int> OnEdit { get; set; }
+
+    private ChaseState Chase => State.Chase!;
+
+    /// <summary>Почему выбыл: сбежал, пойман, отстал… или просто «выбыл» (без сознания, отметка Хранителя).</summary>
+    private string OutText(EncounterParticipant participant) =>
+        ChaseRules.StatusOf(State, participant.Id) is var status && status != ChaseStatus.Running ? ChaseText.Of(status) : "выбыл";
+
+    private Guid? ActiveId => State.ActiveParticipantId;
+
+    private List<(EncounterParticipant Participant, ChaseRunner Runner)> Runners =>
+    [
+        .. State.Participants.Select(p => (p, Chase.Runner(p.Id))).Where(x => x.Item2 is not null).Select(x => (x.p, x.Item2!)),
+    ];
+}

@@ -86,6 +86,7 @@ public sealed class ChaseTurnTests
         Assert.Single(ChaseRules.DexTies(state));
 
         var result = ChaseRules.ResolveDexTie(state, a.Id, b.Id, rollA, rollB, NoDice, Now);
+        Assert.Empty(ChaseRules.DexTies(state)); // решённую пару больше не спрашиваем
         state.Started();
 
         Assert.Equal(firstWins, result);

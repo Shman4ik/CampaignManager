@@ -335,6 +335,20 @@ public static class ChaseRules
         return true;
     }
 
+    /// <summary>Вернуться к трассе из проверки скорости (поправки сброшены — их бросят заново).</summary>
+    public static void BackToSetup(EncounterState state)
+    {
+        if (state.Chase is not { Phase: ChasePhase.SpeedCheck } chase)
+            return;
+
+        chase.Phase = ChasePhase.Setup;
+        foreach (var runner in chase.Runners)
+        {
+            runner.SpeedChecked = false;
+            runner.SpeedModifier = 0;
+        }
+    }
+
     /// <summary>Навык проверки скорости (стр. 130): пешком и мускульной тягой — ВЫН, за рулём — навык управления, а его нет — ½ ЛВК.</summary>
     public static SpeedCheckSkill SpeedSkill(EncounterParticipant participant, ChaseRunner runner)
     {
@@ -746,13 +760,17 @@ public static class ChaseRules
         {
             for (var j = i + 1; j < ordered.Count; j++)
             {
-                if (ordered[i].Initiative == ordered[j].Initiative && ordered[i].Stats.Dex == ordered[j].Stats.Dex)
+                if (ordered[i].Initiative == ordered[j].Initiative && ordered[i].Stats.Dex == ordered[j].Stats.Dex
+                    && !Resolved(state.Chase!, ordered[i].Id, ordered[j].Id))
                     ties.Add((ordered[i], ordered[j]));
             }
         }
 
         return ties;
     }
+
+    private static bool Resolved(ChaseState chase, Guid a, Guid b) =>
+        chase.Ties.Any(t => (t.First == a && t.Second == b) || (t.First == b && t.Second == a));
 
     /// <summary>
     /// Встречная проверка ЛВК при равенстве (стр. 132): выше уровень — ходит первым; уровни равны — меньший бросок. Броски
@@ -771,6 +789,9 @@ public static class ChaseRules
         var levelB = Check.Evaluate(rollB, second.Stats.Dex);
         var firstWins = levelA > levelB || (levelA == levelB && rollA <= rollB);
         var (winner, loser) = firstWins ? (first, second) : (second, first);
+
+        if (state.Chase is { } chase && !Resolved(chase, winner.Id, loser.Id))
+            chase.Ties.Add(new ChaseTie { First = winner.Id, Second = loser.Id });
 
         var winnerIndex = state.Participants.IndexOf(winner);
         var loserIndex = state.Participants.IndexOf(loser);

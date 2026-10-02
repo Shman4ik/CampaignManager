@@ -1,0 +1,39 @@
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+
+@* Погоня в строке участника: роль, локация, СКО и действия, транспорт — словами (на iPad наведения нет). *@
+@if (Session.State.Chase?.Runner(Participant.Id) is { } runner)
+{
+    <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="chase-row">
+        <Badge Tone="@(runner.Role == ChaseRole.Prey ? Tone.Success : Tone.Error)">@ChaseText.Of(runner.Role)</Badge>
+        <span>локация <b>@runner.Location</b></span>
+        @if (runner.IsPassenger)
+        {
+            <span class="cm-meta">пассажир: @Session.State.Find(runner.CarrierId!.Value)?.Name</span>
+        }
+        else
+        {
+            <span class="cm-meta">СКО @ChaseRules.Move(Participant, runner)</span>
+            @if (Session.State.Chase.Phase == ChasePhase.Active && !Participant.IsOut)
+            {
+                <span class="cm-meta">действий @runner.ActionsLeft/@runner.Actions@(runner.Debt > 0 ? $", долг {runner.Debt}" : "")</span>
+            }
+        }
+        @if (runner.Vehicle is { } vehicle && runner.IsDriver)
+        {
+            <span class="cm-meta"><i class="fa-solid fa-car-side" aria-hidden="true"></i> @vehicle.Name, Компл. @ChaseText.Build(vehicle.BuildLeft)</span>
+        }
+        @if (Participant.IsOut && Status is var status && status != ChaseStatus.Running)
+        {
+            <Badge Tone="@(status == ChaseStatus.Escaped ? Tone.Success : status == ChaseStatus.Caught ? Tone.Error : Tone.Neutral)">@ChaseText.Of(status)</Badge>
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    [Parameter, EditorRequired] public EncounterParticipant Participant { get; set; } = null!;
+
+    private ChaseStatus Status => ChaseRules.StatusOf(Session.State, Participant.Id);
+}

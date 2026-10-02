@@ -87,6 +87,15 @@
     /// <summary>Панели правил боя и погоны (T2.6b/c) — получают <see cref="EncounterSession"/> каскадом.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    /// <summary>
+    /// Сцену начинает своя панель (погоня: трасса и проверка скорости, T2.6c) — оболочка не показывает «Начать» на
+    /// расстановке. Дальше раунды общие: «Следующий» оболочки ведёт очередь, а погоня считает действия сама (ядро).
+    /// </summary>
+    [Parameter] public bool StartsItself { get; set; }
+
+    /// <summary>Своё в строке участника (погоня: роль, локация, СКО, действия) — ChildContent строки.</summary>
+    [Parameter] public RenderFragment<EncounterParticipant>? RowContent { get; set; }
+
     private string Route => Kind == EncounterKind.Combat ? "combat" : "chase";
 
     private string MoodTag => Kind == EncounterKind.Combat ? "бой" : "погоня";
@@ -503,7 +512,7 @@
                         @if (state.Round == 0)
                         {
                             <div class="font-semibold">Расстановка</div>
-                            <div class="cm-meta">Добавьте участников и начните: очередь — по ЛВК (стр. 110).</div>
+                            <div class="cm-meta">@(StartsItself ? "Добавьте участников, настройте трассу и проверку скорости ниже." : "Добавьте участников и начните: очередь — по ЛВК (стр. 110).")</div>
                         }
                         else
                         {
@@ -514,7 +523,10 @@
                     <div class="flex flex-wrap gap-2">
                         @if (state.Round == 0)
                         {
-                            <Button Small="true" Icon="fa-play" Disabled="@(state.Participants.Count == 0)" OnClick="NextAsync" data-testid="start-round">Начать</Button>
+                            @if (!StartsItself)
+                            {
+                                <Button Small="true" Icon="fa-play" Disabled="@(state.Participants.Count == 0)" OnClick="NextAsync" data-testid="start-round">Начать</Button>
+                            }
                         }
                         else
                         {
@@ -566,6 +578,12 @@
                                     }
                                     <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => RemoveAsync(participant)">Убрать</Button>
                                 </Actions>
+                                <ChildContent>
+                                    @if (RowContent is not null)
+                                    {
+                                        <CascadingValue Value="session" IsFixed="true">@RowContent(participant)</CascadingValue>
+                                    }
+                                </ChildContent>
                             </ParticipantRow>
                         }
                     </div>

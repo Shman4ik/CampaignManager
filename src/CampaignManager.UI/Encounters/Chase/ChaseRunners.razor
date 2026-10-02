@@ -1,0 +1,192 @@
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+@using CampaignManager.Core.KeeperScreen
+
+@* Бегущие: роль, транспорт (таблица V), пассажир какого водителя, способ передвижения и место на трассе — настройка
+   Хранителя (сеттеры ChaseRules, не эффекты). Ниже — СКО, действия и Комплекция словами. Строки списка в карточке, а не
+   карточки; контролы переносятся рядами (портрет iPad, телефон). Своей карточки не рисует. *@
+<div data-testid="chase-runners">
+    @foreach (var (participant, runner) in Rows)
+    {
+        <div @key="participant.Id" class="border-t border-primary-200 px-3 py-3 first:border-t-0">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-primary-900">@participant.Name</span>
+                <Badge Tone="@(runner.Role == ChaseRole.Prey ? Tone.Success : Tone.Error)">@ChaseText.Of(runner.Role)</Badge>
+                @if (participant.IsOut)
+                {
+                    <Badge Tone="Tone.Neutral" Icon="fa-flag-checkered">@OutText(participant)</Badge>
+                }
+                else if (!runner.SpeedChecked && Chase.Phase != ChasePhase.Setup)
+                {
+                    <Badge Tone="Tone.Warning" Icon="fa-gauge">нужна проверка скорости</Badge>
+                }
+                <span class="cm-meta">@Summary(participant, runner)</span>
+            </div>
+
+            @if (Editable)
+            {
+                <div class="mt-2 flex flex-wrap items-end gap-2">
+                    <Field Label="Роль" class="w-40">
+                        <select class="cm-input cm-input-sm" value="@runner.Role" disabled="@runner.IsPassenger"
+                                @onchange="e => SetRole(participant, e)" aria-label="@($"Роль: {participant.Name}")">
+                            <option value="@ChaseRole.Prey">@ChaseText.Of(ChaseRole.Prey)</option>
+                            <option value="@ChaseRole.Pursuer">@ChaseText.Of(ChaseRole.Pursuer)</option>
+                        </select>
+                    </Field>
+                    <Field Label="Транспорт" class="w-full sm:w-64">
+                        <select class="cm-input cm-input-sm" value="@(runner.IsPassenger ? "" : runner.Vehicle?.Name ?? "")"
+                                disabled="@runner.IsPassenger" @onchange="e => SetVehicle(participant, e)"
+                                aria-label="@($"Транспорт: {participant.Name}")">
+                            <option value="">Пешком</option>
+                            @foreach (var category in Enum.GetValues<VehicleCategory>())
+                            {
+                                <optgroup label="@VehicleReference.Of(category)">
+                                    @foreach (var vehicle in VehicleReference.Vehicles.Where(v => v.Category == category))
+                                    {
+                                        <option value="@vehicle.Name">@vehicle.Name — СКО @vehicle.Speed, Компл. @ChaseText.Build(vehicle.Build)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </Field>
+                    @if (runner.IsDriver)
+                    {
+                        <Field Label="@ChaseRules.DriveLabel(runner.Vehicle!)" Note="пусто — ½ ЛВК (стр. 142)" class="w-28">
+                            <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm"
+                                   value="@(runner.Vehicle!.Skill?.ToString(CultureInfo.InvariantCulture))"
+                                   @onchange="e => SetDriving(participant, e)" aria-label="@($"Навык управления: {participant.Name}")" />
+                        </Field>
+                    }
+                    else if (Drivers(participant).Count > 0)
+                    {
+                        <Field Label="Пассажир" class="w-full sm:w-48">
+                            <select class="cm-input cm-input-sm" value="@(runner.CarrierId?.ToString() ?? "")"
+                                    @onchange="e => SetCarrier(participant, e)" aria-label="@($"Пассажир у кого: {participant.Name}")">
+                                <option value="">— сам по себе —</option>
+                                @foreach (var driver in Drivers(participant))
+                                {
+                                    <option value="@driver.Id">@driver.Name</option>
+                                }
+                            </select>
+                        </Field>
+                    }
+                    @if (runner.Vehicle is null && !runner.IsPassenger)
+                    {
+                        <Field Label="Способ" class="w-36">
+                            <select class="cm-input cm-input-sm" value="@runner.Mode" @onchange="e => SetMode(participant, runner, e)"
+                                    aria-label="@($"Способ передвижения: {participant.Name}")">
+                                @foreach (var mode in Enum.GetValues<MovementMode>())
+                                {
+                                    <option value="@mode">@ChaseText.Of(mode)</option>
+                                }
+                            </select>
+                        </Field>
+                        @if (runner.Mode != MovementMode.OnFoot)
+                        {
+                            <Field Label="Своя СКО" Note="пусто — статблок или ½" class="w-28">
+                                <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm"
+                                       value="@(runner.ModeSpeed?.ToString(CultureInfo.InvariantCulture))"
+                                       @onchange="e => SetModeSpeed(participant, runner, e)" aria-label="@($"Своя СКО: {participant.Name}")" />
+                            </Field>
+                        }
+                    }
+                    @if (!runner.IsPassenger)
+                    {
+                        <Field Label="Локация" class="w-24">
+                            <input type="number" inputmode="numeric" min="1" max="@Chase.LastLocation" class="cm-input cm-input-sm"
+                                   value="@runner.Location" @onchange="e => SetPosition(participant, e)"
+                                   aria-label="@($"Локация: {participant.Name}")" />
+                        </Field>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    [Parameter, EditorRequired] public ChaseSkills Skills { get; set; } = null!;
+
+    /// <summary>Показывать контролы настройки (на трассе — всегда; посреди погони их прячет «Свернуть»).</summary>
+    [Parameter] public bool Editable { get; set; } = true;
+
+    private EncounterState State => Session.State;
+
+    private ChaseState Chase => State.Chase!;
+
+    private List<(EncounterParticipant Participant, ChaseRunner Runner)> Rows =>
+    [
+        .. EncounterQueue.Order(State).Select(State.Find).OfType<EncounterParticipant>()
+            .Select(p => (p, Chase.Runner(p.Id))).Where(x => x.Item2 is not null).Select(x => (x.p, x.Item2!)),
+    ];
+
+    private List<EncounterParticipant> Drivers(EncounterParticipant passenger) =>
+        [.. State.Participants.Where(p => p.Id != passenger.Id && Chase.Runner(p.Id) is { IsDriver: true })];
+
+    private string Summary(EncounterParticipant participant, ChaseRunner runner)
+    {
+        List<string> parts = [$"лок. {runner.Location}"];
+        if (runner.IsPassenger)
+        {
+            parts.Add($"пассажир: {State.Find(runner.CarrierId!.Value)?.Name}");
+        }
+        else
+        {
+            parts.Add($"СКО {ChaseRules.Move(participant, runner)}" + (runner.SpeedModifier switch { > 0 => " (+1)", < 0 => " (−1)", _ => "" }));
+            if (Chase.Phase is ChasePhase.Active)
+                parts.Add($"действий {runner.ActionsLeft}/{runner.Actions}" + (runner.Debt > 0 ? $", долг {runner.Debt}" : ""));
+        }
+
+        if (runner.Mode != MovementMode.OnFoot && runner.Vehicle is null && !runner.IsPassenger)
+            parts.Add(ChaseText.Of(runner.Mode));
+        if (runner.Vehicle is { } vehicle && runner.IsDriver)
+        {
+            parts.Add($"{vehicle.Name}, Компл. {ChaseText.Build(vehicle.BuildLeft)}/{ChaseText.Build(vehicle.Build)}" +
+                      (VehicleRules.IsWrecked(vehicle) ? " — разбит" : VehicleRules.IsBrokenDown(vehicle) ? " — поломка" : ""));
+        }
+
+        if (runner.Boost is { } boost)
+            parts.Add($"разгон ещё {ChaseText.Locations(boost.LocationsLeft)}");
+        if (runner.NavigatorAssist)
+            parts.Add("штурман помог");
+        return string.Join(" · ", parts);
+    }
+
+    private string OutText(EncounterParticipant participant) =>
+        ChaseRules.StatusOf(State, participant.Id) is var status && status != ChaseStatus.Running ? ChaseText.Of(status) : "выбыл";
+
+    private Task SetRole(EncounterParticipant participant, ChangeEventArgs e) =>
+        Enum.TryParse<ChaseRole>(e.Value?.ToString(), out var role)
+            ? Session.ChangeAsync(state => ChaseRules.SetRole(state, participant.Id, role))
+            : Task.CompletedTask;
+
+    private Task SetVehicle(EncounterParticipant participant, ChangeEventArgs e)
+    {
+        var template = VehicleReference.Find(e.Value?.ToString());
+        var skill = template is null ? null : Skills.Driving(participant, Session.Catalog, template.SkillCode);
+        return Session.ChangeAsync(state => ChaseRules.SetVehicle(state, participant.Id, template, skill));
+    }
+
+    private Task SetDriving(EncounterParticipant participant, ChangeEventArgs e) =>
+        Session.ChangeAsync(state => ChaseRules.SetDriverSkill(state, participant.Id, Number(e)));
+
+    private Task SetCarrier(EncounterParticipant participant, ChangeEventArgs e) =>
+        Session.ChangeAsync(state => ChaseRules.SetPassenger(state, participant.Id, Guid.TryParse(e.Value?.ToString(), out var id) ? id : null));
+
+    private Task SetMode(EncounterParticipant participant, ChaseRunner runner, ChangeEventArgs e) =>
+        Enum.TryParse<MovementMode>(e.Value?.ToString(), out var mode)
+            ? Session.ChangeAsync(state => ChaseRules.ChangeMode(state, participant.Id, mode, runner.ModeSpeed, Session.Now))
+            : Task.CompletedTask;
+
+    private Task SetModeSpeed(EncounterParticipant participant, ChaseRunner runner, ChangeEventArgs e) =>
+        Session.ChangeAsync(state => ChaseRules.ChangeMode(state, participant.Id, runner.Mode, Number(e), Session.Now));
+
+    private Task SetPosition(EncounterParticipant participant, ChangeEventArgs e) =>
+        Number(e) is { } location ? Session.ChangeAsync(state => ChaseRules.SetPosition(state, participant.Id, location)) : Task.CompletedTask;
+
+    private static int? Number(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : null;
+}

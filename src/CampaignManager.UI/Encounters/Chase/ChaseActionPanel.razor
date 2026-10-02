@@ -1,0 +1,678 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+@using CampaignManager.Core.KeeperScreen
+@inject IDiceRoller Dice
+
+@* Ход в погоне. Кнопки — ровно то, что разрешает ChaseRules.AvailableActions (Core), а не цепочка условий в разметке,
+   как в v1. Выбранное действие — одна форма: навык и значение подставляются из листа, бросок можно вписать, кости броска
+   на экране — те же, что у правила (ChaseActions.ActionDice). «Предпросмотр» отдаёт результат ядру (Propose): участники
+   и трасса меняются только «Применить» наверху. Своей карточки не рисует. *@
+@if (Active is not { } actor || Runner is not { } runner)
+{
+    <p class="cm-text-muted">Ход никого: нажмите «Следующий».</p>
+}
+else if (State.Pending is not null)
+{
+    <p class="cm-text-muted" data-testid="chase-pending">Сначала примените или отмените результат выше.</p>
+}
+else
+{
+    var next = Chase.Location(runner.Location + 1);
+    <div class="flex flex-col gap-3" data-testid="chase-actions">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-primary-900">@actor.Name</span>
+                <Badge Tone="@(runner.Role == ChaseRole.Prey ? Tone.Success : Tone.Error)">@ChaseText.Of(runner.Role)</Badge>
+                <span class="cm-meta">локация @runner.Location</span>
+                @if (runner.Vehicle is { } vehicle && runner.IsDriver)
+                {
+                    <Badge Tone="Tone.Info" Icon="fa-car-side">@vehicle.Name · Компл. @ChaseText.Build(vehicle.BuildLeft)</Badge>
+                }
+            </div>
+            @if (!runner.IsPassenger)
+            {
+                <div class="flex items-center gap-1" aria-label="@($"Действий перемещения: {runner.ActionsLeft} из {runner.Actions}")">
+                    @for (var i = 0; i < runner.Actions; i++)
+                    {
+                        <span class="@(i < runner.ActionsLeft ? "chase-pip chase-pip-on" : "chase-pip")" aria-hidden="true"></span>
+                    }
+                    <span class="cm-meta font-mono">@runner.ActionsLeft/@runner.Actions</span>
+                </div>
+            }
+        </div>
+
+        @if (runner.IsPassenger)
+        {
+            <p class="cm-meta">Пассажир: своих действий перемещения нет, едет с водителем; один раз в свой ход может стрелять, помогать штурманом или создать помеху (стр. 139).</p>
+        }
+        @if (!runner.SpeedChecked)
+        {
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0">Сначала — проверка скорости (в списке бегущих ниже): присоединившийся без неё не двигается (стр. 140).</Alert>
+        }
+        @if (runner.Boost is { } boost)
+        {
+            <Alert Tone="Tone.Info" Small="true" class="mb-0">Разгон: ещё @ChaseText.Locations(boost.LocationsLeft) без нового действия; помехи на пути — @(boost.PenaltyDice > 0 ? ChaseText.PenaltyDice(boost.PenaltyDice) : "без штрафа").</Alert>
+        }
+        @if (next?.Barrier is { } barrier)
+        {
+            <div class="chase-obstacle chase-obstacle-barrier rounded-md">
+                <i class="fa-solid fa-road-barrier" aria-hidden="true"></i>
+                <span>Впереди преграда «@barrier.Name» (@ChaseText.Of(barrier.Difficulty)@(barrier.CanBreak ? $", ПЗ {barrier.HitPointsLeft}/{barrier.HitPoints}" : ", не сломать")) — не пустит без проверки.</span>
+            </div>
+        }
+        else if (next?.Hazard is { } hazard)
+        {
+            <div class="chase-obstacle chase-obstacle-hazard rounded-md">
+                <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+                <span>Впереди помеха «@hazard.Name» (@ChaseText.Of(hazard.Difficulty)): проходят всегда, но с проверкой; можно потратить 1–2 действия на бонусные кости.</span>
+            </div>
+        }
+        @if (runner.IsDriver && actor.MajorWound)
+        {
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0">Водитель с серьёзной раной — проверка управления, как при трудной помехе (стр. 139).</Alert>
+        }
+
+        <div class="flex flex-wrap gap-2" role="group" aria-label="Действие">
+            @foreach (var action in Actions)
+            {
+                <Button Small="true" Variant="@(action == _action ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="@ChaseText.Icon(action)"
+                        OnClick="() => SelectAsync(action)" data-testid="@($"chase-action-{action}")">@ChaseText.Of(action)</Button>
+            }
+        </div>
+
+        @if (_action is { } selected && Actions.Contains(selected))
+        {
+            <div class="flex flex-col gap-3 border-t border-primary-200 pt-3">
+                @Form(selected, actor, runner, next)
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" class="mb-0">@_error</Alert>
+                }
+                <div class="flex flex-wrap gap-2">
+                    <Button Icon="fa-eye" OnClick="ProposeAsync" data-testid="chase-propose">Предпросмотр</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="() => _action = null">Отмена</Button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private ChaseActionKind? _action;
+    private string? _error;
+    private readonly ChaseCheckInput _check = new();
+    private readonly ChaseCheckInput _defence = new() { Key = "skill.dodge", Label = "Уклонение" };
+    private DefenceKind? _defenceKind;
+    private Guid? _target;
+    private int _bonus;
+    private bool _stopped = true;
+    private string? _damageFormula;
+    private int? _damage;
+    private int? _lostActions;
+    private string? _crash;
+    private int? _crashRoll;
+    private bool _consequences;
+    private int _boost = 2;
+    private Difficulty _difficulty;
+    private bool _unconscious;
+    private int _obstacleLocation;
+    private bool _obstacleBarrier;
+    private string _obstacleName = "";
+    private string _obstacleText = "";
+    private int _obstacleHitPoints;
+    private int _obstacleCost = 1;
+    private bool _obstacleCheck;
+    private Guid? _for;
+
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    [Parameter, EditorRequired] public ChaseSkills Skills { get; set; } = null!;
+
+    private EncounterState State => Session.State;
+
+    private ChaseState Chase => State.Chase!;
+
+    private EncounterParticipant? Active => State.Active;
+
+    private ChaseRunner? Runner => Active is { } active ? Chase.Runner(active.Id) : null;
+
+    private IReadOnlyList<ChaseActionKind> Actions => Active is { } active ? ChaseRules.AvailableActions(State, active.Id) : [];
+
+    protected override void OnParametersSet()
+    {
+        // Сменился тот, чей ход, — действие и цель сбрасываются, навык остаётся.
+        if (State.ActiveParticipantId != _for)
+        {
+            _for = State.ActiveParticipantId;
+            _action = null;
+            _target = null;
+        }
+    }
+
+    private Task SelectAsync(ChaseActionKind action)
+    {
+        _action = action;
+        _error = null;
+        _check.Roll = null;
+        _defence.Roll = null;
+        _damage = null;
+        _lostActions = null;
+        _crashRoll = null;
+        _bonus = 0;
+        var actor = Active!;
+        var runner = Runner!;
+        var next = Chase.Location(runner.Location + 1);
+        switch (action)
+        {
+            case ChaseActionKind.Hazard:
+                _difficulty = next?.Hazard?.Difficulty ?? Difficulty.Regular;
+                _damageFormula = next?.Hazard?.Damage;
+                _crash = runner.IsDriver ? VehicleReference.DefaultCrash(_difficulty).Name : null;
+                if (runner.IsDriver)
+                    UseSkill(actor, runner.Vehicle!.SkillCode);
+                break;
+            case ChaseActionKind.Barrier:
+                _difficulty = next?.Barrier?.Difficulty ?? Difficulty.Regular;
+                _consequences = false;
+                _damageFormula = null;
+                if (runner.IsDriver)
+                    UseSkill(actor, runner.Vehicle!.SkillCode);
+                break;
+            case ChaseActionKind.Melee:
+                UseSkill(actor, "skill.fighting.brawl");
+                _defenceKind = null;
+                _damageFormula = "1D3";
+                break;
+            case ChaseActionKind.Maneuver:
+                UseSkill(actor, runner.IsDriver ? runner.Vehicle!.SkillCode : "skill.fighting.brawl");
+                _defenceKind = null;
+                _damageFormula = null;
+                _crash = null;
+                break;
+            case ChaseActionKind.Ranged or ChaseActionKind.Tyres:
+                UseSkill(actor, "skill.firearms.handgun");
+                _stopped = !runner.IsPassenger && runner.ActionsLeft > 0;
+                _damageFormula = action == ChaseActionKind.Ranged ? "1D10" : null;
+                break;
+            case ChaseActionKind.Ram:
+                _defenceKind = null;
+                break;
+            case ChaseActionKind.Navigate:
+                UseSkill(actor, "skill.navigate");
+                break;
+            case ChaseActionKind.Hide:
+                UseSkill(actor, "skill.stealth");
+                _difficulty = Difficulty.Regular;
+                break;
+            case ChaseActionKind.Track:
+                UseSkill(actor, "skill.track");
+                _difficulty = Difficulty.Regular;
+                break;
+            case ChaseActionKind.CreateObstacle:
+                _obstacleLocation = runner.Location;
+                _obstacleCheck = false;
+                _obstacleCost = runner.IsPassenger ? 0 : 1;
+                break;
+            case ChaseActionKind.DriverControl:
+                _crash = VehicleReference.DefaultCrash(Difficulty.Hard).Name;
+                _unconscious = actor.Unconscious;
+                break;
+        }
+
+        _target = Targets(action).Count == 1 ? Targets(action)[0].Id : _target is { } t && Targets(action).Any(p => p.Id == t) ? t : null;
+        return action == ChaseActionKind.Move ? ProposeAsync() : Task.CompletedTask;
+    }
+
+    private void UseSkill(EncounterParticipant actor, string key) =>
+        _check.Set(key, ChaseSkills.LabelOf(Session.Catalog, key), Skills.Value(actor, Session.Catalog, key) ?? _check.Value);
+
+    private IReadOnlyList<EncounterParticipant> Targets(ChaseActionKind action) => Active is not { } actor
+        ? []
+        : action switch
+        {
+            ChaseActionKind.Melee or ChaseActionKind.Maneuver or ChaseActionKind.Ram => ChaseRules.CloseTargets(State, actor.Id),
+            ChaseActionKind.Ranged => ChaseRules.RangedTargets(State, actor.Id),
+            ChaseActionKind.Tyres => ChaseRules.VehicleTargets(State, actor.Id),
+            _ => [],
+        };
+
+    private EncounterParticipant? Target => _target is { } id ? State.Find(id) : null;
+
+    private (int Bonus, int Penalty) DiceFor(ChaseActionKind action) =>
+        ChaseActions.ActionDice(State, Active!.Id, action, _bonus, 0, _target, _stopped, inVehicle: Runner?.IsDriver == true);
+
+    private ChaseMishap Mishap(bool vehicleVictim) => new(
+        Harm: _damage is { } entered ? new ChaseHarm(Roll: entered) : string.IsNullOrWhiteSpace(_damageFormula) ? null : new ChaseHarm(_damageFormula),
+        Crash: vehicleVictim ? VehicleReference.FindCrash(_crash) : null,
+        CrashRoll: _crashRoll,
+        LostActionsRoll: _lostActions);
+
+    private async Task ProposeAsync()
+    {
+        if (_action is not { } action || Active is not { } actor || Runner is not { } runner)
+            return;
+
+        _error = Validate(action);
+        if (_error is not null)
+            return;
+
+        var (bonus, penalty) = DiceFor(action);
+        var check = _check.ToCheck(_difficulty, bonus, penalty);
+        var next = runner.Location + 1;
+        var target = _target ?? Guid.Empty;
+        var defence = _defenceKind is { } kind && _defence.Value is > 0 ? new ChaseDefence(_defence.Label, _defence.Value.Value, _defence.Roll?.Result, kind) : null;
+        var state = State;
+        ChaseOutcome outcome;
+        try
+        {
+            outcome = action switch
+            {
+                ChaseActionKind.Move => ChaseActions.Move(state, actor.Id),
+                ChaseActionKind.Hazard => ChaseActions.Hazard(state, actor.Id, next, _check.ToCheck(_difficulty, _bonus), Mishap(runner.IsDriver), Dice),
+                ChaseActionKind.Barrier => ChaseActions.Barrier(state, actor.Id, next, _check.ToCheck(_difficulty), _consequences ? Mishap(runner.IsDriver) : null, Dice),
+                ChaseActionKind.BreakBarrier => ChaseActions.BreakBarrier(state, actor.Id, next, _damage, Dice),
+                ChaseActionKind.Melee => ChaseActions.Melee(state, actor.Id, target, check, defence, Harm(), Dice),
+                ChaseActionKind.Ranged => ChaseActions.Ranged(state, actor.Id, target, _check.ToCheck(), _stopped, Harm(), Dice),
+                ChaseActionKind.Maneuver => ChaseActions.Maneuver(state, actor.Id, target, _check.ToCheck(), defence,
+                    Mishap(ChaseRules.VehicleOf(state, target) is not null), Dice),
+                ChaseActionKind.Ram => ChaseActions.Ram(state, actor.Id, target, DrivingCheck(actor, runner), defence, _damage, Dice),
+                ChaseActionKind.Tyres => ChaseActions.Tyres(state, actor.Id, target, _check.ToCheck(), _stopped, _damage, Dice),
+                ChaseActionKind.FloorIt => ChaseActions.FloorIt(state, actor.Id, _boost),
+                ChaseActionKind.Navigate => ChaseActions.Navigate(state, actor.Id, _check.ToCheck(), Dice),
+                ChaseActionKind.Hide => ChaseActions.Hide(state, actor.Id, _check.ToCheck(_difficulty, _bonus),
+                    runner.IsDriver ? runner.Vehicle!.Skill ?? ChaseRules.SpeedSkill(actor, runner).Value : null, Dice),
+                ChaseActionKind.Track => ChaseActions.Track(state, actor.Id, _check.ToCheck(_difficulty), Dice),
+                ChaseActionKind.CreateObstacle => ChaseActions.CreateObstacle(state, actor.Id, _obstacleLocation, Obstacle(), _obstacleText,
+                    _obstacleCost, _obstacleCheck ? _check.ToCheck() : null, Dice),
+                ChaseActionKind.DriverControl => ChaseActions.DriverControl(state, actor.Id, DrivingCheck(actor, runner), _unconscious,
+                    Mishap(true) with { Crash = VehicleReference.FindCrash(_crash) ?? VehicleReference.DefaultCrash(Difficulty.Hard) }, Dice),
+                _ => throw new InvalidOperationException(),
+            };
+        }
+        catch (ArgumentException error)
+        {
+            _error = error.Message;
+            return;
+        }
+
+        _action = null;
+        await Session.ChangeAsync(s => EncounterEngine.Propose(s, outcome.Resolution));
+    }
+
+    private ChaseHarm? Harm() =>
+        _damage is { } entered ? new ChaseHarm(Roll: entered) : string.IsNullOrWhiteSpace(_damageFormula) ? null : new ChaseHarm(_damageFormula);
+
+    private ChaseCheck DrivingCheck(EncounterParticipant actor, ChaseRunner runner)
+    {
+        var skill = ChaseRules.SpeedSkill(actor, runner);
+        return new ChaseCheck(skill.Label, skill.Value, _check.Roll?.Result);
+    }
+
+    private ChaseLocation Obstacle() => _obstacleBarrier
+        ? new ChaseLocation { Barrier = new ChaseBarrier { Name = Named("Преграда"), Difficulty = _difficulty, HitPoints = _obstacleHitPoints } }
+        : new ChaseLocation { Hazard = new ChaseHazard { Name = Named("Помеха"), Difficulty = _difficulty } };
+
+    private string Named(string fallback) => string.IsNullOrWhiteSpace(_obstacleName) ? fallback : _obstacleName.Trim();
+
+    private string? Validate(ChaseActionKind action) => action switch
+    {
+        ChaseActionKind.Move or ChaseActionKind.FloorIt or ChaseActionKind.BreakBarrier => null,
+        ChaseActionKind.Melee or ChaseActionKind.Ranged or ChaseActionKind.Maneuver or ChaseActionKind.Ram or ChaseActionKind.Tyres
+            when Target is null => "Выберите цель.",
+        ChaseActionKind.Ram or ChaseActionKind.DriverControl => null,
+        ChaseActionKind.CreateObstacle when !_obstacleCheck => null,
+        _ when !_check.IsReady => "Впишите значение навыка.",
+        _ => null,
+    };
+
+    private RenderFragment Form(ChaseActionKind action, EncounterParticipant actor, ChaseRunner runner, ChaseLocation? next) => __builder =>
+    {
+        var (bonus, penalty) = DiceFor(action);
+        switch (action)
+        {
+            case ChaseActionKind.Hazard:
+            {
+                <Field Label="Осторожность" Group="true" Note="Действие перемещения за бонусную кость, не больше двух (стр. 133)">
+                    <div class="flex flex-wrap gap-2">
+                        @for (var i = 0; i <= Math.Min(2, Math.Max(0, runner.ActionsLeft - (runner.Boost is null ? 1 : 0))); i++)
+                        {
+                            var count = i;
+                            <Button Small="true" Variant="@(_bonus == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _bonus = count">
+                                @(count == 0 ? "Без бонуса" : $"+{count} бонусн.")
+                            </Button>
+                        }
+                    </div>
+                </Field>
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Difficulty="_difficulty"
+                                  BonusDice="bonus" PenaltyDice="penalty" Label="Помеха" OnChange="StateHasChanged" />
+                @FailureFields(runner.IsDriver, "Если провал")
+                break;
+            }
+            case ChaseActionKind.Barrier:
+            {
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Difficulty="_difficulty"
+                                  BonusDice="bonus" PenaltyDice="penalty" Label="Преграда" OnChange="StateHasChanged" />
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" checked="@_consequences" @onchange="e => _consequences = e.Value is true" />
+                    <span>Провал с последствиями — урон и потерянное время, как у помехи (стр. 134)</span>
+                </label>
+                @if (_consequences)
+                {
+                    @FailureFields(runner.IsDriver, "Последствия провала")
+                }
+                break;
+            }
+            case ChaseActionKind.BreakBarrier:
+            {
+                var vehicle = runner.IsDriver ? runner.Vehicle : null;
+                var dice = vehicle is null ? 1 : VehicleRules.DamageDice(vehicle.BuildLeft);
+                <p class="cm-meta">Без проверки атаки, с места. @(vehicle is null ? "Пешком — урон решает Хранитель (обычно 1d3)." : $"Транспорт: 1d10 за пункт Комплекции ({dice}d10); отдача — половина ПЗ преграды, если пробил (стр. 135–136).")</p>
+                <Field Label="Урон преграде" Group="true" Note="пусто — бросят кости">
+                    <DiceInput Count="dice" Sides="@(vehicle is null ? 3 : 10)" Value="_damage" ValueChanged="v => _damage = v" Label="Урон преграде" />
+                </Field>
+                break;
+            }
+            case ChaseActionKind.Melee or ChaseActionKind.Maneuver:
+            {
+                @TargetField(action)
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" BonusDice="bonus" PenaltyDice="penalty"
+                                  Label="Атака" OnChange="StateHasChanged" />
+                @DefenceFields(false)
+                @if (action == ChaseActionKind.Melee)
+                {
+                    @DamageFields("Урон оружия", "1D3+1D4")
+                }
+                else
+                {
+                    <p class="cm-meta">Удачный манёвр — как провал помехи у цели: 1d3 потерянных действия и, если подходит, урон или авария (стр. 136).</p>
+                    @FailureFields(Target is { } t && ChaseRules.VehicleOf(State, t.Id) is not null, "Последствия для цели")
+                }
+                break;
+            }
+            case ChaseActionKind.Ranged or ChaseActionKind.Tyres:
+            {
+                @TargetField(action)
+                @if (!runner.IsPassenger && runner.ActionsLeft > 0)
+                {
+                    <div class="flex flex-wrap gap-2" role="group" aria-label="Как стреляет">
+                        <Button Small="true" Variant="@(_stopped ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _stopped = true">Остановился (1 действие)</Button>
+                        <Button Small="true" Variant="@(!_stopped ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _stopped = false">На ходу (штрафная кость)</Button>
+                    </div>
+                }
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" BonusDice="bonus" PenaltyDice="penalty"
+                                  Label="Стрельба" OnChange="StateHasChanged" />
+                @if (action == ChaseActionKind.Ranged)
+                {
+                    @DamageFields("Урон оружия", "1D10")
+                    <p class="cm-meta">Огнестрел бьёт на любую дистанцию; броня транспорта защищает водителя и пассажиров (стр. 136, 139).</p>
+                }
+                else
+                {
+                    <p class="cm-meta">Шина — маленькая цель (штрафная кость), броня 3, берёт только проникающее оружие; 2 урона после брони — Комплекция −1 (стр. 139).</p>
+                    <Field Label="Урон" Group="true" Note="пусто — 1d10">
+                        <DiceInput Count="1" Sides="10" Value="_damage" ValueChanged="v => _damage = v" Label="Урон по шине" />
+                    </Field>
+                }
+                break;
+            }
+            case ChaseActionKind.Ram:
+            {
+                var skill = ChaseRules.SpeedSkill(actor, runner);
+                @TargetField(action)
+                <p class="cm-meta">@skill.Label @skill.Value@(penalty > 0 ? ", поломка — штрафная кость" : ""). Транспорт — оружие на 1d10 за пункт Комплекции; цель уклоняется Вождением (стр. 136).</p>
+                <Field Label="Бросок" Group="true">
+                    <RollInput Value="skill.Value" PenaltyDice="penalty" Label="Таран" Roll="_check.Roll" RollChanged="r => _check.Roll = r" />
+                </Field>
+                @DefenceFields(true)
+                <Field Label="Урон" Group="true" Note="пусто — бросят кости">
+                    <DiceInput Count="@VehicleRules.DamageDice(runner.Vehicle!.BuildLeft)" Sides="10" Value="_damage" ValueChanged="v => _damage = v" Label="Урон тарана" />
+                </Field>
+                break;
+            }
+            case ChaseActionKind.FloorIt:
+            {
+                <Field Label="Сколько локаций за одно действие" Group="true" Note="2–3 — штрафная кость у помех на пути, 4–5 — две (стр. 138)">
+                    <div class="flex flex-wrap gap-2">
+                        @for (var n = 2; n <= 5; n++)
+                        {
+                            var count = n;
+                            <Button Small="true" Variant="@(_boost == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _boost = count">@count</Button>
+                        }
+                    </div>
+                </Field>
+                <p class="cm-meta">
+                    Штрафных костей у помех: @ChaseActions.BoostPenaltyDice(_boost, runner.NavigatorAssist)@(runner.NavigatorAssist ? " (штурман снял одну)" : "").
+                    Свободные локации — сразу; перед помехой машина встаёт, её проходят без нового действия; перед преградой разгон кончается.
+                </p>
+                break;
+            }
+            case ChaseActionKind.Navigate:
+            {
+                <p class="cm-meta">Внимание или Ориентирование: успех — следующий разгон водителя на одну штрафную кость меньше (стр. 139).</p>
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Label="Штурман" OnChange="StateHasChanged" />
+                break;
+            }
+            case ChaseActionKind.Hide or ChaseActionKind.Track:
+            {
+                <Field Label="Сложность" Group="true">
+                    <DifficultyPicker Value="_difficulty" ValueChanged="d => _difficulty = d" SkillValue="_check.Value" />
+                </Field>
+                @if (action == ChaseActionKind.Hide)
+                {
+                    <Field Label="Бонусные кости" Group="true" Note="Хранитель даёт за отрыв и укрытия (стр. 139)">
+                        <div class="flex flex-wrap gap-2">
+                            @for (var i = 0; i <= 2; i++)
+                            {
+                                var count = i;
+                                <Button Small="true" Variant="@(_bonus == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _bonus = count">@count</Button>
+                            }
+                        </div>
+                    </Field>
+                    @if (runner.IsDriver)
+                    {
+                        <p class="cm-meta">Транспорт: один бросок должен пройти и Скрытность, и @ChaseRules.DriveLabel(runner.Vehicle!) (@(runner.Vehicle!.Skill ?? ChaseRules.SpeedSkill(actor, runner).Value)).</p>
+                    }
+                }
+                else
+                {
+                    <p class="cm-meta">Провал — преследователь потерял след, погоня для него окончена (стр. 139).</p>
+                }
+                <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Difficulty="_difficulty"
+                                  BonusDice="bonus" PenaltyDice="penalty" Label="@ChaseText.Of(action)" OnChange="StateHasChanged" />
+                break;
+            }
+            case ChaseActionKind.CreateObstacle:
+            {
+                <p class="cm-meta">Запереть дверь — действие без проверки; придвинуть шкаф — СИЛ и действие; запереть Взломом — полный раунд и проверка (стр. 141).</p>
+                <div class="flex flex-wrap items-end gap-2">
+                    <Field Label="Что делает" class="min-w-48 flex-1">
+                        <input class="cm-input" value="@_obstacleText" placeholder="опрокидывает прилавок" @onchange="e => _obstacleText = e.Value?.ToString() ?? string.Empty" />
+                    </Field>
+                    <Field Label="В локации" class="w-24">
+                        <input type="number" inputmode="numeric" min="1" max="@Chase.LastLocation" class="cm-input" value="@_obstacleLocation"
+                               @onchange="e => _obstacleLocation = Math.Clamp(Number(e) ?? runner.Location, 1, Chase.LastLocation)" />
+                    </Field>
+                    <Field Label="Действий" class="w-24">
+                        <input type="number" inputmode="numeric" min="0" max="5" class="cm-input" value="@_obstacleCost"
+                               @onchange="e => _obstacleCost = Math.Clamp(Number(e) ?? 0, 0, 5)" />
+                    </Field>
+                </div>
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Что получится">
+                    <Button Small="true" Variant="@(!_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-bolt" OnClick="() => _obstacleBarrier = false">Помеха</Button>
+                    <Button Small="true" Variant="@(_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-road-barrier" OnClick="() => _obstacleBarrier = true">Преграда</Button>
+                </div>
+                <div class="flex flex-wrap items-end gap-2">
+                    <Field Label="Название" class="min-w-48 flex-1">
+                        <input class="cm-input" value="@_obstacleName" placeholder="@(_obstacleBarrier ? "Запертая дверь" : "Рассыпанные фрукты")" @onchange="e => _obstacleName = e.Value?.ToString() ?? string.Empty" />
+                    </Field>
+                    @if (_obstacleBarrier)
+                    {
+                        <Field Label="ПЗ" Note="0 — не сломать" class="w-24">
+                            <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_obstacleHitPoints" @onchange="e => _obstacleHitPoints = Number(e) ?? 0" />
+                        </Field>
+                    }
+                </div>
+                <Field Label="Сложность" Group="true">
+                    <DifficultyPicker Value="_difficulty" ValueChanged="d => _difficulty = d" />
+                </Field>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" checked="@_obstacleCheck" @onchange="e => _obstacleCheck = e.Value is true" />
+                    <span>Нужна проверка навыка</span>
+                </label>
+                @if (_obstacleCheck)
+                {
+                    <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Label="Создать помеху" OnChange="StateHasChanged" />
+                }
+                break;
+            }
+            case ChaseActionKind.DriverControl:
+            {
+                var skill = ChaseRules.SpeedSkill(actor, runner);
+                <p class="cm-meta">Серьёзная рана у водителя — проверка как при трудной помехе; без сознания — управление потеряно сразу (стр. 139).</p>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" checked="@_unconscious" @onchange="e => _unconscious = e.Value is true" />
+                    <span>Водитель без сознания</span>
+                </label>
+                @if (!_unconscious)
+                {
+                    <Field Label="@($"{skill.Label} {skill.Value}, трудная")" Group="true">
+                        <RollInput Value="skill.Value" Difficulty="Difficulty.Hard" PenaltyDice="penalty" Label="Управление" Roll="_check.Roll" RollChanged="r => _check.Roll = r" />
+                    </Field>
+                }
+                @CrashFields()
+                <Field Label="Потеряно действий" Group="true" Note="пусто — 1d3">
+                    <DiceInput Count="1" Sides="3" Value="_lostActions" ValueChanged="v => _lostActions = v" Label="Потеряно действий" />
+                </Field>
+                break;
+            }
+        }
+    };
+
+    private RenderFragment TargetField(ChaseActionKind action) => __builder =>
+    {
+        <Field Label="Цель">
+            <ParticipantSelect Participants="Targets(action)" Label="Цель" Value="_target" ValueChanged="v => _target = v" />
+        </Field>
+    };
+
+    private RenderFragment DefenceFields(bool driving) => __builder =>
+    {
+        <Field Label="Ответ цели" Group="true" Note="Предлагать всегда, сколько бы действий ни осталось (стр. 136)">
+            <div class="flex flex-wrap gap-2">
+                <Button Small="true" Variant="@(_defenceKind is null ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _defenceKind = null">Без ответа</Button>
+                <Button Small="true" Variant="@(_defenceKind == DefenceKind.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetDefence(DefenceKind.Dodge, driving)">
+                    @(driving ? "Увернуться (Вождение)" : "Уклонение")
+                </Button>
+                @if (!driving)
+                {
+                    <Button Small="true" Variant="@(_defenceKind == DefenceKind.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetDefence(DefenceKind.FightBack, false)">Контратака</Button>
+                }
+            </div>
+        </Field>
+        @if (_defenceKind is not null && Target is { } target)
+        {
+            <ChaseCheckFields Input="_defence" Participant="target" Catalog="Session.Catalog" Skills="Skills" Label="Ответ цели" OnChange="StateHasChanged" />
+        }
+    };
+
+    private void SetDefence(DefenceKind kind, bool driving)
+    {
+        _defenceKind = kind;
+        if (Target is not { } target)
+            return;
+
+        if (driving && Chase.Runner(target.Id) is { } runner && runner.IsDriver)
+        {
+            var skill = ChaseRules.SpeedSkill(target, runner);
+            _defence.Set("drive", skill.Label, skill.Value);
+            return;
+        }
+
+        var key = kind == DefenceKind.Dodge ? "skill.dodge" : "skill.fighting.brawl";
+        _defence.Set(key, ChaseSkills.LabelOf(Session.Catalog, key), Skills.Value(target, Session.Catalog, key));
+    }
+
+    private RenderFragment DamageFields(string label, string placeholder) => __builder =>
+    {
+        <div class="flex flex-wrap items-end gap-2">
+            <Field Label="@label" Note="формула бросится, если не вписано число" class="w-40">
+                <input class="cm-input font-mono" value="@_damageFormula" placeholder="@placeholder" @onchange="e => _damageFormula = e.Value?.ToString()" />
+            </Field>
+            <Field Label="Или выпало" class="w-28">
+                <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
+                       @onchange="e => _damage = Number(e, allowZero: true)" />
+            </Field>
+        </div>
+    };
+
+    /// <summary>Последствия провала: транспорт — авария таблицы VI, пеший — урон таблицы III; и 1d3 потерянных действия.</summary>
+    private RenderFragment FailureFields(bool vehicle, string title) => __builder =>
+    {
+        <fieldset class="flex flex-col gap-2">
+            <legend class="cm-meta mb-1 font-semibold">@title</legend>
+            @if (vehicle)
+            {
+                @CrashFields()
+            }
+            else
+            {
+                <div class="flex flex-wrap items-end gap-2">
+                    <Field Label="Урон" Note="таблица III, стр. 122" class="w-full sm:w-64">
+                        <select class="cm-input" value="@(_damageFormula ?? "")" @onchange="e => _damageFormula = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()">
+                            <option value="">— без урона —</option>
+                            @if (_damageFormula is { Length: > 0 } formula && OtherDamageReference.Tiers.All(t => t.Formula != formula))
+                            {
+                                <option value="@formula">@formula</option>
+                            }
+                            @foreach (var tier in OtherDamageReference.Tiers)
+                            {
+                                <option value="@tier.Formula">@tier.Name — @tier.Formula</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Или выпало" class="w-28">
+                        <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
+                               @onchange="e => _damage = Number(e, allowZero: true)" />
+                    </Field>
+                </div>
+            }
+            <Field Label="Потеряно действий" Group="true" Note="пусто — 1d3">
+                <DiceInput Count="1" Sides="3" Value="_lostActions" ValueChanged="v => _lostActions = v" Label="Потеряно действий" />
+            </Field>
+        </fieldset>
+    };
+
+    private RenderFragment CrashFields() => __builder =>
+    {
+        <div class="flex flex-wrap items-end gap-2">
+            <Field Label="Авария" Note="таблица VI, стр. 145: Комплекция и урон каждому внутри" class="w-full sm:w-72">
+                <select class="cm-input" value="@(_crash ?? "")" @onchange="e => _crash = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()">
+                    <option value="">— без аварии —</option>
+                    @foreach (var crash in VehicleReference.Crashes)
+                    {
+                        <option value="@crash.Name">@crash.Name — @crash.BuildLoss</option>
+                    }
+                </select>
+            </Field>
+            @if (VehicleReference.FindCrash(_crash) is { } chosen)
+            {
+                <Field Label="Комплекция −" Note="@($"пусто — {chosen.BuildLoss}")" class="w-28">
+                    <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_crashRoll?.ToString(CultureInfo.InvariantCulture))"
+                           @onchange="e => _crashRoll = Number(e, allowZero: true)" />
+                </Field>
+                <Field Label="Урон людям" Note="пусто — та же кость каждому" class="w-28">
+                    <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
+                           @onchange="e => _damage = Number(e, allowZero: true)" />
+                </Field>
+                <p class="cm-meta w-full">@chosen.Examples</p>
+            }
+        </div>
+    };
+
+    private static int? Number(ChangeEventArgs e, bool allowZero = false) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && (value > 0 || (allowZero && value == 0))
+            ? value
+            : null;
+}
