@@ -164,16 +164,7 @@ public static partial class CombatRules
         var skill = setup.AttackSkill ?? attack.Skill;
         var surprise = setup.Surprise;
 
-        var modifiers = AttackModifiers.Calculate(new AttackSituation
-        {
-            Kind = AttackKind.Melee,
-            KeeperBonusDice = setup.KeeperBonusDice,
-            KeeperPenaltyDice = setup.KeeperPenaltyDice,
-            Surprise = surprise,
-            TargetProne = defender.Combat.Prone,
-            TargetDefensesThisRound = defender.Combat.DefensesIn(state.Round),
-            TargetAttacksPerRound = defender.Profile.AttacksPerRound,
-        });
+        var modifiers = MeleeDice(state, setup);
 
         var (roll, level, _) = Test(setup.AttackRoll, skill, dice, bonus: modifiers.BonusDice, penalty: modifiers.PenaltyDice);
         List<string> lines = [RollText($"{attacker.Name} ({attack.Name})", roll, skill, level)];
@@ -281,28 +272,9 @@ public static partial class CombatRules
             };
         }
 
-        var autofireIndex = setup.FiringMode == FiringMode.Volley ? setup.AutofireCheckIndex ?? attacker.Combat.AutofireIn(state.Round) : 0;
-        var (required, impossible, _) = EscalateAutofire(AttackModifiers.RequiredDifficulty(setup.Range), autofireIndex);
-        var surprise = AttackModifiers.NormalizeSurprise(AttackKind.Ranged, setup.Surprise);
-        var modifiers = AttackModifiers.Calculate(new AttackSituation
-        {
-            Kind = AttackKind.Ranged,
-            KeeperBonusDice = setup.KeeperBonusDice,
-            KeeperPenaltyDice = setup.KeeperPenaltyDice,
-            Surprise = surprise,
-            PointBlank = setup.PointBlank,
-            Aiming = setup.Aiming || attacker.Combat.Aiming,
-            ShooterProne = attacker.Combat.Prone,
-            TargetBuild = defender.Stats.Build,
-            TargetTakingCover = setup.TargetTakingCover || defender.Combat.TakingCoverIn(state.Round),
-            TargetBehindCover = setup.TargetBehindCover,
-            TargetFastMoving = setup.TargetFastMoving,
-            FiringIntoMelee = setup.FiringIntoMelee,
-            FiringMode = setup.FiringMode,
-            ReloadAndFire = setup.ReloadAndFire,
-            TargetProne = defender.Combat.Prone,
-            AutofireCheckIndex = autofireIndex,
-        });
+        var autofireIndex = AutofireIndex(state, setup);
+        var (required, impossible) = RangedRequirement(state, setup);
+        var modifiers = RangedDice(state, setup);
 
         // Крах — от сложности, которую задала дальность: на большой дальности у навыка 60 нужно 30, и 96–100 уже крах (стр. 88).
         var (roll, level, _) = Test(setup.AttackRoll, skill, dice, DifficultyOf(required), modifiers.BonusDice, modifiers.PenaltyDice);
@@ -368,6 +340,62 @@ public static partial class CombatRules
         {
             Modifiers = modifiers, Roll = roll, Level = level, Required = required,
         };
+    }
+
+    /// <summary>Кости атаки ближнего боя — таблица <see cref="AttackModifiers"/> над участниками (панель показывает их до броска).</summary>
+    public static AttackDice MeleeDice(EncounterState state, MeleeAttackSetup setup)
+    {
+        var defender = Require(state, setup.DefenderId);
+        return AttackModifiers.Calculate(new AttackSituation
+        {
+            Kind = AttackKind.Melee,
+            KeeperBonusDice = setup.KeeperBonusDice,
+            KeeperPenaltyDice = setup.KeeperPenaltyDice,
+            Surprise = setup.Surprise,
+            TargetProne = defender.Combat.Prone,
+            TargetDefensesThisRound = defender.Combat.DefensesIn(state.Round),
+            TargetAttacksPerRound = defender.Profile.AttacksPerRound,
+        });
+    }
+
+    /// <summary>
+    /// Кости стрельбы. Прицел и укрытие — «из настройки или из состояния, один раз»; номер проверки очереди — по счёту
+    /// стрелка в раунде, если его не задали.
+    /// </summary>
+    public static AttackDice RangedDice(EncounterState state, RangedAttackSetup setup)
+    {
+        var attacker = Require(state, setup.AttackerId);
+        var defender = Require(state, setup.DefenderId);
+        return AttackModifiers.Calculate(new AttackSituation
+        {
+            Kind = AttackKind.Ranged,
+            KeeperBonusDice = setup.KeeperBonusDice,
+            KeeperPenaltyDice = setup.KeeperPenaltyDice,
+            Surprise = AttackModifiers.NormalizeSurprise(AttackKind.Ranged, setup.Surprise),
+            PointBlank = setup.PointBlank,
+            Aiming = setup.Aiming || attacker.Combat.Aiming,
+            ShooterProne = attacker.Combat.Prone,
+            TargetBuild = defender.Stats.Build,
+            TargetTakingCover = setup.TargetTakingCover || defender.Combat.TakingCoverIn(state.Round),
+            TargetBehindCover = setup.TargetBehindCover,
+            TargetFastMoving = setup.TargetFastMoving,
+            FiringIntoMelee = setup.FiringIntoMelee,
+            FiringMode = setup.FiringMode,
+            ReloadAndFire = setup.ReloadAndFire,
+            TargetProne = defender.Combat.Prone,
+            AutofireCheckIndex = AutofireIndex(state, setup),
+        });
+    }
+
+    /// <summary>Номер проверки очереди в раунде (с нуля); не очередь — 0.</summary>
+    public static int AutofireIndex(EncounterState state, RangedAttackSetup setup) =>
+        setup.FiringMode == FiringMode.Volley ? setup.AutofireCheckIndex ?? Require(state, setup.AttackerId).Combat.AutofireIn(state.Round) : 0;
+
+    /// <summary>Какой уровень успеха нужен этому выстрелу и возможен ли он (дальность и очередь, стр. 110, 114).</summary>
+    public static (SuccessLevel Required, bool Impossible) RangedRequirement(EncounterState state, RangedAttackSetup setup)
+    {
+        var (required, impossible, _) = EscalateAutofire(AttackModifiers.RequiredDifficulty(setup.Range), AutofireIndex(state, setup));
+        return (required, impossible);
     }
 
     /// <summary>

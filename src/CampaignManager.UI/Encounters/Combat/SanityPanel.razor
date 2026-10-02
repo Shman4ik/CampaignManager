@@ -1,0 +1,78 @@
+@* Проверка Рассудка (гл. 8): бросок против текущего Рассудка без бонусных и штрафных костей, потеря «успех/провал» — из
+   записи твари сцены (её вид — для привыкания, стр. 167), крах — максимум провальной части, 5+ — проверка ИНТ. Правило —
+   CombatRules.SanityCheck; привыкание, пороги ⅕ за день и приступ решает лист, куда уходит итог. Своей карточки не рисует. *@
+<div class="flex flex-col gap-3" data-testid="sanity-panel">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field Label="Кто видит">
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Sanity is not null && !p.Dead" Label="Кто проходит проверку" Value="ActorId" ValueChanged="SelectActor" />
+        </Field>
+        <Field Label="Что видит" Note="Тварь — запись потери и привыкание к её виду">
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Kind == ParticipantKind.Creature" Label="Тварь" Placeholder="— без твари —"
+                               Value="_creatureId" ValueChanged="SelectCreature" />
+        </Field>
+    </div>
+    <div class="flex flex-wrap items-end gap-3">
+        <Field Label="Потеря при успехе" class="w-32">
+            <input class="cm-input font-mono" value="@_success" @onchange="e => _success = Text(e, '0')" />
+        </Field>
+        <Field Label="При провале" class="w-32">
+            <input class="cm-input font-mono" data-testid="sanity-failure" value="@_failure" @onchange="e => _failure = Text(e, '0')" />
+        </Field>
+    </div>
+    @if (Actor is { Sanity: { } sanity } actor)
+    {
+        <details class="encounter-rolls">
+            <summary>Броски со стола (необязательно)</summary>
+            <div class="mt-2 flex flex-col gap-3">
+                <Field Label="@($"Рассудок {sanity}")" Group="true">
+                    <RollInput Label="Рассудок" Value="sanity" Roll="_roll" RollChanged="r => _roll = r" />
+                </Field>
+                <Field Label="Выпавшая потеря"><EnteredNumber Label="Потеря" Value="_loss" ValueChanged="v => _loss = v" /></Field>
+                <Field Label="@($"ИНТ {actor.Stats.Int} — если потеряно 5+")" Group="true">
+                    <RollInput Label="ИНТ" Value="actor.Stats.Int" Roll="_intRoll" RollChanged="r => _intRoll = r" />
+                </Field>
+            </div>
+        </details>
+    }
+    <div>
+        <Button Icon="fa-brain" Disabled="@(Actor is not { Sanity: not null })" OnClick="ResolveAsync" data-testid="sanity-resolve">Проверка Рассудка</Button>
+    </div>
+</div>
+
+@code {
+    private Guid? _creatureId;
+    private string _success = "0";
+    private string _failure = "1D6";
+    private D100Roll? _roll, _intRoll;
+    private int? _loss;
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        if (Actor is { Sanity: null })
+            ActorId = State.Participants.FirstOrDefault(p => p.Sanity is not null && !p.Dead)?.Id;
+    }
+
+    private static string Text(ChangeEventArgs e, char empty) => e.Value?.ToString() is { Length: > 0 } text ? text : empty.ToString();
+
+    private void SelectCreature(Guid? id)
+    {
+        _creatureId = id;
+        if (id is { } creatureId && State.Find(creatureId)?.SanityLoss is { } record)
+            (_success, _failure) = CombatRules.SanityLossParts(record);
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (Actor is not { Sanity: not null } actor)
+            return;
+
+        await ProposeAsync(CombatRules.SanityCheck(State, new SanityCheckSetup
+        {
+            TargetId = actor.Id, CreatureParticipantId = _creatureId, SuccessLoss = _success, FailureLoss = _failure,
+            Roll = _roll, LossRoll = _loss, IntRoll = _intRoll,
+        }, Dice));
+        _roll = _intRoll = null;
+        _loss = null;
+    }
+}

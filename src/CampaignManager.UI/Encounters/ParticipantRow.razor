@@ -23,9 +23,13 @@
                 <div class="cm-meta mt-0.5">@Participant.Note</div>
             }
             <div class="mt-1 flex flex-wrap gap-1">
-                @if (Participant.Dying)
+                @if (Participant.Dead)
                 {
-                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-heart-crack">при смерти</Badge>
+                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
+                }
+                else if (Participant.Dying)
+                {
+                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-heart-crack">@(Participant.Stabilized ? "при смерти, стабилизирован" : "при смерти")</Badge>
                 }
                 else if (Participant.Unconscious)
                 {
@@ -34,6 +38,11 @@
                 @if (Participant.MajorWound)
                 {
                     <Badge Tone="Tone.Warning" Icon="fa-droplet">серьёзная рана</Badge>
+                }
+                @* Состояние боя (T2.6b) — словами: прицел, укрытие, захват, заклинившее оружие, сотворение. *@
+                @foreach (var (tone, icon, text) in CombatBadges)
+                {
+                    <Badge Tone="tone" Icon="@icon">@text</Badge>
                 }
                 @if (Participant.IsOut)
                 {
@@ -102,6 +111,41 @@
     [Parameter] public RenderFragment? Actions { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Раунд сцены — для отметок одного раунда (укрытие).</summary>
+    [Parameter] public int Round { get; set; }
+
+    /// <summary>Отметки боя участника (T2.6b).</summary>
+    private IEnumerable<(Tone Tone, string Icon, string Text)> CombatBadges
+    {
+        get
+        {
+            var c = Participant.Combat;
+            if (c.Prone)
+                yield return (Tone.Warning, "fa-person-falling", "лежит");
+            if (c.GrappledBy is not null)
+                yield return (Tone.Warning, "fa-hands-bound", "схвачен");
+            if (c.Disarmed)
+                yield return (Tone.Warning, "fa-hand", "разоружён");
+            if (c.Disadvantage)
+                yield return (Tone.Neutral, "fa-arrow-down", "невыгодное положение");
+            if (c.Aiming)
+                yield return (Tone.Info, "fa-crosshairs", "целится");
+            if (c.CoverRound == Round)
+                yield return (Tone.Info, "fa-shield-halved", "укрылся от огня");
+            if (c.AttackBlockedRound is { } blocked && blocked >= Round && Round > 0)
+                yield return (Tone.Neutral, "fa-ban", $"без атаки в раунде {blocked}");
+            if (c.FirearmReady)
+                yield return (Tone.Info, "fa-gun", "огнестрел наготове");
+            if (c.JammedAttack is not null)
+                yield return (Tone.Warning, "fa-wrench", $"оружие заклинило ({c.JamRoundsLeft} р.)");
+            if (c.Casting is { } casting)
+                yield return (casting.Disrupted ? Tone.Warning : Tone.Stone, "fa-hat-wizard",
+                    casting.Disrupted ? $"сотворение «{casting.SpellName}» сорвано" : $"творит «{casting.SpellName}» до раунда {casting.CompletesInRound}");
+            if (c.InitiativeLevel is { } level)
+                yield return (Tone.Neutral, "fa-dice-d20", $"инициатива: {Core.Dice.RulesText.Of(level)}");
+        }
+    }
 
     private Tone SideTone => Participant.Side switch
     {

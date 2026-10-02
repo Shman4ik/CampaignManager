@@ -1,0 +1,109 @@
+@* Манёвр (стр. 103): разоружить, сбить с ног, захват, толкнуть, вырваться, невыгодное положение; нокаут — необязательное
+   правило (стр. 123). Комплекция — из снимков: разница 3+ — невозможно, меньше — штрафные кости. Правила —
+   CombatRules.Maneuver. Своей карточки не рисует. *@
+<div class="flex flex-col gap-3" data-testid="maneuver-panel">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field Label="Кто">
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто выполняет манёвр" Value="ActorId" ValueChanged="SelectActor" />
+        </Field>
+        <Field Label="Против кого">
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель манёвра" Value="_targetId" ValueChanged="v => _targetId = v" />
+        </Field>
+    </div>
+
+    <Field Label="Манёвр" Group="true">
+        <div class="flex flex-wrap gap-2">
+            @foreach (var type in Types)
+            {
+                <Button Small="true" Variant="@(type == _type ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _type = type">@CombatRules.NameOf(type)</Button>
+            }
+        </div>
+    </Field>
+
+    @if (Actor is { } actor && Target is { } target)
+    {
+        var gap = target.Stats.Build - actor.Stats.Build;
+        <p class="cm-meta">
+            Комплекция @actor.Name @actor.Stats.Build, @target.Name @target.Stats.Build:
+            @(gap >= 3 ? "разница 3 и больше — манёвр невозможен" : gap > 0 ? $"штрафных костей {Math.Min(gap, 2)}" : "без штрафа") (стр. 103).
+        </p>
+        <div class="flex flex-wrap gap-4">
+            <Field Label="Навык манёвра" Group="true">
+                <select class="cm-input" aria-label="Навык манёвра" value="@_skillKey" @onchange="e => _skillKey = e.Value?.ToString()">
+                    @foreach (var attack in actor.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Maneuver))
+                    {
+                        <option value="@attack.Key">@attack.Name — @attack.Skill%</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Цель защищается" Group="true">
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="@(_reaction == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
+                    <Button Small="true" Variant="@(_reaction == DefenseReaction.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
+                </div>
+            </Field>
+            <Field Label="Кости Хранителя" Group="true">
+                <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
+            </Field>
+        </div>
+        <details class="encounter-rolls">
+            <summary>Броски со стола (необязательно)</summary>
+            <div class="mt-2 flex flex-col gap-3">
+                <Field Label="Манёвр" Group="true">
+                    <RollInput Label="Манёвр" Value="@Skill(actor)" BonusDice="@Split(_net).Bonus" PenaltyDice="@(Split(_net).Penalty + Math.Clamp(gap, 0, 2))"
+                               Roll="_attackRoll" RollChanged="r => _attackRoll = r" />
+                </Field>
+                <Field Label="Защита цели" Group="true">
+                    <RollInput Label="Защита" Value="@(_reaction == DefenseReaction.Dodge ? target.Stats.Dodge : target.Profile.FightBack)" Roll="_defenseRoll" RollChanged="r => _defenseRoll = r" />
+                </Field>
+            </div>
+        </details>
+    }
+
+    <div>
+        <Button Icon="fa-people-pulling" Disabled="@(Actor is null || Target is null)" OnClick="ResolveAsync" data-testid="maneuver-resolve">Провести манёвр</Button>
+    </div>
+</div>
+
+@code {
+    private Guid? _targetId;
+    private ManeuverType _type = ManeuverType.KnockDown;
+    private DefenseReaction _reaction;
+    private int _net;
+    private string? _skillKey;
+    private D100Roll? _attackRoll, _defenseRoll;
+
+    private IEnumerable<ManeuverType> Types => State.Combat.CinematicKnockout
+        ? Enum.GetValues<ManeuverType>()
+        : Enum.GetValues<ManeuverType>().Where(t => t != ManeuverType.Knockout);
+
+    private EncounterParticipant? Target => _targetId is { } id ? State.Find(id) : null;
+
+    private int Skill(EncounterParticipant actor) =>
+        actor.Profile.Attacks.FirstOrDefault(a => a.Key == _skillKey)?.Skill
+        ?? actor.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Maneuver).Select(a => a.Skill).DefaultIfEmpty(0).Max();
+
+    protected override void OnActorChanged()
+    {
+        _skillKey = Actor?.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Maneuver)
+            .OrderByDescending(a => a.Kind == CombatAttackKind.Maneuver).ThenByDescending(a => a.Skill).FirstOrDefault()?.Key;
+        _attackRoll = null;
+        if (Actor is { } actor && Target is null or { Dead: true })
+            _targetId = State.Participants.FirstOrDefault(p => p.Side != actor.Side && p.Id != actor.Id && !p.Dead)?.Id;
+    }
+
+    private async Task ResolveAsync()
+    {
+        if (Actor is not { } actor || Target is not { } target)
+            return;
+
+        var (bonus, penalty) = Split(_net);
+        var outcome = CombatRules.Maneuver(State, new ManeuverSetup
+        {
+            AttackerId = actor.Id, DefenderId = target.Id, Type = _type, AttackSkill = Skill(actor), Reaction = _reaction,
+            KeeperBonusDice = bonus, KeeperPenaltyDice = penalty, AttackRoll = _attackRoll, DefenseRoll = _defenseRoll,
+        }, Dice);
+        await ProposeAsync(outcome.Resolution);
+        _attackRoll = _defenseRoll = null;
+    }
+}

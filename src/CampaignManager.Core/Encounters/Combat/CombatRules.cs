@@ -19,7 +19,7 @@ namespace CampaignManager.Core.Encounters;
 public static partial class CombatRules
 {
     /// <summary>Безоружная атака, если у участника не нашлось выбранной (стр. 66): драка 1D3 + БкУ.</summary>
-    internal static CombatAttack Unarmed(EncounterParticipant p) =>
+    public static CombatAttack Unarmed(EncounterParticipant p) =>
         p.Profile.Attacks.FirstOrDefault(a => a.Key == CombatProfiles.BrawlKey)
         ?? new CombatAttack
         {
@@ -104,7 +104,7 @@ public static partial class CombatRules
     }
 
     /// <summary>Сложность для порога краха (стр. 88): у требования «критический» — та же, что у чрезвычайного.</summary>
-    internal static Difficulty DifficultyOf(SuccessLevel required) => required switch
+    public static Difficulty DifficultyOf(SuccessLevel required) => required switch
     {
         SuccessLevel.Hard => Difficulty.Hard,
         >= SuccessLevel.Extreme => Difficulty.Extreme,

@@ -1,12 +1,22 @@
 @page "/combat"
 @attribute [Authorize(Policy = Policies.Keeper)]
 @using CampaignManager.Core.Encounters
+@using CampaignManager.UI.Encounters.Combat
+@inject NavigationManager Navigation
 
-@* Бой: оболочка сцены (T2.6a). Правила боя — атака, манёвр, заклинания, медицина — T2.6b, панелями в ChildContent. *@
-<EncounterPage Kind="EncounterKind.Combat" EncounterId="Id" CampaignId="Campaign" />
+@* Бой: оболочка сцены (T2.6a) и правила боя (T2.6b) — панель CombatPanel в ChildContent: атака, манёвр, заклинание,
+   рассудок, раны, прочее, кости. Открытая вкладка — в адресе (?tab=), сцена — ?id=. *@
+<EncounterPage Kind="EncounterKind.Combat" EncounterId="Id" CampaignId="Campaign">
+    <CombatPanel Tab="@Tab" TabChanged="SelectTab" />
+</EncounterPage>
 
 @code {
     [SupplyParameterFromQuery(Name = "id")] public Guid? Id { get; set; }
 
     [SupplyParameterFromQuery(Name = "campaign")] public Guid? Campaign { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+
+    private void SelectTab(string tab) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tab", tab == "attack" ? null : tab), replace: true);
 }
