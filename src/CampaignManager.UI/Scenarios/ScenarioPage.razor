@@ -72,12 +72,14 @@
     </AsyncContent>
 </div>
 
-<ScenarioFormModal Open="_formOpen" Scenario="_scenario" OnClose="() => _formOpen = false" OnSaved="HeaderSavedAsync" OnReload="ReloadAsync" />
+@* Окно правки — только над загруженным сценарием: без него форма сочла бы его новым. *@
+<ScenarioFormModal Open="@(_formOpen && _scenario is not null)" Scenario="_scenario" OnClose="() => _formOpen = false" OnSaved="HeaderSavedAsync" OnReload="ReloadAsync" />
 
 @code {
     private AsyncContent<ScenarioDto?>? _content;
     private ScenarioDto? _scenario;
     private bool _formOpen;
+    private bool _openFormOnLoad;
 
     [Parameter] public Guid ScenarioId { get; set; }
 
@@ -90,7 +92,7 @@
         // Старый адрес правки v1: описание с открытой формой, адрес — рабочего места.
         if (Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].EndsWith("/edit", StringComparison.Ordinal))
         {
-            _formOpen = true;
+            _openFormOnLoad = true;
             Navigation.NavigateTo(ScenarioLinks.Workspace(ScenarioId), replace: true);
         }
     }
@@ -101,6 +103,8 @@
         try
         {
             _scenario = await Api.GetAsync(ScenarioId, cancellationToken);
+            _formOpen |= _openFormOnLoad && _scenario.CanEdit;
+            _openFormOnLoad = false;
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

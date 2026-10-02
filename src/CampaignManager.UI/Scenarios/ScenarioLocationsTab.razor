@@ -1,7 +1,7 @@
 @inherits ScenarioTabBase
 
 @* «Локации» — дерево: вложенная локация с отступом под родителем. Касание имени раскрывает описание (Markdown) и
-   проверки. «Вложенная» заводит локацию сразу внутри этой. Порядок — среди соседей («Порядок» → «Выше»/«Ниже»).
+   проверки. «Вложенная локация» (в раскрытой строке) заводит локацию сразу внутри этой. Порядок — среди соседей («Порядок» → «Выше»/«Ниже»).
    Удаление уносит вложенные локации и их проверки — диалог говорит об этом. *@
 <section class="cm-section">
     <div class="cm-section-header flex-wrap gap-2">
@@ -30,7 +30,7 @@
                 var siblings = LocationTree.Siblings(Scenario.Locations, location);
                 var index = siblings.ToList().IndexOf(location.Id);
                 var open = _open.Contains(location.Id);
-                <div class="border-t border-primary-200 py-3 pr-4 first:border-t-0" style="padding-left: @(1 + depth * 1.5)rem" @key="location.Id"
+                <div class="@Css.Join("border-t border-primary-200 py-3 pr-4 first:border-t-0", Indent(depth))" @key="location.Id"
                      data-testid="location-row">
                     <div class="flex flex-wrap items-start justify-between gap-2">
                         <button type="button" class="flex min-h-9 min-w-0 flex-1 items-start gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
@@ -58,12 +58,7 @@
                             <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < siblings.Count - 1"
                                             OnUp="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, -1)"
                                             OnDown="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, 1)"
-                                            OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)">
-                                <Extra>
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy"
-                                            OnClick="() => Open(null, location.Id)">Вложенная</Button>
-                                </Extra>
-                            </PartRowActions>
+                                            OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)" />
                         </div>
                     </div>
                     @if (open)
@@ -95,8 +90,19 @@
                                         </li>
                                     }
                                 </ul>
-                                <a class="text-sm text-accent-700 underline" href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Checks)">Править проверки</a>
                             }
+                            <div class="flex flex-wrap gap-2">
+                                @if (location.Checks.Count > 0)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice-d20"
+                                            Href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Checks)">Проверки</Button>
+                                }
+                                @if (CanEdit)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy" data-testid="add-nested"
+                                            OnClick="() => Open(null, location.Id)">Вложенная локация</Button>
+                                }
+                            </div>
                         </div>
                     }
                 </div>
@@ -113,6 +119,15 @@
     private bool _formOpen;
     private ScenarioLocationDto? _editing;
     private Guid? _parentId;
+
+    /// <summary>Отступ уровня дерева — целыми классами (Tailwind ищет их текстом); глубже третьего — как третий.</summary>
+    private static string Indent(int depth) => depth switch
+    {
+        0 => "pl-4",
+        1 => "pl-10",
+        2 => "pl-16",
+        _ => "pl-22",
+    };
 
     private void Toggle(Guid id)
     {
