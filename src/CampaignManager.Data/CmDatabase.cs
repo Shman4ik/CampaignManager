@@ -1,5 +1,6 @@
 using CampaignManager.Data.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CampaignManager.Data;
@@ -25,8 +26,13 @@ public static class CmDatabase
             .UseSnakeCaseNamingConvention()
             .AddInterceptors(new TimestampsInterceptor(timeProvider ?? TimeProvider.System));
 
-    /// <summary>Контекст на запрос (scoped): в API, в отличие от circuit v1, фабрика не нужна.</summary>
+    /// <summary>
+    /// Контекст на запрос (scoped): в API, в отличие от circuit v1, фабрика не нужна. Перехватчики
+    /// модулей (<see cref="ISaveChangesInterceptor"/> в DI, например журнал правок справочников) — из
+    /// того же scope запроса: им нужен вошедший пользователь.
+    /// </summary>
     public static IServiceCollection AddCmData(this IServiceCollection services, string connectionString) =>
         services.AddDbContext<CmDbContext>((provider, options) =>
-            Configure(options, connectionString, provider.GetService<TimeProvider>()));
+            Configure(options, connectionString, provider.GetService<TimeProvider>())
+                .AddInterceptors(provider.GetServices<ISaveChangesInterceptor>()));
 }

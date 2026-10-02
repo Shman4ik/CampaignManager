@@ -1,0 +1,218 @@
+@page "/weapons"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+@inject ICatalogApi<SkillDto> SkillsApi
+
+@* Оружие — таблица XVII (стр. 401–405). Каждая колонка книги — свой столбец, строка — одна строка:
+   Название · Тип · Урон · Дист. · Атаки · Боезапас · Осечка · Цена. Ширина колонок — бюджет:
+   девяти столбцам нужно ~1130px, поэтому таблица с xl (1280), ниже — карточки (в портрет iPad не
+   влезает даже без типа). Навык уехал в раскрытие: тип его почти дублирует, а колонкой он съедал
+   214px. Раскрытая строка не повторяет колонки — только навык, разбивка дальности, ёмкость, примечания. *@
+<CatalogPage TItem="WeaponDto" Title="Оружие" Icon="fa-gun" AddLabel="Добавить оружие" Noun="оружие"
+             Filters="Filters" Toggles="Toggles" ErasOf="w => w.Eras" SearchAlso="w => [w.SkillName, w.Notes]"
+             TableFrom="TableBreakpoint.Xl" New="() => new WeaponDto { Type = WeaponType.Pistols }" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
+    <Columns Context="view">
+        <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[24%]" Context="w">
+            <span class="font-medium text-primary-800">@w.Name</span>
+            @if (view.ShowEra)
+            {
+                <EraBadges Values="w.Eras" />
+            }
+            <WeaponMarks Weapon="w" />
+        </DataColumn>
+        @if (!view.IsFixed("type"))
+        {
+            <DataColumn TItem="WeaponDto" Title="Тип" SortBy="w => w.Type" CellClass="cm-clip" HeaderClass="w-[12%]" Context="w">@CatalogText.Of(w.Type)</DataColumn>
+        }
+        <DataColumn TItem="WeaponDto" Title="Урон" SortBy="w => w.Damage" CellClass="cm-dice whitespace-nowrap" Context="w">
+            @w.Damage<UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" />
+        </DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Дист." SortBy="w => w.BaseRangeM" CellClass="whitespace-nowrap" Context="w">
+            @w.Range<UnparsedMark Show="Unparsed(w.Range, WeaponStatsParser.ParseRange(w.Range).IsParsed)" What="дальность" />
+        </DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Атаки" CellClass="whitespace-nowrap" Context="w">
+            @w.Attacks<UnparsedMark Show="Unparsed(w.Attacks, WeaponStatsParser.ParseAttacks(w.Attacks).IsParsed)" What="атаки" />
+        </DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Боезапас" SortBy="w => w.AmmoCapacity" CellClass="whitespace-nowrap" Context="w">
+            @w.Ammo<UnparsedMark Show="Unparsed(w.Ammo, WeaponStatsParser.ParseAmmo(w.Ammo).IsParsed)" What="боезапас" />
+        </DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Осечка" SortBy="w => w.Malfunction" AlignEnd="true" Context="w">@Malfunction(w)</DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Цена" SortBy="w => w.CostClassic" CellClass="cm-clip" HeaderClass="w-[11%]" Context="w">
+            @w.Cost<UnparsedMark Show="Unparsed(w.Cost, WeaponStatsParser.ParseCost(w.Cost).IsParsed)" What="стоимость" />
+        </DataColumn>
+    </Columns>
+    <CardTemplate Context="w">
+        <p class="font-medium text-primary-800">@w.Name<WeaponMarks Weapon="w" /></p>
+        <p class="cm-meta">@CatalogText.Of(w.Type) · @w.SkillName</p>
+        <dl class="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm sm:grid-cols-3">
+            <div><dt class="inline cm-text-muted">Урон </dt><dd class="inline cm-dice">@w.Damage<UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" /></dd></div>
+            <div><dt class="inline cm-text-muted">Дист. </dt><dd class="inline">@w.Range</dd></div>
+            <div><dt class="inline cm-text-muted">Атаки </dt><dd class="inline">@w.Attacks</dd></div>
+            <div><dt class="inline cm-text-muted">Боезапас </dt><dd class="inline">@w.Ammo</dd></div>
+            <div><dt class="inline cm-text-muted">Осечка </dt><dd class="inline">@Malfunction(w)</dd></div>
+            <div><dt class="inline cm-text-muted">Цена </dt><dd class="inline">@w.Cost</dd></div>
+        </dl>
+    </CardTemplate>
+</CatalogPage>
+
+@code {
+    private static readonly IReadOnlyList<CatalogFilter<WeaponDto>> Filters =
+        [CatalogFilter<WeaponDto>.ForEnum<WeaponType>("type", "Все типы", CatalogText.Of, w => w.Type)];
+
+    private static readonly IReadOnlyList<CatalogToggle<WeaponDto>> Toggles =
+    [
+        new("rare", "Редкое", w => w.IsRare),
+        new("impaling", "Пронзающее", w => w.IsImpaling),
+    ];
+
+    private IReadOnlyList<SkillDto> _skills = [];
+
+    // Навыки нужны только форме: грузятся при первом открытии.
+    private async Task EnsureSkillsAsync()
+    {
+        if (_skills.Count > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _skills = [.. (await SkillsApi.ListAsync()).Items.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)];
+        }
+        catch (HttpRequestException)
+        {
+            // Без связи список навыков пуст: сервер всё равно не примет оружие без навыка и скажет об этом.
+        }
+    }
+
+    private static bool Unparsed(string? raw, bool parsed) => !parsed && !string.IsNullOrWhiteSpace(raw);
+
+    // «00» книги = 100: в строке показываем как в книге.
+    private static string Malfunction(WeaponDto w) => w.Malfunction switch
+    {
+        null => "—",
+        100 => "00",
+        { } value => value.ToString(System.Globalization.CultureInfo.CurrentCulture),
+    };
+
+    private static RenderFragment<WeaponDto> Detail => w => __builder =>
+    {
+        <dl class="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+            <div><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? "—")</dd></div>
+            @if (WeaponStatsParser.ParseRange(w.Range) is { IsParsed: true } range)
+            {
+                <div><dt class="cm-meta-label inline">Дальность: </dt><dd class="inline">@WeaponStatsReader.RangeDisplay(range)</dd></div>
+            }
+            @if (w.DamageByRange is { Count: > 0 } byRange)
+            {
+                <div><dt class="cm-meta-label inline">Урон по дистанциям: </dt><dd class="inline cm-dice">@string.Join(" / ", byRange.Select(r => $"{r.Range} {r.Damage}"))</dd></div>
+            }
+            @if (w.AmmoCapacity is { } capacity)
+            {
+                <div><dt class="cm-meta-label inline">Магазин: </dt><dd class="inline">@(w.AmmoCapacityOptions is { Count: > 1 } options ? string.Join(" / ", options) : capacity.ToString())</dd></div>
+            }
+            @if (!string.IsNullOrWhiteSpace(w.Notes))
+            {
+                <div class="sm:col-span-2"><dt class="cm-meta-label inline">Примечания: </dt><dd class="inline">@w.Notes</dd></div>
+            }
+            @if (w.Source is not null)
+            {
+                <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@w.Source</dd></div>
+            }
+        </dl>
+    };
+
+    private RenderFragment<WeaponDto> Form => w => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="w.Name" /></Field>
+            <Field Label="Тип">
+                <select class="cm-input" @bind="w.Type">
+                    @foreach (var type in Enum.GetValues<WeaponType>())
+                    {
+                        <option value="@type">@CatalogText.Of(type)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Навык">
+                <select class="cm-input" @bind="w.SkillId">
+                    <option value="@Guid.Empty">— выберите —</option>
+                    @foreach (var skill in _skills)
+                    {
+                        <option value="@skill.Id">@skill.Name</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Урон" Note="@DamageHint(w.Damage)" Error="@DamageError(w.Damage)">
+                <input class="cm-input cm-dice" placeholder="1d6 + БкУ" @bind="w.Damage" @bind:event="oninput" />
+            </Field>
+            <Field Label="Дальность" Note="@Hint(w.Range, r => WeaponStatsReader.RangeDisplay(WeaponStatsParser.ParseRange(r)), WeaponStatsParser.ParseRange(w.Range).IsParsed)">
+                <input class="cm-input" placeholder="15 м" @bind="w.Range" @bind:event="oninput" />
+            </Field>
+            <Field Label="Атак за раунд" Note="@Hint(w.Attacks, a => WeaponStatsReader.AttacksDisplay(WeaponStatsParser.ParseAttacks(a)), WeaponStatsParser.ParseAttacks(w.Attacks).IsParsed)">
+                <input class="cm-input" placeholder="1 (3)" @bind="w.Attacks" @bind:event="oninput" />
+            </Field>
+            <Field Label="Боезапас" Note="@Hint(w.Ammo, AmmoHint, WeaponStatsParser.ParseAmmo(w.Ammo).IsParsed)">
+                <input class="cm-input" placeholder="6" @bind="w.Ammo" @bind:event="oninput" />
+            </Field>
+            <Field Label="Осечка" Hint="(1–100)" Note="«00» книги — это 100.">
+                <input class="cm-input" type="number" min="1" max="100" @bind="w.Malfunction" />
+            </Field>
+            <Field Label="Цена" Note="@Hint(w.Cost, CostHint, WeaponStatsParser.ParseCost(w.Cost).IsParsed)">
+                <input class="cm-input" placeholder="$25/$200" @bind="w.Cost" @bind:event="oninput" />
+            </Field>
+            <div class="sm:col-span-2"><EraPicker @bind-Values="w.Eras" Note="Редкость — отдельно: «1920-е, редко» — это эпоха плюс флажок «Редкое»." /></div>
+            <Field Label="Особенности" Group="true" class="sm:col-span-2">
+                <div class="flex flex-wrap gap-x-5">
+                    <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="w.IsRare" /><span>Редкое</span></label>
+                    <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="w.IsImpaling" /><span>Пронзающее (стр. 113)</span></label>
+                    <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="w.SingleUse" /><span>Одноразовое</span></label>
+                </div>
+            </Field>
+            <Field Label="Примечания" class="sm:col-span-2"><textarea class="cm-input" rows="2" @bind="w.Notes"></textarea></Field>
+            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="w.Source" /></Field>
+        </div>
+    };
+
+    // Подсказки разбора: что сервер запишет числами. Неразобранное сохранится текстом.
+    private static string? Hint(string? raw, Func<string, string> parsed, bool ok) =>
+        string.IsNullOrWhiteSpace(raw) ? null
+        : ok ? $"Распознано: {parsed(raw)}"
+        : "Не разобрано — сохранится текстом, в бою считать вручную.";
+
+    private static string? DamageHint(string? raw)
+    {
+        var info = DamageFormulaParser.Parse(raw);
+        if (string.IsNullOrWhiteSpace(raw) || !info.IsParsed)
+        {
+            return null;
+        }
+
+        return info switch
+        {
+            { RangeDamages: { Count: > 0 } byRange } => "Распознано: по дистанциям " + string.Join(" / ", byRange.Select(r => r.Damage.ToString())),
+            { BlastRadiusMeters: { } radius, Primary: { } blast } => $"Распознано: {blast}, радиус {radius} м",
+            { Primary: { } primary } => $"Распознано: {primary}",
+            _ => null,
+        };
+    }
+
+    private static string? DamageError(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) || DamageFormulaParser.Parse(raw).IsParsed
+            ? null
+            : "Не разобрано — сохранится текстом, бой этот урон не бросит.";
+
+    private static string AmmoHint(string raw) => WeaponStatsParser.ParseAmmo(raw) switch
+    {
+        { CapacityOptions: { Count: > 1 } options } => $"{string.Join(" или ", options)} патронов",
+        { Capacity: { } capacity } => $"{capacity} патронов",
+        { IsSingleUse: true } => "одноразовое",
+        _ => raw,
+    };
+
+    private static string CostHint(string raw)
+    {
+        var cost = WeaponStatsParser.ParseCost(raw);
+        return $"1920-е: {(cost.Cost1920 is { } c ? $"${c}" : "—")}, наши дни: {(cost.CostModern is { } m ? $"${m}" : "—")}";
+    }
+}

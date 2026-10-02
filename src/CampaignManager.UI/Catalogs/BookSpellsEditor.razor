@@ -1,0 +1,71 @@
+@using CampaignManager.Core.Catalogs
+
+@* Возможные заклинания книги: строка книги и связь со справочником. Каждая правка отдаёт новый
+   список (как StringListEditor). Связь, которую не выбрали руками, сервер ищет сам — только точным
+   совпадением имени или другого названия (SpellMatcher), без нечёткого поиска: не нашлось — пусть
+   Хранитель свяжет руками, а не получит молча чужое заклинание. Своей карточки не рисует. *@
+<div class="grid gap-2">
+    @for (var i = 0; i < Spells.Count; i++)
+    {
+        var index = i;
+        var spell = Spells[index];
+        <div class="flex flex-wrap items-center gap-2" @key="index">
+            <input class="cm-input min-w-40 flex-1" value="@spell.RawName" aria-label="@($"Заклинание {index + 1}")"
+                   @onchange="e => RenameAsync(index, e.Value?.ToString())" />
+            <select class="cm-input w-full sm:w-64 shrink-0" aria-label="@($"Связь в справочнике: {spell.RawName}")"
+                    value="@(spell.SpellId?.ToString() ?? "")"
+                    @onchange="e => LinkAsync(index, e.Value?.ToString())">
+                <option value="">@(Match(spell) is { } guess ? $"сам найдёт: {guess.Name}" : "— не связано —")</option>
+                @foreach (var option in _sorted)
+                {
+                    <option value="@option.Id">@option.Name</option>
+                }
+            </select>
+            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {spell.RawName}")" OnClick="() => RemoveAsync(index)" />
+        </div>
+    }
+    <div>
+        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="AddAsync">Добавить заклинание</Button>
+    </div>
+</div>
+
+@code {
+    private List<SpellDto> _sorted = [];
+
+    [Parameter] public List<BookSpellDto> Spells { get; set; } = [];
+
+    [Parameter] public EventCallback<List<BookSpellDto>> SpellsChanged { get; set; }
+
+    [Parameter] public IEnumerable<SpellDto> Catalog { get; set; } = [];
+
+    protected override void OnParametersSet() =>
+        _sorted = [.. Catalog.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>Что найдёт сервер для несвязанной строки — тем же правилом.</summary>
+    private SpellData? Match(BookSpellDto spell) =>
+        string.IsNullOrWhiteSpace(spell.RawName)
+            ? null
+            : SpellMatcher.Match(_sorted.Select(s => new SpellData(s.Id, s.Name) { AlternativeNames = s.AltNames }), spell.RawName);
+
+    private Task RenameAsync(int index, string? name) =>
+        ReplaceAsync(index, Spells[index] with { RawName = name?.Trim() ?? "" });
+
+    private Task LinkAsync(int index, string? spellId) =>
+        ReplaceAsync(index, Spells[index] with { SpellId = Guid.TryParse(spellId, out var id) ? id : null });
+
+    private Task ReplaceAsync(int index, BookSpellDto spell)
+    {
+        var list = Spells.ToList();
+        list[index] = spell;
+        return SpellsChanged.InvokeAsync(list);
+    }
+
+    private Task RemoveAsync(int index)
+    {
+        var list = Spells.ToList();
+        list.RemoveAt(index);
+        return SpellsChanged.InvokeAsync(list);
+    }
+
+    private Task AddAsync() => SpellsChanged.InvokeAsync([.. Spells, new BookSpellDto("", null)]);
+}

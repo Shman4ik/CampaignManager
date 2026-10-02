@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CampaignManager.Contracts.Campaigns;
+using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
@@ -32,4 +33,26 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CampaignJournalDto))]
 [JsonSerializable(typeof(CampaignSessionDto))]
 [JsonSerializable(typeof(CampaignSessionInput))]
+[JsonSerializable(typeof(SkillDto))]
+[JsonSerializable(typeof(CatalogList<SkillDto>))]
+[JsonSerializable(typeof(CatalogFile<SkillDto>))]
+[JsonSerializable(typeof(OccupationDto))]
+[JsonSerializable(typeof(CatalogList<OccupationDto>))]
+[JsonSerializable(typeof(CatalogFile<OccupationDto>))]
+[JsonSerializable(typeof(WeaponDto))]
+[JsonSerializable(typeof(CatalogList<WeaponDto>))]
+[JsonSerializable(typeof(CatalogFile<WeaponDto>))]
+[JsonSerializable(typeof(SpellDto))]
+[JsonSerializable(typeof(CatalogList<SpellDto>))]
+[JsonSerializable(typeof(CatalogFile<SpellDto>))]
+[JsonSerializable(typeof(BookDto))]
+[JsonSerializable(typeof(CatalogList<BookDto>))]
+[JsonSerializable(typeof(CatalogFile<BookDto>))]
+[JsonSerializable(typeof(ItemDto))]
+[JsonSerializable(typeof(CatalogList<ItemDto>))]
+[JsonSerializable(typeof(CatalogFile<ItemDto>))]
+[JsonSerializable(typeof(CreatureDto))]
+[JsonSerializable(typeof(CatalogList<CreatureDto>))]
+[JsonSerializable(typeof(CatalogFile<CreatureDto>))]
+[JsonSerializable(typeof(CatalogImportReport))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

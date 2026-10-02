@@ -1,0 +1,307 @@
+@page "/bestiary/creatures/edit/{Id:guid?}"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@using CampaignManager.Contracts.Identity
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.Core.Catalogs
+@inject ICatalogApi<CreatureDto> Api
+@inject NavigationManager Navigation
+@inject ToastService Toasts
+
+@* Правка твари — своя страница, а не окно: статблок (гл. 14, стр. 277–280) в окно не помещается.
+   Форма — по документу Statblock: характеристики «значение + кости», ПЗ, ПМ, бонус к урону к УРОНУ
+   (не к попаданию), комплекция, скорости (пустое плавание — половина обычной, пустой полёт — не
+   летает), атак за раунд у твари, а не у атаки, броня с оговоркой, уклонение, потеря рассудка,
+   инициатива (0 — по ЛВК). Ссылка на страницу защищена политикой Keeper; запись — сервером. *@
+<PageHeader Title="@(Id is null ? "Новое существо" : $"Существо: {_creature?.Name}")">
+    <Actions>
+        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-left" Href="@BackHref">К бестиарию</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent TData="CreatureDto" Load="LoadAsync" Key="Id" IsEmpty="_ => false">
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" ShowIcon="true">
+                <ChildContent>@_error</ChildContent>
+                <Actions>
+                    @if (_stale)
+                    {
+                        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
+                    }
+                </Actions>
+            </Alert>
+        }
+        @if (_creature is { } c)
+        {
+            var s = c.Statblock;
+            <section class="cm-section">
+                <div class="cm-card">
+                    <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="c.Name" /></Field>
+                        <Field Label="Тип">
+                            <select class="cm-input" @bind="c.Type">
+                                @foreach (var type in Enum.GetValues<CreatureType>())
+                                {
+                                    <option value="@type">@CatalogText.Of(type)</option>
+                                }
+                            </select>
+                        </Field>
+                        <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="c.Source" /></Field>
+                        <Field Label="Описание" class="sm:col-span-2 lg:col-span-4"><textarea class="cm-input" rows="4" @bind="c.Description"></textarea></Field>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Характеристики</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                        @foreach (var (label, stat) in Stats(s))
+                        {
+                            var current = stat;
+                            <Field Label="@label" Group="true">
+                                <input class="cm-input" type="number" min="0" aria-label="@($"{label}, среднее")" @bind="current.Value" />
+                                <input class="cm-input cm-dice mt-1" placeholder="3D6×5" aria-label="@($"{label}, кости")" @bind="current.Dice" />
+                            </Field>
+                        }
+                        <Field Label="ПЗ"><input class="cm-input" type="number" min="0" @bind="s.HitPoints" /></Field>
+                        <Field Label="ПМ"><input class="cm-input" type="number" min="0" @bind="s.MagicPoints" /></Field>
+                        <Field Label="Бонус к урону" Note="К урону, не к попаданию: «+1D4».">
+                            <input class="cm-input cm-dice" @bind="s.DamageBonus" />
+                        </Field>
+                        <Field Label="Комплекция"><input class="cm-input" type="number" @bind="s.Build" /></Field>
+                        <Field Label="Уклонение" Hint="(%)"><input class="cm-input" type="number" min="0" max="100" @bind="s.Dodge" /></Field>
+                        <Field Label="Инициатива" Note="0 — по ЛВК (стр. 110)."><input class="cm-input" type="number" min="0" @bind="s.Initiative" /></Field>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Движение, броня, рассудок</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <Field Label="Скорость"><input class="cm-input" type="number" min="0" @bind="s.Speed.Move" /></Field>
+                        <Field Label="Плавание" Note="Пусто — половина скорости (стр. 141)."><input class="cm-input" type="number" min="0" @bind="s.Speed.Swim" /></Field>
+                        <Field Label="Полёт" Note="Пусто — не летает."><input class="cm-input" type="number" min="0" @bind="s.Speed.Fly" /></Field>
+                        <Field Label="Скорость словами" Hint="(если в книге так)"><input class="cm-input" placeholder="перекатывание 10" @bind="s.Speed.Note" /></Field>
+                        <Field Label="Атак за раунд" Note="У твари, не у атаки: столько же защит до численного превосходства (стр. 279).">
+                            <input class="cm-input" type="number" min="0" @bind="s.AttacksPerRound" />
+                        </Field>
+                        <Field Label="Атаки — оговорка"><input class="cm-input" @bind="s.AttacksPerRoundNote" /></Field>
+                        <Field Label="Броня"><input class="cm-input" type="number" min="0" @bind="s.Armor" /></Field>
+                        <Field Label="Броня — оговорка" Note="«Броня: нет» плюс оговорка — настоящая защита: «огнестрел — минимальный урон».">
+                            <input class="cm-input" @bind="s.ArmorNote" />
+                        </Field>
+                        <Field Label="Потеря рассудка" Note="@SanityNote(s.SanityLoss)" class="sm:col-span-2">
+                            <input class="cm-input cm-dice" placeholder="1/1D8" @bind="s.SanityLoss" @bind:event="oninput" />
+                        </Field>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Атаки</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body grid gap-3">
+                        @for (var i = 0; i < s.Attacks.Count; i++)
+                        {
+                            var attack = s.Attacks[i];
+                            var index = i;
+                            <div class="flex flex-wrap items-end gap-2 border-t border-primary-100 pt-3 first:border-t-0 first:pt-0" @key="attack">
+                                <Field Label="Атака" class="min-w-40 flex-1"><input class="cm-input" @bind="attack.Name" /></Field>
+                                <Field Label="%" class="w-20"><input class="cm-input" type="number" min="0" @bind="attack.SkillValue" /></Field>
+                                <Field Label="Урон" class="w-32" Error="@DamageError(attack)"><input class="cm-input cm-dice" @bind="attack.Damage" @bind:event="oninput" /></Field>
+                                <Field Label="БкУ" class="w-40">
+                                    <select class="cm-input" @bind="attack.DamageBonusMode">
+                                        @foreach (var mode in Enum.GetValues<CreatureDamageBonusMode>())
+                                        {
+                                            <option value="@mode">@CatalogText.Of(mode)</option>
+                                        }
+                                    </select>
+                                </Field>
+                                <Field Label="Вид" class="w-36">
+                                    <select class="cm-input" @bind="attack.Kind">
+                                        @foreach (var kind in Enum.GetValues<CreatureAttackKind>())
+                                        {
+                                            <option value="@kind">@CatalogText.Of(kind)</option>
+                                        }
+                                    </select>
+                                </Field>
+                                <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить атаку: {attack.Name}")"
+                                        OnClick="() => s.Attacks.RemoveAt(index)" />
+                                <textarea class="cm-input w-full" rows="2" placeholder="Описание атаки (как в бестиарии)" aria-label="@($"Описание атаки: {attack.Name}")"
+                                          @bind="attack.Description"></textarea>
+                            </div>
+                        }
+                        <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Attacks.Add(new CreatureAttack())">Добавить атаку</Button></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Навыки и особые умения</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body cm-stack">
+                        <div class="grid gap-2">
+                            @for (var i = 0; i < s.Skills.Count; i++)
+                            {
+                                var skill = s.Skills[i];
+                                var index = i;
+                                <div class="flex flex-wrap items-center gap-2" @key="skill">
+                                    <input class="cm-input min-w-40 flex-1" aria-label="Навык" placeholder="Внимание" @bind="skill.Name" />
+                                    <input class="cm-input w-24" type="number" min="0" aria-label="Значение навыка, %" @bind="skill.Value" />
+                                    <input class="cm-input min-w-32 flex-1" aria-label="Оговорка навыка" placeholder="оговорка книги" @bind="skill.Note" />
+                                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить навык: {skill.Name}")" OnClick="() => s.Skills.RemoveAt(index)" />
+                                </div>
+                            }
+                            <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Skills.Add(new CreatureSkill())">Добавить навык</Button></div>
+                        </div>
+                        <div class="grid gap-2">
+                            @for (var i = 0; i < s.SpecialAbilities.Count; i++)
+                            {
+                                var ability = s.SpecialAbilities[i];
+                                var index = i;
+                                <div class="flex flex-wrap items-start gap-2" @key="ability">
+                                    <input class="cm-input w-full sm:w-56" aria-label="Умение" placeholder="Регенерация" @bind="ability.Name" />
+                                    <textarea class="cm-input min-w-48 flex-1" rows="2" aria-label="@($"Описание: {ability.Name}")" @bind="ability.Text"></textarea>
+                                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить умение: {ability.Name}")" OnClick="() => s.SpecialAbilities.RemoveAt(index)" />
+                                </div>
+                            }
+                            <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.SpecialAbilities.Add(new SpecialAbility())">Добавить особое умение</Button></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Иллюстрации</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body grid gap-3">
+                        <p class="cm-text-muted">Первая картинка — обложка плитки.</p>
+                        @for (var i = 0; i < c.Images.Count; i++)
+                        {
+                            var image = c.Images[i];
+                            var index = i;
+                            <div class="flex flex-wrap items-center gap-3" @key="image.FileId">
+                                <img src="@image.Url" alt="" class="h-20 w-16 rounded-md border border-primary-200 object-cover" />
+                                <input class="cm-input min-w-40 flex-1" placeholder="Подпись" aria-label="Подпись картинки" value="@image.Caption"
+                                       @onchange="e => c.Images[index] = image with { Caption = e.Value?.ToString() }" />
+                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-up" AriaLabel="Выше" Disabled="index == 0" OnClick="() => MoveUp(c, index)" />
+                                <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="Убрать картинку" OnClick="() => c.Images.RemoveAt(index)" />
+                            </div>
+                        }
+                        <ImagePicker OnChanged="file => AddImage(c, file)" />
+                    </div>
+                </div>
+            </section>
+
+            <div class="flex flex-wrap justify-end gap-2">
+                <Button Variant="ButtonVariant.Secondary" Href="@BackHref">Отмена</Button>
+                <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
+            </div>
+        }
+    </AsyncContent>
+</div>
+
+@code {
+    private CreatureDto? _creature;
+    private bool _saving;
+    private bool _stale;
+    private string? _error;
+
+    [Parameter] public Guid? Id { get; set; }
+
+    private string BackHref => Id is { } id ? $"bestiary?open={id}" : "bestiary";
+
+    private async Task<CreatureDto> LoadAsync(CancellationToken cancellationToken)
+    {
+        _error = null;
+        _stale = false;
+        if (Id is not { } id)
+        {
+            _creature = new CreatureDto();
+            return _creature;
+        }
+
+        // Своей ручки «одна тварь» нет: бестиарий маленький и браузер держит его по ETag.
+        var list = await Api.ListAsync(cancellationToken);
+        _creature = list.Items.FirstOrDefault(c => c.Id == id);
+        if (_creature is null)
+        {
+            _error = "Такого существа нет — возможно, его удалили.";
+        }
+
+        StateHasChanged(); // имя — в шапке, она вне AsyncContent
+
+        return _creature ?? new CreatureDto();
+    }
+
+    private static IEnumerable<(string Label, StatValue Stat)> Stats(Statblock s) =>
+        [("СИЛ", s.Str), ("ВЫН", s.Con), ("ТЕЛ", s.Siz), ("ЛВК", s.Dex), ("ИНТ", s.Int), ("МОЩ", s.Pow)];
+
+    private static void MoveUp(CreatureDto creature, int index)
+    {
+        (creature.Images[index - 1], creature.Images[index]) = (creature.Images[index], creature.Images[index - 1]);
+    }
+
+    private static void AddImage(CreatureDto creature, StoredFileDto? file)
+    {
+        if (file is not null && creature.Images.All(i => i.FileId != file.Id))
+        {
+            creature.Images.Add(new CreatureImageDto(file.Id, file.Url, null));
+        }
+    }
+
+    // Бой бросает только то, что понимает DiceFormula: «1д6» и «1D6+БкУ» — да, «см. описание» — нет.
+    private static string? DamageError(CreatureAttack attack) =>
+        attack.DamageBonusMode == CreatureDamageBonusMode.OnlyBonus || string.IsNullOrWhiteSpace(attack.Damage)
+        || Core.Dice.DiceFormula.Parse(attack.Damage).IsValid
+            ? null
+            : "Бой этот урон не бросит.";
+
+    // Предел привыкания (стр. 167) — максимум провальной части, тем же разбором, что и бросок.
+    private static string? SanityNote(string? sanityLoss) =>
+        string.IsNullOrWhiteSpace(sanityLoss)
+            ? "«успех/провал»: 0/1D6."
+            : $"Предел привыкания — {SanityLossFormula.MaxLoss(sanityLoss)} (стр. 167).";
+
+    private async Task SaveAsync()
+    {
+        if (_creature is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        _stale = false;
+        try
+        {
+            var saved = Id is null ? await Api.CreateAsync(_creature) : await Api.UpdateAsync(_creature);
+            Toasts.Success($"«{saved.Name}» сохранено.");
+            Navigation.NavigateTo($"bestiary?open={saved.Id}");
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+            _stale = ex.IsStale;
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RereadAsync()
+    {
+        _creature = await LoadAsync(CancellationToken.None);
+        _error = "Это свежая версия существа — ваши правки нужно внести заново.";
+    }
+}

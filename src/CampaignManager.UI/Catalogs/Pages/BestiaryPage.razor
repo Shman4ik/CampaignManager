@@ -1,0 +1,170 @@
+@page "/bestiary"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Бестиарий — вид «галерея» того же справочника. Плитка — обложка 4:5, имя поверх, под ней ПЗ /
+   броня / потеря рассудка; 13rem на колонку — пять в альбоме iPad, четыре в портрете; 20 тварей на
+   странице — ровно четыре ряда в обеих ориентациях. Касание плитки раскрывает полный статблок во всю
+   ширину сетки (dense подтягивает следующие плитки в дыру), раскрытая тварь одна и держится в адресе
+   (?open=). После раскрытия страница прокручивает к карточке; отступ под липкие шапку и фильтры даёт
+   scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается. *@
+<CatalogPage TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо"
+             Filters="Filters" SearchAlso="c => [c.Description]" PageSize="20" Open="Open"
+             New="() => new CreatureDto()" EditHref="EditHref">
+    <Body Context="view">
+        <div class="cr-grid">
+            @foreach (var creature in view.Page)
+            {
+                var image = creature.Images.FirstOrDefault();
+                @if (view.Open == creature.Id)
+                {
+                    <article id="@($"creature-{creature.Id}")" class="cm-card cr-open col-span-full" @key="creature.Id">
+                        <div class="cm-card-header flex-wrap gap-y-2">
+                            <button type="button" class="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left" aria-expanded="true"
+                                    @onclick="() => view.ToggleOpen(creature)">
+                                <i class="fa-solid fa-chevron-up text-sm text-primary-400" aria-hidden="true"></i>
+                                <span class="cm-title-serif truncate text-lg">@creature.Name</span>
+                                <Badge Tone="Tone.Info">@CatalogText.Of(creature.Type)</Badge>
+                            </button>
+                            <div class="flex shrink-0 flex-wrap gap-1.5">
+                                @if (view.CanEdit)
+                                {
+                                    <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" OnClick="() => view.Edit(creature)">Изменить</Button>
+                                    <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" OnClick="() => view.Delete(creature)">Удалить</Button>
+                                }
+                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-compress" OnClick="() => view.ToggleOpen(creature)">Свернуть</Button>
+                            </div>
+                        </div>
+                        <div class="cm-card-body gap-6 md:flex md:items-start">
+                            @if (creature.Images.Count > 0)
+                            {
+                                var shown = creature.Images[Math.Min(_imageIndex, creature.Images.Count - 1)];
+                                @* Остальные картинки — касанием миниатюры: наведения на iPad нет. Картинка не липкая —
+                                   пряталась бы под фильтрами. *@
+                                <figure class="cr-open-media mb-4 md:mb-0">
+                                    <img src="@shown.Url" alt="@(shown.Caption ?? creature.Name)" class="w-full rounded-md" />
+                                    @if (!string.IsNullOrWhiteSpace(shown.Caption))
+                                    {
+                                        <figcaption class="mt-2 text-center text-xs text-primary-500">@shown.Caption</figcaption>
+                                    }
+                                    @if (creature.Images.Count > 1)
+                                    {
+                                        <div class="mt-3 flex flex-wrap justify-center gap-2">
+                                            @for (var i = 0; i < creature.Images.Count; i++)
+                                            {
+                                                var index = i;
+                                                <button type="button" class="@Css.Join("h-14 w-14 overflow-hidden rounded-md border", index == _imageIndex ? "border-accent-500 ring-2 ring-accent-500/30" : "border-primary-200 opacity-70")"
+                                                        aria-label="@($"Картинка {index + 1}")" @onclick="() => _imageIndex = index">
+                                                    <img src="@creature.Images[index].Url" alt="" class="h-full w-full object-cover" loading="lazy" />
+                                                </button>
+                                            }
+                                        </div>
+                                    }
+                                </figure>
+                            }
+                            <div class="min-w-0 flex-1">
+                                <StatblockView Statblock="creature.Statblock" />
+                                <section class="mt-4 text-sm">
+                                    <h3 class="cm-section-title mb-1">Описание</h3>
+                                    <p class="cm-text-muted whitespace-pre-line">@(string.IsNullOrWhiteSpace(creature.Description) ? "Описания нет." : creature.Description)</p>
+                                    @if (creature.Source is not null)
+                                    {
+                                        <p class="cm-meta mt-2">Источник: @creature.Source</p>
+                                    }
+                                </section>
+                            </div>
+                        </div>
+                    </article>
+                }
+                else
+                {
+                    <div class="cm-card cr-tile overflow-hidden" @key="creature.Id">
+                        <button type="button" class="cr-tile-button" aria-expanded="false" aria-label="@($"{creature.Name}: раскрыть статблок")"
+                                @onclick="() => OpenAsync(view, creature)">
+                            <div class="cr-tile-media">
+                                @if (image is not null)
+                                {
+                                    <img src="@image.Url" alt="" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="cr-tile-placeholder"><i class="fa-solid fa-skull" aria-hidden="true"></i></div>
+                                }
+                                @if (creature.Images.Count > 1)
+                                {
+                                    <span class="cr-tile-count"><i class="fa-solid fa-images" aria-hidden="true"></i> @creature.Images.Count</span>
+                                }
+                                <div class="cr-tile-caption">
+                                    <span class="cr-tile-name">@creature.Name</span>
+                                    <span class="cr-tile-type">@CatalogText.Of(creature.Type)</span>
+                                </div>
+                            </div>
+                            <dl class="cr-tile-stats">
+                                <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
+                                <div><dt>Броня</dt><dd>@StatblockView.TileArmor(creature.Statblock)</dd></div>
+                                <div><dt>Рассудок</dt><dd>@(string.IsNullOrWhiteSpace(creature.Statblock.SanityLoss) ? "—" : creature.Statblock.SanityLoss)</dd></div>
+                            </dl>
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+    </Body>
+</CatalogPage>
+
+@code {
+    private static readonly IReadOnlyList<CatalogFilter<CreatureDto>> Filters =
+        [CatalogFilter<CreatureDto>.ForEnum<CreatureType>("type", "Все типы", CatalogText.Of, c => c.Type)];
+
+    private IJSObjectReference? _module;
+    private int _imageIndex;
+    private Guid? _revealed;
+
+    [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
+
+    private static string EditHref(CreatureDto? creature) =>
+        creature is null ? "bestiary/creatures/edit" : $"bestiary/creatures/edit/{creature.Id}";
+
+    private Task OpenAsync(CatalogView<CreatureDto> view, CreatureDto creature)
+    {
+        _imageIndex = 0;
+        return view.ToggleOpen(creature);
+    }
+
+    // Прокрутка — только в рендере, где раскрытая карточка уже есть: адрес меняется не сразу.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open is not { } open || open == _revealed)
+        {
+            return;
+        }
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Catalogs/Pages/BestiaryPage.razor.js");
+            if (await _module.InvokeAsync<bool>("reveal", $"creature-{open}"))
+            {
+                _revealed = open;
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

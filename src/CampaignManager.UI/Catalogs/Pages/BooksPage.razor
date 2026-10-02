@@ -1,0 +1,177 @@
+@page "/books"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+@inject ICatalogApi<SpellDto> SpellsApi
+
+@* Книги: Название · Язык · Автор · Рассудок · МКН · МКП · ЗМ · Оккульт. Колонок девять — таблица с xl
+   (замер v1: в ландшафте ровно по контейнеру). Фильтр категории убирает чужие колонки: у оккультных
+   книг МКН/МКП/ЗМ пусты всегда, у книг Мифов — «+Оккультизм»; метка категории у названия — только без
+   фильтра. Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка. *@
+<CatalogPage TItem="BookDto" Title="Книги" Icon="fa-book-open" AddLabel="Добавить книгу" Noun="книгу"
+             Filters="Filters" SearchAlso="b => b.AltNames.Append(b.Author)" TableFrom="TableBreakpoint.Xl"
+             New="() => new BookDto()" OnFormOpening="EnsureSpellsAsync" RowDetail="Detail" Form="Form">
+    <Columns Context="view">
+        <DataColumn TItem="BookDto" Title="Название" SortBy="b => b.Name" DefaultSort="false" HeaderClass="w-[26%]" CellClass="cm-clip" Context="b">
+            <span class="font-medium text-primary-800">@b.Name</span>
+            @if (!view.IsFixed("type"))
+            {
+                <Badge Tone="@(b.BookType == BookType.MythosBook ? Tone.Info : Tone.Stone)" class="ml-1.5 align-middle">@CatalogText.Short(b.BookType)</Badge>
+            }
+        </DataColumn>
+        <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[12%]" CellClass="cm-clip" Context="b">@b.Language</DataColumn>
+        <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[16%]" CellClass="cm-clip" Context="b">@b.Author</DataColumn>
+        <DataColumn TItem="BookDto" Title="Рассудок" CellClass="cm-dice whitespace-nowrap" Context="b">@b.SanityLoss</DataColumn>
+        @if (ShowMythos(view))
+        {
+            <DataColumn TItem="BookDto" Title="МКН" SortBy="b => b.MythosInitial" AlignEnd="true" Context="b">@Plus(b.MythosInitial)</DataColumn>
+            <DataColumn TItem="BookDto" Title="МКП" SortBy="b => b.MythosFull" AlignEnd="true" Context="b">@Plus(b.MythosFull)</DataColumn>
+            <DataColumn TItem="BookDto" Title="ЗМ" SortBy="b => b.MythosRating" AlignEnd="true" Context="b">@b.MythosRating</DataColumn>
+        }
+        @if (ShowOccultism(view))
+        {
+            <DataColumn TItem="BookDto" Title="Оккульт." SortBy="b => b.OccultismBonus" AlignEnd="true" Context="b">@Plus(b.OccultismBonus)</DataColumn>
+        }
+    </Columns>
+    <CardTemplate Context="b">
+        <p class="font-medium text-primary-800">@b.Name <Badge Tone="Tone.Stone" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge></p>
+        <p class="cm-meta">@string.Join(" · ", new[] { b.Language, b.Author }.Where(x => !string.IsNullOrEmpty(x)))</p>
+        <p class="mt-1 text-sm text-primary-600">
+            Рассудок @(b.SanityLoss ?? "—")
+            @if (b.BookType == BookType.MythosBook)
+            {
+                <text> · МКН @(Plus(b.MythosInitial) ?? "—") · МКП @(Plus(b.MythosFull) ?? "—") · ЗМ @(b.MythosRating?.ToString(System.Globalization.CultureInfo.CurrentCulture) ?? "—")</text>
+            }
+            else if (b.OccultismBonus is not null)
+            {
+                <text> · Оккультизм @Plus(b.OccultismBonus)</text>
+            }
+        </p>
+    </CardTemplate>
+</CatalogPage>
+
+@code {
+    private static readonly IReadOnlyList<CatalogFilter<BookDto>> Filters =
+        [CatalogFilter<BookDto>.ForEnum<BookType>("type", "Все книги", CatalogText.Of, b => b.BookType)];
+
+    private Dictionary<Guid, SpellDto> _spells = [];
+
+    protected override Task OnInitializedAsync() => EnsureSpellsAsync();
+
+    private async Task EnsureSpellsAsync()
+    {
+        if (_spells.Count > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _spells = (await SpellsApi.ListAsync()).Items.ToDictionary(s => s.Id);
+        }
+        catch (HttpRequestException)
+        {
+            // Без списка заклинаний книги показываются строками книги — как записано.
+        }
+    }
+
+    private static bool ShowMythos(CatalogView<BookDto> view) => view.Filters.GetValueOrDefault("type") != nameof(BookType.OccultBook);
+
+    private static bool ShowOccultism(CatalogView<BookDto> view) => view.Filters.GetValueOrDefault("type") != nameof(BookType.MythosBook);
+
+    private static string? Plus(int? value) => value is { } v ? $"+{v}" : null;
+
+    private RenderFragment<BookDto> Detail => b => __builder =>
+    {
+        <div class="flex flex-wrap items-start gap-4 text-sm">
+            @if (b.ImageUrl is not null)
+            {
+                <img src="@b.ImageUrl" alt="@b.Name" class="max-h-48 rounded-md" loading="lazy" />
+            }
+            <dl class="grid min-w-0 flex-1 gap-1">
+                @if (b.Year is not null)
+                {
+                    <div><dt class="cm-meta-label inline">Год, век: </dt><dd class="inline">@b.Year</dd></div>
+                }
+                @if (b.StudyWeeks is not null)
+                {
+                    <div><dt class="cm-meta-label inline">Полное изучение: </dt><dd class="inline">@b.StudyWeeks нед.</dd></div>
+                }
+                @if (b.AltNames.Count > 0)
+                {
+                    <div><dt class="cm-meta-label inline">Другие названия: </dt><dd class="inline">@string.Join(", ", b.AltNames)</dd></div>
+                }
+                @if (b.Spells.Count > 0)
+                {
+                    <div>
+                        <dt class="cm-meta-label inline">Заклинания: </dt>
+                        <dd class="inline">
+                            @for (var i = 0; i < b.Spells.Count; i++)
+                            {
+                                var spell = b.Spells[i];
+                                @(i > 0 ? ", " : "")
+                                @if (spell.SpellId is { } id && _spells.TryGetValue(id, out var linked))
+                                {
+                                    <a class="text-accent-700 underline" href="@($"spells?q={Uri.EscapeDataString(linked.Name)}")">@spell.RawName</a>
+                                }
+                                else
+                                {
+                                    <span>@spell.RawName</span>
+                                }
+                            }
+                        </dd>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(b.Description))
+                {
+                    <p class="mt-1 whitespace-pre-line text-primary-700">@b.Description</p>
+                }
+                @if (b.Source is not null)
+                {
+                    <p class="cm-meta">Источник: @b.Source</p>
+                }
+            </dl>
+        </div>
+    };
+
+    private RenderFragment<BookDto> Form => b => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field Label="Название" class="sm:col-span-2 lg:col-span-3"><input class="cm-input" @bind="b.Name" /></Field>
+            <Field Label="Категория">
+                <select class="cm-input" @bind="b.BookType">
+                    @foreach (var type in Enum.GetValues<BookType>())
+                    {
+                        <option value="@type">@CatalogText.Of(type)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Язык"><input class="cm-input" @bind="b.Language" /></Field>
+            <Field Label="Автор"><input class="cm-input" @bind="b.Author" /></Field>
+            <Field Label="Год, век"><input class="cm-input" placeholder="ок. 730 г. н. э." @bind="b.Year" /></Field>
+            <Field Label="Потеря рассудка"><input class="cm-input cm-dice" placeholder="1d10" @bind="b.SanityLoss" /></Field>
+            @if (b.BookType == BookType.MythosBook)
+            {
+                <Field Label="МКН" Note="Мифы за начальное чтение (стр. 171)."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosInitial" /></Field>
+                <Field Label="МКП" Note="Мифы за полное изучение."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosFull" /></Field>
+                <Field Label="ЗМ" Note="Значение Мифов книги."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosRating" /></Field>
+            }
+            else
+            {
+                <Field Label="Прибавка к Оккультизму"><input class="cm-input" type="number" min="0" max="99" @bind="b.OccultismBonus" /></Field>
+            }
+            <Field Label="Недель на изучение"><input class="cm-input" type="number" min="0" @bind="b.StudyWeeks" /></Field>
+            <Field Label="Другие названия" Group="true" class="sm:col-span-2 lg:col-span-4">
+                <StringListEditor Values="b.AltNames" ValuesChanged="v => b.AltNames = [.. v]" ItemLabel="Название" Placeholder="Как ещё называют книгу" />
+            </Field>
+            <Field Label="Возможные заклинания" Group="true" class="sm:col-span-2 lg:col-span-4"
+                   Note="Как записано в книге. Связь со справочником сервер находит сам по точному имени или другому названию; не нашлось — выберите руками.">
+                <BookSpellsEditor Spells="b.Spells" SpellsChanged="v => b.Spells = v" Catalog="_spells.Values" />
+            </Field>
+            <Field Label="Описание" class="sm:col-span-2 lg:col-span-4"><textarea class="cm-input" rows="4" @bind="b.Description"></textarea></Field>
+            <Field Label="Обложка" Group="true" class="sm:col-span-2">
+                <ImagePicker FileId="b.ImageFileId" Url="b.ImageUrl" OnChanged="file => { b.ImageFileId = file?.Id; b.ImageUrl = file?.Url; }" />
+            </Field>
+            <Field Label="Источник" Hint="(страница книги)" class="sm:col-span-2"><input class="cm-input" @bind="b.Source" /></Field>
+        </div>
+    };
+}

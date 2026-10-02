@@ -1,0 +1,137 @@
+@page "/occupations"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@inject ICatalogApi<SkillDto> SkillsApi
+
+@* Профессии — единственный справочник на карточках, а не таблицей: формула, Средства и до десятка
+   навыков чипами в строку таблицы не сжать. Профессий три десятка — без страниц. Кнопки карточки
+   подписаны: голые иконки — только в плотной таблице. Счётчик «навыков: N из 8» — проверка правила
+   книги (стр. 37), он же у Хранителя в форме. «С правилами» — синхронизация с сидом книги по коду. *@
+<CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию"
+             Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="0" Sync="true"
+             New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form" FormSize="ModalSize.ExtraLarge">
+    <Body Context="view">
+        <div class="cm-grid-cards">
+            @foreach (var occupation in view.Page)
+            {
+                var count = occupation.ProfessionalSkillCount;
+                <article class="cm-card flex flex-col" @key="occupation.Id">
+                    <div class="cm-card-header flex-wrap gap-y-1">
+                        <h2 class="cm-card-title min-w-0 flex-1">@occupation.Name</h2>
+                        @if (occupation.IsLovecraftian)
+                        {
+                            <Badge Tone="Tone.Info">Лавкрафт</Badge>
+                        }
+                        @if (view.ShowEra)
+                        {
+                            <EraBadges Values="occupation.Eras" />
+                        }
+                    </div>
+                    <div class="cm-card-body flex-1 text-sm">
+                        <p class="cm-meta mb-2">
+                            <span><span class="cm-meta-label">Очки:</span> @CatalogText.Of(occupation.SkillPointsFormula)</span>
+                            <span><span class="cm-meta-label">Средства:</span> @occupation.CreditRatingMin–@occupation.CreditRatingMax</span>
+                        </p>
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach (var slot in occupation.Slots)
+                            {
+                                @* Длинный выбор («4 из: …») переносится внутри чипа — иначе на телефоне страница уезжает вбок. *@
+                                <Badge Tone="@(slot.Kind is OccupationSlotKind.Skill or OccupationSlotKind.Specialization ? Tone.Neutral : Tone.Stone)"
+                                       class="max-w-full whitespace-normal">@SlotLabel(slot)</Badge>
+                            }
+                        </div>
+                        @if (count != OccupationRules.RequiredSkillCount)
+                        {
+                            <Alert Tone="Tone.Warning" Small="true" class="mb-0 mt-2">Навыков @count из @OccupationRules.RequiredSkillCount — по книге ровно восемь плюс Средства (стр. 37).</Alert>
+                        }
+                    </div>
+                    @if (view.CanEdit)
+                    {
+                        <div class="cm-card-footer flex-wrap justify-end">
+                            <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" OnClick="() => view.Edit(occupation)">Изменить</Button>
+                            <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" OnClick="() => view.Delete(occupation)">Удалить</Button>
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    </Body>
+</CatalogPage>
+
+@code {
+    private static readonly IReadOnlyList<CatalogFilter<OccupationDto>> Filters =
+        [CatalogFilter<OccupationDto>.ForEnum<SkillPointsFormula>("formula", "Любые очки навыков", CatalogText.Of, o => o.SkillPointsFormula)];
+
+    private static readonly IReadOnlyList<CatalogToggle<OccupationDto>> Toggles =
+        [new("lovecraft", "Лавкрафтовские", o => o.IsLovecraftian)];
+
+    private IReadOnlyList<SkillDto> _skills = [];
+
+    private async Task EnsureSkillsAsync()
+    {
+        if (_skills.Count > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _skills = [.. (await SkillsApi.ListAsync()).Items];
+        }
+        catch (HttpRequestException)
+        {
+            // Без связи редактор слотов пуст; сохранить всё равно не выйдет — скажет сервер.
+        }
+    }
+
+    private static OccupationDto NewOccupation() => new()
+    {
+        CreditRatingMin = 9,
+        CreditRatingMax = 40,
+        Slots = [.. Enumerable.Range(0, 8).Select(_ => new OccupationSlotDto { Kind = OccupationSlotKind.Free })],
+    };
+
+    private static IEnumerable<string?> SlotNames(OccupationDto occupation) =>
+        occupation.Slots.Select(s => s.SkillName).Concat(occupation.Slots.SelectMany(s => s.OptionNames));
+
+    /// <summary>Чип слота словами книги: «Стрельба (любая)», «2 из: Лазание, Плавание».</summary>
+    private static string SlotLabel(OccupationSlotDto slot) => slot.Kind switch
+    {
+        OccupationSlotKind.Skill => slot.SkillName ?? "?",
+        OccupationSlotKind.Specialization => $"{slot.SkillName} ({slot.Specialization})",
+        OccupationSlotKind.AnySpecialization => $"{slot.SkillName} (любая)",
+        OccupationSlotKind.Choice => $"{slot.ChooseCount} из: {string.Join(", ", slot.OptionNames)}",
+        OccupationSlotKind.Social => "социальный навык",
+        _ => "любой навык",
+    };
+
+    private RenderFragment<OccupationDto> Form => o => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="o.Name" /></Field>
+            <Field Label="Очки навыков" class="sm:col-span-2" Note="Если формула даёт выбор, берётся выбранная характеристика (стр. 38–39).">
+                <select class="cm-input" @bind="o.SkillPointsFormula">
+                    @foreach (var formula in Enum.GetValues<SkillPointsFormula>())
+                    {
+                        <option value="@formula">@CatalogText.Of(formula)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Средства от"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMin" /></Field>
+            <Field Label="Средства до"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMax" /></Field>
+            <Field Label="Особенности" Group="true">
+                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="o.IsLovecraftian" /><span>Лавкрафтовская</span></label>
+            </Field>
+            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="o.Source" /></Field>
+            <div class="sm:col-span-2 lg:col-span-4"><EraPicker @bind-Values="o.Eras" /></div>
+            <Field Label="Навыки профессии" Group="true" class="sm:col-span-2 lg:col-span-4"
+                   Note="Ровно восемь профессиональных навыков; Средства — не слот, их задаёт диапазон.">
+                <OccupationSlotsEditor Slots="o.Slots" SlotsChanged="v => o.Slots = v" Skills="_skills" />
+            </Field>
+            <Field Label="Теги" Group="true" class="sm:col-span-2 lg:col-span-4" Note="Для взвешенного выбора навыков в случайном черновике сыщика.">
+                <StringListEditor Values="o.Tags" ValuesChanged="v => o.Tags = [.. v]" ItemLabel="Тег" Placeholder="Academic, Combat…" />
+            </Field>
+        </div>
+    };
+}

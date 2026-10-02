@@ -1,0 +1,121 @@
+@typeparam TItem where TItem : CatalogItemDto
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.UI.Platform
+@using CampaignManager.Contracts.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject ICatalogApi<TItem> Api
+@inject ToastService Toasts
+
+@* Импорт файла обмена — одно окно на все справочники (в v1 модалки импорта и экспорта повторялись
+   у каждого каталога на 66–95 строк из ~100). Файл уходит на сервер как есть; сначала пробный прогон
+   с отчётом, потом запись. Ключ записи — код, без него — имя без учёта регистра. *@
+<Modal Open="Open" Title="@Title" Size="ModalSize.Large" OnClose="CloseAsync">
+    <ChildContent>
+        <div class="grid gap-4">
+            <p class="cm-text-muted">
+                Файл — тот, что даёт «Экспорт» этого справочника (<span class="font-mono">{ "catalog": …, "items": [ … ] }</span>).
+                Запись ищется по коду, без кода — по названию без учёта регистра.
+            </p>
+            <Field Label="Файл JSON">
+                <InputFile class="cm-input" accept=".json,application/json" OnChange="PickAsync" />
+            </Field>
+            <label class="flex min-h-9 items-center gap-2">
+                <input type="checkbox" class="cm-checkbox" checked="@_overwrite" @onchange="e => { _overwrite = e.Value is true; _report = null; }" />
+                <span>Перезаписывать записи, которые уже есть</span>
+            </label>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true">@_error</Alert>
+            }
+            @if (_report is not null)
+            {
+                <CatalogReportView Report="_report" />
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">@(_done ? "Закрыть" : "Отмена")</Button>
+        @if (!_done)
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-vial" Busy="_busy" Disabled="_file is null" OnClick="() => RunAsync(dryRun: true)">Проверить</Button>
+            <Button Icon="fa-file-import" Busy="_busy" Disabled="_file is null" OnClick="() => RunAsync(dryRun: false)">Импортировать</Button>
+        }
+    </Footer>
+</Modal>
+
+@code {
+    /// <summary>Файл обмена больше справочника не бывает: бестиарий v1 со статблоками — ~0,5 МБ.</summary>
+    private const long MaxFileBytes = 10 * 1024 * 1024;
+
+    private byte[]? _file;
+    private bool _overwrite;
+    private bool _busy;
+    private bool _done;
+    private string? _error;
+    private CatalogImportReport? _report;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Запись прошла — страница перечитывает список.</summary>
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    private async Task PickAsync(InputFileChangeEventArgs e)
+    {
+        _report = null;
+        _error = null;
+        _file = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _file = buffer.ToArray();
+        }
+        catch (IOException)
+        {
+            _error = $"Файл больше {MaxFileBytes / (1024 * 1024)} МБ.";
+        }
+    }
+
+    private async Task RunAsync(bool dryRun)
+    {
+        if (_file is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            _report = await Api.ImportAsync(new MemoryStream(_file), _overwrite, dryRun);
+            if (!dryRun)
+            {
+                _done = true;
+                Toasts.Success($"Импорт: добавлено {_report.Created}, обновлено {_report.Updated}.");
+                await OnImported.InvokeAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _file = null;
+        _report = null;
+        _error = null;
+        _done = false;
+        await OnClose.InvokeAsync();
+    }
+}

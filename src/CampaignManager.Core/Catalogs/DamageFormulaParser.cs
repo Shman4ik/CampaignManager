@@ -11,7 +11,8 @@ namespace CampaignManager.Core.Catalogs;
 ///   <item>бонус к урону: 1d4+БкУ, 1d6+БП, 1d3+1/2 БкУ;</item>
 ///   <item>дробовики по дальностям: 4d6/2d6/1d6;</item>
 ///   <item>взрывчатка с радиусом: 4d10 / 3 метра;</item>
-///   <item>эффекты: 2d6+горение, Шок.</item>
+///   <item>эффекты при костях: 2d6+горение. Эффект без костей («Шок») формулой не считается и
+///   остаётся текстом (rules-findings F-P13).</item>
 /// </list>
 /// Всё, что понимает бросок (<see cref="DiceFormula"/>), понимает и этот разбор — в v1 голое «5» и
 /// «1 d 6» бросок понимал, а разборщик нет (rules-findings F-P12).
@@ -137,7 +138,6 @@ public static partial class DamageFormulaParser
                 start--;
             expression.Effects.Add(effect.ToLowerInvariant());
             working = working.Remove(start, idx - start + effect.Length);
-            hasAnyComponent = true;
         }
 
         working = working.Trim().TrimEnd('+', '-', ' ').Trim();
@@ -168,6 +168,10 @@ public static partial class DamageFormulaParser
 
         if (hasAnyComponent)
             return true;
+
+        // Эффект без костей («Шок») — не формула урона: строка остаётся текстом (F-P13).
+        if (expression.Effects.Count > 0)
+            return false;
 
         // Голое число и кости с пробелами внутри («1 d 6») — как у броска (F-P12).
         var formula = DiceFormula.Parse(working);

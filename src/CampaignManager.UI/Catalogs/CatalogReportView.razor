@@ -1,0 +1,67 @@
+@using CampaignManager.Contracts.Catalogs
+
+@* Отчёт импорта или синхронизации: счётчики, предупреждения по правилам и строки с итогом.
+   Стоит внутри окна — своей карточки не рисует. *@
+<div class="grid gap-3">
+    <Alert Tone="@(Report.Failed > 0 ? Tone.Warning : Tone.Success)" ShowIcon="true" class="mb-0"
+           Title="@(Report.DryRun ? "Пробный прогон — ничего не записано" : "Готово")">
+        Добавить: @Report.Created · обновить: @Report.Updated · пропустить: @Report.Skipped@(Report.Failed > 0 ? $" · ошибок: {Report.Failed}" : "")
+    </Alert>
+
+    @if (Report.Warnings.Count > 0)
+    {
+        <Alert Tone="Tone.Warning" Small="true" Title="Сохранится, но в игре сработает не так, как ждёшь" class="mb-0">
+            <ul class="list-disc pl-5">
+                @foreach (var warning in Report.Warnings.Take(MaxLines))
+                {
+                    <li>@warning</li>
+                }
+            </ul>
+        </Alert>
+    }
+
+    @if (Report.Lines.Count > 0)
+    {
+        <div class="max-h-72 overflow-y-auto rounded-md border border-primary-200">
+            @foreach (var line in Report.Lines.Take(MaxLines))
+            {
+                <div class="flex items-baseline gap-3 border-t border-primary-100 px-3 py-1.5 text-sm first:border-t-0">
+                    <Badge Tone="@ToneOf(line.Outcome)">@Label(line.Outcome)</Badge>
+                    <span class="min-w-0 flex-1">
+                        <span class="font-medium text-primary-800">@line.Name</span>
+                        @if (line.Message is not null)
+                        {
+                            <span class="cm-text-muted"> — @line.Message</span>
+                        }
+                    </span>
+                </div>
+            }
+            @if (Report.Lines.Count > MaxLines)
+            {
+                <p class="px-3 py-1.5 text-sm text-primary-500">…и ещё @(Report.Lines.Count - MaxLines)</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const int MaxLines = 400;
+
+    [Parameter, EditorRequired] public CatalogImportReport Report { get; set; } = null!;
+
+    private static Tone ToneOf(CatalogImportOutcome outcome) => outcome switch
+    {
+        CatalogImportOutcome.Created => Tone.Success,
+        CatalogImportOutcome.Updated => Tone.Info,
+        CatalogImportOutcome.Failed => Tone.Error,
+        _ => Tone.Neutral,
+    };
+
+    private static string Label(CatalogImportOutcome outcome) => outcome switch
+    {
+        CatalogImportOutcome.Created => "новая",
+        CatalogImportOutcome.Updated => "обновлена",
+        CatalogImportOutcome.Failed => "ошибка",
+        _ => "пропущена",
+    };
+}

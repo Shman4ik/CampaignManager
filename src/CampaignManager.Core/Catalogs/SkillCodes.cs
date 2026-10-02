@@ -37,7 +37,7 @@ public static class SkillCodes
     /// 2026-10-02). Порядок — как в справочнике по категориям; новый книжный навык — новая строка здесь, код
     /// однажды выданный не меняется. Варианты написания — со справочника и с листов v1 (перенос T1.3).
     /// </summary>
-    private static readonly CatalogCodeTable Table = new(Prefix,
+    public static CatalogCodeTable Table { get; } = new(Prefix,
     [
         // Действия
         new("skill.ride", "Верховая езда"),

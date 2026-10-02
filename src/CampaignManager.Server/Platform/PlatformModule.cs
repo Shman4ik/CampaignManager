@@ -25,6 +25,7 @@ public static class PlatformModule
         services.ConfigureHttpJsonOptions(options =>
             options.SerializerOptions.TypeInfoResolverChain.Insert(0, ContractsJsonContext.Default));
         services.AddProblemDetails();
+        services.AddExceptionHandler<ApiProblemExceptionHandler>();
         services.AddHealthChecks();
         services.AddOpenApi();
 

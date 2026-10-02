@@ -1,0 +1,122 @@
+@page "/skills"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+
+@* Навыки: Название · Категория · База. В v1 — карточки по шесть на страницу и отдельные страницы
+   деталей и правки; здесь таблица, как у остальных справочников, раскрытая строка — детали навыка
+   (тот же SkillDetails, что в справке листа), правка — окно. Раскрытый навык держится в адресе
+   (?open=): на него можно дать ссылку, старые /skills/detail/{id} ведут сюда же. *@
+<CatalogPage TItem="SkillDto" Title="Навыки" Icon="fa-brain" AddLabel="Добавить навык" Noun="навык"
+             Filters="Filters" Toggles="Toggles" ErasOf="s => s.Eras" SearchAlso="s => [ParentName(s)]" TableFrom="TableBreakpoint.Md"
+             New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
+    <Columns Context="view">
+        <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[45%]" Context="s">
+            <span class="font-medium text-primary-800">@s.Name</span>
+            @if (s.IsUncommon)
+            {
+                <Badge Tone="Tone.Warning" class="ml-1.5 align-middle">необычный</Badge>
+            }
+            @if (view.ShowEra)
+            {
+                <EraBadges Values="s.Eras" />
+            }
+        </DataColumn>
+        @if (!view.IsFixed("category"))
+        {
+            <DataColumn TItem="SkillDto" Title="Категория" SortBy="s => CatalogText.Of(s.Category)" Context="s">@CatalogText.Of(s.Category)</DataColumn>
+        }
+        <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" AlignEnd="true" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
+    </Columns>
+    <CardTemplate Context="s">
+        <p class="font-medium text-primary-800">@s.Name</p>
+        <p class="cm-meta">@CatalogText.Of(s.Category) · база @SkillDetails.BaseOf(s)</p>
+    </CardTemplate>
+</CatalogPage>
+
+@code {
+    private static readonly IReadOnlyList<CatalogFilter<SkillDto>> Filters =
+        [CatalogFilter<SkillDto>.ForEnum<SkillCategory>("category", "Все категории", CatalogText.Of, s => s.Category)];
+
+    private static readonly IReadOnlyList<CatalogToggle<SkillDto>> Toggles =
+    [
+        new("uncommon", "Необычные", s => s.IsUncommon),
+        new("specializations", "Специализации", s => s.ParentId is not null),
+    ];
+
+    private IReadOnlyList<SkillDto> _skills = [];
+
+    [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
+
+    private void Loaded(IReadOnlyList<SkillDto> skills) => _skills = [.. skills];
+
+    private string? ParentName(SkillDto skill) =>
+        skill.ParentId is { } id ? _skills.FirstOrDefault(s => s.Id == id)?.Name : null;
+
+    private RenderFragment<SkillDto> Detail => s => __builder =>
+    {
+        <SkillDetails Skill="s" Catalog="_skills" />
+    };
+
+    // Родителем может быть только навык без родителя: у специализаций одна ступень.
+    private IEnumerable<SkillDto> Parents(SkillDto skill) =>
+        _skills.Where(s => s.ParentId is null && s.Id != skill.Id).OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase);
+
+    private RenderFragment<SkillDto> Form => s => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" class="sm:col-span-2" Note="Специализация пишется с родителем в скобках: «Наука (химия)».">
+                <input class="cm-input" @bind="s.Name" />
+            </Field>
+            <Field Label="Специализация навыка" Hint="(необязательно)">
+                <select class="cm-input" @bind="s.ParentId">
+                    <option value="">— самостоятельный навык —</option>
+                    @foreach (var parent in Parents(s))
+                    {
+                        <option value="@parent.Id">@parent.Name</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Категория">
+                <select class="cm-input" @bind="s.Category">
+                    @foreach (var category in Enum.GetValues<SkillCategory>())
+                    {
+                        <option value="@category">@CatalogText.Of(category)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="База" Hint="(%)" Note="Уклонение — ½ ЛВК (стр. 57), родной язык — ОБР (стр. 77).">
+                <div class="flex gap-2">
+                    <select class="cm-input w-36 shrink-0" aria-label="Формула базы" value="@(s.BaseFormula ?? "")"
+                            @onchange="e => s.BaseFormula = e.Value is string { Length: > 0 } formula ? formula : null">
+                        <option value="">число</option>
+                        <option value="DEX/2">½ ЛВК</option>
+                        <option value="EDU">ОБР</option>
+                    </select>
+                    @if (s.BaseFormula is null)
+                    {
+                        <input class="cm-input" type="number" min="0" max="99" aria-label="База, %" @bind="s.BaseValue" />
+                    }
+                </div>
+            </Field>
+            <Field Label="Особенности" Group="true">
+                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="s.IsUncommon" /><span>Необычный навык</span></label>
+                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="s.CanRetry" /><span>Проверку можно повторить</span></label>
+            </Field>
+            <div class="sm:col-span-2"><EraPicker @bind-Values="s.Eras" /></div>
+            <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="5" @bind="s.Description"></textarea></Field>
+            <Field Label="Примеры применения" Group="true" class="sm:col-span-2">
+                <StringListEditor Values="s.UsageExamples" ValuesChanged="v => s.UsageExamples = [.. v]" ItemLabel="Пример" />
+            </Field>
+            <Field Label="Последствия провала" Group="true" class="sm:col-span-2">
+                <StringListEditor Values="s.FailureConsequences" ValuesChanged="v => s.FailureConsequences = [.. v]" ItemLabel="Последствие" />
+            </Field>
+            <Field Label="Встречные навыки" Group="true">
+                <StringListEditor Values="s.OpposingSkills" ValuesChanged="v => s.OpposingSkills = [.. v]" ItemLabel="Навык" />
+            </Field>
+            <div class="grid content-start gap-4">
+                <Field Label="Время" Hint="(необязательно)"><input class="cm-input" placeholder="1 час" @bind="s.TimeRequired" /></Field>
+                <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
+            </div>
+        </div>
+    };
+}
