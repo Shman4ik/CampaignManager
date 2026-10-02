@@ -38,7 +38,8 @@
   `IClaimsTransformation` v1, смена роли видна со следующего запроса.
 - **Data Protection** — ключи в `cm.data_protection_keys`, имя приложения `CampaignManager`, как в
   v1: T1.3 копирует ключи, и куки входа переживают переключение. На localhost v1 и v2 делят куку
-  (один хост и порт), но ключи у них пока разные — кука v1 для v2 просто анонимна.
+  (один хост и порт), но ключи у них пока разные — кука v1 для v2 просто анонимна. Исключение —
+  v2 в Development с известным портом: его кука `.CampaignManager.Auth.8080` (см. «Порт в именах кук»).
 
 ## Тестовый вход (только Development)
 
@@ -66,6 +67,29 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
   по-прежнему роняет старт.
 - Белый список (`Authorization:AllowedEmails/AllowedDomains`), если он задан, тестовых пользователей
   тоже не пустит (`authStatus=accessDenied`) — добавить туда `cm.test`.
+
+### Порт в именах кук (только Development)
+
+Агенты запускают несколько серверов на `localhost` (8083, 8084, …), а куки браузер делит по хосту, не
+по порту: без мер вход на одном порту перезаписывал куку соседа, сессии выбивали друг друга, а в логе
+сыпались ошибки расшифровки (кука чужого сервера, чужие ключи Data Protection).
+
+- **Все имена — в `AppCookies`** (синглтон): вход, `LastLogin`, метка автовхода, префиксы корреляции
+  и nonce OIDC; имя antiforgery задаёт ASP.NET Core (с хешем приложения), к нему порт дописывает
+  `PostConfigure<AntiforgeryOptions>`. В Development имя — `.CampaignManager.Auth.8083`, префиксы —
+  `.CampaignManager.Nonce.8083.`, `.CampaignManager.Correlation.8083.` (хвост обработчика не сливается
+  с портом). Новая кука приложения — имя только через `AppCookies`, не строкой.
+- **Вне Development `AppCookies.Port = null` и имена прежние**, даже если адрес задан: другое имя куки
+  входа на проде и beta выбило бы всех. Держит `AppCookiesTests` (Testing/Production/Beta — без
+  суффикса, Development на двух портах — разные имена у всех кук) и
+  `DevLoginTests.Dev_logins_on_two_ports_do_not_overwrite_each_other` (обе сессии живы при общей «банке» кук).
+- **Порт — из конфигурации адресов** при сборке сервисов (`AppCookies.FindPort`): `urls` (`--urls`,
+  `ASPNETCORE_URLS`, `applicationUrl` из `launchSettings.json`; из нескольких — первый https), затем
+  `Kestrel:Endpoints:*:Url`, затем `https_ports`/`http_ports`. Не из `IServerAddressesFeature`:
+  antiforgery читает свои опции при сборке конвейера, ещё до старта Kestrel, — реальных адресов в фиче
+  тогда нет, только скопированные из той же конфигурации. И не из запроса: имена кук — опции, одни на
+  приложение, а за прокси порт в `Host` не тот, что слушает сервер. Порт 0 или ни одного адреса — имена
+  без суффикса; сервер пишет выбранное имя (или предупреждение) в лог при старте.
 
 ## JWT для мобильного приложения
 

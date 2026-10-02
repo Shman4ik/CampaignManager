@@ -27,11 +27,12 @@ public sealed record RememberedLogin(string Method, string Email);
 /// </summary>
 public static class AutoLogin
 {
-    public const string RememberedCookie = ".CampaignManager.LastLogin";
+    /// <summary>Имя без порта; в Development к нему дописан порт сервера (<see cref="AppCookies"/>).</summary>
+    public const string RememberedCookie = AppCookies.LastLogin;
 
     // Одна попытка на сессию браузера: без метки неудачный автовход — отказ, отмена или брошенная
     // страница Google — повторялся бы на каждой загрузке.
-    public const string AttemptCookie = ".CampaignManager.AutoLogin";
+    public const string AttemptCookie = AppCookies.AutoLoginAttempt;
 
     // sub учёток с паролем — auth0|…, у Google — google-oauth2|…, а у кук, выданных ещё прямым
     // входом через Google, — голый id Google.
@@ -52,9 +53,9 @@ public static class AutoLogin
                 Remember(context);
             }
             else if (GetRemembered(context.Request) is { Method: LoginMethods.Google }
-                     && !context.Request.Cookies.ContainsKey(AttemptCookie))
+                     && !context.Request.Cookies.ContainsKey(AppCookies.For(context).AutoLoginAttemptName))
             {
-                context.Response.Cookies.Append(AttemptCookie, "1", CreateCookieOptions(expires: null));
+                context.Response.Cookies.Append(AppCookies.For(context).AutoLoginAttemptName, "1", CreateCookieOptions(expires: null));
 
                 var returnUrl = $"{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}";
                 await context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
@@ -67,7 +68,7 @@ public static class AutoLogin
 
     public static RememberedLogin? GetRemembered(HttpRequest request)
     {
-        var value = request.Cookies[RememberedCookie];
+        var value = request.Cookies[AppCookies.For(request.HttpContext).LastLoginName];
         var separator = value?.IndexOf(':') ?? -1;
         if (value is null || separator <= 0 || separator == value.Length - 1)
         {
@@ -81,7 +82,7 @@ public static class AutoLogin
 
     /// <summary>Выход — это «забудь меня»: после него браузер сам больше не входит.</summary>
     public static void Forget(HttpContext context) =>
-        context.Response.Cookies.Delete(RememberedCookie, CreateCookieOptions(expires: null));
+        context.Response.Cookies.Delete(AppCookies.For(context).LastLoginName, CreateCookieOptions(expires: null));
 
     /// <summary><c>google</c> / <c>email</c> без учёта регистра; прочее — <c>null</c>.</summary>
     public static string? ParseMethod(string? value) => value?.Trim().ToLowerInvariant() switch
@@ -114,6 +115,7 @@ public static class AutoLogin
     private static void Remember(HttpContext context)
     {
         var user = context.User;
+        var cookies = AppCookies.For(context);
         // Тестовая сессия Development — не способ входа этого браузера: запомни её, и после выхода
         // автовход повёл бы в Google с почтой dev-…@cm.test.
         if (user.FindFirst(ClaimTypes.Email)?.Value is { } email && !DevLogin.IsDevSession(user))
@@ -122,15 +124,15 @@ public static class AutoLogin
                 .StartsWith(EmailSubjectPrefix, StringComparison.Ordinal) == true;
             var value = $"{(isEmailAccount ? LoginMethods.Email : LoginMethods.Google)}:{email}";
 
-            if (context.Request.Cookies[RememberedCookie] != value)
+            if (context.Request.Cookies[cookies.LastLoginName] != value)
             {
-                context.Response.Cookies.Append(RememberedCookie, value, CreateCookieOptions(DateTimeOffset.UtcNow.AddYears(1)));
+                context.Response.Cookies.Append(cookies.LastLoginName, value, CreateCookieOptions(DateTimeOffset.UtcNow.AddYears(1)));
             }
         }
 
-        if (context.Request.Cookies.ContainsKey(AttemptCookie))
+        if (context.Request.Cookies.ContainsKey(cookies.AutoLoginAttemptName))
         {
-            context.Response.Cookies.Delete(AttemptCookie, CreateCookieOptions(expires: null));
+            context.Response.Cookies.Delete(cookies.AutoLoginAttemptName, CreateCookieOptions(expires: null));
         }
     }
 
