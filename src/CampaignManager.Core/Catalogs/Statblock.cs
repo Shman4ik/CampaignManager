@@ -118,6 +118,9 @@ public sealed record CreatureAttack : DocumentPart
     public CreatureAttackKind Kind { get; set; }
 
     public CreatureDamageBonusMode DamageBonusMode { get; set; }
+
+    /// <summary>Как атака выглядит и что делает — текст бестиария (у всех 153 атак v1 он есть).</summary>
+    public string? Description { get; set; }
 }
 
 public sealed record CreatureSkill : DocumentPart
@@ -127,6 +130,9 @@ public sealed record CreatureSkill : DocumentPart
     public string Name { get; set; } = "";
 
     public int Value { get; set; }
+
+    /// <summary>Оговорка книги к навыку: «только в воде», «на своём языке».</summary>
+    public string? Note { get; set; }
 }
 
 public sealed record SpecialAbility : DocumentPart

@@ -32,8 +32,10 @@ public static class SkillCodes
     public static IReadOnlyList<string> Social { get; } = [Intimidate, FastTalk, Charm, Persuade];
 
     /// <summary>
-    /// Книжные навыки: код → имя в справочнике (93 навыка справочника v1). Порядок — как в справочнике
-    /// по категориям; новый книжный навык — новая строка здесь, код однажды выданный не меняется.
+    /// Книжные навыки: код → имя в справочнике (93 навыка справочника v1 без трёх только современной эпохи —
+    /// «Ближний бой (бензопила)», «Работа с компьютером», «Электроника»: современную эпоху владелец убрал
+    /// 2026-10-02). Порядок — как в справочнике по категориям; новый книжный навык — новая строка здесь, код
+    /// однажды выданный не меняется. Варианты написания — со справочника и с листов v1 (перенос T1.3).
     /// </summary>
     private static readonly CatalogCodeTable Table = new(Prefix,
     [
@@ -62,7 +64,6 @@ public static class SkillCodes
 
         // Сражение (общее)
         new(Fighting, "Ближний бой"),
-        new("skill.fighting.chainsaw", "Ближний бой (бензопила)"),
         new("skill.fighting.brawl", "Ближний бой (драка)"),
         new("skill.fighting.spear", "Ближний бой (копьё)"),
         new("skill.fighting.sword", "Ближний бой (меч)"),
@@ -76,13 +77,13 @@ public static class SkillCodes
         // Лечение
         new("skill.hypnosis", "Гипноз"),
         new("skill.medicine", "Медицина"),
-        new("skill.science.pharmacy", "Наука (фармакология)"),
+        new("skill.science.pharmacy", "Наука (фармакология)", ["Наука (фармацевтика)", "Наука фармакология"]),
         new("skill.first-aid", "Первая помощь"),
         new("skill.psychoanalysis", "Психоанализ"),
 
         // Сбор информации
         new("skill.spot-hidden", "Внимание"),
-        new("skill.science.forensics", "Наука (криминалистика)"),
+        new("skill.science.forensics", "Наука (криминалистика)", ["Наука судмедэксперт"]),
         new("skill.library-use", "Работа в библиотеке"),
         new("skill.listen", "Слух"),
 
@@ -118,11 +119,9 @@ public static class SkillCodes
         new("skill.sleight-of-hand", "Ловкость рук"),
         new("skill.mechanical-repair", "Механика"),
         new("skill.navigate", "Ориентирование"),
-        new("skill.computer-use", "Работа с компьютером"),
         new("skill.stealth", "Скрытность"),
         new("skill.track", "Чтение следов"),
         new("skill.electrical-repair", "Электрика"),
-        new("skill.electronics", "Электроника"),
 
         // Социальные
         new(Intimidate, "Запугивание"),
@@ -139,9 +138,9 @@ public static class SkillCodes
         // Специальные
         new("skill.art-craft", "Искусство/ремесло"),
         new("skill.art-craft.acting", "Искусство/ремесло (актёрская игра)"),
-        new("skill.art-craft.fine-art", "Искусство/ремесло (изобразительное искусство)"),
+        new("skill.art-craft.fine-art", "Искусство/ремесло (изобразительное искусство)", ["Рисование"]), // спорно: «Рисование» с листа v1
         new("skill.art-craft.forgery", "Искусство/ремесло (подделка)"),
-        new("skill.art-craft.photography", "Искусство/ремесло (фотография)"),
+        new("skill.art-craft.photography", "Искусство/ремесло (фотография)", ["Фотография", "Фотографирование"]),
         new(Mythos, "Мифы Ктулху"),
         new("skill.animal-handling", "Обращение с животными"),
         new(CreditRating, "Средства"),

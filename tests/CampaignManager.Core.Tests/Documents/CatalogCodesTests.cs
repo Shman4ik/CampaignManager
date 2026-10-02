@@ -12,11 +12,12 @@ public sealed partial class CatalogCodesTests
 {
     public static TheoryData<string, int> Tables => new()
     {
-        { OccupationCodes.Prefix, 31 },
-        { WeaponCodes.Prefix, 108 },
+        // Современная эпоха убрана владельцем 2026-10-02: её записей в таблицах нет
+        { OccupationCodes.Prefix, 30 }, // 31 минус «Хакер»
+        { WeaponCodes.Prefix, 69 }, // 108 минус 39 только современных (с ними «РПГ*»)
         { SpellCodes.Prefix, 92 },
         { BookCodes.Prefix, 106 },
-        { ItemCodes.Prefix, 310 }, // 317 минус 4 реквизита сценариев и 3 повтора под другим именем
+        { ItemCodes.Prefix, 257 }, // 317 минус 4 реквизита сценария, 3 повтора и 53 несверенных современных
         { CreatureCodes.Prefix, 86 }, // 87 минус «Гончая Шаб-Ниггурат»
     };
 
@@ -59,7 +60,7 @@ public sealed partial class CatalogCodesTests
     [InlineData("occupation.", "  ЛЕТЧИК ", "occupation.pilot")] // регистр, пробелы, «ё»
     [InlineData("weapon.", "ПП Томпсона", "weapon.thompson")]
     [InlineData("weapon.", "Револьвер 38-го калибра  (9 мм)", "weapon.38-or-9mm-revolver")]
-    [InlineData("weapon.", "«Миниган»*", "weapon.minigun")]
+    [InlineData("weapon.", "Ручная граната*", "weapon.hand-grenade")]
     [InlineData("spell.", "Знак Старших богов", "spell.elder-sign")]
     [InlineData("spell.", "призыв/укрощение бьякхи", "spell.summon-bind-byakhee")]
     [InlineData("spell.", "Хватка Ниогты", "spell.clutch-of-nyogtha")]
@@ -72,6 +73,34 @@ public sealed partial class CatalogCodesTests
     [InlineData("creature.", "Шагнер Фан", "creature.chaugnar-faugn")]
     public void FromName_FindsBookEntry(string prefix, string name, string expected) =>
         Assert.Equal(expected, TableOf(prefix).FromName(name));
+
+    /// <summary>Ошибки перевода v1 исправлены в имени; код прежний, старое написание находит ту же запись.</summary>
+    [Theory]
+    [InlineData("item.", "Фляга", "Флаг (1 метр)", "item.canteen")]
+    [InlineData("item.", "Железные колышки для палатки (12 шт.)", "Железная кровать для палатки (12 шт.)", "item.iron-tent-stakes")]
+    [InlineData("item.", "Когти монтёрские", "Котли монтёрские", "item.linemans-climbers")]
+    [InlineData("item.", "Перчатки электрика", "Печатки электрика", "item.electricians-gloves")]
+    [InlineData("item.", "Запонки", "Заколки", "item.cuff-links")]
+    [InlineData("item.", "Шприц из твёрдой резины", "Стрихнинка", "item.hard-rubber-syringe")]
+    [InlineData("item.", "Глобус на подставке", "Трюбка на подставке", "item.globe-on-stand")]
+    [InlineData("weapon.", "Винтовка калибра .30-06 со скользящим затвором", "Рычажная винтовка калибра .30-06", "weapon.30-06-bolt-action-rifle")]
+    public void Renamed_entry_keeps_code_and_old_spelling(string prefix, string name, string oldName, string code)
+    {
+        var table = TableOf(prefix);
+        Assert.Equal(name, table.BookNames[code]);
+        Assert.Equal(code, table.FromName(oldName));
+    }
+
+    /// <summary>Записи только современной эпохи убраны (решение владельца 2026-10-02) — их имена кода не дают.</summary>
+    [Theory]
+    [InlineData("weapon.", "РПГ*")]
+    [InlineData("weapon.", "АК-47 или АКМ")]
+    [InlineData("weapon.", "Бензопила")]
+    [InlineData("item.", "Смартфон")]
+    [InlineData("item.", "Мобильный телефон")]
+    [InlineData("occupation.", "Хакер")]
+    public void FromName_ModernOnlyEntry_IsNull(string prefix, string name) =>
+        Assert.Null(TableOf(prefix).FromName(name));
 
     /// <summary>Самодельное и повторы v1 кода не получают — перенос (T1.3) кладёт их с <c>code</c> null и в отчёт.</summary>
     [Theory]

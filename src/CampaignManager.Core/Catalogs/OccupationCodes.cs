@@ -9,7 +9,10 @@ public static class OccupationCodes
 {
     public const string Prefix = "occupation.";
 
-    /// <summary>31 профессия справочника v1 на 2026-10-02, все книжные. Порядок — по алфавиту русских имён.</summary>
+    /// <summary>
+    /// 31 профессия справочника v1 на 2026-10-02, все книжные, без «Хакера» — он только современной эпохи, которую
+    /// владелец убрал 2026-10-02. Порядок — по алфавиту русских имён.
+    /// </summary>
     public static CatalogCodeTable Table { get; } = new(Prefix,
     [
         new("occupation.antiquarian", "Антиквар"),
@@ -39,7 +42,6 @@ public static class OccupationCodes
         new("occupation.athlete", "Спортсмен"),
         new("occupation.zealot", "Фанатик"),
         new("occupation.farmer", "Фермер"),
-        new("occupation.hacker", "Хакер"),
         new("occupation.artist", "Художник"),
         new("occupation.private-investigator", "Частный сыщик"),
         new("occupation.lawyer", "Юрист"),
