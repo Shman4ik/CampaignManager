@@ -5,7 +5,8 @@ namespace CampaignManager.Core.Tests.Documents;
 
 /// <summary>
 /// Коды книжных навыков — явная таблица «русское имя → английский код книги» (решение владельца
-/// 2026-10-02), а не транслит. Перенос (T1.3) и сиды берут коды отсюда.
+/// 2026-10-02), а не транслит. Перенос (T1.3) и сиды берут коды отсюда. Названия сверены с книгой Хранителя
+/// и книгой сыщика 7e (2026-10-02): расхождений нет, «Lore (Dream Lore)» — по примерам специализаций книги.
 /// </summary>
 public sealed partial class SkillCodesTests
 {
@@ -116,12 +117,4 @@ public sealed partial class SkillCodesTests
     [InlineData("skill.language-other.english", "skill.language-other")]
     [InlineData("skill.dodge", null)]
     public void ParentOf(string code, string? expected) => Assert.Equal(expected, SkillCodes.ParentOf(code));
-
-    /// <summary>Транслит остаётся общей функцией для справочников, у которых правило кода ещё не выбрано.</summary>
-    [Fact]
-    public void Transliterate_StillAvailableForOtherCatalogs()
-    {
-        Assert.Equal("shchit-1920", CatalogCode.Transliterate("  Щит, 1920 "));
-        Assert.Equal("occupation.antikvar", CatalogCode.For(CatalogCode.OccupationPrefix, "Антиквар"));
-    }
 }

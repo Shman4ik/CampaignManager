@@ -131,9 +131,14 @@ create unique index campaign_members_one_keeper on cm.campaign_members (campaign
 
 -- ═══════════════════════ Справочники ═══════════════════════
 -- Общее у всех: code — стабильный ключ книжной записи (синхронизация с правилами идёт по нему,
--- переименование — обычный update); null у самодельных. У навыков — английское название книги
--- по явной таблице Core/Catalogs/SkillCodes (skill.dodge, skill.firearms.handgun); у остальных
--- справочников правило кода ещё не выбрано. source — страница книги; null — самодельное.
+-- переименование — обычный update); null у самодельных. Код — английское название записи в книгах
+-- Chaosium для 7e в kebab-case с префиксом справочника: skill., occupation., weapon., spell., book.,
+-- item., creature. (skill.dodge, occupation.private-investigator, weapon.thompson-submachine-gun,
+-- creature.deep-one). Из русского имени код не вычисляется: соответствие — явные таблицы
+-- Core/Catalogs/*Codes (SkillCodes, OccupationCodes, WeaponCodes, SpellCodes, BookCodes, ItemCodes,
+-- CreatureCodes). Только у навыков есть иерархия: специализация — код родителя + «.» + английское
+-- название специализации (skill.firearms.handgun). Выданный код не меняется. source — страница
+-- книги; null — самодельное.
 -- Имя уникально без учёта регистра (индекс по lower(name)); поиск — триграммы (pg_trgm).
 -- Тексты описаний книги в публичный репозиторий не кладём (см. TASKS, T1.3, «Сиды»).
 
@@ -663,11 +668,11 @@ Enum'ы строками — в v1 журнал боя хранил `CombatActio
 | `ScenarioNpcs` (25) | `scenario_npcs` | Как есть. |
 | `Characters` (54) | `characters` | См. ниже. |
 | `Skills` (93) | `skills` | `code` — по таблице `Core/Catalogs/SkillCodes` (`SkillCodes.FromName`): английское название книги в kebab-case (`skill.dodge`, `skill.cthulhu-mythos`), специализация — код родителя + `.` + английское название специализации (`skill.firearms.handgun`, `skill.fighting.brawl`); не транслит и не вычисляется из имени. Все 93 есть в таблице — навык без кода значит ошибку переноса. `Is1920`/`IsModern` → `eras`. |
-| `Occupations` (31) | `occupations` + `occupation_slots` | 193 названных навыка → слоты `Skill`; 5 названных специализаций («Язык, иностранный (латынь)» и др.) → `Specialization` с родителем; `SkillChoices` (24 варианта) → `Choice` + options; `SocialSkillSlots`/`FreeSkillSlots` → N слотов `Social`/`Free`; `Tags` (маска) → `text[]`. |
-| `Weapons` (108) | `weapons` | Данные чистые: все разобраны, у всех `SkillId`. Числа — из `*Info`. Колонка `CatalogWeaponId` у каталога не нужна (нигде не заполнена). |
-| `Spells` (91), `Books` (106) | `spells`, `books` + `book_spells` | `PossibleSpells` (165) → `book_spells`; сопоставятся ~68, остальные 97 — строкой без `spell_id`. |
-| `Items` (312) | `items` | `Era` (у всех `Classic`) → `eras`; `ImageUrl` → `files`. |
-| `Creatures` (87) | `creatures` + `creature_images` | Четыре jsonb → `statblock`. `Images` (86) → `files` + `creature_images`. Выбросить: колонку `ImageUrl` (36, уже перенесена в `Images`), словарь `CombatDescriptions` (55, исходный текст книги — источник правды давно типизированные поля), ключи наследия у одной твари. |
+| `Occupations` (31) | `occupations` + `occupation_slots` | `code` — `OccupationCodes` (все 31 книжные). 193 названных навыка → слоты `Skill`; 5 названных специализаций («Язык, иностранный (латынь)» и др.) → `Specialization` с родителем; `SkillChoices` (24 варианта) → `Choice` + options; `SocialSkillSlots`/`FreeSkillSlots` → N слотов `Social`/`Free`; `Tags` (маска) → `text[]`. |
+| `Weapons` (108) | `weapons` | `code` — `WeaponCodes` (все 108 книжные: таблица XVII и прейскурант 1920-х). Данные чистые: все разобраны, у всех `SkillId`. Числа — из `*Info`. Колонка `CatalogWeaponId` у каталога не нужна (нигде не заполнена). |
+| `Spells` (92), `Books` (106) | `spells`, `books` + `book_spells` | `code` — `SpellCodes`, `BookCodes` (все книжные). `PossibleSpells` (165) → `book_spells`; сопоставятся ~68, остальные 97 — строкой без `spell_id`. |
+| `Items` (317) | `items` | `code` — `ItemCodes` (310); без кода — 4 реквизита сценариев и 3 повтора книжных записей под другим именем (список — в конце таблицы), в отчёт. `Era` (у всех `Classic`) → `eras`; `ImageUrl` → `files`. |
+| `Creatures` (87) | `creatures` + `creature_images` | `code` — `CreatureCodes` (86); самодельная «Гончая Шаб-Ниггурат» — без кода, в отчёт. Четыре jsonb → `statblock`. `Images` (86) → `files` + `creature_images`. Выбросить: колонку `ImageUrl` (36, уже перенесена в `Images`), словарь `CombatDescriptions` (55, исходный текст книги — источник правды давно типизированные поля), ключи наследия у одной твари. |
 | `MusicTracks` (104) | `music_tracks` | `Storage` (89) → `files`; `YouTube` (15) → `youtube_id`. |
 | `EditHistoryEntries` (310) | `audit_log` | Только `SnapshotJson`; почта → `actor_id`. |
 | `ChaseSessions` (0) | `encounters` | Пусто. |
