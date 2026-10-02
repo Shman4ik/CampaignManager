@@ -221,6 +221,38 @@ public sealed class RunsApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
     }
 
     [Fact]
+    public async Task Signup_closes_itself_when_the_scheduled_time_has_passed()
+    {
+        TestDatabase.SkipIfMissing();
+        var table = await OneShotAsync();
+        var anna = await app.AddUserAsync(UserRole.Player, "Анна");
+        var boris = await app.AddUserAsync(UserRole.Player, "Борис");
+        var annas = await Runs(anna).ReserveAsync(table.Run.Id, table.Doctor, Cancellation);
+        Assert.True(Assert.Single((await app.Api(boris).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == table.Run.Id).CanReserve);
+
+        // Игра была вчера: флаг в базе остаётся, но запись закрыта — бронь 409 с текстом, флаги ложны везде.
+        var run = table.Run;
+        await Runs(table.Keeper).UpdateAsync(run.Id, new RunInput(run.Status, DateTimeOffset.UtcNow.AddDays(-1), run.Announcement, SignupOpen: true), Cancellation);
+        var error = await Fails(HttpStatusCode.Conflict, () => Runs(boris).ReserveAsync(run.Id, table.Librarian, Cancellation));
+        Assert.Contains("запись закрыта", error.Message);
+        Assert.False(Assert.Single((await app.Api(boris).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == run.Id).CanReserve);
+        Assert.False(Assert.Single(await Scenarios(table.Keeper).ListRunsAsync(table.ScenarioId, Cancellation), r => r.Id == run.Id).SignupOpen);
+        await using (var db = app.Database.CreateContext())
+        {
+            Assert.True(await db.ScenarioRuns.Where(r => r.Id == run.Id).Select(r => r.SignupOpen).SingleAsync(Cancellation));
+            Assert.Equal(1, await db.RunReservations.CountAsync(r => r.RunId == run.Id, Cancellation));
+        }
+
+        // Свою бронь игрок после даты снять может (сыгранную игру она не меняет).
+        await Runs(anna).ReleaseAsync(run.Id, table.Doctor, Cancellation);
+
+        // Без даты и с датой в будущем запись открыта.
+        await Runs(table.Keeper).UpdateAsync(run.Id, new RunInput(run.Status, null, run.Announcement, SignupOpen: true), Cancellation);
+        Assert.True(Assert.Single((await app.Api(boris).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == run.Id).CanReserve);
+        await Runs(boris).ReserveAsync(run.Id, table.Librarian, Cancellation);
+    }
+
+    [Fact]
     public async Task Reservation_is_released_by_its_player_or_the_runs_keeper_only()
     {
         TestDatabase.SkipIfMissing();

@@ -49,6 +49,12 @@ public static class ScenarioLinks
     /// <summary>Бой прохождения (T2.6d): <c>/combat?campaign=&amp;run=</c> — сцена в кампании прохождения стартует сразу с ним.</summary>
     public static string Combat(ScenarioRunDto run) => $"combat?campaign={run.CampaignId}&run={run.Id}";
 
+    /// <summary>
+    /// Погоня прохождения: <c>/chase?campaign=&amp;run=</c>. Одна погоня в кампании — открывается и получает прохождение,
+    /// нет ни одной — стартует сразу с ним, несколько — выбор «Идут сейчас», а «Новая погоня» несёт прохождение.
+    /// </summary>
+    public static string Chase(ScenarioRunDto run) => $"chase?campaign={run.CampaignId}&run={run.Id}";
+
     /// <summary>Второй экран раздатки — статическая страница сервера (телевизор, проектор, телефон игрока).</summary>
     public static string HandoutScreen(Guid scenarioId, Guid handoutId) => $"scenarios/{scenarioId}/handouts/{handoutId}";
 }
