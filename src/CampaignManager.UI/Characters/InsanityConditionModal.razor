@@ -1,0 +1,123 @@
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@inject IDiceRoller Dice
+
+@* Новая фобия или мания (таблицы IX/X, стр. 158–159). Бросок или вписанный номер только подставляет название
+   и описание в поля — в запись уходит то, что осталось после правки Хранителя. Описания таблиц — пересказ (D5). *@
+<Modal Open="@Open" OnClose="CloseAsync" Title="@(_kind == InsanityConditionKind.Phobia ? "Новая фобия" : "Новая мания")">
+    <ChildContent>
+        <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Фобия или мания">
+                @foreach (var kind in Kinds)
+                {
+                    <Button Small="true" Variant="@(_kind == kind ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SelectKind(kind)">
+                        @(kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания") · табл. @InsanityTables.TableNumeral(kind)
+                    </Button>
+                }
+            </div>
+            <div class="flex flex-wrap items-end gap-3">
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="condition-roll"
+                        OnClick="() => Fill(Dice.Roll(1, InsanityTables.ConditionDie))">Бросить 1d100</Button>
+                <Field Label="Выпало" class="w-24">
+                    <input type="number" inputmode="numeric" min="1" max="100" class="cm-input" data-testid="condition-roll-value"
+                           value="@_roll" @onchange="SetRoll" />
+                </Field>
+                <Field Label="Или строка таблицы" Hint="@($"— стр. {InsanityTables.TablePage(_kind)}")" class="min-w-56 flex-1">
+                    <select class="cm-input" value="@(_roll?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetRoll">
+                        <option value="">—</option>
+                        @foreach (var entry in InsanityTables.Conditions(_kind))
+                        {
+                            <option value="@entry.Number">@entry.Number. @entry.Name</option>
+                        }
+                    </select>
+                </Field>
+            </div>
+            <Field Label="Название"><input class="cm-input" data-testid="condition-name" @bind="_name" @bind:event="oninput" /></Field>
+            <Field Label="Описание" Hint="— и при каких обстоятельствах появилась">
+                <textarea class="cm-input" rows="2" @bind="_description" @bind:event="oninput"></textarea>
+            </Field>
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Отмена</Button>
+        <Button Icon="fa-check" Disabled="@string.IsNullOrWhiteSpace(_name)" data-testid="condition-save" OnClick="SaveAsync">Записать</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly InsanityConditionKind[] Kinds = [InsanityConditionKind.Phobia, InsanityConditionKind.Mania];
+
+    private InsanityConditionKind _kind;
+    private int? _roll;
+    private string _name = "";
+    private string _description = "";
+    private bool _wasOpen;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public InsanityConditionKind Kind { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _kind = Kind;
+            _roll = null;
+            _name = "";
+            _description = "";
+        }
+
+        _wasOpen = Open;
+    }
+
+    /// <summary>Тот же номер в другой таблице — другая строка: поля заполняются заново.</summary>
+    private void SelectKind(InsanityConditionKind kind)
+    {
+        _kind = kind;
+        if (_roll is { } roll)
+            Fill(roll);
+    }
+
+    private void SetRoll(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var roll))
+            Fill(roll);
+        else
+            _roll = null;
+    }
+
+    private void Fill(int roll)
+    {
+        if (InsanityTables.FindCondition(_kind, roll) is not { } entry)
+        {
+            _roll = null;
+            return;
+        }
+
+        _roll = roll;
+        _name = entry.Name;
+        _description = entry.Description;
+    }
+
+    private Task CloseAsync() => OpenChanged.InvokeAsync(false);
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+            return;
+
+        Context.Sheet.InsanityConditions.Add(new InsanityCondition
+        {
+            Kind = _kind,
+            Name = _name.Trim(),
+            Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+            AcquiredAt = DateTimeOffset.UtcNow,
+        });
+        Context.Changed();
+        await CloseAsync();
+    }
+}

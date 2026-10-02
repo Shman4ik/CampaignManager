@@ -1,0 +1,198 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Documents
+@inject IDiceRoller Dice
+
+@* Чтение книги Мифов. Предпросмотр — то же правило на копии листа (MythosBookRules.Apply по CmJson.Clone), а
+   не второй расчёт Мифов и рассудка в разметке, как в v1. Потеря рассудка применяется только числом — бросили
+   здесь или вписали с настоящих костей: случайный ноль молча сберёг бы рассудок (знание v1). *@
+<Modal Open="@(Book is not null)" OnClose="OnClose" Title="@Title" Size="ModalSize.Large">
+    <ChildContent>
+        @if (Book is not null && _preview is { } preview)
+        {
+            <div class="flex flex-col gap-3" data-testid="mythos-reading">
+                <div class="flex flex-wrap items-end gap-3">
+                    @if (CanRollSanity)
+                    {
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" OnClick="RollSanity">Бросить @Book.SanityLoss</Button>
+                    }
+                    <Field Label="Потеря рассудка" Hint="@($"— {(string.IsNullOrWhiteSpace(Book.SanityLoss) ? "впишите" : Book.SanityLoss)}")" class="w-44">
+                        <input type="number" inputmode="numeric" min="0" class="cm-input" data-testid="reading-sanity" @bind="_sanityLoss" @bind:after="Preview" />
+                    </Field>
+                    <label class="flex items-center gap-2 text-sm text-primary-700">
+                        <input type="checkbox" class="cm-checkbox" @bind="_disbelieves" @bind:after="Preview" />
+                        Не верит в Мифы (рассудок цел, стр. 177)
+                    </label>
+                </div>
+                <Field Label="Игровая дата" Hint="(необязательно)"><input class="cm-input" placeholder="март 1925" @bind="_gameDate" /></Field>
+
+                <div class="grid grid-cols-1 gap-2 rounded-md bg-primary-50 p-3 text-sm sm:grid-cols-3" data-testid="reading-preview">
+                    <div><span class="cm-meta-label">Рассудок:</span> @Sheet.Current.Sanity → <strong>@preview.Sheet.Current.Sanity</strong></div>
+                    <div><span class="cm-meta-label">Мифы:</span> @SanityRules.MythosValue(Sheet, Context.Catalog) → <strong>@SanityRules.MythosValue(preview.Sheet, Context.Catalog)</strong> <span class="text-xs text-primary-500">(@GainReason)</span></div>
+                    <div><span class="cm-meta-label">Макс. Рассудка:</span> <strong>@SanityRules.Status(preview.Sheet, Context.Catalog).Max</strong></div>
+                </div>
+                @if (SanityRules.Status(preview.Sheet, Context.Catalog) is { IndefiniteLoss: true } && !Sheet.Condition.IndefiniteInsanity)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">После чтения потеряно ≥⅕ Рассудка за день — бессрочное безумие (стр. 154).</Alert>
+                }
+
+                @if (_stage == MythosBookStage.FullStudy && !string.IsNullOrWhiteSpace(Book.Language))
+                {
+                    <label class="flex items-center gap-2 text-sm text-primary-700">
+                        <input type="checkbox" class="cm-checkbox" @bind="_markLanguage" />
+                        Отметить навык языка «@Book.Language» для фазы развития (стр. 173)
+                    </label>
+                }
+
+                @if (_spells.Count > 0)
+                {
+                    <div>
+                        <span class="cm-field-label">Заклинания книги</span>
+                        @foreach (var choice in _spells)
+                        {
+                            <label class="flex items-start gap-2 border-t border-primary-200 py-1.5 text-sm first:border-t-0">
+                                <input type="checkbox" class="cm-checkbox mt-0.5" disabled="@choice.AlreadyKnown" @bind="choice.Learn" />
+                                <span>
+                                    <span class="font-medium">@choice.BookName</span>
+                                    <span class="block text-xs text-primary-500">
+                                        @(choice.AlreadyKnown ? "уже на листе" : choice.Match is { } m ? $"справочник: {m.Name}" : "в справочнике нет — ляжет на лист одним названием")
+                                    </span>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose">Отмена</Button>
+        <Button Icon="fa-check" Disabled="@(!CanApply)" data-testid="reading-apply" OnClick="ApplyAsync">Применить к листу</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private sealed class SpellChoice
+    {
+        public required string BookName { get; init; }
+        public SpellData? Match { get; init; }
+        public bool AlreadyKnown { get; init; }
+        public bool Learn { get; set; }
+    }
+
+    private sealed record PreviewResult(CharacterSheet Sheet);
+
+    private MythosBookRecord? _openedFor;
+    private MythosBookStage _stage;
+    private int? _sanityLoss;
+    private bool _disbelieves;
+    private bool _markLanguage = true;
+    private string? _gameDate;
+    private List<SpellChoice> _spells = [];
+    private PreviewResult? _preview;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    [Parameter] public MythosBookRecord? Book { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback<MythosBookReadingEntry> OnApplied { get; set; }
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private string Title => Book is null ? "" :
+        $"{(_stage == MythosBookStage.InitialReading ? "Начальное чтение" : Book.FullStudyCount > 0 ? "Повторное изучение" : "Полное изучение")}: «{Book.Name}»";
+
+    private bool CanRollSanity => Book is not null && SanityLossFormula.MaxLoss(Book.SanityLoss) > 0;
+
+    private bool CanApply => Book is not null && (_disbelieves || _sanityLoss is >= 0);
+
+    private string GainReason => Book is null || _stage == MythosBookStage.InitialReading
+        ? "МКН"
+        : MythosBookRules.GetsFullGain(Book, SanityRules.MythosValue(Sheet, Context.Catalog)) ? "МКП: Мифы ниже ЗМ" : "только МКН: Мифы не ниже ЗМ";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Book is null)
+        {
+            _openedFor = null;
+            return;
+        }
+
+        if (ReferenceEquals(_openedFor, Book))
+            return;
+
+        _openedFor = Book;
+        _stage = MythosBookRules.NextStage(Book);
+        // Число подставляется сразу; «нет» — это ноль; формулу Хранитель бросит или впишет.
+        _sanityLoss = int.TryParse(Book.SanityLoss?.Trim(), out var fixedLoss) ? fixedLoss
+            : !string.IsNullOrWhiteSpace(Book.SanityLoss) && SanityLossFormula.MaxLoss(Book.SanityLoss) == 0 ? 0
+            : null;
+        _disbelieves = false;
+        _markLanguage = true;
+        _gameDate = null;
+        _spells = [];
+        Preview();
+
+        if (Book.PossibleSpells.Count == 0)
+            return;
+
+        var catalog = (await Context.Catalogs.SpellsAsync())
+            .Select(s => new SpellData(s.Id, s.Name) { AlternativeNames = s.AltNames, Cost = s.Cost, CastingTime = s.CastingTime, Description = s.Description })
+            .ToList();
+        var known = Sheet.Spells.Select(s => (s.Name, (IReadOnlyList<string>)s.AlternativeNames)).ToList();
+        _spells =
+        [
+            .. Book.PossibleSpells
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.CurrentCultureIgnoreCase)
+                .Select(name =>
+                {
+                    var match = SpellMatcher.Match(catalog, name);
+                    return new SpellChoice
+                    {
+                        BookName = name,
+                        Match = match,
+                        AlreadyKnown = SpellMatcher.IsKnown(known, match?.Name ?? name, match?.AlternativeNames ?? []),
+                    };
+                }),
+        ];
+    }
+
+    private void RollSanity()
+    {
+        _sanityLoss = Math.Max(0, DiceFormula.Roll(Book?.SanityLoss, Dice));
+        Preview();
+    }
+
+    /// <summary>Итог — тем же правилом на копии листа.</summary>
+    private void Preview()
+    {
+        if (Book is null)
+            return;
+
+        var copy = CmJson.Clone(Sheet);
+        var book = copy.MythosBooks.First(b => b.Id == Book.Id);
+        MythosBookRules.Apply(copy, Context.Catalog, book, Reading([]));
+        _preview = new PreviewResult(copy);
+    }
+
+    private MythosBookReading Reading(IReadOnlyList<SheetSpell> spells) =>
+        new(_stage, Math.Max(0, _sanityLoss ?? 0), _disbelieves, _gameDate, spells, _markLanguage);
+
+    private async Task ApplyAsync()
+    {
+        if (Book is null || !CanApply)
+            return;
+
+        var spells = _spells
+            .Where(c => c.Learn && !c.AlreadyKnown)
+            .Select(c => MythosBookRules.ToSheetSpell(c.BookName, c.Match, Book.Name))
+            .ToList();
+        var entry = MythosBookRules.Apply(Sheet, Context.Catalog, Book, Reading(spells));
+        await OnApplied.InvokeAsync(entry);
+    }
+}

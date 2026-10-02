@@ -1,0 +1,266 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+
+@* «Личные данные» — три колонки бланка: анкета с портретом, характеристики с производными, состояние.
+   Своей карточки нет: блок всегда в секции листа. Знание v1 о вёрстке под iPad:
+   - три колонки — с lg (1024px), а не с md: на 768px «Состоянию» оставалось 240px, и «Макс.» обрезало «11» до «1».
+     Ниже lg блоки идут в столбик, колонки характеристик и состояния упираются в max-w-md;
+   - подписи полей анкеты — над полями, а не слева: слева подпись съедала 70px, и имя ужималось до «Дж»;
+   - «Труд.» и «Чрез.» — текст, а не поля; Б.К.У., Комплекция, Скорость и Уклонение — под характеристиками,
+     только для чтения: их считает Core (в v1 их можно было править, и пересчёт молча затирал правку). *@
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.85fr_1.15fr] lg:divide-x lg:divide-primary-200">
+    <div class="flex flex-col gap-3">
+        <h3 class="cm-section-title border-b border-primary-200 pb-1">Анкета</h3>
+        <div class="flex items-center gap-3">
+            <CharacterPortrait Url="@Context.Character.PortraitUrl" OnChanged="OnPortraitChanged" />
+            <div class="flex min-w-0 flex-1 flex-col gap-2">
+                <Field Label="Имя"><input class="cm-input" data-testid="sheet-name" @bind="Sheet.Personal.Name" @bind:after="Context.Changed" /></Field>
+                <Field Label="Профессия"><input class="cm-input" @bind="Sheet.Personal.Occupation" /></Field>
+            </div>
+        </div>
+        @if (Context.Character.PlayerName is { } player)
+        {
+            <div class="text-sm"><span class="cm-meta-label">Игрок:</span> @player</div>
+        }
+        @if (Context.Character.CampaignName is { } campaign)
+        {
+            <div class="text-sm">
+                <span class="cm-meta-label">Кампания:</span>
+                <a class="text-accent-700 underline" href="@($"campaigns/{Context.Character.CampaignId}")">@campaign</a>
+            </div>
+        }
+        <div class="grid grid-cols-2 gap-2">
+            <Field Label="Возраст">
+                <input type="number" inputmode="numeric" min="0" max="999" class="cm-input" @bind="Sheet.Personal.Age" @bind:after="Recalculate" />
+            </Field>
+            <Field Label="Пол"><input class="cm-input" @bind="Sheet.Personal.Gender" /></Field>
+        </div>
+        <Field Label="Место рождения"><input class="cm-input" @bind="Sheet.Personal.Birthplace" /></Field>
+        <Field Label="Место жительства"><input class="cm-input" @bind="Sheet.Personal.Residence" /></Field>
+    </div>
+
+    <div class="max-w-md lg:max-w-none lg:pl-4">
+        <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Характеристики</h3>
+        <table class="sheet-chars">
+            <thead>
+                <tr><th></th><th>Обыч.</th><th>Труд.</th><th>Чрез.</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var info in InvestigatorCreationRules.Characteristics)
+                {
+                    var value = Sheet.Characteristics[info.Key];
+                    <tr @key="info.Key">
+                        <td>
+                            @* Тап по сокращению — проверка этой характеристики. *@
+                            <button type="button" class="sheet-chip" aria-label="@($"Проверка: {info.Name}")"
+                                    data-testid="@($"char-check-{info.Key}")" @onclick="() => Context.Check(CheckKey(info.Key))">
+                                @info.Abbreviation
+                            </button>
+                        </td>
+                        <td>
+                            <input type="number" inputmode="numeric" min="0" max="999" class="cm-input cm-input-sm"
+                                   aria-label="@($"{info.Name}: значение")" data-testid="@($"char-{info.Key}")"
+                                   value="@value" @onchange="e => SetCharacteristic(info.Key, e)" />
+                        </td>
+                        <td class="sheet-derived">@CharacteristicMath.Half(value)</td>
+                        <td class="sheet-derived">@CharacteristicMath.Fifth(value)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <h4 class="cm-section-title mt-3 border-t border-primary-200 pt-3">Производные</h4>
+        @{ var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog); }
+        <dl class="sheet-derived-grid" data-testid="sheet-derived">
+            <div><dt>Б.К.У.</dt><dd>@derived.DamageBonus</dd></div>
+            <div><dt>Комп.</dt><dd>@derived.Build</dd></div>
+            <div><dt>Скор.</dt><dd>@derived.Move</dd></div>
+            <div><dt>Укл.</dt><dd>@derived.Dodge</dd></div>
+        </dl>
+        <p class="cm-field-note mt-1">
+            Считаются по характеристикам и возрасту (стр. 31); Уклонение — навык, правится в «Навыках».
+            @if (HasOverrides)
+            {
+                <text>Часть значений — из книги (НПС).</text>
+            }
+        </p>
+    </div>
+
+    <div class="max-w-md lg:max-w-none lg:pl-4">
+        <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Состояние</h3>
+        <table class="sheet-current">
+            <thead><tr><th></th><th>Текущ.</th><th>Макс.</th></tr></thead>
+            <tbody>
+                @foreach (var row in Rows(derived))
+                {
+                    <tr @key="row.Label">
+                        <td>
+                            @if (row.Label == "Удача")
+                            {
+                                <button type="button" class="sheet-chip" aria-label="Проверка Удачи" @onclick='() => Context.Check("luck")'>Удача</button>
+                            }
+                            else
+                            {
+                                <span class="text-xs font-medium text-primary-700">@row.Label</span>
+                            }
+                        </td>
+                        <td>
+                            @* Шаг — штатная кнопка 36×36 с shrink-0: без него узкая колонка сжимала её до 21px. *@
+                            <div class="flex items-center gap-1">
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                                        aria-label="@($"{row.Label}: минус один")" @onclick="() => Adjust(row, -1)">−</button>
+                                <input type="number" inputmode="numeric" class="cm-input cm-input-sm min-w-[2.75rem]"
+                                       aria-label="@($"{row.Label}: текущее")" data-testid="@($"current-{row.Key}")"
+                                       value="@row.Get()" @onchange="e => Set(row, e)" />
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
+                                        aria-label="@($"{row.Label}: плюс один")" @onclick="() => Adjust(row, 1)">+</button>
+                            </div>
+                        </td>
+                        <td class="sheet-derived" data-testid="@($"max-{row.Key}")">@row.Max</td>
+                    </tr>
+                    <tr class="sheet-bar-row">
+                        <td colspan="3"><div class="sheet-bar"><div class="@BarClass(row)" style="width: @Percent(row)%"></div></div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой (стр. 117). *@
+        <div class="mt-3 flex flex-wrap items-end gap-2 border-t border-primary-200 pt-3">
+            <Field Label="Урон" class="w-20">
+                <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" data-testid="damage" @bind="_damage" />
+            </Field>
+            <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-heart-crack" data-testid="apply-damage" OnClick="ApplyDamage">Нанести</Button>
+        </div>
+        <p class="cm-field-note">Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку (стр. 117).</p>
+        @if (_lastHitWasMajor)
+        {
+            <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-2 mb-0">
+                Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает, нужна проверка ВЫН, иначе он теряет сознание.
+            </Alert>
+        }
+
+        @* Колонки отметок — группы, а не половинки списка: слева тело (рана решает, чем обернётся ноль ПЗ), справа
+           рассудок. Встают рядом по @container — ширине блока, а не окна (знание v1). Отметки безумия здесь ставятся
+           мимо SanityRules и флаг приступа не трогают — приступ ведёт панель рассудка. *@
+        <div class="sheet-conditions mt-3 border-t border-primary-200 pt-2">
+            <h4 class="text-xs font-semibold text-primary-500">Состояние сыщика</h4>
+            <div class="sheet-conditions-list">
+                <div class="flex flex-col">
+                    @ConditionRow("Серьёзная рана", "fa-heart-crack", Sheet.Condition.MajorWound, v => { Sheet.Condition.MajorWound = v; WoundRules.UpdateConsciousness(Sheet); })
+                    @ConditionRow("Без сознания", "fa-moon", Sheet.Condition.Unconscious, v => Sheet.Condition.Unconscious = v)
+                    @ConditionRow("При смерти", "fa-skull", Sheet.Condition.Dying, v => Sheet.Condition.Dying = v)
+                </div>
+                <div class="flex flex-col">
+                    @ConditionRow("Врем. безумие", "fa-brain", Sheet.Condition.TemporaryInsanity, v => Sheet.Condition.TemporaryInsanity = v)
+                    @ConditionRow("Бессроч. безумие", "fa-brain", Sheet.Condition.IndefiniteInsanity, v => Sheet.Condition.IndefiniteInsanity = v)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed record CurrentRow(string Key, string Label, int Max, Func<int> Get, Action<int> Put, bool Warns);
+
+    private int _damage = 1;
+    private bool _lastHitWasMajor;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    [Parameter] public EventCallback<StoredFileDto?> OnPortraitChanged { get; set; }
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private bool HasOverrides => Sheet.Overrides is { MaxHitPoints: not null } or { MaxMagicPoints: not null } or { MaxSanity: not null }
+        or { DamageBonus: not null } or { Build: not null } or { Move: not null };
+
+    private static string CheckKey(Characteristic key) => $"char:{key}";
+
+    private IEnumerable<CurrentRow> Rows(DerivedStats derived) =>
+    [
+        new("hp", "ПЗ", derived.MaxHitPoints, () => Sheet.Current.HitPoints, v => Sheet.Current.HitPoints = v, true),
+        new("mp", "ПМ", derived.MaxMagicPoints, () => Sheet.Current.MagicPoints, v => Sheet.Current.MagicPoints = v, false),
+        new("san", "Рассудок", derived.MaxSanity, () => Sheet.Current.Sanity, v => Sheet.Current.Sanity = v, true),
+        new("luck", "Удача", derived.MaxLuck, () => Sheet.Current.Luck, v => Sheet.Current.Luck = v, false),
+    ];
+
+    private void SetCharacteristic(Characteristic key, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            return;
+
+        Sheet.Characteristics[key] = Math.Clamp(value, 0, 999);
+        Recalculate();
+    }
+
+    /// <summary>Характеристика или возраст изменились: текущие прижимаются к новым максимумам (правило Core).</summary>
+    private void Recalculate()
+    {
+        DerivedAttributeRules.Normalize(Sheet, Context.Catalog);
+        Context.Changed();
+    }
+
+    private void Adjust(CurrentRow row, int delta) => Put(row, row.Get() + delta);
+
+    private void Set(CurrentRow row, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var value))
+            Put(row, value);
+    }
+
+    /// <summary>Не ниже нуля и не выше максимума. Правка ПЗ меняет состояние: 0 ПЗ — без сознания или при смерти (стр. 118).</summary>
+    private void Put(CurrentRow row, int value)
+    {
+        row.Put(Math.Clamp(value, 0, Math.Max(0, row.Max)));
+        if (row.Key == "hp")
+        {
+            if (Sheet.Current.HitPoints > 0)
+                _lastHitWasMajor = false;
+            WoundRules.UpdateConsciousness(Sheet);
+        }
+
+        Context.Changed();
+    }
+
+    private void ApplyDamage()
+    {
+        if (_damage <= 0)
+            return;
+
+        _lastHitWasMajor = WoundRules.ApplyDamage(Sheet, _damage);
+        Context.Changed();
+    }
+
+    private static int Percent(CurrentRow row) => row.Max <= 0 ? 100 : Math.Clamp(row.Get() * 100 / row.Max, 0, 100);
+
+    // Классы — целыми литералами: Tailwind не увидит собранное имя. ПЗ — error, ПМ — accent, Рассудок — камень,
+    // Удача — success; у ПЗ и Рассудка на половине запаса полоса желтеет, на четверти — густо-красная.
+    private static string BarClass(CurrentRow row)
+    {
+        var percent = Percent(row);
+        if (row.Warns && percent <= 25)
+            return "h-full rounded-full bg-error-700";
+        if (row.Warns && percent <= 50)
+            return "h-full rounded-full bg-warning-500";
+
+        return row.Key switch
+        {
+            "hp" => "h-full rounded-full bg-error-500",
+            "mp" => "h-full rounded-full bg-accent-500",
+            "san" => "h-full rounded-full bg-secondary-500",
+            _ => "h-full rounded-full bg-success-500",
+        };
+    }
+
+    private RenderFragment ConditionRow(string label, string icon, bool value, Action<bool> set) =>
+        @<label class="@Css.Join("sheet-condition", value ? "sheet-condition-on" : null)">
+            <input type="checkbox" class="cm-checkbox" checked="@value" @onchange="e => { set(e.Value is true); Context.Changed(); }" />
+            @if (value)
+            {
+                <i class="fa-solid @icon text-xs" aria-hidden="true"></i>
+            }
+            <span>@label</span>
+        </label>;
+}

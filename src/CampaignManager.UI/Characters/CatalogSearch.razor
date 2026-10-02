@@ -1,0 +1,100 @@
+@typeparam TItem
+@using CampaignManager.Core.Catalogs
+
+@* Поиск по справочнику для листа — один на оружие, заклинания, книги, предметы и тварей привыкания (в v1 —
+   шесть копий). Список грузится целиком (справочник маленький), поиск — без регистра, «ё» и лишних пробелов.
+   Выбор строки отдаёт запись; «Завести вручную» — то, что вписано, когда в справочнике такого нет. *@
+<div class="catalog-search" data-testid="catalog-search">
+    <div class="flex flex-wrap items-center gap-2">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="@Placeholder" aria-label="@Placeholder"
+               data-testid="catalog-search-input" @bind="_query" @bind:event="oninput" />
+        @if (OnCustom.HasDelegate)
+        {
+            <Button Small="true" Variant="ButtonVariant.Secondary" Disabled="@string.IsNullOrWhiteSpace(_query)" data-testid="catalog-search-custom"
+                    OnClick="CustomAsync">Вручную</Button>
+        }
+        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="OnCancel">Отмена</Button>
+    </div>
+    @if (_items is null)
+    {
+        <p class="cm-field-note py-2">Загружаю справочник…</p>
+    }
+    else if (_error is not null)
+    {
+        <Alert Tone="Tone.Error" Small="true" class="mt-2 mb-0">@_error</Alert>
+    }
+    else
+    {
+        var found = Found();
+        @if (found.Count > 0)
+        {
+            <div class="catalog-search-results">
+                @foreach (var item in found)
+                {
+                    <button type="button" class="catalog-search-row" @onclick="() => OnSelect.InvokeAsync(item)">
+                        <span class="font-medium text-primary-900">@Name(item)</span>
+                        @if (Meta?.Invoke(item) is { Length: > 0 } meta)
+                        {
+                            <span class="text-xs text-primary-500">@meta</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_query))
+        {
+            <p class="cm-field-note py-2">В справочнике такого нет@(OnCustom.HasDelegate ? " — можно завести вручную" : "").</p>
+        }
+    }
+</div>
+
+@code {
+    private const int Limit = 10;
+
+    private string _query = "";
+    private IReadOnlyList<TItem>? _items;
+    private string? _error;
+
+    [Parameter, EditorRequired] public Func<Task<IReadOnlyList<TItem>>> Load { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, string> Name { get; set; } = null!;
+
+    /// <summary>Другие названия, по которым тоже ищется (другие имена заклинания).</summary>
+    [Parameter] public Func<TItem, IEnumerable<string>>? Also { get; set; }
+
+    [Parameter] public Func<TItem, string>? Meta { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Найти в справочнике…";
+
+    [Parameter] public EventCallback<TItem> OnSelect { get; set; }
+
+    [Parameter] public EventCallback<string> OnCustom { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _items = await Load();
+        }
+        catch (HttpRequestException error)
+        {
+            _items = [];
+            _error = Platform.ApiErrors.Describe(error);
+        }
+    }
+
+    private List<TItem> Found()
+    {
+        var query = CatalogCodeTable.NormalizeName(_query);
+        if (query.Length == 0 || _items is null)
+            return [];
+
+        bool Matches(string text) => CatalogCodeTable.NormalizeName(text).Contains(query, StringComparison.Ordinal);
+
+        return [.. _items.Where(i => Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false)).Take(Limit)];
+    }
+
+    private Task CustomAsync() => OnCustom.InvokeAsync(_query.Trim());
+}

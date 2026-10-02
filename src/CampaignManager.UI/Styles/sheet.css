@@ -1,0 +1,506 @@
+/*
+  Лист сыщика (UI/Characters). Классы общие для нескольких блоков листа, поэтому здесь, а не в *.razor.css
+  каждого. Слой components — как у cm-*: утилита на элементе их перебивает. Замеры вёрстки под iPad — знание
+  v1 (Characters/CLAUDE.md модуля UI).
+*/
+@layer components {
+  /* ── Меню секций над листом: строится из того же списка, что и секции ── */
+  .sheet-nav {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    padding: 0.375rem;
+    overflow-x: auto;
+    background: var(--color-page);
+    border-bottom: 1px solid var(--color-primary-200);
+  }
+
+  .sheet-nav-link {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 36px;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-primary-600);
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-200);
+    white-space: nowrap;
+  }
+
+  .sheet-nav-link:hover {
+    color: var(--color-accent-700);
+    border-color: var(--color-accent-300);
+  }
+
+  /* Секция, к которой прокрутили, не прячется под шапкой и меню. */
+  .sheet-section {
+    scroll-margin-top: 4.5rem;
+  }
+
+  .sheet-section-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 36px;
+    text-align: left;
+  }
+
+  .sheet-save-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  /* Сокращение характеристики, «Удача», процент оружия — кнопка-плашка: тап открывает проверку. */
+  .sheet-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 36px;
+    padding: 0 0.375rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-primary-700);
+    background: var(--color-primary-100);
+  }
+
+  .sheet-chip:hover {
+    background: var(--color-accent-100);
+    color: var(--color-accent-800);
+  }
+
+  /* ── Характеристики и состояние ── */
+  .sheet-chars,
+  .sheet-current {
+    width: 100%;
+    font-size: 0.75rem;
+    table-layout: fixed;
+  }
+
+  .sheet-chars th,
+  .sheet-current th {
+    padding-bottom: 0.25rem;
+    font-weight: 600;
+    color: var(--color-primary-500);
+    border-bottom: 1px solid var(--color-primary-300);
+  }
+
+  .sheet-chars th:first-child {
+    width: 3.25rem;
+  }
+
+  .sheet-chars th:nth-child(3),
+  .sheet-chars th:nth-child(4) {
+    width: 2.75rem;
+  }
+
+  .sheet-current th:first-child {
+    width: 4.5rem;
+  }
+
+  .sheet-current th:nth-child(2) {
+    width: 9rem;
+  }
+
+  .sheet-chars td,
+  .sheet-current td {
+    padding: 0.25rem 0.125rem;
+  }
+
+  .sheet-chars tr + tr td {
+    border-top: 1px solid var(--color-primary-100);
+  }
+
+  /* «Труд.», «Чрез.», максимумы — текст, а не поля: их считает Core. */
+  .sheet-derived {
+    text-align: center;
+    font-family: var(--font-mono);
+    color: var(--color-primary-600);
+  }
+
+  .sheet-derived-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    max-width: 20rem;
+  }
+
+  .sheet-derived-grid dt {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--color-primary-600);
+  }
+
+  .sheet-derived-grid dd {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--color-primary-900);
+    background: var(--color-primary-50);
+    border-radius: 0.25rem;
+  }
+
+  .sheet-bar-row td {
+    padding-top: 0;
+    padding-bottom: 0.375rem;
+  }
+
+  .sheet-bar {
+    height: 0.375rem;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-primary-200);
+  }
+
+  /* Отметки состояния: строка 40px — тап-цель, чекбокс штатный. Группы встают рядом по ширине блока
+     (@container), а не окна: на 1024px это самая узкая колонка (307px), а ниже lg — во всю ширину. */
+  .sheet-conditions {
+    container-type: inline-size;
+  }
+
+  .sheet-conditions-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0 0.75rem;
+  }
+
+  @container (min-width: 24rem) {
+    .sheet-conditions-list {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .sheet-condition {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 40px;
+    padding: 0 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--color-primary-700);
+    cursor: pointer;
+  }
+
+  .sheet-condition:hover {
+    background: var(--color-primary-50);
+  }
+
+  .sheet-condition-on {
+    font-weight: 600;
+    color: var(--color-warning-800);
+    background: var(--color-warning-50);
+  }
+
+  /* ── Портрет ── */
+  .portrait {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    flex-shrink: 0;
+  }
+
+  .portrait-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 5.5rem;
+    height: 6.5rem;
+    overflow: hidden;
+    border: 1px dashed var(--color-primary-300);
+    border-radius: 0.375rem;
+    background: var(--color-primary-50);
+    cursor: pointer;
+  }
+
+  .portrait-caption {
+    font-size: 0.75rem;
+    color: var(--color-accent-700);
+  }
+
+  .portrait-remove {
+    min-height: 28px;
+    font-size: 0.75rem;
+  }
+
+  /* ── Навыки: колонки-masonry, плотные строки ── */
+  .skill-columns {
+    columns: 1;
+    column-gap: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .skill-columns {
+      columns: 2;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .skill-columns {
+      columns: 3;
+    }
+  }
+
+  .skill-group {
+    break-inside: avoid;
+    margin-bottom: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+  }
+
+  .skill-group-title {
+    margin-bottom: 0.25rem;
+    padding-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-primary-800);
+    border-bottom: 1px solid var(--color-primary-200);
+  }
+
+  .skill-row {
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem 3.5rem 1.75rem 1.75rem;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0;
+  }
+
+  .skill-remove {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--color-primary-400);
+  }
+
+  .skill-remove:hover {
+    color: var(--color-error-600);
+  }
+
+  .skill-name {
+    min-width: 0;
+    font-size: 0.875rem;
+    line-height: 1.25;
+  }
+
+  /* Имя — кнопка справки; касание расширено невидимо по 8px сверху и снизу, строка от этого не растёт. */
+  .skill-name-button {
+    position: relative;
+    font-weight: 500;
+    text-align: left;
+    color: var(--color-primary-800);
+  }
+
+  .skill-name-button::after {
+    content: "";
+    position: absolute;
+    inset: -8px 0;
+  }
+
+  .skill-name-button:hover {
+    color: var(--color-accent-700);
+    text-decoration: underline;
+  }
+
+  .skill-base {
+    margin-left: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--color-primary-400);
+  }
+
+  .skill-value {
+    min-height: 32px;
+  }
+
+  .skill-derived {
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-primary-500);
+  }
+
+  .skill-fold summary {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--color-accent-700);
+    cursor: pointer;
+  }
+
+  /* ── Поиск по справочнику ── */
+  .catalog-search-results {
+    margin-top: 0.5rem;
+    max-height: 18rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+  }
+
+  .catalog-search-row {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 40px;
+    padding: 0.375rem 0.75rem;
+    text-align: left;
+  }
+
+  .catalog-search-row + .catalog-search-row {
+    border-top: 1px solid var(--color-primary-100);
+  }
+
+  .catalog-search-row:hover {
+    background: var(--color-accent-50);
+  }
+
+  /* ── Оружие: одна разметка. Ниже lg — ячейки с подписью, переносятся; с lg — колонки под общей шапкой. ── */
+  .weapon-head {
+    display: none;
+  }
+
+  .weapon-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--color-primary-200);
+  }
+
+  .weapon-row:first-of-type {
+    border-top: 0;
+  }
+
+  .weapon-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+  }
+
+  .weapon-name,
+  .weapon-notes {
+    grid-column: 1 / -1;
+  }
+
+  .weapon-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .weapon-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-primary-600);
+  }
+
+  @media (min-width: 640px) {
+    .weapon-row {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .weapon-head,
+    .weapon-row {
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr) minmax(0, 0.7fr) minmax(0, 0.6fr) 7rem;
+      gap: 0.375rem;
+    }
+
+    .weapon-head {
+      display: grid;
+      padding-bottom: 0.25rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-primary-500);
+      border-bottom: 1px solid var(--color-primary-300);
+    }
+
+    .weapon-row {
+      padding: 0.375rem 0;
+      border-top-color: var(--color-primary-100);
+    }
+
+    .weapon-row:first-of-type {
+      border-top: 0;
+    }
+
+    .weapon-name {
+      grid-column: auto;
+    }
+
+    .weapon-notes {
+      grid-column: 1 / -1;
+    }
+
+    .weapon-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+  }
+
+  /* ── Приступ безумия ── */
+  .bout-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+  }
+
+  .bout-mode-active {
+    border-color: var(--color-accent-500);
+    background: var(--color-accent-50);
+  }
+
+  .bout-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 40px;
+    padding: 0.25rem 0.5rem;
+    text-align: left;
+    font-size: 0.875rem;
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+  }
+
+  .bout-option-active {
+    border-color: var(--color-secondary-500);
+    background: var(--color-secondary-50);
+    font-weight: 600;
+  }
+
+  .bout-option-number {
+    min-width: 1.5rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--color-secondary-700);
+  }
+}

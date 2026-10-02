@@ -1,0 +1,402 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@inject IDiceRoller Dice
+
+@* Фаза развития сыщиков (стр. 92–94, 164–167). Считает только DevelopmentPhaseRules — окно показывает
+   итог. Знание v1:
+   - набор отмеченных навыков снимается ОДИН раз на открытие: пока бросают кости, состав таблицы не меняется;
+   - Мифы и Средства не отмечают (CanBeChecked);
+   - отметки снимаются только здесь: «Стереть отметки и завершить» или аварийное «Снять отметки» в шаге 1
+     (с подтверждением на месте — вложенного окна не заводим). На листе кнопки сброса нет.
+   Проверку опыта, Удачу и самолечение можно бросить или вписать d100 с настоящих костей (EnteredDiceRoller). *@
+<Modal Open="@Open" OnClose="CloseAsync" Title="Фаза развития сыщиков" Size="ModalSize.Large">
+    <ChildContent>
+        <div class="cm-stack" data-testid="development-phase">
+            <p class="text-sm text-primary-600">
+                Фаза наступает в конце сценария или главы кампании (стр. 92). Броски делает игрок за своего сыщика;
+                отметки стираются в самом конце.
+            </p>
+
+            <section>
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="cm-section-title">1. Проверки опыта</h3>
+                    @if (_checked.Count > 0)
+                    {
+                        <div class="flex flex-wrap gap-2">
+                            <Button Small="true" Icon="fa-dice" Disabled="@(Pending.Count == 0)" data-testid="dev-roll-all" OnClick="RollAll">Бросить все (@Pending.Count)</Button>
+                            @if (_confirmClear)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.Error" OnClick="ClearWithoutRolling">Точно снять?</Button>
+                                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => _confirmClear = false">Отмена</Button>
+                            }
+                            else
+                            {
+                                <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => _confirmClear = true">Снять отметки</Button>
+                            }
+                        </div>
+                    }
+                </div>
+                <p class="cm-field-note mb-2">
+                    За каждый отмеченный навык 1d100. Больше значения (или выше 95) — навык растёт на 1d10 и может превысить 100%;
+                    навык, впервые дошедший до 90%, даёт +2d6 Рассудка.
+                </p>
+                @if (_checked.Count == 0)
+                {
+                    <p class="text-sm italic text-primary-400">
+                        @(_cleared ? "Отметки сняты без проверок опыта." : "Отмеченных навыков нет. Галочку ставят за успешное применение навыка в игре.")
+                    </p>
+                }
+                else
+                {
+                    <div class="cm-table-wrap">
+                        <table class="cm-table">
+                            <thead><tr><th>Навык</th><th>Было</th><th>1d100</th><th>Итог</th></tr></thead>
+                            <tbody>
+                                @foreach (var skill in _checked)
+                                {
+                                    var result = _results.GetValueOrDefault(skill);
+                                    <tr class="@(result?.Improved == true ? "bg-success-50" : null)">
+                                        <td class="font-medium">@skill.DisplayName(Context.Catalog)</td>
+                                        <td>@(result?.OldValue ?? skill.Value)</td>
+                                        <td>
+                                            @if (result is null)
+                                            {
+                                                <div class="flex items-center gap-1">
+                                                    <input type="number" inputmode="numeric" min="1" max="100" class="cm-input cm-input-sm w-16" placeholder="d100"
+                                                           aria-label="@($"{skill.DisplayName(Context.Catalog)}: выпало")" @bind="_entered[skill]" />
+                                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice-d20" AriaLabel="Бросить" OnClick="() => Roll(skill)" />
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <strong class="@(result.Improved ? "text-success-700" : "text-primary-400")">@result.Roll</strong>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (result is null)
+                                            {
+                                                <span class="text-xs text-primary-400">не брошено</span>
+                                            }
+                                            else if (result.Improved)
+                                            {
+                                                <span class="font-semibold text-success-800">+@result.Gain → @result.NewValue%</span>
+                                                @if (result.ReachedMastery)
+                                                {
+                                                    <Badge Tone="Tone.Stone">90%+ · +@result.SanityGain РАС</Badge>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="text-xs text-primary-500">без изменений</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            <section>
+                <h3 class="cm-section-title mb-1">2. Восстановление Удачи</h3>
+                <p class="cm-field-note mb-2">1d100 больше текущей Удачи (@Sheet.Current.Luck) — прибавьте 1d10, потолок 99 (стр. 93).</p>
+                @if (_luck is { } luck)
+                {
+                    <p class="text-sm">1d100 = <strong>@luck.Roll</strong> против @luck.OldValue — @(luck.Improved ? $"Удача выросла на {luck.Gain} до {luck.NewValue}." : "Удача не восстановилась.")</p>
+                }
+                else
+                {
+                    <div class="flex items-center gap-2">
+                        <input type="number" inputmode="numeric" min="1" max="100" class="cm-input cm-input-sm w-20" placeholder="d100" aria-label="Удача: выпало" @bind="_luckEntered" />
+                        <Button Small="true" Icon="fa-dice" data-testid="dev-luck" OnClick="RollLuck">Бросить</Button>
+                    </div>
+                }
+            </section>
+
+            <section>
+                <h3 class="cm-section-title mb-1">3. Награда Хранителя</h3>
+                <p class="cm-field-note mb-2">За успешное окончание сценария — прибавка к Рассудку по пережитой опасности (стр. 164).</p>
+                <div class="flex flex-wrap items-center gap-1.5">
+                    @foreach (var sides in RewardDice)
+                    {
+                        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Reward(Dice.Roll(1, sides), sides)">+1d@(sides)</Button>
+                    }
+                    <span class="ml-1 text-xs text-primary-400">или вручную:</span>
+                    <input type="number" inputmode="numeric" min="1" max="99" class="cm-input cm-input-sm w-16" aria-label="Награда вручную" @bind="_rewardAmount" />
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Reward(Math.Max(1, _rewardAmount), null)">Прибавить</Button>
+                </div>
+                @if (_rewardLog is not null)
+                {
+                    <p class="mt-1 text-sm">@_rewardLog</p>
+                }
+            </section>
+
+            <section>
+                <h3 class="cm-section-title mb-1">4. Самолечение</h3>
+                <p class="cm-field-note mb-2">
+                    Сыщик тратит время на пункт биографии и проходит проверку Рассудка: успех — +1d6, провал — −1, и пункт придётся
+                    изменить. Раны, фобии и всё, связанное с Мифами, не годятся (стр. 165).
+                </p>
+                @if (HealingOptions.Count == 0)
+                {
+                    <p class="text-sm italic text-primary-400">В биографии нечего использовать — заполните её на листе.</p>
+                }
+                else
+                {
+                    <div class="flex flex-wrap items-end gap-2">
+                        <Field Label="Пункт биографии" class="min-w-56 flex-1">
+                            <select class="cm-input" @bind="_healingField">
+                                @foreach (var option in HealingOptions)
+                                {
+                                    <option value="@option.Key">@option.Label: @Shorten(option.Get(Sheet.Biography))</option>
+                                }
+                            </select>
+                        </Field>
+                        <label class="@Css.Join("flex items-center gap-2 text-sm", HasKeyConnection ? null : "opacity-50")">
+                            <input type="checkbox" class="cm-checkbox" disabled="@(!HasKeyConnection)" @bind="_useKeyConnection" />
+                            Ключевая связь (бонусная кость)
+                        </label>
+                        <input type="number" inputmode="numeric" min="1" max="100" class="cm-input cm-input-sm w-20" placeholder="d100" aria-label="Проверка Рассудка: выпало" @bind="_healingEntered" />
+                        <Button Small="true" Icon="fa-dice" OnClick="SelfHeal">Проверка Рассудка</Button>
+                    </div>
+                    @if (_healing is { } healing)
+                    {
+                        <p class="mt-1 text-sm">
+                            @(healing.UsedKeyConnection ? "С бонусной костью: " : "Проверка Рассудка: ")<strong>@healing.Roll</strong> —
+                            @if (healing.Success)
+                            {
+                                <text>успех, рассудок +@healing.SanityDelta.</text>
+                                @if (healing.CuredIndefiniteInsanity) { <text> Бессрочное безумие вылечено.</text> }
+                                @if (healing.CriticalSuccess) { <text> Критический успех — можно назначить новую ключевую связь.</text> }
+                            }
+                            else
+                            {
+                                <text>провал, рассудок @healing.SanityDelta. Этот пункт биографии нужно изменить.</text>
+                                @if (healing.LostKeyConnection) { <text> Ключевая связь потеряна.</text> }
+                            }
+                        </p>
+                        @if (healing.Success && !HasKeyConnection)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="MakeKeyConnection">Сделать этот пункт ключевой связью</Button>
+                        }
+                    }
+                }
+            </section>
+
+            <section>
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="cm-section-title">5. Средства и занятия</h3>
+                    <span class="text-xs text-primary-500">Сейчас: @CreditRating% · @FinanceRules.GetTier(CreditRating, Context.Era).Name · @(Context.Era == Era.Modern ? "наше время" : "1920-е")</span>
+                </div>
+                <p class="cm-field-note mb-2">Когда положение сыщика резко меняется, Хранитель выбирает вариант (стр. 94). По умолчанию всё как есть.</p>
+                <div class="flex flex-col gap-1">
+                    @foreach (var option in DevelopmentPhaseRules.CreditRatingOptions)
+                    {
+                        <label class="@Css.Join("flex cursor-pointer items-start gap-2 rounded-md border p-2", _credit == option.Change ? "border-accent-400 bg-accent-50" : "border-primary-200")">
+                            <input type="radio" name="credit-change" class="mt-1" checked="@(_credit == option.Change)" @onchange="() => _credit = option.Change" />
+                            <span>
+                                <span class="block text-sm font-semibold">@option.Title <span class="font-normal text-primary-400">@option.DiceLabel</span></span>
+                                <span class="block text-xs text-primary-500">@option.Description</span>
+                            </span>
+                        </label>
+                    }
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-3">
+                    <Button Small="true" Icon="fa-dice" OnClick="ApplyCredit">Применить</Button>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" class="cm-checkbox" @bind="_recalculate" /> Пересчитать деньги по таблице II</label>
+                </div>
+                @foreach (var line in _creditLog)
+                {
+                    <p class="mt-1 text-sm">@line</p>
+                }
+            </section>
+
+            <section>
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="cm-section-title">6. Привыкание к ужасному</h3>
+                    <Button Small="true" Disabled="@(Sheet.Condition.Habituations.Count == 0 || _habituationLog is not null)" OnClick="Relax">−1 всем</Button>
+                </div>
+                <p class="cm-field-note">Накопленная потеря за каждый вид тварей снижается на 1 — время лечит (стр. 167).</p>
+                @if (_habituationLog is not null)
+                {
+                    <p class="mt-1 text-sm">@_habituationLog</p>
+                }
+            </section>
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Закрыть</Button>
+        <Button Icon="fa-check" data-testid="dev-finish" OnClick="FinishAsync">Стереть отметки и завершить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly int[] RewardDice = [3, 6, 10];
+
+    private List<SheetSkill> _checked = [];
+    private readonly Dictionary<SheetSkill, SkillImprovementResult> _results = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<SheetSkill, int?> _entered = new(ReferenceEqualityComparer.Instance);
+    private LuckRecoveryResult? _luck;
+    private int? _luckEntered;
+    private string? _rewardLog;
+    private int _rewardAmount = 1;
+    private SelfHealingResult? _healing;
+    private string _healingField = "";
+    private bool _useKeyConnection;
+    private int? _healingEntered;
+    private CreditRatingChange _credit = CreditRatingChange.BusinessAsUsual;
+    private bool _recalculate = true;
+    private readonly List<string> _creditLog = [];
+    private string? _habituationLog;
+    private bool _confirmClear;
+    private bool _cleared;
+    private bool _wasOpen;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private List<SheetSkill> Pending => [.. _checked.Where(s => !_results.ContainsKey(s))];
+
+    private bool HasKeyConnection => !string.IsNullOrWhiteSpace(Sheet.Biography.KeyConnection);
+
+    private int CreditRating => Sheet.Value(Context.Catalog, SkillCodes.CreditRating);
+
+    private List<BiographyField> HealingOptions =>
+        [.. BiographyFields.Short.Where(f => f.SupportsSelfHealing && !string.IsNullOrWhiteSpace(f.Get(Sheet.Biography)))];
+
+    protected override void OnParametersSet()
+    {
+        // Состав отмеченных навыков — один раз на открытие: он не должен меняться под руками.
+        if (Open && !_wasOpen)
+            Reset();
+
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _checked = DevelopmentPhaseRules.CheckedSkills(Sheet, Context.Catalog);
+        _results.Clear();
+        _entered.Clear();
+        foreach (var skill in _checked)
+            _entered[skill] = null;
+        _luck = null;
+        _luckEntered = null;
+        _rewardLog = null;
+        _rewardAmount = 1;
+        _healing = null;
+        _healingEntered = null;
+        _healingField = HealingOptions.FirstOrDefault()?.Key ?? "";
+        _useKeyConnection = HasKeyConnection;
+        _credit = CreditRatingChange.BusinessAsUsual;
+        _creditLog.Clear();
+        _habituationLog = null;
+        _confirmClear = false;
+        _cleared = false;
+    }
+
+    private static string Shorten(string text) => text.Length <= 50 ? text : text[..47] + "…";
+
+    private void Roll(SheetSkill skill)
+    {
+        if (_results.ContainsKey(skill))
+            return;
+
+        var dice = new EnteredDiceRoller(Dice).Percentile(_entered.GetValueOrDefault(skill));
+        _results[skill] = DevelopmentPhaseRules.RollSkillImprovement(Sheet, Context.Catalog, skill, dice);
+        Context.Changed();
+    }
+
+    private void RollAll()
+    {
+        foreach (var skill in Pending)
+            Roll(skill);
+    }
+
+    private void ClearWithoutRolling()
+    {
+        DevelopmentPhaseRules.ClearSkillChecks(Sheet);
+        _checked = [];
+        _results.Clear();
+        _confirmClear = false;
+        _cleared = true;
+        Context.Changed();
+    }
+
+    private void RollLuck()
+    {
+        _luck = DevelopmentPhaseRules.RollLuckRecovery(Sheet, new EnteredDiceRoller(Dice).Percentile(_luckEntered));
+        Context.Changed();
+    }
+
+    private void Reward(int amount, int? sides)
+    {
+        var actual = SanityRules.Grant(Sheet, Context.Catalog, amount);
+        var label = sides is { } s ? $"1d{s}" : "вручную";
+        _rewardLog = actual == amount
+            ? $"{label}: рассудок +{actual} (теперь {Sheet.Current.Sanity})."
+            : $"{label}: выпало {amount}, но упёрлись в максимум — рассудок +{actual} (теперь {Sheet.Current.Sanity}).";
+        Context.Changed();
+    }
+
+    private void SelfHeal()
+    {
+        var useKey = _useKeyConnection && HasKeyConnection;
+        var dice = new EnteredDiceRoller(Dice).Percentile(_healingEntered, tensDice: useKey ? 2 : 1);
+        _healing = DevelopmentPhaseRules.RollSelfHealing(Sheet, Context.Catalog, useKey, dice);
+        if (_healing.LostKeyConnection)
+            _useKeyConnection = false;
+        Context.Changed();
+    }
+
+    private void MakeKeyConnection()
+    {
+        if (BiographyFields.Short.FirstOrDefault(f => f.Key == _healingField) is not { } field)
+            return;
+
+        Sheet.Biography.KeyConnection = field.Get(Sheet.Biography);
+        _useKeyConnection = true;
+        Context.Changed();
+    }
+
+    private void ApplyCredit()
+    {
+        var result = DevelopmentPhaseRules.ApplyCreditRatingChange(Sheet, Context.Catalog, _credit, Dice);
+        var option = DevelopmentPhaseRules.CreditRatingOptions.First(o => o.Change == _credit);
+        _creditLog.Add(result.Change is CreditRatingChange.BusinessAsUsual
+            ? $"{option.Title}: Средства остались {result.NewValue}%."
+            : $"{option.Title} ({option.DiceLabel}): выпало {result.Roll}, Средства {result.OldValue}% → {result.NewValue}%.");
+
+        if (_recalculate)
+        {
+            var money = DevelopmentPhaseRules.RecalculateFinances(Sheet, Context.Catalog, Context.Era);
+            _creditLog.Add($"Достаток «{money.TierName}»: наличные {FinanceRules.Format(money.PreviousCash ?? 0)} + {FinanceRules.Format(money.TierCash)} = ${FinanceRules.Format(money.NewCash)}, активы {money.Assets}, карманные ${FinanceRules.Format(money.PocketMoney)}.");
+        }
+
+        Context.Changed();
+    }
+
+    private void Relax()
+    {
+        var affected = DevelopmentPhaseRules.RelaxHabituations(Sheet);
+        _habituationLog = affected > 0 ? $"Снижено записей: {affected}." : "Снижать нечего — накопленных потерь нет.";
+        Context.Changed();
+    }
+
+    private Task CloseAsync() => OpenChanged.InvokeAsync(false);
+
+    private async Task FinishAsync()
+    {
+        DevelopmentPhaseRules.ClearSkillChecks(Sheet);
+        Context.Changed();
+        await CloseAsync();
+    }
+}

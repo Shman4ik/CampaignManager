@@ -1,0 +1,102 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Привыкание к ужасному (гл. 8, «Привыкание к ужасному», стр. 167): сколько рассудка потеряно за вид тварей.
+   Запись и предел — HabituationRules (вид из бестиария, предел — максимум провальной части его потери); сама
+   потеря идёт одной причиной через SanityRules.ApplyLoss — пороги безумия считаются только там. Фаза развития
+   снижает накопленное на 1. *@
+<section data-testid="habituation">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Привыкание к ужасному</h3>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="habituation-add" OnClick="() => _adding = true">Вид тварей</Button>
+    </div>
+    @if (_adding)
+    {
+        <div class="mb-3">
+            <CatalogSearch TItem="CreatureDto" Load="Context.Catalogs.CreaturesAsync" Name="c => c.Name" Placeholder="Найти в бестиарии…"
+                           Meta="c => c.Statblock.SanityLoss" OnSelect="Add" OnCustom="AddManual" OnCancel="() => _adding = false" />
+        </div>
+    }
+    @if (Sheet.Condition.Habituations.Count == 0)
+    {
+        <p class="text-sm italic text-primary-400">Ни один вид не отслеживается.</p>
+    }
+    @foreach (var entry in Sheet.Condition.Habituations.OrderBy(h => h.CreatureName, StringComparer.CurrentCulture))
+    {
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 py-2 first:border-t-0" data-testid="habituation-row">
+            <div class="min-w-40 flex-1">
+                <div class="text-sm font-semibold text-primary-900">@entry.CreatureName</div>
+                <div class="text-xs text-primary-500">
+                    потеряно @entry.LostSanity@(entry.MaxLoss > 0 ? $" из {entry.MaxLoss}" : "")@(entry.SanityLossFormula is { } f ? $" · потеря {f}" : "")
+                    @if (entry.IsHabituated)
+                    {
+                        <Badge Tone="Tone.Success">привык — рассудок не теряет</Badge>
+                    }
+                </div>
+            </div>
+            <Field Label="Предел" class="w-20">
+                <input type="number" inputmode="numeric" min="0" max="99" class="cm-input cm-input-sm" value="@entry.MaxLoss"
+                       @onchange="e => SetMax(entry, e)" />
+            </Field>
+            <div class="flex items-end gap-1">
+                <Field Label="Потеря" class="w-20">
+                    <input type="number" inputmode="numeric" min="1" max="99" class="cm-input cm-input-sm" @bind="_loss" />
+                </Field>
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Disabled="@entry.IsHabituated" OnClick="() => Lose(entry)">Списать</Button>
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {entry.CreatureName}")"
+                        OnClick="() => Remove(entry)" />
+            </div>
+        </div>
+    }
+    @if (_lastNote is not null)
+    {
+        <p class="cm-field-note mt-1">@_lastNote</p>
+    }
+</section>
+
+@code {
+    private bool _adding;
+    private int _loss = 1;
+    private string? _lastNote;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private void Add(CreatureDto creature)
+    {
+        HabituationRules.Add(Sheet, creature.Name, creature.Id, creature.Statblock.SanityLoss);
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void AddManual(string name)
+    {
+        HabituationRules.Add(Sheet, name);
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void SetMax(MythosHabituation entry, ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var value))
+            return;
+
+        HabituationRules.SetMaxLoss(entry, value);
+        Context.Changed();
+    }
+
+    /// <summary>Не больше остатка до предела: за предел этот вид рассудка уже не отнимает.</summary>
+    private void Lose(MythosHabituation entry)
+    {
+        var lost = HabituationRules.Lose(Sheet, Context.Catalog, entry, Math.Max(1, _loss));
+        _lastNote = lost < _loss ? $"«{entry.CreatureName}»: списано {lost} — упёрлись в предел привыкания." : null;
+        Context.Changed();
+    }
+
+    private void Remove(MythosHabituation entry)
+    {
+        Sheet.Condition.Habituations.Remove(entry);
+        Context.Changed();
+    }
+}

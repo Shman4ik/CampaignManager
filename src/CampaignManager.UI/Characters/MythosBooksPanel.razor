@@ -1,0 +1,229 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Книги Мифов — рядом с Рассудком: чтение отнимает его и растит Мифы, а те снижают максимум Рассудка
+   (стр. 172–173). Книга на листе — свой экземпляр чисел (стр. 222): правка здесь справочник не трогает.
+   Стадию с эффектами двигает только чтение (MythosBookRules.Apply); стадия руками — для книг, прочитанных до
+   игры, без эффектов (SetStage). Книги — строки, раскрытие — полосой слева, а не вложенной карточкой. Окно
+   чтения — внутри section: вторым корнем в cm-stack секции оно получило бы линейку на подложку. *@
+<section data-testid="mythos-books">
+    <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Книги Мифов</h3>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="mythos-book-add" OnClick="() => _adding = true">Книга</Button>
+    </div>
+    <p class="cm-field-note mb-3">
+        Начальное чтение даёт МКН и отнимает рассудок; полное изучение — МКП, пока Мифы сыщика ниже ЗМ книги, иначе
+        снова МКН, и каждое следующее вдвое дольше предыдущего (стр. 172–173).
+    </p>
+    @if (_adding)
+    {
+        <div class="mb-3">
+            <CatalogSearch TItem="BookDto" Load="MythosBooksAsync" Name="b => b.Name" Also="b => b.AltNames" Placeholder="Найти книгу Мифов…"
+                           Meta="BookMeta" OnSelect="Add" OnCustom="AddCustom" OnCancel="() => _adding = false" />
+        </div>
+    }
+    @if (_lastResult is not null)
+    {
+        <Alert Tone="Tone.Success" ShowIcon="true" Small="true" OnClose="() => _lastResult = null">@_lastResult</Alert>
+    }
+    @if (Sheet.MythosBooks.Count == 0)
+    {
+        <p class="text-sm italic text-primary-400">Книг нет.</p>
+    }
+    @foreach (var book in Sheet.MythosBooks)
+    {
+        var expanded = _expanded.Contains(book.Id);
+        <div @key="book.Id" class="border-t border-primary-200 py-2 first:border-t-0" data-testid="mythos-book-row">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="min-w-48 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-semibold text-primary-900">@book.Name</span>
+                        <Badge Tone="@StageTone(book)">@StageText(book)</Badge>
+                        @if (book.BookId is null)
+                        {
+                            <span class="text-xs text-primary-400">не из справочника</span>
+                        }
+                    </div>
+                    <div class="text-xs text-primary-500">@StatsLine(book)</div>
+                </div>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" data-testid="mythos-book-read"
+                        OnClick="() => _reading = book">@ActionText(book)</Button>
+                <Button Small="true" Variant="ButtonVariant.Ghost" Icon="@(expanded ? "fa-chevron-up" : "fa-chevron-down")"
+                        AriaLabel="@(expanded ? $"Свернуть «{book.Name}»" : $"Подробнее о «{book.Name}»")" OnClick="() => Toggle(book)" />
+            </div>
+            @if (expanded)
+            {
+                <div class="mt-2 border-l-4 border-primary-200 pl-3">
+                    <p class="cm-field-note mb-2">
+                        Числа этого экземпляра — правьте под свою книгу: экземпляры различаются, оригинальное издание даёт больше
+                        (стр. 222). Справочник книг от этого не меняется.
+                    </p>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <Field Label="Название" class="col-span-2"><input class="cm-input" @bind="book.Name" /></Field>
+                        <Field Label="Язык"><input class="cm-input" @bind="book.Language" /></Field>
+                        <Field Label="Потеря рассудка"><input class="cm-input" placeholder="1d6" @bind="book.SanityLoss" /></Field>
+                        <Field Label="МКН"><input type="number" min="0" max="99" class="cm-input" @bind="book.MythosInitial" /></Field>
+                        <Field Label="МКП"><input type="number" min="0" max="99" class="cm-input" @bind="book.MythosFull" /></Field>
+                        <Field Label="ЗМ"><input type="number" min="0" max="100" class="cm-input" @bind="book.MythosRating" /></Field>
+                        <Field Label="Изучение, нед."><input type="number" min="0" class="cm-input" @bind="book.StudyWeeks" /></Field>
+                    </div>
+                    <Field Label="Стадия (руками, без эффектов)" Note="Для книг, прочитанных до игры: ничего не списывает и не начисляет. Эффекты применяет кнопка чтения." class="mt-2 sm:w-72">
+                        <select class="cm-input" value="@book.Stage" @onchange="e => SetStage(book, e)">
+                            <option value="@MythosBookStage.NotRead">Не прочитана</option>
+                            <option value="@MythosBookStage.InitialReading">Начальное чтение</option>
+                            <option value="@MythosBookStage.FullStudy">Полное изучение</option>
+                        </select>
+                    </Field>
+                    <Field Label="Заметка" class="mt-2">
+                        <textarea class="cm-input" rows="2" placeholder="Где взята, у кого сейчас, что в ней нашли" @bind="book.Note"></textarea>
+                    </Field>
+                    @if (book.Readings.Count > 0)
+                    {
+                        <div class="mt-2">
+                            <span class="cm-field-label">Что уже применено к листу</span>
+                            <ul class="list-disc pl-4 text-sm text-primary-700">
+                                @foreach (var reading in book.Readings)
+                                {
+                                    <li>@ReadingLine(reading)</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" class="mt-3" OnClick="() => RemoveAsync(book)">Убрать книгу</Button>
+                </div>
+            }
+        </div>
+    }
+
+    <MythosBookReadingModal Book="_reading" OnClose="() => _reading = null" OnApplied="Applied" />
+</section>
+
+@code {
+    private bool _adding;
+    private readonly HashSet<Guid> _expanded = [];
+    private MythosBookRecord? _reading;
+    private string? _lastResult;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    [Inject] private DialogService Dialogs { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    /// <summary>Книги по оккультизму Мифов не прибавляют — их правила здесь не ведутся.</summary>
+    private async Task<IReadOnlyList<BookDto>> MythosBooksAsync() =>
+        [.. (await Context.Catalogs.BooksAsync()).Where(b => b.BookType == BookType.MythosBook)];
+
+    private static string BookMeta(BookDto book) =>
+        $"{book.Language} · РАС {book.SanityLoss ?? "—"} · +{book.MythosInitial ?? 0}/+{book.MythosFull ?? 0}";
+
+    private void Add(BookDto book)
+    {
+        var record = MythosBookRules.FromCatalog(new BookData(book.Id, book.Name)
+        {
+            Language = book.Language,
+            SanityLoss = book.SanityLoss,
+            MythosInitial = book.MythosInitial,
+            MythosFull = book.MythosFull,
+            MythosRating = book.MythosRating,
+            StudyWeeks = book.StudyWeeks,
+            PossibleSpells = [.. book.Spells.Select(s => s.RawName)],
+        });
+        Sheet.MythosBooks.Add(record);
+        _expanded.Add(record.Id);
+        _adding = false;
+        Context.Changed();
+    }
+
+    /// <summary>Книга не из справочника (дневник культиста): числа впишет Хранитель — поля сразу открыты.</summary>
+    private void AddCustom(string name)
+    {
+        var record = MythosBookRules.Custom(name);
+        Sheet.MythosBooks.Add(record);
+        _expanded.Add(record.Id);
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void Toggle(MythosBookRecord book)
+    {
+        if (!_expanded.Remove(book.Id))
+            _expanded.Add(book.Id);
+    }
+
+    private void SetStage(MythosBookRecord book, ChangeEventArgs e)
+    {
+        if (!Enum.TryParse<MythosBookStage>(e.Value?.ToString(), out var stage))
+            return;
+
+        MythosBookRules.SetStage(book, stage);
+        Context.Changed();
+    }
+
+    private async Task RemoveAsync(MythosBookRecord book)
+    {
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Убрать книгу?", $"«{book.Name}» уйдёт с листа.")
+            {
+                ConfirmText = "Убрать",
+                Details = "Уже применённые рассудок, Мифы и заклинания останутся.",
+            }))
+            return;
+
+        Sheet.MythosBooks.Remove(book);
+        _expanded.Remove(book.Id);
+        Context.Changed();
+    }
+
+    private void Applied(MythosBookReadingEntry entry)
+    {
+        _lastResult = $"«{_reading?.Name}»: {ReadingLine(entry)}";
+        _reading = null;
+        Context.Changed();
+    }
+
+    private static string StageText(MythosBookRecord book) => book.Stage switch
+    {
+        MythosBookStage.InitialReading => "начальное чтение",
+        MythosBookStage.FullStudy => book.FullStudyCount > 1 ? $"изучена ×{book.FullStudyCount}" : "изучена",
+        _ => "не прочитана",
+    };
+
+    private static Tone StageTone(MythosBookRecord book) => book.Stage switch
+    {
+        MythosBookStage.InitialReading => Tone.Info,
+        MythosBookStage.FullStudy => Tone.Stone,
+        _ => Tone.Neutral,
+    };
+
+    private static string ActionText(MythosBookRecord book) => MythosBookRules.NextStage(book) switch
+    {
+        MythosBookStage.InitialReading => "Начальное чтение",
+        _ => book.FullStudyCount > 0 ? "Повторное изучение" : "Полное изучение",
+    };
+
+    private static string StatsLine(MythosBookRecord book)
+    {
+        List<string> parts = [];
+        if (!string.IsNullOrWhiteSpace(book.Language))
+            parts.Add(book.Language);
+        parts.Add($"РАС {(string.IsNullOrWhiteSpace(book.SanityLoss) ? "—" : book.SanityLoss)}");
+        parts.Add($"Мифы +{book.MythosInitial}/+{book.MythosFull}");
+        parts.Add($"ЗМ {book.MythosRating}");
+        if (MythosBookRules.NextStudyWeeks(book) is { } weeks)
+            parts.Add(book.FullStudyCount > 0 ? $"след. изучение ≈{weeks} нед." : $"изучение ≈{weeks} нед.");
+        return string.Join(" · ", parts);
+    }
+
+    public static string ReadingLine(MythosBookReadingEntry entry)
+    {
+        List<string> parts = [entry.Stage == MythosBookStage.FullStudy ? "полное изучение" : "начальное чтение"];
+        if (!string.IsNullOrWhiteSpace(entry.GameDate))
+            parts.Add(entry.GameDate);
+        parts.Add(entry.Disbelieved ? "не верит — рассудок цел" : $"−{entry.SanityLost} рассудка");
+        parts.Add($"+{entry.MythosGained}% Мифов");
+        if (entry.SpellsLearned.Count > 0)
+            parts.Add($"выучено: {string.Join(", ", entry.SpellsLearned)}");
+        return string.Join(" · ", parts);
+    }
+}

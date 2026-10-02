@@ -1,0 +1,95 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Заклинания листа — свой экземпляр (SheetCopies.Spell): в v1 выбранное на листе заклинание было
+   экземпляром общего кэша, и правка стоимости на листе меняла справочник у всех (ошибка v1 1).
+   Строки — через линейку; описание раскрывается на месте. *@
+<section data-testid="spells">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Заклинания</h3>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="spell-add" OnClick="() => _adding = true">Заклинание</Button>
+    </div>
+    @if (_adding)
+    {
+        <div class="mb-3">
+            <CatalogSearch TItem="SpellDto" Load="Context.Catalogs.SpellsAsync" Name="s => s.Name" Also="s => s.AltNames"
+                           Placeholder="Найти заклинание…" Meta="Meta" OnSelect="Add" OnCustom="AddCustom" OnCancel="() => _adding = false" />
+        </div>
+    }
+
+    @if (Sheet.Spells.Count == 0)
+    {
+        <p class="text-sm italic text-primary-400">Заклинаний нет.</p>
+    }
+    else
+    {
+        @foreach (var spell in Sheet.Spells)
+        {
+            var open = _open.Contains(spell);
+            <div class="border-t border-primary-200 py-2 first:border-t-0" data-testid="spell-row">
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+                    <Field Label="Название"><input class="cm-input" @bind="spell.Name" /></Field>
+                    <Field Label="Стоимость"><input class="cm-input" data-testid="spell-cost" @bind="spell.Cost" /></Field>
+                    <Field Label="Время"><input class="cm-input" @bind="spell.CastingTime" /></Field>
+                    <div class="flex gap-2">
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
+                                OnClick="() => Toggle(spell)">Описание</Button>
+                        <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {spell.Name}")" OnClick="() => Remove(spell)" />
+                    </div>
+                </div>
+                @if (open)
+                {
+                    <textarea class="cm-input mt-2" rows="4" aria-label="@($"{spell.Name}: описание")" @bind="spell.Description"></textarea>
+                }
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private bool _adding;
+    // Записи — record с равенством по значению: правка поля сменила бы хеш, поэтому сравнение по ссылке.
+    private readonly HashSet<SheetSpell> _open = new(ReferenceEqualityComparer.Instance);
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private static string Meta(SpellDto spell) =>
+        string.Join(" · ", new[] { spell.Cost, spell.CastingTime }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    private void Add(SpellDto spell)
+    {
+        Sheet.Spells.Add(SheetCopies.Spell(new SpellData(spell.Id, spell.Name)
+        {
+            AlternativeNames = spell.AltNames,
+            Cost = spell.Cost,
+            CastingTime = spell.CastingTime,
+            Description = spell.Description,
+        }));
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void AddCustom(string name)
+    {
+        var spell = new SheetSpell { Name = name };
+        Sheet.Spells.Add(spell);
+        _open.Add(spell);
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void Toggle(SheetSpell spell)
+    {
+        if (!_open.Remove(spell))
+            _open.Add(spell);
+    }
+
+    private void Remove(SheetSpell spell)
+    {
+        Sheet.Spells.Remove(spell);
+        Context.Changed();
+    }
+}

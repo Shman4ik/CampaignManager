@@ -1,0 +1,59 @@
+@using CampaignManager.Core.Characters
+
+@* Строка навыка — одна разметка на базовые навыки, специализации и свои (в v1 — три копии). Строка
+   максимально плотная, навыков на листе десятки: «убрать» — серый крестик с невидимой тап-целью 36×36
+   (cm-tap-target), своей кнопки проверки в строке нет — проверка в справке по тапу на имя (у своего навыка
+   справки нет, и тап сразу открывает проверку). Галочка развития тоже в cm-tap-target: делать им настоящие
+   отступы нельзя — каждая строка выросла бы на десяток пикселей. *@
+<div class="skill-row" data-testid="@($"skill-row-{Line.Name}")">
+    @if (Line.Entry is not null)
+    {
+        <button type="button" class="cm-tap-target skill-remove" aria-label="@($"Убрать навык: {Line.Name}")" @onclick="OnRemove">
+            <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+        </button>
+    }
+    else
+    {
+        <span class="skill-remove" aria-hidden="true"></span>
+    }
+    <span class="skill-name">
+        <button type="button" class="skill-name-button" data-testid="@($"skill-open-{Line.Name}")" @onclick="OnOpen">@Line.Name</button>
+        <span class="skill-base">(@Line.BaseValue)</span>
+        @if (Line.SpecializationBonus > 0)
+        {
+            <Badge Tone="Tone.Success">+@Line.SpecializationBonus</Badge>
+        }
+    </span>
+    @if (Line.CanBeChecked)
+    {
+        <label class="cm-tap-target">
+            <input type="checkbox" class="cm-checkbox" aria-label="@($"{Line.Name}: отметка развития")" data-testid="@($"skill-check-{Line.Name}")"
+                   checked="@Line.Checked" @onchange="e => OnChecked.InvokeAsync(e.Value is true)" />
+        </label>
+    }
+    else
+    {
+        @* Мифам и Средствам место под галочку не положено (стр. 92). *@
+        <span class="w-[1.125rem]" aria-hidden="true"></span>
+    }
+    <input type="number" inputmode="numeric" min="0" max="999" class="cm-input cm-input-sm skill-value"
+           aria-label="@($"{Line.Name}: значение")" data-testid="@($"skill-value-{Line.Name}")"
+           value="@Line.Value" @onchange="ChangeValue" />
+    <span class="skill-derived">@CharacteristicMath.Half(Line.Value)</span>
+    <span class="skill-derived">@CharacteristicMath.Fifth(Line.Value)</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SkillLine Line { get; set; } = null!;
+
+    [Parameter] public EventCallback<int> OnValue { get; set; }
+
+    [Parameter] public EventCallback<bool> OnChecked { get; set; }
+
+    [Parameter] public EventCallback OnRemove { get; set; }
+
+    [Parameter] public EventCallback OnOpen { get; set; }
+
+    private Task ChangeValue(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var value) ? OnValue.InvokeAsync(value) : Task.CompletedTask;
+}
