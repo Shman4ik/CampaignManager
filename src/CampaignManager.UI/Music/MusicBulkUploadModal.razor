@@ -1,0 +1,217 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.Contracts.Music
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject IFilesApi Files
+@inject ICatalogApi<MusicTrackDto> Tracks
+
+@* Пачка файлов одним действием (v1, MusicBulkUploadModal): название — из имени файла, настроения — общие
+   на всю пачку. Каждый файл — загрузка в cm.files (тот же файл второй раз не плодит объект) и запись трека.
+   Занятое название пропускается ДО загрузки — иначе в хранилище оставался бы объект, на который никто не
+   сошлётся (такой всё равно подберёт уборка сирот, но зачем). Ошибка одного файла не останавливает пачку. *@
+<Modal Open="Open" Title="Загрузить файлы" Size="ModalSize.Large" Dismissible="!_running" OnClose="CloseAsync">
+    <ChildContent>
+        <div class="cm-stack">
+            <Field Label="Файлы" Group="true" Note="@($"mp3, ogg, m4a, wav, flac — до 50 МБ каждый, не больше {MaxFiles} за раз. Название трека — имя файла.")">
+                <label class="@Css.Join("cm-btn cm-btn-secondary", _running ? "pointer-events-none opacity-70" : null)">
+                    <i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>Выбрать файлы</span>
+                    <InputFile class="sr-only" accept="audio/*" multiple OnChange="Pick" disabled="@_running" data-testid="music-bulk-input" />
+                </label>
+            </Field>
+
+            <Field Label="Настроения для всей пачки" Group="true">
+                <MusicTagPicker Values="_tags" ValuesChanged="tags => _tags = [.. tags]" Known="KnownTags" />
+            </Field>
+
+            @if (_rows.Count > 0)
+            {
+                <div>
+                    <p class="cm-meta mb-2">
+                        @if (_running)
+                        {
+                            <span>Загружено @_done из @_rows.Count…</span>
+                        }
+                        else if (_finished)
+                        {
+                            <span>Готово: добавлено @_rows.Count(r => r.Outcome == Outcome.Created), пропущено @_rows.Count(r => r.Outcome is Outcome.Skipped or Outcome.Failed).</span>
+                        }
+                        else
+                        {
+                            <span>Выбрано файлов: @_rows.Count</span>
+                        }
+                    </p>
+                    @if (_running)
+                    {
+                        <progress class="mb-2 w-full" max="@_rows.Count" value="@_done" aria-label="Ход загрузки"></progress>
+                    }
+                    <ul class="max-h-72 overflow-y-auto" data-testid="music-bulk-rows">
+                        @foreach (var row in _rows)
+                        {
+                            <li class="flex items-start gap-2 border-t border-primary-200 py-1.5 text-sm first:border-t-0">
+                                <i class="@RowIcon(row.Outcome)" aria-hidden="true"></i>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-medium text-primary-800">@row.Name</p>
+                                    @if (row.Message is not null)
+                                    {
+                                        <p class="cm-text-muted">@row.Message</p>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" Disabled="_running" OnClick="CloseAsync">@(_finished ? "Закрыть" : "Отмена")</Button>
+        @if (!_finished)
+        {
+            <Button Icon="fa-upload" Busy="_running" Disabled="_pending.Count == 0" OnClick="UploadAsync" data-testid="music-bulk-start">Загрузить</Button>
+        }
+    </Footer>
+</Modal>
+
+@code {
+    /// <summary>Предел пачки — как в v1; столько же передаётся в выбор файлов (иначе Blazor роняет выбор на 11-м).</summary>
+    public const int MaxFiles = 100;
+
+    private List<IBrowserFile> _pending = [];
+    private List<Row> _rows = [];
+    private List<string> _tags = [];
+    private bool _running;
+    private bool _finished;
+    private int _done;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Что-то добавилось — странице пора перечитать список.</summary>
+    [Parameter] public EventCallback OnUploaded { get; set; }
+
+    /// <summary>Фонотека сейчас: по ней видно, какие названия заняты.</summary>
+    [Parameter] public IReadOnlyList<MusicTrackDto> Library { get; set; } = [];
+
+    [Parameter] public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    private void Pick(InputFileChangeEventArgs e)
+    {
+        _finished = false;
+        _pending = [.. e.GetMultipleFiles(MaxFiles)];
+        _rows = [.. _pending.Select(f => new Row(MusicTrackForm.NameFromFile(f.Name)))];
+        if (e.FileCount > MaxFiles)
+        {
+            _rows.Add(new Row($"Ещё {e.FileCount - MaxFiles}") { Outcome = Outcome.Skipped, Message = $"За раз — не больше {MaxFiles} файлов." });
+        }
+    }
+
+    private async Task UploadAsync()
+    {
+        _running = true;
+        _done = 0;
+        var taken = Library.Select(t => CatalogCodeTable.NormalizeName(t.Name)).ToHashSet(StringComparer.Ordinal);
+        var created = 0;
+        for (var i = 0; i < _pending.Count; i++)
+        {
+            var file = _pending[i];
+            var row = _rows[i];
+            await RunAsync(file, row, taken);
+            created += row.Outcome == Outcome.Created ? 1 : 0;
+            _done++;
+            StateHasChanged();
+        }
+
+        _pending = [];
+        _running = false;
+        _finished = true;
+        if (created > 0)
+        {
+            await OnUploaded.InvokeAsync();
+        }
+    }
+
+    private async Task RunAsync(IBrowserFile file, Row row, HashSet<string> taken)
+    {
+        if (row.Name.Length == 0)
+        {
+            row.Fail("Из имени файла не вышло названия.");
+            return;
+        }
+
+        // Название занимается до загрузки: и среди фонотеки, и среди файлов этой же пачки.
+        if (!taken.Add(CatalogCodeTable.NormalizeName(row.Name)))
+        {
+            row.Outcome = Outcome.Skipped;
+            row.Message = "Трек с таким названием уже есть — пропущен.";
+            return;
+        }
+
+        try
+        {
+            row.Outcome = Outcome.Uploading;
+            StateHasChanged();
+            await using var stream = file.OpenReadStream(maxAllowedSize: MusicTrackForm.MaxFileBytes);
+            var stored = await Files.UploadAsync(stream, file.Name);
+            await Tracks.CreateAsync(new MusicTrackDto { Name = row.Name, FileId = stored.Id, Tags = [.. _tags] });
+            row.Outcome = Outcome.Created;
+            row.Message = null;
+        }
+        catch (IOException)
+        {
+            row.Fail("Больше 50 МБ — пропущен.");
+        }
+        catch (HttpRequestException ex)
+        {
+            row.Fail(ApiErrors.Describe(ex));
+        }
+    }
+
+    private Task CloseAsync()
+    {
+        if (_running)
+        {
+            return Task.CompletedTask;
+        }
+
+        _pending = [];
+        _rows = [];
+        _finished = false;
+        return OnClose.InvokeAsync();
+    }
+
+    private static string RowIcon(Outcome outcome) => outcome switch
+    {
+        Outcome.Created => "fa-solid fa-circle-check mt-0.5 text-success-600",
+        Outcome.Skipped => "fa-solid fa-circle-minus mt-0.5 text-warning-600",
+        Outcome.Failed => "fa-solid fa-circle-xmark mt-0.5 text-error-600",
+        Outcome.Uploading => "fa-solid fa-spinner fa-spin mt-0.5 text-accent-600",
+        _ => "fa-regular fa-circle mt-0.5 text-primary-400",
+    };
+
+    private enum Outcome
+    {
+        Waiting,
+        Uploading,
+        Created,
+        Skipped,
+        Failed,
+    }
+
+    private sealed class Row(string name)
+    {
+        public string Name { get; } = name;
+
+        public Outcome Outcome { get; set; }
+
+        public string? Message { get; set; }
+
+        public void Fail(string message)
+        {
+            Outcome = Outcome.Failed;
+            Message = message;
+        }
+    }
+}

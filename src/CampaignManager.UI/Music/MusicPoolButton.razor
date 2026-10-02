@@ -1,0 +1,35 @@
+@using CampaignManager.Core.Music
+@implements IDisposable
+@inject MusicPlayer Player
+
+@* Кнопка «включить музыку сцены» для других модулей: музыка локации (T2.5b — теги и прибитые треки
+   локации), кнопка настроения в шапке боя и погони (T2.6 — тег «бой», «погоня»). Пул и выбор — правило
+   Core (MusicPool, MusicShuffle) над фонотекой плеера. Под пул ничего нет — кнопки нет: мёртвая кнопка
+   хуже её отсутствия (v1, MoodMusicButton). Только Хранителю — как и сам плеер. *@
+<AuthorizeView Policy="@Policies.Keeper">
+    <Authorized>
+        @if (Player.Resolve(Pool).Count > 0)
+        {
+            <Button Small="true" class="cm-music-start" Icon="fa-music"
+                    Variant="@(IsPlayingThis ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                    OnClick="() => Player.PlayPool(Pool, Label)">@Text</Button>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Parameter, EditorRequired] public MusicPool Pool { get; set; } = MusicPool.Empty;
+
+    /// <summary>Что покажет панель плеера под названием трека: «Склад Уэйтли», «бой».</summary>
+    [Parameter] public string? Label { get; set; }
+
+    [Parameter] public string Text { get; set; } = "Музыка";
+
+    private bool IsPlayingThis => Player.IsPlaying && Player.Pool.Equals(Pool);
+
+    protected override void OnInitialized() => Player.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Player.Changed -= OnChanged;
+}

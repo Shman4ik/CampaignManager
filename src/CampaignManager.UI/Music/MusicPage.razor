@@ -1,0 +1,117 @@
+@page "/music"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@using CampaignManager.Contracts.Music
+@using CampaignManager.Core.Music
+@implements IDisposable
+@inject MusicPlayer Player
+
+@* Фонотека Хранителя — справочник «строками» на общей CatalogPage (T2.1): поиск, фильтры, форма в окне,
+   импорт и экспорт JSON. Сверх справочника — «Играть» в строке, пачка файлов и закреплённые настроения.
+   Колонок четыре — таблица с md, портрет iPad её вмещает. *@
+<CatalogPage @ref="_page" TItem="MusicTrackDto" Title="Фонотека" Icon="fa-music" AddLabel="Добавить трек" Noun="трек"
+             EmptyTitle="В фонотеке пока пусто." SearchPlaceholder="Поиск по названию, тегу, заметке"
+             Filters="_filters" SearchAlso="t => [.. t.Tags, t.Notes, t.FileName]"
+             New="() => new MusicTrackDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore" FormSize="ModalSize.Large">
+    <HeaderActions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-thumbtack" OnClick="() => _pinnedOpen = true">Настроения</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-upload" OnClick="() => _bulkOpen = true" data-testid="music-bulk-open">Загрузить файлы</Button>
+    </HeaderActions>
+    <Columns Context="view">
+        <DataColumn TItem="MusicTrackDto" Title="" CellClass="w-px whitespace-nowrap" Context="track">
+            <Button Small="true" Variant="@(Player.Current?.Id == track.Id ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                    class="cm-music-start" Icon="fa-play" OnClick="() => Player.PlayTrack(track)">Играть</Button>
+        </DataColumn>
+        <DataColumn TItem="MusicTrackDto" Title="Название" SortBy="t => t.Name" DefaultSort="false" HeaderClass="w-[34%]" CellClass="cm-clip" Context="track">
+            <SourceMark Track="track" />
+            <span class="font-medium text-primary-800">@track.Name</span>
+        </DataColumn>
+        @if (!view.IsFixed("tag"))
+        {
+            <DataColumn TItem="MusicTrackDto" Title="Настроения" Context="track">
+                <TagBadges Tags="track.Tags" />
+            </DataColumn>
+        }
+        <DataColumn TItem="MusicTrackDto" Title="Звучание" HeaderClass="w-[22%]" CellClass="text-primary-600" Context="track">@Playback(track)</DataColumn>
+    </Columns>
+    <CardTemplate Context="track">
+        <p class="font-medium text-primary-800"><SourceMark Track="track" />@track.Name</p>
+        <p class="cm-meta">@Playback(track)</p>
+        <div class="mt-1"><TagBadges Tags="track.Tags" /></div>
+        <Button Small="true" class="cm-music-start mt-2" Variant="ButtonVariant.Secondary" Icon="fa-play" OnClick="() => Player.PlayTrack(track)">Играть</Button>
+    </CardTemplate>
+    <Form Context="track">
+        <MusicTrackForm Track="track" KnownTags="_allTags" />
+    </Form>
+</CatalogPage>
+
+<MusicBulkUploadModal Open="_bulkOpen" OnClose="() => _bulkOpen = false" OnUploaded="ReloadAsync" Library="Player.Library" KnownTags="_allTags" />
+<PinnedTagsModal Open="_pinnedOpen" OnClose="() => _pinnedOpen = false" KnownTags="_allTags" />
+
+@code {
+    private CatalogPage<MusicTrackDto>? _page;
+    private IReadOnlyList<CatalogFilter<MusicTrackDto>> _filters = [];
+    private IReadOnlyList<string> _allTags = [];
+    private bool _bulkOpen;
+    private bool _pinnedOpen;
+
+    // Список справочника — он же фонотека плеера: правка здесь сразу видна панели (имя играющего трека, пул).
+    private void Loaded(IReadOnlyList<MusicTrackDto> tracks)
+    {
+        Player.SetLibrary([.. tracks]);
+        _allTags = [.. tracks.SelectMany(t => t.Tags).Distinct().Order(StringComparer.CurrentCulture)];
+        _filters =
+        [
+            new("tag", "Все настроения", [.. _allTags.Select(t => new CatalogOption(t, t))], (track, tag) => track.Tags.Contains(tag)),
+            new("source", "Любой источник", [new("file", "Файлы"), new("youtube", "YouTube")],
+                (track, source) => (source == "youtube") == track.IsYouTube),
+        ];
+    }
+
+    // Играющий трек подсвечен в строке — панель меняет его и сама.
+    protected override void OnInitialized() => Player.Changed += OnPlayerChanged;
+
+    private void OnPlayerChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Player.Changed -= OnPlayerChanged;
+
+    private Task ReloadAsync() => _page?.ReloadAsync() ?? Task.CompletedTask;
+
+    private static bool HasMore(MusicTrackDto track) => !string.IsNullOrWhiteSpace(track.Notes) || track.IsYouTube || track.FileName is not null;
+
+    /// <summary>«с 0:30 · по кругу · 80%» — то, что отличает трек от умолчаний.</summary>
+    private static string Playback(MusicTrackDto track)
+    {
+        List<string> parts = [track.Loop ? "по кругу" : "один раз"];
+        if (track.StartSeconds > 0)
+        {
+            parts.Insert(0, $"с {track.StartSeconds / 60}:{track.StartSeconds % 60:00}");
+        }
+
+        if (track.Volume != 100)
+        {
+            parts.Add($"{track.Volume}%");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static RenderFragment<MusicTrackDto> Detail => track => __builder =>
+    {
+        <div class="flex flex-col gap-1 text-sm">
+            @if (track.IsYouTube)
+            {
+                <a href="@YouTubeVideo.WatchUrl(track.YoutubeId!)" target="_blank" rel="noopener" class="text-accent-700 underline">
+                    <i class="fa-brands fa-youtube mr-1" aria-hidden="true"></i>Открыть ролик на YouTube
+                </a>
+            }
+            else if (track.FileName is not null)
+            {
+                <span class="cm-meta"><i class="fa-solid fa-file-audio mr-1" aria-hidden="true"></i>@track.FileName</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(track.Notes))
+            {
+                <p class="whitespace-pre-line text-primary-700">@track.Notes</p>
+            }
+        </div>
+    };
+}

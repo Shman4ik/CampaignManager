@@ -22,6 +22,12 @@ public sealed record MusicPool(IReadOnlyList<string> Tags, IReadOnlyList<Guid> T
     public bool Contains(Guid trackId, IEnumerable<string> trackTags) =>
         TrackIds.Contains(trackId) || trackTags.Any(Tags.Contains);
 
+    /// <summary>Тот же пул — по составу, а не по ссылкам на списки (кнопка «играет эта сцена»).</summary>
+    public bool Equals(MusicPool? other) =>
+        other is not null && Tags.SequenceEqual(other.Tags) && TrackIds.SequenceEqual(other.TrackIds);
+
+    public override int GetHashCode() => HashCode.Combine(Tags.Count, TrackIds.Count, Tags.FirstOrDefault(), TrackIds.FirstOrDefault());
+
     /// <summary>Треки пула в порядке фонотеки.</summary>
     public List<T> Select<T>(IEnumerable<T> tracks, Func<T, Guid> id, Func<T, IEnumerable<string>> tags) =>
         IsEmpty ? [] : [.. tracks.Where(t => Contains(id(t), tags(t)))];

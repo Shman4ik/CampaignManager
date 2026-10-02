@@ -1,0 +1,150 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.Contracts.Music
+@using CampaignManager.Core.Music
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject IFilesApi Files
+
+@* Форма трека в окне справочника; правит копию (CatalogPage). Источник — ровно одно из двух: ролик YouTube
+   (ссылка любой формы — сервер достанет идентификатор) или загруженный звук. Внешний адрес файла не
+   предлагается: звук идёт через Web Audio, а с чужого origin он там немой. *@
+<div class="grid gap-4 sm:grid-cols-2">
+    <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="Track.Name" /></Field>
+
+    <Field Label="Источник" Group="true" class="sm:col-span-2">
+        <div class="flex flex-wrap gap-2">
+            <Button Small="true" Variant="@(_youTube ? ButtonVariant.Secondary : ButtonVariant.Primary)" Icon="fa-file-audio"
+                    aria-pressed="@(_youTube ? "false" : "true")" OnClick="() => SetSource(youTube: false)">Файл</Button>
+            <Button Small="true" Variant="@(_youTube ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-brands fa-youtube"
+                    aria-pressed="@(_youTube ? "true" : "false")" OnClick="() => SetSource(youTube: true)">YouTube</Button>
+        </div>
+    </Field>
+
+    @if (_youTube)
+    {
+        <Field Label="Ссылка на ролик" class="sm:col-span-2" Note="@VideoNote" Error="@VideoError">
+            <input class="cm-input" placeholder="https://www.youtube.com/watch?v=…" @bind="Track.YoutubeId" @bind:event="oninput" />
+        </Field>
+    }
+    else
+    {
+        <Field Label="Файл" Group="true" class="sm:col-span-2" Note="mp3, ogg, m4a, wav, flac — до 50 МБ">
+            <div class="flex flex-wrap items-center gap-3">
+                <label class="@Css.Join("cm-btn cm-btn-secondary cm-btn-sm", _uploading ? "pointer-events-none opacity-70" : null)">
+                    <i class="fa-solid fa-upload" aria-hidden="true"></i>
+                    <span>@(_uploading ? "Загружаю…" : Track.FileId is null ? "Загрузить" : "Заменить")</span>
+                    <InputFile class="sr-only" accept="audio/*" OnChange="UploadAsync" disabled="@_uploading" />
+                </label>
+                @if (Track.FileId is not null)
+                {
+                    <span class="cm-meta"><i class="fa-solid fa-file-audio mr-1" aria-hidden="true"></i>@(Track.FileName ?? "загружен")</span>
+                }
+            </div>
+            @if (_uploadError is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" class="mb-0 mt-2">@_uploadError</Alert>
+            }
+        </Field>
+    }
+
+    <Field Label="Начать с секунды">
+        <input class="cm-input" type="number" min="0" inputmode="numeric" @bind="Track.StartSeconds" />
+    </Field>
+    <Field Label="Громкость трека" Hint="@($"{Track.Volume}%")" Note="@(_youTube ? "На iPad громкость YouTube не меняется — только у файлов." : null)">
+        <input type="range" min="0" max="100" step="5" class="w-full" @bind="Track.Volume" @bind:event="oninput" />
+    </Field>
+    <label class="flex min-h-9 items-center gap-2 text-sm text-primary-700 sm:col-span-2">
+        <input type="checkbox" class="cm-checkbox" @bind="Track.Loop" />
+        <span>По кругу — иначе по окончании заиграет другой трек того же настроения</span>
+    </label>
+
+    <Field Label="Настроения" Group="true" class="sm:col-span-2">
+        <MusicTagPicker Values="Track.Tags" ValuesChanged="tags => Track.Tags = [.. tags]" Known="KnownTags" />
+    </Field>
+
+    <Field Label="Заметки" Hint="(необязательно)" class="sm:col-span-2">
+        <textarea class="cm-input" rows="2" @bind="Track.Notes"></textarea>
+    </Field>
+</div>
+
+@code {
+    private bool _youTube;
+    private bool _uploading;
+    private string? _uploadError;
+    private MusicTrackDto? _for;
+
+    [Parameter, EditorRequired] public MusicTrackDto Track { get; set; } = null!;
+
+    [Parameter] public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    protected override void OnParametersSet()
+    {
+        // Новая копия записи (окно открыли заново) — источник берём из неё; пока правят ту же копию,
+        // переключатель не сбрасывается. Новый трек по умолчанию — файл: их в фонотеке большинство.
+        if (!ReferenceEquals(_for, Track))
+        {
+            _for = Track;
+            _youTube = Track.IsYouTube;
+            _uploadError = null;
+        }
+    }
+
+    private void SetSource(bool youTube)
+    {
+        _youTube = youTube;
+        // Ровно одно из двух: второй источник сбрасывается, иначе сервер ответит 400.
+        if (youTube)
+        {
+            Track.FileId = null;
+            Track.FileName = null;
+            Track.FileUrl = null;
+        }
+        else
+        {
+            Track.YoutubeId = null;
+        }
+    }
+
+    private string? VideoNote => YouTubeVideo.TryParseId(Track.YoutubeId, out var id) ? $"Ролик {id}" : "Ролик с запретом встраивания (чаще всего каналы «… - Topic») играть не будет.";
+
+    private string? VideoError => !string.IsNullOrWhiteSpace(Track.YoutubeId) && !YouTubeVideo.TryParseId(Track.YoutubeId, out _)
+        ? "Не похоже на ссылку на ролик YouTube."
+        : null;
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _uploading = true;
+        _uploadError = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: MaxFileBytes);
+            var file = await Files.UploadAsync(stream, e.File.Name);
+            Track.FileId = file.Id;
+            Track.FileUrl = file.Url;
+            Track.FileName = file.OriginalName ?? e.File.Name;
+            Track.YoutubeId = null;
+            if (string.IsNullOrWhiteSpace(Track.Name))
+            {
+                Track.Name = NameFromFile(e.File.Name);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _uploadError = ApiErrors.Describe(ex);
+        }
+        catch (IOException)
+        {
+            _uploadError = "Файл больше 50 МБ.";
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    /// <summary>Предел загрузки сервера (<c>Files:MaxUploadBytes</c>), как у трека в v1.</summary>
+    public const long MaxFileBytes = 50L * 1024 * 1024;
+
+    /// <summary>Название трека из имени файла — без расширения, как в v1.</summary>
+    public static string NameFromFile(string fileName) => Path.GetFileNameWithoutExtension(fileName).Trim();
+}

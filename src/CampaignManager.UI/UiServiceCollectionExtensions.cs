@@ -1,6 +1,7 @@
 using CampaignManager.Core.Dice;
 using CampaignManager.UI.Admin;
 using CampaignManager.UI.KeeperScreen;
+using CampaignManager.UI.Music;
 using CampaignManager.UI.Platform;
 using CampaignManager.UI.Shared;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,8 @@ public static class UiServiceCollectionExtensions
         services.AddSingleton<DialogService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<KeeperScreenState>();
+        // Плеер — на вкладку: переходы между страницами музыку не обрывают.
+        services.AddSingleton(_ => new MusicPlayer());
         services.AddSingleton<BrowserStorage>();
         services.AddSingleton<AdminBadges>();
         return services;

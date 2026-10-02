@@ -1,0 +1,73 @@
+@using CampaignManager.Contracts.Music
+@using CampaignManager.UI.Platform
+@inject IMusicApi Music
+@inject MusicPlayer Player
+@inject ToastService Toasts
+
+@* Закреплённые настроения — кнопки ряда «Настроение» на панели плеера. Своя настройка Хранителя
+   (cm.user_preferences, ключ music.pinnedTags), на всех его устройствах одна. Порядок — как выбраны. *@
+<Modal Open="Open" Title="Настроения на панели плеера" OnClose="OnClose">
+    <ChildContent>
+        <p class="cm-text-muted mb-3">
+            Эти кнопки на панели плеера включают случайный трек с тегом. Порядок — как выбраны.
+            @if (Player.PinnedTagsAreDefault)
+            {
+                <span>Сейчас стоят настроения по умолчанию.</span>
+            }
+        </p>
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" ShowIcon="true">@_error</Alert>
+        }
+        <MusicTagPicker Values="_tags" ValuesChanged="tags => _tags = [.. tags]" Known="KnownTags" />
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose">Отмена</Button>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" Busy="_saving" OnClick="() => SaveAsync([])">По умолчанию</Button>
+        <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="() => SaveAsync(_tags)">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<string> _tags = [];
+    private bool _saving;
+    private string? _error;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _tags = [.. Player.PinnedTags];
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync(IReadOnlyList<string> tags)
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            Player.SetPinnedTags(await Music.SetPinnedTagsAsync(tags));
+            Toasts.Success("Настроения сохранены.");
+            await OnClose.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
