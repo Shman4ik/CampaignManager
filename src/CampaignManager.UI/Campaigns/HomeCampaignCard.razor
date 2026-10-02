@@ -1,0 +1,115 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.Core.Characters
+
+@* Кампания на главной. Игроку — одно главное действие: открыть своего сыщика или завести его.
+   Хранителю — игроки со всеми листами (в v1 это была отдельная таблица-аккордеон «Персонажи в
+   ваших кампаниях») и НПС кампании. Второстепенное — журнал и участники — в подвале. *@
+<article class="cm-card flex flex-col" aria-labelledby="@($"campaign-{Campaign.Id}")">
+    <div class="cm-card-header">
+        <a id="@($"campaign-{Campaign.Id}")" href="@($"campaigns/{Campaign.Id}")" class="cm-card-title min-w-0 flex-1 basis-48 truncate hover:underline">
+            @Campaign.Name
+        </a>
+        <div class="flex flex-wrap items-center gap-1.5">
+            @if (Kept)
+            {
+                <Badge Tone="Tone.Info" Icon="fa-book-skull">Хранитель</Badge>
+            }
+            @if (Campaign.Kind == CampaignKind.OneShot)
+            {
+                <Badge Tone="Tone.Neutral">Ваншот</Badge>
+            }
+            <Badge Tone="CampaignLabels.StatusTone(Campaign.Status)">@CampaignLabels.Status(Campaign.Status)</Badge>
+        </div>
+    </div>
+
+    <div class="cm-card-body flex-1">
+        @if (!Kept)
+        {
+            <div class="cm-meta mb-3">
+                @if (Campaign.KeeperName is { } keeperName)
+                {
+                    <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
+                }
+                <span><i class="fa-solid fa-user mr-1" aria-hidden="true"></i>Игроков: @Campaign.PlayerCount</span>
+            </div>
+
+            @if (Campaign.MyCharacter is { } mine)
+            {
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="truncate font-semibold text-primary-800">@mine.Name</div>
+                        @if (mine.Occupation is not null)
+                        {
+                            <div class="truncate text-sm text-primary-500">@mine.Occupation</div>
+                        }
+                    </div>
+                    <Button Small="true" Href="@($"character/{mine.Id}")" Icon="fa-id-card">Открыть лист</Button>
+                </div>
+            }
+            else
+            {
+                <p class="cm-text-muted mb-3">Своего сыщика в этой кампании у вас пока нет.</p>
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Href="@($"character/wizard?campaignId={Campaign.Id}")" Icon="fa-wand-magic-sparkles">Создать сыщика</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Href="@($"character/create/{Campaign.Id}")">Пустой лист</Button>
+                </div>
+            }
+        }
+        else
+        {
+            <h3 class="cm-section-title mb-1">Игроки (@Campaign.PlayerCount)</h3>
+            @if (Campaign.Players.Count == 0)
+            {
+                <p class="cm-text-muted">Игроков пока нет: кампания видна всем на главной в «Можно вступить».</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var player in Campaign.Players)
+                    {
+                        <li class="border-t border-primary-200 py-2 first:border-t-0" @key="player.UserId">
+                            <div class="text-sm font-semibold text-primary-700">@CampaignLabels.Person(player.Name)</div>
+                            @if (player.Characters.Count == 0)
+                            {
+                                <div class="text-sm text-primary-500">Листа пока нет</div>
+                            }
+                            else
+                            {
+                                <div class="mt-1 flex flex-wrap gap-2">
+                                    @foreach (var character in player.Characters)
+                                    {
+                                        <CharacterChip Character="character" @key="character.Id" />
+                                    }
+                                </div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="cm-section-divided">
+                <h3 class="cm-section-title mb-2">НПС кампании (@Campaign.Npcs.Count)</h3>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var npc in Campaign.Npcs)
+                    {
+                        <CharacterChip Character="npc" @key="npc.Id" />
+                    }
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus"
+                            Href="@($"character/create/npc?campaignId={Campaign.Id}")">НПС</Button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="cm-card-footer">
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"campaigns/{Campaign.Id}/journal")">Журнал</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-users" Href="@($"campaigns/{Campaign.Id}")">Участники</Button>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public HomeCampaignDto Campaign { get; set; } = null!;
+
+    private bool Kept => Campaign.MyRole == CampaignRole.Keeper;
+}

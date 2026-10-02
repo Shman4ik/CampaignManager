@@ -1,0 +1,119 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Core
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.UI.Platform
+@inject ICampaignsApi Api
+
+@* Одна форма на создание и правку кампании (в v1 — две одинаковые модалки в CampaignsPage).
+   Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
+<Modal Open="Open" Title="@(Campaign is null ? "Новая кампания" : "Изменить кампанию")" Size="ModalSize.Small" OnClose="CloseAsync">
+    <ChildContent>
+        <form id="campaign-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Error="@_nameError">
+                <input class="cm-input" maxlength="@CampaignLimits.NameLength" @bind="_name" @bind:event="oninput"
+                       placeholder="Например: «Маски Ньярлатхотепа»" />
+            </Field>
+            <Field Label="Вид" Note="Ваншот — одна игра с прегенами; игроки попадают в него бронью, а не вступлением.">
+                <select class="cm-input" @bind="_kind">
+                    @foreach (var kind in Enum.GetValues<CampaignKind>())
+                    {
+                        <option value="@kind">@CampaignLabels.Kind(kind)</option>
+                    }
+                </select>
+            </Field>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field Label="Статус">
+                    <select class="cm-input" @bind="_status">
+                        @foreach (var status in Enum.GetValues<CampaignStatus>())
+                        {
+                            <option value="@status">@CampaignLabels.Status(status)</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Эпоха">
+                    <select class="cm-input" @bind="_era">
+                        @foreach (var era in Enum.GetValues<Era>())
+                        {
+                            <option value="@era">@CampaignLabels.Era(era)</option>
+                        }
+                    </select>
+                </Field>
+            </div>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="campaign-form" Busy="_saving">@(Campaign is null ? "Создать" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    /// <summary>Правка этой кампании; <c>null</c> — новая.</summary>
+    [Parameter] public CampaignSummaryDto? Campaign { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Сохранено: новая или изменённая кампания.</summary>
+    [Parameter] public EventCallback<CampaignSummaryDto> OnSaved { get; set; }
+
+    private bool _wasOpen;
+    private string _name = "";
+    private CampaignKind _kind;
+    private CampaignStatus _status;
+    private Era _era;
+    private string? _nameError;
+    private string? _error;
+    private bool _saving;
+
+    protected override void OnParametersSet()
+    {
+        // Форма заполняется при открытии, а не на каждую перерисовку страницы.
+        if (Open && !_wasOpen)
+        {
+            _name = Campaign?.Name ?? "";
+            _kind = Campaign?.Kind ?? CampaignKind.Campaign;
+            _status = Campaign?.Status ?? CampaignStatus.Planning;
+            _era = Campaign?.Era ?? Era.Classic;
+            _nameError = null;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        if (_nameError is not null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var input = new CampaignInput(_name.Trim(), _kind, _status, _era);
+            var saved = Campaign is null
+                ? await Api.CreateCampaignAsync(input)
+                : await Api.UpdateCampaignAsync(Campaign.Id, input);
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

@@ -23,6 +23,7 @@ public static class UiServiceCollectionExtensions
         services.AddSingleton<DialogService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<KeeperScreenState>();
+        services.AddSingleton<BrowserStorage>();
         return services;
     }
 }

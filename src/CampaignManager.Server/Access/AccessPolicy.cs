@@ -44,7 +44,54 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
             .Where(m => m.CampaignId == campaignId && m.UserId == user.Id)
             .Select(m => (CampaignRole?)m.Role)
             .SingleOrDefaultAsync(cancellationToken);
-        return ByMembership(role);
+        return ForCampaign(user, role);
+    }
+
+    /// <summary>
+    /// То же правило, что <see cref="ForCampaignAsync"/>, для уже прочитанной строки — списки кампаний
+    /// считают флаги без запроса на каждую. <paramref name="role"/> — роль пользователя в кампании.
+    /// </summary>
+    public static Access ForCampaign(SignedInUser user, CampaignRole? role) =>
+        user.IsAdmin ? Access.Full : ByMembership(role);
+
+    /// <summary>
+    /// Участник кампании: видят участники кампании. Псевдоним (<see cref="Access.CanEdit"/>) меняет сам
+    /// участник или тот, кто правит кампанию; убрать (<see cref="Access.CanDelete"/>) можно только игрока —
+    /// выходит он сам или его исключает Хранитель кампании. Хранителя не убрать: кампания без него не живёт.
+    /// </summary>
+    public async Task<Access> ForMemberAsync(Guid campaignId, Guid memberId, CancellationToken cancellationToken = default)
+    {
+        if (await currentUser.GetAsync(cancellationToken) is not { } user)
+        {
+            return Access.None;
+        }
+
+        var roles = await dbContext.CampaignMembers
+            .Where(m => m.CampaignId == campaignId && (m.UserId == user.Id || m.UserId == memberId))
+            .Select(m => new { m.UserId, m.Role })
+            .ToListAsync(cancellationToken);
+        if (roles.FirstOrDefault(m => m.UserId == memberId) is not { } member)
+        {
+            return Access.None;
+        }
+
+        var mine = roles.FirstOrDefault(m => m.UserId == user.Id)?.Role;
+        return ForMember(user, ForCampaign(user, mine), memberId, member.Role);
+    }
+
+    /// <summary>Правило <see cref="ForMemberAsync"/> для прочитанных строк: <paramref name="campaign"/> — права на кампанию.</summary>
+    public static Access ForMember(SignedInUser user, Access campaign, Guid memberId, CampaignRole memberRole)
+    {
+        if (!campaign.CanRead)
+        {
+            return Access.None;
+        }
+
+        var self = memberId == user.Id;
+        return new Access(
+            CanRead: true,
+            CanEdit: self || campaign.CanEdit,
+            CanDelete: memberRole is CampaignRole.Player && (self || campaign.CanEdit));
     }
 
     /// <summary>Завести кампанию — Хранитель по роли (в v1 — кто угодно); создатель становится её Хранителем.</summary>

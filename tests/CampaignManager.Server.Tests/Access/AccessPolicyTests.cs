@@ -54,6 +54,31 @@ public sealed class AccessPolicyTests(AccessWorld world) : IClassFixture<AccessW
         Assert.False(await world.PolicyFor("outsider").CanJoinCampaignAsync(world.CompletedCampaign, Cancellation));
     }
 
+    // Участник: псевдоним — свой или Хранитель кампании; убрать можно только игрока (выйти сам или исключит
+    // Хранитель). Хранителя не убрать никому, даже администратору.
+    [Theory]
+    [InlineData("player", "player", "RED")]
+    [InlineData("player", "keeper", "R")]
+    [InlineData("keeper", "player", "RED")]
+    [InlineData("keeper", "keeper", "RE")]
+    [InlineData("admin", "player", "RED")]
+    [InlineData("admin", "keeper", "RE")]
+    [InlineData("otherKeeper", "player", "-")]
+    [InlineData("outsider", "keeper", "-")]
+    public async Task Members_rename_themselves_and_keeper_manages_players(string user, string member, string expected)
+    {
+        TestDatabase.SkipIfMissing();
+        var policy = world.PolicyFor(user);
+        Assert.Equal(expected, Flags(await policy.ForMemberAsync(world.Campaign, world.User(member).Id, Cancellation)));
+    }
+
+    [Fact]
+    public async Task Not_a_member_is_invisible()
+    {
+        TestDatabase.SkipIfMissing();
+        Assert.Equal("-", Flags(await world.PolicyFor("keeper").ForMemberAsync(world.Campaign, world.User("outsider").Id, Cancellation)));
+    }
+
     // ── Прохождение и бронь ──
 
     [Theory]

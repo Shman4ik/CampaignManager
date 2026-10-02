@@ -1,0 +1,280 @@
+@using System.Globalization
+@using System.Text.Json
+@using CampaignManager.Contracts
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.UI.Platform
+@implements IDisposable
+@inject ICampaignsApi Api
+@inject BrowserStorage Storage
+@inject DialogService Dialogs
+@inject TimeProvider Time
+
+@* Новая встреча или правка. Хронику пишут после игры, и она бывает длинной, поэтому:
+   - недописанное живёт в черновике localStorage (ключ — кампания и встреча) и переживает закрытую
+     вкладку, перезагрузку и выход в соседнее приложение; в v1 это держал [PersistentState] circuit;
+   - касание мимо окна и Esc его не закрывают (Dismissible="false"), а «Отмена» с правками спрашивает;
+   - ошибка сервера остаётся в окне, черновик стирается только после успешной записи. *@
+<Modal Open="Open" Title="@(Session is null ? "Новая встреча" : $"Встреча №{Session.Number}")" Size="ModalSize.Large"
+       Dismissible="false" OnClose="CloseAsync">
+    <ChildContent>
+        @if (_form is { } form)
+        {
+            <form id="session-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+                @if (_restored)
+                {
+                    <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" Icon="fa-floppy-disk" class="mb-0"
+                           Title="Восстановлен несохранённый черновик">
+                        <ChildContent>В прошлый раз запись не дошла до сервера — текст ниже из браузера.</ChildContent>
+                        <Actions>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="DiscardDraftAsync">Отбросить черновик</Button>
+                        </Actions>
+                    </Alert>
+                }
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Field Label="Дата встречи" class="sm:col-span-2">
+                        <input type="date" class="cm-input" @bind="form.SessionDate" @bind:after="Changed" />
+                    </Field>
+                    <Field Label="Номер" Note="Предложен следующий.">
+                        <input type="number" class="cm-input" min="@CampaignLimits.MinSessionNumber" max="@CampaignLimits.MaxSessionNumber"
+                               @bind="form.Number" @bind:after="Changed" />
+                    </Field>
+                </div>
+
+                <Field Label="Заголовок" Hint="(необязательно)">
+                    <input class="cm-input" maxlength="@CampaignLimits.SessionTitleLength" placeholder="Например: «Дом на Френч-Хилл»"
+                           @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
+                </Field>
+
+                <Field Label="Прохождение" Note="@(Runs.Count == 0 ? "У кампании пока нет прохождений сценариев — встреча без сценария." : null)">
+                    <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed" disabled="@(Runs.Count == 0 && form.RunId is null)">
+                        <option value="">— без сценария —</option>
+                        @foreach (var run in Runs)
+                        {
+                            <option value="@run.RunId">@RunLabel(run)</option>
+                        }
+                        @if (form.RunId is { } linked && Runs.All(r => r.RunId != linked))
+                        {
+                            @* Привязано, но в списке нет: без этой строки select молча показал бы «без сценария». *@
+                            <option value="@linked">@(Session?.ScenarioName ?? "Прохождение недоступно")</option>
+                        }
+                    </select>
+                </Field>
+
+                <label class="flex cursor-pointer items-start gap-3 py-1">
+                    <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
+                    <span>
+                        <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
+                        <span class="cm-field-note block">Время фазы развития сыщиков (стр. 92): журнал покажет ссылки на их листы.</span>
+                    </span>
+                </label>
+
+                <Field Label="Хроника" Hint="(видна игрокам, Markdown)">
+                    <textarea class="cm-input min-h-40" rows="7" placeholder="Что произошло на встрече"
+                              @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
+                </Field>
+
+                <Field Label="Заметки Хранителя" Hint="(только вам, Markdown)">
+                    <textarea class="cm-input min-h-28" rows="4" placeholder="Тайны, зацепки, что готовить к следующей встрече"
+                              @bind="form.KeeperNotes" @bind:event="oninput" @bind:after="Changed"></textarea>
+                </Field>
+
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+                }
+            </form>
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="session-form" Busy="_saving">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
+    private static readonly TimeSpan DraftDelay = TimeSpan.FromMilliseconds(400);
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid CampaignId { get; set; }
+
+    /// <summary>Правка этой встречи; <c>null</c> — новая.</summary>
+    [Parameter] public CampaignSessionDto? Session { get; set; }
+
+    [Parameter] public int NextNumber { get; set; } = 1;
+
+    [Parameter] public IReadOnlyList<JournalRunOption> Runs { get; set; } = [];
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback<CampaignSessionDto> OnSaved { get; set; }
+
+    private bool _wasOpen;
+    private SessionForm? _form;
+    private CampaignSessionInput? _original;
+    private bool _restored;
+    private bool _saving;
+    private string? _error;
+    private CancellationTokenSource? _draftDelay;
+
+    /// <summary>Черновик своей кампании и своей встречи: новая встреча и правка разных встреч не путаются.</summary>
+    private string DraftKey => $"cm.journal-draft:{CampaignId}:{Session?.Id.ToString() ?? "new"}";
+
+    private bool Dirty => _form is not null && _form.ToInput() != _original;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opening = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opening)
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(Time.GetLocalNow().DateTime);
+        _form = Session is null ? SessionForm.New(NextNumber, today) : SessionForm.From(Session);
+        _original = _form.ToInput();
+        _restored = false;
+        _error = null;
+
+        if (await ReadDraftAsync() is { } draft && draft != _original)
+        {
+            _form = SessionForm.From(draft);
+            _restored = true;
+        }
+    }
+
+    private static string RunLabel(JournalRunOption run) => run.ScheduledAt is { } when
+        ? $"{run.ScenarioName} — {when.ToLocalTime().ToString("d MMMM yyyy", Russian)}"
+        : run.ScenarioName;
+
+    /// <summary>Любая правка поля: черновик пишется с задержкой, а не на каждую букву.</summary>
+    private async Task Changed()
+    {
+        _draftDelay?.Cancel();
+        _draftDelay?.Dispose();
+        _draftDelay = new CancellationTokenSource();
+        var token = _draftDelay.Token;
+        try
+        {
+            await Task.Delay(DraftDelay, Time, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await WriteDraftAsync();
+    }
+
+    private async Task WriteDraftAsync()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        if (Dirty)
+        {
+            await Storage.SetAsync(DraftKey, JsonSerializer.Serialize(_form.ToInput(), ContractsJsonContext.Default.CampaignSessionInput));
+        }
+        else
+        {
+            await Storage.RemoveAsync(DraftKey);
+        }
+    }
+
+    private async Task<CampaignSessionInput?> ReadDraftAsync()
+    {
+        if (await Storage.GetAsync(DraftKey) is not { Length: > 0 } json)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(json, ContractsJsonContext.Default.CampaignSessionInput);
+        }
+        catch (JsonException)
+        {
+            // Черновик старого формата или испорченный — не повод не открыть форму.
+            await Storage.RemoveAsync(DraftKey);
+            return null;
+        }
+    }
+
+    private async Task DiscardDraftAsync()
+    {
+        _draftDelay?.Cancel();
+        await Storage.RemoveAsync(DraftKey);
+        _form = _original is null ? null : SessionForm.From(_original);
+        _restored = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        _error = _form.Validate();
+        if (_error is not null)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var input = _form.ToInput();
+            var saved = Session is null
+                ? await Api.AddSessionAsync(CampaignId, input)
+                : await Api.UpdateSessionAsync(CampaignId, Session.Id, input);
+            _draftDelay?.Cancel();
+            await Storage.RemoveAsync(DraftKey);
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Черновик остаётся: связь вернётся — текст на месте.
+            _error = ApiErrors.Describe(ex);
+            await WriteDraftAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>«Отмена» и крестик: с правками — спросить; отказ от правок стирает и черновик.</summary>
+    private async Task CloseAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        if (Dirty && !await Dialogs.ConfirmAsync(new ConfirmRequest("Отбросить запись?", "Набранный текст не сохранён и пропадёт.")
+            {
+                ConfirmText = "Отбросить",
+                CancelText = "Вернуться к записи",
+                Details = null,
+            }))
+        {
+            return;
+        }
+
+        _draftDelay?.Cancel();
+        await Storage.RemoveAsync(DraftKey);
+        await OnClose.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _draftDelay?.Cancel();
+        _draftDelay?.Dispose();
+    }
+}

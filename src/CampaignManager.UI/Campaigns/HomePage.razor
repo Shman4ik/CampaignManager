@@ -1,0 +1,172 @@
+@page "/"
+@using System.Globalization
+@using System.Security.Claims
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Identity
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.UI.Platform
+@inject ICampaignsApi Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+@inject UiEnvironment Environment
+
+@* Главная. Гостю кампаний не показывает вовсе (v1 отдавал анониму названия и почты Хранителей) и
+   в API не ходит; вошедшему — один GET /api/v1/home: открытые ваншоты, свои кампании (Хранителю — с
+   игроками, листами и НПС), доступные для вступления. Почт нет нигде: люди — по имени в кампании. *@
+<PageHeader Title="Главная" DocumentTitle="CampaignManager" />
+
+<div class="cm-page">
+    <AuthorizeView>
+        <Authorized>
+            <AsyncContent @ref="_home" Load="Api.GetHomeAsync" LoadingMessage="Загружаю кампании…" Context="home">
+                @if (home.OneShots.Count > 0)
+                {
+                    <section class="cm-section" aria-labelledby="home-oneshots">
+                        <div class="cm-section-header"><h2 id="home-oneshots" class="cm-section-title">Ваншоты — открыта запись</h2></div>
+                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                            @foreach (var run in home.OneShots)
+                            {
+                                <OneShotCard Run="run" @key="run.RunId" />
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section class="cm-section" aria-labelledby="home-mine">
+                    <div class="cm-section-header">
+                        <h2 id="home-mine" class="cm-section-title">Ваши кампании</h2>
+                        <AuthorizeView Policy="@Policies.Keeper" Context="keeper">
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="() => _creating = true">Новая кампания</Button>
+                        </AuthorizeView>
+                    </div>
+                    @if (home.Mine.Count == 0)
+                    {
+                        <EmptyState Icon="fa-map" Title="Вы пока ни в одной кампании."
+                                    Message="@(home.Available.Count > 0 ? "Вступите в кампанию ниже — Хранитель увидит вас среди игроков." : "Когда Хранитель заведёт кампанию, она появится здесь.")" />
+                    }
+                    else
+                    {
+                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                            @foreach (var campaign in home.Mine)
+                            {
+                                <HomeCampaignCard Campaign="campaign" @key="campaign.Id" />
+                            }
+                        </div>
+                    }
+                </section>
+
+                @if (home.Available.Count > 0)
+                {
+                    <section class="cm-section" aria-labelledby="home-available">
+                        <div class="cm-section-header"><h2 id="home-available" class="cm-section-title">Можно вступить</h2></div>
+                        <div class="cm-card">
+                            @foreach (var campaign in home.Available)
+                            {
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="campaign.Id">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="font-semibold text-primary-800">@campaign.Name</div>
+                                        <div class="cm-meta">
+                                            @if (campaign.KeeperName is { } keeperName)
+                                            {
+                                                <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
+                                            }
+                                            <span>с @campaign.CreatedAt.ToLocalTime().ToString("d MMMM yyyy", Russian)</span>
+                                            <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
+                                        </div>
+                                    </div>
+                                    <Button Small="true" Icon="fa-right-to-bracket" OnClick="() => StartJoin(campaign)">Вступить</Button>
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+            </AsyncContent>
+
+            <MemberNameModal Open="_joining is not null" Title="@($"Вступить: {_joining?.Name}")" ConfirmText="Вступить"
+                             Value="@ProfileName(context.User)" ProfileName="@ProfileName(context.User)"
+                             Busy="_busy" Error="@_joinError" OnSave="JoinAsync" OnClose="() => _joining = null" />
+            <CampaignFormModal Open="_creating" OnClose="() => _creating = false" OnSaved="CreatedAsync" />
+        </Authorized>
+        <NotAuthorized>
+            <section class="cm-section">
+                <div class="cm-card">
+                    <div class="cm-card-body flex flex-col items-start gap-3">
+                        <h2 class="cm-h4 cm-title-serif">Зов Ктулху: кампании, сыщики, сценарии</h2>
+                        <p class="cm-text-muted max-w-prose">
+                            Войдите, чтобы увидеть свои кампании, вести лист сыщика и записаться на ваншот.
+                        </p>
+                        <Button Href="login" Icon="fa-right-to-bracket">Войти</Button>
+                    </div>
+                </div>
+            </section>
+        </NotAuthorized>
+    </AuthorizeView>
+
+    @if (Environment.IsDevelopment)
+    {
+        <section class="cm-section">
+            <div class="cm-section-header"><h2 class="cm-section-title">Разработка</h2></div>
+            <div class="flex flex-wrap gap-2">
+                <Button Href="dev/ping" Small="true" Variant="ButtonVariant.Secondary" Icon="fa-heart-pulse">Проверка связи</Button>
+                <Button Href="dev/files" Small="true" Variant="ButtonVariant.Secondary" Icon="fa-file-arrow-up">Проверка файлов</Button>
+                <Button Href="dev/ui" Small="true" Variant="ButtonVariant.Secondary" Icon="fa-swatchbook">UI-кит</Button>
+                <Button Href="dev/checks" Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice-d20">Проверки</Button>
+            </div>
+        </section>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
+
+    private AsyncContent<HomeDto>? _home;
+    private HomeAvailableCampaignDto? _joining;
+    private string? _joinError;
+    private bool _busy;
+    private bool _creating;
+
+    /// <summary>Имя профиля для поля «Имя в кампании»; почту не подставляем.</summary>
+    private static string? ProfileName(ClaimsPrincipal user) =>
+        user.Identity?.Name is { } name && !name.Contains('@', StringComparison.Ordinal) ? name : null;
+
+    private void StartJoin(HomeAvailableCampaignDto campaign)
+    {
+        _joinError = null;
+        _joining = campaign;
+    }
+
+    private async Task JoinAsync(string displayName)
+    {
+        if (_joining is not { } campaign)
+        {
+            return;
+        }
+
+        _busy = true;
+        _joinError = null;
+        try
+        {
+            await Api.JoinAsync(campaign.Id, new JoinCampaignRequest(displayName));
+            _joining = null;
+            Toasts.Success($"Вы в кампании «{campaign.Name}».");
+            await ReloadAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _joinError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void CreatedAsync(CampaignSummaryDto campaign)
+    {
+        _creating = false;
+        Toasts.Success($"Кампания «{campaign.Name}» создана.");
+        Navigation.NavigateTo($"campaigns/{campaign.Id}");
+    }
+
+    private Task ReloadAsync() => _home?.ReloadAsync() ?? Task.CompletedTask;
+}
