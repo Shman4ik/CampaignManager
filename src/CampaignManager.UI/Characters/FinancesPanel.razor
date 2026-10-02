@@ -1,0 +1,34 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Финансы: деньги числами (в v1 — строка в трёх форматах), активы словами. Достаток и образ жизни — по
+   Средствам и эпохе кампании из таблицы II и раздела «Достаток» (FinanceRules, стр. 44–45): подсказка, не правка. *@
+<section data-testid="finances">
+    <h3 class="cm-section-title mb-2">Финансы</h3>
+    @{
+        var credit = Sheet.Value(Context.Catalog, SkillCodes.CreditRating);
+        var tier = FinanceRules.GetTier(credit, Context.Era);
+        var lifestyle = FinanceRules.GetLifestyle(credit);
+    }
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Field Label="Наличные, $">
+            <input type="number" inputmode="decimal" step="0.01" min="0" class="cm-input" data-testid="cash" @bind="Sheet.Finances.Cash" />
+        </Field>
+        <Field Label="Карманные, $">
+            <input type="number" inputmode="decimal" step="0.01" min="0" class="cm-input" @bind="Sheet.Finances.PocketMoney" />
+        </Field>
+        <Field Label="Активы" class="col-span-2"><input class="cm-input" @bind="Sheet.Finances.Assets" /></Field>
+    </div>
+    <Field Label="Заметка" class="mt-2"><input class="cm-input" @bind="Sheet.Finances.Note" /></Field>
+    <p class="cm-field-note mt-2">
+        Средства @credit% — «@tier.Name» (@(Context.Era == Era.Modern ? "наше время" : "1920-е")): по таблице II наличные $@tier.CashText,
+        карманные $@tier.PocketMoneyText, активы @tier.AssetsText (стр. 45). Жильё: @lifestyle.Housing Транспорт: @lifestyle.Transport
+    </p>
+</section>
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+}

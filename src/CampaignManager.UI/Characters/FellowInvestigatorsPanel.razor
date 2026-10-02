@@ -1,0 +1,120 @@
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Characters
+@inject ICharactersApi Api
+
+@* «Знакомые сыщики» (бланк, стр. 33) — рядом с биографией. Строки — соседи по столу из API (имя, профессия и
+   игрок — из живых листов) плюс вписанные руками; убрать можно только вписанные. Заметка о соседе заводит
+   строку в документе лишь в момент, когда её напишут, со слепком имени — иначе открытие листа меняло бы
+   документ и дёргало автосохранение, а при уходе соседа заметка осталась бы без адресата (знание v1). *@
+<section data-testid="fellows">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Знакомые сыщики</h3>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddManual">Вписать</Button>
+    </div>
+    @if (_party is null)
+    {
+        <p class="cm-field-note">Загружаю состав…</p>
+    }
+    else if (_party.Count == 0 && Sheet.FellowInvestigators.Count == 0)
+    {
+        <p class="text-sm italic text-primary-400">Соседей по столу нет — можно вписать знакомого руками.</p>
+    }
+    else
+    {
+        @foreach (var member in _party)
+        {
+            <div class="grid grid-cols-1 gap-2 border-t border-primary-200 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" @key="member.CharacterId">
+                <div>
+                    <div class="font-semibold text-primary-900">@member.Name</div>
+                    <div class="text-xs text-primary-500">@string.Join(" · ", new[] { member.PlayerName, member.Occupation }.Where(p => !string.IsNullOrWhiteSpace(p)))</div>
+                </div>
+                <input class="cm-input" placeholder="Что сыщик думает о нём" aria-label="@($"Заметка: {member.Name}")"
+                       value="@(EntryFor(member.CharacterId)?.Note ?? "")" @onchange="e => SetNote(member, e)" />
+            </div>
+        }
+        @foreach (var entry in Manual)
+        {
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-primary-200 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]">
+                <input class="cm-input" placeholder="Имя" aria-label="Имя знакомого" @bind="entry.Name" @bind:after="Context.Changed" />
+                <input class="cm-input" placeholder="Игрок" aria-label="Игрок" @bind="entry.PlayerName" />
+                <input class="cm-input col-span-2 sm:col-span-1" placeholder="Заметка" aria-label="Заметка" @bind="entry.Note" />
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {entry.Name}")"
+                        class="col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto" OnClick="() => Remove(entry)" />
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private IReadOnlyList<PartyMemberDto>? _party;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    /// <summary>Вписанные руками и осиротевшие (сосед ушёл из кампании — заметка о нём осталась).</summary>
+    private IEnumerable<FellowInvestigator> Manual
+    {
+        get
+        {
+            var known = _party?.Select(p => p.CharacterId).ToHashSet() ?? [];
+            return Sheet.FellowInvestigators.Where(e => e.CharacterId is not { } id || !known.Contains(id));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _party = await Api.GetPartyAsync(Context.Character.Id);
+        }
+        catch (HttpRequestException)
+        {
+            _party = [];
+        }
+    }
+
+    private FellowInvestigator? EntryFor(Guid characterId) =>
+        Sheet.FellowInvestigators.FirstOrDefault(e => e.CharacterId == characterId);
+
+    /// <summary>Заметка заводит строку и снимает слепок имени; пустая заметка строку убирает.</summary>
+    private void SetNote(PartyMemberDto member, ChangeEventArgs e)
+    {
+        var note = e.Value?.ToString()?.Trim() ?? "";
+        var entry = EntryFor(member.CharacterId);
+        if (note.Length == 0)
+        {
+            if (entry is not null)
+                Sheet.FellowInvestigators.Remove(entry);
+        }
+        else if (entry is null)
+        {
+            Sheet.FellowInvestigators.Add(new FellowInvestigator
+            {
+                CharacterId = member.CharacterId,
+                Name = member.Name,
+                PlayerName = member.PlayerName ?? "",
+                Note = note,
+            });
+        }
+        else
+        {
+            entry.Note = note;
+            entry.Name = member.Name;
+        }
+
+        Context.Changed();
+    }
+
+    private void AddManual()
+    {
+        Sheet.FellowInvestigators.Add(new FellowInvestigator());
+        Context.Changed();
+    }
+
+    private void Remove(FellowInvestigator entry)
+    {
+        Sheet.FellowInvestigators.Remove(entry);
+        Context.Changed();
+    }
+}

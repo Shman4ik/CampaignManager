@@ -59,6 +59,20 @@ public static class MythosBookRules
         book.Stage == MythosBookStage.NotRead ? MythosBookStage.InitialReading : MythosBookStage.FullStudy;
 
     /// <summary>
+    /// Стадия, выставленная руками — для книг, прочитанных до начала игры: ничего не списывает и не
+    /// начисляет (эффекты применяет только <see cref="Apply"/>). Полное изучение считается первым, чтобы
+    /// следующее получило удвоенный срок; другая стадия обнуляет счётчик.
+    /// </summary>
+    public static void SetStage(MythosBookRecord book, MythosBookStage stage)
+    {
+        book.Stage = stage;
+        if (stage == MythosBookStage.FullStudy)
+            book.FullStudyCount = Math.Max(1, book.FullStudyCount);
+        else
+            book.FullStudyCount = 0;
+    }
+
+    /// <summary>
     /// Прирост Мифов: начальное чтение — МКН; полное изучение — МКП, пока Мифы читателя ниже ЗМ книги,
     /// иначе МКН (стр. 173).
     /// </summary>
@@ -110,17 +124,7 @@ public static class MythosBookRules
     public static SheetSpell ToSheetSpell(string bookSpellName, SpellData? catalogSpell, string bookName)
     {
         if (catalogSpell is not null)
-        {
-            return new SheetSpell
-            {
-                CatalogSpellId = catalogSpell.Id,
-                Name = catalogSpell.Name,
-                AlternativeNames = [.. catalogSpell.AlternativeNames],
-                Cost = catalogSpell.Cost ?? "",
-                CastingTime = catalogSpell.CastingTime ?? "",
-                Description = catalogSpell.Description,
-            };
-        }
+            return SheetCopies.Spell(catalogSpell);
 
         return new SheetSpell
         {

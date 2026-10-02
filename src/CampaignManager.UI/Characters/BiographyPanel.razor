@@ -1,0 +1,60 @@
+@using CampaignManager.Core.Characters
+
+@* Биография по таблице граф (BiographyFields) — подпись над полем, одна разметка на все графы (в v1 —
+   одиннадцать одинаковых блоков). Ключевая связь — первой: её теряют при провале самолечения (стр. 165). *@
+<section data-testid="biography">
+    <Field Label="@BiographyFields.KeyConnection.Label" class="mb-3">
+        <input class="cm-input" placeholder="@BiographyFields.KeyConnection.Placeholder" data-testid="bio-key"
+               value="@BiographyFields.KeyConnection.Get(Bio)" @onchange="e => Set(BiographyFields.KeyConnection, e)" />
+    </Field>
+    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        @foreach (var field in BiographyFields.Short)
+        {
+            <Field Label="@field.Label" @key="field.Key">
+                <textarea class="cm-input" rows="2" placeholder="@field.Placeholder" data-testid="@($"bio-{field.Key}")"
+                          value="@field.Get(Bio)" @onchange="e => Set(field, e)"></textarea>
+            </Field>
+        }
+    </div>
+    @foreach (var field in BiographyFields.Long)
+    {
+        var preview = _preview.Contains(field.Key);
+        <div class="mt-3" @key="field.Key">
+            <div class="mb-1 flex items-center justify-between gap-2">
+                <span class="cm-field-label">@field.Label</span>
+                <Button Small="true" Variant="ButtonVariant.Ghost" Icon="@(preview ? "fa-pen" : "fa-eye")" OnClick="() => TogglePreview(field)">
+                    @(preview ? "Править" : "Просмотр")
+                </Button>
+            </div>
+            @if (preview)
+            {
+                <div class="rounded-md border border-primary-200 p-3"><Markdown Text="@field.Get(Bio)" /></div>
+            }
+            else
+            {
+                <textarea class="cm-input" rows="6" aria-label="@field.Label" placeholder="@field.Placeholder" data-testid="@($"bio-{field.Key}")"
+                          value="@field.Get(Bio)" @onchange="e => Set(field, e)"></textarea>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private readonly HashSet<string> _preview = [];
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private Biography Bio => Context.Sheet.Biography;
+
+    private void Set(BiographyField field, ChangeEventArgs e)
+    {
+        field.Set(Bio, e.Value?.ToString() ?? "");
+        Context.Changed();
+    }
+
+    private void TogglePreview(BiographyField field)
+    {
+        if (!_preview.Remove(field.Key))
+            _preview.Add(field.Key);
+    }
+}

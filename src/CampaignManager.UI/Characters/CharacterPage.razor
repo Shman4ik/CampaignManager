@@ -1,0 +1,474 @@
+@page "/character/{CharacterId:guid}"
+@attribute [Authorize]
+@implements IDisposable
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+@using CampaignManager.UI.Campaigns
+@using CampaignManager.UI.Platform
+@inject ICharactersApi Api
+@inject ICatalogApi<SkillDto> SkillsApi
+@inject ICatalogApi<WeaponDto> WeaponsApi
+@inject ICatalogApi<SpellDto> SpellsApi
+@inject ICatalogApi<BookDto> BooksApi
+@inject ICatalogApi<CreatureDto> CreaturesApi
+@inject ICatalogApi<ItemDto> ItemsApi
+@inject BrowserStorage Storage
+@inject ToastService Toasts
+
+@* Лист сыщика (T2.3). Документ правят блоки секций прямо в объекте листа (каскадный SheetContext); в базу
+   правку уносит автосохранение (SheetAutoSave: слепок раз в 3 с, If-Match, черновик в localStorage).
+   Правила — только Core: блоки зовут SanityRules, MythosBookRules, DevelopmentPhaseRules и т. д.
+   Вычисляемое (максимумы, БкУ, Комплекция, Скорость, Уклонение) — только для чтения. *@
+<PageHeader Title="@Title">
+    <Actions>
+        @if (_context is not null && !_context.ReadOnly)
+        {
+            <span class="sheet-save-state @SaveStateClass" role="status" aria-live="polite" data-testid="autosave-status">
+                <i class="fa-solid @SaveStateIcon" aria-hidden="true"></i>
+                <span class="hidden md:inline">@SaveStateText</span>
+            </span>
+            <Button Small="true" Icon="fa-floppy-disk" AriaLabel="Сохранить лист" Busy="@_saver.IsBusy"
+                    Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
+                    OnClick="SaveNowAsync" />
+        }
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent @ref="_content" Key="CharacterId" Load="LoadAsync" LoadingMessage="Загружаю лист…" Context="loaded"
+                  ErrorTitle="Лист недоступен">
+        <Empty>
+            <EmptyState Icon="fa-id-card" Title="Лист не найден."
+                        Message="Его нет, или он не ваш. Свой лист открывается с главной.">
+                <Actions><Button Href="" Icon="fa-house">На главную</Button></Actions>
+            </EmptyState>
+        </Empty>
+        <ChildContent>
+            @{ var context = loaded!; }
+            <nav class="sheet-nav" aria-label="Разделы листа">
+                @foreach (var section in SheetSections.All)
+                {
+                    <a class="sheet-nav-link" href="@($"character/{CharacterId}#{SheetSections.Anchor(section)}")"
+                       data-testid="@($"nav-{section.Id}")">
+                        <i class="fa-solid @section.Icon" aria-hidden="true"></i>
+                        <span class="hidden sm:inline">@section.Title</span>
+                        <span class="sm:hidden">@section.ShortTitle</span>
+                    </a>
+                }
+            </nav>
+
+            @if (_saver.State == SheetSaveState.Conflict)
+            {
+                <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист изменили на другом устройстве" data-testid="sheet-conflict">
+                    <ChildContent>
+                        Правки этого устройства не сохранены — иначе они затёрли бы чужие. Перечитайте лист (правки
+                        отсюда пропадут) или запишите свои поверх.
+                    </ChildContent>
+                    <Actions>
+                        <Button Small="true" Icon="fa-rotate" data-testid="sheet-reload" OnClick="ReloadAsync">Перечитать</Button>
+                        <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="sheet-overwrite" OnClick="OverwriteAsync">
+                            Записать мои поверх
+                        </Button>
+                    </Actions>
+                </Alert>
+            }
+            else if (_saver.State == SheetSaveState.Rejected)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true" Title="Лист не сохраняется">
+                    <ChildContent>@_saver.Error</ChildContent>
+                    <Actions><Button Small="true" Icon="fa-rotate" OnClick="ReloadAsync">Перечитать</Button></Actions>
+                </Alert>
+            }
+
+            @if (_draftNotice is { } notice)
+            {
+                <Alert Tone="@(notice.NeedsChoice ? Tone.Warning : Tone.Info)" ShowIcon="true" data-testid="sheet-draft" OnClose="() => _draftNotice = null">
+                    <ChildContent>
+                        @if (notice.NeedsChoice)
+                        {
+                            <text>На этом устройстве остались несохранённые правки листа, но с тех пор лист изменили.</text>
+                        }
+                        else if (notice.Saved)
+                        {
+                            <text>Восстановленные несохранённые правки с этого устройства записаны в базу.</text>
+                        }
+                        else
+                        {
+                            <text>Восстановлены несохранённые правки с этого устройства — они уйдут в базу сами.</text>
+                        }
+                    </ChildContent>
+                    <Actions>
+                        @if (notice.NeedsChoice)
+                        {
+                            <Button Small="true" OnClick="RestoreDraft">Восстановить мои</Button>
+                        }
+                        @if (!notice.Saved)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="sheet-draft-discard" OnClick="DiscardDraftAsync">
+                                Отбросить
+                            </Button>
+                        }
+                    </Actions>
+                </Alert>
+            }
+
+            @if (context.ReadOnly)
+            {
+                <Alert Tone="Tone.Info" ShowIcon="true" Small="true">Лист только для чтения — править его может Хранитель.</Alert>
+            }
+
+            <CascadingValue Value="context">
+                @* change всплывает от любого поля листа: черновик пишется сразу, а не на тике автосохранения. *@
+                <div class="sheet" @onchange="KeepDraftAsync">
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Personal" Expanded="IsOpen(SheetSections.Personal)" OnToggle="() => Toggle(SheetSections.Personal)">
+                        <Actions>
+                            @if (context.ReadOnly)
+                            {
+                                <Badge Tone="CampaignLabels.CharacterStatusTone(context.Character.Status)">@CampaignLabels.CharacterStatus(context.Character.Status)</Badge>
+                            }
+                            else
+                            {
+                                <select class="cm-input cm-input-sm w-auto" aria-label="Статус листа" data-testid="sheet-status"
+                                        value="@context.Character.Status" @onchange="SetStatusAsync">
+                                    @foreach (var status in Enum.GetValues<CharacterStatus>())
+                                    {
+                                        <option value="@status">@CampaignLabels.CharacterStatus(status)</option>
+                                    }
+                                </select>
+                            }
+                        </Actions>
+                        <ChildContent>
+                            <PersonalPanel OnPortraitChanged="SetPortraitAsync" />
+                        </ChildContent>
+                    </SheetSection>
+
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Skills" Expanded="IsOpen(SheetSections.Skills)" OnToggle="() => Toggle(SheetSections.Skills)">
+                        <Actions>
+                            @if (!context.ReadOnly)
+                            {
+                                <Button Small="true" Icon="fa-dice" data-testid="open-development" OnClick="() => _developmentOpen = true">Фаза развития</Button>
+                            }
+                        </Actions>
+                        <ChildContent><SkillsPanel /></ChildContent>
+                    </SheetSection>
+
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Combat" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Combat)" OnToggle="() => Toggle(SheetSections.Combat)">
+                        <WeaponsPanel />
+                        <SpellsPanel />
+                    </SheetSection>
+
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Equipment" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Equipment)" OnToggle="() => Toggle(SheetSections.Equipment)">
+                        <EquipmentPanel />
+                        <FinancesPanel />
+                    </SheetSection>
+
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Sanity" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Sanity)" OnToggle="() => Toggle(SheetSections.Sanity)">
+                        <SanityPanel />
+                        <MythosBooksPanel />
+                    </SheetSection>
+
+                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Biography" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Biography)" OnToggle="() => Toggle(SheetSections.Biography)">
+                        <BiographyPanel />
+                        <FellowInvestigatorsPanel />
+                    </SheetSection>
+                </div>
+
+                <DevelopmentPhaseModal @bind-Open="_developmentOpen" />
+            </CascadingValue>
+
+            <SkillCheckModal @bind-Open="_checkOpen" Title="@($"Проверка — {context.Sheet.Personal.Name}")" Sheet="@context.Sheet"
+                             Catalog="@context.Catalog" InitialKey="@_checkKey"
+                             OnSheetChange="@(context.ReadOnly ? default(EventCallback<CheckSheetChange>) : EventCallback.Factory.Create<CheckSheetChange>(this, ApplyCheck))" />
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+@code {
+    /// <summary>Плашка черновика; <c>Saved</c> — восстановленное уже ушло в базу, отбрасывать нечего.</summary>
+    private sealed record DraftNotice(bool NeedsChoice, CharacterSheet Sheet, bool Saved = false);
+
+    private AsyncContent<SheetContext?>? _content;
+    private SheetContext? _context;
+    private SheetAutoSave _saver = null!;
+    private DraftNotice? _draftNotice;
+    private readonly HashSet<string> _collapsed = [];
+    private CancellationTokenSource? _loop;
+    private bool _developmentOpen;
+    private bool _checkOpen;
+    private string? _checkKey;
+    private bool _failureShown;
+
+    [Parameter] public Guid CharacterId { get; set; }
+
+    private string Title => _context?.Sheet.Personal.Name is { Length: > 0 } name ? name : "Лист сыщика";
+
+    protected override void OnInitialized() => _saver = new SheetAutoSave(Api, Storage);
+
+    private async Task<SheetContext?> LoadAsync(CancellationToken cancellationToken)
+    {
+        StopLoop();
+        _draftNotice = null;
+        CharacterDto character;
+        try
+        {
+            character = await Api.GetAsync(CharacterId, cancellationToken);
+        }
+        catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _context = null;
+            StateHasChanged();
+            return null;
+        }
+
+        var skills = await SkillsApi.ListAsync(cancellationToken);
+        var catalog = SkillCatalogs.From(skills.Items);
+
+        _saver.Start(character);
+        _context = new SheetContext(character, catalog, skills.Items,
+            new SheetCatalogs(WeaponsApi, SpellsApi, BooksApi, CreaturesApi, ItemsApi),
+            () => InvokeAsync(StateHasChanged), OpenCheck);
+
+        if (character.CanEdit)
+        {
+            await RestoreDraftAsync(character);
+            StartLoop();
+        }
+
+        StateHasChanged(); // шапка (имя, индикатор) — вне AsyncContent
+        return _context;
+    }
+
+    /// <summary>
+    /// Черновик с этого устройства. Совпадает с базой — стираем молча (уведомление только если расходится,
+    /// знание v1). Начат на той же версии — подставляем сразу; на старой — спрашиваем: лист с тех пор
+    /// правили на другом устройстве.
+    /// </summary>
+    private async Task RestoreDraftAsync(CharacterDto character)
+    {
+        if (await _saver.ReadDraftAsync(character.Id) is not { } draft)
+            return;
+
+        if (!_saver.HasChanges(draft.Sheet))
+        {
+            await _saver.DiscardDraftAsync(character.Id);
+            return;
+        }
+
+        if (draft.Version == character.Version)
+        {
+            character.Sheet = draft.Sheet;
+            _draftNotice = new DraftNotice(false, draft.Sheet);
+        }
+        else
+        {
+            _draftNotice = new DraftNotice(true, draft.Sheet);
+        }
+    }
+
+    private void RestoreDraft()
+    {
+        if (_context is null || _draftNotice is null)
+            return;
+
+        _context.Character.Sheet = _draftNotice.Sheet;
+        _draftNotice = null;
+    }
+
+    private async Task DiscardDraftAsync()
+    {
+        _draftNotice = null;
+        await _saver.DiscardDraftAsync(CharacterId);
+        if (_content is not null)
+            await _content.ReloadAsync();
+    }
+
+    private void StartLoop()
+    {
+        _loop = new CancellationTokenSource();
+        _ = RunLoopAsync(_loop.Token);
+    }
+
+    private void StopLoop()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        _loop = null;
+    }
+
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(SheetAutoSave.Interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+                await InvokeAsync(() => SaveAsync(manual: false));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private Task SaveNowAsync() => SaveAsync(manual: true);
+
+    private Task KeepDraftAsync() => _context is { ReadOnly: false } context ? _saver.KeepDraftAsync(context.Sheet) : Task.CompletedTask;
+
+    /// <summary>Одно уведомление на серию ошибок: тик раз в три секунды иначе завалил бы экран тостами.</summary>
+    private async Task SaveAsync(bool manual)
+    {
+        if (_context is null || _context.ReadOnly)
+            return;
+
+        var changed = await _saver.SaveIfChangedAsync(_context.Sheet);
+        switch (_saver.State)
+        {
+            case SheetSaveState.Conflict when changed:
+                Toasts.Warning("Лист изменили на другом устройстве — правки отсюда не сохранены. Выберите вверху листа: перечитать или записать свои.");
+                break;
+            case SheetSaveState.Failed when !_failureShown || manual:
+                _failureShown = true;
+                Toasts.Error(_saver.Error ?? "Лист не сохранился.", "Лист не сохранён — повторю сам");
+                break;
+            case SheetSaveState.Saved:
+                if (changed && _draftNotice is { NeedsChoice: false, Saved: false } restored)
+                    _draftNotice = restored with { Saved = true };
+                if (_failureShown)
+                    Toasts.Success("Лист снова сохраняется.");
+                else if (manual)
+                    Toasts.Success("Лист сохранён.");
+                _failureShown = false;
+                break;
+        }
+
+        if (changed || manual)
+            StateHasChanged();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await _saver.DiscardDraftAsync(CharacterId);
+        if (_content is not null)
+            await _content.ReloadAsync();
+    }
+
+    /// <summary>Конфликт: записать правки этого устройства поверх — с версией, прочитанной сейчас.</summary>
+    private async Task OverwriteAsync()
+    {
+        if (_context is null)
+            return;
+
+        try
+        {
+            var fresh = await Api.GetAsync(CharacterId);
+            var saved = await Api.SaveSheetAsync(CharacterId, _context.Sheet, fresh.Version);
+            await _saver.DiscardDraftAsync(CharacterId);
+            fresh.Sheet = _context.Sheet;
+            fresh.Version = saved.Version;
+            _saver.Start(fresh);
+            Toasts.Success("Правки этого устройства записаны поверх.");
+        }
+        catch (HttpRequestException error)
+        {
+            Toasts.Error(ApiErrors.Describe(error));
+        }
+    }
+
+    private async Task SetStatusAsync(ChangeEventArgs args)
+    {
+        if (_context is null || !Enum.TryParse<CharacterStatus>(args.Value?.ToString(), out var status))
+            return;
+
+        await WriteColumnAsync(() => Api.SetStatusAsync(CharacterId, status, _saver.Version), () => _context.Character.Status = status);
+    }
+
+    private Task SetPortraitAsync(Contracts.Files.StoredFileDto? file) =>
+        _context is null
+            ? Task.CompletedTask
+            : WriteColumnAsync(() => Api.SetPortraitAsync(CharacterId, file?.Id, _saver.Version), () =>
+            {
+                _context.Character.PortraitFileId = file?.Id;
+                _context.Character.PortraitUrl = file?.Url;
+            });
+
+    /// <summary>
+    /// Портрет и статус — колонки строки, их пишут сразу (с той же версией, что и лист). Несохранённые правки
+    /// документа сначала уходят в базу — иначе запись колонки сдвинула бы версию, и следующий тик получил бы
+    /// конфликт сам с собой.
+    /// </summary>
+    private async Task WriteColumnAsync(Func<Task<CharacterSavedDto>> write, Action apply)
+    {
+        await SaveAsync(manual: false);
+        if (_saver.State is not SheetSaveState.Saved)
+        {
+            Toasts.Warning("Сначала должен сохраниться лист — попробуйте ещё раз через пару секунд.");
+            return;
+        }
+
+        try
+        {
+            _saver.Accept(await write());
+            apply();
+        }
+        catch (ApiException error) when (error.IsStale)
+        {
+            Toasts.Warning("Лист изменили на другом устройстве — перечитайте его.");
+        }
+        catch (HttpRequestException error)
+        {
+            Toasts.Error(ApiErrors.Describe(error));
+        }
+    }
+
+    private void OpenCheck(string? key)
+    {
+        _checkKey = key;
+        _checkOpen = true;
+        StateHasChanged();
+    }
+
+    /// <summary>Трата Удачи и отметка из диалога — правилом Core; в базу их унесёт автосохранение.</summary>
+    private void ApplyCheck(CheckSheetChange change)
+    {
+        if (_context is not null && CheckRules.Apply(_context.Sheet, _context.Catalog, change))
+            StateHasChanged();
+    }
+
+    private bool IsOpen(SheetSectionInfo section) => !_collapsed.Contains(section.Id);
+
+    private void Toggle(SheetSectionInfo section)
+    {
+        if (!_collapsed.Remove(section.Id))
+            _collapsed.Add(section.Id);
+    }
+
+    private string SaveStateText => _saver.State switch
+    {
+        SheetSaveState.Saving => "Сохранение…",
+        SheetSaveState.Dirty => "Есть правки",
+        SheetSaveState.Failed => "Не сохранено",
+        SheetSaveState.Conflict => "Конфликт",
+        SheetSaveState.Rejected => "Не сохраняется",
+        _ => "Сохранено",
+    };
+
+    private string SaveStateIcon => _saver.State switch
+    {
+        SheetSaveState.Saving => "fa-spinner fa-spin",
+        SheetSaveState.Dirty => "fa-pen",
+        SheetSaveState.Failed or SheetSaveState.Rejected => "fa-triangle-exclamation",
+        SheetSaveState.Conflict => "fa-code-merge",
+        _ => "fa-check",
+    };
+
+    private string SaveStateClass => _saver.State switch
+    {
+        SheetSaveState.Failed or SheetSaveState.Rejected => "text-error-700",
+        SheetSaveState.Conflict => "text-warning-800",
+        SheetSaveState.Saved => "text-success-700",
+        _ => "text-primary-500",
+    };
+
+    public void Dispose() => StopLoop();
+}

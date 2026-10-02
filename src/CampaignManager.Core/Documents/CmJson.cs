@@ -50,6 +50,20 @@ public static class CmJson
     public static JsonDocument Write(EncounterState state) =>
         JsonSerializer.SerializeToDocument(state, CmJsonContext.Default.EncounterState);
 
+    /// <summary>Лист строкой — слепок для автосохранения и черновика (сравнение «изменилось ли»).</summary>
+    public static string Serialize(CharacterSheet sheet) =>
+        JsonSerializer.Serialize(sheet, CmJsonContext.Default.CharacterSheet);
+
+    public static CharacterSheet? DeserializeSheet(string json) =>
+        JsonSerializer.Deserialize(json, CmJsonContext.Default.CharacterSheet);
+
+    /// <summary>
+    /// Глубокая копия листа — для предпросмотра правила (окно чтения книги применяет его к копии и
+    /// показывает итог, а не считает Мифы и рассудок второй раз сам, как в v1).
+    /// </summary>
+    public static CharacterSheet Clone(CharacterSheet sheet) =>
+        DeserializeSheet(Serialize(sheet)) ?? throw new JsonException("Копия листа пуста.");
+
     public static string Serialize(InvestigatorDraft draft) =>
         JsonSerializer.Serialize(draft, CmJsonContext.Default.InvestigatorDraft);
 

@@ -1,0 +1,221 @@
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Навыки по группам бланка (раскладка — Core/SheetSkillLayout). Строки размечены @key: без него Blazor
+   переиспользует поле соседнего навыка, когда список перетасовывается (навык уехал из свёрнутых), и
+   показывает чужое значение (знание v1). Колонки — CSS columns (masonry): каждая группа рисуется один раз. *@
+<div class="mb-3 flex flex-wrap items-center gap-2">
+    <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск навыка…" aria-label="Поиск навыка"
+           data-testid="skill-search" @bind="_search" @bind:event="oninput" />
+    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-specialization"
+            OnClick="() => _adding = Adding.Specialization">Специализация</Button>
+    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-own-skill"
+            OnClick="() => _adding = Adding.Own">Свой навык</Button>
+</div>
+<p class="cm-field-note mb-3">
+    Тап по имени навыка — справка и «Проверка»; тап по СИЛ, ЛВК… в «Личных данных» — проверка характеристики.
+    В скобках — база; галочка — отметка успеха для фазы развития (стр. 92).
+</p>
+
+@if (_adding == Adding.Specialization)
+{
+    <div class="mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
+        <Field Label="Навык" class="w-full sm:w-56">
+            <select class="cm-input" @bind="_parentId">
+                <option value="">— выберите —</option>
+                @foreach (var parent in Parents)
+                {
+                    <option value="@parent.Id">@parent.Name</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Специализация" class="min-w-48 flex-1">
+            <input class="cm-input" list="spec-options" placeholder="латынь, химия, пистолет…" data-testid="specialization-name"
+                   @bind="_name" @bind:event="oninput" />
+            <datalist id="spec-options">
+                @foreach (var option in SpecializationOptions)
+                {
+                    <option value="@option"></option>
+                }
+            </datalist>
+        </Field>
+        <Button Small="true" Icon="fa-plus" Disabled="@(_parentId is null || string.IsNullOrWhiteSpace(_name))" data-testid="specialization-add"
+                OnClick="AddSpecialization">Добавить</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        <p class="cm-field-note w-full">
+            Специализация, которой нет в справочнике, получает базу соседней, иначе 1% (стр. 52).
+        </p>
+    </div>
+}
+else if (_adding == Adding.Own)
+{
+    <div class="mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
+        <Field Label="Название" class="min-w-48 flex-1">
+            <input class="cm-input" data-testid="own-skill-name" @bind="_name" @bind:event="oninput" />
+        </Field>
+        <Field Label="Значение" class="w-24">
+            <input type="number" inputmode="numeric" min="0" max="99" class="cm-input" @bind="_value" />
+        </Field>
+        <Button Small="true" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_name)" data-testid="own-skill-add" OnClick="AddOwn">Добавить</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        <p class="cm-field-note w-full">Свой навык живёт только на этом листе — в справочник он не попадает.</p>
+    </div>
+}
+
+@{ var groups = Filtered(); }
+@if (groups.Count == 0)
+{
+    <p class="py-6 text-center text-sm text-primary-500">Навыки не найдены.</p>
+}
+else
+{
+    <div class="skill-columns">
+        @foreach (var group in groups)
+        {
+            <section class="skill-group" @key="group.Title">
+                <h3 class="skill-group-title">@group.Title</h3>
+                @foreach (var line in group.Lines)
+                {
+                    <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
+                              OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />
+                }
+                @foreach (var fold in group.Folds)
+                {
+                    <details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)">
+                        <summary>@fold.ParentName — ещё @fold.Lines.Count</summary>
+                        @foreach (var line in fold.Lines)
+                        {
+                            <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
+                                      OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />
+                        }
+                    </details>
+                }
+            </section>
+        }
+    </div>
+}
+
+<Modal Open="@(_info is not null)" OnClose="() => _info = null" Title="@(_info?.Name ?? "")" Size="ModalSize.Large">
+    <ChildContent>
+        @if (_info is not null)
+        {
+            <SkillDetails Skill="_info" Catalog="Context.Skills" />
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="() => _info = null">Закрыть</Button>
+        <Button Icon="fa-dice-d20" data-testid="skill-info-check" OnClick="CheckFromInfo">Проверка</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private enum Adding { None, Specialization, Own }
+
+    private string _search = "";
+    private Adding _adding;
+    private Guid? _parentId;
+    private string _name = "";
+    private int _value = 1;
+    private Contracts.Catalogs.SkillDto? _info;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private IEnumerable<SkillDefinition> Parents =>
+        Context.Catalog.Skills.Where(s => Context.Catalog.IsParent(s.Id)).OrderBy(s => s.Name, StringComparer.CurrentCulture);
+
+    /// <summary>Подсказки: специализации родителя из справочника — частью в скобках.</summary>
+    private IEnumerable<string> SpecializationOptions => _parentId is { } parent
+        ? Context.Catalog.Children(parent).Select(c => Inner(c.Name)).Where(n => n.Length > 0)
+        : [];
+
+    private static string Inner(string name)
+    {
+        var open = name.IndexOf('(', StringComparison.Ordinal);
+        var close = name.LastIndexOf(')');
+        return open >= 0 && close > open ? name[(open + 1)..close].Trim() : "";
+    }
+
+    private List<SkillLineGroup> Filtered()
+    {
+        var groups = SheetSkillLayout.Groups(Context.Sheet, Context.Catalog);
+        var query = CatalogCodeTable.NormalizeName(_search);
+        if (query.Length == 0)
+            return [.. groups];
+
+        bool Matches(SkillLine line) => CatalogCodeTable.NormalizeName(line.Name).Contains(query, StringComparison.Ordinal);
+
+        return
+        [
+            .. groups
+                .Select(g => g with
+                {
+                    Lines = [.. g.Lines.Where(Matches)],
+                    Folds = [.. g.Folds.Select(f => f with { Lines = [.. f.Lines.Where(Matches)] }).Where(f => f.Lines.Count > 0)],
+                })
+                .Where(g => g.Lines.Count > 0 || g.Folds.Count > 0),
+        ];
+    }
+
+    private void SetValue(SkillLine line, int value)
+    {
+        SheetSkillLayout.SetValue(Context.Sheet, Context.Catalog, line, value);
+        Context.Changed();
+    }
+
+    private void SetChecked(SkillLine line, bool value)
+    {
+        SheetSkillLayout.SetChecked(Context.Sheet, line, value);
+        Context.Changed();
+    }
+
+    private void Remove(SkillLine line)
+    {
+        SheetSkillLayout.Remove(Context.Sheet, line);
+        Context.Changed();
+    }
+
+    /// <summary>Навык справочника — справка с «Проверкой»; свой — сразу проверка (справки у него нет).</summary>
+    private void Open(SkillLine line)
+    {
+        if (line.Definition is { } definition && Context.Skills.FirstOrDefault(s => s.Id == definition.Id) is { } dto)
+            _info = dto;
+        else
+            Context.Check(line.Key);
+    }
+
+    private void CheckFromInfo()
+    {
+        if (_info is null)
+            return;
+
+        var key = $"skill:{_info.Id}";
+        _info = null;
+        Context.Check(key);
+    }
+
+    private void AddSpecialization()
+    {
+        if (_parentId is not { } parent)
+            return;
+
+        SheetSkillLayout.AddSpecialization(Context.Sheet, Context.Catalog, parent, _name);
+        _search = "";
+        CancelAdd();
+        Context.Changed();
+    }
+
+    private void AddOwn()
+    {
+        SheetSkillLayout.AddOwn(Context.Sheet, _name, _value);
+        CancelAdd();
+        Context.Changed();
+    }
+
+    private void CancelAdd()
+    {
+        _adding = Adding.None;
+        _parentId = null;
+        _name = "";
+        _value = 1;
+    }
+}

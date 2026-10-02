@@ -17,6 +17,29 @@ public static class DevelopmentPhaseRules
     /// <summary>Выше 95 навык растёт, даже если и так высок (стр. 92).</summary>
     public const int AlwaysImprovesAbove = 95;
 
+    /// <summary>Прирост навыка при успешной проверке опыта (стр. 92).</summary>
+    public static readonly DiceSpec SkillGain = new(1, 10);
+
+    /// <summary>Рассудок за навык, впервые дошедший до 90% (стр. 92).</summary>
+    public static readonly DiceSpec MasterySanity = new(2, 6);
+
+    /// <summary>Прирост Удачи при восстановлении (стр. 93).</summary>
+    public static readonly DiceSpec LuckGain = new(1, 10);
+
+    /// <summary>Рассудок при успешном самолечении (стр. 165).</summary>
+    public static readonly DiceSpec SelfHealingGain = new(1, 6);
+
+    /// <summary>Кости варианта «занятия и Средства» (стр. 94); null — бросать нечего («Жизнь идёт своим чередом»).</summary>
+    public static DiceSpec? CreditRatingDice(CreditRatingChange change) => change switch
+    {
+        CreditRatingChange.Rich => new DiceSpec(1, 10),
+        CreditRatingChange.Promotion => new DiceSpec(1, 6),
+        CreditRatingChange.TightenBelt or CreditRatingChange.SoldSilver => new DiceSpec(1, 10),
+        CreditRatingChange.RoughPatch => new DiceSpec(2, 10),
+        CreditRatingChange.Bankrupt => new DiceSpec(1, 100),
+        _ => null,
+    };
+
     /// <summary>Мифы Ктулху и Средства не отмечают — «у этих навыков даже нет места для галочки» (стр. 92).</summary>
     public static bool CanBeChecked(string? skillCode) =>
         skillCode is not (SkillCodes.Mythos or SkillCodes.CreditRating);
@@ -44,11 +67,11 @@ public static class DevelopmentPhaseRules
         if (roll <= oldValue && roll <= AlwaysImprovesAbove)
             return new SkillImprovementResult { SkillName = name, OldValue = oldValue, Roll = roll, NewValue = oldValue };
 
-        var gain = dice.Roll(1, 10);
+        var gain = dice.Roll(SkillGain.Count, SkillGain.Sides);
         skill.Value = oldValue + gain;
 
         var reachedMastery = oldValue < MasteryThreshold && skill.Value >= MasteryThreshold;
-        var sanityGain = reachedMastery ? SanityRules.Grant(sheet, catalog, dice.Roll(2, 6)) : 0;
+        var sanityGain = reachedMastery ? SanityRules.Grant(sheet, catalog, dice.Roll(MasterySanity.Count, MasterySanity.Sides)) : 0;
 
         return new SkillImprovementResult
         {
@@ -79,7 +102,7 @@ public static class DevelopmentPhaseRules
         if (roll <= oldValue)
             return new LuckRecoveryResult(roll, oldValue, false, 0, oldValue);
 
-        var newValue = Math.Min(DerivedAttributeRules.MaxLuck, oldValue + dice.Roll(1, 10));
+        var newValue = Math.Min(DerivedAttributeRules.MaxLuck, oldValue + dice.Roll(LuckGain.Count, LuckGain.Sides));
         sheet.Current.Luck = newValue;
         return new LuckRecoveryResult(roll, oldValue, true, newValue - oldValue, newValue);
     }
@@ -106,7 +129,7 @@ public static class DevelopmentPhaseRules
             return new SelfHealingResult(roll, useKeyConnection, false, false, -lost, false, useKeyConnection);
         }
 
-        var gain = SanityRules.Grant(sheet, catalog, dice.Roll(1, 6));
+        var gain = SanityRules.Grant(sheet, catalog, dice.Roll(SelfHealingGain.Count, SelfHealingGain.Sides));
 
         var curedIndefinite = useKeyConnection && sheet.Condition.IndefiniteInsanity;
         if (curedIndefinite)
@@ -144,16 +167,8 @@ public static class DevelopmentPhaseRules
     {
         var oldValue = sheet.Value(catalog, SkillCodes.CreditRating);
 
-        var (roll, delta) = change switch
-        {
-            CreditRatingChange.Rich => RollDelta(1, 10, 1),
-            CreditRatingChange.Promotion => RollDelta(1, 6, 1),
-            CreditRatingChange.TightenBelt => RollDelta(1, 10, -1),
-            CreditRatingChange.SoldSilver => RollDelta(1, 10, -1),
-            CreditRatingChange.RoughPatch => RollDelta(2, 10, -1),
-            CreditRatingChange.Bankrupt => RollDelta(1, 100, -1),
-            _ => (0, 0),
-        };
+        var sign = change is CreditRatingChange.Rich or CreditRatingChange.Promotion ? 1 : -1;
+        var (roll, delta) = CreditRatingDice(change) is { } spec ? RollDelta(spec.Count, spec.Sides, sign) : (0, 0);
 
         var newValue = Math.Clamp(oldValue + delta, 0, 99);
         if (sheet.EnsureEntry(catalog, SkillCodes.CreditRating) is { } skill)
@@ -251,3 +266,9 @@ public sealed record FinancesUpdateResult(
     decimal NewCash,
     string Assets,
     decimal PocketMoney);
+
+/// <summary>Кости правила: <c>Count</c>d<c>Sides</c> («2d6») — окно по ним предлагает вписать сумму.</summary>
+public sealed record DiceSpec(int Count, int Sides)
+{
+    public override string ToString() => $"{Count}d{Sides}";
+}

@@ -1,0 +1,136 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+
+@* Оружие листа — ОДНА разметка для таблицы и карточек (в v1 таблица и карточки выводили те же десять полей
+   дважды). Строка — сетка: с lg ячейки встают колонками под общей шапкой, ниже lg — переносятся с подписью
+   над каждой (как карточка, но без рамки — строки разделяет линейка). Патроны и Неиспр. — колонки, а не
+   детали: в бою в них смотрят каждый раунд (знание v1).
+   В листе — текст книги; числа для боя считаются при чтении (WeaponStatsReader), поэтому правка урона здесь
+   сразу видна бою (ошибка v1 2). Оружие из справочника — копия (SheetCopies.Weapon): правка патронов на листе
+   справочник не трогает. *@
+<section data-testid="weapons">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Оружие</h3>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="weapon-add" OnClick="() => _adding = true">Оружие</Button>
+    </div>
+    @if (_adding)
+    {
+        <div class="mb-3">
+            <CatalogSearch TItem="WeaponDto" Load="Context.Catalogs.WeaponsAsync" Name="w => w.Name" Placeholder="Найти оружие…"
+                           Meta="w => w.Damage" OnSelect="Add" OnCustom="AddCustom" OnCancel="() => _adding = false" />
+        </div>
+    }
+
+    @if (Sheet.Weapons.Count == 0)
+    {
+        <p class="text-sm italic text-primary-400">Оружия нет.</p>
+    }
+    else
+    {
+        <div class="weapon-head" aria-hidden="true">
+            <span>Название</span><span>Навык</span><span>Урон</span><span>Дист.</span><span>Атаки</span><span>Патроны</span><span>Неиспр.</span><span></span>
+        </div>
+        @foreach (var weapon in Sheet.Weapons)
+        {
+            var damage = WeaponStatsReader.Damage(weapon);
+            var skill = SkillOf(weapon);
+            <div class="weapon-row" @key="weapon.RowId" data-testid="weapon-row">
+                <label class="weapon-cell weapon-name">
+                    <span class="weapon-label">Название</span>
+                    <input class="cm-input" @bind="weapon.Name" />
+                </label>
+                <div class="weapon-cell weapon-skill">
+                    <span class="weapon-label">Навык</span>
+                    <div class="flex items-center gap-1">
+                        <select class="cm-input" aria-label="@($"{weapon.Name}: навык")" value="@weapon.SkillId" @onchange="e => SetSkill(weapon, e)">
+                            <option value="">—</option>
+                            @foreach (var option in CombatSkills)
+                            {
+                                <option value="@option.Id">@option.Name</option>
+                            }
+                        </select>
+                        @if (skill is not null)
+                        {
+                            <button type="button" class="sheet-chip shrink-0" aria-label="@($"Проверка: {skill.Name}")" @onclick="() => Context.Check(skill.Key)">@skill.Value%</button>
+                        }
+                    </div>
+                </div>
+                <label class="weapon-cell">
+                    <span class="weapon-label">Урон</span>
+                    <span class="flex items-center">
+                        <input class="cm-input" data-testid="weapon-damage" @bind="weapon.Damage" @bind:after="Context.Changed" />
+                        <UnparsedMark Show="@(!damage.IsParsed && weapon.Damage.Trim().Length > 0)" What="урон — бой его не бросит" />
+                    </span>
+                </label>
+                <label class="weapon-cell"><span class="weapon-label">Дист.</span><input class="cm-input" @bind="weapon.Range" /></label>
+                <label class="weapon-cell"><span class="weapon-label">Атаки</span><input class="cm-input" @bind="weapon.Attacks" /></label>
+                <label class="weapon-cell"><span class="weapon-label">Патроны</span><input class="cm-input" @bind="weapon.Ammo" /></label>
+                <label class="weapon-cell"><span class="weapon-label">Неиспр.</span><input class="cm-input" @bind="weapon.Malfunction" /></label>
+                <div class="weapon-cell weapon-actions">
+                    <label class="flex items-center gap-1.5 text-xs text-primary-600">
+                        <input type="checkbox" class="cm-checkbox" checked="@weapon.Impaling" @onchange="e => { weapon.Impaling = e.Value is true; Context.Changed(); }" />
+                        пронз.
+                    </label>
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {weapon.Name}")" OnClick="() => Remove(weapon)" />
+                </div>
+                <label class="weapon-cell weapon-notes">
+                    <span class="weapon-label">Заметки</span>
+                    <input class="cm-input" placeholder="Заметки" aria-label="@($"{weapon.Name}: заметки")" @bind="weapon.Notes" />
+                </label>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private bool _adding;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    /// <summary>Навыки оружия — ближний бой, стрельба, метание (категории боя), без родителей.</summary>
+    private IEnumerable<SkillDefinition> CombatSkills => Context.Catalog.Skills
+        .Where(s => s.Category is SkillCategory.CombatGeneral or SkillCategory.CombatFirearms && !Context.Catalog.IsParent(s.Id))
+        .OrderBy(s => s.Name, StringComparer.CurrentCulture);
+
+    private CheckSubject? SkillOf(SheetWeapon weapon) =>
+        weapon.SkillId is { } id ? CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id) : null;
+
+    private void Add(WeaponDto weapon)
+    {
+        Sheet.Weapons.Add(SheetCopies.Weapon(new WeaponData(weapon.Id, weapon.Name)
+        {
+            SkillId = weapon.SkillId,
+            Damage = weapon.Damage,
+            Range = weapon.Range,
+            Attacks = weapon.Attacks,
+            Ammo = weapon.Ammo,
+            Malfunction = weapon.Malfunction is { } m ? (m == 100 ? "00" : m.ToString(CultureInfo.InvariantCulture)) : "",
+            Impaling = weapon.IsImpaling,
+        }));
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void AddCustom(string name)
+    {
+        Sheet.Weapons.Add(new SheetWeapon { Name = name });
+        _adding = false;
+        Context.Changed();
+    }
+
+    private void SetSkill(SheetWeapon weapon, ChangeEventArgs e)
+    {
+        weapon.SkillId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        Context.Changed();
+    }
+
+    private void Remove(SheetWeapon weapon)
+    {
+        Sheet.Weapons.Remove(weapon);
+        Context.Changed();
+    }
+}

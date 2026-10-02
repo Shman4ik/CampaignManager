@@ -25,6 +25,12 @@ public sealed class SheetNotes
     /// <summary>Расхождения у сыщиков и прегенов: вычисленное побеждает, в отчёт.</summary>
     public List<string> Discrepancies { get; } = [];
 
+    /// <summary>
+    /// Непустые графы биографии v1, которых в 2.0 нет («Фобии», «Магические предметы» — решение владельца
+    /// 2026-10-02): текст отброшен, в отчёт — какие графы были заполнены.
+    /// </summary>
+    public List<string> DroppedBiography { get; } = [];
+
     public int CheckedDropped { get; set; }
 
     public int WeaponsLinked { get; set; }
@@ -110,7 +116,7 @@ public sealed class SheetConverter(
         }
 
         sheet.Finances = Finances(v1.Obj("Finances"));
-        sheet.Biography = Biography(v1);
+        sheet.Biography = Biography(v1, notes);
         sheet.Condition = Condition(v1.Obj("State"));
 
         foreach (var condition in v1.Arr("InsanityConditions").OfType<JsonObject>())
@@ -384,9 +390,24 @@ public sealed class SheetConverter(
         return decimal.TryParse(digits, NumberStyles.Number, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
 
-    private static Biography Biography(JsonNode v1)
+    /// <summary>Графы v1, которых в 2.0 нет: текст выбрасывается, в отчёт — подпись графы.</summary>
+    private static readonly (string Key, string Label)[] DroppedBiographyFields =
+    [
+        ("Phobias", "Фобии"),
+        ("MagicalItems", "Магические предметы"),
+    ];
+
+    private static Biography Biography(JsonNode v1, SheetNotes notes)
     {
         var b = v1.Obj("Biography");
+        foreach (var (key, label) in DroppedBiographyFields)
+        {
+            if (!string.IsNullOrWhiteSpace(b.Str(key)))
+            {
+                notes.DroppedBiography.Add(label);
+            }
+        }
+
         return new Biography
         {
             Appearance = b.Str("Appearance") ?? "",
@@ -397,8 +418,6 @@ public sealed class SheetConverter(
             ValuablePossessions = b.Str("ValuablePossessions") ?? "",
             SupernaturalEncounters = b.Str("SupernaturalEncounters") ?? "",
             Injuries = b.Str("Injuries") ?? "",
-            Phobias = b.Str("Phobias") ?? "",
-            MagicalItems = b.Str("MagicalItems") ?? "",
             KeyConnection = b.Str("KeyConnection") ?? "",
             Backstory = v1.Str("Backstory") ?? "",
             Notes = v1.Str("Notes") ?? "",

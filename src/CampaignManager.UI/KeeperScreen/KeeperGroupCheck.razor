@@ -1,0 +1,90 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Platform
+@inject ICampaignsApi Campaigns
+@inject ICharactersApi Characters
+@inject ICatalogApi<SkillDto> Skills
+@inject KeeperScreenState Screen
+
+@* Групповая проверка ширмы с составом кампании (как в v1): Хранитель выбирает свою кампанию — значения навыков
+   берутся с листов её активных сыщиков (GET /campaigns/{id}/investigators, T2.3). Без кампании — ручной режим:
+   имя и значение вписывает Хранитель. Выбор кампании живёт в состоянии ширмы вкладки. *@
+<div class="flex flex-col gap-3">
+    @if (_campaigns.Count > 0)
+    {
+        <Field Label="Состав" class="sm:w-80">
+            <select class="cm-input" data-testid="group-campaign" value="@(Screen.GroupCampaignId?.ToString() ?? "")" @onchange="SelectAsync">
+                <option value="">— вписать сыщиков вручную —</option>
+                @foreach (var campaign in _campaigns)
+                {
+                    <option value="@campaign.Id">@campaign.Name</option>
+                }
+            </select>
+        </Field>
+    }
+    @if (_error is not null)
+    {
+        <Alert Tone="Tone.Error" Small="true" class="mb-0">@_error</Alert>
+    }
+    @if (_party is not null && _catalog is not null)
+    {
+        <GroupCheckPanel @key="Screen.GroupCampaignId" Party="_party" Catalog="_catalog" Draft="@Screen.GroupCheck" />
+    }
+    else
+    {
+        <GroupCheckPanel Draft="@Screen.GroupCheck" />
+    }
+</div>
+
+@code {
+    private IReadOnlyList<CampaignSummaryDto> _campaigns = [];
+    private IReadOnlyList<CheckInvestigator>? _party;
+    private SkillCatalog? _catalog;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit)];
+            if (Screen.GroupCampaignId is { } id)
+                await LoadAsync(id);
+        }
+        catch (HttpRequestException error)
+        {
+            _error = ApiErrors.Describe(error);
+        }
+    }
+
+    private async Task SelectAsync(ChangeEventArgs e)
+    {
+        Screen.GroupCampaignId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        Screen.GroupCheck.Rolls.Clear();
+        _party = null;
+        if (Screen.GroupCampaignId is { } campaignId)
+            await LoadAsync(campaignId);
+    }
+
+    private async Task LoadAsync(Guid campaignId)
+    {
+        _error = null;
+        try
+        {
+            var investigators = await Characters.GetCampaignInvestigatorsAsync(campaignId);
+            if (_catalog is null)
+            {
+                var skills = await Skills.ListAsync();
+                _catalog = SkillCatalogs.From(skills.Items);
+            }
+
+            _party = [.. investigators.Select(i => new CheckInvestigator(i.CharacterId, i.Name, i.Sheet, i.PlayerName))];
+        }
+        catch (HttpRequestException error)
+        {
+            _error = ApiErrors.Describe(error);
+            _party = null;
+        }
+    }
+}

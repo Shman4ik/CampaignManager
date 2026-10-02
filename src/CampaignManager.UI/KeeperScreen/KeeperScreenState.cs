@@ -19,6 +19,9 @@ public sealed class KeeperScreenState
     /// <summary>Групповая проверка: сыщики, навык и броски — чтобы не вписывать заново при каждом открытии.</summary>
     public GroupCheckDraft GroupCheck { get; } = new();
 
+    /// <summary>Кампания, чей состав в групповой проверке; null — сыщиков вписывают руками.</summary>
+    public Guid? GroupCampaignId { get; set; }
+
     public event Action? Changed;
 
     public void Toggle()

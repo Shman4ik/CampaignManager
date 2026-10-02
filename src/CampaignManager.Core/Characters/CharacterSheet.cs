@@ -228,7 +228,13 @@ public sealed record Finances : DocumentPart
     public string Note { get; set; } = "";
 }
 
-/// <summary>Биография (стр. 40–43): графы бланка, ключевая связь и заметки.</summary>
+/// <summary>
+/// Биография (стр. 40–43): графы бланка, ключевая связь, предыстория и заметки. Текстовых граф «Фобии» и
+/// «Магические предметы» нет (решение владельца 2026-10-02): фобии и мании — структурированные записи
+/// <see cref="CharacterSheet.InsanityConditions"/>, предметы — <see cref="CharacterSheet.Equipment"/>. Текст
+/// этих граф в старых листах 2.0 доживает в <see cref="DocumentPart.Extra"/>; перенос v1 его отбрасывает.
+/// «Предыстория» и «Заметки» — раздельные графы (решение владельца 2026-10-02).
+/// </summary>
 public sealed record Biography : DocumentPart
 {
     public string Appearance { get; set; } = "";
@@ -239,8 +245,6 @@ public sealed record Biography : DocumentPart
     public string ValuablePossessions { get; set; } = "";
     public string SupernaturalEncounters { get; set; } = "";
     public string Injuries { get; set; } = "";
-    public string Phobias { get; set; } = "";
-    public string MagicalItems { get; set; } = "";
     public string Backstory { get; set; } = "";
 
     /// <summary>Ключевая связь (стр. 43); пусто — связь потеряна.</summary>

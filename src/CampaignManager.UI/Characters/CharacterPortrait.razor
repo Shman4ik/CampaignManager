@@ -1,0 +1,69 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject IFilesApi Files
+
+@* Портрет — как рамка в правом верхнем углу бланка, слева от имени. Рамка сама — <label> скрытого InputFile
+   (большая тап-цель), но подпись «Загрузить»/«Заменить» под ней обязательна: наведения на планшете нет, и без
+   подписи рамка читается как украшение (знание v1). Файл — строка files; ссылку пишет страница (колонка листа). *@
+<div class="portrait">
+    <label class="@Css.Join("portrait-frame", _busy ? "pointer-events-none opacity-70" : null)" data-testid="portrait">
+        @if (Url is not null)
+        {
+            <img src="@Url" alt="Портрет" class="h-full w-full object-cover" />
+        }
+        else
+        {
+            <i class="fa-solid fa-user text-3xl text-primary-300" aria-hidden="true"></i>
+        }
+        <InputFile class="sr-only" accept="image/*" OnChange="UploadAsync" disabled="@_busy" />
+    </label>
+    @if (!ReadOnly)
+    {
+        <span class="portrait-caption">@(_busy ? "Загружаю…" : Url is null ? "Загрузить" : "Заменить")</span>
+    }
+    @if (Url is not null && !ReadOnly)
+    {
+        <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm portrait-remove" @onclick="ClearAsync">Убрать</button>
+    }
+    @if (_error is not null)
+    {
+        <span class="cm-field-error" role="alert">@_error</span>
+    }
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+
+    [Parameter] public string? Url { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    [Parameter] public EventCallback<StoredFileDto?> OnChanged { get; set; }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            await OnChanged.InvokeAsync(await Files.UploadAsync(stream, e.File.Name));
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        catch (IOException)
+        {
+            _error = "Файл больше 50 МБ.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task ClearAsync() => OnChanged.InvokeAsync(null);
+}
