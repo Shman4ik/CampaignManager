@@ -35,10 +35,16 @@ public static class WoundRules
     /// 0 ПЗ без серьёзной раны — без сознания, с серьёзной — при смерти (стр. 118). Пока ПЗ выше нуля,
     /// оба состояния снимаются.
     /// </summary>
-    public static void UpdateConsciousness(CharacterSheet sheet)
+    public static void UpdateConsciousness(CharacterSheet sheet) =>
+        (sheet.Condition.Unconscious, sheet.Condition.Dying) = Consciousness(sheet.Current.HitPoints, sheet.Condition.MajorWound);
+
+    /// <summary>
+    /// То же правило для любого счётчика ПЗ (лист и снимок участника сцены): 0 ПЗ без серьёзной раны — без сознания,
+    /// с раной — при смерти.
+    /// </summary>
+    public static (bool Unconscious, bool Dying) Consciousness(int hitPoints, bool majorWound)
     {
-        var down = sheet.Current.HitPoints <= 0;
-        sheet.Condition.Dying = down && sheet.Condition.MajorWound;
-        sheet.Condition.Unconscious = down && !sheet.Condition.MajorWound;
+        var down = hitPoints <= 0;
+        return (down && !majorWound, down && majorWound);
     }
 }

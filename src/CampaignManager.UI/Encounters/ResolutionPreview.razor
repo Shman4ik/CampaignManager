@@ -1,0 +1,77 @@
+@using CampaignManager.Core.Encounters
+
+@* Предпросмотр результата — один на все действия сцены (в v1 — семь реализаций). Строки — что выпало и как
+   считали; таблица — что изменится у каждого («было → станет» и чем чревато), посчитано тем же EncounterEngine, что
+   применит. «Применить» — единственный путь изменить участников; «Отменить» выбрасывает эффекты, отменять нечего.
+   Своей карточки не рисует: стоит в карточке страницы. *@
+<div class="flex flex-col gap-3" data-testid="resolution-preview">
+    <div>
+        <h3 class="font-semibold text-primary-900">@Resolution.Title</h3>
+        @if (Resolution.Lines.Count > 0)
+        {
+            <ul class="mt-1 flex flex-col gap-0.5 text-sm text-primary-700">
+                @foreach (var line in Resolution.Lines)
+                {
+                    <li>@line</li>
+                }
+            </ul>
+        }
+    </div>
+
+    @if (Lines.Count > 0)
+    {
+        <div class="cm-table-wrap">
+            <table class="cm-table">
+                <thead>
+                    <tr><th>Кто</th><th>Что</th><th class="text-right">Было</th><th class="text-right">Станет</th><th>Чем чревато</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in Lines)
+                    {
+                        <tr>
+                            <td class="font-medium">@line.Name</td>
+                            <td>@line.Label</td>
+                            <td class="text-right font-mono">@line.Before</td>
+                            <td class="text-right font-mono font-bold">@line.After</td>
+                            <td class="text-sm text-primary-700">@line.Note</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (SheetTargets.Count > 0)
+    {
+        <p class="cm-meta"><i class="fa-solid fa-file-pen" aria-hidden="true"></i> Запишется в лист: @string.Join(", ", SheetTargets).</p>
+    }
+
+    <div class="flex flex-wrap gap-2">
+        <Button Variant="ButtonVariant.Primary" Icon="fa-check" OnClick="OnApply" Busy="Busy" data-testid="apply">Применить</Button>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-xmark" OnClick="OnCancel" Disabled="Busy" data-testid="cancel">Отменить</Button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EncounterState State { get; set; } = null!;
+
+    [Parameter, EditorRequired] public EncounterResolution Resolution { get; set; } = null!;
+
+    [Parameter] public EventCallback OnApply { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    private IReadOnlyList<EffectPreview> Lines => EncounterEngine.Preview(State, Resolution);
+
+    private List<string> SheetTargets =>
+    [
+        .. Resolution.Effects
+            .Where(e => EncounterSheetEffects.TouchesSheet(e.Kind))
+            .Select(e => State.Find(e.ParticipantId))
+            .Where(p => p is { HasSheet: true, Kind: not ParticipantKind.Creature })
+            .Select(p => p!.Name)
+            .Distinct(),
+    ];
+}

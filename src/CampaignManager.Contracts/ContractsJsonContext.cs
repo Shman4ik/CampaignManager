@@ -4,6 +4,7 @@ using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Characters;
+using CampaignManager.Contracts.Encounters;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Music;
@@ -49,6 +50,11 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CharacterCreatedDto))]
 [JsonSerializable(typeof(CreationContextDto))]
 [JsonSerializable(typeof(IReadOnlyList<CharacterSummaryDto>))]
+[JsonSerializable(typeof(EncounterDto))]
+[JsonSerializable(typeof(IReadOnlyList<EncounterSummaryDto>))]
+[JsonSerializable(typeof(StartEncounterRequest))]
+[JsonSerializable(typeof(EncounterSavedDto))]
+[JsonSerializable(typeof(CampaignManager.Core.Encounters.EncounterState))]
 [JsonSerializable(typeof(SkillDto))]
 [JsonSerializable(typeof(CatalogList<SkillDto>))]
 [JsonSerializable(typeof(CatalogFile<SkillDto>))]

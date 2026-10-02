@@ -1,0 +1,112 @@
+@using CampaignManager.Core.Encounters
+
+@* Строка участника — одна на бой и погоню (в v1 CombatantCard и ChaseParticipantCard повторяли шапку, удаление, полосы
+   и бейджи). Всегда внутри карточки «Участники»: своей карточки не рисует, только линейку сверху и полосу-акцент у того,
+   чей ход. Полосы — StatBar с цифрами; состояние — бейджами с подписью (смысл не держится на title, наведения нет).
+   Действия строки — кнопки с подписью, переносятся рядом. Своё бой и погоня кладут в ChildContent (оружие, локация). *@
+<div class="@Css.Join("encounter-row", Active ? "encounter-row-active" : null, Participant.IsOut ? "encounter-row-out" : null)"
+     data-testid="participant-row" aria-current="@(Active ? "step" : null)">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                @if (Active)
+                {
+                    <i class="fa-solid fa-play text-xs text-accent-700" aria-hidden="true"></i>
+                    <span class="sr-only">Ходит:</span>
+                }
+                <span class="font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
+                <Badge Tone="@SideTone">@EncounterText.Of(Participant.Side)</Badge>
+                <span class="cm-meta">@EncounterText.Of(Participant.Kind) · иниц. @Participant.Initiative</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Participant.Note))
+            {
+                <div class="cm-meta mt-0.5">@Participant.Note</div>
+            }
+            <div class="mt-1 flex flex-wrap gap-1">
+                @if (Participant.Dying)
+                {
+                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-heart-crack">при смерти</Badge>
+                }
+                else if (Participant.Unconscious)
+                {
+                    <Badge Tone="Tone.Error" Icon="fa-bed">без сознания</Badge>
+                }
+                @if (Participant.MajorWound)
+                {
+                    <Badge Tone="Tone.Warning" Icon="fa-droplet">серьёзная рана</Badge>
+                }
+                @if (Participant.IsOut)
+                {
+                    <Badge Tone="Tone.Neutral" Icon="fa-person-walking-arrow-right">выбыл</Badge>
+                }
+                @foreach (var write in Writes)
+                {
+                    <Badge Tone="@(write.Blocked ? Tone.Error : Tone.Warning)" Icon="fa-file-pen">
+                        @(write.Error is null ? "пишется в лист" : "не записано в лист")
+                    </Badge>
+                }
+            </div>
+        </div>
+        @if (Actions is not null)
+        {
+            <div class="flex flex-wrap gap-2">@Actions</div>
+        }
+    </div>
+
+    <div class="encounter-stats mt-2">
+        <div class="encounter-stats-grid">
+            <StatBar Label="ПЗ" Value="Participant.HitPoints" Max="Participant.MaxHitPoints" Kind="StatKind.HitPoints" TestId="stat-hp" />
+            @if (Participant.MaxMagicPoints > 0)
+            {
+                <StatBar Label="ПМ" Value="Participant.MagicPoints" Max="Participant.MaxMagicPoints" Kind="StatKind.MagicPoints" TestId="stat-mp" />
+            }
+            @if (Participant.Sanity is { } sanity)
+            {
+                <StatBar Label="Рассудок" Value="sanity" Max="@(Participant.MaxSanity ?? 99)" Kind="StatKind.Sanity" TestId="stat-san" />
+            }
+        </div>
+        <p class="cm-meta mt-1">
+            СИЛ @Participant.Stats.Str · ЛВК @Participant.Stats.Dex · МОЩ @Participant.Stats.Pow · БкУ @Participant.Stats.DamageBonus
+            · Компл. @Participant.Stats.Build@(Participant.Luck is { } luck ? $" · Удача {luck}" : "")@(Participant.Stats.Armor > 0 ? $" · Броня {Participant.Stats.Armor}" : "")
+        </p>
+    </div>
+
+    @foreach (var write in Writes.Where(w => w.Error is not null))
+    {
+        <Alert Tone="@(write.Blocked ? Tone.Error : Tone.Warning)" Small="true" class="mt-2 mb-0">
+            «@write.Title» не записано в лист: @write.Error
+            @if (OnSheetWrite.HasDelegate)
+            {
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate" OnClick="() => OnSheetWrite.InvokeAsync((write.Id, true))">Повторить</Button>
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => OnSheetWrite.InvokeAsync((write.Id, false))">Не записывать</Button>
+                </div>
+            }
+        </Alert>
+    }
+
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public EncounterParticipant Participant { get; set; } = null!;
+
+    [Parameter] public bool Active { get; set; }
+
+    /// <summary>Записи этого участника в лист, которые ещё не дошли.</summary>
+    [Parameter] public IReadOnlyList<SheetWrite> Writes { get; set; } = [];
+
+    /// <summary>Решение по застрявшей записи в лист: (id записи, true — повторить, false — не записывать).</summary>
+    [Parameter] public EventCallback<(Guid WriteId, bool Retry)> OnSheetWrite { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private Tone SideTone => Participant.Side switch
+    {
+        EncounterSide.Investigators => Tone.Success,
+        EncounterSide.Enemies => Tone.Error,
+        _ => Tone.Neutral,
+    };
+}

@@ -1,0 +1,627 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Contracts.Encounters
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Documents
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Music
+@using CampaignManager.UI.Platform
+@implements IDisposable
+@inject IEncountersApi Api
+@inject ICampaignsApi Campaigns
+@inject ICharactersApi Characters
+@inject ICatalogApi<SkillDto> Skills
+@inject ICatalogApi<CreatureDto> Creatures
+@inject IScenariosApi Scenarios
+@inject BrowserStorage Storage
+@inject TimeProvider Time
+@inject NavigationManager Navigation
+@inject ToastService Toasts
+@inject DialogService Dialogs
+
+@* Оболочка страницы сцены — одна на бой (/combat) и погоню (/chase), T2.6a. Начать или продолжить сцену, участники со
+   снимком чисел, очередь, предпросмотр результата, эффект Хранителя, журнал; своё бой и погоня кладут в ChildContent
+   (T2.6b/c) и получают EncounterSession каскадом. Открытая сцена — в адресе (?id=), состояние — в базе: перезагрузка
+   вкладки посреди сцены возвращает всё, включая неприменённый результат и неписанные в лист эффекты (UI/Encounters/CLAUDE.md). *@
+<PageHeader Title="@EncounterText.Of(Kind)" DocumentTitle="@DocumentTitle">
+    <Actions>
+        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@(Kind == EncounterKind.Combat ? "Музыка боя" : "Музыка погони")" />
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    @if (_loading)
+    {
+        <LoadingIndicator />
+    }
+    else if (_error is not null)
+    {
+        <Alert Tone="Tone.Error" ShowIcon="true">
+            @_error
+            <div class="mt-2"><Button Small="true" Variant="ButtonVariant.Secondary" OnClick="LoadAsync">Повторить</Button></div>
+        </Alert>
+    }
+    else if (_session is null)
+    {
+        @Lobby()
+    }
+    else
+    {
+        @Scene(_session)
+    }
+</div>
+
+@if (_session is not null)
+{
+    <ParticipantPicker Open="_pickerOpen" OnClose="() => _pickerOpen = false" Sources="_sources"
+                       Context="@(new ParticipantPickerContext(_session.Encounter.CampaignId, _session.Catalog))"
+                       UsedCharacterIds="UsedCharacterIds" OnPicked="AddParticipantsAsync" />
+}
+
+@code {
+    private EncounterSession? _session;
+    private IReadOnlyList<EncounterSummaryDto> _active = [];
+    private IReadOnlyList<CampaignSummaryDto> _campaigns = [];
+    private IReadOnlyList<IParticipantSource> _sources = [];
+    private Guid? _startCampaign;
+    private bool _loading = true;
+    private bool _starting;
+    private bool _applying;
+    private bool _pickerOpen;
+    private string? _error;
+    private string? _notice;
+    private (uint Version, EncounterState State)? _draftChoice;
+    private string _note = "";
+    private Guid? _loadedFor;
+    private CancellationTokenSource? _loop;
+    private SkillCatalog? _catalog;
+
+    [Parameter, EditorRequired] public EncounterKind Kind { get; set; }
+
+    /// <summary>Открытая сцена (<c>?id=</c>) — переживает перезагрузку и даёт ссылку.</summary>
+    [Parameter] public Guid? EncounterId { get; set; }
+
+    /// <summary>Кампания (<c>?campaign=</c>): продолжить её сцену или начать в ней.</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    /// <summary>Панели правил боя и погоны (T2.6b/c) — получают <see cref="EncounterSession"/> каскадом.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string Route => Kind == EncounterKind.Combat ? "combat" : "chase";
+
+    private string MoodTag => Kind == EncounterKind.Combat ? "бой" : "погоня";
+
+    private string DocumentTitle => _session?.Encounter.CampaignName is { } campaign ? $"{EncounterText.Of(Kind)} — {campaign}" : EncounterText.Of(Kind);
+
+    private IReadOnlySet<Guid> UsedCharacterIds =>
+        _session?.State.Participants.Select(p => p.SourceCharacterId).OfType<Guid>().ToHashSet() ?? [];
+
+    protected override void OnInitialized() => _sources = ParticipantSources.Default(Characters, Creatures, Scenarios);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Смена адреса своей же навигацией (?id= после открытия) сцену не перечитывает.
+        if (_session is not null && EncounterId == _session.Encounter.Id)
+            return;
+        if (_loadedFor is not null && _loadedFor == EncounterId && _session is null && !_loading)
+            return;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        StopLoop();
+        _loading = true;
+        _error = null;
+        _session = null;
+        _loadedFor = EncounterId;
+        try
+        {
+            if (EncounterId is { } id)
+            {
+                await OpenAsync(id);
+                return;
+            }
+
+            _active = await Api.ListActiveAsync(Kind);
+            var match = CampaignId is { } campaignId
+                ? _active.FirstOrDefault(a => a.CampaignId == campaignId)
+                : _active.Count == 1 ? _active[0] : null;
+            if (match is not null)
+            {
+                await OpenAsync(match.Id);
+                return;
+            }
+
+            _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit)];
+            _startCampaign = CampaignId ?? (_campaigns.Count == 1 ? _campaigns[0].Id : null);
+        }
+        catch (HttpRequestException error)
+        {
+            _error = ApiErrors.Describe(error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenAsync(Guid encounterId)
+    {
+        EncounterDto encounter;
+        try
+        {
+            encounter = await Api.GetAsync(encounterId);
+        }
+        catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _notice = "Такой сцены нет или её ведёт другой Хранитель.";
+            Navigation.NavigateTo(Route, replace: true);
+            return;
+        }
+
+        if (encounter.Status != EncounterStatus.Active)
+        {
+            _notice = "Эта сцена уже завершена — начните новую.";
+            Navigation.NavigateTo(Route, replace: true);
+            return;
+        }
+
+        _catalog ??= SkillCatalogs.From((await Skills.ListAsync()).Items);
+        var session = new EncounterSession(Api, new EncounterSheetSync(Characters), Storage, Time);
+        session.Start(encounter, _catalog);
+        session.Changed += OnSessionChanged;
+        _session = session;
+        await RestoreDraftAsync(session);
+
+        if (EncounterId != encounter.Id)
+            Navigation.NavigateTo($"{Route}?id={encounter.Id}", replace: true);
+
+        _loading = false;
+        StateHasChanged();
+        StartLoop();
+        await session.RefreshFromSheetsAsync();
+        await session.TickAsync();
+    }
+
+    /// <summary>
+    /// Черновик вкладки: совпадает с базой — стираем молча; начат на той же версии — просто не дошёл до базы, уходит
+    /// сам; на старой — сцену с тех пор писала другая вкладка, спрашиваем (знание листа T2.3).
+    /// </summary>
+    private async Task RestoreDraftAsync(EncounterSession session)
+    {
+        if (await session.ReadDraftAsync(session.Encounter.Id) is not { } draft)
+            return;
+
+        if (CmJson.Serialize(draft.State) == CmJson.Serialize(session.State))
+        {
+            await session.DiscardDraftAsync(session.Encounter.Id);
+            return;
+        }
+
+        if (draft.Version == session.Encounter.Version)
+            session.Restore(draft.State);
+        else
+            _draftChoice = draft;
+    }
+
+    private async Task StartAsync()
+    {
+        _starting = true;
+        try
+        {
+            var started = await Api.StartAsync(new StartEncounterRequest(Kind, _startCampaign));
+            Navigation.NavigateTo($"{Route}?id={started.Id}");
+        }
+        catch (HttpRequestException error)
+        {
+            Toasts.Error(ApiErrors.Describe(error));
+            _active = await Api.ListActiveAsync(Kind);
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    private Task Change(Action<EncounterState> change) => _session?.ChangeAsync(change) ?? Task.CompletedTask;
+
+    private async Task AddParticipantsAsync(IReadOnlyList<EncounterParticipant> participants)
+    {
+        List<string> rejected = [];
+        List<string> added = [];
+        await Change(state =>
+        {
+            foreach (var participant in participants)
+            {
+                var outcome = EncounterEngine.Add(state, participant, Now);
+                if (outcome.Rejection is { } reason)
+                    rejected.Add(reason);
+                else
+                    added.Add(participant.Name);
+            }
+        });
+
+        if (added.Count > 0)
+            Toasts.Success($"В сцене: {string.Join(", ", added)}.");
+        foreach (var reason in rejected)
+            Toasts.Warning(reason);
+    }
+
+    private async Task RemoveAsync(EncounterParticipant participant)
+    {
+        var writes = _session?.State.SheetWrites.Count(w => w.ParticipantId == participant.Id) ?? 0;
+        var message = writes > 0
+            ? $"{participant.Name} покинет сцену. Неписанные в лист эффекты ({writes}) всё равно уйдут в лист."
+            : $"{participant.Name} покинет сцену; лист и бестиарий не меняются.";
+        if (await Dialogs.ConfirmAsync(new ConfirmRequest("Убрать участника?", message) { ConfirmText = "Убрать" }))
+            await Change(state => EncounterEngine.Remove(state, participant.Id, Now));
+    }
+
+    private Task ToggleOutAsync(EncounterParticipant participant) =>
+        Change(state => EncounterEngine.Apply(state, new EncounterResolution
+        {
+            Kind = EncounterLogKind.Effect,
+            Title = participant.IsOut ? $"{participant.Name} возвращается в очередь" : $"{participant.Name} выбывает из очереди",
+            Effects = [new EncounterEffect { Kind = EncounterEffectKind.Out, ParticipantId = participant.Id, Flag = !participant.IsOut }],
+        }, Now));
+
+    private Task SetSideAsync(EncounterParticipant participant, ChangeEventArgs e) =>
+        Enum.TryParse<EncounterSide>(e.Value?.ToString(), out var side)
+            ? Change(state => EncounterEngine.SetSide(state, participant.Id, side))
+            : Task.CompletedTask;
+
+    private Task ProposeAsync(EncounterResolution resolution) => Change(state => EncounterEngine.Propose(state, resolution));
+
+    private async Task ApplyAsync()
+    {
+        _applying = true;
+        try
+        {
+            await Change(state => EncounterEngine.Apply(state, Now));
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private Task CancelAsync() => Change(EncounterEngine.Cancel);
+
+    private Task NextAsync() => Change(state => EncounterQueue.Next(state, Now));
+
+    private Task DelayAsync() => Change(state => EncounterQueue.Delay(state, null, Now));
+
+    private async Task NoteAsync()
+    {
+        var text = _note;
+        _note = "";
+        await Change(state => EncounterEngine.Note(state, text, Now));
+    }
+
+    private Task SheetWriteAsync((Guid WriteId, bool Retry) decision) =>
+        Change(state =>
+        {
+            if (decision.Retry)
+                EncounterEngine.RetrySheetWrite(state, decision.WriteId);
+            else
+                EncounterEngine.DropSheetWrite(state, decision.WriteId, Now);
+        });
+
+    private async Task FinishAsync()
+    {
+        if (_session is not { } session)
+            return;
+
+        var pending = session.State.SheetWrites.Count;
+        var message = pending > 0
+            ? $"Не записано в листы: {pending}. После завершения эти эффекты в листы не попадут."
+            : "Сцена закроется, журнал останется в базе. Новую можно начать сразу.";
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить: {EncounterText.Of(Kind).ToLowerInvariant()}?", message) { ConfirmText = "Завершить" }))
+            return;
+
+        await session.ChangeAsync(state => EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Finished, Text = "Сцена завершена.", At = Now }));
+        try
+        {
+            await Api.FinishAsync(session.Encounter.Id, session.Encounter.Version);
+            await session.DiscardDraftAsync(session.Encounter.Id);
+            StopLoop();
+            _session = null;
+            _notice = "Сцена завершена.";
+            Navigation.NavigateTo(Route, replace: true);
+        }
+        catch (HttpRequestException error)
+        {
+            Toasts.Error(ApiErrors.Describe(error));
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_session is { } session)
+            await session.DiscardDraftAsync(session.Encounter.Id);
+        _draftChoice = null;
+        await LoadAsync();
+    }
+
+    private async Task OverwriteAsync()
+    {
+        if (_session is null)
+            return;
+
+        try
+        {
+            await _session.OverwriteAsync();
+            Toasts.Success("Сцена этой вкладки записана поверх.");
+        }
+        catch (HttpRequestException error)
+        {
+            Toasts.Error(ApiErrors.Describe(error));
+        }
+    }
+
+    private async Task RestoreChoiceAsync()
+    {
+        if (_session is null || _draftChoice is not { } draft)
+            return;
+
+        _draftChoice = null;
+        _session.Restore(draft.State);
+        await _session.ChangeAsync(_ => { });
+    }
+
+    private async Task DiscardChoiceAsync()
+    {
+        _draftChoice = null;
+        if (_session is not null)
+            await _session.DiscardDraftAsync(_session.Encounter.Id);
+    }
+
+    private DateTimeOffset Now => Time.GetUtcNow();
+
+    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    private void StartLoop()
+    {
+        _loop = new CancellationTokenSource();
+        _ = RunLoopAsync(_loop.Token);
+    }
+
+    private void StopLoop()
+    {
+        _loop?.Cancel();
+        _loop?.Dispose();
+        _loop = null;
+        if (_session is not null)
+            _session.Changed -= OnSessionChanged;
+    }
+
+    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(EncounterSession.Interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_session is { } session)
+                    await InvokeAsync(session.TickAsync);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose() => StopLoop();
+
+    private RenderFragment Lobby() => __builder =>
+    {
+        @if (_notice is not null)
+        {
+            <Alert Tone="Tone.Info" OnClose="() => _notice = null">@_notice</Alert>
+        }
+        <section class="cm-section">
+            <div class="cm-card">
+                <div class="cm-card-header"><h2 class="cm-card-title">Новая сцена</h2></div>
+                <div class="cm-card-body flex flex-wrap items-end gap-3">
+                    <Field Label="Кампания" class="w-full sm:w-80">
+                        <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
+                                @onchange="e => _startCampaign = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                            <option value="">— вне кампании —</option>
+                            @foreach (var campaign in _campaigns)
+                            {
+                                <option value="@campaign.Id">@campaign.Name</option>
+                            }
+                        </select>
+                    </Field>
+                    <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">Начать</Button>
+                </div>
+            </div>
+        </section>
+        @if (_active.Count > 0)
+        {
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Идут сейчас</h2></div>
+                <div class="cm-card">
+                    @foreach (var active in _active)
+                    {
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            <div>
+                                <div class="font-medium">@(active.CampaignName ?? "Вне кампании")</div>
+                                <div class="cm-meta">
+                                    @(active.Round == 0 ? "расстановка" : $"раунд {active.Round}") · участников: @active.ParticipantCount ·
+                                    @LocalTime.DateTime(active.UpdatedAt)
+                                </div>
+                            </div>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-right" Href="@($"{Route}?id={active.Id}")">Продолжить</Button>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+    };
+
+    private RenderFragment Scene(EncounterSession session) => __builder =>
+    {
+        var state = session.State;
+        var active = state.Active;
+        var order = state.Round > 0 ? state.TurnOrder.Select(state.Find).OfType<EncounterParticipant>().Concat(state.Participants.Where(p => !state.TurnOrder.Contains(p.Id))).ToList()
+                                    : EncounterQueue.Order(state).Select(state.Find).OfType<EncounterParticipant>().ToList();
+
+        @if (session.SaveState == EncounterSaveState.Conflict)
+        {
+            <Alert Tone="Tone.Warning" ShowIcon="true">
+                Сцену изменили в другой вкладке или на другом устройстве — правки отсюда не сохранены.
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="ReloadAsync">Перечитать</Button>
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="OverwriteAsync">Записать мои поверх</Button>
+                </div>
+            </Alert>
+        }
+        else if (session.SaveState is EncounterSaveState.Failed or EncounterSaveState.Rejected && session.Error is not null)
+        {
+            <Alert Tone="@(session.SaveState == EncounterSaveState.Rejected ? Tone.Error : Tone.Warning)" Small="true">
+                Сцена не сохранена: @session.Error @(session.SaveState == EncounterSaveState.Failed ? "Повторю сам." : "")
+            </Alert>
+        }
+        @if (_draftChoice is not null)
+        {
+            <Alert Tone="Tone.Warning" ShowIcon="true">
+                На этой вкладке есть несохранённые ходы, а сцену с тех пор записали в другом месте.
+                <div class="mt-2 flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="RestoreChoiceAsync">Восстановить мои</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="DiscardChoiceAsync">Отбросить</Button>
+                </div>
+            </Alert>
+        }
+
+        <section class="cm-section">
+            <div class="cm-card">
+                <div class="cm-card-body flex flex-wrap items-center justify-between gap-3">
+                    <div data-testid="round-status">
+                        @if (state.Round == 0)
+                        {
+                            <div class="font-semibold">Расстановка</div>
+                            <div class="cm-meta">Добавьте участников и начните: очередь — по ЛВК (стр. 110).</div>
+                        }
+                        else
+                        {
+                            <div class="font-semibold">Раунд @state.Round · ходит @(active?.Name ?? "—")</div>
+                            <div class="cm-meta">@(session.Encounter.CampaignName ?? "Вне кампании") · @SaveText(session)</div>
+                        }
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        @if (state.Round == 0)
+                        {
+                            <Button Small="true" Icon="fa-play" Disabled="@(state.Participants.Count == 0)" OnClick="NextAsync" data-testid="start-round">Начать</Button>
+                        }
+                        else
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
+                            <Button Small="true" Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий</Button>
+                        }
+                        @* «Завершить» — здесь, а не в шапке: на телефоне в шапке помещаются две подписанные кнопки. *@
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить</Button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <section class="cm-section lg:col-span-5">
+                @* «Участник» — у списка, а не в шапке: на телефоне шапка вмещает две подписанные кнопки, и там — музыка сцены. *@
+                <div class="cm-section-header">
+                    <h2 class="cm-section-title">Участники</h2>
+                    <Button Small="true" Icon="fa-user-plus" OnClick="() => _pickerOpen = true" data-testid="add-participant">Участник</Button>
+                </div>
+                @if (order.Count == 0)
+                {
+                    <EmptyState Icon="fa-users" Title="Пока никого" Message="Сыщики кампании, НПС и твари бестиария — кнопкой «Участник».">
+                        <Actions><Button Small="true" Icon="fa-user-plus" OnClick="() => _pickerOpen = true">Участник</Button></Actions>
+                    </EmptyState>
+                }
+                else
+                {
+                    <div class="cm-card">
+                        @foreach (var participant in order)
+                        {
+                            <ParticipantRow @key="participant.Id" Participant="participant" Active="@(participant.Id == state.ActiveParticipantId)"
+                                            Writes="@state.SheetWrites.Where(w => w.ParticipantId == participant.Id).ToList()"
+                                            OnSheetWrite="SheetWriteAsync">
+                                <Actions>
+                                    <select class="cm-input cm-input-sm w-36" aria-label="@($"Сторона: {participant.Name}")"
+                                            value="@participant.Side" @onchange="e => SetSideAsync(participant, e)">
+                                        @foreach (var side in Enum.GetValues<EncounterSide>())
+                                        {
+                                            <option value="@side">@EncounterText.Of(side)</option>
+                                        }
+                                    </select>
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ToggleOutAsync(participant)">
+                                        @(participant.IsOut ? "Вернуть" : "Выбыл")
+                                    </Button>
+                                    @if (participant.SourceCharacterId is { } sheetId)
+                                    {
+                                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-id-card" Href="@($"character/{sheetId}")" target="_blank">Лист</Button>
+                                    }
+                                    <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => RemoveAsync(participant)">Убрать</Button>
+                                </Actions>
+                            </ParticipantRow>
+                        }
+                    </div>
+                }
+            </section>
+
+            <div class="flex flex-col gap-4 lg:col-span-7">
+                @if (state.Pending is { } pending)
+                {
+                    <section class="cm-section">
+                        <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
+                        <div class="cm-card"><div class="cm-card-body">
+                            <ResolutionPreview State="state" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying" />
+                        </div></div>
+                    </section>
+                }
+
+                <CascadingValue Value="session" IsFixed="true">@ChildContent</CascadingValue>
+
+                <section class="cm-section">
+                    <div class="cm-section-header"><h2 class="cm-section-title">Эффект Хранителя</h2></div>
+                    <div class="cm-card"><div class="cm-card-body">
+                        @if (state.Participants.Count == 0)
+                        {
+                            <p class="cm-text-muted">Сначала добавьте участников.</p>
+                        }
+                        else
+                        {
+                            <EffectPanel State="state" OnPropose="ProposeAsync" />
+                        }
+                    </div></div>
+                </section>
+            </div>
+        </div>
+
+        <section class="cm-section">
+            <div class="cm-section-header"><h2 class="cm-section-title">Журнал</h2></div>
+            <div class="cm-card">
+                <div class="cm-card-body flex flex-wrap items-end gap-2 border-b border-primary-200">
+                    <Field Label="Заметка в журнал" class="min-w-48 flex-1">
+                        <input class="cm-input" value="@_note" @oninput="e => _note = e.Value?.ToString() ?? string.Empty" placeholder="Что произошло" />
+                    </Field>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" Disabled="@string.IsNullOrWhiteSpace(_note)" OnClick="NoteAsync" class="mb-1">Записать</Button>
+                </div>
+                <EncounterLog Entries="state.Log" />
+            </div>
+        </section>
+    };
+
+    private static string SaveText(EncounterSession session) => session.SaveState switch
+    {
+        _ when session.SheetsBusy => "пишу в листы…",
+        EncounterSaveState.Saving => "сохраняю…",
+        EncounterSaveState.Saved when session.State.SheetWrites.Count > 0 => $"сохранено, в листы не дошло: {session.State.SheetWrites.Count}",
+        EncounterSaveState.Saved => "сохранено",
+        EncounterSaveState.Conflict => "конфликт",
+        _ => "не сохранено",
+    };
+}

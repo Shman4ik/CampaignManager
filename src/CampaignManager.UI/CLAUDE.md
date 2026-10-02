@@ -9,8 +9,8 @@
 
 | Папка | Что |
 |---|---|
-| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика) |
-| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
+| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `encounter.css` (сцена) |
+| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
 | `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
@@ -21,6 +21,7 @@
 | `Admin/` | `/admin/users`, `/admin/applications`, `/admin/files`, счётчик заявок `AdminBadges` — [CLAUDE.md](Admin/CLAUDE.md) |
 | `Characters/` | лист сыщика `/character/{id}`: секции, автосохранение, рассудок, книги, фаза развития — [CLAUDE.md](Characters/CLAUDE.md) |
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
+| `Encounters/` | сцена `/combat`, `/chase`: оболочка, участники, предпросмотр, эффект Хранителя, журнал, запись итогов в листы — [CLAUDE.md](Encounters/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `Music/` | фонотека `/music`, плеер (кнопка в слоте шапки, панель внизу колонки, звук — модуль JS) — [Music/CLAUDE.md](Music/CLAUDE.md) |
 | `Scenarios/` | библиотека `/scenarios` и рабочее место сценария во вкладках — [Scenarios/CLAUDE.md](Scenarios/CLAUDE.md) |

@@ -1,0 +1,63 @@
+@using CampaignManager.Core.Encounters
+
+@* Журнал сцены — один на бой и погоню (в v1: CombatLog и ChaseLog с тремя switch-словарями). Подпись и категория —
+   EncounterText (Core), цвет — по категории, а не по каждому виду (знание журнала погони v1). Свежее сверху, раунд —
+   метка у записи. Лежит на всю ширину под рабочей областью: длинная запись в узкой колонке портрета iPad
+   разворачивалась на десяток строк (знание v1, Chase/CLAUDE.md). Своей карточки не рисует. *@
+@if (Entries.Count == 0)
+{
+    <p class="cm-text-muted px-3 py-2">Пока пусто: здесь появятся раунды, эффекты и записи в листы.</p>
+}
+else
+{
+    <ol class="flex flex-col" data-testid="encounter-log">
+        @foreach (var entry in Visible)
+        {
+            <li @key="entry.Id" class="@Css.Join("encounter-log-entry", CategoryClass(EncounterText.Category(entry.Kind)))">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    @if (entry.Round > 0)
+                    {
+                        <span class="cm-meta font-mono">Р@(entry.Round)</span>
+                    }
+                    <span class="text-xs font-semibold uppercase tracking-wide text-primary-600">@EncounterText.Of(entry.Kind)</span>
+                    <span class="text-primary-900">@entry.Text</span>
+                </div>
+                @if (entry.Lines.Count > 0)
+                {
+                    <ul class="mt-1 flex flex-col gap-0.5 text-sm text-primary-700">
+                        @foreach (var line in entry.Lines)
+                        {
+                            <li>@line</li>
+                        }
+                    </ul>
+                }
+            </li>
+        }
+    </ol>
+    @if (Entries.Count > _limit)
+    {
+        <div class="px-3 py-2">
+            <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => _limit += PageSize">Показать ещё @Math.Min(PageSize, Entries.Count - _limit)</Button>
+        </div>
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+    private int _limit = PageSize;
+
+    [Parameter, EditorRequired] public IReadOnlyList<EncounterLogEntry> Entries { get; set; } = [];
+
+    private IEnumerable<EncounterLogEntry> Visible => Entries.Reverse().Take(_limit);
+
+    // Классы — целыми литералами: Tailwind и поиск по коду видят только их.
+    private static string CategoryClass(EncounterLogCategory category) => category switch
+    {
+        EncounterLogCategory.Movement => "encounter-log-movement",
+        EncounterLogCategory.Obstacle => "encounter-log-obstacle",
+        EncounterLogCategory.Violence => "encounter-log-violence",
+        EncounterLogCategory.Sanity => "encounter-log-sanity",
+        EncounterLogCategory.Magic => "encounter-log-magic",
+        _ => "encounter-log-system",
+    };
+}

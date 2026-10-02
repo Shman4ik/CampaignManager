@@ -2,6 +2,7 @@ using CampaignManager.ApiClient.Admin;
 using CampaignManager.ApiClient.Campaigns;
 using CampaignManager.ApiClient.Catalogs;
 using CampaignManager.ApiClient.Characters;
+using CampaignManager.ApiClient.Encounters;
 using CampaignManager.ApiClient.Files;
 using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Music;
@@ -12,6 +13,7 @@ using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Characters;
+using CampaignManager.Contracts.Encounters;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Music;
@@ -40,6 +42,7 @@ public static class ApiClientServiceCollectionExtensions
         });
         services.AddHttpClient<ICampaignsApi, CampaignsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICharactersApi, CharactersApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IEncountersApi, EncountersApiClient>(http => http.BaseAddress = baseAddress);
 
         // Справочники — один клиент на справочник, общий код в CatalogApiClient.
         services.AddHttpClient<ICatalogApi<SkillDto>, SkillsApiClient>(http => http.BaseAddress = baseAddress);

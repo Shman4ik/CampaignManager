@@ -1,0 +1,188 @@
+@using CampaignManager.Core.Encounters
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Scenarios
+
+@* Добавить участника — единственный список на бой и погоню (знание v1): источники вкладками (сыщики кампании, состав
+   сценария, НПС, бестиарий — IParticipantSource), поиск без регистра, «уже в сцене» у листа, который уже стоит (один
+   лист — один раз), количество у тварей и в составе сценария (по умолчанию — из состава). Окно не закрывается после добавления — обычно ставят
+   несколько. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
+<Modal Open="Open" OnClose="OnClose" Title="Участник сцены" Size="ModalSize.Large">
+    <ChildContent>
+        <div class="flex flex-col gap-3">
+            <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
+            @if (ActiveSource?.UsesScenario == true)
+            {
+                <select class="cm-input" aria-label="Сценарий" data-testid="picker-scenario" value="@(_scenarioId?.ToString() ?? "")" @onchange="SelectScenarioAsync">
+                    <option value="">— выберите сценарий —</option>
+                    @foreach (var scenario in _scenarios)
+                    {
+                        <option value="@scenario.Id">@scenario.Name</option>
+                    }
+                </select>
+            }
+            <input class="cm-input" type="search" placeholder="Поиск по имени" aria-label="Поиск участника" data-testid="picker-search"
+                   value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+
+            @if (_loading)
+            {
+                <LoadingIndicator />
+            }
+            else if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" class="mb-0">@_error</Alert>
+            }
+            else if (_results.TryGetValue(_tab, out var result))
+            {
+                @if (result.Message is not null)
+                {
+                    <p class="cm-text-muted">@result.Message</p>
+                }
+                <div class="max-h-[55vh] overflow-y-auto" data-testid="picker-list">
+                    @foreach (var option in Filter(result.Options))
+                    {
+                        var used = option.CharacterId is { } id && UsedCharacterIds.Contains(id);
+                        <div class="flex flex-wrap items-center gap-2 border-t border-primary-200 py-2 first:border-t-0" @key="option.Key">
+                            <div class="min-w-0 flex-1">
+                                <div class="font-medium text-primary-900">@option.Name</div>
+                                @if (!string.IsNullOrWhiteSpace(option.Subtitle))
+                                {
+                                    <div class="cm-meta">@option.Subtitle</div>
+                                }
+                            </div>
+                            @if (used)
+                            {
+                                <Badge Tone="Tone.Neutral">уже в сцене</Badge>
+                            }
+                            else
+                            {
+                                @if (option.AllowCount)
+                                {
+                                    <input type="number" inputmode="numeric" min="1" max="99" class="cm-input cm-input-sm w-16"
+                                           aria-label="@($"Сколько: {option.Name}")" value="@CountOf(option)"
+                                           @onchange="e => SetCount(option, e)" />
+                                }
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Busy="@(_adding == option.Key)"
+                                        OnClick="() => AddAsync(option)" data-testid="picker-add">Добавить</Button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose">Готово</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private readonly Dictionary<string, ParticipantSourceResult> _results = [];
+    private readonly Dictionary<string, int> _counts = [];
+    private string _tab = "";
+    private string _search = "";
+    private bool _loading;
+    private string? _error;
+    private string? _adding;
+    private Guid? _scenarioId;
+    private IReadOnlyList<ScenarioSummaryDto> _scenarios = [];
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<IParticipantSource> Sources { get; set; } = [];
+
+    [Parameter, EditorRequired] public ParticipantPickerContext Context { get; set; } = null!;
+
+    /// <summary>Листы, которые уже в сцене (по <c>SourceCharacterId</c> участников).</summary>
+    [Parameter] public IReadOnlySet<Guid> UsedCharacterIds { get; set; } = new HashSet<Guid>();
+
+    [Parameter] public EventCallback<IReadOnlyList<EncounterParticipant>> OnPicked { get; set; }
+
+    private IParticipantSource? ActiveSource => Sources.FirstOrDefault(s => s.Key == _tab);
+
+    private IReadOnlyList<Tabs.Item> TabItems => [.. Sources.Select(s => new Tabs.Item(s.Key, s.Label, s.Icon))];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Open || Sources.Count == 0)
+            return;
+
+        if (_tab.Length == 0)
+            _tab = Context.CampaignId is null && Sources.Count > 1 ? Sources[1].Key : Sources[0].Key;
+        if (!_results.ContainsKey(_tab))
+            await LoadAsync();
+    }
+
+    private async Task SelectTabAsync(string key)
+    {
+        _tab = key;
+        if (!_results.ContainsKey(key))
+            await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (ActiveSource is not { } source)
+            return;
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            if (source.UsesScenario && _scenarios.Count == 0)
+                _scenarios = [.. (await Scenarios.ListAsync()).Items.OrderBy(s => s.Name, StringComparer.CurrentCulture)];
+            _results[_tab] = await source.LoadAsync(Context with { ScenarioId = _scenarioId }, CancellationToken.None);
+        }
+        catch (HttpRequestException error)
+        {
+            _error = ApiErrors.Describe(error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectScenarioAsync(ChangeEventArgs e)
+    {
+        _scenarioId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        foreach (var source in Sources.Where(s => s.UsesScenario))
+            _results.Remove(source.Key);
+        await LoadAsync();
+    }
+
+    private IEnumerable<ParticipantOption> Filter(IEnumerable<ParticipantOption> options) =>
+        string.IsNullOrWhiteSpace(_search)
+            ? options
+            : options.Where(o => Normalize(o.Name).Contains(Normalize(_search), StringComparison.Ordinal));
+
+    private static string Normalize(string text) => text.Trim().ToLowerInvariant().Replace('ё', 'е');
+
+    private int CountOf(ParticipantOption option) => _counts.TryGetValue(option.Key, out var count) ? count : option.DefaultCount;
+
+    private void SetCount(ParticipantOption option, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var count))
+            _counts[option.Key] = Math.Clamp(count, 1, 99);
+    }
+
+    private async Task AddAsync(ParticipantOption option)
+    {
+        _adding = option.Key;
+        _error = null;
+        try
+        {
+            var participants = await option.CreateAsync(CountOf(option), CancellationToken.None);
+            await OnPicked.InvokeAsync(participants);
+        }
+        catch (HttpRequestException error)
+        {
+            _error = ApiErrors.Describe(error);
+        }
+        finally
+        {
+            _adding = null;
+        }
+    }
+}

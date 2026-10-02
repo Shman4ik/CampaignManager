@@ -15,8 +15,8 @@ public static class NavMenu
     [
         new("", "fa-house", "Главная", NavGroup.Main, NavAudience.Everyone, OnPhoneBar: true),
         new("campaigns", "fa-map", "Кампании", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
-        new("combat", "fa-hand-fist", "Бой", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
-        new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
+        new("combat", "fa-hand-fist", "Бой", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
+        new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
         new("scenarios", "fa-masks-theater", "Сценарии", NavGroup.Main, NavAudience.Keeper),
         new("npcs", "fa-user-secret", "НПС", NavGroup.Main, NavAudience.Keeper),
         new("music", "fa-music", "Музыка", NavGroup.Main, NavAudience.Keeper),
