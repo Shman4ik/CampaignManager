@@ -178,6 +178,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Identity` | вход через Auth0 (кука и JWT), автовход, `cm.users`, `/api/v1/me` | [Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md) |
 | `Access` | `CurrentUser`, `AccessPolicy`, политики `[Authorize]` | [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) |
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
+| `Campaigns` | кампании, участники и псевдонимы, журнал встреч, главная (`/api/v1/home`) | [Server/Campaigns/CLAUDE.md](CampaignManager.Server/Campaigns/CLAUDE.md), [UI/Campaigns/CLAUDE.md](CampaignManager.UI/Campaigns/CLAUDE.md) |
 
 Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` (и beta-стенд на ней) смотрит
 в бакет **`campaign-manager-dev`**: туда перенос (T1.3) копирует объекты v1, на которые ссылаются строки

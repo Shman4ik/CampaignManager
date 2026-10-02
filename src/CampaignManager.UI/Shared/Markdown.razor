@@ -1,0 +1,28 @@
+@* Текст в Markdown: хроника журнала, анонс ваншота, текст сценария. HTML строит MarkdownText —
+   без сырого HTML и опасных ссылок, поэтому MarkupString здесь безопасен. Оформление — cm-markdown. *@
+@if (!string.IsNullOrWhiteSpace(Text))
+{
+    <div class="@Css.Join("cm-markdown", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">
+        @((MarkupString)_html)
+    </div>
+}
+
+@code {
+    private string? _source;
+    private string _html = "";
+
+    [Parameter] public string? Text { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        // Разбор — только когда текст сменился, а не на каждую перерисовку страницы.
+        if (!string.Equals(_source, Text, StringComparison.Ordinal))
+        {
+            _source = Text;
+            _html = MarkdownText.ToHtml(Text);
+        }
+    }
+}

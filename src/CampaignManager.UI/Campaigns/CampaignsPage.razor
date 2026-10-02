@@ -1,0 +1,168 @@
+@page "/campaigns"
+@attribute [Authorize]
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Identity
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.UI.Platform
+@inject ICampaignsApi Api
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Кампании, где я участник (администратору — все: он правит и чужие). В v1 страница была только для
+   Хранителя; здесь игрок видит свои кампании с журналом, а кнопки правки приходят флагами из API.
+   Вступление — на главной, в «Можно вступить». *@
+<PageHeader Title="Кампании">
+    <Actions>
+        <AuthorizeView Policy="@Policies.Keeper">
+            <Button Small="true" Icon="fa-plus" OnClick="() => OpenForm(null)">Новая</Button>
+        </AuthorizeView>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <FilterPanel OnReset="ResetFilters">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию…" aria-label="Поиск по названию"
+               @bind="_search" @bind:event="oninput" />
+        <select class="cm-input w-full shrink-0 sm:w-56" aria-label="Статус" @bind="_status">
+            <option value="">Все статусы</option>
+            @foreach (var status in Enum.GetValues<CampaignStatus>())
+            {
+                <option value="@status">@CampaignLabels.Status(status)</option>
+            }
+        </select>
+    </FilterPanel>
+
+    <AsyncContent @ref="_list" Load="Api.GetCampaignsAsync" LoadingMessage="Загружаю кампании…" Context="campaigns">
+        @{
+            var shown = Filter(campaigns);
+        }
+        @if (campaigns.Count == 0)
+        {
+            <EmptyState Icon="fa-map" Title="Кампаний пока нет."
+                        Message="Хранитель заводит кампанию здесь, игрок вступает в неё на главной.">
+                <Actions>
+                    <AuthorizeView Policy="@Policies.Keeper">
+                        <Button Icon="fa-plus" OnClick="() => OpenForm(null)">Новая кампания</Button>
+                    </AuthorizeView>
+                    <Button Variant="ButtonVariant.Secondary" Href="" Icon="fa-house">На главную</Button>
+                </Actions>
+            </EmptyState>
+        }
+        else if (shown.Count == 0)
+        {
+            <EmptyState Title="Нет кампаний по этим условиям.">
+                <Actions><Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">Очистить фильтры</Button></Actions>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="cm-grid-cards">
+                @foreach (var campaign in shown)
+                {
+                    <article class="cm-card flex flex-col" @key="campaign.Id">
+                        <div class="cm-card-header">
+                            <a href="@($"campaigns/{campaign.Id}")" class="cm-card-title min-w-0 flex-1 basis-48 truncate hover:underline">@campaign.Name</a>
+                            <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
+                        </div>
+                        <div class="cm-card-body flex-1">
+                            <div class="cm-meta">
+                                @if (campaign.MyRole is { } role)
+                                {
+                                    <span><span class="cm-meta-label">Вы:</span> @CampaignLabels.Role(role)</span>
+                                }
+                                @if (campaign.MyRole != CampaignRole.Keeper && campaign.KeeperName is { } keeperName)
+                                {
+                                    <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
+                                }
+                                <span><span class="cm-meta-label">Игроков:</span> @campaign.PlayerCount</span>
+                                <span>@CampaignLabels.Kind(campaign.Kind) · @CampaignLabels.Era(campaign.Era)</span>
+                                <span>с @LocalTime.ShortDate(campaign.CreatedAt)</span>
+                            </div>
+                        </div>
+                        <div class="cm-card-footer">
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"campaigns/{campaign.Id}/journal")">Журнал</Button>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-users" Href="@($"campaigns/{campaign.Id}")">Участники</Button>
+                            @if (campaign.CanEdit)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="() => OpenForm(campaign)">Изменить</Button>
+                            }
+                            @if (campaign.CanDelete)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="() => DeleteAsync(campaign)">Удалить</Button>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </AsyncContent>
+</div>
+
+<CampaignFormModal Open="_formOpen" Campaign="_editing" OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
+
+@code {
+    private AsyncContent<IReadOnlyList<CampaignSummaryDto>>? _list;
+    private string _search = "";
+    private string _status = "";
+    private bool _formOpen;
+    private CampaignSummaryDto? _editing;
+
+    private List<CampaignSummaryDto> Filter(IReadOnlyList<CampaignSummaryDto> campaigns) =>
+    [
+        .. campaigns
+            .Where(c => string.IsNullOrWhiteSpace(_search) || c.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(c => _status.Length == 0 || c.Status.ToString() == _status),
+    ];
+
+    private void ResetFilters()
+    {
+        _search = "";
+        _status = "";
+    }
+
+    private void OpenForm(CampaignSummaryDto? campaign)
+    {
+        _editing = campaign;
+        _formOpen = true;
+    }
+
+    private async Task SavedAsync(CampaignSummaryDto campaign)
+    {
+        var created = _editing is null;
+        _formOpen = false;
+        if (created)
+        {
+            Toasts.Success($"Кампания «{campaign.Name}» создана.");
+            Navigation.NavigateTo($"campaigns/{campaign.Id}");
+            return;
+        }
+
+        Toasts.Success("Сохранено.");
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(CampaignSummaryDto campaign)
+    {
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
+            "Удалить кампанию?",
+            $"«{campaign.Name}» удалится вместе с журналом встреч и прохождениями. Листы игроков останутся у них, НПС кампании вернутся в библиотеку."));
+        if (!confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteCampaignAsync(campaign.Id);
+            Toasts.Success($"Кампания «{campaign.Name}» удалена.");
+            await ReloadAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
+        }
+    }
+
+    private Task ReloadAsync() => _list?.ReloadAsync() ?? Task.CompletedTask;
+}

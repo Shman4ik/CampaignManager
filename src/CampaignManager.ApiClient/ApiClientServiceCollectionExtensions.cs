@@ -1,6 +1,8 @@
+using CampaignManager.ApiClient.Campaigns;
 using CampaignManager.ApiClient.Files;
 using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Platform;
+using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
@@ -24,6 +26,7 @@ public static class ApiClientServiceCollectionExtensions
             http.BaseAddress = baseAddress;
             http.Timeout = TimeSpan.FromMinutes(10);
         });
+        services.AddHttpClient<ICampaignsApi, CampaignsApiClient>(http => http.BaseAddress = baseAddress);
         return services;
     }
 }

@@ -1,0 +1,84 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.UI.Platform
+
+@* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и прегены — кто какого занял.
+   Бронь и её снятие (кнопки строк) делает модуль прохождений (T2.5c): данные для них уже здесь
+   (IsReserved, IsMine). Длинный анонс прокручивается внутри карточки, а не растягивает главную. *@
+<article class="cm-card flex flex-col" aria-labelledby="@($"run-{Run.RunId}")">
+    <div class="cm-card-header">
+        <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48 truncate">@Run.ScenarioName</h3>
+        @if (Run.IsMine)
+        {
+            <Badge Tone="Tone.Info" Icon="fa-book-skull">Вы ведёте</Badge>
+        }
+    </div>
+    <div class="cm-card-body cm-stack flex-1">
+        <div>
+            <div class="cm-meta mb-2">
+                @if (Run.ScheduledAt is { } when)
+                {
+                    <span><i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@LocalTime.DateTime(when)</span>
+                }
+                else
+                {
+                    <span>Дата ещё не назначена</span>
+                }
+                @if (!Run.IsMine && Run.KeeperName is { } keeperName)
+                {
+                    <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Run.Announcement))
+            {
+                <Markdown Text="@Run.Announcement" class="max-h-60 overflow-y-auto" />
+            }
+        </div>
+
+        <div>
+            <h4 class="cm-section-title mb-1">
+                Персонажи · свободно @Run.Pregens.Count(p => !p.IsReserved) из @Run.Pregens.Count
+            </h4>
+            @if (Run.Pregens.Count == 0)
+            {
+                <p class="cm-text-muted">Хранитель ещё не добавил прегенов.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var pregen in Run.Pregens)
+                    {
+                        <li class="flex items-center gap-3 border-t border-primary-200 py-2 first:border-t-0" @key="pregen.Id">
+                            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 font-semibold text-primary-600"
+                                  aria-hidden="true">@Initial(pregen.Name)</span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate font-semibold text-primary-800">@pregen.Name</span>
+                                @if (pregen.Occupation is not null)
+                                {
+                                    <span class="block truncate text-sm text-primary-500">@pregen.Occupation</span>
+                                }
+                            </span>
+                            @if (pregen.IsMine)
+                            {
+                                <Badge Tone="Tone.Success">Ваш</Badge>
+                            }
+                            else if (pregen.IsReserved)
+                            {
+                                <Badge Tone="Tone.Neutral">Занят@(pregen.ReservedBy is { } by ? $": {by}" : "")</Badge>
+                            }
+                            else
+                            {
+                                <Badge Tone="Tone.Info">Свободен</Badge>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public HomeOneShotDto Run { get; set; } = null!;
+
+    private static string Initial(string name) => string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
+}

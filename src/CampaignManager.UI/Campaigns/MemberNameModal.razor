@@ -1,0 +1,63 @@
+@using CampaignManager.Contracts.Campaigns
+
+@* Имя в кампании (псевдоним): при вступлении и при смене. Имена в кампаниях нарочно разные
+   («Дима» в одной, полное имя в другой), поэтому это поле участника, а не профиля; пусто — имя
+   из профиля. Запрос делает страница: окно только редактирует строку и показывает её ошибку. *@
+<Modal Open="Open" Title="@Title" Size="ModalSize.Small" OnClose="CloseAsync">
+    <ChildContent>
+        <form id="member-name-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Имя в этой кампании" Hint="(необязательно)"
+                   Note="Так вас увидят Хранитель и другие игроки этой кампании. Пусто — имя из профиля.">
+                <input class="cm-input" maxlength="@CampaignLimits.DisplayNameLength" @bind="_value" @bind:event="oninput"
+                       placeholder="@ProfileName" />
+            </Field>
+            @if (Error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@Error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="Busy">Отмена</Button>
+        <Button Type="submit" form="member-name-form" Busy="Busy">@ConfirmText</Button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public string Title { get; set; } = "Имя в кампании";
+
+    [Parameter] public string ConfirmText { get; set; } = "Сохранить";
+
+    /// <summary>С чего начать правку: нынешний псевдоним или имя профиля.</summary>
+    [Parameter] public string? Value { get; set; }
+
+    /// <summary>Подсказка в пустом поле — имя из профиля.</summary>
+    [Parameter] public string? ProfileName { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback<string> OnSave { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _wasOpen;
+    private string _value = "";
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _value = Value ?? "";
+        }
+
+        _wasOpen = Open;
+    }
+
+    private Task SaveAsync() => OnSave.InvokeAsync(_value.Trim());
+
+    private Task CloseAsync() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+}

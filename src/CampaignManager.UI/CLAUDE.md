@@ -10,11 +10,12 @@
 | Папка | Что |
 |---|---|
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка) |
-| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
+| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
-| `Platform/` | `ApiActivity` — состояние связи и записи |
+| `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
 | `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui`, `/dev/checks` (T2.7) |
+| `Campaigns/` | главная, кампании, участники, журнал — [CLAUDE.md](Campaigns/CLAUDE.md) |
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
@@ -150,6 +151,23 @@
   тоном Alert error. `ValidationMessage` — `.validation-message`.
 - Тонированные панели правил боя и погоны (результат атаки, действие погони) — содержимое экрана с
   контролами, а не уведомления; их не переводили на Alert и в 2.0.
+
+## Markdown
+
+`<Markdown Text="…">` — хроника журнала, анонс ваншота, тексты сценариев; оформление `cm-markdown`.
+HTML строит `MarkdownText` (Markdig): **сырой HTML выводится текстом** (`DisableHtml`), ссылки и картинки —
+только `http(s)`, `mailto` и относительные, остальное (`javascript:`, `data:`) становится `#`. Пишет
+Хранитель, читают игроки — поэтому без исключений. HtmlSanitizer v1 (AngleSharp) в WebAssembly не
+берём: мегабайты ради того, что даёт `DisableHtml`.
+
+## Черновики и ошибки API
+
+- Несохранённая правка — черновик в `localStorage` через `BrowserStorage` (встроенные
+  `localStorage.*` по JS-интеропу, своих скриптов нет). Хранилище бывает недоступно (приватный режим) —
+  тогда черновика просто нет. Ключ — `cm.<что>:<id>`; стирать после успешной записи и при явном отказе.
+  Пример — окно встречи журнала (`Campaigns/SessionEditorModal`).
+- Текст отказа для пользователя — `ApiErrors.Describe(HttpRequestException)`: ProblemDetails как есть,
+  401 — «сессия закончилась», без ответа — «нет связи», 5xx — общая фраза.
 
 ## Поля
 

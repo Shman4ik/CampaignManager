@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
@@ -20,4 +21,15 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(DeleteOrphansRequest))]
 [JsonSerializable(typeof(DeleteOrphansResponse))]
 [JsonSerializable(typeof(MeResponse))]
+[JsonSerializable(typeof(HomeDto))]
+[JsonSerializable(typeof(IReadOnlyList<CampaignSummaryDto>))]
+[JsonSerializable(typeof(CampaignSummaryDto))]
+[JsonSerializable(typeof(CampaignDetailsDto))]
+[JsonSerializable(typeof(CampaignMemberDto))]
+[JsonSerializable(typeof(CampaignInput))]
+[JsonSerializable(typeof(JoinCampaignRequest))]
+[JsonSerializable(typeof(UpdateMemberRequest))]
+[JsonSerializable(typeof(CampaignJournalDto))]
+[JsonSerializable(typeof(CampaignSessionDto))]
+[JsonSerializable(typeof(CampaignSessionInput))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
