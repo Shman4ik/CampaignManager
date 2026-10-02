@@ -277,25 +277,38 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (character is null)
-        {
-            return Access.None;
-        }
+        return character is null
+            ? Access.None
+            : ForCharacter(user, character.Kind, character.OwnerId, character.CampaignId, character.KeepsCampaign);
+    }
 
+    /// <summary>
+    /// То же правило, что <see cref="ForCharacterAsync"/>, для уже прочитанной строки — библиотека НПС и прегенов
+    /// считает флаги без запроса на каждый лист. <paramref name="keepsCampaign"/> — пользователь Хранитель кампании листа.
+    /// </summary>
+    public static Access ForCharacter(SignedInUser user, CharacterKind kind, Guid? ownerId, Guid? campaignId, bool keepsCampaign)
+    {
         if (user.IsAdmin)
         {
             return Access.Full;
         }
 
-        return character.Kind switch
+        return kind switch
         {
-            CharacterKind.Player => character.OwnerId == user.Id || character.KeepsCampaign ? Access.Full : Access.None,
+            CharacterKind.Player => ownerId == user.Id || keepsCampaign ? Access.Full : Access.None,
             CharacterKind.Pregen => user.IsKeeper ? Access.Full : Access.ReadOnly,
-            CharacterKind.Npc when character.CampaignId is null => user.IsKeeper ? Access.Full : Access.None,
-            CharacterKind.Npc => character.KeepsCampaign ? Access.Full : Access.None,
+            CharacterKind.Npc when campaignId is null => user.IsKeeper ? Access.Full : Access.None,
+            CharacterKind.Npc => keepsCampaign ? Access.Full : Access.None,
             _ => Access.None,
         };
     }
+
+    /// <summary>
+    /// Библиотека НПС и прегенов (<c>/npcs</c>): Хранитель по роли. Что в списке видно, решает
+    /// <see cref="ForCharacter"/> по каждой строке (НПС чужой кампании в список не попадает).
+    /// </summary>
+    public async Task<bool> CanBrowseCharacterLibraryAsync(CancellationToken cancellationToken = default) =>
+        await currentUser.GetAsync(cancellationToken) is { IsKeeper: true };
 
     /// <summary>
     /// Завести лист: своего сыщика — любой (в кампанию — только её участник); прегена — Хранитель;

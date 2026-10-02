@@ -71,7 +71,7 @@ public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access,
     public async Task<CharacterSavedDto> SaveSheetAsync(Guid characterId, CharacterSheet sheet, uint? ifMatch, CancellationToken cancellationToken)
     {
         await access.ForCharacterAsync(characterId, cancellationToken).Demand(Operation.Edit);
-        await ValidateAsync(sheet, cancellationToken);
+        await ValidateAsync(dbContext, sheet, cancellationToken);
 
         return await WriteAsync(characterId, ifMatch, character =>
         {
@@ -223,7 +223,7 @@ public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access,
     /// Документ от клиента: пределы длины и ссылки на справочник навыков. Неизвестный навык — 400: лист без
     /// справочника не читается (имя, группа и база берутся из него).
     /// </summary>
-    private async Task ValidateAsync(CharacterSheet sheet, CancellationToken cancellationToken)
+    internal static async Task ValidateAsync(CmDbContext dbContext, CharacterSheet sheet, CancellationToken cancellationToken)
     {
         if (sheet.Personal.Name.Length > CharacterLimits.NameLength || sheet.Personal.Occupation.Length > CharacterLimits.NameLength)
         {

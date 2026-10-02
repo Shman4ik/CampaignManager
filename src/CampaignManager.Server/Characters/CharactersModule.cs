@@ -12,12 +12,29 @@ public static class CharactersModule
     public static WebApplicationBuilder AddCharactersModule(this WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<CharacterService>();
+        builder.Services.AddScoped<CharacterLibraryService>();
         return builder;
     }
 
     /// <summary>Все эндпоинты — только вошедшим; кто что может, решает сервис (<c>AccessPolicy</c>).</summary>
     public static IEndpointRouteBuilder MapCharactersApi(this IEndpointRouteBuilder app)
     {
+        app.MapPost(CharactersRoutes.Characters, async Task<IResult> (CreateCharacterRequest body, CharacterLibraryService library,
+                CancellationToken ct) =>
+            {
+                var created = await library.CreateAsync(body, ct);
+                return TypedResults.Created(CharactersRoutes.Character(created.Id), created);
+            })
+            .RequireAuthorization().WithName("CreateCharacter").WithTags(Tag);
+
+        app.MapGet(CharactersRoutes.Characters, (CharacterKind kind, bool? archived, CharacterLibraryService library, CancellationToken ct) =>
+                library.ListAsync(kind, archived ?? false, ct))
+            .RequireAuthorization().WithName("ListCharacterLibrary").WithTags(Tag);
+
+        app.MapGet(CharactersRoutes.NewPattern, (CharacterKind kind, Guid? campaignId, Guid? scenarioId, CharacterLibraryService library,
+                CancellationToken ct) => library.GetCreationContextAsync(kind, campaignId, scenarioId, ct))
+            .RequireAuthorization().WithName("GetCharacterCreationContext").WithTags(Tag);
+
         app.MapGet(CharactersRoutes.CharacterPattern, async Task<IResult> (Guid characterId, HttpContext http, CharacterService characters,
                 CancellationToken ct) =>
             {
