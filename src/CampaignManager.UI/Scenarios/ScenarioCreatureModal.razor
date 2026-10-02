@@ -1,0 +1,105 @@
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Тварь в сценарии: своё имя («Вожак культистов» поверх «Культиста»), количество, где она и заметки. Статблок —
+   ссылка на бестиарий; своя версия (у перенесённых из v1 тварей она есть, если отличалась) правкой бестиария не
+   обновляется — «Идти за бестиарием» её выбрасывает. Правки статблока сценария здесь нет, как и в v1. *@
+<Modal Open="Open" Title="@($"Тварь: {Creature?.Name}")" OnClose="CloseAsync" data-testid="creature-form">
+    <ChildContent>
+        @if (Creature is not null)
+        {
+            <form id="creature-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+                <Field Label="Имя в сценарии" Note="@(Creature.CatalogName is { } catalog ? $"Пусто — как в бестиарии: «{catalog}»." : null)">
+                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="creature-name" @bind="_name" />
+                </Field>
+                <div class="grid grid-cols-[8rem_1fr] gap-4">
+                    <Field Label="Сколько">
+                        <input class="cm-input" type="number" min="1" max="@ScenarioLimits.MaxCount" data-testid="creature-count" @bind="_count" />
+                    </Field>
+                    <Field Label="Где">
+                        <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_location" placeholder="в подвале особняка" />
+                    </Field>
+                </div>
+                <Field Label="Заметки">
+                    <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
+                </Field>
+                @if (Creature.HasOwnStatblock && Creature.CreatureId is not null)
+                {
+                    <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
+                        <input type="checkbox" class="cm-checkbox" @bind="_reset" />
+                        Идти за бестиарием: выбросить свою версию статблока
+                    </label>
+                }
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+                }
+            </form>
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="creature-form" Busy="_saving" data-testid="creature-save">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private string? _name;
+    private int _count = 1;
+    private string? _location;
+    private string? _notes;
+    private bool _reset;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public ScenarioCreatureDto? Creature { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen && Creature is not null)
+        {
+            _name = Creature.OwnName;
+            _count = Creature.Count;
+            _location = Creature.LocationNote;
+            _notes = Creature.Notes;
+            _reset = false;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Creature is null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.UpdateCreatureAsync(ScenarioId, Creature.Id,
+                new ScenarioCreatureInput(null, _name, _count, _location, _notes, _reset));
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

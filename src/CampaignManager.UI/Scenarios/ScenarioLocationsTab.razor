@@ -1,0 +1,153 @@
+@inherits ScenarioTabBase
+
+@* «Локации» — дерево: вложенная локация с отступом под родителем. Касание имени раскрывает описание (Markdown) и
+   проверки. «Вложенная» заводит локацию сразу внутри этой. Порядок — среди соседей («Порядок» → «Выше»/«Ниже»).
+   Удаление уносит вложенные локации и их проверки — диалог говорит об этом. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Локации</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                @if (Scenario.Locations.Count > 1)
+                {
+                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
+                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+                }
+                <Button Small="true" Icon="fa-plus" data-testid="add-location" OnClick="() => Open(null, null)">Локация</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Locations.Count == 0)
+    {
+        <EmptyState Icon="fa-location-dot" Title="Локаций пока нет." Message="Локации — места, где сыщики ищут улики: у каждой описание и проверки." />
+    }
+    else
+    {
+        <div class="cm-card" data-testid="location-list">
+            @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
+            {
+                var siblings = LocationTree.Siblings(Scenario.Locations, location);
+                var index = siblings.ToList().IndexOf(location.Id);
+                var open = _open.Contains(location.Id);
+                <div class="border-t border-primary-200 py-3 pr-4 first:border-t-0" style="padding-left: @(1 + depth * 1.5)rem" @key="location.Id"
+                     data-testid="location-row">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <button type="button" class="flex min-h-9 min-w-0 flex-1 items-start gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                                @onclick="() => Toggle(location.Id)">
+                            <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") mt-1 w-3 text-xs text-primary-400" aria-hidden="true"></i>
+                            <span class="flex min-w-0 flex-col">
+                                <span class="font-semibold text-primary-900">
+                                    @if (depth > 0)
+                                    {
+                                        <i class="fa-solid fa-turn-up mr-1 rotate-90 text-xs text-primary-400" aria-hidden="true"></i>
+                                    }
+                                    @location.Name
+                                </span>
+                                @if (location.Address is { } address)
+                                {
+                                    <span class="text-sm text-primary-500">@address</span>
+                                }
+                            </span>
+                        </button>
+                        <div class="flex flex-wrap items-center gap-2">
+                            @if (location.Checks.Count > 0)
+                            {
+                                <Badge Tone="Tone.Info" Icon="fa-dice-d20">@location.Checks.Count</Badge>
+                            }
+                            <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < siblings.Count - 1"
+                                            OnUp="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, -1)"
+                                            OnDown="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, 1)"
+                                            OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)">
+                                <Extra>
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy"
+                                            OnClick="() => Open(null, location.Id)">Вложенная</Button>
+                                </Extra>
+                            </PartRowActions>
+                        </div>
+                    </div>
+                    @if (open)
+                    {
+                        <div class="mt-2 flex flex-col gap-3 pl-5">
+                            @if (location.Description is { } description)
+                            {
+                                <Markdown Text="@description" />
+                            }
+                            else
+                            {
+                                <p class="cm-text-muted">Описания нет.</p>
+                            }
+                            @if (location.Checks.Count > 0)
+                            {
+                                <ul class="flex flex-col gap-1 text-sm">
+                                    @foreach (var check in location.Checks)
+                                    {
+                                        <li @key="check.Id">
+                                            <span class="font-semibold text-primary-800">@ScenarioLabels.Target(check)</span>
+                                            @if (ScenarioLabels.Difficulty(check) is { } difficulty)
+                                            {
+                                                <span class="text-warning-700"> · @difficulty</span>
+                                            }
+                                            @if (check.OnSuccess is { } success)
+                                            {
+                                                <span class="text-primary-600"> — @success</span>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                                <a class="text-sm text-accent-700 underline" href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Checks)">Править проверки</a>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<LocationFormModal Open="_formOpen" ScenarioId="Scenario.Id" Location="_editing" Locations="Scenario.Locations" DefaultParentId="_parentId"
+                   OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
+
+@code {
+    private readonly HashSet<Guid> _open = [];
+    private bool _formOpen;
+    private ScenarioLocationDto? _editing;
+    private Guid? _parentId;
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+            _open.Add(id);
+    }
+
+    private void Open(ScenarioLocationDto? location, Guid? parentId)
+    {
+        _editing = location;
+        _parentId = parentId;
+        _formOpen = true;
+    }
+
+    private async Task SavedFormAsync()
+    {
+        var wasNew = _editing is null;
+        _formOpen = false;
+        await SavedAsync(wasNew ? "Локация добавлена." : "Локация сохранена.");
+    }
+
+    private Task RemoveAsync(ScenarioLocationDto location)
+    {
+        var nested = CountNested(location.Id);
+        var checks = location.Checks.Count;
+        var message = nested > 0
+            ? $"Вместе с ней удалятся вложенные локации ({nested}) и их проверки."
+            : checks > 0 ? $"Вместе с ней удалятся её проверки ({checks})." : "Описание локации удалится.";
+        return DeleteAsync($"Удалить «{location.Name}»?", message,
+            () => Api.DeleteLocationAsync(Scenario.Id, location.Id), "Локация удалена.");
+    }
+
+    private int CountNested(Guid id)
+    {
+        var children = Scenario.Locations.Where(l => l.ParentId == id).ToList();
+        return children.Count + children.Sum(c => CountNested(c.Id));
+    }
+}

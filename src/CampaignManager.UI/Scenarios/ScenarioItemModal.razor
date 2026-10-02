@@ -1,0 +1,99 @@
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Предмет сценария: свой реквизит (имя обязательно — справочника за ним нет, как у резного идола «Среди древних
+   деревьев») или предмет справочника со своими именем и описанием поверх (пусто — как в справочнике); где лежит и
+   заметки. Одна форма на «Свой реквизит» и «Изменить». *@
+<Modal Open="Open" Title="@(Item is null ? "Свой реквизит" : $"Предмет: {Item.Name}")" OnClose="CloseAsync" data-testid="item-form">
+    <ChildContent>
+        <form id="item-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Error="@_nameError"
+                   Note="@(Item?.CatalogName is { } catalog ? $"Пусто — как в справочнике: «{catalog}»." : null)">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="item-name" @bind="_name" @bind:event="oninput" />
+            </Field>
+            <Field Label="Описание" Note="@(Item?.ItemId is not null ? "Пусто — описание справочника." : null)">
+                <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" @bind="_description"></textarea>
+            </Field>
+            <Field Label="Где">
+                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_location" placeholder="в ящике стола" />
+            </Field>
+            <Field Label="Заметки">
+                <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="item-form" Busy="_saving" data-testid="item-save">@(Item is null ? "Добавить" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private string? _name;
+    private string? _description;
+    private string? _location;
+    private string? _notes;
+    private string? _nameError;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    /// <summary>Правка этого предмета; <c>null</c> — новый свой реквизит.</summary>
+    [Parameter] public ScenarioItemDto? Item { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _name = Item?.OwnName;
+            _description = Item?.OwnDescription;
+            _location = Item?.LocationNote;
+            _notes = Item?.Notes;
+            _nameError = null;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        _nameError = Item?.ItemId is null && string.IsNullOrWhiteSpace(_name) ? "У своего предмета должно быть название." : null;
+        if (_nameError is not null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var input = new ScenarioItemInput(Item?.ItemId, _name, _description, _location, _notes);
+            if (Item is null)
+                await Api.AddItemAsync(ScenarioId, input);
+            else
+                await Api.UpdateItemAsync(ScenarioId, Item.Id, input);
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

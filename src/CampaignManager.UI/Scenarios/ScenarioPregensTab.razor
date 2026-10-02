@@ -1,0 +1,88 @@
+@inherits ScenarioTabBase
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Platform
+@inject ICharactersApi CharactersApi
+
+@* «Прегены» — листы сценария для ваншотов. Из библиотеки преген приходит копией (заготовка остаётся для других
+   сценариев); бронь (T2.5c) копирует уже прегена сценария игроку. «Убрать» уводит прегена в архив библиотеки;
+   забронированного в незавершённом прохождении убрать нельзя — сначала снимают бронь. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Прегены</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" Href="@CreationLinks.Create(CharacterKind.Pregen, null, Scenario.Id)">Новый</Button>
+                <Button Small="true" Icon="fa-copy" data-testid="add-pregen" OnClick="OpenPicker">Из библиотеки</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Pregens.Count == 0)
+    {
+        <EmptyState Icon="fa-user" Title="Прегенов пока нет." Message="Готовые сыщики для ваншота: игроки бронируют их с главной." />
+    }
+    else
+    {
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack" data-testid="pregen-list">
+                @foreach (var pregen in Scenario.Pregens)
+                {
+                    <CharacterSummaryCard @key="pregen.Character.Id" Character="pregen.Character" Framed="false" ArchiveLabel="Убрать" Busy="Busy"
+                                          OnArchive="CanEdit && !pregen.IsReserved ? RemoveCallback : default">
+                        @if (pregen.IsReserved)
+                        {
+                            <div><Badge Tone="Tone.Warning" Icon="fa-lock">Забронирован игроком</Badge></div>
+                        }
+                    </CharacterSummaryCard>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="Преген из библиотеки" Load="LoadPregensAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="c => c.Occupation" Also="c => [c.Occupation]" Empty="В библиотеке нет прегенов-заготовок." ConfirmText="Копировать в сценарий"
+                    Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false" />
+
+@code {
+    private bool _picking;
+    private bool _adding;
+    private string? _addError;
+
+    private EventCallback<CharacterSummaryDto> RemoveCallback => EventCallback.Factory.Create<CharacterSummaryDto>(this, RemoveAsync);
+
+    private void OpenPicker()
+    {
+        _addError = null;
+        _picking = true;
+    }
+
+    /// <summary>Заготовки — прегены библиотеки без сценария; прегены других сценариев копируются через их сценарий.</summary>
+    private async Task<IReadOnlyList<CharacterSummaryDto>> LoadPregensAsync(CancellationToken cancellationToken) =>
+        [.. (await CharactersApi.ListAsync(CharacterKind.Pregen, archived: false, cancellationToken)).Where(c => c.ScenarioId is null)];
+
+    private async Task AddAsync(CharacterSummaryDto pregen)
+    {
+        _adding = true;
+        _addError = null;
+        try
+        {
+            await Api.AddPregenAsync(Scenario.Id, pregen.Id);
+            _picking = false;
+            await SavedAsync($"Копия «{pregen.Name}» в сценарии.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _addError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private Task RemoveAsync(CharacterSummaryDto pregen) =>
+        DeleteAsync($"Убрать «{pregen.Name}» из сценария?", "Преген уйдёт в архив библиотеки — оттуда его можно вернуть.",
+            () => Api.RemovePregenAsync(Scenario.Id, pregen.Id), "Преген убран в архив.", "Убрать");
+}

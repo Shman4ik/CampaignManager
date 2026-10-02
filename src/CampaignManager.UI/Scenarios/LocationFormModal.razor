@@ -1,0 +1,150 @@
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Локация: название, адрес, родитель, описание для Хранителя в Markdown с предпросмотром. Пишет одну строку —
+   музыку локации (T2.5b) и её проверки эта форма не трогает, поэтому правило v1 «новое поле обязано попасть в
+   глубокое копирование» больше не нужно: копии нет. Родителем нельзя выбрать саму локацию и её потомков (сервер
+   тоже не даст). Ошибка — в окне, окно не закрывается. *@
+<Modal Open="Open" Title="@(Location is null ? "Новая локация" : $"Локация: {Location.Name}")" Size="ModalSize.Large" OnClose="CloseAsync"
+       data-testid="location-form">
+    <ChildContent>
+        <form id="location-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field Label="Название" Error="@_nameError">
+                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="location-name" @bind="_name" @bind:event="oninput" />
+                </Field>
+                <Field Label="Адрес">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_address" />
+                </Field>
+            </div>
+            <Field Label="Внутри локации" class="sm:w-96">
+                <select class="cm-input" data-testid="location-parent" value="@(_parentId?.ToString() ?? "")"
+                        @onchange="e => _parentId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                    <option value="">— верхний уровень —</option>
+                    @foreach (var (parent, depth) in Parents())
+                    {
+                        <option value="@parent.Id">@(new string(' ', depth * 3))@parent.Name</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Описание" Hint="(Markdown, для Хранителя)" Group="true">
+                <div class="mb-2 flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
+                        @(_preview ? "Редактор" : "Просмотр")
+                    </Button>
+                </div>
+                @if (_preview)
+                {
+                    <div class="max-h-[50vh] min-h-40 overflow-y-auto rounded-md border border-primary-200 p-3">
+                        <Markdown Text="@_description" />
+                    </div>
+                }
+                else
+                {
+                    <textarea class="cm-input font-mono text-sm" rows="12" maxlength="@ScenarioLimits.TextLength" data-testid="location-description"
+                              aria-label="Описание локации" @bind="_description"></textarea>
+                }
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="location-error">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="location-form" Busy="_saving" data-testid="location-save">@(Location is null ? "Добавить" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private string _name = "";
+    private string? _address;
+    private string? _description;
+    private Guid? _parentId;
+    private bool _preview;
+    private string? _nameError;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    /// <summary>Правка этой локации; <c>null</c> — новая.</summary>
+    [Parameter] public ScenarioLocationDto? Location { get; set; }
+
+    /// <summary>Все локации сценария по порядку дерева — варианты родителя.</summary>
+    [Parameter] public IReadOnlyList<ScenarioLocationDto> Locations { get; set; } = [];
+
+    /// <summary>Родитель новой локации («Вложенная» у строки).</summary>
+    [Parameter] public Guid? DefaultParentId { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _name = Location?.Name ?? "";
+            _address = Location?.Address;
+            _description = Location?.Description;
+            _parentId = Location is null ? DefaultParentId : Location.ParentId;
+            _preview = false;
+            _nameError = null;
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    /// <summary>Варианты родителя: всё дерево, кроме самой локации и её потомков.</summary>
+    private IEnumerable<(ScenarioLocationDto Location, int Depth)> Parents()
+    {
+        var excluded = new HashSet<Guid>();
+        if (Location is not null)
+        {
+            excluded.Add(Location.Id);
+            // Порядок дерева — в глубину, так что потомки идут сразу за локацией.
+            foreach (var l in Locations)
+            {
+                if (l.ParentId is { } parent && excluded.Contains(parent))
+                    excluded.Add(l.Id);
+            }
+        }
+
+        return LocationTree.WithDepth(Locations).Where(x => !excluded.Contains(x.Location.Id));
+    }
+
+    private async Task SaveAsync()
+    {
+        _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        if (_nameError is not null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var input = new LocationInput(_name.Trim(), _address, _description, _parentId);
+            if (Location is null)
+                await Api.AddLocationAsync(ScenarioId, input);
+            else
+                await Api.UpdateLocationAsync(ScenarioId, Location.Id, input);
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

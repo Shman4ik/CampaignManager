@@ -1,0 +1,150 @@
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* НПС в сценарии: роль, количество (три одинаковых громилы — одна строка с «3») и заметка. Лист не копируется —
+   правки НПС видны во всех сценариях, где он занят. Одно окно на «В сценарий» с карточки /npcs (выбор сценария —
+   только тех, что можно править) и на «Роль» в составе сценария (ScenarioId задан). Повтор — правка той же связи,
+   двойника не бывает. Ошибка — в окне. *@
+<Modal Open="Open" Title="@(ScenarioId is null ? "НПС в сценарий" : $"{Character?.Name} в сценарии")" OnClose="CloseAsync" data-testid="cast-npc">
+    <ChildContent>
+        <form id="cast-npc-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            @if (ScenarioId is null)
+            {
+                <p class="cm-text-muted">«@Character?.Name» появится в выбранном сценарии. Лист остаётся один: правки увидят все сценарии, где он занят.</p>
+                @if (_scenarios is null)
+                {
+                    <LoadingIndicator Message="Загружаю сценарии…" />
+                }
+                else if (_scenarios.Count == 0)
+                {
+                    <EmptyState Icon="fa-masks-theater" Title="Сценариев, которые вы можете править, нет.">
+                        <Actions><Button Small="true" Icon="fa-plus" Href="@ScenarioLinks.New">Новый сценарий</Button></Actions>
+                    </EmptyState>
+                }
+                else
+                {
+                    <Field Label="Сценарий">
+                        <select class="cm-input" data-testid="cast-scenario" value="@(_scenarioId?.ToString() ?? "")"
+                                @onchange="e => _scenarioId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                            <option value="">— выберите —</option>
+                            @foreach (var scenario in _scenarios)
+                            {
+                                var taken = Character?.CastIn.Contains(scenario.Name) == true;
+                                <option value="@scenario.Id">@scenario.Name@(taken ? " (уже занят)" : "")</option>
+                            }
+                        </select>
+                    </Field>
+                }
+            }
+            <div class="grid grid-cols-2 gap-3 sm:w-96">
+                <Field Label="Роль">
+                    <select class="cm-input" data-testid="cast-role" @bind="_role">
+                        @foreach (var role in Enum.GetValues<NpcRole>())
+                        {
+                            <option value="@role">@ScenarioText.Of(role)</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Сколько">
+                    <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" data-testid="cast-count" @bind="_count" />
+                </Field>
+            </div>
+            <Field Label="Заметка" Hint="(для этого сценария)">
+                <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="cast-error">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="cast-npc-form" Busy="_saving" Disabled="@(ScenarioId is null && _scenarioId is null)" data-testid="cast-save">
+            @(ScenarioId is null ? "Добавить" : "Сохранить")
+        </Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private IReadOnlyList<ScenarioSummaryDto>? _scenarios;
+    private Guid? _scenarioId;
+    private NpcRole _role;
+    private int _count = 1;
+    private string? _notes;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    /// <summary>НПС, которого занимают.</summary>
+    [Parameter] public CharacterSummaryDto? Character { get; set; }
+
+    /// <summary>Сценарий задан (правка роли в составе); null — выбор сценария (с карточки /npcs).</summary>
+    [Parameter] public Guid? ScenarioId { get; set; }
+
+    [Parameter] public NpcRole Role { get; set; }
+
+    [Parameter] public int Count { get; set; } = 1;
+
+    [Parameter] public string? Notes { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Записано: id сценария.</summary>
+    [Parameter] public EventCallback<Guid> OnSaved { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opened = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opened)
+            return;
+
+        _scenarioId = ScenarioId;
+        _role = Role;
+        _count = Count;
+        _notes = Notes;
+        _error = null;
+        if (ScenarioId is null)
+        {
+            _scenarios = null;
+            try
+            {
+                // Только те, что можно править: иначе выбор кончался бы отказом сервера.
+                _scenarios = [.. (await Api.ListAsync()).Items.Where(s => s.CanEdit)];
+            }
+            catch (HttpRequestException ex)
+            {
+                _scenarios = [];
+                _error = ApiErrors.Describe(ex);
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving || Character is null || (_scenarioId ?? ScenarioId) is not { } scenarioId)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.CastNpcAsync(scenarioId, Character.Id, new NpcCastInput(_role, Math.Clamp(_count, 1, CharacterLimits.MaxCastCount), _notes));
+            await OnSaved.InvokeAsync(scenarioId);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

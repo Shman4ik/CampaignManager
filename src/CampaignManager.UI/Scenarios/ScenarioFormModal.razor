@@ -1,0 +1,144 @@
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.Core
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Шапка сценария — одна форма на «Новый сценарий» и правку (в v1 «Основное» правилось формой, копировавшей
+   девять полей дважды, а описание и журнал рисовались ещё и на странице просмотра). Правка — с версией корня:
+   изменили на другом устройстве — текст в окне и «Перечитать», а не молчаливая перезапись. Анонса здесь нет:
+   он у прохождения (T2.5c). *@
+<Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Описание сценария")" OnClose="CloseAsync" data-testid="scenario-form">
+    <ChildContent>
+        <form id="scenario-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Error="@_nameError">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="scenario-name" @bind="_name" @bind:event="oninput"
+                       placeholder="Например: «Безымянный туман»" />
+            </Field>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field Label="Место действия">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_setting" placeholder="Бостон, Массачусетс" />
+                </Field>
+                <Field Label="Время действия">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_settingDate" placeholder="Июнь 1925 года" />
+                </Field>
+            </div>
+            <Field Label="Эпоха" Note="По ней имена быстрых НПС и цены; время действия — просто текст." class="sm:w-72">
+                <select class="cm-input" value="@(_era?.ToString() ?? "")" @onchange="e => _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null">
+                    <option value="">Не указана</option>
+                    @foreach (var era in Enum.GetValues<Era>())
+                    {
+                        <option value="@era">@CampaignManager.Core.Catalogs.CatalogText.Of(era)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Кратко" Hint="(для списка сценариев)">
+                <textarea class="cm-input" rows="3" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="scenario-form-error">
+                    <ChildContent>@_error</ChildContent>
+                    <Actions>
+                        @if (_stale)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" OnClick="OnReload">Перечитать</Button>
+                        }
+                    </Actions>
+                </Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="scenario-form" Busy="_saving" data-testid="scenario-save">@(Scenario is null ? "Создать" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private string _name = "";
+    private string? _summary;
+    private string? _setting;
+    private string? _settingDate;
+    private Era? _era;
+    private string? _nameError;
+    private string? _error;
+    private bool _stale;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    /// <summary>Правка этого сценария; <c>null</c> — новый.</summary>
+    [Parameter] public ScenarioDto? Scenario { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Новый сценарий создан — его id.</summary>
+    [Parameter] public EventCallback<Guid> OnCreated { get; set; }
+
+    /// <summary>Шапка записана.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    /// <summary>«Перечитать» после конфликта: страница перечитывает сценарий, окно заполняется заново.</summary>
+    [Parameter] public EventCallback OnReload { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        // Форма заполняется при открытии и после «Перечитать» (новая версия), а не на каждую перерисовку.
+        if ((Open && !_wasOpen) || (_stale && Scenario is not null && _staleVersion != Scenario.Version))
+        {
+            _name = Scenario?.Name ?? "";
+            _summary = Scenario?.Summary;
+            _setting = Scenario?.Setting;
+            _settingDate = Scenario?.SettingDate;
+            _era = Scenario is null ? Era.Classic : Scenario.Era;
+            _nameError = null;
+            _error = null;
+            _stale = false;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private uint _staleVersion;
+
+    private async Task SaveAsync()
+    {
+        _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        if (_nameError is not null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        _stale = false;
+        try
+        {
+            var input = new ScenarioInput(_name.Trim(), _summary, _setting, _era, _settingDate);
+            if (Scenario is null)
+            {
+                var created = await Api.CreateAsync(input);
+                await OnCreated.InvokeAsync(created.Id);
+            }
+            else
+            {
+                await Api.UpdateAsync(Scenario.Id, input, Scenario.Version);
+                await OnSaved.InvokeAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+            if (ex is CampaignManager.Contracts.Platform.ApiException { IsStale: true })
+            {
+                _stale = true;
+                _staleVersion = Scenario?.Version ?? 0;
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

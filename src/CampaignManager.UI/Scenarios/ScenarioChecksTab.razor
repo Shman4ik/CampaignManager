@@ -1,0 +1,113 @@
+@inherits ScenarioTabBase
+
+@* «Проверки» — все проверки сценария, сгруппированные по локациям (путь «Дом › Подвал»). Проверка живёт в локации:
+   новая — с выбором локации; «+» у группы — сразу в эту локацию. Порядок — внутри локации. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Проверки</h2>
+        @if (CanEdit && Scenario.Locations.Count > 0)
+        {
+            <div class="flex flex-wrap gap-2">
+                @if (Groups.Any(g => g.Location.Checks.Count > 1))
+                {
+                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
+                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+                }
+                <Button Small="true" Icon="fa-plus" data-testid="add-check" OnClick="() => Open(null, null)">Проверка</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Locations.Count == 0)
+    {
+        <EmptyState Icon="fa-dice-d20" Title="Проверки живут в локациях." Message="Сначала заведите локацию на вкладке «Локации».">
+            <Actions>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-location-dot" Href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Locations)">К локациям</Button>
+            </Actions>
+        </EmptyState>
+    }
+    else if (!Groups.Any())
+    {
+        <EmptyState Icon="fa-dice-d20" Title="Проверок пока нет." Message="Проверка — что узнают сыщики при успехе и при провале навыка в локации." />
+    }
+    else
+    {
+        <div class="flex flex-col gap-4" data-testid="check-groups">
+            @foreach (var group in Groups)
+            {
+                var ids = group.Location.Checks.Select(c => c.Id).ToList();
+                <div class="cm-card" @key="group.Location.Id">
+                    <div class="cm-card-header flex-wrap gap-2">
+                        <span class="cm-card-title"><i class="fa-solid fa-location-dot mr-1 text-accent-600" aria-hidden="true"></i>@group.Path</span>
+                        @if (CanEdit && !Reordering)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy"
+                                    OnClick="() => Open(null, group.Location.Id)">Сюда</Button>
+                        }
+                    </div>
+                    @foreach (var check in group.Location.Checks)
+                    {
+                        var index = ids.IndexOf(check.Id);
+                        <div class="flex flex-wrap items-start justify-between gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="check.Id"
+                             data-testid="check-row">
+                            <div class="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold text-primary-900">@ScenarioLabels.Target(check)</span>
+                                    @if (check.TargetKind is not CheckTarget.Skill)
+                                    {
+                                        <Badge Tone="Tone.Stone">@ScenarioText.Of(check.TargetKind)</Badge>
+                                    }
+                                    @if (ScenarioLabels.Difficulty(check) is { } difficulty)
+                                    {
+                                        <Badge Tone="Tone.Warning">@difficulty</Badge>
+                                    }
+                                </div>
+                                @if (check.OnSuccess is { } success)
+                                {
+                                    <p class="whitespace-pre-line text-primary-700"><span class="font-medium text-success-700">Успех:</span> @success</p>
+                                }
+                                @if (check.OnFailure is { } failure)
+                                {
+                                    <p class="whitespace-pre-line text-primary-700"><span class="font-medium text-error-700">Провал:</span> @failure</p>
+                                }
+                            </div>
+                            <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
+                                            OnUp="() => MoveAsync(ScenarioPart.Checks, ids, check.Id, -1)"
+                                            OnDown="() => MoveAsync(ScenarioPart.Checks, ids, check.Id, 1)"
+                                            OnEdit="() => Open(check, null)" OnDelete="() => RemoveAsync(check)" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<CheckFormModal Open="_formOpen" ScenarioId="Scenario.Id" Check="_editing" Locations="Scenario.Locations" DefaultLocationId="_locationId"
+                OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
+
+@code {
+    private bool _formOpen;
+    private ScenarioCheckDto? _editing;
+    private Guid? _locationId;
+
+    private IEnumerable<(ScenarioLocationDto Location, string Path)> Groups =>
+        Scenario.Locations.Where(l => l.Checks.Count > 0).Select(l => (l, LocationTree.Path(Scenario.Locations, l.Id)));
+
+    private void Open(ScenarioCheckDto? check, Guid? locationId)
+    {
+        _editing = check;
+        _locationId = locationId ?? Scenario.Locations.FirstOrDefault()?.Id;
+        _formOpen = true;
+    }
+
+    private async Task SavedFormAsync()
+    {
+        var wasNew = _editing is null;
+        _formOpen = false;
+        await SavedAsync(wasNew ? "Проверка добавлена." : "Проверка сохранена.");
+    }
+
+    private Task RemoveAsync(ScenarioCheckDto check) =>
+        DeleteAsync($"Удалить проверку «{ScenarioLabels.Target(check)}»?", "Тексты успеха и провала удалятся вместе с ней.",
+            () => Api.DeleteCheckAsync(Scenario.Id, check.Id), "Проверка удалена.");
+}

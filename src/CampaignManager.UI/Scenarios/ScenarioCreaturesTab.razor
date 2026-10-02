@@ -1,0 +1,166 @@
+@inherits ScenarioTabBase
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.UI.Platform
+@inject ICatalogApi<CreatureDto> CreaturesApi
+
+@* «Твари» — ссылки на бестиарий с количеством, местом и заметками. Касание раскрывает итоговый статблок (своя версия
+   сценария поверх бестиария) — тот, что прочтёт бой (T2.6). Выбор — общий CatalogPickerModal: в v1 модалки тварей и
+   предметов были почти копиями, а поле «Количество» никуда не сохранялось. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Твари</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                @if (Scenario.Creatures.Count > 1)
+                {
+                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
+                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+                }
+                <Button Small="true" Icon="fa-plus" data-testid="add-creature" OnClick="OpenPicker">Из бестиария</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.Creatures.Count == 0)
+    {
+        <EmptyState Icon="fa-skull" Title="Тварей пока нет." Message="Тварь берётся из бестиария: исправление там дойдёт и до сценария." />
+    }
+    else
+    {
+        var ids = Scenario.Creatures.Select(c => c.Id).ToList();
+        <div class="cm-card" data-testid="creature-list">
+            @foreach (var creature in Scenario.Creatures)
+            {
+                var index = ids.IndexOf(creature.Id);
+                var open = _open.Contains(creature.Id);
+                <div class="border-t border-primary-200 px-4 py-3 first:border-t-0" @key="creature.Id" data-testid="creature-row">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <button type="button" class="flex min-h-9 min-w-0 flex-1 items-start gap-3 text-left" aria-expanded="@(open ? "true" : "false")"
+                                @onclick="() => Toggle(creature.Id)">
+                            @if (creature.ImageUrl is { } image)
+                            {
+                                <img src="@image" alt="" class="h-12 w-12 shrink-0 rounded-md object-cover" loading="lazy" />
+                            }
+                            <span class="flex min-w-0 flex-col gap-1">
+                                <span class="font-semibold text-primary-900">
+                                    @creature.Name
+                                    @if (creature.Count > 1)
+                                    {
+                                        <span class="text-primary-500"> × @creature.Count</span>
+                                    }
+                                </span>
+                                <span class="flex flex-wrap gap-1.5">
+                                    @if (creature.Type is { } type)
+                                    {
+                                        <Badge Tone="Tone.Stone">@CatalogText.Of(type)</Badge>
+                                    }
+                                    @if (creature.OwnName is not null && creature.CatalogName is { } catalog)
+                                    {
+                                        <Badge Tone="Tone.Neutral">в бестиарии: @catalog</Badge>
+                                    }
+                                    @if (creature.HasOwnStatblock)
+                                    {
+                                        <Badge Tone="Tone.Warning" Icon="fa-code-branch">свой статблок</Badge>
+                                    }
+                                    <Badge Tone="Tone.Info">ПЗ @creature.Statblock.HitPoints</Badge>
+                                </span>
+                                @if (creature.LocationNote is { } where)
+                                {
+                                    <span class="text-sm text-primary-600"><span class="cm-meta-label">Где:</span> @where</span>
+                                }
+                                @if (creature.Notes is { } notes)
+                                {
+                                    <span class="whitespace-pre-line text-sm text-primary-600">@notes</span>
+                                }
+                            </span>
+                        </button>
+                        <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
+                                        OnUp="() => MoveAsync(ScenarioPart.Creatures, ids, creature.Id, -1)"
+                                        OnDown="() => MoveAsync(ScenarioPart.Creatures, ids, creature.Id, 1)"
+                                        OnEdit="() => _editing = creature" OnDelete="() => RemoveAsync(creature)" DeleteLabel="Убрать" />
+                    </div>
+                    @if (open)
+                    {
+                        <div class="mt-3 border-t border-primary-100 pt-3">
+                            <StatblockView Statblock="creature.Statblock" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<CatalogPickerModal TItem="CreatureDto" Open="_picking" Title="Тварь из бестиария" Load="LoadCreaturesAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="@(c => $"{CatalogText.Of(c.Type)} · ПЗ {c.Statblock.HitPoints}")" Empty="Бестиарий пуст."
+                    Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+        <Field Label="Сколько">
+            <input class="cm-input" type="number" min="1" max="@ScenarioLimits.MaxCount" data-testid="pick-count" @bind="_count" />
+        </Field>
+        <Field Label="Где">
+            <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_where" placeholder="в склепе под церковью" />
+        </Field>
+        <Field Label="Заметки" class="sm:col-span-2">
+            <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
+        </Field>
+    </div>
+</CatalogPickerModal>
+
+<ScenarioCreatureModal Open="_editing is not null" ScenarioId="Scenario.Id" Creature="_editing" OnClose="() => _editing = null" OnSaved="EditedAsync" />
+
+@code {
+    private readonly HashSet<Guid> _open = [];
+    private bool _picking;
+    private bool _adding;
+    private string? _addError;
+    private int _count = 1;
+    private string? _where;
+    private string? _notes;
+    private ScenarioCreatureDto? _editing;
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+            _open.Add(id);
+    }
+
+    private void OpenPicker()
+    {
+        (_count, _where, _notes, _addError) = (1, null, null, null);
+        _picking = true;
+    }
+
+    private async Task<IReadOnlyList<CreatureDto>> LoadCreaturesAsync(CancellationToken cancellationToken) =>
+        [.. (await CreaturesApi.ListAsync(cancellationToken)).Items.OrderBy(c => c.Name, StringComparer.CurrentCulture)];
+
+    private async Task AddAsync(CreatureDto creature)
+    {
+        _adding = true;
+        _addError = null;
+        try
+        {
+            await Api.AddCreatureAsync(Scenario.Id, new ScenarioCreatureInput(creature.Id, null, _count, _where, _notes));
+            _picking = false;
+            await SavedAsync($"«{creature.Name}» в сценарии.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _addError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private async Task EditedAsync()
+    {
+        _editing = null;
+        await SavedAsync("Тварь сохранена.");
+    }
+
+    private Task RemoveAsync(ScenarioCreatureDto creature) =>
+        DeleteAsync($"Убрать «{creature.Name}» из сценария?", "В бестиарии тварь останется.",
+            () => Api.DeleteCreatureAsync(Scenario.Id, creature.Id), "Тварь убрана.", "Убрать");
+}

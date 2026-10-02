@@ -1,0 +1,137 @@
+@page "/scenarios/{ScenarioId:guid}"
+@page "/scenarios/{ScenarioId:guid}/edit"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@using CampaignManager.Contracts.Scenarios
+@inject IScenariosApi Api
+@inject NavigationManager Navigation
+
+@* Рабочее место сценария: одна страница с вкладками вместо пары «просмотр + правка» v1 (там описание и журнал
+   рисовались дважды, а сохранение просмотра затирало правки правки). Сценарий читается одним запросом, а пишется по
+   строке: вкладка зовёт свой адрес API и просит страницу перечитать сценарий (OnChanged) — соседние вкладки и корень
+   запись не трогает. Открытая вкладка — в адресе (?tab=). /scenarios/{id}/edit — старый адрес правки: ведёт на
+   «Описание» с открытой формой. Режим игры (?mode=play&location=&handout=) — T2.5b. *@
+<PageHeader Title="@(_scenario?.Name ?? "Сценарий")">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Href="@ScenarioLinks.List">
+            <span class="hidden md:inline">Сценарии</span>
+        </Button>
+        @if (_scenario?.CanEdit == true)
+        {
+            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-scenario" OnClick="() => _formOpen = true">
+                <span class="hidden md:inline">Описание</span>
+            </Button>
+        }
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent @ref="_content" Key="ScenarioId" Load="LoadAsync" LoadingMessage="Загружаю сценарий…" Context="loaded"
+                  ErrorTitle="Сценарий недоступен">
+        <Empty>
+            <EmptyState Icon="fa-masks-theater" Title="Сценарий не найден." Message="Его удалили, или ссылка неверна.">
+                <Actions><Button Icon="fa-arrow-left" Href="@ScenarioLinks.List">К сценариям</Button></Actions>
+            </EmptyState>
+        </Empty>
+        <ChildContent>
+            @{ var scenario = loaded!; }
+            <Tabs Items="TabItems(scenario)" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Части сценария" />
+            @switch (ActiveTab)
+            {
+                case ScenarioLinks.Tabs.Text:
+                    <ScenarioTextTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Locations:
+                    <ScenarioLocationsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Checks:
+                    <ScenarioChecksTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Facts:
+                    <ScenarioFactsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Handouts:
+                    <ScenarioHandoutsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Creatures:
+                    <ScenarioCreaturesTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Items:
+                    <ScenarioItemsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Npcs:
+                    <ScenarioNpcsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                case ScenarioLinks.Tabs.Pregens:
+                    <ScenarioPregensTab Scenario="scenario" OnChanged="ReloadAsync" />
+                    break;
+                default:
+                    <ScenarioDescriptionTab Scenario="scenario" OnEdit="() => _formOpen = true" OnOpenTab="SelectTab" />
+                    break;
+            }
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+<ScenarioFormModal Open="_formOpen" Scenario="_scenario" OnClose="() => _formOpen = false" OnSaved="HeaderSavedAsync" OnReload="ReloadAsync" />
+
+@code {
+    private AsyncContent<ScenarioDto?>? _content;
+    private ScenarioDto? _scenario;
+    private bool _formOpen;
+
+    [Parameter] public Guid ScenarioId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+
+    private string ActiveTab => Tab ?? ScenarioLinks.Tabs.Description;
+
+    protected override void OnParametersSet()
+    {
+        // Старый адрес правки v1: описание с открытой формой, адрес — рабочего места.
+        if (Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].EndsWith("/edit", StringComparison.Ordinal))
+        {
+            _formOpen = true;
+            Navigation.NavigateTo(ScenarioLinks.Workspace(ScenarioId), replace: true);
+        }
+    }
+
+    /// <summary>404 — сценария нет (или он не виден): пустое место, а не ошибка.</summary>
+    private async Task<ScenarioDto?> LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _scenario = await Api.GetAsync(ScenarioId, cancellationToken);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _scenario = null;
+        }
+
+        StateHasChanged(); // шапка — вне AsyncContent
+        return _scenario;
+    }
+
+    private Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
+
+    private async Task HeaderSavedAsync()
+    {
+        _formOpen = false;
+        await ReloadAsync();
+    }
+
+    private void SelectTab(string key) => Navigation.NavigateTo(ScenarioLinks.Workspace(ScenarioId, key), replace: true);
+
+    private static IReadOnlyList<Tabs.Item> TabItems(ScenarioDto s) =>
+    [
+        new(ScenarioLinks.Tabs.Description, "Описание", "fa-circle-info"),
+        new(ScenarioLinks.Tabs.Text, "Текст", "fa-file-lines"),
+        new(ScenarioLinks.Tabs.Locations, "Локации", "fa-location-dot", s.Locations.Count),
+        new(ScenarioLinks.Tabs.Checks, "Проверки", "fa-dice-d20", s.Locations.Sum(l => l.Checks.Count)),
+        new(ScenarioLinks.Tabs.Facts, "Факты", "fa-key", s.KeyFacts.Count),
+        new(ScenarioLinks.Tabs.Handouts, "Раздатки", "fa-file-image", s.Handouts.Count),
+        new(ScenarioLinks.Tabs.Creatures, "Твари", "fa-skull", s.Creatures.Count),
+        new(ScenarioLinks.Tabs.Items, "Предметы", "fa-box", s.Items.Count),
+        new(ScenarioLinks.Tabs.Npcs, "НПС", "fa-masks-theater", s.Npcs.Count),
+        new(ScenarioLinks.Tabs.Pregens, "Прегены", "fa-user", s.Pregens.Count),
+    ];
+}

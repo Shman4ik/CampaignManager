@@ -1,0 +1,101 @@
+@inherits ScenarioTabBase
+
+@* «Факты» — ключевые факты Хранителя: что на самом деле произошло, хронология, награды. В режиме игры (T2.5b) — их
+   панель справа. Содержание — Markdown, длинное раскрывается касанием. *@
+<section class="cm-section">
+    <div class="cm-section-header flex-wrap gap-2">
+        <h2 class="cm-section-title">Ключевые факты</h2>
+        @if (CanEdit)
+        {
+            <div class="flex flex-wrap gap-2">
+                @if (Scenario.KeyFacts.Count > 1)
+                {
+                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
+                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+                }
+                <Button Small="true" Icon="fa-plus" data-testid="add-fact" OnClick="() => Open(null)">Факт</Button>
+            </div>
+        }
+    </div>
+    @if (Scenario.KeyFacts.Count == 0)
+    {
+        <EmptyState Icon="fa-key" Title="Фактов пока нет." Message="Предыстория, зловещая истина, хронология и награды — то, что Хранитель держит в голове." />
+    }
+    else
+    {
+        var ids = Scenario.KeyFacts.Select(f => f.Id).ToList();
+        <div class="cm-card" data-testid="fact-list">
+            @foreach (var fact in Scenario.KeyFacts)
+            {
+                var index = ids.IndexOf(fact.Id);
+                var open = _open.Contains(fact.Id);
+                <div class="border-t border-primary-200 px-4 py-3 first:border-t-0" @key="fact.Id" data-testid="fact-row">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <button type="button" class="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                                @onclick="() => Toggle(fact.Id)">
+                            <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-400" aria-hidden="true"></i>
+                            <Badge Tone="TypeTone(fact.Type)">@ScenarioText.Of(fact.Type)</Badge>
+                            <span class="font-semibold text-primary-900">@fact.Title</span>
+                        </button>
+                        <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
+                                        OnUp="() => MoveAsync(ScenarioPart.KeyFacts, ids, fact.Id, -1)"
+                                        OnDown="() => MoveAsync(ScenarioPart.KeyFacts, ids, fact.Id, 1)"
+                                        OnEdit="() => Open(fact)" OnDelete="() => RemoveAsync(fact)" />
+                    </div>
+                    @if (open)
+                    {
+                        <div class="mt-2 pl-5">
+                            @if (fact.Content is { } content)
+                            {
+                                <Markdown Text="@content" />
+                            }
+                            else
+                            {
+                                <p class="cm-text-muted">Содержания нет.</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+<KeyFactFormModal Open="_formOpen" ScenarioId="Scenario.Id" Fact="_editing" OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
+
+@code {
+    private readonly HashSet<Guid> _open = [];
+    private bool _formOpen;
+    private KeyFactDto? _editing;
+
+    private static Tone TypeTone(KeyFactType type) => type switch
+    {
+        KeyFactType.Truth => Tone.Error,
+        KeyFactType.Timeline => Tone.Info,
+        KeyFactType.Reward => Tone.Success,
+        _ => Tone.Stone,
+    };
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+            _open.Add(id);
+    }
+
+    private void Open(KeyFactDto? fact)
+    {
+        _editing = fact;
+        _formOpen = true;
+    }
+
+    private async Task SavedFormAsync()
+    {
+        var wasNew = _editing is null;
+        _formOpen = false;
+        await SavedAsync(wasNew ? "Факт добавлен." : "Факт сохранён.");
+    }
+
+    private Task RemoveAsync(KeyFactDto fact) =>
+        DeleteAsync($"Удалить факт «{fact.Title}»?", "Содержание факта удалится.",
+            () => Api.DeleteFactAsync(Scenario.Id, fact.Id), "Факт удалён.");
+}

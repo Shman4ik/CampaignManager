@@ -13,8 +13,8 @@
 @inject NavigationManager Navigation
 
 @* Библиотека НПС и прегенов (T2.4) — Хранителю. Вкладка и архив — в адресе (?tab=pregen&archived=true). НПС не
-   копируется: один лист живёт в библиотеке или в кампании, в сценарии он появляется связью (T2.5a), поэтому правка
-   листа видна во всех сценариях. «Удалить» — архив (статус листа с If-Match), безвозвратно отсюда ничего не пропадает.
+   копируется: один лист живёт в библиотеке или в кампании, в сценарии он появляется связью (T2.5a: «В сценарий» —
+   CastNpcDialog с ролью и количеством), поэтому правка листа видна во всех сценариях. «Удалить» — архив (статус листа с If-Match), безвозвратно отсюда ничего не пропадает.
    Чужие НПС кампаний сюда не попадают — список фильтрует сервер правилом листа (AccessPolicy.ForCharacter). *@
 <PageHeader Title="НПС и прегены">
     <Actions>
@@ -60,7 +60,7 @@
                     @foreach (var character in found)
                     {
                         <CharacterSummaryCard @key="character.Id" Character="character" Busy="@(_busy == character.Id)"
-                                              OnArchive="ArchiveAsync" OnRestore="RestoreAsync" />
+                                              OnArchive="ArchiveAsync" OnRestore="RestoreAsync" OnCast="c => _casting = c" />
                     }
                 </div>
             }
@@ -73,6 +73,8 @@
     <QuickNpcModal Open="true" Campaigns="_keeperCampaigns" OnClose="() => _quickOpen = false" OnCreated="QuickCreated" />
 }
 
+<CastNpcDialog Open="_casting is not null" Character="_casting" OnClose="() => _casting = null" OnSaved="CastAsync" />
+
 @code {
     private const string PregenTab = "pregen";
     private AsyncContent<IReadOnlyList<CharacterSummaryDto>>? _content;
@@ -80,6 +82,7 @@
     private Guid? _busy;
     private bool _quickOpen;
     private IReadOnlyList<CampaignSummaryDto> _keeperCampaigns = [];
+    private CharacterSummaryDto? _casting;
 
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
 
@@ -152,6 +155,14 @@
         }
 
         _quickOpen = true;
+    }
+
+    private async Task CastAsync(Guid scenarioId)
+    {
+        Toasts.Success($"«{_casting?.Name}» занят в сценарии.");
+        _casting = null;
+        if (_content is not null)
+            await _content.ReloadAsync();
     }
 
     private void QuickCreated(Guid id) => Navigation.NavigateTo($"character/{id}");

@@ -1,0 +1,180 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+@inject ICatalogApi<SkillDto> SkillsApi
+
+@* Проверка в локации: навык справочника (ссылка, а не имя строкой — в v1 «Библиотека» и «Библиотеки» были разными
+   навыками), характеристика или Удача; сложность — по книге (стр. 80), теми же кнопками, что в диалоге проверки;
+   что узнают при успехе и при провале. В режиме игры (T2.5b) «Проверить» откроет общий диалог проверки по
+   сыщикам кампании прохождения. Ошибка — в окне. *@
+<Modal Open="Open" Title="@(Check is null ? "Новая проверка" : "Проверка")" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="check-form">
+    <ChildContent>
+        <form id="check-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            @if (Check is null)
+            {
+                <Field Label="Локация" class="sm:w-96">
+                    <select class="cm-input" data-testid="check-location" value="@(_locationId?.ToString() ?? "")"
+                            @onchange="e => _locationId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                        <option value="">— выберите —</option>
+                        @foreach (var (location, depth) in LocationTree.WithDepth(Locations))
+                        {
+                            <option value="@location.Id">@(new string(' ', depth * 3))@location.Name</option>
+                        }
+                    </select>
+                </Field>
+            }
+            <Field Label="Что проверяют" Group="true">
+                <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Что проверяют">
+                    @foreach (var target in Enum.GetValues<CheckTarget>())
+                    {
+                        var active = target == _target;
+                        <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)" role="radio"
+                                aria-checked="@(active ? "true" : "false")" data-testid="@($"check-target-{target}")"
+                                OnClick="() => _target = target">@ScenarioText.Of(target)</Button>
+                    }
+                </div>
+            </Field>
+            @if (_target is CheckTarget.Skill)
+            {
+                <Field Label="Навык" Group="true">
+                    @if (_skills is null)
+                    {
+                        <LoadingIndicator Message="Загружаю навыки…" />
+                    }
+                    else
+                    {
+                        <div class="flex" data-testid="check-skill"><SkillSelect Skills="_skills" @bind-Value="_skillId" Label="Навык" /></div>
+                    }
+                </Field>
+            }
+            else if (_target is CheckTarget.Characteristic)
+            {
+                <Field Label="Характеристика" class="sm:w-72">
+                    <select class="cm-input" data-testid="check-characteristic" value="@(_characteristic?.ToString() ?? "")"
+                            @onchange="e => _characteristic = Enum.TryParse<Characteristic>(e.Value?.ToString(), out var c) ? c : null">
+                        <option value="">— выберите —</option>
+                        @foreach (var info in InvestigatorCreationRules.Characteristics)
+                        {
+                            <option value="@info.Key">@ScenarioLabels.CharacteristicName(info.Key)</option>
+                        }
+                    </select>
+                </Field>
+            }
+            <Field Label="Сложность" Group="true" Note="Трудная — половина значения, чрезвычайная — пятая часть (стр. 80).">
+                <DifficultyPicker @bind-Value="_difficulty" />
+            </Field>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Field Label="При успехе">
+                    <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" data-testid="check-success" @bind="_onSuccess"></textarea>
+                </Field>
+                <Field Label="При провале">
+                    <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" @bind="_onFailure"></textarea>
+                </Field>
+            </div>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="check-error">@_error</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Type="submit" form="check-form" Busy="_saving" data-testid="check-save">@(Check is null ? "Добавить" : "Сохранить")</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private Guid? _locationId;
+    private CheckTarget _target;
+    private Guid? _skillId;
+    private Characteristic? _characteristic;
+    private Difficulty _difficulty;
+    private string? _onSuccess;
+    private string? _onFailure;
+    private IReadOnlyList<SkillDto>? _skills;
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    /// <summary>Правка этой проверки; <c>null</c> — новая.</summary>
+    [Parameter] public ScenarioCheckDto? Check { get; set; }
+
+    [Parameter] public IReadOnlyList<ScenarioLocationDto> Locations { get; set; } = [];
+
+    /// <summary>Локация новой проверки по умолчанию.</summary>
+    [Parameter] public Guid? DefaultLocationId { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opened = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opened)
+            return;
+
+        _locationId = Check?.LocationId ?? DefaultLocationId;
+        _target = Check?.TargetKind ?? CheckTarget.Skill;
+        _skillId = Check?.SkillId;
+        _characteristic = Check?.Characteristic;
+        _difficulty = Check?.Difficulty ?? Difficulty.Regular;
+        _onSuccess = Check?.OnSuccess;
+        _onFailure = Check?.OnFailure;
+        _error = null;
+
+        if (_skills is null)
+        {
+            try
+            {
+                // Весь справочник, с родителями специализаций: «Язык (иностранный)» в книге проверяют и без уточнения.
+                _skills = (await SkillsApi.ListAsync()).Items;
+            }
+            catch (HttpRequestException ex)
+            {
+                _skills = [];
+                _error = ApiErrors.Describe(ex);
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+            return;
+
+        _error = (Check is null && _locationId is null) ? "Выберите локацию."
+            : _target is CheckTarget.Skill && _skillId is null ? "Выберите навык."
+            : _target is CheckTarget.Characteristic && _characteristic is null ? "Выберите характеристику."
+            : null;
+        if (_error is not null)
+            return;
+
+        _saving = true;
+        try
+        {
+            var input = new CheckInput(_target, _skillId, _characteristic, _difficulty, _onSuccess, _onFailure);
+            if (Check is null)
+                await Api.AddCheckAsync(ScenarioId, _locationId!.Value, input);
+            else
+                await Api.UpdateCheckAsync(ScenarioId, Check.Id, input);
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

@@ -1,0 +1,156 @@
+@typeparam TItem
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.UI.Platform
+
+@* Выбор записи справочника в окне — один на тварей и предметы сценария, НПС и прегенов из библиотеки (в v1 —
+   почти одинаковые AddCreatureModal, AddItemModal, AddNpcModal со своими копиями поиска). Список приходит целиком
+   (Load), поиск — без регистра, «ё» и лишних пробелов; выбранная строка подсвечена, под списком — свои поля
+   страницы (ChildContent: количество, где, заметки). Запись делает страница в OnPick: ошибка (Error) остаётся
+   в окне, окно не закрывается; пока идёт запись (Busy), кнопки выключены. Окно декларативное: Open. *@
+<Modal Open="Open" Title="@Title" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="catalog-picker">
+    <ChildContent>
+        <div class="flex flex-col gap-3">
+            <input type="search" class="cm-input" placeholder="@Placeholder" aria-label="@Placeholder" data-testid="picker-search"
+                   @bind="_query" @bind:event="oninput" />
+            @if (_items is null && _error is null)
+            {
+                <LoadingIndicator Message="Загружаю…" />
+            }
+            else if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" class="mb-0">@_error</Alert>
+            }
+            else
+            {
+                var found = Found();
+                @if (found.Count == 0)
+                {
+                    <p class="cm-field-note py-2">@(string.IsNullOrWhiteSpace(_query) ? Empty : "Ничего не найдено.")</p>
+                }
+                else
+                {
+                    <div class="max-h-[40vh] overflow-y-auto rounded-md border border-primary-200" role="listbox" aria-label="@Title">
+                        @foreach (var item in found)
+                        {
+                            var selected = _selected is not null && Equals(Key(_selected), Key(item));
+                            <button type="button" role="option" aria-selected="@(selected ? "true" : "false")" data-testid="picker-row"
+                                    class="@Css.Join("flex min-h-11 w-full flex-col items-start gap-0.5 border-t border-primary-200 px-3 py-2 text-left first:border-t-0",
+                                               selected ? "bg-accent-50" : "hover:bg-primary-50")"
+                                    @onclick="() => _selected = item">
+                                <span class="flex items-center gap-2 font-medium text-primary-900">
+                                    @if (selected)
+                                    {
+                                        <i class="fa-solid fa-check text-accent-600" aria-hidden="true"></i>
+                                    }
+                                    @Name(item)
+                                </span>
+                                @if (Meta?.Invoke(item) is { Length: > 0 } meta)
+                                {
+                                    <span class="text-xs text-primary-500">@meta</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                    @if (_more > 0)
+                    {
+                        <p class="cm-field-note">И ещё @_more — уточните поиск.</p>
+                    }
+                }
+            }
+            @if (_selected is not null && ChildContent is not null)
+            {
+                <div class="border-t border-primary-200 pt-3">@ChildContent(_selected)</div>
+            }
+            @if (Error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="picker-error">@Error</Alert>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="Busy">Отмена</Button>
+        <Button Icon="fa-plus" Busy="Busy" Disabled="@(_selected is null)" data-testid="picker-confirm" OnClick="PickAsync">@ConfirmText</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private const int Limit = 50;
+
+    private string _query = "";
+    private IReadOnlyList<TItem>? _items;
+    private string? _error;
+    private TItem? _selected;
+    private int _more;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired] public Func<CancellationToken, Task<IReadOnlyList<TItem>>> Load { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, object> Key { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, string> Name { get; set; } = null!;
+
+    /// <summary>Строка под названием: тип, ПЗ, занятие.</summary>
+    [Parameter] public Func<TItem, string?>? Meta { get; set; }
+
+    /// <summary>Другие тексты, по которым тоже ищется (занятие, тип).</summary>
+    [Parameter] public Func<TItem, IEnumerable<string?>>? Also { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Поиск по названию…";
+
+    [Parameter] public string Empty { get; set; } = "Список пуст.";
+
+    [Parameter] public string ConfirmText { get; set; } = "Добавить";
+
+    /// <summary>Поля под выбранной записью (количество, где, заметки).</summary>
+    [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback<TItem> OnPick { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Открытие — новый выбор и свежий список; перерисовка открытого окна их не сбрасывает.
+        var opened = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opened)
+            return;
+
+        _query = "";
+        _selected = default;
+        _items = null;
+        _error = null;
+        try
+        {
+            _items = await Load(CancellationToken.None);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+    }
+
+    private List<TItem> Found()
+    {
+        var query = CatalogCodeTable.NormalizeName(_query);
+        bool Matches(string? text) => text is not null && CatalogCodeTable.NormalizeName(text).Contains(query, StringComparison.Ordinal);
+
+        var all = (_items ?? [])
+            .Where(i => query.Length == 0 || Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false))
+            .ToList();
+        _more = Math.Max(0, all.Count - Limit);
+        return [.. all.Take(Limit)];
+    }
+
+    private Task PickAsync() => _selected is null || Busy ? Task.CompletedTask : OnPick.InvokeAsync(_selected);
+
+    private Task CloseAsync() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+}

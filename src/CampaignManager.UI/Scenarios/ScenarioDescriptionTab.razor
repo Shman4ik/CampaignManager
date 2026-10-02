@@ -1,0 +1,128 @@
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* «Описание» — карточка сценария: эпоха, место, время, автор, кратко и что внутри (ссылки на вкладки). Правка —
+   общая форма шапки (ScenarioFormModal, кнопка «Описание» в шапке страницы), удаление — автору и администратору. *@
+<section class="cm-section">
+    <div class="cm-card">
+        <div class="cm-card-body flex flex-col gap-3">
+            <div class="flex flex-wrap gap-1.5">
+                @if (Scenario.Era is { } era)
+                {
+                    <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
+                }
+                @if (Scenario.SettingDate is { } date)
+                {
+                    <Badge Tone="Tone.Neutral" Icon="fa-calendar">@date</Badge>
+                }
+                @if (Scenario.Setting is { } setting)
+                {
+                    <Badge Tone="Tone.Info" Icon="fa-location-dot">@setting</Badge>
+                }
+                @if (Scenario.RunCount > 0)
+                {
+                    <Badge Tone="Tone.Success" Icon="fa-dice">Прохождений: @Scenario.RunCount</Badge>
+                }
+            </div>
+            @if (Scenario.SourceScenarioName is { } source)
+            {
+                <p class="text-sm text-primary-600">
+                    Переделка сценария <a class="underline" href="@ScenarioLinks.Workspace(Scenario.SourceScenarioId!.Value)">«@source»</a>.
+                </p>
+            }
+            @if (Scenario.Summary is { } summary)
+            {
+                <p class="whitespace-pre-line text-primary-800" data-testid="scenario-summary">@summary</p>
+            }
+            else
+            {
+                <p class="cm-text-muted">Описания нет@(Scenario.CanEdit ? " — его можно добавить кнопкой «Описание»." : ".")</p>
+            }
+            <div class="cm-meta">
+                <span><span class="cm-meta-label">Автор:</span> @(Scenario.AuthorName ?? "неизвестен")</span>
+                <span><span class="cm-meta-label">Изменён:</span> @LocalTime.DateTime(Scenario.UpdatedAt)</span>
+            </div>
+        </div>
+        @if (Scenario.CanEdit || Scenario.CanDelete)
+        {
+            <div class="cm-card-footer flex-wrap gap-2">
+                @if (Scenario.CanEdit)
+                {
+                    <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="OnEdit">Изменить описание</Button>
+                }
+                @if (Scenario.CanDelete)
+                {
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" Busy="_deleting" OnClick="DeleteAsync">Удалить сценарий</Button>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+<section class="cm-section" aria-labelledby="contents-title">
+    <div class="cm-section-header"><h2 id="contents-title" class="cm-section-title">Что внутри</h2></div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        @foreach (var (tab, label, icon, count) in Contents())
+        {
+            <button type="button" class="cm-card flex min-h-16 items-center gap-3 px-4 py-3 text-left hover:border-accent-400"
+                    @onclick="() => OnOpenTab.InvokeAsync(tab)">
+                <i class="fa-solid @icon text-lg text-accent-600" aria-hidden="true"></i>
+                <span class="flex flex-col">
+                    <span class="text-2xl font-semibold leading-none text-primary-900">@count</span>
+                    <span class="text-sm text-primary-600">@label</span>
+                </span>
+            </button>
+        }
+    </div>
+</section>
+
+@code {
+    private bool _deleting;
+
+    [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
+
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public EventCallback<string> OnOpenTab { get; set; }
+
+    private IEnumerable<(string Tab, string Label, string Icon, int Count)> Contents() =>
+    [
+        (ScenarioLinks.Tabs.Locations, "Локации", "fa-location-dot", Scenario.Locations.Count),
+        (ScenarioLinks.Tabs.Checks, "Проверки", "fa-dice-d20", Scenario.Locations.Sum(l => l.Checks.Count)),
+        (ScenarioLinks.Tabs.Facts, "Ключевые факты", "fa-key", Scenario.KeyFacts.Count),
+        (ScenarioLinks.Tabs.Handouts, "Раздатки", "fa-file-image", Scenario.Handouts.Count),
+        (ScenarioLinks.Tabs.Creatures, "Твари", "fa-skull", Scenario.Creatures.Count),
+        (ScenarioLinks.Tabs.Items, "Предметы", "fa-box", Scenario.Items.Count),
+        (ScenarioLinks.Tabs.Npcs, "НПС", "fa-masks-theater", Scenario.Npcs.Count),
+        (ScenarioLinks.Tabs.Pregens, "Прегены", "fa-user", Scenario.Pregens.Count),
+    ];
+
+    private async Task DeleteAsync()
+    {
+        var message = Scenario.RunCount > 0
+            ? "Сценарий проходят в кампаниях — сервер его не удалит, пока есть прохождения."
+            : "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС и прегены останутся в библиотеке.";
+        if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{Scenario.Name}»?", message))
+            return;
+
+        _deleting = true;
+        try
+        {
+            await Api.DeleteAsync(Scenario.Id);
+            Toasts.Success("Сценарий удалён.");
+            Navigation.NavigateTo(ScenarioLinks.List);
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+}
