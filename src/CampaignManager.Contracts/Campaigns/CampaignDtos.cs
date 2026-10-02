@@ -105,7 +105,7 @@ public sealed record CampaignSessionInput(
 
 /// <summary>Всё о кампаниях, что показывает главная, — одним запросом.</summary>
 /// <param name="Mine">Кампании, где я участник (Хранитель или игрок), новые сверху.</param>
-/// <param name="Available">Незавершённые кампании (не ваншоты), куда я ещё не вступил.</param>
+/// <param name="Available">Незавершённые кампании и ваншоты, куда я ещё не вступил.</param>
 /// <param name="OneShots">Прохождения с открытой записью на прегенов.</param>
 public sealed record HomeDto(
     IReadOnlyList<HomeCampaignDto> Mine,
@@ -132,7 +132,7 @@ public sealed record HomePlayerDto(Guid UserId, string? Name, IReadOnlyList<Home
 
 public sealed record HomeCharacterDto(Guid Id, string Name, string? Occupation, CharacterKind Kind, CharacterStatus Status);
 
-public sealed record HomeAvailableCampaignDto(Guid Id, string Name, CampaignStatus Status, DateTimeOffset CreatedAt, string? KeeperName);
+public sealed record HomeAvailableCampaignDto(Guid Id, string Name, CampaignKind Kind, CampaignStatus Status, DateTimeOffset CreatedAt, string? KeeperName);
 
 /// <param name="IsMine">Я веду это прохождение (Хранитель его кампании).</param>
 public sealed record HomeOneShotDto(

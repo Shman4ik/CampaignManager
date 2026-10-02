@@ -71,14 +71,16 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
             .ToListAsync(cancellationToken);
 
         var available = await dbContext.Campaigns
+            // Ваншоты здесь тоже: вступить в них можно и обычным участником, а не только бронью прегена
+            // (решение владельца, T2.2).
             .Where(c => c.Status != CampaignStatus.Completed
-                        && c.Kind != CampaignKind.OneShot
                         && !c.Members.Any(m => m.UserId == me))
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => new
             {
                 c.Id,
                 c.Name,
+                c.Kind,
                 c.Status,
                 c.CreatedAt,
                 Keeper = c.Members.Where(m => m.Role == CampaignRole.Keeper)
@@ -122,7 +124,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                             : []);
                 }),
             ],
-            [.. available.Select(c => new HomeAvailableCampaignDto(c.Id, c.Name, c.Status, c.CreatedAt,
+            [.. available.Select(c => new HomeAvailableCampaignDto(c.Id, c.Name, c.Kind, c.Status, c.CreatedAt,
                 PublicNames.Of(c.Keeper?.DisplayName, c.Keeper?.UserName)))],
             await OneShotsAsync(me, cancellationToken));
     }

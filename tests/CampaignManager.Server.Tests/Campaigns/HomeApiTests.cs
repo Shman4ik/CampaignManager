@@ -41,9 +41,10 @@ public sealed class HomeApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         Assert.Empty(played.Npcs);
     }
 
-    // Вступить можно в незавершённую кампанию, где меня нет; ваншоты — бронью прегена, а не здесь.
+    // Вступить можно в незавершённую кампанию, где меня нет, — и в ваншот тоже (решение владельца:
+    // участником, не только бронью прегена).
     [Fact]
-    public async Task Available_excludes_mine_completed_and_one_shots()
+    public async Task Available_excludes_mine_and_completed_but_lists_one_shots()
     {
         TestDatabase.SkipIfMissing();
         var keeper = await app.AddUserAsync(UserRole.Keeper, "Хранитель");
@@ -57,7 +58,8 @@ public sealed class HomeApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
 
         var row = Assert.Single(available, c => c.Id == open.Id);
         Assert.Equal("Хранитель", row.KeeperName);
-        Assert.DoesNotContain(available, c => c.Id == joined.Id || c.Id == completed.Id || c.Id == oneShot.Id);
+        Assert.Equal(CampaignManager.Core.Campaigns.CampaignKind.OneShot, Assert.Single(available, c => c.Id == oneShot.Id).Kind);
+        Assert.DoesNotContain(available, c => c.Id == joined.Id || c.Id == completed.Id);
     }
 
     // Открытые на запись ваншоты видит любой вошедший: прегены сценария, кто какого занял, мой ли он.
@@ -90,5 +92,28 @@ public sealed class HomeApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         Assert.True(seenByPlayer.Pregens.Single(p => p.Id == taken.Id).IsMine);
         Assert.True(Assert.Single((await app.Api(keeper).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == run.Id).IsMine);
         Assert.Equal(free.Id, seenByPlayer.Pregens[1].Id);
+    }
+
+    // Время — момент со смещением (UTC), а не «настенное» время сервера: в какой пояс перевести, решает
+    // браузер пользователя (решение владельца). Москва 20:00 = 17:00 UTC.
+    [Fact]
+    public async Task Times_go_out_as_utc_with_offset()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper, "Хранитель");
+        var oneShot = await app.AddCampaignAsync(keeper, CampaignStatus.Planning, CampaignKind.OneShot);
+        var moscow = new DateTimeOffset(2026, 10, 10, 20, 0, 0, TimeSpan.FromHours(3));
+        var run = await app.AddRunAsync(oneShot.Id, "Эликсир жизни", signupOpen: true, scheduledAt: moscow.ToUniversalTime());
+
+        // Строка в JSON — ISO 8601 со смещением: её поймёт любой клиент, без договорённости о поясе сервера.
+        using var json = System.Text.Json.JsonDocument.Parse(
+            await app.Http(keeper).GetStringAsync(Contracts.Campaigns.CampaignsRoutes.Home, Cancellation));
+        var sent = json.RootElement.GetProperty("oneShots").EnumerateArray()
+            .Single(o => o.GetProperty("runId").GetGuid() == run.Id)
+            .GetProperty("scheduledAt").GetString();
+        Assert.Equal("2026-10-10T17:00:00+00:00", sent);
+
+        var dto = Assert.Single((await app.Api(keeper).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == run.Id);
+        Assert.Equal(moscow, dto.ScheduledAt);
     }
 }

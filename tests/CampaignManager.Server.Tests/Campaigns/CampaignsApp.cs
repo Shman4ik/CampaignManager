@@ -88,7 +88,7 @@ public sealed class CampaignsApp : CmApp, IAsyncLifetime
 
     /// <summary>Сценарий и его прохождение в кампании.</summary>
     public async Task<ScenarioRun> AddRunAsync(Guid campaignId, string scenarioName = "Дом с привидениями", bool signupOpen = false,
-        Guid? scenarioId = null)
+        Guid? scenarioId = null, DateTimeOffset? scheduledAt = null)
     {
         await using var db = Database.CreateContext();
         if (scenarioId is null)
@@ -99,7 +99,7 @@ public sealed class CampaignsApp : CmApp, IAsyncLifetime
             scenarioId = scenario.Id;
         }
 
-        var run = new ScenarioRun { ScenarioId = scenarioId.Value, CampaignId = campaignId, SignupOpen = signupOpen };
+        var run = new ScenarioRun { ScenarioId = scenarioId.Value, CampaignId = campaignId, SignupOpen = signupOpen, ScheduledAt = scheduledAt };
         db.ScenarioRuns.Add(run);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return run;
