@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Platform;
 
 namespace CampaignManager.Contracts;
@@ -11,4 +12,9 @@ namespace CampaignManager.Contracts;
 /// </summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(PingResponse))]
+[JsonSerializable(typeof(StoredFileDto))]
+[JsonSerializable(typeof(AddExternalFileRequest))]
+[JsonSerializable(typeof(OrphanFilesReport))]
+[JsonSerializable(typeof(DeleteOrphansRequest))]
+[JsonSerializable(typeof(DeleteOrphansResponse))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
