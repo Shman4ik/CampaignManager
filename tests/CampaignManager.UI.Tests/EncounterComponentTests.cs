@@ -86,6 +86,17 @@ public sealed class EncounterComponentTests : KitContext
         Assert.Contains("encounter-row-active", cut.Find("[data-testid=participant-row]").ClassName, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Extra_from_scenario_pack_says_its_sheet_is_not_written()
+    {
+        var (_, ghoul) = Scene();
+        ghoul.Note = "статист: снимок листа, урон в лист не пишется";
+
+        var cut = Render<ParticipantRow>(p => p.Add(c => c.Participant, ghoul));
+
+        Assert.Contains("статист", cut.Markup, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(StatKind.HitPoints, 100, "bg-error-500")]
     [InlineData(StatKind.HitPoints, 50, "bg-warning-500")]

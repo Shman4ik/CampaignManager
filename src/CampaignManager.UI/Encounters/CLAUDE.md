@@ -15,7 +15,7 @@ v1 (`[PersistentState]`, снимки circuit, `RegisterPersistentService`, со
 | `EncounterPage` | оболочка: «Новая сцена» / «Идут сейчас», раунд и очередь, участники, результат, эффект Хранителя, журнал, плашки конфликта и черновика |
 | `EncounterSession` | открытая сцена: документ, справочник навыков, автосохранение с `If-Match`, черновик `cm.encounter-draft:{id}`, листы |
 | `EncounterSheetSync` | запись итогов в листы через `ICharactersApi` (приращение на свежей версии, 409 — перечитать) и обновление снимков из листов |
-| `ParticipantPicker` + `ParticipantSources` (`IParticipantSource`) | добавить участника: сыщики кампании, НПС (библиотека и кампании), бестиарий |
+| `ParticipantPicker` + `ParticipantSources` (`IParticipantSource`) | добавить участника: сыщики кампании, состав сценария (выбор сценария в окне), НПС (библиотека и кампании), бестиарий |
 | `ParticipantSelect` | выбор участника: один — `<select>`, несколько — кнопки-переключатели |
 | `ParticipantRow` + `Shared/StatBar` | строка участника: имя, сторона, состояние словами, полосы ПЗ/ПМ/Рассудка с цифрами, неписанное в лист |
 | `ResolutionPreview` | предпросмотр результата: строки броска, «было → станет», «Применить» / «Отменить» |
@@ -84,9 +84,12 @@ v1 (`[PersistentState]`, снимки circuit, `RegisterPersistentService`, со
 
 ## Стыки
 
-- **T2.5a — «НПС сценария»**: новый `IParticipantSource` над API состава (`scenario_npcs` — лист, роль → сторона, количество
-  → пачка; `scenario_creatures` — тварь с правкой статблока), в список `ParticipantSources.Default` или параметром
-  страницы; сценарий — из прохождения кампании сцены.
+- **Состав сценария (T2.5a)** — `ScenarioCastSource` над `IScenariosApi.GetAsync`: НПС — лист, сторона по роли; твари —
+  итоговый статблок сценария (`ScenarioCreatureDto.Statblock`), количество — из состава. Сценарий выбирают в окне; когда
+  будут прохождения (T2.5c), можно подставлять сценарий прохождения кампании сцены.
+- **Статисты**: НПС состава с количеством больше одного — снимки листа **без ссылки** на него («#1, #2», заметка
+  «статист»): урон троих громил в один общий лист не пишется, а «один лист — один участник» в ядре и на сервере
+  соблюдается. Один — обычная ссылка, его эффекты пишутся в лист.
 - **T2.6b/c** — панели в `ChildContent` (`[CascadingParameter] EncounterSession`), их резолв — `EncounterResolution`, их
   новые эффекты и записи журнала — члены `EncounterEffectKind`/`EncounterLogKind` (ветки в `EncounterEngine`,
   `EncounterSheetEffects`, строки в `EncounterText`). Кости в бою — `Checks/SkillCheckPanel` с `InCombat`.

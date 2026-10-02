@@ -1,13 +1,17 @@
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Characters;
+using CampaignManager.Contracts.Scenarios;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Encounters;
 
 namespace CampaignManager.UI.Encounters;
 
-/// <summary>Что видит источник: кампания сцены (для её сыщиков) и справочник навыков (лист без него не читается).</summary>
-public sealed record ParticipantPickerContext(Guid? CampaignId, SkillCatalog Catalog);
+/// <summary>
+/// Что видит источник: кампания сцены (для её сыщиков), справочник навыков (лист без него не читается) и сценарий,
+/// выбранный в окне (для состава сценария).
+/// </summary>
+public sealed record ParticipantPickerContext(Guid? CampaignId, SkillCatalog Catalog, Guid? ScenarioId = null);
 
 /// <summary>
 /// Строка выбора участника: кто, откуда и как из неё получить участников сцены. Лист — один участник (повтор отсечёт
@@ -20,7 +24,11 @@ public sealed record ParticipantOption(
     ParticipantKind Kind,
     Guid? CharacterId,
     bool AllowCount,
-    Func<int, CancellationToken, Task<IReadOnlyList<EncounterParticipant>>> CreateAsync);
+    Func<int, CancellationToken, Task<IReadOnlyList<EncounterParticipant>>> CreateAsync)
+{
+    /// <summary>Сколько предложить сразу: количество из состава сценария.</summary>
+    public int DefaultCount { get; init; } = 1;
+}
 
 /// <summary>Строки источника; <see cref="Message"/> — почему пусто (нет кампании), чтобы не гадать.</summary>
 public sealed record ParticipantSourceResult(IReadOnlyList<ParticipantOption> Options, string? Message = null);
@@ -28,11 +36,6 @@ public sealed record ParticipantSourceResult(IReadOnlyList<ParticipantOption> Op
 /// <summary>
 /// Источник участников для <see cref="ParticipantPicker"/>. Новый источник — новая реализация в списке страницы, а не
 /// вкладка рядом со списком (знание v1: <c>ParticipantPicker</c> — единственный список участников боя и погони).
-/// <para>
-/// <b>Стык T2.5a:</b> «НПС сценария» — реализация над API состава сценария (<c>scenario_npcs</c>: лист, роль, количество;
-/// <c>scenario_creatures</c>: тварь с правкой статблока и количеством). Сторона — <see cref="EncounterParticipants.SideOf"/>
-/// по роли, количество больше 1 — пачка с номерами, как у тварей. Страница сцены берёт сценарий из прохождения кампании.
-/// </para>
 /// </summary>
 public interface IParticipantSource
 {
@@ -42,15 +45,19 @@ public interface IParticipantSource
 
     string Icon { get; }
 
+    /// <summary>Источнику нужен сценарий — окно показывает выбор сценария (<see cref="ParticipantPickerContext.ScenarioId"/>).</summary>
+    bool UsesScenario => false;
+
     Task<ParticipantSourceResult> LoadAsync(ParticipantPickerContext context, CancellationToken cancellationToken);
 }
 
 /// <summary>Источники, которые есть у любой сцены: сыщики кампании, НПС библиотеки и кампаний, бестиарий.</summary>
 public static class ParticipantSources
 {
-    public static IReadOnlyList<IParticipantSource> Default(ICharactersApi characters, ICatalogApi<CreatureDto> creatures) =>
+    public static IReadOnlyList<IParticipantSource> Default(ICharactersApi characters, ICatalogApi<CreatureDto> creatures, IScenariosApi scenarios) =>
     [
         new CampaignInvestigatorsSource(characters),
+        new ScenarioCastSource(scenarios, characters),
         new NpcLibrarySource(characters),
         new BestiarySource(creatures),
     ];
@@ -152,5 +159,92 @@ public sealed class BestiarySource(ICatalogApi<CreatureDto> creatures) : IPartic
                     (count, _) => Task.FromResult<IReadOnlyList<EncounterParticipant>>(
                         [.. Enumerable.Range(0, Math.Max(1, count)).Select(_ => EncounterParticipants.FromStatblock(c.Id, c.Name, c.Statblock))]))),
         ], list.Items.Count == 0 ? "Бестиарий пуст." : null);
+    }
+}
+
+/// <summary>
+/// Состав сценария (T2.5a): НПС — листы со стороной по роли (<see cref="EncounterParticipants.SideOf"/>: союзник — с сыщиками,
+/// враг — против), твари — итоговый статблок сценария (своя версия поверх бестиария), количество — из состава.
+/// <para>
+/// <b>Пачка НПС</b> («трое громил» с одного листа, знание v1): при количестве больше одного все участники — <b>статисты</b>:
+/// снимок листа без ссылки на него, с номерами «#1, #2». Урон статиста в общий лист не пишется — лист у троих один, и
+/// «один лист — один участник» соблюдается. Один участник — обычная ссылка на лист.
+/// </para>
+/// </summary>
+public sealed class ScenarioCastSource(IScenariosApi scenarios, ICharactersApi characters) : IParticipantSource
+{
+    public string Key => "scenario";
+
+    public string Label => "Сценарий";
+
+    public string Icon => "fa-masks-theater";
+
+    public bool UsesScenario => true;
+
+    public async Task<ParticipantSourceResult> LoadAsync(ParticipantPickerContext context, CancellationToken cancellationToken)
+    {
+        if (context.ScenarioId is not { } scenarioId)
+            return new ParticipantSourceResult([], "Выберите сценарий — его НПС и твари появятся здесь.");
+
+        var scenario = await scenarios.GetAsync(scenarioId, cancellationToken);
+        List<ParticipantOption> options = [];
+        foreach (var npc in scenario.Npcs)
+        {
+            var character = npc.Character;
+            var side = EncounterParticipants.SideOf(npc.Role);
+            options.Add(new ParticipantOption(
+                $"character:{character.Id}",
+                character.Name,
+                string.Join(" · ", new[] { "НПС", Core.Scenarios.ScenarioText.Of(npc.Role), character.Occupation, npc.Count > 1 ? $"×{npc.Count}" : null }
+                    .Where(s => !string.IsNullOrWhiteSpace(s))),
+                ParticipantKind.Npc,
+                character.Id,
+                AllowCount: true,
+                async (count, ct) =>
+                {
+                    var sheet = (await characters.GetAsync(character.Id, ct)).Sheet;
+                    if (count <= 1)
+                        return [EncounterParticipants.FromSheet(character.Id, CharacterKind.Npc, sheet, context.Catalog, side)];
+
+                    return
+                    [
+                        .. Enumerable.Range(0, count).Select(_ =>
+                        {
+                            var extra = EncounterParticipants.FromSheet(character.Id, CharacterKind.Npc, sheet, context.Catalog, side);
+                            extra.SourceCharacterId = null;
+                            extra.Note = "статист: снимок листа, урон в лист не пишется";
+                            return extra;
+                        }),
+                    ];
+                })
+            {
+                DefaultCount = npc.Count,
+            });
+        }
+
+        foreach (var creature in scenario.Creatures)
+        {
+            options.Add(new ParticipantOption(
+                $"scenario-creature:{creature.Id}",
+                creature.Name,
+                string.Join(" · ", new[]
+                {
+                    "тварь",
+                    creature.HasOwnStatblock ? "статблок сценария" : creature.CatalogName,
+                    $"ПЗ {creature.Statblock.HitPoints}",
+                    creature.LocationNote,
+                    creature.Count > 1 ? $"×{creature.Count}" : null,
+                }.Where(s => !string.IsNullOrWhiteSpace(s))),
+                ParticipantKind.Creature,
+                CharacterId: null,
+                AllowCount: true,
+                (count, _) => Task.FromResult<IReadOnlyList<EncounterParticipant>>(
+                    [.. Enumerable.Range(0, Math.Max(1, count)).Select(_ => EncounterParticipants.FromStatblock(creature.CreatureId, creature.Name, creature.Statblock))]))
+            {
+                DefaultCount = creature.Count,
+            });
+        }
+
+        return new ParticipantSourceResult(options, options.Count == 0 ? "В составе сценария нет НПС и тварей." : null);
     }
 }
