@@ -62,6 +62,9 @@ public sealed record DamageOutcome(
 /// <summary>Почему лечение не подействовало; null — подействовало.</summary>
 public sealed record HealOutcome(WoundStatus Before, WoundStatus After, string? Refusal, string Text);
 
+/// <summary>Недельная проверка лечения на листе (<see cref="WoundRules.ApplyWeeklyRecovery"/>): бросок ВЫН, уровень, выпавшее на 1d3/2d3.</summary>
+public sealed record RecoveryCheck(D100Roll Roll, SuccessLevel Level, int Amount, HealOutcome Outcome);
+
 /// <summary>
 /// Раны и лечение (гл. 6, стр. 117–120) — <b>один конвейер</b> для листа и сцены по схеме получения урона ширмы
 /// Хранителя (стр. 119) и решению владельца 2026-10-02 (F-S02):
@@ -216,6 +219,19 @@ public static class WoundRules
         level >= SuccessLevel.Extreme ? 2 : level.IsSuccess() ? 1 : 0;
 
     /// <summary>
+    /// Сколько ПЗ дали кости лечения серьёзной раны: провал — 0; иначе <paramref name="entered"/>, если такая сумма
+    /// возможна на <see cref="RecoveryDiceCount"/>d3, а нет — бросок <paramref name="dice"/>. Одна копия для боя и листа.
+    /// </summary>
+    public static int RecoveryAmount(SuccessLevel level, int? entered, IDiceRoller dice)
+    {
+        var count = RecoveryDiceCount(level);
+        if (count == 0)
+            return 0;
+
+        return entered is { } sum && sum >= count && sum <= count * HealDieSides ? sum : dice.Roll(count, HealDieSides);
+    }
+
+    /// <summary>
     /// Недельная проверка лечения серьёзной раны (стр. 119): <paramref name="level"/> — уровень проверки ВЫН,
     /// <paramref name="amount"/> — выпавшее на 1d3 (успех) или 2d3 (чрезвычайный). Чрезвычайный снимает отметку; крах —
     /// осложнение на усмотрение Хранителя (пример с Сесилом).
@@ -325,6 +341,31 @@ public static class WoundRules
     {
         var outcome = TakeDamage(Read(sheet), DerivedAttributeRules.MaxHitPoints(sheet), damage, conPassed);
         Write(sheet, outcome.After);
+        return outcome;
+    }
+
+    /// <summary>
+    /// Недельная проверка лечения серьёзной раны по листу (стр. 119): <paramref name="roll"/> — бросок ВЫН листа, уже с
+    /// костями ухода и условий (<see cref="RecoveryDice"/>; брошен или вписан), <paramref name="healRoll"/> — выпавшее на
+    /// 1d3/2d3 (null — бросит <paramref name="dice"/>). Отказ (нет раны, при смерти) лист не меняет.
+    /// </summary>
+    public static RecoveryCheck ApplyWeeklyRecovery(CharacterSheet sheet, D100Roll roll, int? healRoll, IDiceRoller dice)
+    {
+        var level = Check.Evaluate(roll.Result, sheet.Characteristics[Characteristic.CON]);
+        var status = Read(sheet);
+        var amount = status.MajorWound && !status.Dying && !status.Dead ? RecoveryAmount(level, healRoll, dice) : 0;
+        var outcome = WeeklyRecovery(status, DerivedAttributeRules.MaxHitPoints(sheet), level, amount);
+        if (outcome.Refusal is null)
+            Write(sheet, outcome.After);
+        return new RecoveryCheck(roll, level, amount, outcome);
+    }
+
+    /// <summary>Отдых без серьёзной раны по листу: 1 ПЗ в день (стр. 119). Отказ лист не меняет.</summary>
+    public static HealOutcome ApplyNaturalRecovery(CharacterSheet sheet, int days)
+    {
+        var outcome = NaturalRecovery(Read(sheet), DerivedAttributeRules.MaxHitPoints(sheet), days);
+        if (outcome.Refusal is null)
+            Write(sheet, outcome.After);
         return outcome;
     }
 

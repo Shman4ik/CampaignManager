@@ -155,9 +155,7 @@ public static partial class CombatRules
         var (bonus, penalty) = WoundRules.RecoveryDice(setup.MedicalCare, setup.Rested, setup.PoorConditions);
         var test = Test(setup.Roll, p.Stats.Con, dice, bonus: bonus, penalty: penalty);
         var count = WoundRules.RecoveryDiceCount(test.Level);
-        var amount = count == 0 ? 0
-            : setup.HealRoll is { } entered && entered >= count && entered <= count * WoundRules.HealDieSides ? entered
-            : dice.Roll(count, WoundRules.HealDieSides);
+        var amount = WoundRules.RecoveryAmount(test.Level, setup.HealRoll, dice);
         var outcome = WoundRules.WeeklyRecovery(EncounterParticipants.Wounds(p), p.MaxHitPoints, test.Level, amount);
 
         List<string> lines = [RollText($"{p.Name} (ВЫН, лечение)", test.Roll, p.Stats.Con, test.Level)];

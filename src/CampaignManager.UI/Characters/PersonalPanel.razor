@@ -132,6 +132,12 @@
                 <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" data-testid="damage" @bind="_damage" />
             </Field>
             <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-heart-crack" data-testid="apply-damage" OnClick="ApplyDamage">Нанести</Button>
+            @if (!Context.ReadOnly)
+            {
+                @* Лечение вне боя (T2.3b): отдых по дням или недельная проверка серьёзной раны — окно под тем же корнем. *@
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-kit-medical" data-testid="open-recovery"
+                        OnClick="() => _recoveryOpen = true">Лечение</Button>
+            }
         </div>
         <p class="cm-field-note">
             Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку, смерть — от @Math.Max(1, derived.MaxHitPoints) (стр. 117–118).
@@ -169,6 +175,7 @@
                 </div>
             </div>
         </div>
+        <WoundRecoveryModal @bind-Open="_recoveryOpen" />
     </div>
 </div>
 
@@ -177,6 +184,7 @@
 
     private int _damage = 1;
     private DamageOutcome? _lastHit;
+    private bool _recoveryOpen;
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 

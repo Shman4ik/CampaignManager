@@ -1,5 +1,6 @@
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Dice;
+using CampaignManager.Core.Tests.Infrastructure;
 using static CampaignManager.Core.Tests.Sheet.Sheets;
 
 namespace CampaignManager.Core.Tests.Sheet;
@@ -328,6 +329,84 @@ public sealed class WoundRulesTests
         sheet.Condition.MajorWound = true;
         WoundRules.UpdateConsciousness(sheet);
         Assert.True(sheet.Condition.Dying);
+    }
+
+    // ── Лечение вне боя на листе (T2.3b) ──
+
+    [Theory]
+    [Trait("page", "119")]
+    [InlineData(SuccessLevel.Failure, 3, 0)] // провал — кости лечения не бросаются
+    [InlineData(SuccessLevel.Regular, 3, 3)]
+    [InlineData(SuccessLevel.Regular, 4, null)] // 4 на 1d3 невозможно — бросит правило
+    [InlineData(SuccessLevel.Extreme, 5, 5)]
+    [InlineData(SuccessLevel.Extreme, 1, null)] // 1 на 2d3 невозможно
+    public void RecoveryAmount_EnteredWhenPossible_ElseRolled(SuccessLevel level, int entered, int? expected)
+    {
+        var dice = ScriptedDice.Of(2, 2);
+        var amount = WoundRules.RecoveryAmount(level, entered, dice);
+
+        Assert.Equal(expected ?? WoundRules.RecoveryDiceCount(level) * 2, amount);
+    }
+
+    [Fact]
+    [Trait("page", "119")]
+    public void ApplyWeeklyRecovery_Sheet_ExtremeClearsWound_RegularKeepsIt()
+    {
+        var sheet = Wounded(4, 15); // ВЫН 80: чрезвычайный — до 16
+        sheet.Condition.MajorWound = true;
+
+        var regular = WoundRules.ApplyWeeklyRecovery(sheet, D100Roll.Entered(55), healRoll: 2, ScriptedDice.Of());
+
+        Assert.Equal(SuccessLevel.Regular, regular.Level);
+        Assert.Equal(6, sheet.Current.HitPoints);
+        Assert.True(sheet.Condition.MajorWound);
+
+        var extreme = WoundRules.ApplyWeeklyRecovery(sheet, D100Roll.Entered(12), healRoll: null, ScriptedDice.Of(3, 2));
+
+        Assert.Equal(SuccessLevel.Extreme, extreme.Level);
+        Assert.Equal(5, extreme.Amount);
+        Assert.Equal(11, sheet.Current.HitPoints);
+        Assert.False(sheet.Condition.MajorWound);
+    }
+
+    [Fact]
+    [Trait("page", "119")]
+    public void ApplyWeeklyRecovery_Sheet_FailureOrNoWound_LeavesSheet()
+    {
+        var sheet = Wounded(4, 15);
+        sheet.Condition.MajorWound = true;
+
+        var failed = WoundRules.ApplyWeeklyRecovery(sheet, D100Roll.Entered(90), healRoll: 3, ScriptedDice.Of());
+        Assert.Equal(0, failed.Amount);
+        Assert.Null(failed.Outcome.Refusal);
+        Assert.Equal(4, sheet.Current.HitPoints);
+
+        sheet.Condition.MajorWound = false;
+        var refused = WoundRules.ApplyWeeklyRecovery(sheet, D100Roll.Entered(5), healRoll: 3, ScriptedDice.Of());
+        Assert.NotNull(refused.Outcome.Refusal);
+        Assert.Equal(4, sheet.Current.HitPoints);
+    }
+
+    [Fact]
+    [Trait("page", "119")]
+    public void ApplyNaturalRecovery_Sheet_DaysUpToMax_RefusedWithMajorWound()
+    {
+        var sheet = Wounded(0, 10);
+        sheet.Condition.Unconscious = true;
+
+        var outcome = WoundRules.ApplyNaturalRecovery(sheet, 3);
+
+        Assert.Null(outcome.Refusal);
+        Assert.Equal(3, sheet.Current.HitPoints);
+        Assert.False(sheet.Condition.Unconscious);
+
+        WoundRules.ApplyNaturalRecovery(sheet, 30);
+        Assert.Equal(10, sheet.Current.HitPoints);
+
+        sheet.Condition.MajorWound = true;
+        sheet.Current.HitPoints = 5;
+        Assert.NotNull(WoundRules.ApplyNaturalRecovery(sheet, 2).Refusal);
+        Assert.Equal(5, sheet.Current.HitPoints);
     }
 
     private static CharacterSheet Wounded(int hp, int maxHp)
