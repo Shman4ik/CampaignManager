@@ -1,0 +1,88 @@
+# Beta-стенд 2.0 (https://beta.cthulhu.dmnet.dev): образ из src/Dockerfile и коммит тега в
+# dmnet-gitops, workloads/campaign-manager-beta. Дальше Argo CD сам катит его в k3s, как у v1.
+# Прод v1 — отдельно, в docker-build-deploy.yml; этот воркфлоу его не касается.
+# Устройство, секреты и откат — src/CLAUDE.md, «Beta-стенд».
+name: v2 beta deploy
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "src/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - "NuGet.config"
+      - ".github/workflows/v2-beta-deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: v2-beta-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/shman4ik/campaign-manager-v2
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # 0.2.N — свой счётчик воркфлоу; v1 — 0.1.N, номера не пересекаются.
+      - name: Set version
+        run: echo "VERSION=0.2.${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+          cache-from: type=gha,scope=v2-beta
+          cache-to: type=gha,mode=max,scope=v2-beta
+
+      - name: Check out dmnet-gitops
+        uses: actions/checkout@v7
+        with:
+          repository: Shman4ik/dmnet-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+          path: gitops
+
+      # Деплой = коммит тега в dmnet-gitops; Argo CD применяет его за ~90 с. К VPS никто не ходит.
+      - name: Point dmnet-gitops at the new image
+        working-directory: gitops/workloads/campaign-manager-beta
+        run: |
+          yq -i '(.images[] | select(.name == strenv(IMAGE))).newTag = strenv(VERSION)' kustomization.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "campaign-manager-beta ${VERSION}" -m "Built from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          for attempt in 1 2 3; do git push && exit 0; git pull --rebase; done
+          exit 1
+
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: campaign-manager-v2
+          package-type: container
+          # Старые теги остаются для отката (revert коммита тега в dmnet-gitops).
+          min-versions-to-keep: 10
+          ignore-versions: "^latest$"

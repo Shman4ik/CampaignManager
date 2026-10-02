@@ -80,6 +80,32 @@ Neon (`ep-white-leaf-435379…/neondb`, память `postgres-mcp-dev-db`).
 
 **Готово, когда** PR с этой задачей сам прошёл проверку.
 
+### T0.4 — Beta-стенд 2.0
+
+**Сделано 2026-10-02.** `https://beta.cthulhu.dmnet.dev` — 2.0 на живой системе: владелец проверяет
+карточки по мере влития, не дожидаясь T3.2. Как устроено, где секреты и как откатить —
+[src/CLAUDE.md](../../src/CLAUDE.md), «Beta-стенд». Что сделано:
+- образ `src/Dockerfile` (сервер вместе с клиентом WebAssembly, Node для Tailwind); собран в `wslc`,
+  `/health`, `/api/v1/ping` до ветки `dev` и редирект входа на Auth0 с `https://`-адресом возврата проверены;
+- `.github/workflows/v2-beta-deploy.yml`: на push в `master` по `src/**` и общим props — образ
+  `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и тег в dmnet-gitops,
+  `workloads/campaign-manager-beta`; деплой v1 не тронут;
+- dmnet-gitops: Application `campaign-manager-beta`, Deployment/Service/Ingress (cert-manager +
+  Traefik, как у прода), SealedSecret `campaign-manager-beta-env` — ветка Neon `dev` и dev-приложение
+  Auth0 (в нём владелец разрешил адреса беты);
+- окружение `Production`: страницы `/dev/*` и так работают в любом окружении.
+
+Не сделано здесь: ключ MinIO к бакету `campaign-manager-dev` (бакет заводит T1.3) — до него файлы
+на бете отвечают ошибкой настройки. Миграции `cm` на `dev` накатывает автор PR с миграцией до слияния.
+
+**Цель.** Каждая влитая карточка 2.0 видна на настоящем адресе с настоящим входом, на данных `dev`,
+без участия прода.
+
+**Зависит от:** T0.1 (ветка `dev`), T1.1 (каркас).
+
+**Готово, когда** push в `master` с изменениями `src/` сам выкатывает стенд, а публичные страницы
+беты открываются.
+
 ---
 
 ## Волна 1. Фундамент
