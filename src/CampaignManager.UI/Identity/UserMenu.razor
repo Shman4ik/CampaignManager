@@ -1,0 +1,30 @@
+@using CampaignManager.Contracts.Identity
+@inject NavigationManager Navigation
+
+@* Кто вошёл и выход — для шапки. Оболочку (рельс, нижняя навигация) делает T1.6; ей этот
+   компонент и достаётся. *@
+<AuthorizeView>
+    <Authorized>
+        <div class="flex items-center gap-3">
+            <span class="text-sm text-slate-600" data-testid="current-user">
+                @context.User.Identity?.Name
+                <span class="ml-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">@RoleName(context.User)</span>
+            </span>
+            <button type="button" class="inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                    @onclick="Logout">
+                Выйти
+            </button>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <a href="@IdentityRoutes.LoginPage.TrimStart('/')" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-sm text-white">Войти</a>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private static string RoleName(System.Security.Claims.ClaimsPrincipal user) =>
+        user.IsInRole("Admin") ? "администратор" : user.IsInRole("Keeper") ? "Хранитель" : "игрок";
+
+    // Выход — серверный адрес: полная загрузка, после неё приложение стартует уже без сессии.
+    private void Logout() => Navigation.NavigateTo(IdentityRoutes.Logout.TrimStart('/'), forceLoad: true);
+}

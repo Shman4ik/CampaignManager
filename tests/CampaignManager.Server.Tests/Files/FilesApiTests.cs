@@ -15,6 +15,46 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
+    // Права (T1.4): читать и загружать — вошедший, сироты — админ; загрузивший записывается.
+    [Fact]
+    public async Task Upload_records_who_uploaded()
+    {
+        TestDatabase.SkipIfMissing();
+
+        var file = await new ApiClient.Files.FilesApiClient(app.CreateClient(app.Player))
+            .UploadAsync(new MemoryStream(RandomBytes(900)), "Улика.jpg", Cancellation);
+
+        await using var db = app.Database.CreateContext();
+        Assert.Equal(app.Player.Id, db.Files.Single(f => f.Id == file.Id).UploadedById);
+    }
+
+    [Fact]
+    public async Task Files_are_closed_to_anonymous()
+    {
+        TestDatabase.SkipIfMissing();
+        var file = await app.Api().UploadAsync(new MemoryStream(RandomBytes(600)), "Тайна.png", Cancellation);
+        var anonymous = app.CreateClient(anonymous: true);
+
+        using var content = await anonymous.GetAsync(file.Url, Cancellation);
+        using var upload = await anonymous.PostAsync(FilesRoutes.Upload, new MultipartFormDataContent
+        {
+            { new ByteArrayContent(RandomBytes(10)), FilesRoutes.UploadField, "a.png" },
+        }, Cancellation);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, content.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, upload.StatusCode);
+    }
+
+    [Fact]
+    public async Task Orphans_are_admin_only()
+    {
+        TestDatabase.SkipIfMissing();
+
+        using var report = await app.CreateClient(app.Player).GetAsync(FilesRoutes.Orphans, Cancellation);
+
+        Assert.Equal(HttpStatusCode.Forbidden, report.StatusCode);
+    }
+
     [Fact]
     public async Task Uploaded_image_is_served_with_type_and_immutable_cache()
     {

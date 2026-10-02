@@ -1,4 +1,5 @@
 using CampaignManager.Contracts.Files;
+using CampaignManager.Contracts.Identity;
 using CampaignManager.Server.Files.Storage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -22,7 +23,6 @@ public static class FilesModule
         services.TryAddSingleton<IObjectStorage, MinioObjectStorage>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<FileService>();
-        services.AddScoped<FileAccessStub>();
         return builder;
     }
 
@@ -30,29 +30,35 @@ public static class FilesModule
     {
         var maxUpload = app.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<FilesOptions>>().Value.MaxUploadBytes;
 
+        // Читать и загружать — любой вошедший; права на сирот проверяет и FileService (AccessPolicy).
         app.MapPost(FilesRoutes.Upload, UploadAsync)
+            .RequireAuthorization()
             .WithName("UploadFile")
             .WithTags("Files")
             // Kestrel по умолчанию режет тело на 30 МБ, а трек бывает до 50.
             .WithMetadata(new RequestSizeLimitAttribute(maxUpload + MultipartOverheadBytes))
             // Клиент — WebAssembly и мобильное приложение, а не форма сервера: токена антифорджери
-            // у них нет. Межсайтовую отправку формы закрывает SameSite у куки входа (T1.4).
+            // у них нет. Межсайтовую отправку формы закрывает SameSite=Lax у куки входа: браузер не
+            // приложит её к POST с чужого сайта, и запрос придёт анонимным — 401 (Identity/CLAUDE.md).
             .DisableAntiforgery();
 
         app.MapPost(FilesRoutes.External, AddExternalAsync)
+            .RequireAuthorization()
             .WithName("AddExternalFile")
             .WithTags("Files");
 
         app.MapMethods(FilesRoutes.ContentPattern, [HttpMethods.Get, HttpMethods.Head], FileContentEndpoint.HandleAsync)
+            .RequireAuthorization()
             .WithName("GetFileContent")
             .WithTags("Files");
 
-        // TODO(T1.4): группа /api/v1/admin под ролевой политикой администратора.
         app.MapGet(FilesRoutes.Orphans, GetOrphansAsync)
+            .RequireAuthorization(Policies.Admin)
             .WithName("GetOrphanFiles")
             .WithTags("Files");
 
         app.MapPost(FilesRoutes.DeleteOrphans, DeleteOrphansAsync)
+            .RequireAuthorization(Policies.Admin)
             .WithName("DeleteOrphanFiles")
             .WithTags("Files");
 
@@ -62,14 +68,8 @@ public static class FilesModule
     private static async Task<IResult> UploadAsync(
         [FromForm(Name = FilesRoutes.UploadField)] IFormFile file,
         FileService files,
-        FileAccessStub access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanUpload)
-        {
-            return Forbidden();
-        }
-
         try
         {
             return TypedResults.Ok(await files.UploadAsync(file.FileName, file.Length, file.OpenReadStream, cancellationToken));
@@ -83,14 +83,8 @@ public static class FilesModule
     private static async Task<IResult> AddExternalAsync(
         AddExternalFileRequest request,
         FileService files,
-        FileAccessStub access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanUpload)
-        {
-            return Forbidden();
-        }
-
         try
         {
             return TypedResults.Ok(await files.AddExternalAsync(request.Url, cancellationToken));
@@ -101,15 +95,12 @@ public static class FilesModule
         }
     }
 
-    private static async Task<IResult> GetOrphansAsync(FileService files, FileAccessStub access, CancellationToken cancellationToken) =>
-        access.CanManageOrphans ? TypedResults.Ok(await files.GetOrphansAsync(cancellationToken)) : Forbidden();
+    private static async Task<IResult> GetOrphansAsync(FileService files, CancellationToken cancellationToken) =>
+        TypedResults.Ok(await files.GetOrphansAsync(cancellationToken));
 
     private static async Task<IResult> DeleteOrphansAsync(
         DeleteOrphansRequest request,
         FileService files,
-        FileAccessStub access,
         CancellationToken cancellationToken) =>
-        access.CanManageOrphans ? TypedResults.Ok(await files.DeleteOrphansAsync(request.Ids, cancellationToken)) : Forbidden();
-
-    private static IResult Forbidden() => TypedResults.Problem(statusCode: StatusCodes.Status403Forbidden);
+        TypedResults.Ok(await files.DeleteOrphansAsync(request.Ids, cancellationToken));
 }

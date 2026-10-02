@@ -1,0 +1,62 @@
+@page "/login"
+@using CampaignManager.Contracts.Identity
+@inject NavigationManager Navigation
+
+@* Выбор способа входа. Сам вход — на сервере (OIDC через Auth0), сюда клиент и сервер только
+   приводят: сервер — с прямой загрузки страницы под [Authorize], клиент — RedirectToLogin. *@
+<PageTitle>Вход</PageTitle>
+
+<h1 class="mb-2 text-2xl font-semibold">Вход</h1>
+
+@if (AuthStatus == "accessDenied")
+{
+    <p class="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-red-800" role="alert">
+        Этой учётке вход закрыт: почта не подтверждена или её нет в списке приглашённых.
+    </p>
+}
+else if (AuthStatus == "failed")
+{
+    <p class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800" role="alert">
+        Вход не удался. Попробуйте ещё раз.
+    </p>
+}
+
+<AuthorizeView>
+    <Authorized>
+        <p class="mb-4">Вы вошли как <strong>@context.User.Identity?.Name</strong>.</p>
+        <div class="flex flex-wrap gap-3">
+            <a href="@SafeReturnUrl.TrimStart('/')" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-white">Продолжить</a>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <p class="mb-4 text-slate-600">Через Google — если вы входили так раньше, второй раз это произойдёт само.</p>
+        <div class="flex flex-wrap gap-3">
+            <button type="button" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-white"
+                    @onclick="() => Login(LoginMethods.Google)">
+                Войти через Google
+            </button>
+            <button type="button" class="inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-slate-700"
+                    @onclick="() => Login(LoginMethods.Email)">
+                Войти по почте и паролю
+            </button>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [SupplyParameterFromQuery(Name = IdentityRoutes.ReturnUrlParameter)]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "authStatus")]
+    public string? AuthStatus { get; set; }
+
+    // Сервер всё равно сверит адрес возврата со своим хостом; здесь — только не уйти со страницы входа на неё же.
+    private string SafeReturnUrl =>
+        string.IsNullOrEmpty(ReturnUrl) || !ReturnUrl.StartsWith('/') || ReturnUrl.StartsWith(IdentityRoutes.LoginPage)
+            ? "/"
+            : ReturnUrl;
+
+    // Полная загрузка: вход — серверный адрес, клиентский роутер его не знает.
+    private void Login(string method) =>
+        Navigation.NavigateTo(IdentityRoutes.LoginUrl(method, SafeReturnUrl).TrimStart('/'), forceLoad: true);
+}

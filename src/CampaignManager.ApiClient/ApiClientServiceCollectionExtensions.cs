@@ -1,6 +1,8 @@
 using CampaignManager.ApiClient.Files;
+using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Platform;
 using CampaignManager.Contracts.Files;
+using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +17,7 @@ public static class ApiClientServiceCollectionExtensions
     public static IServiceCollection AddCampaignManagerApi(this IServiceCollection services, Uri baseAddress)
     {
         services.AddHttpClient<IPingApi, PingApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IIdentityApi, IdentityApiClient>(http => http.BaseAddress = baseAddress);
         // Загрузка трека в 50 МБ по медленной сети идёт дольше стандартных 100 секунд.
         services.AddHttpClient<IFilesApi, FilesApiClient>(http =>
         {

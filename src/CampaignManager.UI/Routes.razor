@@ -1,9 +1,26 @@
 @* Корневой компонент приложения. Рендерится в WebAssembly без пререндера (D1); статически —
    только страницы с [ExcludeFromInteractiveRouting] вроде /Error сервера, их маршрут Router
-   берёт у эндпоинта. *@
+   берёт у эндпоинта.
+   Страница под [Authorize]: без сессии — на /login, с сессией без прав — «Нет доступа». Права
+   страниц — только политиками (Policies.Keeper/Admin), см. Identity/CLAUDE.md. *@
 <Router AppAssembly="typeof(Routes).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    <h1 class="mb-2 text-2xl font-semibold">Нет доступа</h1>
+                    <p>Эта страница открыта только Хранителям или администратору.</p>
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <p class="text-slate-500">Загрузка…</p>
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

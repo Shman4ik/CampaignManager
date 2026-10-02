@@ -19,21 +19,16 @@ namespace CampaignManager.Server.Files;
 /// </summary>
 public static class FileContentEndpoint
 {
-    // private: ответ зависит от прав (после T1.4 — от входа), общим кэшам его держать нельзя.
+    // private: ответ зависит от входа, общим кэшам его держать нельзя.
     private const string CacheControl = "private, max-age=31536000, immutable";
 
     public static async Task<IResult> HandleAsync(
         Guid id,
         HttpContext http,
         FileService files,
-        IObjectStorage storage,
-        FileAccessStub access)
+        IObjectStorage storage)
     {
-        if (!access.CanRead)
-        {
-            return TypedResults.Problem(statusCode: StatusCodes.Status403Forbidden);
-        }
-
+        // Читать — любой вошедший: эндпоинт под RequireAuthorization (FilesModule).
         var cancellationToken = http.RequestAborted;
         var file = await files.FindAsync(id, cancellationToken);
         if (file is null)

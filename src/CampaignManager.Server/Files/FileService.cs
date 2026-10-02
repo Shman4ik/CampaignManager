@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Data;
 using CampaignManager.Data.Files;
+using CampaignManager.Server.Access;
 using CampaignManager.Server.Files.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -13,11 +14,13 @@ namespace CampaignManager.Server.Files;
 public sealed class FileRejectedException(string message) : Exception(message);
 
 /// <summary>
-/// Строки <c>cm.files</c> и объекты хранилища. Права проверяет эндпоинт через
-/// <see cref="FileAccessStub"/> (TODO T1.4: <c>AccessPolicy</c> прямо здесь, в методах записи).
+/// Строки <c>cm.files</c> и объекты хранилища. Права — <see cref="AccessPolicy.ForFilesAsync"/> в каждом
+/// методе записи: загрузить — любой вошедший, сироты — администратор.
 /// </summary>
 public sealed class FileService(
     CmDbContext dbContext,
+    AccessPolicy access,
+    CurrentUser currentUser,
     IObjectStorage storage,
     IOptions<FilesOptions> options,
     TimeProvider time,
@@ -38,6 +41,7 @@ public sealed class FileService(
         Func<Stream> openRead,
         CancellationToken cancellationToken)
     {
+        await access.ForFilesAsync(cancellationToken).Demand(Operation.Edit);
         var name = CleanName(fileName);
         var type = FileTypes.Find(name)
             ?? throw new FileRejectedException($"Такие файлы не принимаются. Можно: {FileTypes.Supported}.");
@@ -76,7 +80,7 @@ public sealed class FileService(
             SizeBytes = length,
             Sha256 = sha256,
             OriginalName = name,
-            // TODO(T1.4): UploadedById = currentUser.Id.
+            UploadedById = (await currentUser.GetAsync(cancellationToken))?.Id,
         };
         dbContext.Files.Add(file);
         try
@@ -97,6 +101,7 @@ public sealed class FileService(
     /// <summary>Внешний адрес — строка без объекта. Тот же адрес второй раз даёт прежнюю строку.</summary>
     public async Task<StoredFileDto> AddExternalAsync(string url, CancellationToken cancellationToken)
     {
+        await access.ForFilesAsync(cancellationToken).Demand(Operation.Edit);
         if (url.Length > MaxUrlLength
             || !Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
             || uri.Scheme != Uri.UriSchemeHttps)
@@ -112,7 +117,7 @@ public sealed class FileService(
             return ToDto(existing);
         }
 
-        var file = new StoredFile { ExternalUrl = normalized };
+        var file = new StoredFile { ExternalUrl = normalized, UploadedById = (await currentUser.GetAsync(cancellationToken))?.Id };
         dbContext.Files.Add(file);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToDto(file);
@@ -124,6 +129,7 @@ public sealed class FileService(
     /// <summary>Сироты: старше <see cref="FilesOptions.OrphanGracePeriod"/>, и никто не ссылается.</summary>
     public async Task<OrphanFilesReport> GetOrphansAsync(CancellationToken cancellationToken)
     {
+        await access.ForFilesAsync(cancellationToken).Demand(Operation.Delete);
         var cutoff = OrphanCutoff();
         // EF1002: в SQL склеиваются только имена таблиц и колонок из модели, значения — параметрами.
 #pragma warning disable EF1002
@@ -146,6 +152,7 @@ public sealed class FileService(
     /// </summary>
     public async Task<DeleteOrphansResponse> DeleteOrphansAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
     {
+        await access.ForFilesAsync(cancellationToken).Demand(Operation.Delete);
         if (ids.Count == 0)
         {
             return new DeleteOrphansResponse([], [], []);

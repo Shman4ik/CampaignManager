@@ -11,7 +11,7 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 | `Contracts/Files` | `FilesRoutes` (маршруты и `Content(id)`), DTO, `IFilesApi` |
 | `ApiClient/Files` | `FilesApiClient` — multipart-загрузка, текст ProblemDetails в `HttpRequestException` |
 | `Data/Files` | `StoredFile`, `FileReferences` — список FK на `files` из модели EF |
-| `Server/Files` | `FilesModule`, `FileService`, `FileContentEndpoint` (отдача с Range), `FileTypes`, `FileAccessStub`, `Storage/` |
+| `Server/Files` | `FilesModule`, `FileService`, `FileContentEndpoint` (отдача с Range), `FileTypes`, `Storage/` |
 | `UI/Pages/Dev/FilesPage` | `/dev/files` — сквозная проверка: загрузка, картинка, плеер, сироты |
 
 ## API
@@ -36,8 +36,10 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
   30 МБ, поэтому на эндпоинте `RequestSizeLimitAttribute` (предел + 1 МБ на multipart): 40 МБ
   проходят, 56 МБ получают 413 ещё до сервиса.
 - Антифорджери на загрузке выключен: клиенты — WebAssembly и мобильное приложение, токена у них нет.
-  Межсайтовую отправку формы должен закрыть `SameSite` куки входа (T1.4).
-- `uploaded_by_id` пока `null` — TODO T1.4 (`CurrentUser`).
+  Межсайтовую отправку закрывает `SameSite=Lax` куки входа: к POST с чужого сайта браузер её не
+  приложит, запрос придёт анонимным и получит 401. Остаётся «тот же сайт» (поддомены `dmnet.dev`) —
+  их держит владелец, а JSON-эндпоинты без CORS чужой origin и так не вызовет.
+- `uploaded_by_id` — из `CurrentUser`; у повторной загрузки того же файла остаётся первый загрузивший.
 
 ## Отдача — не трогать
 
@@ -102,11 +104,12 @@ curl -X PUT --user cmtest:cmtest-secret --aws-sigv4 "aws:amz:us-east-1:s3" http:
 - Узкое место: загрузка того же содержимого в момент удаления его сироты может потерять объект
   (ключ один). Удаление сирот — редкое ручное действие админа, с этим живём.
 
-## Права — заглушка до T1.4
+## Права
 
-`FileAccessStub` пускает только в Development и Testing, иначе 403: забытая заглушка закрывает.
-T1.4 заменяет её на `AccessPolicy`: читать — любой вошедший (игроку нужны портреты и раздатки),
-загружать — вошедший, сироты — админ ролевой политикой на группе `/api/v1/admin`.
+`AccessPolicy.ForFilesAsync` ([Access/CLAUDE.md](../Access/CLAUDE.md)): читать и загружать — любой
+вошедший (игроку нужны портреты и раздатки), сироты — администратор. Эндпоинты под
+`RequireAuthorization()` (сироты — `Policies.Admin`), методы записи `FileService` ещё и зовут `Demand`.
+Права на то, *где* файл показан (лист, раздатка), — у владельца ссылки; отдача по id их не повторяет.
 
 ## Тесты
 
