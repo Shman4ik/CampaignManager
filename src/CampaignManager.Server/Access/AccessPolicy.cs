@@ -141,10 +141,21 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
         return user.IsAdmin ? Access.Full : ByMembership(run.Role);
     }
 
-    /// <summary>Забронировать прегена: любой вошедший, пока у прохождения открыта запись.</summary>
-    public async Task<bool> CanReserveAsync(Guid runId, CancellationToken cancellationToken = default) =>
-        await currentUser.GetAsync(cancellationToken) is not null
-        && await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.SignupOpen, cancellationToken);
+    /// <summary>
+    /// Забронировать прегена: любой вошедший, пока у прохождения открыта запись. Запись закрывается сама, когда
+    /// назначенное время прошло (<see cref="SignupOpenNow"/>) — флаг в базе при этом не переписывается.
+    /// </summary>
+    public async Task<bool> CanReserveAsync(Guid runId, CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await currentUser.GetAsync(cancellationToken) is not null
+               && await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.SignupOpen && (r.ScheduledAt == null || r.ScheduledAt > now),
+                   cancellationToken);
+    }
+
+    /// <summary>Запись по прохождению открыта сейчас: флаг в базе и назначенное время ещё не прошло (решение владельца 2026-10-02).</summary>
+    public static bool SignupOpenNow(bool signupOpen, DateTimeOffset? scheduledAt) =>
+        signupOpen && (scheduledAt is null || scheduledAt > DateTimeOffset.UtcNow);
 
     /// <summary>
     /// Бронь прегена: видят участники кампании, снимают (<see cref="Access.CanDelete"/>) сам игрок или

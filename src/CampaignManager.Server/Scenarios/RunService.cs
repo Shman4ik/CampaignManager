@@ -222,12 +222,19 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
                       {
                           r.CampaignId,
                           r.ScenarioId,
+                          r.ScheduledAt,
                           CampaignStatus = dbContext.Campaigns.Where(c => c.Id == r.CampaignId).Select(c => c.Status).First(),
                           Role = dbContext.CampaignMembers.Where(m => m.CampaignId == r.CampaignId && m.UserId == user.Id)
                               .Select(m => (CampaignRole?)m.Role).FirstOrDefault(),
                       })
                       .SingleOrDefaultAsync(cancellationToken)
                   ?? throw AccessDeniedException.NotFound();
+        if (run.ScheduledAt is { } at && at <= DateTimeOffset.UtcNow)
+        {
+            // Игра уже была: запись закрылась сама, Хранителю её открывать заново не нужно.
+            throw ApiProblemException.Conflict("Игра уже прошла — запись закрыта.");
+        }
+
         await access.CanReserveAsync(runId, cancellationToken).Demand();
 
         var pregen = await dbContext.Characters.AsNoTracking()
@@ -386,7 +393,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
                     r.Status,
                     r.ScheduledAt,
                     r.Announcement,
-                    r.SignupOpen,
+                    AccessPolicy.SignupOpenNow(r.SignupOpen, r.ScheduledAt),
                     [
                         .. reservations.Where(rr => rr.RunId == r.Id).Select(rr => new RunReservationDto(
                             rr.PregenId,

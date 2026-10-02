@@ -223,7 +223,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                         }),
                     ],
                     // Ведущий не бронирует прегенов своей игры; одна бронь на игрока (UNIQUE (run_id, user_id)).
-                    CanReserve: !leads && !mineInRun);
+                    CanReserve: !leads && !mineInRun && AccessPolicy.SignupOpenNow(true, r.ScheduledAt));
             }),
         ];
     }
