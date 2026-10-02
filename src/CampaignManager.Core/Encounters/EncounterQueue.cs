@@ -40,6 +40,7 @@ public static class EncounterQueue
         state.Round = 1;
         state.TurnOrder = Order(state);
         state.ActiveParticipantId = FirstInPlay(state, 0);
+        Chase.ChaseRules.OnRoundStarted(state);
         EncounterEngine.Log(state, new EncounterLogEntry
         {
             Kind = EncounterLogKind.Started,
@@ -75,6 +76,7 @@ public static class EncounterQueue
         state.Round++;
         state.TurnOrder = Order(state);
         state.ActiveParticipantId = FirstInPlay(state, 0);
+        Chase.ChaseRules.OnRoundStarted(state);
         EncounterEngine.Log(state, new EncounterLogEntry
         {
             Kind = EncounterLogKind.Round,

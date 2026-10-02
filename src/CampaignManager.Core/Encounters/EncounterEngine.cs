@@ -1,5 +1,7 @@
 using System.Globalization;
 using CampaignManager.Core.Characters;
+using CampaignManager.Core.Documents;
+using CampaignManager.Core.Encounters.Chase;
 
 namespace CampaignManager.Core.Encounters;
 
@@ -52,6 +54,8 @@ public static class EncounterEngine
 
         state.Participants.Add(participant);
         EncounterQueue.OnAdded(state, participant.Id);
+        if (state.Chase is not null)
+            ChaseRules.OnAdded(state, participant);
         Log(state, new EncounterLogEntry
         {
             Kind = EncounterLogKind.Joined,
@@ -70,6 +74,8 @@ public static class EncounterEngine
 
         state.Participants.Remove(participant);
         EncounterQueue.OnRemoved(state, participantId, now);
+        if (state.Chase is not null)
+            ChaseRules.OnRemoved(state, participantId);
         // Записи в лист остаются: урон уже случился, лист его получит и без участника в сцене.
         if (state.Pending is { } pending && (pending.ActorId == participantId || pending.Effects.Any(e => e.ParticipantId == participantId)))
             state.Pending = null;
@@ -95,23 +101,18 @@ public static class EncounterEngine
     /// <summary>«Отменить»: эффекты выброшены, участники не тронуты.</summary>
     public static void Cancel(EncounterState state) => state.Pending = null;
 
-    /// <summary>Что изменит результат — по строке на эффект; считает тем же кодом, что <see cref="Apply(EncounterState, DateTimeOffset)"/>, на копиях.</summary>
+    /// <summary>
+    /// Что изменит результат — по строке на эффект; считает тем же кодом, что <see cref="Apply(EncounterState, DateTimeOffset)"/>,
+    /// на копии сцены (участники и погоня; журнал и очередь записей копировать незачем).
+    /// </summary>
     public static IReadOnlyList<EffectPreview> Preview(EncounterState state, EncounterResolution resolution)
     {
-        var copies = new Dictionary<Guid, EncounterParticipant>();
+        var copy = CmJson.Clone(state with { Log = [], SheetWrites = [], Pending = null });
         List<EffectPreview> lines = [];
         foreach (var effect in resolution.Effects)
         {
-            if (state.Find(effect.ParticipantId) is not { } original)
-                continue;
-
-            if (!copies.TryGetValue(original.Id, out var copy))
-            {
-                copy = original with { Stats = original.Stats with { }, Combat = original.Combat.Copy() };
-                copies[original.Id] = copy;
-            }
-
-            lines.Add(Describe(state.Round, copy, effect));
+            if (Describe(copy, effect) is { } line)
+                lines.Add(line);
         }
 
         return lines;
@@ -130,8 +131,8 @@ public static class EncounterEngine
         List<string> lines = [.. resolution.Lines];
         foreach (var effect in resolution.Effects)
         {
-            if (state.Find(effect.ParticipantId) is { } participant)
-                lines.Add(Describe(state.Round, participant, effect).ToLogLine());
+            if (Describe(state, effect) is { } line)
+                lines.Add(line.ToLogLine());
         }
 
         List<SheetWrite> writes = [];
@@ -166,6 +167,8 @@ public static class EncounterEngine
             At = now,
         };
         Log(state, entry);
+        if (state.Chase is not null)
+            ChaseRules.AfterApply(state, now);
         return new ApplyOutcome(entry, writes);
     }
 
@@ -255,13 +258,22 @@ public static class EncounterEngine
     /// <see cref="Preview"/> зовёт его на копии. Правила — листа (<see cref="WoundRules"/>): та же серьёзная рана и то же
     /// сознание, что запишутся в лист.
     /// </summary>
-    private static EffectPreview Describe(int round, EncounterParticipant p, EncounterEffect effect)
+    private static EffectPreview? Describe(EncounterState state, EncounterEffect effect)
+    {
+        // Трасса погони (преграда, новая помеха) — эффект без участника.
+        if (state.Chase is not null && ChaseEffects.IsTrackEffect(effect.Kind))
+            return ChaseEffects.DescribeTrack(state, effect);
+
+        return state.Find(effect.ParticipantId) is { } participant ? Describe(state, participant, effect) : null;
+    }
+
+    private static EffectPreview Describe(EncounterState state, EncounterParticipant p, EncounterEffect effect)
     {
         string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
         var detail = string.IsNullOrWhiteSpace(effect.Detail) ? null : effect.Detail;
 
         // Раны, лечение и состояние боя (T2.6b) — CombatEffects: правила ран там одни с листом (WoundRules).
-        if (CombatEffects.Describe(round, p, effect) is { } combat)
+        if (CombatEffects.Describe(state.Round, p, effect) is { } combat)
             return combat;
 
         switch (effect.Kind)
@@ -295,8 +307,10 @@ public static class EncounterEngine
                 p.IsOut = effect.Flag;
                 return new EffectPreview(p.Id, p.Name, "Очередь", before ? "выбыл" : "в очереди", p.IsOut ? "выбыл" : "в очереди", detail);
             }
+            case var kind when state.Chase is not null && ChaseEffects.Handles(kind):
+                return ChaseEffects.Describe(state, p, effect);
             default:
-                return new EffectPreview(p.Id, p.Name, effect.Kind.ToString(), "", "", detail);
+                return new EffectPreview(p.Id, p.Name, EncounterText.Of(effect.Kind), "", "", detail);
         }
     }
 
