@@ -64,6 +64,17 @@ public static class CmJson
     public static CharacterSheet Clone(CharacterSheet sheet) =>
         DeserializeSheet(Serialize(sheet)) ?? throw new JsonException("Копия листа пуста.");
 
+    /// <summary>Состояние сцены строкой — слепок автосохранения и черновик вкладки.</summary>
+    public static string Serialize(EncounterState state) =>
+        JsonSerializer.Serialize(state, CmJsonContext.Default.EncounterState);
+
+    public static EncounterState? DeserializeEncounterState(string json) =>
+        JsonSerializer.Deserialize(json, CmJsonContext.Default.EncounterState);
+
+    /// <summary>Глубокая копия состояния сцены — предпросмотр и откат неудавшейся записи.</summary>
+    public static EncounterState Clone(EncounterState state) =>
+        DeserializeEncounterState(Serialize(state)) ?? throw new JsonException("Копия состояния сцены пуста.");
+
     public static string Serialize(InvestigatorDraft draft) =>
         JsonSerializer.Serialize(draft, CmJsonContext.Default.InvestigatorDraft);
 
