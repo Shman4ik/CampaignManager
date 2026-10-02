@@ -50,7 +50,12 @@
       а сайт отдаёт 404 на стили;
     - и он же убирается из глоба при вычислении: со второй сборки файл уже на диске, глоб его
       подбирает, Include в таргете добавляет вторую копию, и статические ассеты падают с
-      «Two assets found targeting the same path». Убирать внутри таргета поздно.
+      «Two assets found targeting the same path». Убирать внутри таргета поздно;
+    - хэш содержимого (Integrity) таргет считает сам. DefineStaticWebAssets кэширует ассеты в
+      obj/…/rpswa.dswa.cache.json, и ключ кэша — метаданные элемента, где от содержимого есть только
+      ModifiedTime. Новое время записи кэш сбрасывает, но тогда отпечаток держится на том, что
+      Tailwind успел перезаписать файл и время сдвинулось. С Integrity ключ и отпечаток
+      (fingerprint, ETag) идут прямо от содержимого. Проверка — tools/check-styles-fingerprint.ps1.
   -->
   <ItemGroup>
     <Content Remove="wwwroot\styles.css" />
@@ -82,9 +87,12 @@
           IgnoreStandardErrorWarningFormat="true" />
     <Error Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/styles.css')"
            Text="Tailwind did not produce wwwroot/styles.css." />
+    <GetFileHash Files="wwwroot\styles.css" Algorithm="SHA256" HashEncoding="base64">
+      <Output TaskParameter="Hash" PropertyName="_TailwindStylesIntegrity" />
+    </GetFileHash>
     <ItemGroup>
       <Content Remove="wwwroot\styles.css" />
-      <Content Include="wwwroot\styles.css" />
+      <Content Include="wwwroot\styles.css" Integrity="$(_TailwindStylesIntegrity)" />
     </ItemGroup>
   </Target>
 
