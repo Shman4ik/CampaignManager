@@ -1,0 +1,173 @@
+@using CampaignManager.Core.Catalogs
+
+@* Статблок твари как в книге (гл. 14, стр. 277–280). Короткие числа (СИЛ…МОЩ, ПЗ, ПМ) — сеткой,
+   число колонок считает ширина (auto-fill); строки с оговорками (бонус к урону, скорость, атаки за
+   раунд, броня, уклонение, потеря рассудка) — каждая во всю ширину: длинные оговорки рвали
+   двухколоночную сетку. Своей карточки не рисует. *@
+<div class="grid gap-4 text-sm">
+    <section>
+        <h3 class="cm-section-title mb-1">Характеристики</h3>
+        <dl class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2">
+            @foreach (var (label, value, dice) in ShortStats)
+            {
+                <div class="rounded-md border border-primary-200 px-2 py-1 text-center">
+                    <dt class="text-[0.6875rem] font-bold tracking-wide text-primary-500">@label</dt>
+                    <dd class="text-base font-semibold text-primary-800">@value</dd>
+                    @if (dice is not null)
+                    {
+                        <dd class="cm-dice text-[0.6875rem] text-primary-500">@dice</dd>
+                    }
+                </div>
+            }
+        </dl>
+    </section>
+
+    <dl class="grid gap-0.5">
+        @foreach (var (label, value) in Lines)
+        {
+            <div><dt class="cm-meta-label inline">@label: </dt><dd class="inline">@value</dd></div>
+        }
+    </dl>
+
+    @if (Statblock.Attacks.Count > 0)
+    {
+        <section>
+            <h3 class="cm-section-title mb-1">Атаки</h3>
+            <ul class="grid gap-1">
+                @foreach (var attack in Statblock.Attacks)
+                {
+                    @* Строка как в книге: «Когти 60% (30/12), урон 2d6 + БкУ» (стр. 278). *@
+                    <li>
+                        <span class="font-semibold">@attack.Name</span>@(" ")
+                        @if (attack.SkillValue > 0)
+                        {
+                            <span class="text-primary-600">@($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон ")<span class="cm-dice">@CatalogText.Damage(attack)</span></span>
+                        }
+                        else
+                        {
+                            <span class="text-primary-600">— без броска, см. описание</span>
+                        }
+                        @if (attack.Kind != CreatureAttackKind.Melee)
+                        {
+                            <Badge Tone="Tone.Stone" class="ml-1">@CatalogText.Of(attack.Kind)</Badge>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(attack.Description))
+                        {
+                            <span class="ml-4 block text-primary-500">@attack.Description</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    @if (Statblock.SpecialAbilities.Count > 0)
+    {
+        <section>
+            <h3 class="cm-section-title mb-1">Особые умения</h3>
+            @foreach (var ability in Statblock.SpecialAbilities)
+            {
+                <p class="mb-1"><span class="font-semibold">@ability.Name:</span> @ability.Text</p>
+            }
+        </section>
+    }
+
+    @if (Statblock.Skills.Count > 0)
+    {
+        <section>
+            <h3 class="cm-section-title mb-1">Навыки</h3>
+            <p>@string.Join(", ", Statblock.Skills.Select(s => string.IsNullOrWhiteSpace(s.Note) ? $"{s.Name} {s.Value}%" : $"{s.Name} {s.Value}% ({s.Note})"))</p>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Statblock Statblock { get; set; } = null!;
+
+    private IEnumerable<(string Label, int Value, string? Dice)> ShortStats
+    {
+        get
+        {
+            var s = Statblock;
+            (string, StatValue)[] stats = [("СИЛ", s.Str), ("ВЫН", s.Con), ("ТЕЛ", s.Siz), ("ЛВК", s.Dex), ("ИНТ", s.Int), ("МОЩ", s.Pow)];
+            foreach (var (label, stat) in stats.Where(x => x.Item2.Value > 0))
+            {
+                yield return (label, stat.Value, stat.Dice);
+            }
+
+            yield return ("ПЗ", s.HitPoints, null);
+            if (s.MagicPoints > 0)
+            {
+                yield return ("ПМ", s.MagicPoints, null);
+            }
+        }
+    }
+
+    private IEnumerable<(string Label, string Value)> Lines
+    {
+        get
+        {
+            var s = Statblock;
+            yield return ("Ср. бонус к урону", string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus);
+            yield return ("Ср. комплекция", s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture));
+            if (Speed(s.Speed) is { } speed)
+            {
+                yield return ("Скорость", speed);
+            }
+
+            yield return ("Атак за раунд", s.AttacksPerRoundNote is { Length: > 0 } note ? $"{s.AttacksPerRound} ({note})" : $"{s.AttacksPerRound}");
+            yield return ("Броня", ArmorText(s));
+            if (s.Dodge > 0)
+            {
+                yield return ("Уклонение", $"{s.Dodge}%");
+            }
+
+            if (!string.IsNullOrWhiteSpace(s.SanityLoss))
+            {
+                yield return ("Потеря рассудка", s.SanityLoss);
+            }
+
+            if (s.Initiative > 0)
+            {
+                yield return ("Инициатива", $"{s.Initiative}");
+            }
+        }
+    }
+
+    // Книга пишет скорость по способам передвижения: «8 / плавание 10», «6 / полёт 20» (стр. 280).
+    // Пустое плавание — половина обычной скорости, пустой полёт — летать не умеет (стр. 141).
+    private static string? Speed(CreatureSpeed speed)
+    {
+        if (!string.IsNullOrWhiteSpace(speed.Note))
+        {
+            return speed.Note;
+        }
+
+        if (speed.Move <= 0 && speed.Swim is null && speed.Fly is null)
+        {
+            return null;
+        }
+
+        List<string> parts = [speed.Move.ToString(System.Globalization.CultureInfo.CurrentCulture)];
+        if (speed.Swim is { } swim) parts.Add($"плавание {swim}");
+        if (speed.Fly is { } fly) parts.Add($"полёт {fly}");
+        return string.Join(" / ", parts);
+    }
+
+    /// <summary>
+    /// «Броня: нет» у книги часто идёт с оговоркой, которая и есть настоящая защита («огнестрел наносит
+    /// минимальный урон», «регенерирует»), поэтому ноль без оговорки — «нет», с оговоркой — она сама.
+    /// </summary>
+    public static string ArmorText(Statblock s) =>
+        (s.Armor, s.ArmorNote) switch
+        {
+            ( > 0, { Length: > 0 } note) => $"{s.Armor} — {note}",
+            ( > 0, _) => $"{s.Armor}",
+            (_, { Length: > 0 } note) => note,
+            _ => "нет",
+        };
+
+    /// <summary>На плитке места для оговорки нет, но и «нет» там, где тварь регенерирует, соврало бы: «особая».</summary>
+    public static string TileArmor(Statblock s) =>
+        s.Armor > 0 ? $"{s.Armor}" : string.IsNullOrWhiteSpace(s.ArmorNote) ? "нет" : "особая";
+}

@@ -168,11 +168,11 @@ mobile/ (позже)
 | `/campaigns`, `/campaigns/{id}/journal` | Campaigns |
 | `/character/{id}`, `/character/create/{Kind}`, `/character/create/{CampaignId}`, `/character/wizard` | Characters |
 | `/npcs` | Characters (библиотека НПС и прегенов) |
-| `/occupations` | Catalogs |
+| `/occupations` | Catalogs — **есть** (T2.1): карточки, редактор слотов, «С правилами» |
 | `/scenarios`, `/scenarios/new`, `/scenarios/{id}`, `/scenarios/{id}/edit`, `/scenarios/{id}/handouts/{handoutId}` | Scenarios |
 | `/combat`, `/chase` | Encounters |
 | `/reference` | KeeperScreen — **есть** (T2.7): `/reference?block=…`, панель «Ширма» в шапке |
-| `/bestiary`, `/bestiary/creatures/edit/{id?}`, `/weapons`, `/items`, `/spells`, `/books`, `/skills`, `/skills/detail/{id}`, `/skills/edit`, `/skills/edit/{id}` | Catalogs |
+| `/bestiary`, `/bestiary/creatures/edit/{id?}`, `/weapons`, `/items`, `/spells`, `/books`, `/skills`, `/skills/detail/{id}`, `/skills/edit`, `/skills/edit/{id}` | Catalogs — **есть** (T2.1); `/skills/detail/{id}` и `/skills/edit[/{id}]` ведут на `/skills?open={id}` (детали — раскрытая строка, правка — окно) |
 | `/music` | Music |
 | `/profile` | Profile |
 | `/admin/applications`, `/admin/users` | Admin |
@@ -200,6 +200,11 @@ mobile/ (позже)
    посреди боя ничего не теряет.
 8. Погоня: расстановка, помехи и преграды, таран, побег.
 9. Справочники: поиск, фильтр по эпохе, правка Хранителем, запрет правки игроку.
+   *T2.1 (2026-10-02): пройдено под dev-входом на перенесённых данных ветки `dev` (чтение) и на тестовой базе
+   (правка): поиск без регистра и «ё», фильтры с возвратом на первую страницу, правка и дубль имени (текст в
+   окне), правка твари на своей странице, импорт, «С правилами» у профессий; игрок не видит кнопок правки,
+   прямой POST/DELETE — 403. Фильтра по эпохе на перенесённых данных нет: современная эпоха не переносится,
+   все записи — классика (фильтр и метки появляются, только если эпохи различаются).*
 10. Фонотека: загрузка пачкой, плеер, музыка локации; на iPad играет и перематывается.
 11. Профиль: имя, псевдоним в кампании; заявка на Хранителя и её одобрение.
    *T2.2 (2026-10-02): псевдоним в кампании — при вступлении и сменой на странице кампании (сам игрок

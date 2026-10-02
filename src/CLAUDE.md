@@ -179,6 +179,13 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Access` | `CurrentUser`, `AccessPolicy`, политики `[Authorize]` | [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) |
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
 | `Campaigns` | кампании, участники и псевдонимы, журнал встреч, главная (`/api/v1/home`) | [Server/Campaigns/CLAUDE.md](CampaignManager.Server/Campaigns/CLAUDE.md), [UI/Campaigns/CLAUDE.md](CampaignManager.UI/Campaigns/CLAUDE.md) |
+| `Catalogs` | семь справочников одним сервисом: список с ETag, правка с `If-Match`, импорт и экспорт JSON, синхронизация с правилами, журнал правок | [Server/Catalogs/CLAUDE.md](CampaignManager.Server/Catalogs/CLAUDE.md), [UI/Catalogs/CLAUDE.md](CampaignManager.UI/Catalogs/CLAUDE.md) |
+
+**Отказ с кодом** — `Platform/ApiProblemException` (400 `invalid`, 409 `duplicate`/`in-use`/`stale`, 428
+`version-required`); `DbUpdateConcurrencyException` (устаревший `xmin`) обработчик тоже превращает в 409 `stale`.
+Код — расширение ProblemDetails `code` (`Contracts/Platform/ApiProblemCodes`); клиент, которому он нужен, читает
+ответ через `ApiResponses` с `withCode: true` и получает `ApiException` (наследник `HttpRequestException`).
+Перехватчики `SaveChanges` модулей — `ISaveChangesInterceptor` в DI, `AddCmData` их подключает.
 
 Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` (и beta-стенд на ней) смотрит
 в бакет **`campaign-manager-dev`**: туда перенос (T1.3) копирует объекты v1, на которые ссылаются строки

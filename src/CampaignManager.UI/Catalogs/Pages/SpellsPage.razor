@@ -1,0 +1,121 @@
+@page "/spells"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+
+@* Заклинания: Название · Тип · Стоимость · Время сотворения. Колонок пять — таблица с lg (портрет
+   iPad её вмещает, замер v1). Стоимость и время — длинный свободный текст: в строке обрезаны и
+   разворачиваются на месте; в раскрытии — только то, чего в колонках нет (другие названия, описание).
+   При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. *@
+<CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание"
+             Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded"
+             New="() => new SpellDto()" RowDetail="Detail" Form="Form">
+    <Columns Context="view">
+        <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" CellClass="cm-clip font-medium text-primary-800" Context="s">@s.Name</DataColumn>
+        @if (!view.IsFixed("type"))
+        {
+            <DataColumn TItem="SpellDto" Title="Тип" SortBy="s => s.SpellType" HeaderClass="w-[14%]" CellClass="cm-clip" Context="s">@s.SpellType</DataColumn>
+        }
+        <DataColumn TItem="SpellDto" Title="Стоимость" HeaderClass="@(view.IsFixed("type") ? "w-[44%]" : "w-[34%]")" CellClass="cm-clip" Context="s">@s.Cost</DataColumn>
+        <DataColumn TItem="SpellDto" Title="Время сотворения" CellClass="cm-clip" Context="s">@s.CastingTime</DataColumn>
+    </Columns>
+    <CardTemplate Context="s">
+        <p class="font-medium text-primary-800">@s.Name</p>
+        <p class="cm-meta">@s.SpellType · @s.CastingTime</p>
+        <p class="mt-1 text-sm text-primary-600">@s.Cost</p>
+    </CardTemplate>
+</CatalogPage>
+
+@code {
+    private IReadOnlyList<CatalogFilter<SpellDto>> _filters = [];
+    private IReadOnlyList<string> _types = [];
+
+    private void Loaded(IReadOnlyList<SpellDto> spells)
+    {
+        _types = [.. spells.Select(s => s.SpellType).Where(t => t.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
+        _filters = [new("type", "Все типы", [.. _types.Select(t => new CatalogOption(t, t))], (spell, type) => spell.SpellType == type)];
+    }
+
+    private static RenderFragment<SpellDto> Detail => s => __builder =>
+    {
+        <div class="grid gap-2 text-sm">
+            @if (s.AltNames.Count > 0)
+            {
+                <p><span class="cm-meta-label">Другие названия: </span>@string.Join(", ", s.AltNames)</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(s.Description))
+            {
+                <p class="whitespace-pre-line text-primary-700">@s.Description</p>
+            }
+            else
+            {
+                <p class="cm-text-muted">Описания нет.</p>
+            }
+            @if (s.Source is not null)
+            {
+                <p class="cm-meta">Источник: @s.Source</p>
+            }
+        </div>
+    };
+
+    private RenderFragment<SpellDto> Form => s => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="s.Name" /></Field>
+            <Field Label="Тип"><input class="cm-input" list="spell-types" placeholder="Призыв, Контакт…" @bind="s.SpellType" /></Field>
+            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
+            <datalist id="spell-types">
+                @foreach (var type in _types)
+                {
+                    <option value="@type"></option>
+                }
+            </datalist>
+            <Field Label="Стоимость" class="sm:col-span-2" Note="@CostHint(s.Cost)">
+                <input class="cm-input" placeholder="8 ПМ, 1d6 рассудка" @bind="s.Cost" @bind:event="oninput" />
+            </Field>
+            <Field Label="Время сотворения" class="sm:col-span-2" Note="@TimeHint(s.CastingTime)">
+                <input class="cm-input" placeholder="1 раунд" @bind="s.CastingTime" @bind:event="oninput" />
+            </Field>
+            <Field Label="Другие названия" Group="true" class="sm:col-span-2"
+                   Note="По ним книга Мифов находит заклинание в справочнике — пишите так, как названо в книгах.">
+                <StringListEditor Values="s.AltNames" ValuesChanged="v => s.AltNames = [.. v]" ItemLabel="Название" Placeholder="Как ещё называют" />
+            </Field>
+            <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="6" @bind="s.Description"></textarea></Field>
+        </div>
+    };
+
+    // Подсказка для боя — не правда, а то, что поймёт помощник: неразобранное Хранитель подтвердит сам.
+    private static string? CostHint(string? cost)
+    {
+        var estimate = SpellStatsReader.ParseCost(cost);
+        if (string.IsNullOrWhiteSpace(cost))
+        {
+            return null;
+        }
+
+        if (estimate.IsEmpty)
+        {
+            return "Бой не поймёт стоимость — Хранитель впишет её при сотворении.";
+        }
+
+        List<string> parts = [];
+        if (estimate.MagicPoints is { } mp) parts.Add($"ПМ {mp}");
+        if (estimate.Sanity is { } san) parts.Add($"рассудок {san}");
+        if (estimate.Power is { } pow) parts.Add($"МОЩ {pow}");
+        if (estimate.HitPoints is { } hp) parts.Add($"ПЗ {hp}");
+        return "Подсказка для боя: " + string.Join(", ", parts);
+    }
+
+    private static string? TimeHint(string? time)
+    {
+        var estimate = SpellStatsReader.ParseCastingTime(time);
+        return estimate switch
+        {
+            _ when string.IsNullOrWhiteSpace(time) => null,
+            { IsInstant: true } => "Подсказка для боя: мгновенно.",
+            { Rounds: { } rounds } => $"Подсказка для боя: {rounds} раунд(ов){(estimate.MentionsLongerUnits ? ", в тексте есть и минуты/часы" : "")}.",
+            { RoundsFormula: { } formula } => $"Подсказка для боя: {formula} раундов.",
+            { MentionsLongerUnits: true } => "В бою не творится: минуты, часы или дни.",
+            _ => "Бой не поймёт время — Хранитель решит сам.",
+        };
+    }
+}

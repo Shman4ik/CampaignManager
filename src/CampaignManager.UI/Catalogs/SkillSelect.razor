@@ -1,0 +1,28 @@
+@* Выбор навыка справочника: селект по имени. Пустое значение — «не выбран». *@
+<select class="cm-input min-w-48 flex-1" aria-label="@Label" value="@(Value?.ToString() ?? "")" @onchange="ChangeAsync">
+    <option value="">@(Placeholder ?? "— навык —")</option>
+    @foreach (var skill in _sorted)
+    {
+        <option value="@skill.Id">@skill.Name</option>
+    }
+</select>
+
+@code {
+    private List<SkillDto> _sorted = [];
+
+    [Parameter] public IReadOnlyList<SkillDto> Skills { get; set; } = [];
+
+    [Parameter] public Guid? Value { get; set; }
+
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    protected override void OnParametersSet() =>
+        _sorted = [.. Skills.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)];
+
+    private Task ChangeAsync(ChangeEventArgs e) =>
+        ValueChanged.InvokeAsync(Guid.TryParse(e.Value?.ToString(), out var id) ? id : null);
+}

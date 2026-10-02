@@ -1,5 +1,6 @@
 using CampaignManager.Server.Access;
 using CampaignManager.Server.Campaigns;
+using CampaignManager.Server.Catalogs;
 using CampaignManager.Server.Files;
 using CampaignManager.Server.Identity;
 using CampaignManager.Server.Platform;
@@ -11,6 +12,7 @@ builder.AddIdentityModule();
 builder.AddAccessModule();
 builder.AddFilesModule();
 builder.AddCampaignsModule();
+builder.AddCatalogsModule();
 
 var app = builder.Build();
 
@@ -20,6 +22,7 @@ app.MapPlatformApi();
 app.MapIdentityApi();
 app.MapFilesApi();
 app.MapCampaignsApi();
+app.MapCatalogsApi();
 app.MapClientApp();
 
 app.Run();

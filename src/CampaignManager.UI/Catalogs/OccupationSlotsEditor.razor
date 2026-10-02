@@ -1,0 +1,156 @@
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Слоты навыков профессии (cm.occupation_slots) — вместо четырёх полей и мини-языка «N: a | b»
+   v1. Слот: навык; названная специализация («Язык, иностранный» + «латынь»); любая специализация;
+   выбор N из вариантов; социальный; любой. Средства — не слот: их даёт диапазон профессии. Каждая
+   правка отдаёт новый список. Своей карточки не рисует. *@
+<div class="grid gap-2">
+    @for (var i = 0; i < Slots.Count; i++)
+    {
+        var index = i;
+        var slot = Slots[index];
+        <div class="flex flex-wrap items-start gap-2 border-t border-primary-100 pt-2 first:border-t-0 first:pt-0" @key="index">
+            <span class="mt-2.5 w-5 shrink-0 text-right text-sm text-primary-500">@(index + 1)</span>
+            <select class="cm-input w-full sm:w-56 shrink-0" aria-label="@($"Вид слота {index + 1}")" value="@slot.Kind"
+                    @onchange="e => SetKindAsync(index, e.Value?.ToString())">
+                @foreach (var kind in Enum.GetValues<OccupationSlotKind>())
+                {
+                    <option value="@kind">@CatalogText.Of(kind)</option>
+                }
+            </select>
+            <div class="flex min-w-48 flex-1 flex-wrap gap-2">
+                @switch (slot.Kind)
+                {
+                    case OccupationSlotKind.Skill:
+                        <SkillSelect Skills="Skills" Value="slot.SkillId" ValueChanged="id => SetSkillAsync(index, id)" Label="Навык" />
+                        break;
+                    case OccupationSlotKind.AnySpecialization:
+                        <SkillSelect Skills="Parents" Value="slot.SkillId" ValueChanged="id => SetSkillAsync(index, id)" Label="Навык со специализациями" />
+                        break;
+                    case OccupationSlotKind.Specialization:
+                        <SkillSelect Skills="Parents" Value="slot.SkillId" ValueChanged="id => SetSkillAsync(index, id)" Label="Родитель" />
+                        <input class="cm-input min-w-32 flex-1" placeholder="латынь" aria-label="Специализация" value="@slot.Specialization"
+                               @onchange="e => SetSpecializationAsync(index, e.Value?.ToString())" />
+                        break;
+                    case OccupationSlotKind.Choice:
+                        <div class="flex w-full items-center gap-2">
+                            <span class="text-sm text-primary-600">Выбрать</span>
+                            <input class="cm-input w-20" type="number" min="1" aria-label="Сколько выбрать" value="@slot.ChooseCount"
+                                   @onchange="e => SetCountAsync(index, e.Value?.ToString())" />
+                            <span class="text-sm text-primary-600">из</span>
+                        </div>
+                        <div class="flex w-full flex-wrap gap-1.5">
+                            @foreach (var option in slot.Options)
+                            {
+                                var id = option;
+                                <span class="cm-badge cm-badge-neutral inline-flex items-center gap-1">
+                                    @NameOf(id)
+                                    <Button Variant="ButtonVariant.Ghost" Small="true" Icon="fa-xmark" class="-my-2 -mr-2" AriaLabel="@($"Убрать вариант: {NameOf(id)}")"
+                                            OnClick="() => RemoveOptionAsync(index, id)" />
+                                </span>
+                            }
+                        </div>
+                        <SkillSelect @key="slot.Options.Count" Skills="Skills" Value="null" ValueChanged="id => AddOptionAsync(index, id)" Label="Добавить вариант" Placeholder="+ вариант" />
+                        break;
+                    default:
+                        <span class="mt-2.5 text-sm text-primary-500">@(slot.Kind == OccupationSlotKind.Social ? "Запугивание, Красноречие, Обаяние или Убеждение (стр. 38)" : "Любой навык, кроме Мифов Ктулху")</span>
+                        break;
+                }
+            </div>
+            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить слот {index + 1}")" OnClick="() => RemoveAsync(index)" />
+        </div>
+    }
+    <div class="flex flex-wrap items-center gap-3">
+        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="AddAsync">Добавить слот</Button>
+        <span class="@Css.Join("text-sm", Count == OccupationRules.RequiredSkillCount ? "text-success-700" : "text-warning-700")">
+            Профессиональных навыков: @Count из @OccupationRules.RequiredSkillCount (плюс Средства, стр. 37)
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<OccupationSlotDto> Slots { get; set; } = [];
+
+    [Parameter] public EventCallback<List<OccupationSlotDto>> SlotsChanged { get; set; }
+
+    [Parameter] public IReadOnlyList<SkillDto> Skills { get; set; } = [];
+
+    /// <summary>
+    /// Сколько профессиональных навыков дают слоты — правилом Core (Средства и Мифы не в счёт), тем же,
+    /// что считает сервер для карточки.
+    /// </summary>
+    private int Count => OccupationRules.ProfessionalSkillCount(
+        new OccupationDefinition(Guid.Empty, "", SkillPointsFormula.Edu4)
+        {
+            Slots = [.. Slots.Select(s => new OccupationSlotDefinition(s.Kind)
+            {
+                SkillId = s.SkillId,
+                Specialization = s.Specialization,
+                ChooseCount = s.ChooseCount,
+                Options = s.Options,
+            })],
+        },
+        new SkillCatalog(Skills.Select(s => new SkillDefinition(s.Id, s.Name) { Code = s.Code, ParentId = s.ParentId })));
+
+    private IReadOnlyList<SkillDto> Parents => [.. Skills.Where(s => Skills.Any(c => c.ParentId == s.Id))];
+
+    private string NameOf(Guid id) => Skills.FirstOrDefault(s => s.Id == id)?.Name ?? "?";
+
+    private Task ChangeAsync(int index, Func<OccupationSlotDto, OccupationSlotDto> change)
+    {
+        var list = Slots.Select(Clone).ToList();
+        list[index] = change(list[index]);
+        return SlotsChanged.InvokeAsync(list);
+    }
+
+    private static OccupationSlotDto Clone(OccupationSlotDto slot) => new()
+    {
+        Kind = slot.Kind,
+        SkillId = slot.SkillId,
+        SkillName = slot.SkillName,
+        Specialization = slot.Specialization,
+        ChooseCount = slot.ChooseCount,
+        Options = [.. slot.Options],
+        OptionNames = [.. slot.OptionNames],
+    };
+
+    private Task SetKindAsync(int index, string? value) =>
+        Enum.TryParse<OccupationSlotKind>(value, out var kind)
+            ? ChangeAsync(index, _ => new OccupationSlotDto { Kind = kind })
+            : Task.CompletedTask;
+
+    private Task SetSkillAsync(int index, Guid? id) =>
+        ChangeAsync(index, s => { s.SkillId = id; s.SkillName = id is { } known ? NameOf(known) : null; return s; });
+
+    private Task SetSpecializationAsync(int index, string? value) =>
+        ChangeAsync(index, s => { s.Specialization = value?.Trim(); return s; });
+
+    private Task SetCountAsync(int index, string? value) =>
+        ChangeAsync(index, s => { s.ChooseCount = int.TryParse(value, out var n) && n > 0 ? n : 1; return s; });
+
+    private Task AddOptionAsync(int index, Guid? id) => id is not { } option
+        ? Task.CompletedTask
+        : ChangeAsync(index, s =>
+        {
+            if (!s.Options.Contains(option))
+            {
+                s.Options.Add(option);
+                s.OptionNames = [.. s.Options.Select(NameOf)];
+            }
+
+            return s;
+        });
+
+    private Task RemoveOptionAsync(int index, Guid option) =>
+        ChangeAsync(index, s => { s.Options.Remove(option); s.OptionNames = [.. s.Options.Select(NameOf)]; return s; });
+
+    private Task RemoveAsync(int index)
+    {
+        var list = Slots.ToList();
+        list.RemoveAt(index);
+        return SlotsChanged.InvokeAsync(list);
+    }
+
+    private Task AddAsync() => SlotsChanged.InvokeAsync([.. Slots, new OccupationSlotDto { Kind = OccupationSlotKind.Free }]);
+}

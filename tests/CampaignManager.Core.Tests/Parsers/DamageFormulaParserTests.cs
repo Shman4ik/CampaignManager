@@ -159,18 +159,23 @@ public sealed class DamageFormulaParserTests
     }
 
     /// <summary>
-    /// F-P13: «Шок» без костей разбирается как формула с одним эффектом, хотя комментарии v1 обещали
-    /// текст. Противоречие внутри кода, а не с книгой; поведение сохранено.
+    /// F-P13 исправлена (T2.1): в v1 «Шок» без костей разбирался как формула с одним эффектом, хотя
+    /// комментарии обещали текст. Теперь эффект без костей — неразобранная строка; при костях эффект
+    /// по-прежнему разбирается.
     /// </summary>
     [Fact]
     [Trait("finding", "F-P13")]
-    public void Parse_EffectOnly_IsParsedDespiteComment()
+    public void Parse_EffectOnly_StaysText()
     {
         var info = DamageFormulaParser.Parse("Шок");
 
-        Assert.True(info.IsParsed);
-        Assert.Empty(info.Primary!.Dice);
-        Assert.Equal(["шок"], info.Primary.Effects);
+        Assert.False(info.IsParsed);
+        Assert.Null(info.Primary);
+        Assert.Equal("Шок", info.RawText);
+
+        var withDice = DamageFormulaParser.Parse("2d6+горение");
+        Assert.True(withDice.IsParsed);
+        Assert.Equal(["горение"], withDice.Primary!.Effects);
     }
 
     /// <summary>

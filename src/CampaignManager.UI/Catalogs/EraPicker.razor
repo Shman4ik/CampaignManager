@@ -1,0 +1,33 @@
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core
+
+@* Эпохи записи справочника флажками. Отдаёт новый список на каждую правку (как StringListEditor).
+   Одна эпоха в приложении — выбирать нечего, поле не рисуется. *@
+@if (Enum.GetValues<Era>().Length > 1)
+{
+    <Field Label="Эпоха" Group="true" Note="@Note">
+        <div class="flex flex-wrap gap-x-5">
+            @foreach (var era in Enum.GetValues<Era>())
+            {
+                var current = era;
+                <label class="flex min-h-9 items-center gap-2">
+                    <input type="checkbox" class="cm-checkbox" checked="@Values.Contains(current)"
+                           @onchange="e => ToggleAsync(current, e.Value is true)" />
+                    <span>@CatalogText.Of(current)</span>
+                </label>
+            }
+        </div>
+    </Field>
+}
+
+@code {
+    [Parameter] public List<Era> Values { get; set; } = [];
+
+    [Parameter] public EventCallback<List<Era>> ValuesChanged { get; set; }
+
+    /// <summary>Правило под полем: у оружия — что редкость отдельно от эпохи.</summary>
+    [Parameter] public string? Note { get; set; }
+
+    private Task ToggleAsync(Era era, bool on) =>
+        ValuesChanged.InvokeAsync(on ? [.. Values.Append(era).Distinct().Order()] : [.. Values.Where(v => v != era)]);
+}

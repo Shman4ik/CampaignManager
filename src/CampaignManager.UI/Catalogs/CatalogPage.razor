@@ -1,0 +1,638 @@
+@typeparam TItem where TItem : CatalogItemDto
+@using System.Text.Json
+@using System.Text.Json.Serialization.Metadata
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.UI.Platform
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@inject ICatalogApi<TItem> Api
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Страница справочника — одна на все семь (в v1 четыре плотных каталога совпадали на 83–88%).
+   Список приходит целиком (справочники маленькие), поиск, фильтры, сортировка и страницы — здесь,
+   у всех справочников одинаково. Своё у справочника — колонки (Columns) или своя раскладка (Body:
+   карточки профессий, галерея бестиария), раскрытие, форма. Кнопки правки — только при CanEdit из
+   API; защищает сервер (403), здесь они просто не рисуются. *@
+<PageHeader Title="@Title">
+    <Actions>
+        @if (_canEdit)
+        {
+            <Button Small="true" Icon="fa-plus" OnClick="AddAsync">@AddLabel</Button>
+        }
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <FilterPanel OnReset="ResetFilters">
+        <ChildContent>
+            <input class="cm-input min-w-48 flex-1" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
+                   value="@_search" @oninput="OnSearch" />
+            @foreach (var filter in Filters)
+            {
+                var current = filter;
+                <select class="cm-input w-full sm:w-56 shrink-0" aria-label="@current.AllLabel"
+                        value="@(_filters.GetValueOrDefault(current.Key) ?? "")" @onchange="e => SetFilter(current.Key, e.Value?.ToString())">
+                    <option value="">@current.AllLabel</option>
+                    @foreach (var option in current.Options)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+            }
+            @if (ErasVary || _era is not null)
+            {
+                <select class="cm-input w-full sm:w-44 shrink-0" aria-label="Эпоха" value="@(_era?.ToString() ?? "")" @onchange="SetEra">
+                    <option value="">Любая эпоха</option>
+                    @foreach (var era in Enum.GetValues<Era>())
+                    {
+                        <option value="@era">@CatalogText.Of(era)</option>
+                    }
+                </select>
+            }
+            @foreach (var toggle in Toggles)
+            {
+                var current = toggle;
+                <label class="flex min-h-9 shrink-0 items-center gap-2 text-sm text-primary-700">
+                    <input type="checkbox" class="cm-checkbox" checked="@_toggles.Contains(current.Key)" @onchange="e => SetToggle(current.Key, e.Value is true)" />
+                    <span>@current.Label</span>
+                </label>
+            }
+        </ChildContent>
+        <Actions>
+            @if (_canEdit)
+            {
+                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</Button>
+                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-export" Href="@Api.Route.Export" download="">Экспорт</Button>
+                @if (Sync)
+                {
+                    <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate" Busy="_syncing" OnClick="SyncAsync">С правилами</Button>
+                }
+            }
+        </Actions>
+    </FilterPanel>
+
+    <AsyncContent @ref="_content" TData="CatalogList<TItem>" Load="LoadAsync" IsEmpty="_ => false" LoadingMessage="Загрузка справочника…">
+        @{
+            var view = View();
+        }
+        @if (_items.Count == 0)
+        {
+            <EmptyState Title="@EmptyTitle" Message="@(_canEdit ? "Добавьте первую запись или импортируйте файл." : "Хранитель ещё ничего сюда не добавил.")" Icon="@Icon">
+                <Actions>
+                    @if (_canEdit)
+                    {
+                        <Button Icon="fa-plus" OnClick="AddAsync">@AddLabel</Button>
+                    }
+                </Actions>
+            </EmptyState>
+        }
+        else if (view.Filtered.Count == 0)
+        {
+            <EmptyState Title="Ничего не найдено по этим условиям." Message="Измените поиск или сбросьте фильтры." Icon="fa-magnifying-glass">
+                <Actions>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">Очистить фильтры</Button>
+                </Actions>
+            </EmptyState>
+        }
+        else if (Body is not null)
+        {
+            @Body(view)
+            @if (TotalPages(view.Filtered.Count) > 1)
+            {
+                <div class="cm-card mt-4">
+                    <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
+                </div>
+            }
+        }
+        else
+        {
+            <div class="cm-card">
+                @* Ключ — фильтры, которые прячут колонки и метки: ячейки DataColumn таблица рисует раньше, чем
+                   колонки получат новый вид, и без пересоздания метка эпохи отставала бы на один рендер. *@
+                <DataTable @key="ColumnsKey" TItem="TItem" Items="view.Filtered" RowKey="i => i.Id" Page="_page" PageSize="PageSize"
+                           TableFrom="TableFrom" Scroll="Scroll" RowDetail="RowDetail" CanExpand="CanExpand" OpenKey="Open"
+                           CardTemplate="CardTemplate is null ? null : Card" AriaLabel="@Title">
+                    <Columns>
+                        @Columns?.Invoke(view)
+                        @if (_canEdit)
+                        {
+                            <DataColumn TItem="TItem" Title="" CellClass="w-px whitespace-nowrap text-right" Context="item">
+                                @RowActions(item)
+                            </DataColumn>
+                        }
+                    </Columns>
+                </DataTable>
+                <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
+            </div>
+        }
+    </AsyncContent>
+</div>
+
+@if (Form is not null)
+{
+    <Modal Open="_editing is not null" Title="@FormTitle" Size="FormSize" OnClose="CloseForm">
+        <ChildContent>
+            @if (_formError is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true">
+                    <ChildContent>@_formError</ChildContent>
+                    <Actions>
+                        @if (_stale)
+                        {
+                            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
+                        }
+                    </Actions>
+                </Alert>
+            }
+            @if (_editing is not null)
+            {
+                @Form(_editing)
+            }
+        </ChildContent>
+        <Footer>
+            <Button Variant="ButtonVariant.Secondary" OnClick="CloseForm">Отмена</Button>
+            <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
+        </Footer>
+    </Modal>
+}
+
+<CatalogImportModal TItem="TItem" Open="_importOpen" Title="@($"Импорт: {Title.ToLowerInvariant()}")"
+                    OnClose="() => _importOpen = false" OnImported="ReloadAsync" />
+
+<Modal Open="_syncReport is not null" Title="Синхронизация с правилами" Size="ModalSize.Large" OnClose="() => _syncReport = null">
+    <ChildContent>
+        @if (_syncReport is not null)
+        {
+            <CatalogReportView Report="_syncReport" />
+        }
+    </ChildContent>
+    <Footer>
+        <Button OnClick="() => _syncReport = null">Готово</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly JsonTypeInfo<TItem> ItemType =
+        (JsonTypeInfo<TItem>)CampaignManager.Contracts.ContractsJsonContext.Default.GetTypeInfo(typeof(TItem))!;
+
+    private AsyncContent<CatalogList<TItem>>? _content;
+    private List<TItem> _items = [];
+    private bool _canEdit;
+    private string _search = "";
+    private readonly Dictionary<string, string> _filters = [];
+    private readonly HashSet<string> _toggles = [];
+    private Era? _era;
+    private int _page = 1;
+    private TItem? _editing;
+    private bool _isNew;
+    private bool _saving;
+    private string? _formError;
+    private bool _stale;
+    private bool _importOpen;
+    private bool _syncing;
+    private CatalogImportReport? _syncReport;
+    private Guid? _pagedTo;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Иконка пустого справочника — та же, что у пункта меню.</summary>
+    [Parameter] public string Icon { get; set; } = "fa-book";
+
+    /// <summary>«Добавить оружие».</summary>
+    [Parameter, EditorRequired] public string AddLabel { get; set; } = "Добавить";
+
+    /// <summary>«оружие», «навык» — в подтверждении удаления.</summary>
+    [Parameter, EditorRequired] public string Noun { get; set; } = "";
+
+    [Parameter] public string EmptyTitle { get; set; } = "В справочнике пока пусто.";
+
+    [Parameter] public string SearchPlaceholder { get; set; } = "Поиск по названию";
+
+    /// <summary>Что ещё искать, кроме названия: другие названия, автор.</summary>
+    [Parameter] public Func<TItem, IEnumerable<string?>>? SearchAlso { get; set; }
+
+    [Parameter] public IReadOnlyList<CatalogFilter<TItem>> Filters { get; set; } = [];
+
+    [Parameter] public IReadOnlyList<CatalogToggle<TItem>> Toggles { get; set; } = [];
+
+    /// <summary>Эпохи записи — у справочника с эпохой появляется фильтр по ней.</summary>
+    [Parameter] public Func<TItem, IReadOnlyList<Era>>? ErasOf { get; set; }
+
+    [Parameter] public int PageSize { get; set; } = 25;
+
+    /// <summary>Колонки таблицы (DataColumn); получают вид — чтобы прятать то, что фиксирует фильтр.</summary>
+    [Parameter] public RenderFragment<CatalogView<TItem>>? Columns { get; set; }
+
+    /// <summary>Своя раскладка вместо таблицы: карточки профессий, галерея бестиария.</summary>
+    [Parameter] public RenderFragment<CatalogView<TItem>>? Body { get; set; }
+
+    /// <summary>Строка-карточка на узком экране (кнопки правки страница добавит сама).</summary>
+    [Parameter] public RenderFragment<TItem>? CardTemplate { get; set; }
+
+    [Parameter] public RenderFragment<TItem>? RowDetail { get; set; }
+
+    [Parameter] public Func<TItem, bool>? CanExpand { get; set; }
+
+    [Parameter] public TableBreakpoint TableFrom { get; set; } = TableBreakpoint.Md;
+
+    /// <summary>Плотный справочник: таблица — свой скроллпорт с липкими шапкой и названием.</summary>
+    [Parameter] public bool Scroll { get; set; } = true;
+
+    /// <summary>Форма записи в окне; получает копию — отмена ничего не портит.</summary>
+    [Parameter] public RenderFragment<TItem>? Form { get; set; }
+
+    [Parameter] public ModalSize FormSize { get; set; } = ModalSize.Large;
+
+    /// <summary>Новая запись для формы.</summary>
+    [Parameter, EditorRequired] public Func<TItem> New { get; set; } = null!;
+
+    /// <summary>Правка на своей странице (статблок не помещается в окно): адрес; null — новая.</summary>
+    [Parameter] public Func<TItem?, string>? EditHref { get; set; }
+
+    /// <summary>Форма открывается — странице пора загрузить то, что нужно только форме (навыки для оружия).</summary>
+    [Parameter] public EventCallback OnFormOpening { get; set; }
+
+    /// <summary>Есть сид книги — кнопка «С правилами».</summary>
+    [Parameter] public bool Sync { get; set; }
+
+    /// <summary>Раскрытая запись из адреса (<c>?open=</c>).</summary>
+    [Parameter] public Guid? Open { get; set; }
+
+    /// <summary>Список загружен или изменился — странице, которой нужны имена (родители навыков).</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TItem>> OnLoaded { get; set; }
+
+    // Заголовок — имя на момент открытия: пока его правят, окно не должно переименовываться.
+    private string FormTitle => _isNew ? AddLabel : $"Изменить: {_editingName}";
+
+    private string? _editingName;
+
+    // ?q= — поиск из ссылки (заклинание книги ведёт на справочник заклинаний).
+    protected override void OnInitialized()
+    {
+        var query = new Uri(Navigation.Uri).Query;
+        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair is ["q", var value])
+            {
+                _search = Uri.UnescapeDataString(value.Replace('+', ' ')).Trim();
+            }
+        }
+    }
+
+    private async Task<CatalogList<TItem>> LoadAsync(CancellationToken cancellationToken)
+    {
+        var list = await Api.ListAsync(cancellationToken);
+        _items = [.. list.Items];
+        _canEdit = list.CanEdit;
+        _pagedTo = null;
+        await OnLoaded.InvokeAsync(_items);
+        // Права пришли со списком: шапке и панели фильтров (они вне AsyncContent) нужен свой рендер.
+        StateHasChanged();
+        return list;
+    }
+
+    private Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
+
+    private CatalogView<TItem> View()
+    {
+        var filtered = _items.Where(Matches).OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        // Раскрытая по адресу запись — на своей странице, а не «где-то дальше».
+        if (Open is { } open && _pagedTo != open && PageSize > 0)
+        {
+            var index = filtered.FindIndex(i => i.Id == open);
+            if (index >= 0)
+            {
+                _page = index / PageSize + 1;
+            }
+
+            _pagedTo = open;
+        }
+
+        var page = PageSize > 0 ? filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList() : filtered;
+        return new CatalogView<TItem>
+        {
+            All = _items,
+            Filtered = filtered,
+            Page = page,
+            CanEdit = _canEdit,
+            Filters = _filters,
+            Era = _era,
+            ErasVary = ErasVary,
+            Actions = RowActions,
+            Edit = EditAsync,
+            Delete = DeleteAsync,
+            Open = Open,
+            ToggleOpen = ToggleOpenAsync,
+        };
+    }
+
+    private bool Matches(TItem item)
+    {
+        if (_search.Length > 0)
+        {
+            var needle = CatalogCodeTable.NormalizeName(_search);
+            var haystack = (SearchAlso?.Invoke(item) ?? []).Prepend(item.Name);
+            if (!haystack.Any(text => text is not null && CatalogCodeTable.NormalizeName(text).Contains(needle, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+        }
+
+        foreach (var filter in Filters)
+        {
+            if (_filters.TryGetValue(filter.Key, out var value) && !filter.Matches(item, value))
+            {
+                return false;
+            }
+        }
+
+        foreach (var toggle in Toggles)
+        {
+            if (_toggles.Contains(toggle.Key) && !toggle.Matches(item))
+            {
+                return false;
+            }
+        }
+
+        return _era is not { } era || ErasOf is null || ErasOf(item).Contains(era);
+    }
+
+    /// <summary>
+    /// Эпоха различает записи, только если они из разных эпох. Перенос оставил одну классику (современная
+    /// эпоха не переносится, решение владельца 2026-10-02) — тогда ни фильтра, ни меток: «1920-е» в каждой
+    /// строке ничего не различает. Появится запись другой эпохи — появятся и они.
+    /// </summary>
+    private bool ErasVary => ErasOf is not null
+        && _items.Select(i => string.Join(",", ErasOf(i).Order())).Distinct().Skip(1).Any();
+
+    private string ColumnsKey => $"{_era}|{string.Join(",", _filters.OrderBy(f => f.Key).Select(f => $"{f.Key}={f.Value}"))}";
+
+    private int TotalPages(int count) => PageSize > 0 ? (count + PageSize - 1) / PageSize : 1;
+
+    // Любой фильтр возвращает на первую страницу: иначе с пятой страницы поиск уводит в пустоту.
+    private void OnSearch(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString()?.Trim() ?? "";
+        _page = 1;
+    }
+
+    private void SetFilter(string key, string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            _filters.Remove(key);
+        }
+        else
+        {
+            _filters[key] = value;
+        }
+
+        _page = 1;
+    }
+
+    private void SetToggle(string key, bool on)
+    {
+        if (on)
+        {
+            _toggles.Add(key);
+        }
+        else
+        {
+            _toggles.Remove(key);
+        }
+
+        _page = 1;
+    }
+
+    private void SetEra(ChangeEventArgs e)
+    {
+        _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null;
+        _page = 1;
+    }
+
+    private void ResetFilters()
+    {
+        _search = "";
+        _filters.Clear();
+        _toggles.Clear();
+        _era = null;
+        _page = 1;
+    }
+
+    private void SetPage(int page) => _page = page;
+
+    private Task ToggleOpenAsync(TItem item)
+    {
+        var open = Open == item.Id ? null : (Guid?)item.Id;
+        _pagedTo = open;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("open", open), replace: true);
+        return Task.CompletedTask;
+    }
+
+    // ── Строка ──
+
+    private RenderFragment<TItem> RowActions => item => __builder =>
+    {
+        if (!_canEdit)
+        {
+            return;
+        }
+
+        <div class="inline-flex gap-1.5" @onclick:stopPropagation="true">
+            <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {item.Name}")"
+                    OnClick="() => EditAsync(item)" />
+            <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" AriaLabel="@($"Удалить: {item.Name}")"
+                    OnClick="() => DeleteAsync(item)" />
+        </div>
+    };
+
+    private RenderFragment<TItem> Card => item => __builder =>
+    {
+        <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+                @CardTemplate!(item)
+                @if (ErasOf is not null && ErasVary && _era is null)
+                {
+                    <EraBadges Values="ErasOf(item)" />
+                }
+            </div>
+            @RowActions(item)
+        </div>
+        @if (RowDetail is not null && (CanExpand?.Invoke(item) ?? true))
+        {
+            var open = _openCards.Contains(item.Id);
+            <Button Variant="ButtonVariant.Ghost" Small="true" class="mt-1 -ml-3" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
+                    aria-expanded="@(open ? "true" : "false")" OnClick="() => ToggleCard(item.Id)">@(open ? "Свернуть" : "Подробнее")</Button>
+            @if (open)
+            {
+                <div class="mt-2 rounded-md bg-primary-50 p-3">@RowDetail(item)</div>
+            }
+        }
+    };
+
+    private readonly HashSet<Guid> _openCards = [];
+
+    private void ToggleCard(Guid id)
+    {
+        if (!_openCards.Remove(id))
+        {
+            _openCards.Add(id);
+        }
+    }
+
+    // ── Правка ──
+
+    private async Task AddAsync()
+    {
+        await OnFormOpening.InvokeAsync();
+        if (EditHref is not null)
+        {
+            Navigation.NavigateTo(EditHref(null));
+            return;
+        }
+
+        _isNew = true;
+        _editing = New();
+        _formError = null;
+        _stale = false;
+    }
+
+    private async Task EditAsync(TItem item)
+    {
+        await OnFormOpening.InvokeAsync();
+        if (EditHref is not null)
+        {
+            Navigation.NavigateTo(EditHref(item));
+            return;
+        }
+
+        _isNew = false;
+        _editing = Copy(item);
+        _editingName = item.Name;
+        _formError = null;
+        _stale = false;
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+        _stale = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editing.Name))
+        {
+            _formError = "Нужно название.";
+            return;
+        }
+
+        _saving = true;
+        _formError = null;
+        _stale = false;
+        try
+        {
+            var saved = _isNew ? await Api.CreateAsync(_editing) : await Api.UpdateAsync(_editing);
+            var index = _items.FindIndex(i => i.Id == saved.Id);
+            if (index >= 0)
+            {
+                _items[index] = saved;
+            }
+            else
+            {
+                _items.Add(saved);
+            }
+
+            Toasts.Success($"«{saved.Name}» сохранено.");
+            _editing = null;
+            await OnLoaded.InvokeAsync(_items);
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+            _stale = ex.IsStale;
+        }
+        catch (HttpRequestException ex)
+        {
+            _formError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Запись изменили на другом устройстве: перечитать список и открыть свежую копию.</summary>
+    private async Task RereadAsync()
+    {
+        var id = _editing?.Id;
+        await ReloadAsync();
+        _editing = _items.FirstOrDefault(i => i.Id == id) is { } fresh ? Copy(fresh) : null;
+        _formError = _editing is null ? null : "Это свежая версия записи — ваши правки нужно внести заново.";
+        _stale = false;
+    }
+
+    private async Task DeleteAsync(TItem item)
+    {
+        if (!await Dialogs.ConfirmDeleteAsync($"Удалить {Noun}?", $"«{item.Name}» исчезнет из справочника."))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteAsync(item.Id);
+            _items.RemoveAll(i => i.Id == item.Id);
+            Toasts.Success($"«{item.Name}» удалено.");
+            await OnLoaded.InvokeAsync(_items);
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
+        }
+    }
+
+    private async Task SyncAsync()
+    {
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
+            "Синхронизировать с правилами?",
+            "Книжные записи обновятся по сиду книги (по коду), недостающие добавятся. Самодельные записи не изменятся.")
+        {
+            ConfirmText = "Синхронизировать",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = "Правки книжных записей, сделанные вручную, перезапишутся.",
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            _syncReport = await Api.SyncAsync(dryRun: false);
+            await ReloadAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Синхронизация не удалась");
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    /// <summary>Копия записи для формы — через тот же сгенерированный JSON, что и API: новое поле копируется само.</summary>
+    private static TItem Copy(TItem item) => JsonSerializer.Deserialize(JsonSerializer.Serialize(item, ItemType), ItemType)!;
+}

@@ -1,0 +1,67 @@
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject IFilesApi Files
+
+@* Картинка записи справочника: загрузка в cm.files (тот же файл второй раз — та же строка) или
+   внешний адрес. Отдаёт id файла и адрес для показа; ссылку пишет запись при сохранении. *@
+<div class="flex flex-wrap items-start gap-3">
+    @if (Url is not null)
+    {
+        <img src="@Url" alt="" class="h-24 w-24 rounded-md border border-primary-200 object-cover" />
+    }
+    <div class="flex flex-wrap items-center gap-2">
+        @* InputFile прячется под подписью-кнопкой: у самого поля нет тап-цели. *@
+        <label class="@Css.Join("cm-btn cm-btn-secondary cm-btn-sm", _busy ? "pointer-events-none opacity-70" : null)">
+            <i class="fa-solid fa-upload" aria-hidden="true"></i>
+            <span>@(_busy ? "Загружаю…" : Url is null ? "Загрузить" : "Заменить")</span>
+            <InputFile class="sr-only" accept="image/*" OnChange="UploadAsync" disabled="@_busy" />
+        </label>
+        @if (Url is not null)
+        {
+            <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-xmark" OnClick="ClearAsync">Убрать</Button>
+        }
+    </div>
+    @if (_error is not null)
+    {
+        <Alert Tone="Tone.Error" Small="true" class="mb-0 w-full">@_error</Alert>
+    }
+</div>
+
+@code {
+    private bool _busy;
+    private string? _error;
+
+    [Parameter] public Guid? FileId { get; set; }
+
+    [Parameter] public string? Url { get; set; }
+
+    /// <summary>Выбрана новая картинка (или убрана — тогда null).</summary>
+    [Parameter] public EventCallback<StoredFileDto?> OnChanged { get; set; }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+            var file = await Files.UploadAsync(stream, e.File.Name);
+            await OnChanged.InvokeAsync(file);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        catch (IOException)
+        {
+            _error = "Файл больше 50 МБ.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task ClearAsync() => OnChanged.InvokeAsync(null);
+}

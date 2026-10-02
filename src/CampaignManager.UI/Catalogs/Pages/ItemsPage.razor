@@ -1,0 +1,85 @@
+@page "/items"
+@attribute [Authorize]
+
+@* Предметы: Название · Тип · Описание. Колонок четыре — таблица помещается и в портрет iPad (с md).
+   Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки;
+   описание раскрытие не печатает заново, а снимает обрезку с той же ячейки. *@
+<CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет"
+             Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
+             New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore">
+    <Columns Context="view">
+        <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[32%]" Context="item">
+            <span class="font-medium text-primary-800">@item.Name</span>
+            @if (view.ShowEra)
+            {
+                <EraBadges Values="item.Eras" />
+            }
+            @if (item.ImageUrl is not null)
+            {
+                <i class="fa-regular fa-image ml-1.5 text-primary-400" role="img" aria-label="Есть картинка"></i>
+            }
+        </DataColumn>
+        @if (!view.IsFixed("type"))
+        {
+            <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" CellClass="cm-clip" Context="item">@item.Type</DataColumn>
+        }
+        <DataColumn TItem="ItemDto" Title="Описание" CellClass="cm-clip text-primary-600" Context="item">@item.Description</DataColumn>
+    </Columns>
+    <CardTemplate Context="item">
+        <p class="font-medium text-primary-800">@item.Name</p>
+        <p class="cm-meta">@item.Type</p>
+        @if (!string.IsNullOrEmpty(item.Description))
+        {
+            <p class="mt-1 line-clamp-2 text-sm text-primary-600">@item.Description</p>
+        }
+    </CardTemplate>
+    <Form Context="item">
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="item.Name" /></Field>
+            <Field Label="Тип" Hint="(необязательно)"><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
+            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="item.Source" /></Field>
+            <datalist id="item-types">
+                @foreach (var type in _types)
+                {
+                    <option value="@type"></option>
+                }
+            </datalist>
+            <div class="sm:col-span-2"><EraPicker @bind-Values="item.Eras" /></div>
+            <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="4" @bind="item.Description"></textarea></Field>
+            <Field Label="Картинка" Group="true" class="sm:col-span-2">
+                <ImagePicker FileId="item.ImageFileId" Url="item.ImageUrl"
+                             OnChanged="file => { item.ImageFileId = file?.Id; item.ImageUrl = file?.Url; }" />
+            </Field>
+        </div>
+    </Form>
+</CatalogPage>
+
+@code {
+    /// <summary>Столько описания входит в колонку на портрете iPad (замер v1).</summary>
+    private const int VisibleDescription = 60;
+
+    private IReadOnlyList<CatalogFilter<ItemDto>> _filters = [];
+    private IReadOnlyList<string> _types = [];
+
+    // Тип — свободный текст: варианты фильтра — те, что есть в справочнике.
+    private void Loaded(IReadOnlyList<ItemDto> items)
+    {
+        _types = [.. items.Select(i => i.Type).OfType<string>().Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
+        _filters = [new("type", "Все типы", [.. _types.Select(t => new CatalogOption(t, t))], (item, type) => item.Type == type)];
+    }
+
+    private static bool HasMore(ItemDto item) =>
+        item.ImageUrl is not null || item.Description?.Length > VisibleDescription;
+
+    private static RenderFragment<ItemDto> Detail => item => __builder =>
+    {
+        @if (item.ImageUrl is not null)
+        {
+            <img src="@item.ImageUrl" alt="@item.Name" class="max-h-72 max-w-full rounded-md" loading="lazy" />
+        }
+        else
+        {
+            <span class="cm-text-muted">Описание раскрыто в строке.</span>
+        }
+    };
+}

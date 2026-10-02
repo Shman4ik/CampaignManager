@@ -10,7 +10,7 @@
 
 @if (CardTemplate is not null)
 {
-    <div class="md:hidden">
+    <div class="@CardsClass">
         @if (_items.Count == 0)
         {
             <p class="px-4 py-5 text-center text-sm text-primary-500">@EmptyText</p>
@@ -22,7 +22,8 @@
     </div>
 }
 
-<div class="@Css.Join("cm-table-wrap", CardTemplate is not null ? "hidden md:block" : null)">
+<div class="@Css.Join("cm-table-wrap", CardTemplate is not null ? TableClass : null, Scroll ? "cm-table-scroll" : null,
+                Scroll && RowDetail is not null ? "cm-table-scroll-detail" : null)">
     <table class="cm-table" aria-label="@AriaLabel">
         <thead>
             <tr>
@@ -32,7 +33,7 @@
                 }
                 @foreach (var column in _columns)
                 {
-                    <th class="@AlignClass(column)" aria-sort="@AriaSort(column)">
+                    <th class="@Css.Join(AlignClass(column), column.HeaderClass)" aria-sort="@AriaSort(column)">
                         @if (IsSortable(column))
                         {
                             <button type="button" class="cm-th-sort" @onclick="() => SortByAsync(column)">
@@ -56,15 +57,19 @@
             @foreach (var item in _items)
             {
                 var key = KeyOf(item);
-                var expanded = _expanded.Contains(key);
-                <tr @key="key" class="@Css.Join(expanded ? "cm-row-expanded" : null, Clickable ? "cursor-pointer" : null)"
-                    @onclick="() => RowClickedAsync(item, key)">
+                var expandable = Expandable(item);
+                var expanded = expandable && _expanded.Contains(key);
+                <tr @key="key" class="@Css.Join(expanded ? "cm-row-expanded" : null, Clickable(expandable) ? "cursor-pointer" : null)"
+                    @onclick="() => RowClickedAsync(item, key, expandable)">
                     @if (RowDetail is not null)
                     {
-                        <td class="w-px py-1 pr-0" @onclick:stopPropagation="true">
-                            <Button Variant="ButtonVariant.Ghost" Small="true" Icon="@(expanded ? "fa-chevron-up" : "fa-chevron-down")"
-                                    AriaLabel="@(expanded ? "Свернуть" : "Подробнее")" aria-expanded="@(expanded ? "true" : "false")"
-                                    OnClick="() => Toggle(key)" />
+                        <td class="cm-td-toggle" @onclick:stopPropagation="true">
+                            @if (expandable)
+                            {
+                                <Button Variant="ButtonVariant.Ghost" Small="true" Icon="@(expanded ? "fa-chevron-up" : "fa-chevron-down")"
+                                        AriaLabel="@(expanded ? "Свернуть" : "Подробнее")" aria-expanded="@(expanded ? "true" : "false")"
+                                        OnClick="() => Toggle(key)" />
+                            }
                         </td>
                     }
                     @foreach (var column in _columns)
@@ -116,6 +121,30 @@
 
     [Parameter] public string EmptyText { get; set; } = "Ничего не найдено.";
 
+    /// <summary>Можно ли раскрыть строку: нечего показать — ни шеврона, ни реакции на касание.</summary>
+    [Parameter] public Func<TItem, bool>? CanExpand { get; set; }
+
+    /// <summary>
+    /// Страница списка (с 1) при <see cref="PageSize"/> &gt; 0: таблица сначала сортирует все строки,
+    /// потом берёт страницу — иначе сортировка шла бы внутри одной страницы.
+    /// </summary>
+    [Parameter] public int Page { get; set; } = 1;
+
+    /// <summary>Строка, раскрытая снаружи (<c>?open=</c> в адресе): раскрывается, когда ключ меняется.</summary>
+    [Parameter] public object? OpenKey { get; set; }
+
+    /// <summary>Строк на страницу; 0 — все.</summary>
+    [Parameter] public int PageSize { get; set; }
+
+    /// <summary>С какой ширины вместо карточек таблица: у плотного справочника — позже (замер по колонкам).</summary>
+    [Parameter] public TableBreakpoint TableFrom { get; set; } = TableBreakpoint.Md;
+
+    /// <summary>
+    /// Таблица — свой скроллпорт по высоте экрана: шапка и первая колонка липнут, страница целиком
+    /// не прокручивается (плотные справочники: 25 строк по восьми числовым колонкам без подписей не читаются).
+    /// </summary>
+    [Parameter] public bool Scroll { get; set; }
+
     [Parameter] public string? AriaLabel { get; set; }
 
     private bool ExternalSort => SortChanged.HasDelegate;
@@ -123,7 +152,24 @@
     // Снаружи сортируют по ключу запроса, в таблице — по значению колонки.
     private bool IsSortable(DataColumn<TItem> column) => ExternalSort ? column.SortKey is not null : column.SortBy is not null;
 
-    private bool Clickable => OnRowClick.HasDelegate || RowDetail is not null;
+    private bool Clickable(bool expandable) => OnRowClick.HasDelegate || (RowDetail is not null && expandable);
+
+    private bool Expandable(TItem item) => RowDetail is not null && (CanExpand?.Invoke(item) ?? true);
+
+    // Классы целыми литералами: Tailwind ищет их в исходниках текстом.
+    private string CardsClass => TableFrom switch
+    {
+        TableBreakpoint.Lg => "lg:hidden",
+        TableBreakpoint.Xl => "xl:hidden",
+        _ => "md:hidden",
+    };
+
+    private string TableClass => TableFrom switch
+    {
+        TableBreakpoint.Lg => "hidden lg:block",
+        TableBreakpoint.Xl => "hidden xl:block",
+        _ => "hidden md:block",
+    };
 
     private int ColumnCount => _columns.Count + (RowDetail is null ? 0 : 1);
 
@@ -145,7 +191,18 @@
         Refresh();
     }
 
-    protected override void OnParametersSet() => _items = Arrange();
+    private object? _openedKey;
+
+    protected override void OnParametersSet()
+    {
+        if (OpenKey is not null && !Equals(OpenKey, _openedKey))
+        {
+            _expanded.Add(OpenKey);
+        }
+
+        _openedKey = OpenKey;
+        _items = Arrange();
+    }
 
     private void Refresh()
     {
@@ -155,14 +212,17 @@
 
     private List<TItem> Arrange()
     {
-        if (ExternalSort || _sortColumn?.SortBy is not { } sortBy)
+        IEnumerable<TItem> items = Items;
+        if (!ExternalSort && _sortColumn?.SortBy is { } sortBy)
         {
-            return Items.ToList();
+            items = _descending
+                ? items.OrderByDescending(sortBy, Comparer<object?>.Default)
+                : items.OrderBy(sortBy, Comparer<object?>.Default);
         }
 
-        return _descending
-            ? Items.OrderByDescending(sortBy, Comparer<object?>.Default).ToList()
-            : Items.OrderBy(sortBy, Comparer<object?>.Default).ToList();
+        return PageSize > 0
+            ? items.Skip((Math.Max(1, Page) - 1) * PageSize).Take(PageSize).ToList()
+            : items.ToList();
     }
 
     private object KeyOf(TItem item) => RowKey?.Invoke(item) ?? item!;
@@ -209,9 +269,9 @@
         }
     }
 
-    private async Task RowClickedAsync(TItem item, object key)
+    private async Task RowClickedAsync(TItem item, object key, bool expandable)
     {
-        if (RowDetail is not null)
+        if (expandable)
         {
             Toggle(key);
         }
