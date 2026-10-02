@@ -86,6 +86,7 @@ public static class EncounterParticipants
             Move = derived.Move,
             Dodge = derived.Dodge,
             Armor = participant.Stats.Armor,
+            Extra = participant.Stats.Extra,
         };
         participant.HitPoints = sheet.Current.HitPoints;
         participant.MaxHitPoints = derived.MaxHitPoints;
