@@ -82,7 +82,7 @@ public sealed record ImportedSheet(CharacterSheet Sheet, IReadOnlyList<string> O
 /// Устройство у всех режимов одно, поэтому листы неотличимы:
 /// <list type="bullet">
 /// <item>навыки — <b>только ссылки на справочник</b> (своё — строкой с именем, специализация вне справочника — с
-/// родителем); строка заводится, только если значение отличается от базы — остальное лист показывает базой
+/// родителем); строка заводится, только если значение выше базы (<see cref="SkillCatalog.IsAboveBase"/>) — остальное лист показывает базой
 /// справочника, как пустую графу бланка;</item>
 /// <item>родной язык = ОБР и Уклонение = ½ ЛВК — формулы справочника (<see cref="SkillCatalog.BaseValueOf"/>), а не
 /// копия числа: в v1 их выставляли три сборщика из пяти;</item>
@@ -294,7 +294,7 @@ public static class SheetBuilder
     /// <summary>
     /// Обратное <see cref="FromImport"/> — лист в формат файла сценария (экспорт, T2.5d). Пишется только то, что
     /// <see cref="FromImport"/> читает, и так, чтобы импорт экспорта дал тот же экспорт: ПЗ, ПМ, БкУ, Комплекция,
-    /// Скорость и Уклонение — итоговые (с поправками книги), навыки — только строки <b>не на базе</b> (база — пустая
+    /// Скорость и Уклонение — итоговые (с поправками книги), навыки — только строки <b>выше базы</b> (база — пустая
     /// графа бланка, импорт её строкой не заведёт), Уклонение — полем, а не навыком. Отметки развития, состояние
     /// (раны, безумие), книги Мифов и знакомые сыщики в формат не входят: это игра, а не заготовка.
     /// </summary>
@@ -308,7 +308,7 @@ public static class SheetBuilder
             if (dodge is not null && row.SkillId == dodge.Id)
                 continue;
 
-            if (catalog.Find(row.SkillId) is { } known && row.Value == SkillCatalog.BaseValueOf(known, sheet.Characteristics))
+            if (catalog.Find(row.SkillId) is { } known && !SkillCatalog.IsAboveBase(known, row.Value, sheet.Characteristics))
                 continue;
 
             var name = row.DisplayName(catalog).Trim();
@@ -448,17 +448,22 @@ public static class SheetBuilder
         return draft;
     }
 
-    /// <summary>Запись навыка справочника: строка заводится или правится; значение, равное базе, строки не требует.</summary>
+    /// <summary>
+    /// Запись навыка справочника: строка заводится или правится; значение не выше базы строки не требует
+    /// (<see cref="SkillCatalog.IsAboveBase"/>) — «Язык, родной: 0» из файла сценария не перекрывает ОБР.
+    /// </summary>
     private static void SetSkill(CharacterSheet sheet, SkillCatalog catalog, SkillDefinition skill, int value)
     {
         var existing = sheet.Entry(skill.Id);
         if (existing is not null)
         {
             existing.Value = value;
+            if (existing.AddsNothing(catalog, sheet.Characteristics))
+                sheet.Skills.Remove(existing);
             return;
         }
 
-        if (value != SkillCatalog.BaseValueOf(skill, sheet.Characteristics))
+        if (SkillCatalog.IsAboveBase(skill, value, sheet.Characteristics))
             sheet.Skills.Add(new SheetSkill { SkillId = skill.Id, Value = value });
     }
 

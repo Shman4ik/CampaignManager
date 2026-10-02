@@ -184,6 +184,22 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Equal("Хелен Райт", reserved.Name);
         var npc = CmJson.ReadSheet(characters[V1Fixture.Npc].Sheet, characters[V1Fixture.Npc].SheetVersion);
         Assert.Equal(7, npc.Overrides.MaxHitPoints);
+
+        // «Язык, родной» 0 у прегена в v1 — «не заполнено»: строки нет, значение — ОБР по формуле справочника
+        var catalog = new SkillCatalog(await db.Skills.Select(k => new SkillDefinition(k.Id, k.Name)
+        {
+            Code = k.Code, ParentId = k.ParentId, BaseValue = k.BaseValue, BaseFormula = k.BaseFormula,
+        }).ToListAsync(Token));
+        foreach (var character in characters.Values)
+        {
+            var sheet = CmJson.ReadSheet(character.Sheet, character.SheetVersion);
+            Assert.DoesNotContain(sheet.Skills, row => row.AddsNothing(catalog, sheet.Characteristics));
+        }
+
+        var reservedSheet = CmJson.ReadSheet(reserved.Sheet, reserved.SheetVersion);
+        Assert.Null(reservedSheet.Entry(catalog, SkillCodes.LanguageOwn));
+        Assert.Equal(66, reservedSheet.Value(catalog, SkillCodes.LanguageOwn));
+        Assert.Contains(report.Sections[ReportSections.SheetSkillsBelowBase], l => l.StartsWith("«Язык, родной»", StringComparison.Ordinal));
         Assert.Equal(2, (await db.ScenarioNpcs.SingleAsync(Token)).Count);
 
         Assert.Equal(1, await db.AuditLog.CountAsync(e => e.ActorId == null, Token));

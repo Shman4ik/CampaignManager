@@ -47,7 +47,9 @@ public static class CharacterStep
         var byKind = new Dictionary<CharacterKind, int>();
         var mappedLines = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
         var droppedLines = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
+        var belowBaseLines = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
         var (skills, mapped, unmatched, overrides, checkedDropped, weapons, linked) = (0, 0, 0, 0, 0, 0, 0);
+        var (atBase, belowBase) = (0, 0);
         foreach (var row in s.V1.Characters)
         {
             var id = row.Guid("Id")!.Value;
@@ -130,6 +132,11 @@ public static class CharacterStep
                 Collect(droppedLines, $"навык «{line}» на базовом значении", sheet.Personal.Name);
             }
 
+            foreach (var name in notes.BelowBaseDropped)
+            {
+                Collect(belowBaseLines, $"«{name}»", sheet.Personal.Name);
+            }
+
             if (notes.DroppedBiography.Count > 0)
             {
                 // Решение владельца 2026-10-02: текстовых граф «Фобии» и «Магические предметы» в 2.0 нет
@@ -159,6 +166,8 @@ public static class CharacterStep
             unmatched += notes.UnmatchedSkills.Count;
             overrides += notes.Overrides.Count > 0 ? 1 : 0;
             checkedDropped += notes.CheckedDropped;
+            atBase += notes.AtBaseDropped;
+            belowBase += notes.BelowBaseDropped.Count;
             weapons += sheet.Weapons.Count;
             linked += notes.WeaponsLinked;
 
@@ -174,6 +183,12 @@ public static class CharacterStep
         foreach (var (line, names) in droppedLines)
         {
             s.Report.Add(ReportSections.DroppedModern, $"листы: {line} — {Sheets(names)}");
+        }
+
+        foreach (var (line, names) in belowBaseLines)
+        {
+            // В v1 0 у навыка значил «не заполнено»: строкой он перекрыл бы базу справочника
+            s.Report.Add(ReportSections.SheetSkillsBelowBase, $"{line} — {Sheets(names)}");
         }
 
         if (checkedDropped > 0)
@@ -192,7 +207,7 @@ public static class CharacterStep
         s.Report.Count("games.Characters", s.V1.Characters.Count, "characters", s.Characters.Count,
             string.Join(", ", byKind.OrderBy(p => p.Key).Select(p => $"{p.Key} — {p.Value}")) + $"; с overrides — {overrides}");
         s.Report.Count("листы: навыки", v1Skills, "sheet.skills", skills,
-            $"по старому написанию — {mapped}, без справочника — {unmatched}");
+            $"по старому написанию — {mapped}, без справочника — {unmatched}; на базе (строки нет) — {atBase}, из них ниже базы — {belowBase}");
         static void Collect(SortedDictionary<string, List<string>> lines, string line, string sheetName)
         {
             if (!lines.TryGetValue(line, out var names))

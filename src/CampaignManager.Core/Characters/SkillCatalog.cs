@@ -59,6 +59,15 @@ public sealed class SkillCatalog
     public string? CodeOf(Guid? id) => Find(id)?.Code;
 
     /// <summary>
+    /// Нужна ли навыку справочника строка листа: только если значение <b>выше</b> базы (<see cref="BaseValueOf"/>).
+    /// Навык на базе лист показывает и без строки, как пустую графу бланка; строка ниже базы перекрыла бы базу —
+    /// в v1 0 у навыка значил «не заполнено», и перенесённый буквально он делал родной язык 0 вместо ОБР.
+    /// Одна копия правила: конструктор листа (<see cref="SheetBuilder"/>), экспорт сценария и перенос v1.
+    /// </summary>
+    public static bool IsAboveBase(SkillDefinition skill, int value, Characteristics characteristics) =>
+        value > BaseValueOf(skill, characteristics);
+
+    /// <summary>
     /// Базовое значение (стр. 30–31, 57, 77): число справочника либо формула от характеристики —
     /// <c>DEX/2</c>, <c>EDU</c>, <c>POW*2</c>.
     /// </summary>
