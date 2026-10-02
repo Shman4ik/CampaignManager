@@ -3,7 +3,8 @@
 Модуль T2.5a: `ScenariosModule` (`AddScenariosModule`/`MapScenariosApi`), сервисы `ScenarioService` (библиотека,
 рабочее место, шапка и текст, удаление, порядок), `ScenarioPartsService` (локации, проверки, факты, раздатки, твари,
 предметы), `ScenarioCastService` (состав НПС, прегены), `ScenarioExchangeService` + `ScenarioExchangeEndpoints` (импорт и экспорт
-файлом, T2.5d). Маршруты, DTO и `IScenariosApi` — `Contracts/Scenarios`, клиент —
+файлом, T2.5d), `ScenarioPlayService` (режим игры T2.5b: прохождения для проверок, музыка локации, раздатка для показа и
+второго экрана). Маршруты, DTO и `IScenariosApi` — `Contracts/Scenarios`, клиент —
 `ApiClient/Scenarios`, страницы — [UI/Scenarios/CLAUDE.md](../../CampaignManager.UI/Scenarios/CLAUDE.md). Таблицы —
 `scenarios`, `scenario_locations`, `scenario_checks`, `scenario_key_facts`, `scenario_handouts`, `scenario_creatures`,
 `scenario_items`, `scenario_npcs` (+ чтение `location_tracks`, `scenario_runs`, `run_reservations`, `characters`) из T1.2;
@@ -31,6 +32,10 @@
 | `POST …/pregens`, `DELETE …/pregens/{characterId}` | копия прегена из библиотеки; убрать в архив | Edit (+ Read прегена) |
 | `POST /api/v1/scenarios/import?dryRun=&name=` | новый сценарий из файла (тело — файл как есть) → `ScenarioImportReport` | `CanCreateScenarioAsync` |
 | `GET /api/v1/scenarios/{id}/export` | файл сценария (`attachment`, имя — название) | `ForScenarioAsync` Read |
+| `GET …/runs` | прохождения сценария в кампаниях, которые ведёт вошедший (админу — все), незавершённые первыми | Read + `ForCampaign` Edit по строке |
+| `PUT …/locations/{locationId}/music` | музыка локации: настроения и прибитые треки целиком (`LocationMusicInput`) | Edit |
+| `GET …/handouts/{handoutId}/screen` | раздатка для показа игрокам (`HandoutScreenDto`, без пометки и заметки), `no-store` | `ForHandoutAsync` Read |
+| страница `/scenarios/{id}/handouts/{handoutId}` | второй экран — статическая страница сервера (`Components/Pages/HandoutScreen`), `[Authorize]` | `ForHandoutAsync` Read |
 
 Ответы: 404 — сценария нет **или он не виден** (игроку — всегда), и строка чужого сценария по своему адресу тоже 404;
 403 — виден, но нельзя (удалить чужой); 400 — форма; 409 `stale` — шапку или текст записали с другого устройства;
@@ -116,6 +121,25 @@
 - **Кругооборот**: экспорт → импорт копией → экспорт копии совпадает с первым, кроме названия (тест; на `dev` проверено на
   «Среди древних деревьев» и «Безымянном тумане» с прегеном). Все 5 перенесённых сценариев проходят пробный прогон без ошибок.
 
+## Режим игры (T2.5b)
+
+- **Прохождения** (`GET …/runs`) — только чтение `scenario_runs`; создание, анонс и бронь — T2.5c (`RunService`). Список
+  — только кампании, которые вошедший ведёт (`AccessPolicy.ForCampaign(...).CanEdit` по прочитанной строке): сыщиков
+  чужой кампании ему всё равно не отдадут (`/campaigns/{id}/investigators` — Хранителю кампании).
+- **Музыка локации** — отдельный адрес: правка локации (`LocationInput`) теги и треки не трогает. Теги — `MusicTags.Normalize`
+  (нижний регистр, «ё» → «е», без повторов, по алфавиту), не больше `MusicTags.MaxCount`, каждый не длиннее `MaxLength`.
+  Треки — только из фонотеки (400 иначе), `location_tracks` заменяются разницей. Трек, удалённый из фонотеки, уходит из
+  локаций каскадом FK (v1 чистил их руками).
+- **Раздатка для показа** — `HandoutScreenDto`: только id, текст игрокам и адрес картинки; `CanManage` — смотрит ведущий.
+  Название (пометка Хранителя) и `keeper_note` в тип не входят — показ и второй экран вывести их не могут (тесты
+  `ScenarioPlayApiTests` проверяют сырой JSON и HTML страницы). Раздатка чужого сценария по адресу этого — 404.
+- **Второй экран** — статическая Razor-страница сервера (как `/Error`): `[ExcludeFromInteractiveRouting]`, `StaticLayout`,
+  `[Authorize]` (аноним — на вход), данные — тот же `ScenarioPlayService`. «Нет раздатки» и «не ваша» — один и тот же
+  текст «Раздатка недоступна» с **200**: статус 404 у статической страницы .NET 10 отдаёт конвейеру `/not-found` (через
+  `UseStatusCodePagesWithReExecute`), и тело заменялось общей страницей; с выключенной фичей status pages тело выходило
+  пустым.
+- Картинки раздаток отдаёт `/api/v1/files/{id}` — читает любой вошедший (Files), поэтому игрок второго экрана её видит.
+
 ## Тесты
 
 `Server.Tests/Scenarios/ScenariosApiTests` на `CampaignsApp`: автор и флаги списка у другого Хранителя и админа; игрок —
@@ -128,3 +152,7 @@
 дерево, три вида проверок, лист НПС из `FromImport`; НПС из библиотеки по имени без «ё»; ошибка в середине откатывает всё
 (и лист первого НПС); битый файл — 400, игроку — 403/404; кругооборот на сценарии, собранном правкой по строке.
 `Core.Tests/Sheet/SheetBuilderTests.ToImport_IsFixedPointOfFromImport_AndSkipsSkillsAtBase`.
+`ScenarioPlayApiTests` (T2.5b): прохождения только своих кампаний и незавершённые первыми, игроку 404; музыка локации
+(нормализация, повтор трека, чужой трек — 400, правка локации музыку не трогает, игроку и чужому сценарию 404); показ
+раздатки Хранителю и игроку кампании, постороннему 404, ни в JSON, ни в HTML второго экрана нет пометки и заметки
+Хранителя; второй экран статический, «Закрыть» ведёт ведущего в режим игры, аноним уходит на вход.

@@ -65,7 +65,7 @@
 Правило одно — `Core/Music/MusicPool`: его же зовёт плеер в браузере над загруженной фонотекой. Сервис грузит
 фонотеку целиком (сотня строк) и фильтрует правилом Core — SQL-копии условия нет.
 
-Музыка локации — **T2.5b**: `scenario_locations.music_tags` + `location_tracks` → `MusicPool.Of(tags, trackIds)`;
+Музыка локации — **T2.5b, подключена** (запись — `PUT /api/v1/scenarios/{id}/locations/{locationId}/music`, Scenarios): `scenario_locations.music_tags` + `location_tracks` → `MusicPool.Of(tags, trackIds)`;
 в UI — `<MusicPoolButton Pool=… Label="имя локации" />`, на сервере (экспорт сценария T2.5d, мобильное
 приложение) — `MusicService.GetPoolAsync`. Кнопка настроения боя и погони (T2.6) — тот же компонент с
 `MusicPool.Of(["бой"])`.

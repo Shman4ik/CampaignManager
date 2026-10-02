@@ -43,8 +43,10 @@
   `InteractiveWebAssemblyRenderMode(prerender: false)`. Сервер отдаёт оболочку с заглушкой
   «Загрузка…» (`#app-loading`), её прячет CSS, как только отрисовалась `.cm-shell`. Тест
   `App_page_is_not_prerendered` следит, чтобы пререндер не вернулся.
-- **Статически сервер рендерит только `[ExcludeFromInteractiveRouting]`-страницы** — пока это
-  `/Error`: страница ошибки не должна зависеть от того, загрузится ли клиент. Маршрут такой
+- **Статически сервер рендерит только `[ExcludeFromInteractiveRouting]`-страницы** — `/Error` (страница ошибки не
+  должна зависеть от того, загрузится ли клиент) и второй экран раздатки `/scenarios/{id}/handouts/{handoutId}` (T2.5b:
+  телевизор у стола без WebAssembly, [Server/Scenarios/CLAUDE.md](CampaignManager.Server/Scenarios/CLAUDE.md)). Статус 404
+  такая страница не ставит: .NET 10 отдаёт его конвейеру `/not-found`, и тело заменяется. Маршрут такой
   страницы `Router` из `UI` берёт у эндпоинта, хотя сама она живёт в сборке `Server`.
 - **Ошибки и 404.** Страницы отвечают `/Error` и `/not-found`, API — ProblemDetails. Обработчики
   страниц стоят **в основном конвейере**, обработчики API — внутри них, в `UseWhen`. Наоборот не
@@ -185,7 +187,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Music` | фонотека — справочник на том же сервисе; закреплённые настроения, пул сцены; плеер в шапке и панели | [Server/Music/CLAUDE.md](CampaignManager.Server/Music/CLAUDE.md), [UI/Music/CLAUDE.md](CampaignManager.UI/Music/CLAUDE.md) |
 | `Profile` | личный кабинет: имя и псевдонимы, заявка на Хранителя, настройки (`/api/v1/profile`) | [Server/Profile/CLAUDE.md](CampaignManager.Server/Profile/CLAUDE.md), [UI/Profile/CLAUDE.md](CampaignManager.UI/Profile/CLAUDE.md) |
 | `Admin` | пользователи и роли, заявки на Хранителя (`/api/v1/admin`); страница сирот файлов | [Server/Admin/CLAUDE.md](CampaignManager.Server/Admin/CLAUDE.md), [UI/Admin/CLAUDE.md](CampaignManager.UI/Admin/CLAUDE.md) |
-| `Scenarios` | библиотека сценариев, рабочее место одним запросом, части по строке (локации, проверки, факты, раздатки, твари, предметы), состав НПС и прегены | [Server/Scenarios/CLAUDE.md](CampaignManager.Server/Scenarios/CLAUDE.md), [UI/Scenarios/CLAUDE.md](CampaignManager.UI/Scenarios/CLAUDE.md) |
+| `Scenarios` | библиотека сценариев, рабочее место одним запросом, части по строке (локации, проверки, факты, раздатки, твари, предметы), состав НПС и прегены; режим игры: прохождения для проверок, музыка локации, раздатка для показа и второй экран | [Server/Scenarios/CLAUDE.md](CampaignManager.Server/Scenarios/CLAUDE.md), [UI/Scenarios/CLAUDE.md](CampaignManager.UI/Scenarios/CLAUDE.md) |
 
 **Отказ по смыслу — один механизм на все модули: `Platform/ApiProblemException`** (400 `invalid`, 409 `conflict`/`duplicate`/
 `in-use`/`stale`, 428 `version-required`); `DbUpdateConcurrencyException` (устаревший `xmin`) обработчик тоже превращает в 409

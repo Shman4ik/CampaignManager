@@ -9,7 +9,7 @@
 
 | Папка | Что |
 |---|---|
-| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `encounter.css` (сцена) |
+| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
@@ -212,7 +212,8 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
   страницы блокирует `ModalWindow.razor.js`). Своих `fixed inset-0` не заводить. **Закрытый Modal
   ничего не рендерит.** Закрывает страница (`Open = false` в `OnClose`).
 - `Placement`: `Center` (по умолчанию), `Sheet` — лист снизу (меню «Ещё»), `Drawer` — панель справа во всю
-  высоту (ширма Хранителя: справочник поверх экрана, страница под ним остаётся).
+  высоту (ширма Хранителя: справочник поверх экрана, страница под ним остаётся), `Showcase` — весь экран на тёмном фоне
+  (показ раздатки игрокам).
 - `Dismissible="false"` — подложка и Esc не закрывают (крестик остаётся): диалоги посреди игры, где
   случайное касание не должно ничего пропускать (проверка ВЫН умирающих). Chrome закрывает окно на
   втором Esc сам — JS открывает его обратно.
