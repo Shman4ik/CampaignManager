@@ -1,0 +1,244 @@
+@page "/profile"
+@attribute [Authorize]
+@using CampaignManager.Contracts.Profile
+@using CampaignManager.Core.Identity
+@using CampaignManager.UI.Platform
+@inject IProfileApi Api
+@inject IUserSession Session
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Личный кабинет: имя, роль и заявка на Хранителя, сводка по играм. Его видит и игрок — проверять и на
+   телефоне. Данные только свои: сервер берёт пользователя из сессии. Знание — Profile/CLAUDE.md. *@
+<PageHeader Title="Личный кабинет">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-right-from-bracket" OnClick="Logout">Выйти</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю кабинет…" Context="loaded">
+        @{
+            var profile = _profile ?? loaded;
+        }
+        <section class="cm-section" aria-labelledby="profile-title">
+            <div class="cm-section-header"><h2 id="profile-title" class="cm-section-title">Профиль</h2></div>
+            <div class="cm-card">
+                <div class="cm-card-body cm-stack">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span class="cm-avatar cm-avatar-lg" aria-hidden="true">@Initial(profile.DisplayName)</span>
+                        <div class="min-w-0 flex-1 basis-40">
+                            <div class="truncate font-semibold text-primary-800" data-testid="profile-name">@profile.DisplayName</div>
+                            <div class="truncate text-sm text-primary-500">@profile.Email</div>
+                        </div>
+                        <Badge Tone="RoleLabels.RoleTone(profile.Role)">@RoleLabels.Role(profile.Role)</Badge>
+                    </div>
+
+                    <form class="flex flex-col gap-3" @onsubmit="SaveNameAsync">
+                        <Field Label="Отображаемое имя"
+                               Note="Видно в меню, в кампаниях, где у вас нет своего имени, и администратору в заявке.">
+                            <input class="cm-input" maxlength="@ProfileLimits.DisplayNameLength" autocomplete="nickname"
+                                   @bind="_name" @bind:event="oninput" />
+                        </Field>
+
+                        @if (profile.AliasCount > 0)
+                        {
+                            <label class="flex items-start gap-3 rounded-md py-1">
+                                <span class="cm-tap-target shrink-0">
+                                    <input type="checkbox" class="cm-checkbox" @bind="_replaceAliases" data-testid="replace-aliases" />
+                                </span>
+                                <span class="text-sm">
+                                    <span class="block text-primary-800">Заменить и имена в кампаниях (@profile.AliasCount)</span>
+                                    <span class="block text-primary-500">
+                                        В этих кампаниях у вас своё имя. Галочка сбросит их — везде будет имя профиля.
+                                    </span>
+                                </span>
+                            </label>
+                        }
+
+                        @if (_nameError is not null)
+                        {
+                            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_nameError</Alert>
+                        }
+
+                        <div class="flex flex-wrap gap-2">
+                            <Button Type="submit" Icon="fa-floppy-disk" Busy="_savingName" Disabled="@(!NameChanged(profile))">Сохранить имя</Button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section class="cm-section" aria-labelledby="role-title">
+            <div class="cm-section-header"><h2 id="role-title" class="cm-section-title">Роль</h2></div>
+            <div class="cm-card">
+                <div class="cm-card-body cm-stack">
+                    <p class="text-primary-700">@RoleLabels.RoleDescription(profile.Role)</p>
+
+                    @if (profile.LatestApplication is { } application && profile.Role is UserRole.Player)
+                    {
+                        <div data-testid="application-status">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Badge Tone="RoleLabels.StatusTone(application.Status)">Заявка: @RoleLabels.Status(application.Status).ToLowerInvariant()</Badge>
+                                <span class="text-sm text-primary-500">от @LocalTime.Date(application.CreatedAt)</span>
+                            </div>
+                            @if (application.Status is KeeperApplicationStatus.Pending)
+                            {
+                                <p class="mt-2 text-sm text-primary-600">Администратор её рассмотрит; после одобрения вы станете Хранителем.</p>
+                            }
+                            @if (application.Status is KeeperApplicationStatus.Rejected && application.ReviewComment is { } comment)
+                            {
+                                <p class="mt-2 text-sm text-primary-700"><span class="cm-meta-label">Комментарий:</span> @comment</p>
+                            }
+                        </div>
+                    }
+
+                    @if (profile.CanApply)
+                    {
+                        <form class="flex flex-col gap-3" @onsubmit="ApplyAsync">
+                            @if (profile.LatestApplication is null)
+                            {
+                                <p class="text-sm text-primary-600">
+                                    Хранитель ведёт кампании и сценарии. Хотите вести игры — подайте заявку, администратор её рассмотрит.
+                                </p>
+                            }
+                            <Field Label="Пара слов администратору" Hint="(необязательно)">
+                                <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ApplicationMessageLength"
+                                          placeholder="Что хотите вести, с кем играете…" @bind="_message"></textarea>
+                            </Field>
+                            @if (_applyError is not null)
+                            {
+                                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_applyError</Alert>
+                            }
+                            <div class="flex flex-wrap gap-2">
+                                <Button Type="submit" Variant="ButtonVariant.Secondary" Icon="fa-paper-plane" Busy="_applying">
+                                    @(profile.LatestApplication is null ? "Подать заявку на Хранителя" : "Подать заявку снова")
+                                </Button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="cm-section" aria-labelledby="games-title">
+            <div class="cm-section-header"><h2 id="games-title" class="cm-section-title">Мои игры</h2></div>
+            <div class="cm-card">
+                <a href="campaigns" class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0 hover:bg-primary-50">
+                    <i class="fa-solid fa-map w-5 text-center text-primary-400" aria-hidden="true"></i>
+                    <span class="flex-1">Кампании</span>
+                    <span class="font-semibold text-primary-700">@profile.CampaignCount</span>
+                    <i class="fa-solid fa-chevron-right text-xs text-primary-400" aria-hidden="true"></i>
+                </a>
+                <a href="" class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0 hover:bg-primary-50">
+                    <i class="fa-solid fa-user w-5 text-center text-primary-400" aria-hidden="true"></i>
+                    <span class="flex-1">Сыщики</span>
+                    <span class="font-semibold text-primary-700">@profile.CharacterCount</span>
+                    <i class="fa-solid fa-chevron-right text-xs text-primary-400" aria-hidden="true"></i>
+                </a>
+            </div>
+        </section>
+
+        <section class="cm-section" aria-labelledby="data-title">
+            <div class="cm-section-header"><h2 id="data-title" class="cm-section-title">Мои данные</h2></div>
+            <div class="cm-card">
+                <div class="cm-card-body">
+                    <p class="text-sm text-primary-600">
+                        О вас хранится только нужное для игры: адрес @profile.Email (им вы входите, другим игрокам он не виден),
+                        отображаемое имя, роль и созданные вами материалы. Удалить учётную запись можно, написав администратору.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </AsyncContent>
+</div>
+
+@code {
+    private AsyncContent<ProfileDto>? _content;
+    private ProfileDto? _profile;
+    private string _name = "";
+    // Выключено намеренно: имена в кампаниях нарочно разные («Дима» в одной, полное имя в другой),
+    // и смена имени в кабинете не должна молча их выравнивать.
+    private bool _replaceAliases;
+    private string? _message;
+    private string? _nameError;
+    private string? _applyError;
+    private bool _savingName;
+    private bool _applying;
+
+    private async Task<ProfileDto> LoadAsync(CancellationToken cancellationToken)
+    {
+        Show(await Api.GetProfileAsync(cancellationToken));
+        return _profile!;
+    }
+
+    private void Show(ProfileDto profile)
+    {
+        _profile = profile;
+        _name = profile.DisplayName;
+        _replaceAliases = false;
+    }
+
+    // Сохранять есть что: новое имя или сброс имён в кампаниях (его можно сделать и со старым именем).
+    private bool NameChanged(ProfileDto profile) =>
+        (!string.IsNullOrWhiteSpace(_name) && !string.Equals(_name.Trim(), profile.DisplayName, StringComparison.Ordinal))
+        || _replaceAliases;
+
+    private async Task SaveNameAsync()
+    {
+        if (_profile is null || _savingName)
+        {
+            return;
+        }
+
+        _savingName = true;
+        _nameError = null;
+        try
+        {
+            var replaced = _replaceAliases ? _profile.AliasCount : 0;
+            Show(await Api.UpdateDisplayNameAsync(new UpdateDisplayNameRequest(_name, _replaceAliases)));
+            Toasts.Success(replaced > 0 ? $"Имя сохранено. Своё имя сброшено в кампаниях: {replaced}." : "Имя сохранено.");
+            // Меню показывает имя из /api/v1/me — перечитать, без перезагрузки приложения.
+            await Session.RefreshAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _nameError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _savingName = false;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        _applying = true;
+        _applyError = null;
+        try
+        {
+            Show(await Api.SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest(_message)));
+            _message = null;
+            Toasts.Success("Заявка отправлена — администратор её рассмотрит.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _applyError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private static string Initial(string name) =>
+        name.Length > 0 ? char.ToUpper(name[0], CultureInfo.CurrentCulture).ToString() : "?";
+
+    // Выход — серверный адрес: полная загрузка, после неё приложение стартует уже без сессии.
+    private void Logout() => Navigation.NavigateTo(IdentityRoutes.Logout.TrimStart('/'), forceLoad: true);
+}

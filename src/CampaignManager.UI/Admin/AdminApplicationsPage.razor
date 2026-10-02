@@ -1,0 +1,217 @@
+@page "/admin/applications"
+@attribute [Authorize(Policy = Policies.Admin)]
+@implements IDisposable
+@using CampaignManager.Contracts.Admin
+@using CampaignManager.Contracts.Profile
+@using CampaignManager.Core.Identity
+@using CampaignManager.UI.Platform
+@inject IAdminApi Api
+@inject AdminBadges Badges
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Заявки на роль Хранителя. Одобрение — одна транзакция на сервере: статус заявки и роль (в v1 — два
+   контекста, и сбой между ними оставлял одобренную заявку без роли). Вкладка — в адресе (?status=),
+   по умолчанию — ожидающие. Знание — Admin/CLAUDE.md. *@
+<PageHeader Title="Заявки на Хранителя">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-users" Href="@AdminPages.Users">Пользователи</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <Tabs Items="_tabs" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Статус заявки" />
+
+    <AsyncContent @ref="_content" Key="ActiveTab" Load="LoadAsync" LoadingMessage="Загружаю заявки…" Context="applications">
+        <Empty>
+            <EmptyState Icon="fa-inbox" Title="@(ActiveTab == PendingTab ? "Заявок на рассмотрении нет." : "Заявок нет.")"
+                        Message="Игрок подаёт заявку в личном кабинете — она появится здесь." />
+        </Empty>
+        <ChildContent>
+            <div class="cm-card">
+                @foreach (var application in applications)
+                {
+                    <div class="flex flex-wrap items-start gap-x-4 gap-y-3 border-t border-primary-200 px-4 py-3 first:border-t-0"
+                         @key="application.Id" data-application-id="@application.Id">
+                        <div class="min-w-0 flex-1 basis-64">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-primary-800">@application.UserName</span>
+                                <Badge Tone="RoleLabels.StatusTone(application.Status)">@RoleLabels.Status(application.Status)</Badge>
+                                <Badge Tone="RoleLabels.RoleTone(application.UserRole)">Сейчас: @RoleLabels.Role(application.UserRole).ToLowerInvariant()</Badge>
+                            </div>
+                            <div class="text-sm text-primary-500">@application.UserEmail</div>
+                            @if (!string.IsNullOrWhiteSpace(application.Message))
+                            {
+                                <p class="mt-2 whitespace-pre-line text-primary-700">@application.Message</p>
+                            }
+                            <div class="cm-meta mt-2">
+                                <span><span class="cm-meta-label">Подана:</span> @LocalTime.DateTime(application.CreatedAt)</span>
+                                @if (application.ReviewedAt is { } reviewedAt)
+                                {
+                                    <span>
+                                        <span class="cm-meta-label">Рассмотрена:</span> @LocalTime.DateTime(reviewedAt)@(application.ReviewerName is { } reviewer ? $" — {reviewer}" : "")
+                                    </span>
+                                }
+                            </div>
+                            @if (application.ReviewComment is { } comment)
+                            {
+                                <p class="mt-1 text-sm text-primary-600"><span class="cm-meta-label">Комментарий:</span> @comment</p>
+                            }
+                        </div>
+                        @if (application.Status is KeeperApplicationStatus.Pending)
+                        {
+                            <div class="flex flex-wrap gap-2">
+                                <Button Small="true" Variant="ButtonVariant.Success" Icon="fa-check" Busy="@(_busy == application.Id)"
+                                        OnClick="() => ApproveAsync(application)">Одобрить</Button>
+                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-xmark" Disabled="@(_busy == application.Id)"
+                                        OnClick="() => StartReject(application)">Отклонить</Button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+<Modal Open="_rejecting is not null" Title="@($"Отклонить заявку: {_rejecting?.UserName}")" Size="ModalSize.Small" OnClose="CloseReject">
+    <ChildContent>
+        <form id="reject-form" class="flex flex-col gap-4" @onsubmit="RejectAsync">
+            <Field Label="Комментарий" Hint="(необязательно)" Note="Его увидит игрок в личном кабинете.">
+                <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ReviewCommentLength" placeholder="Причина…"
+                          @bind="_comment"></textarea>
+            </Field>
+            @if (_rejectError is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_rejectError</Alert>
+            }
+        </form>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseReject" Disabled="@(_busy is not null)">Отмена</Button>
+        <Button Type="submit" form="reject-form" Variant="ButtonVariant.Error" Busy="@(_busy is not null)">Отклонить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private const string PendingTab = "pending";
+
+    [SupplyParameterFromQuery(Name = "status")] public string? Status { get; set; }
+
+    private static readonly Dictionary<string, KeeperApplicationStatus?> Filters = new()
+    {
+        [PendingTab] = KeeperApplicationStatus.Pending,
+        ["approved"] = KeeperApplicationStatus.Approved,
+        ["rejected"] = KeeperApplicationStatus.Rejected,
+        ["all"] = null,
+    };
+
+    private AsyncContent<IReadOnlyList<KeeperApplicationDto>>? _content;
+    private IReadOnlyList<Tabs.Item> _tabs = [];
+    private KeeperApplicationDto? _rejecting;
+    private string? _comment;
+    private string? _rejectError;
+    private Guid? _busy;
+
+    private string ActiveTab => Status is { } status && Filters.ContainsKey(status) ? status : PendingTab;
+
+    protected override void OnInitialized() => Badges.Changed += OnBadgesChanged;
+
+    protected override void OnParametersSet() => BuildTabs();
+
+    private void BuildTabs() => _tabs =
+    [
+        new(PendingTab, "Ожидают", "fa-hourglass-half", Badges.Counts.GetValueOrDefault(AdminPages.Applications)),
+        new("approved", "Одобренные", "fa-check"),
+        new("rejected", "Отклонённые", "fa-xmark"),
+        new("all", "Все", "fa-list"),
+    ];
+
+    private void OnBadgesChanged() => InvokeAsync(() =>
+    {
+        BuildTabs();
+        StateHasChanged();
+    });
+
+    private Task<IReadOnlyList<KeeperApplicationDto>> LoadAsync(CancellationToken cancellationToken) =>
+        Api.GetApplicationsAsync(Filters[ActiveTab], cancellationToken);
+
+    private void SelectTab(string key) =>
+        Navigation.NavigateTo(key == PendingTab ? AdminPages.Applications : $"{AdminPages.Applications}?status={key}");
+
+    private async Task ApproveAsync(KeeperApplicationDto application)
+    {
+        _busy = application.Id;
+        try
+        {
+            var approved = await Api.ApproveAsync(application.Id);
+            Toasts.Success(approved.UserRole is UserRole.Admin
+                ? $"Заявка одобрена. {approved.UserName} уже администратор — роль не менялась."
+                : $"Заявка одобрена: {approved.UserName} теперь Хранитель.");
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось одобрить");
+        }
+        finally
+        {
+            _busy = null;
+        }
+
+        await RefreshAsync();
+    }
+
+    private void StartReject(KeeperApplicationDto application)
+    {
+        _comment = null;
+        _rejectError = null;
+        _rejecting = application;
+    }
+
+    private void CloseReject()
+    {
+        if (_busy is null)
+        {
+            _rejecting = null;
+        }
+    }
+
+    private async Task RejectAsync()
+    {
+        if (_rejecting is not { } application || _busy is not null)
+        {
+            return;
+        }
+
+        _busy = application.Id;
+        _rejectError = null;
+        try
+        {
+            await Api.RejectAsync(application.Id, _comment);
+            _rejecting = null;
+            Toasts.Success("Заявка отклонена.");
+        }
+        catch (HttpRequestException ex)
+        {
+            _rejectError = ApiErrors.Describe(ex);
+            return;
+        }
+        finally
+        {
+            _busy = null;
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        await Badges.RefreshAsync(Api);
+        if (_content is not null)
+        {
+            await _content.ReloadAsync();
+        }
+    }
+
+    public void Dispose() => Badges.Changed -= OnBadgesChanged;
+}

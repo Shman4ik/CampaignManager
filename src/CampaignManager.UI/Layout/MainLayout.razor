@@ -1,12 +1,17 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @using System.Security.Claims
+@using CampaignManager.Contracts.Admin
+@using CampaignManager.UI.Admin
+@inject AdminBadges Badges
+@inject IAdminApi AdminApi
 
 @* Оболочка приложения: рельс (планшет), нижняя панель (телефон), колонка страницы и общие
    хосты — диалог подтверждения, уведомления, индикатор связи. Страница внутри — PageHeader
    и один <div class="cm-page">. Кнопки модулей в шапке (ширма, плеер) их компоненты кладут
    отсюда в PageHeaderSlots. *@
 <div class="cm-shell">
-    <NavRail Items="_items">
+    <NavRail Items="_items" Badges="Badges.Counts">
         <Footer><UserMenu Placement="UserMenuPlacement.Rail" /></Footer>
     </NavRail>
 
@@ -27,7 +32,7 @@
         </ErrorBoundary>
     </div>
 
-    <BottomNav Items="_items">
+    <BottomNav Items="_items" Badges="Badges.Counts">
         <Footer><UserMenu Placement="UserMenuPlacement.Sheet" /></Footer>
     </BottomNav>
 </div>
@@ -46,9 +51,12 @@
 @code {
     private ErrorBoundary? _errorBoundary;
     private IReadOnlyList<NavItem> _items = NavMenu.VisibleTo(new ClaimsPrincipal());
+    private bool _badgesLoaded;
 
     // Кто вошёл — из /api/v1/me (MeAuthenticationStateProvider): меню прячет чужие разделы.
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override void OnInitialized() => Badges.Changed += OnBadgesChanged;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -57,7 +65,20 @@
 
         if (AuthenticationState is not null)
         {
-            _items = NavMenu.VisibleTo((await AuthenticationState).User);
+            var user = (await AuthenticationState).User;
+            _items = NavMenu.VisibleTo(user);
+
+            // Счётчик заявок у пункта «Заявки» — администратору, один раз на загрузку; дальше его
+            // обновляет страница заявок после одобрения и отказа.
+            if (!_badgesLoaded && NavMenu.CanSee(NavAudience.Admin, user))
+            {
+                _badgesLoaded = true;
+                await Badges.RefreshAsync(AdminApi);
+            }
         }
     }
+
+    private void OnBadgesChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Badges.Changed -= OnBadgesChanged;
 }

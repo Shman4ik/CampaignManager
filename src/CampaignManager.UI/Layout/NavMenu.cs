@@ -31,6 +31,7 @@ public static class NavMenu
 
         new("admin/users", "fa-users", "Пользователи", NavGroup.System, NavAudience.Admin, ShortLabel: "Аккаунты"),
         new("admin/applications", "fa-inbox", "Заявки", NavGroup.System, NavAudience.Admin),
+        new("admin/files", "fa-folder-open", "Файлы", NavGroup.System, NavAudience.Admin),
     ];
 
     /// <summary>Подписи групп в листе «Ещё»; в рельсе группы разделяет линейка.</summary>

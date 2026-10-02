@@ -4,6 +4,7 @@ using CampaignManager.Core.Campaigns;
 using CampaignManager.Data;
 using CampaignManager.Data.Campaigns;
 using CampaignManager.Server.Access;
+using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -143,7 +144,7 @@ public sealed class CampaignService(
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // Две вкладки вступили одновременно: проверка прошла у обеих, ключ пустил одну.
-            throw CampaignRejectedException.Conflict("Вы уже участник этой кампании.");
+            throw ApiProblemException.Conflict("Вы уже участник этой кампании.");
         }
 
         logger.LogInformation("Пользователь {UserId} вступил в кампанию {CampaignId}", user.Id, campaignId);
@@ -178,7 +179,7 @@ public sealed class CampaignService(
         if (member is { CanEdit: true, CanDelete: false } && await dbContext.CampaignMembers.AnyAsync(
                 m => m.CampaignId == campaignId && m.UserId == userId && m.Role == CampaignRole.Keeper, cancellationToken))
         {
-            throw CampaignRejectedException.Conflict("Хранителя из кампании не убрать: без него кампания не живёт.");
+            throw ApiProblemException.Conflict("Хранителя из кампании не убрать: без него кампания не живёт.");
         }
 
         member.Demand(Operation.Delete);
@@ -234,17 +235,17 @@ public sealed class CampaignService(
         var name = input.Name?.Trim();
         if (string.IsNullOrEmpty(name))
         {
-            throw new CampaignRejectedException("Название кампании не может быть пустым.");
+            throw ApiProblemException.Invalid("Название кампании не может быть пустым.");
         }
 
         if (name.Length > CampaignLimits.NameLength)
         {
-            throw new CampaignRejectedException($"Название кампании — не длиннее {CampaignLimits.NameLength} символов.");
+            throw ApiProblemException.Invalid($"Название кампании — не длиннее {CampaignLimits.NameLength} символов.");
         }
 
         if (!Enum.IsDefined(input.Kind) || !Enum.IsDefined(input.Status) || !Enum.IsDefined(input.Era))
         {
-            throw new CampaignRejectedException("Неизвестный вид, статус или эпоха кампании.");
+            throw ApiProblemException.Invalid("Неизвестный вид, статус или эпоха кампании.");
         }
 
         return name;
@@ -260,13 +261,13 @@ public sealed class CampaignService(
 
         if (alias.Length > CampaignLimits.DisplayNameLength)
         {
-            throw new CampaignRejectedException($"Имя в кампании — не длиннее {CampaignLimits.DisplayNameLength} символов.");
+            throw ApiProblemException.Invalid($"Имя в кампании — не длиннее {CampaignLimits.DisplayNameLength} символов.");
         }
 
         if (alias.Contains('@', StringComparison.Ordinal))
         {
             // Почту другим участникам не показываем, а имя с «@» и не покажем вовсе.
-            throw new CampaignRejectedException("Имя в кампании не должно быть почтой.");
+            throw ApiProblemException.Invalid("Имя в кампании не должно быть почтой.");
         }
 
         return alias;

@@ -1,13 +1,17 @@
+using CampaignManager.ApiClient.Admin;
 using CampaignManager.ApiClient.Campaigns;
 using CampaignManager.ApiClient.Catalogs;
 using CampaignManager.ApiClient.Files;
 using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Platform;
+using CampaignManager.ApiClient.Profile;
+using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
+using CampaignManager.Contracts.Profile;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CampaignManager.ApiClient;
@@ -38,6 +42,8 @@ public static class ApiClientServiceCollectionExtensions
         services.AddHttpClient<ICatalogApi<BookDto>, BooksApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICatalogApi<ItemDto>, ItemsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICatalogApi<CreatureDto>, CreaturesApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IProfileApi, ProfileApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IAdminApi, AdminApiClient>(http => http.BaseAddress = baseAddress);
         return services;
     }
 }

@@ -4,6 +4,7 @@ using CampaignManager.Core.Characters;
 using CampaignManager.Data;
 using CampaignManager.Data.Campaigns;
 using CampaignManager.Server.Access;
+using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Server.Campaigns;
@@ -139,18 +140,18 @@ public sealed class JournalService(
 
         if (input.Number is < CampaignLimits.MinSessionNumber or > CampaignLimits.MaxSessionNumber)
         {
-            throw new CampaignRejectedException(
+            throw ApiProblemException.Invalid(
                 $"Номер встречи — от {CampaignLimits.MinSessionNumber} до {CampaignLimits.MaxSessionNumber}.");
         }
 
         if (title?.Length > CampaignLimits.SessionTitleLength)
         {
-            throw new CampaignRejectedException($"Заголовок — не длиннее {CampaignLimits.SessionTitleLength} символов.");
+            throw ApiProblemException.Invalid($"Заголовок — не длиннее {CampaignLimits.SessionTitleLength} символов.");
         }
 
         if (summary?.Length > CampaignLimits.SessionTextLength || keeperNotes?.Length > CampaignLimits.SessionTextLength)
         {
-            throw new CampaignRejectedException("Текст записи слишком длинный.");
+            throw ApiProblemException.Invalid("Текст записи слишком длинный.");
         }
 
         // Встреча — часть игры этой кампании: привязать можно только её прохождение. Уже привязанное не
@@ -159,7 +160,7 @@ public sealed class JournalService(
                                      && !await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.CampaignId == session.CampaignId,
                                          cancellationToken))
         {
-            throw new CampaignRejectedException("Это прохождение не из этой кампании.");
+            throw ApiProblemException.Invalid("Это прохождение не из этой кампании.");
         }
 
         session.SessionDate = input.SessionDate;

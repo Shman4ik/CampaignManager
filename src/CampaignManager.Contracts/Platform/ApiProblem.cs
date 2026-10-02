@@ -21,6 +21,12 @@ public static class ApiProblemCodes
     /// <summary>409: запись нельзя удалить — на неё ссылаются.</summary>
     public const string InUse = "in-use";
 
+    /// <summary>
+    /// 409: так нельзя по смыслу — убрать Хранителя, второй раз вступить, заявка уже на рассмотрении или уже
+    /// рассмотрена, последний администратор. Предложить нечего, кроме текста.
+    /// </summary>
+    public const string Conflict = "conflict";
+
     /// <summary>400: данные не прошли проверку.</summary>
     public const string Invalid = "invalid";
 

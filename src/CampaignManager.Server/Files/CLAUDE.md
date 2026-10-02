@@ -12,7 +12,8 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 | `ApiClient/Files` | `FilesApiClient` — multipart-загрузка, текст ProblemDetails в `HttpRequestException` |
 | `Data/Files` | `StoredFile`, `FileReferences` — список FK на `files` из модели EF |
 | `Server/Files` | `FilesModule`, `FileService`, `FileContentEndpoint` (отдача с Range), `FileTypes`, `Storage/` |
-| `UI/Pages/Dev/FilesPage` | `/dev/files` — сквозная проверка: загрузка, картинка, плеер, сироты |
+| `UI/Pages/Dev/FilesPage` | `/dev/files` — сквозная проверка: загрузка, картинка, плеер |
+| `UI/Admin/AdminFilesPage` | `/admin/files` — сироты: отчёт и удаление (T2.9, [UI/Admin/CLAUDE.md](../../CampaignManager.UI/Admin/CLAUDE.md)) |
 
 ## API
 
