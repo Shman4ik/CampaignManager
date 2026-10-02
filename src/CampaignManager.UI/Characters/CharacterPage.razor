@@ -85,11 +85,15 @@
 
             @if (_draftNotice is { } notice)
             {
-                <Alert Tone="@(notice.NeedsChoice ? Tone.Warning : Tone.Info)" ShowIcon="true" data-testid="sheet-draft">
+                <Alert Tone="@(notice.NeedsChoice ? Tone.Warning : Tone.Info)" ShowIcon="true" data-testid="sheet-draft" OnClose="() => _draftNotice = null">
                     <ChildContent>
                         @if (notice.NeedsChoice)
                         {
                             <text>На этом устройстве остались несохранённые правки листа, но с тех пор лист изменили.</text>
+                        }
+                        else if (notice.Saved)
+                        {
+                            <text>Восстановленные несохранённые правки с этого устройства записаны в базу.</text>
                         }
                         else
                         {
@@ -101,9 +105,12 @@
                         {
                             <Button Small="true" OnClick="RestoreDraft">Восстановить мои</Button>
                         }
-                        <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="sheet-draft-discard" OnClick="DiscardDraftAsync">
-                            Отбросить
-                        </Button>
+                        @if (!notice.Saved)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="sheet-draft-discard" OnClick="DiscardDraftAsync">
+                                Отбросить
+                            </Button>
+                        }
                     </Actions>
                 </Alert>
             }
@@ -114,11 +121,15 @@
             }
 
             <CascadingValue Value="context">
-                <div class="sheet">
+                @* change всплывает от любого поля листа: черновик пишется сразу, а не на тике автосохранения. *@
+                <div class="sheet" @onchange="KeepDraftAsync">
                     <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Personal" Expanded="IsOpen(SheetSections.Personal)" OnToggle="() => Toggle(SheetSections.Personal)">
                         <Actions>
-                            <Badge Tone="CampaignLabels.CharacterStatusTone(context.Character.Status)">@CampaignLabels.CharacterStatus(context.Character.Status)</Badge>
-                            @if (!context.ReadOnly)
+                            @if (context.ReadOnly)
+                            {
+                                <Badge Tone="CampaignLabels.CharacterStatusTone(context.Character.Status)">@CampaignLabels.CharacterStatus(context.Character.Status)</Badge>
+                            }
+                            else
                             {
                                 <select class="cm-input cm-input-sm w-auto" aria-label="Статус листа" data-testid="sheet-status"
                                         value="@context.Character.Status" @onchange="SetStatusAsync">
@@ -176,7 +187,8 @@
 </div>
 
 @code {
-    private sealed record DraftNotice(bool NeedsChoice, CharacterSheet Sheet);
+    /// <summary>Плашка черновика; <c>Saved</c> — восстановленное уже ушло в базу, отбрасывать нечего.</summary>
+    private sealed record DraftNotice(bool NeedsChoice, CharacterSheet Sheet, bool Saved = false);
 
     private AsyncContent<SheetContext?>? _content;
     private SheetContext? _context;
@@ -212,14 +224,7 @@
         }
 
         var skills = await SkillsApi.ListAsync(cancellationToken);
-        var catalog = new SkillCatalog(skills.Items.Select(s => new SkillDefinition(s.Id, s.Name)
-        {
-            Code = s.Code,
-            ParentId = s.ParentId,
-            BaseValue = s.BaseValue,
-            BaseFormula = s.BaseFormula,
-            Category = s.Category,
-        }));
+        var catalog = SkillCatalogs.From(skills.Items);
 
         _saver.Start(character);
         _context = new SheetContext(character, catalog, skills.Items,
@@ -308,6 +313,8 @@
 
     private Task SaveNowAsync() => SaveAsync(manual: true);
 
+    private Task KeepDraftAsync() => _context is { ReadOnly: false } context ? _saver.KeepDraftAsync(context.Sheet) : Task.CompletedTask;
+
     /// <summary>Одно уведомление на серию ошибок: тик раз в три секунды иначе завалил бы экран тостами.</summary>
     private async Task SaveAsync(bool manual)
     {
@@ -317,11 +324,16 @@
         var changed = await _saver.SaveIfChangedAsync(_context.Sheet);
         switch (_saver.State)
         {
+            case SheetSaveState.Conflict when changed:
+                Toasts.Warning("Лист изменили на другом устройстве — правки отсюда не сохранены. Выберите вверху листа: перечитать или записать свои.");
+                break;
             case SheetSaveState.Failed when !_failureShown || manual:
                 _failureShown = true;
                 Toasts.Error(_saver.Error ?? "Лист не сохранился.", "Лист не сохранён — повторю сам");
                 break;
             case SheetSaveState.Saved:
+                if (changed && _draftNotice is { NeedsChoice: false, Saved: false } restored)
+                    _draftNotice = restored with { Saved = true };
                 if (_failureShown)
                     Toasts.Success("Лист снова сохраняется.");
                 else if (manual)

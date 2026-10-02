@@ -15,6 +15,32 @@ namespace CampaignManager.UI.Tests;
 /// </summary>
 public sealed class KeeperScreenTests : KitContext
 {
+    public KeeperScreenTests()
+    {
+        Services.AddSingleton<CampaignManager.Contracts.Campaigns.ICampaignsApi>(new TableFakes.Campaigns());
+        Services.AddSingleton<CampaignManager.Contracts.Characters.ICharactersApi>(new TableFakes.Characters());
+        Services.AddSingleton<CampaignManager.Contracts.Catalogs.ICatalogApi<CampaignManager.Contracts.Catalogs.SkillDto>>(new TableFakes.Skills());
+    }
+
+    // Групповая проверка с составом кампании (T2.3): значения навыка — с листов сыщиков, а не вписанные руками.
+    [Fact]
+    public void Group_check_takes_party_from_keepers_campaign()
+    {
+        AddAuthorization().SetAuthorized("Хранитель").SetPolicies(Policies.Keeper);
+        Services.GetRequiredService<NavigationManager>().NavigateTo("reference?block=group");
+        var cut = Render<KeeperReferencePage>();
+
+        cut.Find("[data-testid='group-campaign']").Change(TableFakes.CampaignId.ToString());
+
+        cut.WaitForAssertion(() =>
+        {
+            var text = cut.Find("[data-testid='keeper-screen-block-group']").TextContent;
+            Assert.Contains("Харви Уолтерс", text);
+            Assert.Contains("65", text);
+            Assert.Contains("Нора Флинн", text);
+        });
+    }
+
     private IRenderedComponent<IComponent> PageWithHost() => Render(builder =>
     {
         builder.OpenComponent<PageHeader>(0);

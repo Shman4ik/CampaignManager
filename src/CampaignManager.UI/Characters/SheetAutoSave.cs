@@ -125,6 +125,20 @@ public sealed class SheetAutoSave(ICharactersApi api, BrowserStorage storage)
         return true;
     }
 
+    /// <summary>
+    /// Правка поля: черновик сразу, не дожидаясь тика, — перезагрузка или закрытая вкладка в эти три секунды
+    /// иначе теряли бы правку.
+    /// </summary>
+    public async Task KeepDraftAsync(CharacterSheet sheet)
+    {
+        if (State is SheetSaveState.Saving)
+            return;
+
+        var snapshot = CmJson.Serialize(sheet);
+        if (snapshot != _saved)
+            await storage.SetAsync(DraftKey(_id), Draft(Version, snapshot));
+    }
+
     /// <summary>Несохранённый черновик этого листа: на какой версии его начали и сам лист.</summary>
     public async Task<(uint Version, CharacterSheet Sheet)?> ReadDraftAsync(Guid characterId)
     {
