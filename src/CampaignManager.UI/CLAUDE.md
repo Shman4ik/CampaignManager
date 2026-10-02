@@ -10,7 +10,7 @@
 | Папка | Что |
 |---|---|
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика) |
-| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
+| `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
 | `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
@@ -235,6 +235,8 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
 «нужен трудный успех». В v1 было четыре реализации; новая проверка в бою, погоне, листе — этот
 компонент. Тон и подпись уровня — `LevelText` (общий с диалогом проверки). Проверка навыка целиком
 (сложность, кости, Удача, повтор, отметка) — не своя разметка вокруг `RollInput`, а `Checks/SkillCheckPanel`.
+Сумма костей NdM (прирост 1d10, 2d6 Рассудка, 2d10 Средств) — `DiceInput`: та же пара «вписать / бросить», значение —
+сумма; правило Core получает её через `EnteredDiceRoller.Total`.
 
 ## Связь вместо circuit
 
