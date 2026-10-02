@@ -119,6 +119,62 @@ public sealed class ChecksTests : KitContext
         Assert.Contains("отмечен", cut.Find("[data-testid='check-mark']").TextContent);
     }
 
+    /// <summary>
+    /// Успех отметили, потом подняли Удачей: купленный успех отметки не даёт (стр. 97) — трата уходит вместе
+    /// со снятием своей отметки, и предложить её снова панель уже не может.
+    /// </summary>
+    [Fact]
+    public void Raising_marked_success_by_luck_undoes_mark_of_this_roll()
+    {
+        var sheet = Sheet(luck: 40);
+        List<CheckSheetChange> changes = [];
+        var cut = Panel(sheet, $"skill:{Spot.Id}", changes);
+
+        Enter(cut, "first", 40);
+        cut.Find("[data-testid='check-mark-skill']").Click();
+        Assert.Contains("отметка за этот бросок снимется", cut.Find("[data-testid='check-luck-raise-note']").TextContent);
+        cut.Find("[data-testid='check-luck-Hard']").Click();
+
+        Assert.Equal(2, changes.Count);
+        Assert.Equal(10, changes[1].LuckCost);
+        Assert.Equal(Spot.Id, changes[1].UndoMarkOfThisRoll?.SkillId);
+        Assert.Null(changes[1].Mark);
+        Assert.Contains("куплен Удачей", cut.Find("[data-testid='check-mark']").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='check-mark-skill']"));
+    }
+
+    /// <summary>Отметка на листе стояла до броска — трата Удачи её не снимает.</summary>
+    [Fact]
+    public void Raising_by_luck_keeps_mark_from_earlier_roll()
+    {
+        var sheet = Sheet(luck: 40);
+        sheet.Skills[0].Checked = true;
+        List<CheckSheetChange> changes = [];
+        var cut = Panel(sheet, $"skill:{Spot.Id}", changes);
+
+        Enter(cut, "first", 40);
+        Assert.Contains("уже стоит", cut.Find("[data-testid='check-mark']").TextContent);
+        cut.Find("[data-testid='check-luck-Hard']").Click();
+
+        var change = Assert.Single(changes);
+        Assert.Equal(10, change.LuckCost);
+        Assert.Null(change.UndoMarkOfThisRoll);
+
+        CheckRules.Apply(sheet, Catalog, change);
+        Assert.True(sheet.Skills[0].Checked);
+        Assert.Equal(30, sheet.Current.Luck);
+    }
+
+    [Fact]
+    public void Critical_success_offers_no_luck()
+    {
+        var cut = Panel(Sheet(), $"skill:{Spot.Id}");
+
+        Enter(cut, "first", 1);
+
+        Assert.Empty(cut.FindAll("[data-testid='check-luck']"));
+    }
+
     [Fact]
     public void Push_after_failure_rolls_second_attempt()
     {

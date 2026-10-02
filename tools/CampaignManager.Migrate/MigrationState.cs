@@ -13,9 +13,10 @@ public sealed record MigrationOptions
 {
     /// <summary>
     /// Часовой пояс Хранителя: <c>Scenarios.ScheduledDate</c> v1 — время «как ввели» без пояса
-    /// (<c>timestamp without time zone</c>). По умолчанию — Москва (вопрос владельцу в PR T1.3).
+    /// (<c>timestamp without time zone</c>). По умолчанию — Прага (решение владельца 2026-10-02: Хранитель
+    /// играет из Праги); летнее время — по самой дате. Показ в UI — в поясе браузера (T2.2).
     /// </summary>
-    public string KeeperTimeZone { get; init; } = "Europe/Moscow";
+    public string KeeperTimeZone { get; init; } = "Europe/Prague";
 }
 
 /// <summary>

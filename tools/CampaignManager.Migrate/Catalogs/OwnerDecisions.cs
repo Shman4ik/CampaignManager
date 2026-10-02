@@ -57,6 +57,16 @@ public static class OwnerDecisions
         "Смартфон", "«Роллс-Ройс» Ghost Sedan", "Бронеавтомобиль", "Мотоцикл BMW", "Мотоцикл «Дукати»",
     };
 
+    /// <summary>
+    /// Тестовые листы, у которых в v1 текущие ПЗ, ПМ, Рассудок и Удача — нули (лист заводили для проверки и не
+    /// доиграли). Владелец разрешил (2026-10-02) поправить их точечно, по id листа: текущие = максимумы v1 в
+    /// пределах формулы. Общего правила «нули → максимум» нет: у живого сыщика ноль ПЗ — состояние, а не пропуск.
+    /// </summary>
+    public static IReadOnlyDictionary<Guid, string> TestSheetsCurrentToMax { get; } = new Dictionary<Guid, string>
+    {
+        [Guid.Parse("0196c615-0a88-74e4-b119-1625c601e776")] = "Адам Урбан-Фокс",
+    };
+
     /// <summary>Ключи настроек v1, которые никто больше не читает.</summary>
     public static IReadOnlySet<string> DeadPreferenceKeys { get; } = new HashSet<string>(StringComparer.Ordinal)
     {

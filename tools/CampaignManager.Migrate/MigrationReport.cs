@@ -91,6 +91,7 @@ public static class ReportSections
     public const string SheetSkills = "Листы: навыки без справочника";
     public const string SheetSkillsMapped = "Листы: навыки по старым написаниям";
     public const string Overrides = "Листы: значения книги у НПС (overrides)";
+    public const string FormulaWins = "Листы: вычисляемое по формуле, а не как в v1 (решение владельца)";
     public const string SameNames = "Листы: одноимённые (не сливались)";
     public const string Files = "Файлы";
     public const string Warnings = "Предупреждения";

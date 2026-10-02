@@ -97,7 +97,7 @@
                 </Alert>
             }
 
-            @if (!_first.Outcome.Passed && _luckSpent is null && !_pushing)
+            @if (_luckSpent is null && !_pushing && (!_first.Outcome.Passed || CanRaiseByLuck))
             {
                 @LuckBlock()
             }
@@ -185,6 +185,15 @@
         _second?.Outcome
         ?? (_luckSpent is { } spent ? new CheckOutcome(spent.ResultingRoll, spent.Level, true) : _first?.Outcome);
 
+    /// <summary>
+    /// Пройденную проверку Удачей поднимают до уровня выше (стр. 97) — кнопки только у листа с обработчиком,
+    /// и только если есть до чего поднимать: у каждого успеха иначе висел бы пустой блок.
+    /// </summary>
+    private bool CanRaiseByLuck => CanChangeSheet
+        && _first is { Outcome.Passed: true } first
+        && CheckRules.LuckBlockReason(_rolledSubject!, first.Outcome, isPushed: false) is null
+        && CheckRules.LuckOptions(first.Outcome, _rolledSubject!.Value, _difficulty, Sheet!.Current.Luck).Count > 0;
+
     private string LuckAfterText => CanChangeSheet ? $" Удача на листе — {Sheet!.Current.Luck}." : "";
 
     protected override void OnInitialized()
@@ -232,11 +241,15 @@
 
     private async Task SpendLuckAsync(LuckRules.SpendOption option)
     {
-        if (!CanChangeSheet || !option.Affordable || _luckSpent is not null)
+        if (!CanChangeSheet || !option.Affordable || _luckSpent is not null || _rolledSubject is not { } subject)
             return;
 
+        // Купленный успех отметки не даёт (стр. 97): если её поставили за этот же бросок — она снимается
+        // вместе с тратой; отметку, стоявшую на листе до броска, трата не трогает.
+        var change = CheckRules.LuckSpend(subject, option.Cost, markedThisRoll: _marked);
         _luckSpent = option;
-        await OnSheetChange.InvokeAsync(new CheckSheetChange { LuckCost = option.Cost });
+        _marked = false;
+        await OnSheetChange.InvokeAsync(change);
     }
 
     private async Task MarkAsync()
@@ -314,7 +327,7 @@
         var outcome = _first!.Outcome;
         var reason = CheckRules.LuckBlockReason(subject, outcome, isPushed: false);
         <div class="mt-4" data-testid="check-luck">
-            <h3 class="cm-section-title mb-2">Потратить Удачу</h3>
+            <h3 class="cm-section-title mb-2">@(outcome.Passed ? "Поднять уровень Удачей" : "Потратить Удачу")</h3>
             @if (reason is not null)
             {
                 <p class="cm-field-note">@reason</p>
@@ -338,7 +351,16 @@
                             </Button>
                         }
                     </div>
-                    <p class="cm-field-note mt-1">Удача сейчас @luck. Либо Удача, либо повторная проверка — не то и другое (стр. 97).</p>
+                    @if (outcome.Passed)
+                    {
+                        <p class="cm-field-note mt-1" data-testid="check-luck-raise-note">
+                            Удача сейчас @luck. Успех, купленный Удачей, отметки для развития не даёт (стр. 97)@(_marked ? " — отметка за этот бросок снимется" : "").
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="cm-field-note mt-1">Удача сейчас @luck. Либо Удача, либо повторная проверка — не то и другое (стр. 97).</p>
+                    }
                 }
                 else
                 {
