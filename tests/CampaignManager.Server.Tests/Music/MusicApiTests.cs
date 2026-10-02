@@ -30,6 +30,9 @@ public sealed class MusicApp : IAsyncLifetime
 
     public User Player { get; } = new() { Email = $"player-{Guid.NewGuid():N}@example.test", DisplayName = "Игрок" };
 
+    /// <summary>Хранитель, перенесённый из v1: его настройка — строка через запятую.</summary>
+    public User Veteran { get; } = new() { Email = $"veteran-{Guid.NewGuid():N}@example.test", DisplayName = "Ветеран", Role = UserRole.Keeper };
+
     public StoredFile Audio { get; } = new() { StorageKey = $"music/{Guid.NewGuid():N}.mp3", ContentType = "audio/mpeg", OriginalName = "Гроза.mp3", SizeBytes = 10 };
 
     public StoredFile Image { get; } = new() { StorageKey = $"images/{Guid.NewGuid():N}.png", ContentType = "image/png", SizeBytes = 10 };
@@ -46,7 +49,7 @@ public sealed class MusicApp : IAsyncLifetime
 
         await using (var db = Database.CreateContext())
         {
-            db.Users.AddRange(Keeper, Player);
+            db.Users.AddRange(Keeper, Player, Veteran);
             db.Files.AddRange(Audio, Image, External);
             await db.SaveChangesAsync();
         }
@@ -278,19 +281,18 @@ public sealed class MusicApiTests(MusicApp app) : IClassFixture<MusicApp>
         TestDatabase.SkipIfMissing();
         await using (var db = app.Database.CreateContext())
         {
-            await db.UserPreferences.Where(p => p.UserId == app.Keeper.Id).ExecuteDeleteAsync(Cancellation);
             db.UserPreferences.Add(new UserPreference
             {
-                UserId = app.Keeper.Id,
+                UserId = app.Veteran.Id,
                 Key = MusicRoutes.PinnedTagsPreferenceKey,
                 Value = JsonDocument.Parse("\"Погоня,сон, Бой\""),
             });
             await db.SaveChangesAsync(Cancellation);
         }
 
-        var v1 = await app.Music().GetPinnedTagsAsync(Cancellation);
+        var v1 = await app.Music(app.Veteran).GetPinnedTagsAsync(Cancellation);
         var tooMany = await Assert.ThrowsAsync<ApiException>(() =>
-            app.Music().SetPinnedTagsAsync([.. Enumerable.Range(0, MusicTags.MaxCount + 1).Select(i => $"тег {i}")], Cancellation));
+            app.Music(app.Veteran).SetPinnedTagsAsync([.. Enumerable.Range(0, MusicTags.MaxCount + 1).Select(i => $"тег {i}")], Cancellation));
 
         Assert.Equal(["погоня", "сон", "бой"], v1.Tags);
         Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
