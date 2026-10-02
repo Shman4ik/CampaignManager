@@ -11,6 +11,7 @@ public enum KeeperScreenBlock
     Firearms,
     Sanity,
     GroupCheck,
+    Chase,
 }
 
 /// <summary>Вкладка ширмы: раздел, его имя в адресе <c>/reference?block=…</c>, подпись и иконка.</summary>
@@ -31,6 +32,7 @@ public static class KeeperScreenBlocks
         new(KeeperScreenBlock.Damage, "damage", "Урон", "fa-fire"),
         new(KeeperScreenBlock.Firearms, "firearms", "Стрельба", "fa-crosshairs"),
         new(KeeperScreenBlock.Sanity, "sanity", "Рассудок", "fa-brain"),
+        new(KeeperScreenBlock.Chase, "chase", "Погоня", "fa-person-running"),
         new(KeeperScreenBlock.GroupCheck, "group", "Групповая проверка", "fa-users"),
     ];
 
