@@ -3,6 +3,7 @@ using CampaignManager.Contracts;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Data;
 using CampaignManager.Data.Identity;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -51,6 +52,15 @@ public static class IdentityModule
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<UserDirectory>();
 
+        // В Development к именам кук дописан порт сервера: соседние серверы на localhost не выбивают
+        // друг другу вход. В остальных окружениях имена прежние (AppCookies.Port = null).
+        var cookies = AppCookies.Create(configuration, builder.Environment);
+        services.AddSingleton(cookies);
+        if (cookies.Port is not null)
+        {
+            services.PostConfigure<AntiforgeryOptions>(options => AppCookies.ConfigureAntiforgery(options, cookies));
+        }
+
         // Ключи в cm.data_protection_keys (T1.3 копирует их из v1), имя приложения — как в v1:
         // куки входа переживают и рестарт, и переключение на 2.0.
         services.AddDataProtection()
@@ -68,13 +78,13 @@ public static class IdentityModule
                     auth0 && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
                         ? JwtBearerDefaults.AuthenticationScheme
                         : CookieAuthenticationDefaults.AuthenticationScheme)
-            .AddCookie(options => ConfigureCookie(options));
+            .AddCookie(options => ConfigureCookie(options, cookies));
 
         // Без Auth0 (только Development) схем OIDC и JWT нет вовсе: вход — только тестовый.
         if (auth0)
         {
             authentication
-                .AddOpenIdConnect(options => ConfigureOpenIdConnect(options, auth0Domain!, auth0ClientId!,
+                .AddOpenIdConnect(options => ConfigureOpenIdConnect(options, cookies, auth0Domain!, auth0ClientId!,
                     configuration["Authentication:Auth0:ClientSecret"]))
                 .AddJwtBearer(options => ConfigureJwtBearer(options, auth0Domain!, configuration["Authentication:Auth0:Audience"]));
         }
@@ -98,15 +108,28 @@ public static class IdentityModule
             app.Logger.LogWarning("Auth0 не настроен: вход только тестовый, {DevLogin}?as=player|keeper|admin", IdentityRoutes.DevLogin);
         }
 
+        if (app.Environment.IsDevelopment())
+        {
+            var cookies = app.Services.GetRequiredService<AppCookies>();
+            if (cookies.Port is null)
+            {
+                app.Logger.LogWarning("Порт сервера не найден в urls/Kestrel:Endpoints: имена кук без суффикса, {Auth}", cookies.AuthName);
+            }
+            else
+            {
+                app.Logger.LogInformation("Куки Development с портом сервера: {Auth}", cookies.AuthName);
+            }
+        }
+
         app.UseAuthorization();
         // Antiforgery — после авторизации: так требует ASP.NET Core.
         app.UseAntiforgery();
         return app;
     }
 
-    private static void ConfigureCookie(CookieAuthenticationOptions options)
+    private static void ConfigureCookie(CookieAuthenticationOptions options, AppCookies cookies)
     {
-        options.Cookie.Name = ".CampaignManager.Auth";
+        options.Cookie.Name = cookies.AuthName;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         // Lax хватает редиректа Auth0 (GET, см. ResponseMode) и сохраняет защиту браузера от CSRF:
@@ -141,7 +164,7 @@ public static class IdentityModule
         };
     }
 
-    private static void ConfigureOpenIdConnect(OpenIdConnectOptions options, string domain, string clientId, string? clientSecret)
+    private static void ConfigureOpenIdConnect(OpenIdConnectOptions options, AppCookies cookies, string domain, string clientId, string? clientSecret)
     {
         options.Authority = $"https://{domain}/";
         options.ClientId = clientId;
@@ -163,11 +186,11 @@ public static class IdentityModule
         options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
         options.CorrelationCookie.IsEssential = true;
-        options.CorrelationCookie.Name = ".CampaignManager.Correlation";
+        options.CorrelationCookie.Name = cookies.CorrelationName;
         options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.NonceCookie.SameSite = SameSiteMode.Lax;
         options.NonceCookie.IsEssential = true;
-        options.NonceCookie.Name = ".CampaignManager.Nonce.";
+        options.NonceCookie.Name = cookies.NonceName;
 
         // connection и login_hint обработчик сам не передаёт — их кладёт AccountEndpoints.CreateChallenge.
         options.Events.OnRedirectToIdentityProvider = context =>

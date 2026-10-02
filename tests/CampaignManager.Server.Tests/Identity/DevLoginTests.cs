@@ -59,6 +59,28 @@ public sealed class EnvironmentApp(string environmentName, bool withAuth0 = true
     });
 }
 
+/// <summary>Сервер в Development на базе <paramref name="database"/>, слушающий (по конфигурации) <paramref name="urls"/>.</summary>
+public sealed class DevLoginOnPortApp(SchemaDatabase database, string urls) : CmApp
+{
+    protected override string EnvironmentName => "Development";
+
+    protected override string ConnectionString => database.ConnectionString;
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.UseSetting(WebHostDefaults.ServerUrlsKey, urls);
+    }
+
+    /// <summary>Клиент без своих кук: куки «браузера» тест передаёт заголовком сам.</summary>
+    public HttpClient Bare() => CreateClient(new WebApplicationFactoryClientOptions
+    {
+        AllowAutoRedirect = false,
+        HandleCookies = false,
+        BaseAddress = new Uri("https://localhost"),
+    });
+}
+
 public sealed class DevLoginTests(DevLoginApp app) : IClassFixture<DevLoginApp>
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -181,6 +203,42 @@ public sealed class DevLoginTests(DevLoginApp app) : IClassFixture<DevLoginApp>
         var response = await app.Browser().GetAsync(IdentityRoutes.DevLoginUrl("player", "//evil.example"), Cancellation);
 
         Assert.Equal("/", response.Headers.Location?.ToString());
+    }
+
+    // Два сервера Development на одном localhost: у браузера одна банка кук на хост, порт её не делит.
+    // С портом в имени кука входа одного сервера не перезаписывает куку соседа, и обе сессии живы.
+    [Fact]
+    public async Task Dev_logins_on_two_ports_do_not_overwrite_each_other()
+    {
+        TestDatabase.SkipIfMissing();
+        await using var keeperServer = new DevLoginOnPortApp(app.Database, "https://localhost:8083");
+        await using var playerServer = new DevLoginOnPortApp(app.Database, "https://localhost:8084");
+
+        var keeperCookie = await DevLoginCookieAsync(keeperServer, "keeper");
+        var playerCookie = await DevLoginCookieAsync(playerServer, "player");
+
+        Assert.StartsWith(".CampaignManager.Auth.8083=", keeperCookie);
+        Assert.StartsWith(".CampaignManager.Auth.8084=", playerCookie);
+
+        // Браузер шлёт на любой порт localhost обе куки — каждый сервер читает свою.
+        var jar = $"{keeperCookie}; {playerCookie}";
+        Assert.Equal(UserRole.Keeper, (await MeAsync(keeperServer, jar))?.Role);
+        Assert.Equal(UserRole.Player, (await MeAsync(playerServer, jar))?.Role);
+    }
+
+    private static async Task<string> DevLoginCookieAsync(DevLoginOnPortApp server, string role)
+    {
+        var response = await server.Bare().GetAsync(IdentityRoutes.DevLoginUrl(role, "/"), Cancellation);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), c => c.StartsWith(".CampaignManager.Auth"));
+        return cookie[..cookie.IndexOf(';')];
+    }
+
+    private static async Task<MeResponse?> MeAsync(DevLoginOnPortApp server, string cookies)
+    {
+        var client = server.Bare();
+        client.DefaultRequestHeaders.Add("Cookie", cookies);
+        return await new IdentityApiClient(client).GetMeAsync(Cancellation);
     }
 
     private static string Flatten(Exception error)
