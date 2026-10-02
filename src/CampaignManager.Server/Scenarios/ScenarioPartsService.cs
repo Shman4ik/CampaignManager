@@ -275,6 +275,12 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
             }
         }
 
+        ApplyLocationFields(location, input);
+    }
+
+    /// <summary>Поля локации без проверки родителя по базе — её делает вызывающий (импорт ищет родителя по имени в файле).</summary>
+    internal static void ApplyLocationFields(ScenarioLocation location, LocationInput input)
+    {
         location.Name = ScenarioService.Required(input.Name, ScenarioLimits.NameLength, "Название локации");
         location.Address = ScenarioService.Text(input.Address, ScenarioLimits.ShortTextLength, "Адрес");
         location.Description = ScenarioService.Text(input.Description, ScenarioLimits.TextLength, "Описание локации");
@@ -282,6 +288,18 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
     }
 
     private async Task ApplyCheckAsync(ScenarioCheck check, CheckInput input, CancellationToken cancellationToken)
+    {
+        if (input is { TargetKind: CheckTarget.Skill, SkillId: { } skillId }
+            && !await dbContext.Skills.AnyAsync(s => s.Id == skillId, cancellationToken))
+        {
+            throw ApiProblemException.Invalid("Выберите навык из справочника.");
+        }
+
+        ApplyCheckFields(check, input);
+    }
+
+    /// <summary>Поля проверки; что навык есть в справочнике, проверяет вызывающий.</summary>
+    internal static void ApplyCheckFields(ScenarioCheck check, CheckInput input)
     {
         if (!Enum.IsDefined(input.TargetKind) || !Enum.IsDefined(input.Difficulty)
                                               || input.Characteristic is { } c && !Enum.IsDefined(c))
@@ -291,8 +309,7 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
 
         switch (input.TargetKind)
         {
-            case CheckTarget.Skill when input.SkillId is not { } skillId
-                                        || !await dbContext.Skills.AnyAsync(s => s.Id == skillId, cancellationToken):
+            case CheckTarget.Skill when input.SkillId is null:
                 throw ApiProblemException.Invalid("Выберите навык из справочника.");
             case CheckTarget.Characteristic when input.Characteristic is null:
                 throw ApiProblemException.Invalid("Выберите характеристику.");
@@ -306,7 +323,7 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
         check.OnFailure = ScenarioService.Text(input.OnFailure, ScenarioLimits.TextLength, "Итог провала");
     }
 
-    private static void ApplyFact(ScenarioKeyFact fact, KeyFactInput input)
+    internal static void ApplyFact(ScenarioKeyFact fact, KeyFactInput input)
     {
         if (!Enum.IsDefined(input.Type))
         {
@@ -325,13 +342,19 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
             throw ApiProblemException.Invalid("Файл раздатки не найден — загрузите его заново.");
         }
 
+        ApplyHandoutFields(handout, input);
+    }
+
+    /// <summary>Поля раздатки; что файл есть, проверяет вызывающий.</summary>
+    internal static void ApplyHandoutFields(ScenarioHandout handout, HandoutInput input)
+    {
         handout.Name = ScenarioService.Required(input.Name, ScenarioLimits.NameLength, "Название раздатки");
         handout.PlayerText = ScenarioService.Text(input.PlayerText, ScenarioLimits.TextLength, "Текст для игроков");
         handout.KeeperNote = ScenarioService.Text(input.KeeperNote, ScenarioLimits.TextLength, "Пометка Хранителя");
         handout.FileId = input.FileId;
     }
 
-    private static void ApplyCreature(ScenarioCreature creature, ScenarioCreatureInput input)
+    internal static void ApplyCreature(ScenarioCreature creature, ScenarioCreatureInput input)
     {
         if (input.Count is < 1 or > ScenarioLimits.MaxCount)
         {
@@ -344,7 +367,7 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
         creature.Notes = ScenarioService.Text(input.Notes, ScenarioLimits.TextLength, "Заметки");
     }
 
-    private static void ApplyItem(ScenarioItem item, ScenarioItemInput input)
+    internal static void ApplyItem(ScenarioItem item, ScenarioItemInput input)
     {
         item.Name = ScenarioService.Text(input.Name, ScenarioLimits.NameLength, "Название предмета");
         item.Description = ScenarioService.Text(input.Description, ScenarioLimits.TextLength, "Описание предмета");

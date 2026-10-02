@@ -1,0 +1,141 @@
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject IScenarioExchangeApi Api
+@inject ToastService Toasts
+
+@* Импорт сценария файлом (T2.5d) — по образцу импорта справочников: файл уходит на сервер как есть, сначала «Проверить»
+   (пробный прогон с отчётом по строкам), потом «Импортировать». Импорт — одна транзакция: хоть одна строка с ошибкой —
+   не записано ничего. Всегда новый сценарий; «Название копии» — чтобы экспорт, импортированный обратно, не путался с
+   исходным в списке. *@
+<Modal Open="Open" Title="Импорт сценария" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="scenario-import">
+    <ChildContent>
+        <div class="grid gap-4">
+            <p class="cm-text-muted">
+                Файл — тот, что даёт «Экспорт JSON» на странице сценария, или собранный по формату переноса из книги (скилл
+                <span class="font-mono">scenario-import</span>). Родитель локации, навык проверки, НПС, тварь, предмет и трек
+                ищутся по имени без учёта регистра и «ё»; НПС с таким именем из библиотеки занимается, а не заводится заново.
+            </p>
+            <Field Label="Файл JSON">
+                <InputFile class="cm-input" accept=".json,application/json" OnChange="PickAsync" data-testid="scenario-import-file" />
+            </Field>
+            <Field Label="Название копии" Hint="(необязательно)" Note="Пусто — название из файла.">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" @bind="_name" @bind:event="oninput"
+                       @bind:after="() => _report = null" data-testid="scenario-import-name" />
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+            @if (_report is not null)
+            {
+                <ScenarioImportReportView Report="_report" />
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_busy">@(_report?.Imported == true ? "Закрыть" : "Отмена")</Button>
+        @if (_report?.Imported == true)
+        {
+            <Button Icon="fa-book-open" OnClick="OpenAsync" data-testid="scenario-import-open">Открыть сценарий</Button>
+        }
+        else
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-vial" Busy="_busy" Disabled="_file is null"
+                    OnClick="() => RunAsync(dryRun: true)" data-testid="scenario-import-check">Проверить</Button>
+            <Button Icon="fa-file-import" Busy="_busy" Disabled="_file is null"
+                    OnClick="() => RunAsync(dryRun: false)" data-testid="scenario-import-run">Импортировать</Button>
+        }
+    </Footer>
+</Modal>
+
+@code {
+    /// <summary>Самый большой сценарий v1 с листами НПС — ~0,3 МБ; запас на тексты и прегенов.</summary>
+    private const long MaxFileBytes = 10 * 1024 * 1024;
+
+    private byte[]? _file;
+    private string _name = "";
+    private bool _busy;
+    private string? _error;
+    private ScenarioImportReport? _report;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Сценарий записан — страница перечитывает список.</summary>
+    [Parameter] public EventCallback OnImported { get; set; }
+
+    /// <summary>«Открыть сценарий» после записи.</summary>
+    [Parameter] public EventCallback<Guid> OnOpen { get; set; }
+
+    private async Task PickAsync(InputFileChangeEventArgs e)
+    {
+        _report = null;
+        _error = null;
+        _file = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _file = buffer.ToArray();
+        }
+        catch (IOException)
+        {
+            _error = $"Файл больше {MaxFileBytes / (1024 * 1024)} МБ.";
+        }
+    }
+
+    private async Task RunAsync(bool dryRun)
+    {
+        if (_file is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            _report = await Api.ImportAsync(new MemoryStream(_file), dryRun, _name);
+            if (_report.Imported)
+            {
+                Toasts.Success($"Сценарий «{_report.ScenarioName}» импортирован.");
+                await OnImported.InvokeAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _report = null;
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OpenAsync()
+    {
+        if (_report?.ScenarioId is { } id)
+        {
+            Reset();
+            await OnOpen.InvokeAsync(id);
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        Reset();
+        await OnClose.InvokeAsync();
+    }
+
+    private void Reset()
+    {
+        _file = null;
+        _name = "";
+        _report = null;
+        _error = null;
+    }
+}

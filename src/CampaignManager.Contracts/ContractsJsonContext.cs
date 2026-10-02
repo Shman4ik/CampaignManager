@@ -115,4 +115,5 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(NpcCastInput))]
 [JsonSerializable(typeof(AddPregenRequest))]
 [JsonSerializable(typeof(ReorderRequest))]
+[JsonSerializable(typeof(ScenarioImportReport))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
