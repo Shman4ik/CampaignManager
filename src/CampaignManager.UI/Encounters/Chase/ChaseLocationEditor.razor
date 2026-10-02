@@ -1,0 +1,135 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Encounters.Chase
+@using CampaignManager.Core.KeeperScreen
+
+@* Правка локации трассы: название, помеха или преграда. Помеха — сложность и урон при провале (таблица III, стр. 122 —
+   одна копия в Core/KeeperScreen), преграда — сложность и ПЗ (примеры книги, стр. 136; 0 — сломать нельзя). Помеха и
+   преграда лежат в той локации, в которую входят. Правка уходит странице целиком — новый экземпляр локации. *@
+<Modal Open="Location is not null" Title="@($"Локация {Location?.Number}")" OnClose="OnClose">
+    <ChildContent>
+        @if (_draft is not null)
+        {
+            <div class="flex flex-col gap-3">
+                <Field Label="Название" Hint="«Рынок», «Пожарная лестница» — по желанию">
+                    <input class="cm-input" value="@_draft.Name" @onchange="e => _draft.Name = Text(e)" />
+                </Field>
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Что мешает войти">
+                    <Button Small="true" Variant="@(_kind == 0 ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _kind = 0">Свободно</Button>
+                    <Button Small="true" Variant="@(_kind == 1 ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-bolt" OnClick="() => _kind = 1">Помеха</Button>
+                    <Button Small="true" Variant="@(_kind == 2 ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-road-barrier" OnClick="() => _kind = 2">Преграда</Button>
+                </div>
+                @if (_kind == 1)
+                {
+                    <p class="cm-meta">Помеху проходят всегда: успех — без последствий, провал — урон и 1d3 потерянных действия (стр. 133).</p>
+                    <Field Label="Помеха">
+                        <input class="cm-input" value="@_hazard.Name" @onchange="SetHazardName" />
+                    </Field>
+                    <DifficultyPicker Value="_hazard.Difficulty" ValueChanged="d => _hazard.Difficulty = d" />
+                    <Field Label="Урон при провале" Note="Таблица III, стр. 122; пусто — решите на месте">
+                        <select class="cm-input" value="@(_hazard.Damage ?? "")" @onchange="e => _hazard.Damage = Text(e)">
+                            <option value="">— без урона —</option>
+                            @foreach (var tier in OtherDamageReference.Tiers)
+                            {
+                                <option value="@tier.Formula">@tier.Name — @tier.Formula</option>
+                            }
+                        </select>
+                    </Field>
+                }
+                else if (_kind == 2)
+                {
+                    <p class="cm-meta">Преграда не пускает, пока не пройдена проверка или не разрушена (стр. 134).</p>
+                    <Field Label="Преграда">
+                        <input class="cm-input" value="@_barrier.Name" @onchange="SetBarrierName" />
+                    </Field>
+                    <DifficultyPicker Value="_barrier.Difficulty" ValueChanged="d => _barrier.Difficulty = d" />
+                    <div class="flex flex-wrap items-end gap-2">
+                        <Field Label="ПЗ" Note="0 — сломать нельзя" class="w-28">
+                            <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_barrier.HitPoints"
+                                   @onchange="e => _barrier.HitPoints = Number(e)" />
+                        </Field>
+                        <Field Label="Как в книге (стр. 136)" class="w-full sm:w-72">
+                            <select class="cm-input" value="" @onchange="SelectPreset">
+                                <option value="">— пример —</option>
+                                @foreach (var preset in VehicleReference.Barriers)
+                                {
+                                    <option value="@preset.HitPoints">@preset.Name — @preset.HitPoints ПЗ</option>
+                                }
+                            </select>
+                        </Field>
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose">Отмена</Button>
+        <Button Icon="fa-check" OnClick="SaveAsync" data-testid="location-save">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private ChaseLocation? _draft;
+    private ChaseHazard _hazard = new();
+    private ChaseBarrier _barrier = new();
+    private int _kind;
+    private int? _for;
+
+    /// <summary>Какую локацию правим; null — окно закрыто.</summary>
+    [Parameter] public ChaseLocation? Location { get; set; }
+
+    [Parameter] public EventCallback<ChaseLocation> OnSave { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Location is null)
+        {
+            _for = null;
+            _draft = null;
+            return;
+        }
+
+        if (_for == Location.Number && _draft is not null)
+            return;
+
+        _for = Location.Number;
+        _draft = Location with { Hazard = null, Barrier = null };
+        _hazard = Location.Hazard is { } hazard ? hazard with { } : new ChaseHazard();
+        _barrier = Location.Barrier is { } barrier ? barrier with { } : new ChaseBarrier();
+        _kind = Location.Barrier is not null ? 2 : Location.Hazard is not null ? 1 : 0;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_draft is null)
+            return;
+
+        var saved = _draft with
+        {
+            Hazard = _kind == 1 ? _hazard with { } : null,
+            Barrier = _kind == 2 ? _barrier with { HitPointsLeft = Location?.Barrier is { } old && old.HitPoints == _barrier.HitPoints ? old.HitPointsLeft : _barrier.HitPoints } : null,
+        };
+        await OnSave.InvokeAsync(saved);
+    }
+
+    private void SelectPreset(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var hp))
+        {
+            _barrier.HitPoints = hp;
+            var preset = VehicleReference.Barriers.FirstOrDefault(b => b.HitPoints == hp);
+            if (preset is not null && (string.IsNullOrWhiteSpace(_barrier.Name) || _barrier.Name == "Преграда"))
+                _barrier.Name = preset.Name;
+        }
+    }
+
+    private void SetHazardName(ChangeEventArgs e) => _hazard.Name = Text(e) ?? "Помеха";
+
+    private void SetBarrierName(ChangeEventArgs e) => _barrier.Name = Text(e) ?? "Преграда";
+
+    private static string? Text(ChangeEventArgs e) => string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()!.Trim();
+
+    private static int Number(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? Math.Max(0, value) : 0;
+}

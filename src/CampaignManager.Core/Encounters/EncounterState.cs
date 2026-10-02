@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using CampaignManager.Core.Documents;
+using CampaignManager.Core.Encounters.Chase;
 
 namespace CampaignManager.Core.Encounters;
 
@@ -49,6 +50,13 @@ public sealed record EncounterState : DocumentPart
 
     /// <summary>Бой (T2.6b): необязательные правила и броски инициативы. Погоне не нужно — остаётся пустым.</summary>
     public CombatSettings Combat { get; set; } = new();
+
+    /// <summary>
+    /// Погоня (T2.6c): трасса, бегущие, необязательные правила; null — у боя и у погони, где ещё нет трассы. Ядро зовёт
+    /// <see cref="ChaseRules"/> само (добавление и удаление участника, начало раунда, после <c>Apply</c>), поэтому общие
+    /// кнопки оболочки — «Следующий», «Выбыл», «Убрать» — погоню не ломают.
+    /// </summary>
+    public ChaseState? Chase { get; set; }
 
     [JsonIgnore]
     public EncounterParticipant? Active =>
@@ -179,6 +187,15 @@ public sealed record ParticipantStats : DocumentPart
     public int Dodge { get; set; }
 
     public int Armor { get; set; }
+
+    /// <summary>Своя СКО плавания из статблока («6 / плавание 10»); у листа нет — половина обычной (стр. 141).</summary>
+    public int? Swim { get; set; }
+
+    /// <summary>Своя СКО полёта из статблока.</summary>
+    public int? Fly { get; set; }
+
+    /// <summary>Атак за раунд (у твари — из статблока); в погоне столько же, сколько в бою (стр. 136).</summary>
+    public int AttacksPerRound { get; set; } = 1;
 }
 
 /// <summary>
@@ -288,6 +305,53 @@ public enum EncounterEffectKind
 
     /// <summary>Первая помощь или Медицина уже оказаны по этой ране (<see cref="EncounterEffect.Key"/>: firstAid, firstAidTried, medicine).</summary>
     Treated,
+
+    // Погоня (T2.6c): меняют ChaseState, а не лист — ветка ChaseEffects.Describe.
+
+    /// <summary>В локацию <see cref="EncounterEffect.Amount"/>; <see cref="EncounterEffect.Flag"/> — в счёт объявленного разгона. Пассажиры едут с водителем.</summary>
+    ChaseMove,
+
+    /// <summary>Потратил действия перемещения на само действие (не ниже нуля, долга не даёт).</summary>
+    ChaseActionsSpent,
+
+    /// <summary>Потерял действия (помеха, манёвр, авария): сверх оставшихся — долг на следующий раунд (стр. 133).</summary>
+    ChaseActionsLost,
+
+    /// <summary>Итог проверки скорости: поправка СКО на всю погоню (−1, 0, +1).</summary>
+    ChaseSpeed,
+
+    /// <summary>
+    /// Потеря Комплекции транспорта участника (своего или водителя, если он пассажир): авария по таблице VI, шина, таран —
+    /// урон в пунктах переводит в Комплекцию <c>VehicleRules.BuildLoss</c> (полные десятки, остаток не учитывается).
+    /// </summary>
+    VehicleBuild,
+
+    /// <summary>Урон преграде в локации <see cref="EncounterEffect.Location"/>; 0 ПЗ — обломки становятся помехой (стр. 136).</summary>
+    BarrierDamage,
+
+    /// <summary>Помеха или преграда <see cref="EncounterEffect.Obstacle"/> в локацию <see cref="EncounterEffect.Location"/> (стр. 141).</summary>
+    PlaceObstacle,
+
+    /// <summary>Разгон на <see cref="EncounterEffect.Amount"/> локаций (стр. 137); 0 — разгон оборвался.</summary>
+    ChaseBoost,
+
+    /// <summary>Штурман помог водителю (<see cref="EncounterEffect.Flag"/>), стр. 139.</summary>
+    NavigatorAssist,
+
+    /// <summary>Атака в этом раунде (счёт атак, стр. 136).</summary>
+    ChaseAttack,
+
+    /// <summary>Убегающий сбежал (трасса пройдена, спрятался, сразу оторвался).</summary>
+    Escaped,
+
+    /// <summary>Убегающий пойман — решает Хранитель (стр. 135: одна локация — ещё не поимка).</summary>
+    Caught,
+
+    /// <summary>Преследователь потерял след (стр. 139).</summary>
+    LostTrail,
+
+    /// <summary>Преследователь медленнее самого медленного убегающего — в погоне не учитывается (стр. 140, 145).</summary>
+    TooSlow,
 }
 
 /// <summary>Один эффект на одного участника. Плоская запись с видом, а не иерархия типов: новый вид — член enum'а.</summary>
@@ -330,6 +394,12 @@ public sealed record EncounterEffect : DocumentPart
 
     /// <summary>Долгое сотворение, которое начинается (<see cref="EncounterEffectKind.Casting"/>).</summary>
     public SpellCasting? Casting { get; set; }
+
+    /// <summary>Погоня: номер локации — преграды или новой помехи.</summary>
+    public int? Location { get; set; }
+
+    /// <summary>Погоня: помеха или преграда, которую ставит <see cref="EncounterEffectKind.PlaceObstacle"/>.</summary>
+    public ChaseLocation? Obstacle { get; set; }
 }
 
 /// <summary>
@@ -426,6 +496,51 @@ public enum EncounterLogKind
 
     /// <summary>Броски инициативы (необязательное правило, стр. 122).</summary>
     Initiative,
+
+    // Погоня (T2.6c)
+
+    /// <summary>Трасса, расстановка, начало погони.</summary>
+    ChaseStart,
+
+    SpeedCheck,
+
+    Move,
+
+    Hazard,
+
+    Barrier,
+
+    BarrierBreak,
+
+    ChaseAttack,
+
+    ChaseManeuver,
+
+    Collision,
+
+    TyreShot,
+
+    DriverControl,
+
+    FloorIt,
+
+    Navigate,
+
+    RandomHazard,
+
+    SuddenHazard,
+
+    Tracking,
+
+    Hide,
+
+    CreateObstacle,
+
+    ModeChange,
+
+    Escaped,
+
+    Caught,
 }
 
 /// <summary>Категория записи — цвет в журнале: движение, препятствие, насилие, рассудок, служебное (знание v1 погони).</summary>
@@ -437,4 +552,10 @@ public enum EncounterLogCategory
     Violence,
     Sanity,
     Magic,
+
+    /// <summary>Финал погони: сбежал (насыщенный зелёный).</summary>
+    Escaped,
+
+    /// <summary>Финал погони: пойман (насыщенный красный).</summary>
+    Caught,
 }

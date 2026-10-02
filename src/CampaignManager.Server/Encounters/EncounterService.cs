@@ -2,6 +2,7 @@ using System.Text;
 using CampaignManager.Contracts.Encounters;
 using CampaignManager.Core.Documents;
 using CampaignManager.Core.Encounters;
+using CampaignManager.Core.Encounters.Chase;
 using CampaignManager.Data;
 using CampaignManager.Data.Encounters;
 using CampaignManager.Server.Access;
@@ -194,6 +195,22 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
         if (sheets.Distinct().Count() != sheets.Count)
         {
             throw ApiProblemException.Invalid("Один лист в сцене дважды: один лист — один участник.");
+        }
+
+        // Погоня (T2.6c): трасса в пределах, каждый бегущий — участник сцены, один раз.
+        if (state.Chase is { } chase)
+        {
+            if (chase.Locations.Count > ChaseRules.MaxLocations)
+            {
+                throw ApiProblemException.Invalid($"На трассе не больше {ChaseRules.MaxLocations} локаций.");
+            }
+
+            var ids = state.Participants.Select(p => p.Id).ToHashSet();
+            if (chase.Runners.Any(r => !ids.Contains(r.ParticipantId))
+                || chase.Runners.Select(r => r.ParticipantId).Distinct().Count() != chase.Runners.Count)
+            {
+                throw ApiProblemException.Invalid("В погоне бегущий без участника сцены — перечитайте сцену.");
+            }
         }
 
         if (Encoding.UTF8.GetByteCount(CmJson.Serialize(state)) > EncounterLimits.MaxStateBytes)

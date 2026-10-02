@@ -1,0 +1,65 @@
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+@inject IDiceRoller Dice
+
+@* Проверка скорости (стр. 130): ВЫН пешком, навык управления за рулём (½ ЛВК, если навыка нет; поломка — штрафная кость).
+   Чрезвычайный успех — +1 СКО на всю погоню, провал — −1. Бросок вписывают или бросают; «Записать» сразу применяет
+   результат правилом Core (эффект через Apply, запись в журнал). Пассажиры проверку не проходят (стр. 139). Посреди погони
+   здесь те, кто присоединился или пересел (стр. 140–141). Своей карточки не рисует. *@
+<div data-testid="chase-speed-checks">
+    @foreach (var (participant, runner) in Rows)
+    {
+        var skill = ChaseRules.SpeedSkill(participant, runner);
+        <div @key="participant.Id" class="flex flex-wrap items-end gap-3 border-t border-primary-200 px-3 py-3 first:border-t-0">
+            <div class="min-w-40">
+                <div class="font-semibold text-primary-900">@participant.Name</div>
+                <div class="cm-meta">
+                    @ChaseText.Of(runner.Role) · СКО @ChaseRules.BaseMove(participant, runner)
+                    @if (runner.SpeedChecked)
+                    {
+                        <span> → <b>@ChaseRules.Move(participant, runner)</b></span>
+                    }
+                </div>
+            </div>
+            @if (runner.SpeedChecked)
+            {
+                <Badge Tone="@(runner.SpeedModifier switch { > 0 => Tone.Success, < 0 => Tone.Warning, _ => Tone.Neutral })" Icon="fa-check">
+                    @(runner.SpeedModifier switch { > 0 => "+1 к СКО", < 0 => "−1 к СКО", _ => "без поправки" })
+                </Badge>
+            }
+            else
+            {
+                <Field Label="@($"{skill.Label} {skill.Value}")" Group="true">
+                    <RollInput Value="skill.Value" PenaltyDice="skill.PenaltyDice" Label="@($"Скорость: {participant.Name}")"
+                               Roll="RollOf(participant.Id)" RollChanged="r => _rolls[participant.Id] = r" />
+                </Field>
+                <Button Small="true" Icon="fa-check" class="mb-1" OnClick="() => RecordAsync(participant.Id)" data-testid="speed-record">Записать</Button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly Dictionary<Guid, D100Roll?> _rolls = [];
+
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    /// <summary>Только те, кому проверка ещё нужна (посреди погони); иначе — все, кроме пассажиров.</summary>
+    [Parameter] public bool PendingOnly { get; set; }
+
+    private List<(EncounterParticipant Participant, ChaseRunner Runner)> Rows =>
+    [
+        .. ChaseRules.InChase(Session.State)
+            .Where(x => !x.Runner.IsPassenger && (!PendingOnly || !x.Runner.SpeedChecked)),
+    ];
+
+    private D100Roll? RollOf(Guid id) => _rolls.GetValueOrDefault(id);
+
+    private async Task RecordAsync(Guid participantId)
+    {
+        var roll = RollOf(participantId)?.Result;
+        _rolls.Remove(participantId);
+        await Session.ChangeAsync(state => EncounterEngine.Apply(state, ChaseActions.SpeedCheck(state, participantId, roll, Dice).Resolution, Session.Now));
+    }
+}

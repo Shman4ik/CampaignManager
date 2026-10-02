@@ -57,6 +57,21 @@ public static class EncounterText
         EncounterEffectKind.Ready => "Огнестрел наготове",
         EncounterEffectKind.Casting => "Сотворение",
         EncounterEffectKind.Treated => "Лечение по ране",
+
+        EncounterEffectKind.ChaseMove => "Локация",
+        EncounterEffectKind.ChaseActionsSpent => "Действия",
+        EncounterEffectKind.ChaseActionsLost => "Потеря действий",
+        EncounterEffectKind.ChaseSpeed => "СКО",
+        EncounterEffectKind.VehicleBuild => "Комплекция транспорта",
+        EncounterEffectKind.BarrierDamage => "Урон преграде",
+        EncounterEffectKind.PlaceObstacle => "Новое препятствие",
+        EncounterEffectKind.ChaseBoost => "Разгон",
+        EncounterEffectKind.NavigatorAssist => "Штурман",
+        EncounterEffectKind.ChaseAttack => "Атака",
+        EncounterEffectKind.Escaped => "Сбежал",
+        EncounterEffectKind.Caught => "Пойман",
+        EncounterEffectKind.LostTrail => "Потерял след",
+        EncounterEffectKind.TooSlow => "Отстал",
         _ => kind.ToString(),
     };
 
@@ -78,6 +93,28 @@ public static class EncounterText
         EncounterLogKind.Medical => "Раны",
         EncounterLogKind.Action => "Действие",
         EncounterLogKind.Initiative => "Инициатива",
+
+        EncounterLogKind.ChaseStart => "Погоня",
+        EncounterLogKind.SpeedCheck => "Скорость",
+        EncounterLogKind.Move => "Движение",
+        EncounterLogKind.Hazard => "Помеха",
+        EncounterLogKind.Barrier => "Преграда",
+        EncounterLogKind.BarrierBreak => "Разрушение",
+        EncounterLogKind.ChaseAttack => "Атака",
+        EncounterLogKind.ChaseManeuver => "Манёвр",
+        EncounterLogKind.Collision => "Таран",
+        EncounterLogKind.TyreShot => "По шинам",
+        EncounterLogKind.DriverControl => "Управление",
+        EncounterLogKind.FloorIt => "Педаль в пол",
+        EncounterLogKind.Navigate => "Штурман",
+        EncounterLogKind.RandomHazard => "Случайная помеха",
+        EncounterLogKind.SuddenHazard => "Внезапная помеха",
+        EncounterLogKind.Tracking => "След",
+        EncounterLogKind.Hide => "Укрытие",
+        EncounterLogKind.CreateObstacle => "Создал помеху",
+        EncounterLogKind.ModeChange => "Способ",
+        EncounterLogKind.Escaped => "Сбежал",
+        EncounterLogKind.Caught => "Пойман",
         _ => kind.ToString(),
     };
 
@@ -90,6 +127,15 @@ public static class EncounterText
         EncounterLogKind.Sanity => EncounterLogCategory.Sanity,
         EncounterLogKind.Action => EncounterLogCategory.Movement,
         EncounterLogKind.Delayed => EncounterLogCategory.Movement,
+        // Погоня — по категории действия, как журнал v1: движение и скорость, препятствия, насилие, финал.
+        EncounterLogKind.SpeedCheck or EncounterLogKind.Move or EncounterLogKind.FloorIt or EncounterLogKind.Navigate
+            or EncounterLogKind.ModeChange or EncounterLogKind.Tracking or EncounterLogKind.Hide => EncounterLogCategory.Movement,
+        EncounterLogKind.Hazard or EncounterLogKind.Barrier or EncounterLogKind.BarrierBreak or EncounterLogKind.RandomHazard
+            or EncounterLogKind.SuddenHazard or EncounterLogKind.CreateObstacle or EncounterLogKind.DriverControl => EncounterLogCategory.Obstacle,
+        EncounterLogKind.ChaseAttack or EncounterLogKind.ChaseManeuver or EncounterLogKind.Collision
+            or EncounterLogKind.TyreShot => EncounterLogCategory.Violence,
+        EncounterLogKind.Escaped => EncounterLogCategory.Escaped,
+        EncounterLogKind.Caught => EncounterLogCategory.Caught,
         _ => EncounterLogCategory.System,
     };
 }
