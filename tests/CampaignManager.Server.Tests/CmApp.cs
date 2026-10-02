@@ -21,9 +21,12 @@ public class CmApp : WebApplicationFactory<Program>
     /// <summary>Строка подключения сервера; наследник подставляет свою одноразовую базу.</summary>
     protected virtual string ConnectionString => TestDatabase.ConnectionString ?? TestDatabase.Unreachable;
 
+    /// <summary>Окружение хоста; Development — только у тестов тестового входа (<c>DevLoginTests</c>).</summary>
+    protected virtual string EnvironmentName => "Testing";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(EnvironmentName);
         builder.UseSetting($"ConnectionStrings:{CmDatabase.ConnectionStringName}", ConnectionString);
         builder.UseSetting("Authentication:Auth0:Domain", Auth0Domain);
         builder.UseSetting("Authentication:Auth0:ClientId", Auth0ClientId);

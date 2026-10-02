@@ -23,7 +23,14 @@ public static class AccountEndpoints
 
         // Не API, а переходы браузера: OIDC-обмен и куки — забота сервера.
         app.MapGet(IdentityRoutes.Login, LoginAsync).AllowAnonymous().ExcludeFromDescription();
-        app.MapGet(IdentityRoutes.Logout, Logout).AllowAnonymous().ExcludeFromDescription();
+        app.MapGet(IdentityRoutes.Logout, LogoutAsync).AllowAnonymous().ExcludeFromDescription();
+
+        // Жёсткая граница: вне Development адреса тестового входа нет вовсе — 404, а не отказ.
+        if (app.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
+        {
+            app.MapDevLogin();
+        }
+
         return app;
     }
 
@@ -37,8 +44,15 @@ public static class AccountEndpoints
     /// Вход через Auth0. <c>prompt</c> не шлём: при живой сессии Auth0 человек сразу возвращается,
     /// а сменить учётку позволяет выход — он гасит и сессию Auth0.
     /// </summary>
-    private static async Task<ChallengeHttpResult> LoginAsync(string? returnUrl, string? method, HttpContext httpContext)
+    private static async Task<Results<ChallengeHttpResult, RedirectHttpResult>> LoginAsync(
+        string? returnUrl, string? method, HttpContext httpContext, IAuthenticationSchemeProvider schemes)
     {
+        // Development без настроек Auth0: схемы OIDC нет, доступен только тестовый вход.
+        if (await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme) is null)
+        {
+            return TypedResults.LocalRedirect($"{IdentityRoutes.LoginPage}?authStatus=unavailable");
+        }
+
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return TypedResults.Challenge(
             CreateChallenge(httpContext, returnUrl, AutoLogin.ParseMethod(method)),
@@ -75,9 +89,11 @@ public static class AccountEndpoints
     /// <summary>
     /// Выход: своя кука, «забыть» браузер (автовход больше не сработает) и сессия Auth0 — иначе
     /// следующий вход молча пустил бы под той же учёткой. Google при этом не разлогинивается.
+    /// Сессия тестового входа (<see cref="DevLogin"/>) к Auth0 не относится — у неё только кука.
     /// Переход с чужого сайта — только CSRF-выход, его отклоняем.
     /// </summary>
-    private static Results<SignOutHttpResult, BadRequest<string>> Logout(string? returnUrl, HttpContext httpContext)
+    private static async Task<Results<SignOutHttpResult, RedirectHttpResult, BadRequest<string>>> LogoutAsync(
+        string? returnUrl, HttpContext httpContext, IAuthenticationSchemeProvider schemes)
     {
         if (!IsSameSiteRequest(httpContext.Request))
         {
@@ -85,11 +101,19 @@ public static class AccountEndpoints
         }
 
         AutoLogin.Forget(httpContext);
+        var redirectUri = ReturnUrl.Normalize(returnUrl, httpContext.Request.Host.Host);
+
+        if (DevLogin.IsDevSession(httpContext.User)
+            || await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme) is null)
+        {
+            await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return TypedResults.LocalRedirect(redirectUri);
+        }
 
         // Сначала своя кука, затем Auth0: обработчик OIDC уводит на /oidc/logout, а оттуда через
         // /signout-callback-oidc браузер возвращается на returnUrl.
         return TypedResults.SignOut(
-            new AuthenticationProperties { RedirectUri = ReturnUrl.Normalize(returnUrl, httpContext.Request.Host.Host) },
+            new AuthenticationProperties { RedirectUri = redirectUri },
             [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
     }
 

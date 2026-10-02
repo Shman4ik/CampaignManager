@@ -114,7 +114,9 @@ public static class AutoLogin
     private static void Remember(HttpContext context)
     {
         var user = context.User;
-        if (user.FindFirst(ClaimTypes.Email)?.Value is { } email)
+        // Тестовая сессия Development — не способ входа этого браузера: запомни её, и после выхода
+        // автовход повёл бы в Google с почтой dev-…@cm.test.
+        if (user.FindFirst(ClaimTypes.Email)?.Value is { } email && !DevLogin.IsDevSession(user))
         {
             var isEmailAccount = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 .StartsWith(EmailSubjectPrefix, StringComparison.Ordinal) == true;

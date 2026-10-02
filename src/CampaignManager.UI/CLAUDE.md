@@ -12,7 +12,7 @@
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
-| `Identity/` | `/login`, `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
+| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
 | `Platform/` | `ApiActivity` — состояние связи и записи |
 | `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui` |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |

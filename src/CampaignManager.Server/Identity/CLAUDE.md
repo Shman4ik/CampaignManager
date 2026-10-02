@@ -40,6 +40,33 @@
   v1: T1.3 копирует ключи, и куки входа переживают переключение. На localhost v1 и v2 делят куку
   (один хост и порт), но ключи у них пока разные — кука v1 для v2 просто анонимна.
 
+## Тестовый вход (только Development)
+
+`DevLogin` — вход без Auth0 для проверки страниц под ролью: dev-приложение Auth0 пускает только на
+`https://localhost:8080` и на localhost всегда спрашивает согласие, а агенты его не принимают.
+
+```
+GET /dev/login?as=player|keeper|admin[&email=…][&returnUrl=…]
+https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так агент входит в браузере
+```
+
+- **Граница — маппинг.** `MapIdentityApi` маппит `/dev/login` только при `IsDevelopment()`: в
+  `Testing`, `Production`, `Beta` адреса нет вовсе (404, а не отказ). Кнопки «Войти как …» на `/login`
+  рисуются по `UiEnvironment.IsDevelopment` — это лишь подсказка, защита на сервере. Держит
+  `DevLoginTests` (404 вне Development, обычный вход не меняется, `/api/v1/me` под каждой ролью).
+- **Пользователь — тот же код, что у Auth0:** `UserDirectory.DevSignInAsync` зовёт `SignInAsync`
+  (поиск по sub, затем по почте, белый список в силе, `last_login_at`) и ставит роль из `as`. sub —
+  `dev|<почта>`, почта по умолчанию `dev-<роль>@cm.test`, имя «Тестовый Хранитель» и т. п. С `email=`
+  входит этот адрес, и его роль меняется на `as` — в базе Development это нормально.
+- **Кука — та же** (`IdentityModule.CreateSessionPrincipal`, общий с `OnTokenValidated`) плюс claim
+  `cm_dev`. По нему выход (`/account/logout`) гасит только куку, без `/oidc/logout`, а автовход не
+  запоминает такую сессию как «вход через Google».
+- **Development без настроек Auth0 стартует:** схем OIDC и JWT нет, автовход не подключается,
+  `/account/login` уводит на `/login?authStatus=unavailable`. Вне Development отсутствие настроек
+  по-прежнему роняет старт.
+- Белый список (`Authorization:AllowedEmails/AllowedDomains`), если он задан, тестовых пользователей
+  тоже не пустит (`authStatus=accessDenied`) — добавить туда `cm.test`.
+
 ## JWT для мобильного приложения
 
 `Authentication:Auth0:Audience` — идентификатор API в тенанте. **Без него ни один токен не
@@ -69,4 +96,5 @@
 в `TestAuth`, сеть не нужна), автовход, `ReturnUrl`, `/me` и роль из базы, привязка по почте,
 белый список, первые админы, закрытость каждого эндпоинта `/api/v1` (кроме `ping`). Сессия в тестах
 — заголовки `X-Test-UserId` / `X-Test-Sub` + `X-Test-Email` (`TestAuth`); ключи Data Protection —
-эфемерные. Обмен кода на токен и согласие Auth0 проверяет человек.
+эфемерные. Обмен кода на токен и согласие Auth0 проверяет человек. Тестовый вход — `DevLoginTests`
+(сервер в Development со своей базой и `EnvironmentApp` для прочих окружений).
