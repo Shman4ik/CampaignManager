@@ -12,7 +12,7 @@ public sealed record ChaseCheck(string Skill, int Value, int? Roll = null, Diffi
     int BonusDice = 0, int PenaltyDice = 0);
 
 /// <summary>Ответ цели на атаку: уклонение или контратака (стр. 136 — предлагать всегда, сколько бы действий ни осталось).</summary>
-public sealed record ChaseDefence(string Skill, int Value, int? Roll = null, DefenceKind Kind = DefenceKind.Dodge);
+public sealed record ChaseDefence(string Skill, int Value, int? Roll = null, DefenseReaction Kind = DefenseReaction.Dodge);
 
 /// <summary>Урон людям: вписанное число или формула (таблица III, оружие), которую бросят кости правила.</summary>
 public sealed record ChaseHarm(string? Formula = null, int? Roll = null);
@@ -794,9 +794,10 @@ public static class ChaseActions
             return attack.Success;
 
         var answer = Test(new ChaseCheck(defence.Skill, defence.Value, defence.Roll), dice);
-        var wins = Opposed.AttackerWins(attack.Level, answer.Level, defence.Kind);
-        lines.Add($"{target.Name} — {(defence.Kind == DefenceKind.Dodge ? "уклонение" : "контратака")}: {answer.Line}");
-        if (Opposed.DefenderStrikes(attack.Level, answer.Level, defence.Kind))
+        // Встречная проверка — одна копия с боем (CombatRules.AttackerWinsOpposed): ничья при уклонении — защитнику.
+        var wins = attack.Success && CombatRules.AttackerWinsOpposed(attack.Level, answer.Level, defence.Kind);
+        lines.Add($"{target.Name} — {(defence.Kind == DefenseReaction.Dodge ? "уклонение" : "контратака")}: {answer.Line}");
+        if (defence.Kind == DefenseReaction.FightBack && answer.Level.IsSuccess() && answer.Level > attack.Level)
             lines.Add($"{target.Name} перехватывает удар и бьёт сам — урон атакующему: эффект Хранителя.");
         else if (!wins && attack.Success)
             lines.Add("Атака отбита.");

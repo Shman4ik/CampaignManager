@@ -133,6 +133,7 @@ public sealed class ChaseTurnTests
 
     [Fact]
     [Trait("page", "136")]
+    [Trait("finding", "F-P20")]
     public void Attacks_per_round_like_in_combat()
     {
         var prey = Runner("Артур", ChaseRole.Prey);
@@ -177,6 +178,7 @@ public sealed class ChaseTurnTests
 
     [Fact]
     [Trait("page", "139")]
+    [Trait("finding", "F-P18")]
     public void Passengers_move_with_their_driver()
     {
         var driver = Runner("Водитель", ChaseRole.Prey);

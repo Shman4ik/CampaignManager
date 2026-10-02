@@ -160,6 +160,7 @@ public sealed class ChaseVehicleTests
 
     [Fact]
     [Trait("page", "143")]
+    [Trait("finding", "F-P15")]
     public void Broken_down_driver_gets_penalty_die_on_driving_checks()
     {
         var (state, attacker, target) = Cars();
@@ -217,11 +218,11 @@ public sealed class ChaseVehicleTests
 
     /// <summary>
     /// Шина — маленькая цель (штрафная кость) плюс стрельба на ходу — ещё одна (стр. 139). v1 стрелял по шинам «на ходу» без
-    /// штрафной за ход (F-P15).
+    /// штрафной за ход (F-P17).
     /// </summary>
     [Fact]
     [Trait("page", "139")]
-    [Trait("finding", "F-P15")]
+    [Trait("finding", "F-P17")]
     public void Tyres_on_the_move_two_penalty_dice_no_action()
     {
         var (state, attacker, target) = Cars();

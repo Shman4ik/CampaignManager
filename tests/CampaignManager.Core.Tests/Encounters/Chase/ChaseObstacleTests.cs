@@ -180,6 +180,7 @@ public sealed class ChaseObstacleTests
     [Fact]
     [Trait("page", "133")]
     [Trait("page", "144")]
+    [Trait("finding", "F-P21")]
     public void Hazard_vehicle_failure_crash_takes_build_and_hurts_everyone_inside()
     {
         var driver = Runner("Водитель", ChaseRole.Pursuer);
@@ -377,6 +378,7 @@ public sealed class ChaseObstacleTests
     [Fact]
     [Trait("page", "133")]
     [Trait("page", "134")]
+    [Trait("finding", "F-P18")]
     public void Ahead_hazard_offers_hazard_not_plain_move_barrier_offers_climb_and_break()
     {
         var (state, pursuer) = Scene(started: true);

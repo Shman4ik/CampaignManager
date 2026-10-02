@@ -349,6 +349,7 @@ public sealed class ChaseSpeedTests
 
     [Fact]
     [Trait("page", "140")]
+    [Trait("finding", "F-P19")]
     public void Joining_slower_prey_recounts_everyones_actions()
     {
         var prey = Runner("Артур", ChaseRole.Prey, mov: 8);
