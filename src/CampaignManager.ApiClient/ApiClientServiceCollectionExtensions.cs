@@ -7,6 +7,7 @@ using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Music;
 using CampaignManager.ApiClient.Platform;
 using CampaignManager.ApiClient.Profile;
+using CampaignManager.ApiClient.Scenarios;
 using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
@@ -16,6 +17,7 @@ using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Music;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Contracts.Profile;
+using CampaignManager.Contracts.Scenarios;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CampaignManager.ApiClient;
@@ -53,6 +55,7 @@ public static class ApiClientServiceCollectionExtensions
         // Фонотека: треки — тот же справочник, сверх него — настроения и пул.
         services.AddHttpClient<ICatalogApi<MusicTrackDto>, MusicTracksApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IMusicApi, MusicApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IScenariosApi, ScenariosApiClient>(http => http.BaseAddress = baseAddress);
         return services;
     }
 }
