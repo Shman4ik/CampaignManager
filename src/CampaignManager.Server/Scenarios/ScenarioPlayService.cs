@@ -67,17 +67,7 @@ public sealed class ScenarioPlayService(
                            .SingleOrDefaultAsync(l => l.Id == locationId && l.ScenarioId == scenarioId, cancellationToken)
                        ?? throw AccessDeniedException.NotFound();
 
-        var tags = MusicTags.Normalize(input.Tags ?? []);
-        if (tags.Count > MusicTags.MaxCount)
-        {
-            throw ApiProblemException.Invalid($"Настроений у локации — не больше {MusicTags.MaxCount}.");
-        }
-
-        if (tags.FirstOrDefault(t => t.Length > MusicTags.MaxLength) is { } longTag)
-        {
-            throw ApiProblemException.Invalid($"Настроение «{longTag}» длиннее {MusicTags.MaxLength} знаков.");
-        }
-
+        var tags = ScenarioPartsService.LocationMusicTags(input.Tags);
         var trackIds = (input.TrackIds ?? []).Distinct().ToList();
         if (trackIds.Count > MusicTags.MaxCount)
         {
