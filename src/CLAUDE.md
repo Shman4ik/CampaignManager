@@ -11,8 +11,8 @@
 | `Contracts` | DTO, маршруты, интерфейсы API | `Core` |
 | `ApiClient` | `HttpClient`-реализации интерфейсов | `Contracts` |
 | `Data` | `CmDbContext`, миграции схемы `cm` | `Core` |
-| `UI` | страницы, компоненты, Tailwind | `Core`, `Contracts` |
-| `Web.Client` | хост WebAssembly: регистрирует `ApiClient` и `AuthenticationStateProvider` | `UI`, `ApiClient` |
+| `UI` | страницы, UI-кит, оболочка, Tailwind ([CLAUDE.md](CampaignManager.UI/CLAUDE.md)) | `Core`, `Contracts` |
+| `Web.Client` | хост WebAssembly: регистрирует `ApiClient`, кит UI, `AuthenticationStateProvider`; индикатор связи на каждом `HttpClient` | `UI`, `ApiClient` |
 | `Server` | API `/api/v1/…`, хост приложения | всё, кроме `ApiClient` |
 
 Границы проверяет `tests/CampaignManager.Server.Tests/ArchitectureTests` по ссылкам собранных
@@ -75,12 +75,21 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
   запрос). Значения dev-приложения — в `Server/appsettings.Development.json` (копируются скриптом
   из `CampaignManager.Web/appsettings.Development.json` основного чекаута вместе со строкой подключения).
 
-## Tailwind
+## UI и Tailwind
 
-Собирается в `UI` тем же MSBuild-таргетом, что в v1, со всеми оговорками из корневого
-`CLAUDE.md`; результат — `UI/wwwroot/styles.css` (не в git), отдаётся как
-`_content/CampaignManager.UI/styles.css`. Сканирует и `.cs` в `UI`, и `.razor` сервера.
-Пока v3 без токенов — дизайн-систему и выбор v3/v4 делает T1.6.
+Дизайн-система, UI-кит и оболочка — [UI/CLAUDE.md](CampaignManager.UI/CLAUDE.md); живой пример
+всего кита — `/dev/ui` (только Development). Коротко:
+
+- **Tailwind v4**, токены — `@theme` в `UI/Styles/theme.css`, конфига `tailwind.config.js` нет.
+  Палитры только наши: `gray-*`, `slate-*`, `info-*` и прочих стандартных в сборке нет.
+- Собирается MSBuild-таргетом в `UI` (все оговорки v1 из корневого `CLAUDE.md` в силе) через
+  `npm ci` по `UI/package-lock.json` — нужен Node; результат `UI/wwwroot/styles.css` (в репозиторий
+  не кладётся) отдаётся как `_content/CampaignManager.UI/styles.css`.
+- Классы `cm-*` — в слое `components`: утилита перебивает их без «!». Изолированный
+  `*.razor.css` — внутри `@layer components { }`, иначе он бьёт утилиты.
+- Страница — `PageHeader` + `<div class="cm-page">`; диалог — `Modal`/`DialogService`;
+  сообщение — `Alert`/`ToastService`; загрузка — `AsyncContent`; бросок — `RollInput`.
+- Шрифты и Font Awesome — свои, из `UI/wwwroot`; внешних CDN нет.
 
 ## База
 
@@ -130,6 +139,7 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
 
 ## Тесты
 
+- `UI.Tests` — UI-кит на bUnit (поведение компонентов и служб; вёрстку проверяет браузер).
 - `Core.Tests` — правила книги (тесты T0.2, перенесённые на `Core`; кости — `ScriptedDice`, страница книги —
   `[Trait("page", …)]`, находка — `[Trait("finding", "F-…")]`); `Server.Tests` — API через `ApiClient` на `WebApplicationFactory`
   (окружение `Testing`, чтобы не подхватить `appsettings.Development.json`) и тест архитектуры.
@@ -171,5 +181,8 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 ## Запуск
 
 `.claude/launch.json`, конфигурация `v2` — `https://localhost:8080`, тот же порт, что у v1 (он
-разрешён в dev-приложении Auth0), поэтому v1 и v2 запускаются по очереди. `/dev/ping` —
+разрешён в dev-приложении Auth0), поэтому v1 и v2 запускаются по очереди. Второй экземпляр без
+входа — `dotnet run --project src/CampaignManager.Server --no-build --urls https://localhost:8081`.
+Порты 55339–55438 на машине владельца заняты Hyper-V (`netsh int ipv4 show excludedportrange
+protocol=tcp`) — контейнер Postgres для тестов туда не пробросить. `/dev/ping` —
 сквозная проверка: страница → `ApiClient` → `GET /api/v1/ping` → `Data` → Postgres.

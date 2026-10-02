@@ -1,0 +1,94 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Dice
+@inject IDiceRoller Dice
+
+@* «Бросить или вписать» d100 — правило листа v1, требование, а не удобство: любой бросок можно не
+   бросать, а вписать с настоящих костей. Уровень успеха считает только Check.Evaluate (Core), подпись —
+   RulesText. В v1 эта пара жила в четырёх реализациях: 17 пар «поле + авто» в бою, SkillCheckFields
+   погони (где «не введено» кодировалось нулём), SkillCheckPanel и SpellCastPanel.
+   Подпись — Field Group="true" вокруг. *@
+<div class="roll">
+    <input type="number" inputmode="numeric" min="1" max="100" step="1"
+           class="cm-input roll-input" placeholder="1–100"
+           aria-label="@($"{Label}: выпало")" aria-invalid="@(_invalid ? "true" : null)"
+           value="@(Roll?.Result.ToString(CultureInfo.InvariantCulture))" @onchange="OnEnteredAsync" />
+    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice-d20" OnClick="RollAsync">Бросить</Button>
+
+    @if (Roll is { } roll && Value is { } value)
+    {
+        var level = Check.Evaluate(roll.Result, value, Difficulty);
+        var passes = Check.Passes(level, Difficulty);
+        <Badge Tone="@ToneOf(level, passes)" Solid="@(level is SuccessLevel.Critical or SuccessLevel.Fumble)" data-testid="roll-level">
+            @Capitalize(RulesText.Of(level))
+        </Badge>
+        @if (level.IsSuccess() && !passes)
+        {
+            <span class="text-[0.8125rem] text-warning-800">нужен @RulesText.Of(Check.Required(Difficulty))</span>
+        }
+    }
+
+    @if (Value is { } target)
+    {
+        <span class="cm-dice text-[0.8125rem] text-primary-500">нужно ≤ @Check.Target(target, Difficulty)@RulesText.RollDetail(Roll)</span>
+    }
+</div>
+@if (_invalid)
+{
+    <span class="cm-field-error" role="alert">Впишите число от 1 до 100.</span>
+}
+
+@code {
+    private bool _invalid;
+
+    /// <summary>Значение навыка или характеристики. Без него — просто бросок без уровня успеха.</summary>
+    [Parameter] public int? Value { get; set; }
+
+    [Parameter] public Difficulty Difficulty { get; set; } = Difficulty.Regular;
+
+    [Parameter] public int BonusDice { get; set; }
+
+    [Parameter] public int PenaltyDice { get; set; }
+
+    /// <summary>Брошенный или вписанный результат; null — ещё не бросали.</summary>
+    [Parameter] public D100Roll? Roll { get; set; }
+
+    [Parameter] public EventCallback<D100Roll?> RollChanged { get; set; }
+
+    /// <summary>Что бросают — для экранного диктора: «Скрытность».</summary>
+    [Parameter] public string Label { get; set; } = "Бросок";
+
+    private Task RollAsync()
+    {
+        _invalid = false;
+        return RollChanged.InvokeAsync(D100.Roll(Dice, BonusDice, PenaltyDice));
+    }
+
+    private Task OnEnteredAsync(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _invalid = false;
+            return RollChanged.InvokeAsync(null);
+        }
+
+        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var entered) && entered is >= 1 and <= 100)
+        {
+            _invalid = false;
+            return RollChanged.InvokeAsync(D100.RollOrEntered(Dice, entered));
+        }
+
+        _invalid = true;
+        return Task.CompletedTask;
+    }
+
+    private static Tone ToneOf(SuccessLevel level, bool passes) => level switch
+    {
+        SuccessLevel.Fumble or SuccessLevel.Failure => Tone.Error,
+        _ when !passes => Tone.Warning,
+        _ => Tone.Success,
+    };
+
+    private static string Capitalize(string text) =>
+        text.Length == 0 ? text : char.ToUpper(text[0], CultureInfo.CurrentCulture) + text[1..];
+}

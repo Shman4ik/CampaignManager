@@ -1,0 +1,40 @@
+@* Диалог — единственный: свои fixed inset-0 с белой панелью не заводить, подтверждение —
+   DialogService.ConfirmAsync поверх этого же компонента (в v1 было два диалога с двумя копиями
+   JS и подложки). Закрытый Modal ничего не рендерит: в v1 все диалоги страницы жили в дереве
+   скрытыми, и id="modal-title" повторялся.
+   Окно — нативный <dialog> в верхнем слое: фокус внутрь, Esc и подложку даёт браузер,
+   прокрутку страницы под ним блокирует ModalWindow.razor.js. *@
+@if (Open)
+{
+    <ModalWindow Title="@Title" Size="@Size" Dismissible="@Dismissible" Placement="@Placement"
+                 OnClose="OnClose" Footer="@Footer" AdditionalAttributes="@AdditionalAttributes">
+        @ChildContent
+    </ModalWindow>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    /// <summary>Крестик, Esc и касание подложки. Закрывает страница: ставит Open = false.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public ModalSize Size { get; set; } = ModalSize.Medium;
+
+    /// <summary>
+    /// false — подложка и Esc не закрывают окно, остаётся только крестик. Для диалогов посреди
+    /// игры, где случайное касание мимо окна не должно ничего пропускать (проверка ВЫН умирающих).
+    /// </summary>
+    [Parameter] public bool Dismissible { get; set; } = true;
+
+    [Parameter] public ModalPlacement Placement { get; set; } = ModalPlacement.Center;
+
+    /// <summary>Кнопки: «Отмена» (Secondary) и действие справа.</summary>
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

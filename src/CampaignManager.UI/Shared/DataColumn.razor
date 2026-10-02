@@ -1,0 +1,40 @@
+@typeparam TItem
+@implements IDisposable
+
+@* Колонка DataTable: <DataColumn Title="Урон" SortBy="w => w.Damage" Context="w">@w.Damage</DataColumn>.
+   Сама ничего не рисует — таблица собирает колонки и рисует ячейки. *@
+
+@code {
+    [CascadingParameter] private DataTable<TItem>? Table { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Ячейка строки.</summary>
+    [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }
+
+    /// <summary>Значение для сортировки в самой таблице. Задано — заголовок становится кнопкой.</summary>
+    [Parameter] public Func<TItem, object?>? SortBy { get; set; }
+
+    /// <summary>Ключ для сортировки снаружи (DataTable.SortChanged): имя поля в запросе к API.</summary>
+    [Parameter] public string? SortKey { get; set; }
+
+    /// <summary>Сортировать по этой колонке при открытии: false — по возрастанию, true — по убыванию.</summary>
+    [Parameter] public bool? DefaultSort { get; set; }
+
+    /// <summary>Числа — по правому краю.</summary>
+    [Parameter] public bool AlignEnd { get; set; }
+
+    [Parameter] public string? CellClass { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Table is null)
+        {
+            throw new InvalidOperationException("DataColumn ставится только внутрь <Columns> у DataTable.");
+        }
+
+        Table.AddColumn(this);
+    }
+
+    public void Dispose() => Table?.RemoveColumn(this);
+}

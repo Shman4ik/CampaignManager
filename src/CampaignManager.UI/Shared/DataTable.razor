@@ -1,0 +1,224 @@
+@typeparam TItem
+@attribute [CascadingTypeParameter(nameof(TItem))]
+
+@* Таблица справочника или списка: колонки — DataColumn, сортировка по заголовку, раскрытие строки.
+   Своей карточки не рисует — стоит в cm-card страницы (одна карточка, никогда две).
+   Широкая таблица прокручивается в своей обёртке, страница вбок не едет. На телефоне вместо
+   таблицы — строки из CardTemplate, если он задан; правки и удаление в нём те же, что в таблице.
+   В v1 четыре ListView повторяли это на ~80% (701 строка разметки и 604 строки CSS). *@
+<CascadingValue Value="this" IsFixed="true">@Columns</CascadingValue>
+
+@if (CardTemplate is not null)
+{
+    <div class="md:hidden">
+        @if (_items.Count == 0)
+        {
+            <p class="px-4 py-5 text-center text-sm text-primary-500">@EmptyText</p>
+        }
+        @foreach (var item in _items)
+        {
+            <div @key="KeyOf(item)" class="border-t border-primary-200 px-4 py-3 first:border-t-0">@CardTemplate(item)</div>
+        }
+    </div>
+}
+
+<div class="@Css.Join("cm-table-wrap", CardTemplate is not null ? "hidden md:block" : null)">
+    <table class="cm-table" aria-label="@AriaLabel">
+        <thead>
+            <tr>
+                @if (RowDetail is not null)
+                {
+                    <th class="w-px"><span class="sr-only">Подробности</span></th>
+                }
+                @foreach (var column in _columns)
+                {
+                    <th class="@AlignClass(column)" aria-sort="@AriaSort(column)">
+                        @if (IsSortable(column))
+                        {
+                            <button type="button" class="cm-th-sort" @onclick="() => SortByAsync(column)">
+                                <span>@column.Title</span>
+                                <i class="fa-solid @SortIcon(column)" aria-hidden="true"></i>
+                            </button>
+                        }
+                        else
+                        {
+                            @column.Title
+                        }
+                    </th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @if (_items.Count == 0 && _columns.Count > 0)
+            {
+                <tr><td colspan="@ColumnCount" class="py-5 text-center text-primary-500">@EmptyText</td></tr>
+            }
+            @foreach (var item in _items)
+            {
+                var key = KeyOf(item);
+                var expanded = _expanded.Contains(key);
+                <tr @key="key" class="@Css.Join(expanded ? "cm-row-expanded" : null, Clickable ? "cursor-pointer" : null)"
+                    @onclick="() => RowClickedAsync(item, key)">
+                    @if (RowDetail is not null)
+                    {
+                        <td class="w-px py-1 pr-0" @onclick:stopPropagation="true">
+                            <Button Variant="ButtonVariant.Ghost" Small="true" Icon="@(expanded ? "fa-chevron-up" : "fa-chevron-down")"
+                                    AriaLabel="@(expanded ? "Свернуть" : "Подробнее")" aria-expanded="@(expanded ? "true" : "false")"
+                                    OnClick="() => Toggle(key)" />
+                        </td>
+                    }
+                    @foreach (var column in _columns)
+                    {
+                        <td class="@Css.Join(AlignClass(column), column.CellClass)">@column.ChildContent?.Invoke(item)</td>
+                    }
+                </tr>
+                @if (expanded && RowDetail is not null)
+                {
+                    <tr class="cm-row-detail" @key="(key, 1)">
+                        <td colspan="@ColumnCount">@RowDetail(item)</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private readonly List<DataColumn<TItem>> _columns = [];
+    private readonly HashSet<object> _expanded = [];
+    private List<TItem> _items = [];
+    private DataColumn<TItem>? _sortColumn;
+    private bool _descending;
+
+    [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = [];
+
+    /// <summary>DataColumn — по одной на колонку.</summary>
+    [Parameter, EditorRequired] public RenderFragment? Columns { get; set; }
+
+    /// <summary>Ключ строки для @key и раскрытия; по умолчанию — сам элемент.</summary>
+    [Parameter] public Func<TItem, object>? RowKey { get; set; }
+
+    /// <summary>Содержимое раскрытой строки. Задан — в строке появляется шеврон, касание строки раскрывает её.</summary>
+    [Parameter] public RenderFragment<TItem>? RowDetail { get; set; }
+
+    /// <summary>Строка-карточка для телефона (уже md). Не задан — таблица прокручивается вбок.</summary>
+    [Parameter] public RenderFragment<TItem>? CardTemplate { get; set; }
+
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+
+    /// <summary>
+    /// Сортировка снаружи (постраничный список с сервера): задан обработчик — таблица не сортирует
+    /// сама, а сообщает ключ колонки (<see cref="DataColumn{TItem}.SortKey"/>), и порядок задаёт Items.
+    /// </summary>
+    [Parameter] public DataSort? Sort { get; set; }
+
+    [Parameter] public EventCallback<DataSort> SortChanged { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Ничего не найдено.";
+
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private bool ExternalSort => SortChanged.HasDelegate;
+
+    // Снаружи сортируют по ключу запроса, в таблице — по значению колонки.
+    private bool IsSortable(DataColumn<TItem> column) => ExternalSort ? column.SortKey is not null : column.SortBy is not null;
+
+    private bool Clickable => OnRowClick.HasDelegate || RowDetail is not null;
+
+    private int ColumnCount => _columns.Count + (RowDetail is null ? 0 : 1);
+
+    internal void AddColumn(DataColumn<TItem> column)
+    {
+        _columns.Add(column);
+        if (column.DefaultSort is { } descending && _sortColumn is null && !ExternalSort)
+        {
+            _sortColumn = column;
+            _descending = descending;
+        }
+
+        Refresh();
+    }
+
+    internal void RemoveColumn(DataColumn<TItem> column)
+    {
+        _columns.Remove(column);
+        Refresh();
+    }
+
+    protected override void OnParametersSet() => _items = Arrange();
+
+    private void Refresh()
+    {
+        _items = Arrange();
+        StateHasChanged();
+    }
+
+    private List<TItem> Arrange()
+    {
+        if (ExternalSort || _sortColumn?.SortBy is not { } sortBy)
+        {
+            return Items.ToList();
+        }
+
+        return _descending
+            ? Items.OrderByDescending(sortBy, Comparer<object?>.Default).ToList()
+            : Items.OrderBy(sortBy, Comparer<object?>.Default).ToList();
+    }
+
+    private object KeyOf(TItem item) => RowKey?.Invoke(item) ?? item!;
+
+    private async Task SortByAsync(DataColumn<TItem> column)
+    {
+        if (ExternalSort)
+        {
+            var descending = Sort is { } current && current.Key == column.SortKey && !current.Descending;
+            await SortChanged.InvokeAsync(new DataSort(column.SortKey!, descending));
+            return;
+        }
+
+        _descending = _sortColumn == column && !_descending;
+        _sortColumn = column;
+        _items = Arrange();
+    }
+
+    private bool? SortedDescending(DataColumn<TItem> column) => ExternalSort
+        ? Sort is { } sort && sort.Key == column.SortKey ? sort.Descending : null
+        : _sortColumn == column ? _descending : null;
+
+    private string? AriaSort(DataColumn<TItem> column) => SortedDescending(column) switch
+    {
+        true => "descending",
+        false => "ascending",
+        null => null,
+    };
+
+    private string SortIcon(DataColumn<TItem> column) => SortedDescending(column) switch
+    {
+        true => "fa-sort-down",
+        false => "fa-sort-up",
+        null => "fa-sort text-primary-300",
+    };
+
+    private static string? AlignClass(DataColumn<TItem> column) => column.AlignEnd ? "text-right" : null;
+
+    private void Toggle(object key)
+    {
+        if (!_expanded.Remove(key))
+        {
+            _expanded.Add(key);
+        }
+    }
+
+    private async Task RowClickedAsync(TItem item, object key)
+    {
+        if (RowDetail is not null)
+        {
+            Toggle(key);
+        }
+
+        if (OnRowClick.HasDelegate)
+        {
+            await OnRowClick.InvokeAsync(item);
+        }
+    }
+}

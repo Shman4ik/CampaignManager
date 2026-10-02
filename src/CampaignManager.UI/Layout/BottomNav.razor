@@ -1,0 +1,68 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+
+@* Нижняя панель телефона (уже md): пункты с OnPhoneBar и «Ещё» — лист со всем списком NavMenu,
+   тем же, что в рельсе. Лист — обычный Modal снизу, своих оверлеев нет. *@
+<nav class="cm-tabbar" aria-label="Разделы">
+    @foreach (var item in Items.Where(i => i.OnPhoneBar))
+    {
+        <NavLink class="cm-tabbar-item" href="@item.Href" Match="@(item.Href.Length == 0 ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+            <i class="fa-solid @item.Icon" aria-hidden="true"></i>
+            <span>@item.RailLabel</span>
+        </NavLink>
+    }
+    <button type="button" class="@Css.Join("cm-tabbar-item", _moreOpen ? "active" : null)" aria-haspopup="dialog"
+            @onclick="() => _moreOpen = true">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+        <span>Ещё</span>
+        @if (BadgeTotal > 0)
+        {
+            <span class="cm-nav-badge">@BadgeTotal</span>
+        }
+    </button>
+</nav>
+
+<Modal Open="_moreOpen" Title="Разделы" Placement="ModalPlacement.Sheet" OnClose="() => _moreOpen = false">
+    @foreach (var group in Items.GroupBy(i => i.Group))
+    {
+        <div class="cm-sheet-section">@NavMenu.Title(group.Key)</div>
+        @foreach (var item in group)
+        {
+            <NavLink class="cm-sheet-item" href="@item.Href" Match="@(item.Href.Length == 0 ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                <i class="fa-solid @item.Icon" aria-hidden="true"></i>
+                <span class="flex-1">@item.Label</span>
+                @if (Badges is not null && Badges.TryGetValue(item.Href, out var count) && count > 0)
+                {
+                    <span class="cm-count-badge">@count</span>
+                }
+            </NavLink>
+        }
+    }
+    @Footer
+</Modal>
+
+@code {
+    private bool _moreOpen;
+
+    [Parameter, EditorRequired] public IReadOnlyList<NavItem> Items { get; set; } = [];
+
+    [Parameter] public IReadOnlyDictionary<string, int>? Badges { get; set; }
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    private int BadgeTotal => Badges?.Values.Where(v => v > 0).Sum() ?? 0;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    // Перешли по пункту листа — лист закрывается сам.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_moreOpen)
+        {
+            _moreOpen = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

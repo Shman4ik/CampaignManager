@@ -3,41 +3,42 @@
 @inject IPingApi PingApi
 
 @* Сквозная проверка каркаса: страница → ApiClient → GET /api/v1/ping → Data → Postgres. *@
-<PageTitle>Проверка связи</PageTitle>
+<PageHeader Title="Проверка связи">
+    <Actions>
+        <Button Small="true" Icon="fa-rotate-right" Busy="@_loading" OnClick="PingAsync">Проверить ещё раз</Button>
+    </Actions>
+</PageHeader>
 
-<h1 class="mb-2 text-2xl font-semibold">Проверка связи</h1>
-<p class="mb-4 text-slate-600">Страница → ApiClient → GET /api/v1/ping → Data → Postgres.</p>
+<div class="cm-page">
+    <p class="cm-text-muted mb-4">Страница → ApiClient → GET /api/v1/ping → Data → Postgres.</p>
 
-<button type="button"
-        class="mb-4 inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-white disabled:opacity-60"
-        disabled="@_loading"
-        @onclick="PingAsync">
-    @(_loading ? "Проверяю…" : "Проверить ещё раз")
-</button>
+    @if (_error is not null)
+    {
+        <Alert Tone="Tone.Error" Title="Сервер не ответил" ShowIcon="true">@_error</Alert>
+    }
 
-@if (_error is not null)
-{
-    <div class="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-red-800" role="alert">
-        Сервер не ответил: @_error
-    </div>
-}
-
-@if (_response is { } response)
-{
-    <dl class="grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-md border border-slate-200 bg-white p-4"
-        data-testid="ping-result">
-        <dt class="text-slate-500">Время сервера</dt>
-        <dd>@Format(response.ServerTime)</dd>
-        <dt class="text-slate-500">Время базы</dt>
-        <dd>@Format(response.DatabaseTime)</dd>
-        <dt class="text-slate-500">Запрос к базе</dt>
-        <dd>@response.DatabaseLatencyMs.ToString("0.0") мс</dd>
-        <dt class="text-slate-500">Весь ответ</dt>
-        <dd>@_roundTrip.TotalMilliseconds.ToString("0") мс</dd>
-        <dt class="text-slate-500">Сервер</dt>
-        <dd>@response.ServerVersion, @response.Environment</dd>
-    </dl>
-}
+    @if (_response is { } response)
+    {
+        <div class="cm-card">
+            <dl class="cm-card-body grid grid-cols-[auto_1fr] gap-x-6 gap-y-2" data-testid="ping-result">
+                <dt class="text-primary-500">Время сервера</dt>
+                <dd>@Format(response.ServerTime)</dd>
+                <dt class="text-primary-500">Время базы</dt>
+                <dd>@Format(response.DatabaseTime)</dd>
+                <dt class="text-primary-500">Запрос к базе</dt>
+                <dd>@response.DatabaseLatencyMs.ToString("0.0") мс</dd>
+                <dt class="text-primary-500">Весь ответ</dt>
+                <dd>@_roundTrip.TotalMilliseconds.ToString("0") мс</dd>
+                <dt class="text-primary-500">Сервер</dt>
+                <dd>@response.ServerVersion, @response.Environment</dd>
+            </dl>
+        </div>
+    }
+    else if (_loading)
+    {
+        <LoadingIndicator Message="Проверяю…" />
+    }
+</div>
 
 @code {
     private PingResponse? _response;

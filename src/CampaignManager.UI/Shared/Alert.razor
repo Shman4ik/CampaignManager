@@ -1,0 +1,57 @@
+@* Единственный способ показать сообщение: ошибку сохранения, предупреждение по правилам, успех.
+   Своих <div class="bg-error-50"> не заводить — в v1 они расползлись по семи тонам.
+   Несёт собственный нижний отступ (mb-3, у Small — mb-2); не нужен — class="mb-0", утилита
+   перебивает компонентный класс без «!». Всплывающие уведомления (ToastService) — тот же Alert. *@
+<div class="@Css.Join("cm-alert", ToneClasses.Alert(Tone), Small ? "cm-alert-sm" : null, Css.ClassOf(AdditionalAttributes))"
+     role="@(Tone is Tone.Error or Tone.Warning ? "alert" : "status")"
+     @attributes="Css.WithoutClass(AdditionalAttributes)">
+    @if (ShowIcon || Icon is not null)
+    {
+        <i class="fa-solid @(Icon ?? ToneClasses.Icon(Tone)) cm-alert-icon" aria-hidden="true"></i>
+    }
+    <div class="min-w-0 flex-1">
+        @if (!string.IsNullOrEmpty(Title))
+        {
+            <div class="cm-alert-title">@Title</div>
+        }
+        @if (ChildContent is not null)
+        {
+            <div class="cm-alert-body">@ChildContent</div>
+        }
+        @if (Actions is not null)
+        {
+            <div class="mt-2.5 flex flex-wrap gap-2">@Actions</div>
+        }
+    </div>
+    @if (OnClose.HasDelegate)
+    {
+        <Button Variant="ButtonVariant.Ghost" Small="true" Icon="fa-xmark" AriaLabel="Закрыть сообщение"
+                class="cm-alert-close" OnClick="OnClose" />
+    }
+</div>
+
+@code {
+    [Parameter] public Tone Tone { get; set; } = Tone.Info;
+
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>Иконка тона. Короткой строке она не нужна, поэтому по умолчанию выключена.</summary>
+    [Parameter] public bool ShowIcon { get; set; }
+
+    /// <summary>Своя иконка вместо иконки тона (включает показ): <c>fa-skull</c>.</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>Плотный вид — для панелей листа сыщика, фильтров и тела карточек.</summary>
+    [Parameter] public bool Small { get; set; }
+
+    /// <summary>Кнопки под текстом — Small.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>Задан — появляется крестик.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

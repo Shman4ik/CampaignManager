@@ -1,0 +1,69 @@
+@* Поле формы: подпись, контрол, подсказка, правило книги, ошибка. В v1 эта связка собиралась
+   руками — cm-field-label 197 раз в 48 файлах.
+   Подпись обнимает контрол (<label>), поэтому id не нужен и касание подписи ставит фокус в поле.
+   Составному контролу (группа флажков, RollInput, редактор списка) — Group="true": тогда это
+   <fieldset> с <legend>, ведь метка вокруг нескольких полей фокусировала бы первое.
+   Ширину задаёт обёртка или class на самом Field (w-20, flex-1): cm-input — во всю ширину. *@
+@if (Group)
+{
+    <fieldset class="@Classes" @attributes="Css.WithoutClass(AdditionalAttributes)">
+        <legend class="cm-field-label mb-1">@LabelContent</legend>
+        @ChildContent
+        @Below
+    </fieldset>
+}
+else
+{
+    <label class="@Classes" @attributes="Css.WithoutClass(AdditionalAttributes)">
+        <span class="cm-field-label">@LabelContent</span>
+        @ChildContent
+        @Below
+    </label>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>Приписка к подписи бледным: «(необязательно)».</summary>
+    [Parameter] public string? Hint { get; set; }
+
+    /// <summary>Подсказка под полем — правило книги со ссылкой: «Не больше 99 (стр. 32).»</summary>
+    [Parameter] public string? Note { get; set; }
+
+    /// <summary>Ошибка проверки. Красит подсказку и заменяет её.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>Подпись слева от поля, а не над ним.</summary>
+    [Parameter] public bool Inline { get; set; }
+
+    /// <summary>Несколько контролов под одной подписью: fieldset вместо label.</summary>
+    [Parameter] public bool Group { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string Classes => Css.Join("cm-field", Inline ? "cm-field-inline" : null, Css.ClassOf(AdditionalAttributes));
+
+    private RenderFragment LabelContent => __builder =>
+    {
+        <text>@Label</text>
+        if (!string.IsNullOrEmpty(Hint))
+        {
+            <span class="cm-field-hint ml-1">@Hint</span>
+        }
+    };
+
+    private RenderFragment Below => __builder =>
+    {
+        if (!string.IsNullOrEmpty(Error))
+        {
+            <span class="cm-field-error" role="alert">@Error</span>
+        }
+        else if (!string.IsNullOrEmpty(Note))
+        {
+            <span class="cm-field-note">@Note</span>
+        }
+    };
+}

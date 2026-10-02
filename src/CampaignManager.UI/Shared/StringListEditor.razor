@@ -1,0 +1,82 @@
+@* Список строк: связи сыщика, ключевые факты, теги. Каждая правка отдаёт новый список
+   (@bind-Values) — документ листа или сценария получает новый экземпляр, а не правку на месте,
+   которую не заметил бы ни трекер EF, ни сравнение черновика. Пустые строки не добавляются.
+   Своей карточки не рисует; подпись — Field Group="true" вокруг. *@
+<div class="@Css.Join("min-w-0", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">
+    @for (var i = 0; i < Values.Count; i++)
+    {
+        var index = i;
+        var value = Values[index];
+        <div class="list-row" @key="index">
+            <input class="cm-input" value="@value" aria-label="@($"{ItemLabel} {index + 1}")"
+                   @onchange="e => ReplaceAsync(index, e.Value?.ToString())" />
+            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {value}")"
+                    OnClick="() => RemoveAsync(index)" />
+        </div>
+    }
+
+    <div class="@Css.Join("list-row", Values.Count > 0 ? "mt-2" : null)">
+        <input class="cm-input" placeholder="@Placeholder" aria-label="@($"Новый: {ItemLabel}")" @bind="_draft"
+               @bind:event="oninput" @onkeydown="OnKeyDownAsync" />
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_draft)" OnClick="AddAsync">Добавить</Button>
+    </div>
+</div>
+
+@code {
+    private string? _draft;
+
+    [Parameter] public IReadOnlyList<string> Values { get; set; } = [];
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Как назвать строку для экранного диктора: «Связь», «Факт».</summary>
+    [Parameter] public string ItemLabel { get; set; } = "Строка";
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task AddAsync()
+    {
+        var value = _draft?.Trim();
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+
+        _draft = null;
+        await ValuesChanged.InvokeAsync([.. Values, value]);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddAsync();
+        }
+    }
+
+    private Task ReplaceAsync(int index, string? value)
+    {
+        var trimmed = value?.Trim();
+        var list = Values.ToList();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            list.RemoveAt(index);
+        }
+        else
+        {
+            list[index] = trimmed;
+        }
+
+        return ValuesChanged.InvokeAsync(list);
+    }
+
+    private Task RemoveAsync(int index)
+    {
+        var list = Values.ToList();
+        list.RemoveAt(index);
+        return ValuesChanged.InvokeAsync(list);
+    }
+}
