@@ -698,7 +698,13 @@ dev-входом на 1366×1024, 1024×1366 и (главная, журнал, �
 - «Показать игрокам» и второй экран `/scenarios/{id}/handouts/{handoutId}` — статическая страница
   сервера, без интерактива.
 - `keeper_note` не попадает ни в показ, ни на второй экран.
-- Музыка локации — теги и прибитые треки (T2.8).
+- Музыка локации — теги и прибитые треки (T2.8). **Стык готов:** `scenario_locations.music_tags` +
+  `location_tracks` → `MusicPool.Of(tags, trackIds)` (Core), в разметке локации —
+  `<MusicPoolButton Pool=… Label="имя локации" />` (UI/Music, класс `cm-music-start` уже на ней; кнопка прячется,
+  если под пул ничего нет). Сервер — `MusicService.GetPoolAsync` / `GET /api/v1/music/pool?tag=&track=`.
+  Редактор тегов локации — `MusicTagPicker`, выбор прибитых треков — по справочнику фонотеки
+  (`ICatalogApi<MusicTrackDto>`). Режим игры, занимающий всю высоту, должен оставить место панели плеера: она —
+  последний элемент колонки `.cm-main` (UI/Music/CLAUDE.md).
 
 **T2.5c — Прохождения и ваншоты.** `RunService`:
 - «играть в кампании» — прохождение без копии содержимого;
@@ -803,6 +809,31 @@ dev-входом на 1366×1024, 1024×1366 и (главная, журнал, �
 блокируются после первого броска; диалог сам лист не пишет.
 
 ### T2.8 — Фонотека и плеер
+
+**Сделано 2026-10-02.** Модуль `Music` во всех слоях: `Core/Music` (теги, ссылка YouTube → id, правило пула
+`MusicPool`, выбор без повтора `MusicShuffle`, умолчания), `Contracts/Music` (`MusicTrackDto` — наследник
+`CatalogItemDto`, настроения, пул, `IMusicApi`), `ApiClient/Music`, `Server/Music` (`MusicTrackStore` на общем
+`CatalogService`, `MusicService`: `GET|PUT /api/v1/music/pinned-tags`, `GET /api/v1/music/pool`), `UI/Music`
+(`/music` на `CatalogPage`, пачка файлов, настроения, синглтон `MusicPlayer`, панель и кнопка в слоте шапки,
+`MusicPlayerBar.razor.js` — ES-модуль, `MusicPoolButton` для других модулей). Знание —
+[Server/Music/CLAUDE.md](../../src/CampaignManager.Server/Music/CLAUDE.md), [UI/Music/CLAUDE.md](../../src/CampaignManager.UI/Music/CLAUDE.md).
+Миграции нет — хватило таблиц T1.2. Отличия от карточки:
+- фонотека — справочник целиком (`/api/v1/catalogs/music`: ETag, `If-Match`, импорт и экспорт, журнал правок), а не
+  только «вид строками»: `MusicTrack` стал `CatalogEntry` без кода и источника (`Ignore`, колонок нет), у хранилища
+  `HasCodes => false`; `CatalogsModule.AddCatalog`/`MapCatalog` открыты для модуля;
+- закреплённые теги — свой эндпоинт модуля (`/api/v1/music/pinned-tags`) поверх той же строки `user_preferences`
+  (`music.pinnedTags`), а не общий API профиля T2.9: #123 ещё не влит. Значение — JSON-массив; строку v1 через
+  запятую читаем тоже;
+- трек — только загруженный звук или YouTube: внешний адрес звука сервер не принимает (Web Audio с чужого origin
+  немой); картинка вместо звука — 400;
+- пачка файлов — на клиенте (загрузка в `files` и создание трека по одному), а не серверный сервис v1; название
+  занимается до загрузки, как в v1;
+- панель плеера — `sticky` последним элементом колонки: место под собой занимает сама, ResizeObserver, `:has()` и
+  `data-permanent` v1 не нужны (обходы enhanced-навигации и circuit);
+- импорт формата v1 (`{ "tracks": [...] }`) не читается — формат 2.0 тот, что отдаёт экспорт;
+- кит: `CatalogPage.ToolbarActions` и публичный `ReloadAsync`; кнопки панели фильтров переносятся (`FilterPanel`),
+  иначе четыре кнопки уводили страницу вбок на телефоне;
+- музыка локации и кнопка настроения боя — только модель, API и `MusicPoolButton`; подключение — T2.5b и T2.6.
 
 **Цель.** Фонотека — вид каталога «строки» (T2.1), плеер — как в v1.
 

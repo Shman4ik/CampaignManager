@@ -15,7 +15,11 @@
 | `Server/Platform/ApiProblem.cs` | `ApiProblemException` и обработчик: 400/409/428 с кодом; `DbUpdateConcurrencyException` → 409 `stale` |
 | `Core/Catalogs` | `OccupationSeed` (сид профессий), `CatalogText` (подписи), разборщики |
 
-## API (`/api/v1/catalogs/{skills|occupations|weapons|spells|books|items|creatures}`)
+Фонотека (T2.8) — восьмой справочник на том же сервисе: `MusicTrackStore` в модуле Music регистрируется
+публичными `CatalogsModule.AddCatalog`/`MapCatalog`. У трека нет кода книги — хранилище говорит `HasCodes => false`,
+и сервис присланный код не читает, импорт ищет только по имени. См. [Music/CLAUDE.md](../Music/CLAUDE.md).
+
+## API (`/api/v1/catalogs/{skills|occupations|weapons|spells|books|items|creatures|music}`)
 
 - `GET` — список целиком и `canEdit`. **ETag** — хеш id и версий (`xmin`) строк, прав и сборки контрактов:
   `Cache-Control: private, no-cache`, браузер перепроверяет и получает 304 без тела. Сборка в ETag — затем,
