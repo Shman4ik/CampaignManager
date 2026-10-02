@@ -76,9 +76,18 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 падает с сообщением, какой настройки нет. **Бакет создаёт администратор**, загрузка его не создаёт.
 
 Настройки — секция `Minio` с ключами v1: `Endpoint`, `AccessKey`, `SecretKey`, `Secure`,
-`BucketName`, плюс необязательный `Region`. В `appsettings.json` их нет намеренно: у v1 dev и прод —
-**один бакет** `campain-manager`, и дефолт привёл бы разработку в боевой бакет. Локально —
-`Server/appsettings.Development.json` (в `.gitignore`) на MinIO в wslc:
+`BucketName`, плюс необязательный `Region`. В `appsettings.json` их нет намеренно: дефолт привёл бы разработку
+в боевой бакет `campain-manager` (v1 и прод).
+
+- **Ветка Neon `dev` и beta-стенд — бакет `campaign-manager-dev`** на том же MinIO (`s3.dmnet.dev`), заведён в
+  T1.3. Строки `files` ветки `dev` — перенос v1: объекты скопированы туда из боевого бакета под теми же ключами
+  (`images/beasts/…`, `music/…`), новые загрузки ложатся туда же (`images|music/<sha256>…`). Локальная разработка
+  на ветке `dev` — `"BucketName": "campaign-manager-dev"` в `Server/appsettings.Development.json`, ключи — те же,
+  что у v1 в `CampaignManager.Web/appsettings.Development.json` основного чекаута (копировать скриптом, не печатая).
+  Отдельного ключа только на этот бакет пока нет: заводит администратор MinIO (команды — в PR T1.3).
+- Строка `files` переноса — `sha256` пуст (объект не скачивался, копия шла внутри MinIO): повторная загрузка того
+  же файла заведёт новую строку, а не найдёт перенесённую. Размер и тип — из хранилища и расширения.
+- Свой MinIO в wslc — для тестов адаптера и работы без сети:
 
 ```bash
 # образ minio/minio с Docker Hub больше не публикуется — берём сборку Chainguard

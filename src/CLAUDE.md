@@ -101,6 +101,9 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
   `dotnet ef migrations add <Имя> --project src/CampaignManager.Data`. Строка — из `CM_DB`, без
   неё — `localhost:5432`.
 - Журнал миграций — `cm.__ef_migrations_history`, не общий `public` v1.
+- **Данные `cm` на ветке `dev` — перенос v1** (`tools/CampaignManager.Migrate`, T1.3; как запускать —
+  [его CLAUDE.md](../tools/CampaignManager.Migrate/CLAUDE.md)). Перезалить: сбросить ветку от `main`, накатить
+  миграции, перенос с `--reset`. Id строк v1 сохранены — ссылки на листы и сценарии v1 ведут туда же.
 - **Схема `cm`** — `Data/<Модуль>/` (сущности и `IEntityTypeConfiguration` рядом), спецификация —
   [SCHEMA.md](../docs/v2/SCHEMA.md). Первая миграция — `InitialCmSchema`; применена на ветке `dev`.
   Миграции не применяются при старте сервера: `dotnet ef database update --project src/CampaignManager.Data`
@@ -140,6 +143,7 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
 ## Тесты
 
 - `UI.Tests` — UI-кит на bUnit (поведение компонентов и служб; вёрстку проверяет браузер).
+- `Migrate.Tests` — перенос v1 → v2: листы v1 (обезличенные) и прогон целиком на своей базе из `CM_TEST_DB`.
 - `Core.Tests` — правила книги (тесты T0.2, перенесённые на `Core`; кости — `ScriptedDice`, страница книги —
   `[Trait("page", …)]`, находка — `[Trait("finding", "F-…")]`); `Server.Tests` — API через `ApiClient` на `WebApplicationFactory`
   (окружение `Testing`, чтобы не подхватить `appsettings.Development.json`) и тест архитектуры.
@@ -175,8 +179,11 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Access` | `CurrentUser`, `AccessPolicy`, политики `[Authorize]` | [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) |
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
 
-Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат: у v1 dev и прод — один бакет. Без них
-сервер стартует, а файлы отвечают ошибкой с именем недостающей настройки.
+Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` (и beta-стенд на ней) смотрит
+в бакет **`campaign-manager-dev`**: туда перенос (T1.3) копирует объекты v1, на которые ссылаются строки
+`files` ветки `dev`; боевой `campain-manager` (v1 и прод) разработка не трогает. Локально — `Minio:BucketName`
+в `Server/appsettings.Development.json`. Без настроек сервер стартует, а файлы отвечают ошибкой с именем
+недостающей настройки.
 
 ## Проверка под ролями
 
