@@ -1,24 +1,45 @@
 @using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Scenarios
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Scenarios
+@inject IRunsApi Runs
 
 @* Добавить участника — единственный список на бой и погоню (знание v1): источники вкладками (сыщики кампании, состав
    сценария, НПС, бестиарий — IParticipantSource), поиск без регистра, «уже в сцене» у листа, который уже стоит (один
    лист — один раз), количество у тварей и в составе сценария (по умолчанию — из состава). Окно не закрывается после добавления — обычно ставят
-   несколько. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
+   несколько. Сцена в кампании предлагает сценарии её незавершённых прохождений (T2.6d): выбранное прохождение окно
+   отдаёт странице (OnRunChosen), и она пишет его в сцену; без кампании (или если прохождений нет) — любой сценарий библиотеки,
+   сцена остаётся без прохождения. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
 <Modal Open="Open" OnClose="OnClose" Title="Участник сцены" Size="ModalSize.Large">
     <ChildContent>
         <div class="flex flex-col gap-3">
             <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
             @if (ActiveSource?.UsesScenario == true)
             {
-                <select class="cm-input" aria-label="Сценарий" data-testid="picker-scenario" value="@(_scenarioId?.ToString() ?? "")" @onchange="SelectScenarioAsync">
-                    <option value="">— выберите сценарий —</option>
-                    @foreach (var scenario in _scenarios)
+                @if (_runs.Count > 0)
+                {
+                    <select class="cm-input" aria-label="Сценарий прохождения" data-testid="picker-run" value="@(_chosenRunId?.ToString() ?? "")" @onchange="SelectRunAsync">
+                        <option value="">— выберите сценарий прохождения —</option>
+                        @foreach (var run in _runs)
+                        {
+                            <option value="@run.Id">@run.ScenarioName · @ScenarioText.Of(run.Status)</option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <select class="cm-input" aria-label="Сценарий" data-testid="picker-scenario" value="@(_scenarioId?.ToString() ?? "")" @onchange="SelectScenarioAsync">
+                        <option value="">— выберите сценарий —</option>
+                        @foreach (var scenario in _scenarios)
+                        {
+                            <option value="@scenario.Id">@scenario.Name</option>
+                        }
+                    </select>
+                    @if (Context.CampaignId is not null)
                     {
-                        <option value="@scenario.Id">@scenario.Name</option>
+                        <p class="cm-text-muted text-sm" data-testid="picker-no-runs">В кампании нет незавершённых прохождений — сцена останется без сценария.</p>
                     }
-                </select>
+                }
             }
             <input class="cm-input" type="search" placeholder="Поиск по имени" aria-label="Поиск участника" data-testid="picker-search"
                    value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
@@ -85,6 +106,10 @@
     private string? _adding;
     private Guid? _scenarioId;
     private IReadOnlyList<ScenarioSummaryDto> _scenarios = [];
+    private IReadOnlyList<ScenarioRunDto> _runs = [];
+    private Guid? _runsFor;
+    private bool _runsLoaded;
+    private Guid? _chosenRunId;
 
     [Parameter] public bool Open { get; set; }
 
@@ -98,6 +123,12 @@
     [Parameter] public IReadOnlySet<Guid> UsedCharacterIds { get; set; } = new HashSet<Guid>();
 
     [Parameter] public EventCallback<IReadOnlyList<EncounterParticipant>> OnPicked { get; set; }
+
+    /// <summary>Прохождение, с которым идёт сцена (<c>encounters.run_id</c>): окно открывается на его сценарии.</summary>
+    [Parameter] public Guid? RunId { get; set; }
+
+    /// <summary>Хранитель выбрал сценарий прохождения кампании — страница пишет это прохождение в сцену.</summary>
+    [Parameter] public EventCallback<Guid> OnRunChosen { get; set; }
 
     private IParticipantSource? ActiveSource => Sources.FirstOrDefault(s => s.Key == _tab);
 
@@ -130,7 +161,19 @@
         _error = null;
         try
         {
-            if (source.UsesScenario && _scenarios.Count == 0)
+            if (source.UsesScenario && Context.CampaignId is { } campaignId && (!_runsLoaded || _runsFor != campaignId))
+            {
+                _runs = [.. await Runs.ListForCampaignAsync(campaignId)];
+                _runsFor = campaignId;
+                _runsLoaded = true;
+                if (_chosenRunId is null && RunId is { } current && _runs.FirstOrDefault(r => r.Id == current) is { } known)
+                {
+                    _chosenRunId = known.Id;
+                    _scenarioId = known.ScenarioId;
+                }
+            }
+
+            if (source.UsesScenario && _runs.Count == 0 && _scenarios.Count == 0)
                 _scenarios = [.. (await Scenarios.ListAsync()).Items.OrderBy(s => s.Name, StringComparer.CurrentCulture)];
             _results[_tab] = await source.LoadAsync(Context with { ScenarioId = _scenarioId }, CancellationToken.None);
         }
@@ -150,6 +193,18 @@
         foreach (var source in Sources.Where(s => s.UsesScenario))
             _results.Remove(source.Key);
         await LoadAsync();
+    }
+
+    private async Task SelectRunAsync(ChangeEventArgs e)
+    {
+        var run = Guid.TryParse(e.Value?.ToString(), out var id) ? _runs.FirstOrDefault(r => r.Id == id) : null;
+        _chosenRunId = run?.Id;
+        _scenarioId = run?.ScenarioId;
+        foreach (var source in Sources.Where(s => s.UsesScenario))
+            _results.Remove(source.Key);
+        await LoadAsync();
+        if (run is not null && run.Id != RunId)
+            await OnRunChosen.InvokeAsync(run.Id);
     }
 
     private IEnumerable<ParticipantOption> Filter(IEnumerable<ParticipantOption> options) =>

@@ -446,7 +446,9 @@ public sealed record ScenarioRunDto(
     bool SignupOpen,
     IReadOnlyList<RunReservationDto> Reservations,
     bool CanEdit,
-    bool CanDelete);
+    bool CanDelete,
+    Guid ScenarioId,
+    string ScenarioName);
 
 /// <summary>Бронь прегена в прохождении.</summary>
 /// <param name="PlayerName">Кто забронировал — по псевдониму в кампании или имени; <c>null</c> — имени нет (почт нет).</param>

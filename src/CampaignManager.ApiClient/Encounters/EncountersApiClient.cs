@@ -43,6 +43,15 @@ public sealed class EncountersApiClient(HttpClient http) : IEncountersApi
         return await SendAsync(request, version, cancellationToken);
     }
 
+    public async Task<EncounterSavedDto> SetRunAsync(Guid encounterId, Guid? runId, uint version, CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Put, EncountersRoutes.Run(encounterId))
+        {
+            Content = JsonContent.Create(new SetEncounterRunRequest(runId), Json.SetEncounterRunRequest),
+        };
+        return await SendAsync(request, version, cancellationToken);
+    }
+
     public async Task<EncounterSavedDto> FinishAsync(Guid encounterId, uint version, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, EncountersRoutes.Finish(encounterId));

@@ -391,4 +391,40 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
         public Task<IReadOnlyList<InvestigatorDto>> GetCampaignInvestigatorsAsync(Guid campaignId, CancellationToken cancellationToken = default) =>
             inner.GetCampaignInvestigatorsAsync(campaignId, cancellationToken);
     }
+
+    [Fact]
+    public async Task Encounter_carries_the_scenario_run_of_its_campaign()
+    {
+        TestDatabase.SkipIfMissing();
+        var (keeper, _, otherKeeper, campaignId, _) = await TableAsync();
+        var scenarios = new CampaignManager.ApiClient.Scenarios.ScenariosApiClient(app.Http(keeper));
+        var runs = new CampaignManager.ApiClient.Scenarios.RunsApiClient(app.Http(keeper));
+        var scenario = await scenarios.CreateAsync(new CampaignManager.Contracts.Scenarios.ScenarioInput("Туман", Era: CampaignManager.Core.Era.Classic), Cancellation);
+        var run = await runs.PlayInCampaignAsync(scenario.Id, new CampaignManager.Contracts.Scenarios.PlayInCampaignRequest(campaignId), Cancellation);
+        var foreignCampaign = await app.AddCampaignAsync(otherKeeper);
+        var foreignScenario = await new CampaignManager.ApiClient.Scenarios.ScenariosApiClient(app.Http(otherKeeper))
+            .CreateAsync(new CampaignManager.Contracts.Scenarios.ScenarioInput("Чужой", Era: CampaignManager.Core.Era.Classic), Cancellation);
+        var foreignRun = await new CampaignManager.ApiClient.Scenarios.RunsApiClient(app.Http(otherKeeper))
+            .PlayInCampaignAsync(foreignScenario.Id, new CampaignManager.Contracts.Scenarios.PlayInCampaignRequest(foreignCampaign.Id), Cancellation);
+
+        // Из режима игры сцена стартует сразу с прохождением; чужое прохождение и прохождение без кампании — 400.
+        await Fails(HttpStatusCode.BadRequest, () => Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId, foreignRun.Id), Cancellation));
+        await Fails(HttpStatusCode.BadRequest, () => Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, null, run.Id), Cancellation));
+        var started = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId, run.Id), Cancellation);
+        Assert.Equal(run.Id, started.RunId);
+
+        // Окно участника пишет выбранное прохождение; запись меняет версию, состояние после неё пишется на новой.
+        var chase = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
+        Assert.Null(chase.RunId);
+        await Fails(HttpStatusCode.BadRequest, () => Encounters(keeper).SetRunAsync(chase.Id, foreignRun.Id, chase.Version, Cancellation));
+        var linked = await Encounters(keeper).SetRunAsync(chase.Id, run.Id, chase.Version, Cancellation);
+        Assert.NotEqual(chase.Version, linked.Version);
+        Assert.Equal(run.Id, (await Encounters(keeper).GetAsync(chase.Id, Cancellation)).RunId);
+        await Fails(HttpStatusCode.Conflict, () => Encounters(keeper).SetRunAsync(chase.Id, null, chase.Version, Cancellation));
+        await Encounters(keeper).SaveStateAsync(chase.Id, new EncounterState(), linked.Version, Cancellation);
+        await Fails(HttpStatusCode.NotFound, () => Encounters(otherKeeper).SetRunAsync(chase.Id, null, linked.Version, Cancellation));
+        var cleared = await Encounters(keeper).GetAsync(chase.Id, Cancellation);
+        await Encounters(keeper).SetRunAsync(chase.Id, null, cleared.Version, Cancellation);
+        Assert.Null((await Encounters(keeper).GetAsync(chase.Id, Cancellation)).RunId);
+    }
 }

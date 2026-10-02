@@ -109,6 +109,8 @@ public sealed class CombatPanelTests : KitContext
         public Task<EncounterSavedDto> SaveStateAsync(Guid encounterId, EncounterState state, uint version, CancellationToken cancellationToken = default) =>
             Task.FromResult(new EncounterSavedDto(++_version, Now));
 
+        public Task<EncounterSavedDto> SetRunAsync(Guid encounterId, Guid? runId, uint version, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<EncounterSavedDto> FinishAsync(Guid encounterId, uint version, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
