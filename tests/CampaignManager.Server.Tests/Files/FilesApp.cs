@@ -1,5 +1,7 @@
 using CampaignManager.ApiClient.Files;
+using CampaignManager.Core.Identity;
 using CampaignManager.Data;
+using CampaignManager.Data.Identity;
 using CampaignManager.Server.Files.Storage;
 using CampaignManager.Server.Tests.Schema;
 using Microsoft.AspNetCore.Hosting;
@@ -12,7 +14,8 @@ namespace CampaignManager.Server.Tests.Files;
 
 /// <summary>
 /// Сервер с хранилищем в памяти, своей базой (<see cref="SchemaDatabase"/>) и переставляемыми
-/// часами: возраст файла решает, сирота он или нет.
+/// часами: возраст файла решает, сирота он или нет. Клиент по умолчанию — администратор
+/// (<see cref="Admin"/>): сироты только ему; <see cref="Player"/> — для проверок прав.
 /// </summary>
 public sealed class FilesApp : IAsyncLifetime
 {
@@ -27,6 +30,10 @@ public sealed class FilesApp : IAsyncLifetime
 
     public MovableTime Time { get; } = new();
 
+    public User Admin { get; } = new() { Email = $"admin-{Guid.NewGuid():N}@example.test", DisplayName = "Админ", Role = UserRole.Admin };
+
+    public User Player { get; } = new() { Email = $"player-{Guid.NewGuid():N}@example.test", DisplayName = "Игрок" };
+
     public async ValueTask InitializeAsync()
     {
         await Database.InitializeAsync();
@@ -35,9 +42,15 @@ public sealed class FilesApp : IAsyncLifetime
             return;
         }
 
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        await using (var db = Database.CreateContext())
         {
-            builder.UseEnvironment("Testing");
+            db.Users.AddRange(Admin, Player);
+            await db.SaveChangesAsync();
+        }
+
+        // CmApp: пустышки Auth0, эфемерные ключи и сессия заголовками (TestAuth).
+        _factory = new CmApp().WithWebHostBuilder(builder =>
+        {
             builder.UseSetting($"ConnectionStrings:{CmDatabase.ConnectionStringName}", Database.ConnectionString);
             builder.UseSetting("Files:MaxUploadBytes", MaxUploadBytes.ToString(System.Globalization.CultureInfo.InvariantCulture));
             builder.ConfigureServices(services =>
@@ -50,10 +63,17 @@ public sealed class FilesApp : IAsyncLifetime
         });
     }
 
-    /// <summary>Клиент без перехода по редиректам: внешний файл отвечает 302, его и проверяем.</summary>
-    public HttpClient CreateClient() => (_factory ?? throw new InvalidOperationException(
-            "Сервер не поднят: тест должен начинаться с TestDatabase.SkipIfMissing()."))
-        .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    /// <summary>
+    /// Клиент без перехода по редиректам (внешний файл отвечает 302, его и проверяем) от имени
+    /// администратора; <paramref name="anonymous"/> — без входа, <paramref name="user"/> — от имени другого.
+    /// </summary>
+    public HttpClient CreateClient(User? user = null, bool anonymous = false)
+    {
+        var client = (_factory ?? throw new InvalidOperationException(
+                "Сервер не поднят: тест должен начинаться с TestDatabase.SkipIfMissing()."))
+            .CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        return anonymous ? client : client.As((user ?? Admin).Id);
+    }
 
     public FilesApiClient Api() => new(CreateClient());
 

@@ -12,7 +12,7 @@
 | `ApiClient` | `HttpClient`-реализации интерфейсов | `Contracts` |
 | `Data` | `CmDbContext`, миграции схемы `cm` | `Core` |
 | `UI` | страницы, компоненты, Tailwind | `Core`, `Contracts` |
-| `Web.Client` | хост WebAssembly: регистрирует `ApiClient` | `UI`, `ApiClient` |
+| `Web.Client` | хост WebAssembly: регистрирует `ApiClient` и `AuthenticationStateProvider` | `UI`, `ApiClient` |
 | `Server` | API `/api/v1/…`, хост приложения | всё, кроме `ApiClient` |
 
 Границы проверяет `tests/CampaignManager.Server.Tests/ArchitectureTests` по ссылкам собранных
@@ -54,6 +54,26 @@
   встроенный `Microsoft.AspNetCore.OpenApi`, документ на `/openapi/v1.json`; без Swashbuckle.
 - Культура WebAssembly — `ru-RU` при любом языке браузера (`Web.Client/Program.cs`), поэтому
   грузятся все данные ICU (`BlazorWebAssemblyLoadAllGlobalizationData`).
+
+## Вход и права
+
+Подробно — [Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md) (Auth0, куки,
+JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) (таблица прав).
+Что нужно знать любому модулю:
+
+- **Эндпоинты API закрыты:** группа модуля — `.RequireAuthorization()` или
+  `.RequireAuthorization(Policies.Keeper|Admin)`. Открытый эндпоинт роняет тест
+  `Every_api_endpoint_requires_authorization`.
+- **Каждый метод записи сервиса зовёт `AccessPolicy` и `Demand`**; флаги `canEdit`/`canDelete` в DTO —
+  из неё же. Не виден объект — 404, виден, но нельзя — 403. Своих проверок ролей и членства в
+  сервисах не писать: новое правило — метод `AccessPolicy` и строка в таблицу Access.
+- Кто делает запрос — `CurrentUser` (id, роль из `cm.users`). `IHttpContextAccessor`, claims и почту
+  в сервисах не читать.
+- **Страницы UI — `[Authorize(Policy = Policies.Keeper)]`, не `Roles`**: сервер проверяет атрибут
+  страницы при прямой загрузке, а роли в куке нет.
+- Сервер без `Authentication:Auth0:Domain`/`ClientId` не стартует (в v1 это был 500 на каждый
+  запрос). Значения dev-приложения — в `Server/appsettings.Development.json` (копируются скриптом
+  из `CampaignManager.Web/appsettings.Development.json` основного чекаута вместе со строкой подключения).
 
 ## Tailwind
 
@@ -127,6 +147,11 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 - Тесты адаптера MinIO — по `CM_TEST_MINIO=endpoint;accessKey;secretKey` (MinIO в `wslc`, см.
   [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md)); без переменной пропускаются, в CI
   MinIO нет — тесты API модуля файлов идут на хранилище в памяти.
+- `CmApp` подставляет пустышки Auth0, эфемерные ключи Data Protection и схему `TestAuth`: запрос с
+  заголовком `X-Test-UserId` (или `X-Test-Sub` + `X-Test-Email`) — вошедший пользователь
+  (`client.As(userId)`), без заголовков — настоящий аноним. Метаданные Auth0 заданы руками: вход и
+  выход дают редирект на Auth0 без сети. Тестам API с базой нужна схема `cm` — наследник `CmApp`
+  со своей `SchemaDatabase` (пример — `IdentityApp`).
 - Тесты схемы (`Server.Tests/Schema`) создают на сервере из `CM_TEST_DB` отдельную базу
   `cm_schema_<guid>`, поднимают её миграциями и удаляют после прогона (`SchemaDatabase`). Нужны права
   `CREATEDB` — у `postgres` в контейнере они есть.
@@ -136,6 +161,8 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | Модуль | Что | Знание |
 |---|---|---|
 | `Platform` | база, JSON, ошибки, health, OpenAPI, хост WebAssembly | этот файл |
+| `Identity` | вход через Auth0 (кука и JWT), автовход, `cm.users`, `/api/v1/me` | [Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md) |
+| `Access` | `CurrentUser`, `AccessPolicy`, политики `[Authorize]` | [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) |
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
 
 Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат: у v1 dev и прод — один бакет. Без них

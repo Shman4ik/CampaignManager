@@ -196,6 +196,31 @@ kebab-case с префиксом справочника (`skill.dodge`, `occupat
 
 ### T1.4 — Вход, пользователи, права
 
+**Сделано 2026-10-02.** `Server/Identity`: OIDC + кука как в v1 (`email_verified`, белый список,
+`AdminEmails`, `ResponseMode = Query`, автовход через Google, выход гасит сессию Auth0), JWT Bearer
+второй схемой под policy scheme, пользователь заводится и привязывается при входе (`UserDirectory`:
+sub, затем почта), `GET /api/v1/me`. `Server/Access`: `CurrentUser` (роль из `cm.users` на запрос),
+`AccessPolicy` по всей карте прав, `Demand` → 404/403 ProblemDetails, политики `Keeper`/`Admin` для
+`[Authorize]`. Клиент: `MeAuthenticationStateProvider`, `/login`, меню пользователя, `AuthorizeRouteView`.
+`Server.Tests`: каждое правило карты прав (`AccessPolicyTests`), вход/выход/автовход до редиректа на
+Auth0, привязка по почте, роль без кэша, закрытость каждого эндпоинта `/api/v1`. Знание —
+[Identity/CLAUDE.md](../../src/CampaignManager.Server/Identity/CLAUDE.md),
+[Access/CLAUDE.md](../../src/CampaignManager.Server/Access/CLAUDE.md). Отличия от карточки:
+- вход целиком на dev-приложении не пройден агентом: на localhost Auth0 всегда спрашивает согласие,
+  а принимать его — решение человека. Проверено до экрана согласия (автовход через Google без кликов)
+  и отказ на нём; остальное — паритет, пункт 1;
+- JWT подключён, но **без API (audience) и Action в тенанте не работает** — заводит владелец
+  (вопрос в PR); почту в токен кладёт Action под `https://cthulhu.dmnet.dev/`;
+- админ может всё (в v1 не правил чужие кампании), кампанию создаёт только Хранитель, снять бронь —
+  только Хранитель этой кампании, НПС игроку не виден — список в Access/CLAUDE.md;
+- игрок не может править справочник прямым запросом — проверено на `AccessPolicy` (`ForCatalogAsync`
+  + `Demand` → 403); эндпоинтов справочников ещё нет, их делает T2.1 с `Demand` в каждом методе записи;
+- заглушка прав T1.5 (`FileAccessStub`) заменена на `AccessPolicy.ForFilesAsync`: читать и загружать —
+  вошедший, сироты — админ (`Policies.Admin`); `uploaded_by_id` — из `CurrentUser`; загрузка без
+  antiforgery закрыта `SameSite=Lax` куки входа (межсайтовый POST приходит анонимным — 401);
+- ни одной миграции: `users` и `campaign_members` из T1.2 хватило;
+- ключи Data Protection — в `cm.data_protection_keys` с именем приложения v1 (куки переживут переключение).
+
 **Цель.** Auth0 и модель прав 2.0. Знание v1 — корневой `CLAUDE.md`, «Authentication (Auth0)»;
 карта прав — AUDIT, «Права».
 

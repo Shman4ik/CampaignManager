@@ -2,8 +2,6 @@ using System.Net;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Data;
 using CampaignManager.Data.Files;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -31,18 +29,14 @@ public sealed class FileReferencesTests
         ], FileReferences.All(context.Model));
     }
 
-    // Права — заглушка до T1.4: вне Development и Testing файлы закрыты, а не открыты.
+    // Без входа файлы закрыты: 401 ещё до базы и хранилища (права — AccessPolicy, T1.4).
     [Theory]
     [InlineData("GET", "/api/v1/files/0199a2b1-0000-7000-8000-000000000001")]
     [InlineData("GET", FilesRoutes.Orphans)]
     [InlineData("POST", FilesRoutes.External)]
-    public async Task Access_stub_denies_outside_local_environments(string method, string path)
+    public async Task Files_are_closed_without_sign_in(string method, string path)
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Production");
-            builder.UseSetting($"ConnectionStrings:{CmDatabase.ConnectionStringName}", TestDatabase.Unreachable);
-        });
+        await using var factory = new CmApp();
         using var request = new HttpRequestMessage(new HttpMethod(method), path);
         if (method == "POST")
         {
@@ -51,6 +45,6 @@ public sealed class FileReferencesTests
 
         using var response = await factory.CreateClient().SendAsync(request, TestContext.Current.CancellationToken);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
