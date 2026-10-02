@@ -1,0 +1,20 @@
+@implements IDisposable
+@inject ToastService Toasts
+
+@* Стопка уведомлений ToastService под шапкой справа. Стоит один раз в MainLayout. *@
+<div class="cm-toasts" aria-live="polite">
+    @foreach (var toast in Toasts.Messages)
+    {
+        <Alert @key="toast.Id" Tone="toast.Tone" Title="@toast.Title" ShowIcon="true" OnClose="() => Toasts.Dismiss(toast.Id)">
+            @toast.Message
+        </Alert>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Toasts.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Toasts.Changed -= OnChanged;
+}

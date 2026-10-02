@@ -1,0 +1,541 @@
+@page "/dev/ui"
+@using CampaignManager.Core
+@using CampaignManager.Core.Dice
+@using CampaignManager.UI.Platform
+@inject UiEnvironment Environment
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject ApiActivity Activity
+
+@* Все компоненты UI-кита на одном экране — только в Development. Здесь их проверяют на iPad
+   (1366×1024, 1024×1366) и iPhone (390×844) после правки дизайн-системы. Новый компонент кита —
+   сюда же. Данные выдуманы, на сервер страница не ходит. *@
+@if (!Environment.IsDevelopment)
+{
+    <PageHeader Title="Страница не найдена" />
+    <div class="cm-page">
+        <EmptyState Icon="fa-map-signs" Title="По этому адресу ничего нет" />
+    </div>
+    return;
+}
+
+<PageHeader Title="UI-кит">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetDemo">Сбросить</Button>
+        <Button Small="true" Icon="fa-plus" OnClick="() => _modalOpen = true">Окно</Button>
+    </Actions>
+</PageHeader>
+
+@* Так модуль кладёт свою кнопку в шапку любой страницы (ширма, плеер): шапка о модуле не знает. *@
+<SectionContent SectionName="@PageHeaderSlots.KeeperScreen">
+    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-skull" OnClick="@(() => Toasts.Info("Здесь откроется ширма Хранителя."))">Ширма</Button>
+</SectionContent>
+
+<div class="cm-page">
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Цвета</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack">
+                @foreach (var (name, swatches) in Palettes)
+                {
+                    <div>
+                        <div class="cm-field-label mb-2">@name</div>
+                        <div class="grid grid-cols-6 gap-1 sm:grid-cols-11">
+                            @foreach (var (shade, css) in swatches)
+                            {
+                                <div class="min-w-0">
+                                    <div class="@($"h-8 rounded-md border border-primary-200 {css}")"></div>
+                                    <div class="mt-0.5 text-[0.6875rem] text-primary-500">@shade</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Текст</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body">
+                <div class="cm-title-serif mb-2 text-3xl">Маски Ньярлатотепа</div>
+                <div class="cm-h4 mb-1">Заголовок раздела (cm-h4)</div>
+                <div class="cm-h6 mb-2">Заголовок карточки (cm-h6)</div>
+                <p class="mb-2">Обычный текст 14px. Вычитается из физического урона, но не из урона от магии, яда и утопления (стр. 106).</p>
+                <p class="cm-text-muted">Приглушённый текст карточки — пояснения и пересказ правил.</p>
+                <p class="cm-meta mt-2"><span><span class="cm-meta-label">Эпоха:</span> 1920-е</span><span>·</span><span><span class="cm-meta-label">Источник:</span> Книга Хранителя</span></p>
+                <p class="cm-dice mt-2">1d6+БкУ · 2D6+3 · 1д100</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Кнопки</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack">
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button Icon="fa-floppy-disk">Сохранить</Button>
+                    <Button Variant="ButtonVariant.Secondary">Отмена</Button>
+                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen">Изменить</Button>
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can">Удалить</Button>
+                    <Button Variant="ButtonVariant.Error">Удалить навсегда</Button>
+                    <Button Variant="ButtonVariant.Success" Icon="fa-check">Одобрить</Button>
+                    <Button Variant="ButtonVariant.Warning">Внимание</Button>
+                    <Button Variant="ButtonVariant.Ghost">Без фона</Button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Button Small="true" Icon="fa-plus">Добавить</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary">Назад</Button>
+                    <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="Изменить: Кольт .45" />
+                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="Удалить: Кольт .45" />
+                    <Button Icon="fa-dice-d20" AriaLabel="Бросить кости" />
+                    <Button Busy="_busy" Icon="fa-floppy-disk" OnClick="SimulateBusyAsync">@(_busy ? "Сохраняю" : "Долгое действие")</Button>
+                    <Button Disabled="true">Недоступно</Button>
+                    <Button Href="dev/ping" Variant="ButtonVariant.Secondary" Icon="fa-link">Ссылка-кнопка</Button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Метки</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body flex flex-wrap items-center gap-2">
+                <Badge>Черновик</Badge>
+                <Badge Tone="Tone.Info">Отряд</Badge>
+                <Badge Tone="Tone.Success" Icon="fa-check">Пройдено</Badge>
+                <Badge Tone="Tone.Warning">Серьёзная рана</Badge>
+                <Badge Tone="Tone.Error">Без сознания</Badge>
+                <Badge Tone="Tone.Stone">Временное безумие</Badge>
+                <Badge Tone="Tone.Error" Solid="true">При смерти</Badge>
+                <Badge Tone="Tone.Neutral" Solid="true">Мёртв</Badge>
+                <Badge Tone="Tone.Stone" Solid="true">Бессрочное безумие</Badge>
+                <span class="cm-card-title">НПС сценария<span class="cm-card-count">4</span></span>
+                <Button Small="true" Variant="ButtonVariant.Secondary">Заявки<span class="cm-count-badge">3</span></Button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Сообщения</h2></div>
+        <Alert Tone="Tone.Info" Title="Необязательное правило">Книга помечает эти правила как необязательные, поэтому по умолчанию они выключены.</Alert>
+        <Alert Tone="Tone.Success" ShowIcon="true">Первая помощь дала 1 временный ПЗ.</Alert>
+        <Alert Tone="Tone.Warning" ShowIcon="true" Title="Серьёзная рана">Проверка ВЫН, иначе потеря сознания (стр. 120).</Alert>
+        @if (_showClosable)
+        {
+            <Alert Tone="Tone.Error" ShowIcon="true" Title="Не удалось сохранить" OnClose="() => _showClosable = false">
+                <ChildContent>Лист изменён на другом устройстве.</ChildContent>
+                <Actions>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right">Перечитать</Button>
+                </Actions>
+            </Alert>
+        }
+        <Alert Tone="Tone.Stone" Small="true" Icon="fa-brain">Плотный вид для панелей листа.</Alert>
+        <Alert Tone="Tone.Neutral" Small="true" class="mb-0">Нейтральное, без нижнего отступа (class="mb-0").</Alert>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Поля</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body grid gap-4 md:grid-cols-2">
+                <Field Label="Имя сыщика">
+                    <input class="cm-input" @bind="_name" placeholder="Харви Уолтерс" />
+                </Field>
+                <Field Label="Профессия" Hint="(необязательно)">
+                    <select class="cm-input" @bind="_occupation">
+                        <option value="">— Выберите —</option>
+                        <option>Антиквар</option>
+                        <option>Журналист</option>
+                        <option>Частный детектив</option>
+                    </select>
+                </Field>
+                <Field Label="СИЛ" Note="От 15 до 90: 3d6 × 5 (стр. 32)." Error="@(_strength is < 15 or > 90 ? "Вне диапазона книги." : null)" class="w-40">
+                    <input type="number" class="cm-input cm-input-sm" @bind="_strength" />
+                </Field>
+                <Field Label="Биография">
+                    <textarea class="cm-input" rows="3" placeholder="Родился в Аркхеме…"></textarea>
+                </Field>
+                <Field Label="Связи" Group="true" Note="Каждая правка отдаёт новый список.">
+                    <StringListEditor @bind-Values="_connections" ItemLabel="Связь" Placeholder="Кто или что дорого сыщику" />
+                </Field>
+                <Field Label="Опции" Group="true">
+                    <label class="flex min-h-11 items-center gap-2">
+                        <input type="checkbox" class="cm-checkbox" @bind="_optional" />
+                        <span>Необязательные правила</span>
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <label class="cm-tap-target" aria-label="Отметка развития"><input type="checkbox" class="cm-checkbox" /></label>
+                        <span class="text-[0.8125rem]">Галочка навыка в плотной строке (cm-tap-target)</span>
+                    </div>
+                </Field>
+                <Field Label="Поиск" Inline="true">
+                    <input type="search" class="cm-input" placeholder="Поиск по названию…" />
+                </Field>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Бросок</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body grid gap-4 md:grid-cols-2">
+                <Field Label="@($"Скрытность {_skill}%")" Group="true" Note="Вписанное число с настоящих костей — то же, что бросок.">
+                    <RollInput Value="_skill" Difficulty="_difficulty" BonusDice="_bonus" PenaltyDice="_penalty"
+                               @bind-Roll="_roll" Label="Скрытность" />
+                </Field>
+                <div class="flex flex-wrap items-end gap-3">
+                    <Field Label="Сложность" class="w-44">
+                        <select class="cm-input" @bind="_difficulty">
+                            <option value="@Difficulty.Regular">Обычная</option>
+                            <option value="@Difficulty.Hard">Трудная</option>
+                            <option value="@Difficulty.Extreme">Чрезвычайная</option>
+                        </select>
+                    </Field>
+                    <Field Label="Бонусные" class="w-24"><input type="number" min="0" max="2" class="cm-input" @bind="_bonus" /></Field>
+                    <Field Label="Штрафные" class="w-24"><input type="number" min="0" max="2" class="cm-input" @bind="_penalty" /></Field>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Список с фильтром</h2></div>
+        <FilterPanel OnReset="ResetFilter">
+            <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию…" aria-label="Поиск"
+                   @bind="_search" @bind:event="oninput" @bind:after="() => _page = 1" />
+            <select class="cm-input w-full shrink-0 sm:w-56" aria-label="Навык" @bind="_skillFilter" @bind:after="() => _page = 1">
+                <option value="">Все навыки</option>
+                @foreach (var skill in Weapons.Select(w => w.Skill).Distinct())
+                {
+                    <option>@skill</option>
+                }
+            </select>
+        </FilterPanel>
+
+        <Tabs Items="_tabs" @bind-ActiveKey="_tab" AriaLabel="Вид списка" />
+
+        @if (FilteredWeapons.Count == 0)
+        {
+            <EmptyState Icon="fa-gun" Title="Нет оружия по этим условиям." Message="Измените поиск или очистите фильтры.">
+                <Actions>
+                    <Button Icon="fa-plus">Добавить оружие</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="ResetFilter">Очистить фильтры</Button>
+                </Actions>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="cm-card">
+                @if (_tab == "table")
+                {
+                    <DataTable Items="PageOfWeapons" RowKey="w => w.Name" AriaLabel="Оружие" @bind-Sort="_sort">
+                        <Columns>
+                            <DataColumn Title="Название" SortKey="name" Context="w">
+                                <span class="font-semibold text-primary-800">@w.Name</span>
+                            </DataColumn>
+                            <DataColumn Title="Навык" SortKey="skill" Context="w">@w.Skill</DataColumn>
+                            <DataColumn Title="Урон" Context="w"><span class="cm-dice">@w.Damage</span></DataColumn>
+                            <DataColumn Title="Дальность" SortKey="range" AlignEnd="true" Context="w">@w.Range м</DataColumn>
+                            <DataColumn Title="Цена" SortKey="price" AlignEnd="true" Context="w">$@w.Price</DataColumn>
+                            <DataColumn Title="" CellClass="w-px whitespace-nowrap" Context="w">
+                                <div class="flex justify-end gap-1">
+                                    <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="@($"Изменить: {w.Name}")" />
+                                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {w.Name}")"
+                                            OnClick="() => DeleteAsync(w)" />
+                                </div>
+                            </DataColumn>
+                        </Columns>
+                        <RowDetail Context="w">
+                            <p class="cm-text-muted">@w.Name: @w.Skill, урон <span class="cm-dice">@w.Damage</span>. Раскрытая строка — подробности без перехода на другую страницу.</p>
+                        </RowDetail>
+                        <CardTemplate Context="w">
+                            <div class="flex items-center gap-3">
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-semibold text-primary-800">@w.Name</div>
+                                    <div class="cm-meta"><span>@w.Skill</span><span class="cm-dice">@w.Damage</span><span>@w.Range м</span></div>
+                                </div>
+                                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="@($"Изменить: {w.Name}")" />
+                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {w.Name}")"
+                                        OnClick="() => DeleteAsync(w)" />
+                            </div>
+                        </CardTemplate>
+                    </DataTable>
+                }
+                else
+                {
+                    @foreach (var weapon in PageOfWeapons)
+                    {
+                        <div class="flex items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            <i class="fa-solid fa-gun text-primary-400" aria-hidden="true"></i>
+                            <span class="flex-1 font-semibold text-primary-800">@weapon.Name</span>
+                            <Badge>@weapon.Skill</Badge>
+                        </div>
+                    }
+                }
+                <Pagination TotalItems="FilteredWeapons.Count" PageSize="PageSize" @bind-CurrentPage="_page" />
+            </div>
+        }
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Загрузка</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-header">
+                <span class="cm-card-title">AsyncContent</span>
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ReloadWith(LoadMode.Data)">Данные</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ReloadWith(LoadMode.Empty)">Пусто</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ReloadWith(LoadMode.Failure)">Ошибка</Button>
+                </div>
+            </div>
+            <div class="cm-card-body">
+                <AsyncContent @ref="_async" Load="LoadDemoAsync" LoadingMessage="Загружаю сыщиков…" Context="names">
+                    <ChildContent>
+                        <ul>
+                            @foreach (var name in names)
+                            {
+                                <li class="border-t border-primary-200 py-2 first:border-t-0">@name</li>
+                            }
+                        </ul>
+                    </ChildContent>
+                    <Empty>
+                        <p class="text-center text-primary-500">В кампании нет сыщиков.</p>
+                    </Empty>
+                </AsyncContent>
+            </div>
+        </div>
+    </section>
+
+    <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Диалоги, уведомления, связь</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack">
+                <div class="flex flex-wrap gap-2">
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-window-maximize" OnClick="() => _modalOpen = true">Окно</Button>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-hand" OnClick="() => _strictOpen = true">Окно без закрытия мимо</Button>
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="ConfirmDeleteAsync">Подтвердить удаление</Button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Success("Лист сохранён."))">Toast: успех</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Info("Игрок присоединился к кампании."))">Toast: информация</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Warning("Навык выше 99 — проверьте лист."))">Toast: внимание</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Error("Не удалось удалить кампанию.", "Ошибка"))">Toast: ошибка</Button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-cloud-arrow-up" OnClick="SimulateSaveAsync">Имитировать запись</Button>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-plug-circle-xmark" OnClick="Activity.ReportUnreachable">Имитировать обрыв</Button>
+                </div>
+                <div>
+                    <LoadingIndicator Message="Единственный спиннер приложения" />
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<Modal Open="_modalOpen" Title="Изменить оружие" Size="ModalSize.Medium" OnClose="() => _modalOpen = false">
+    <ChildContent>
+        <div class="grid gap-4">
+            <Field Label="Название"><input class="cm-input" value="Кольт .45 автоматический" /></Field>
+            <Field Label="Урон" Note="Формула костей: 1d10+2, «д» тоже можно."><input class="cm-input cm-dice" value="1d10+2" /></Field>
+            @for (var i = 1; i <= 8; i++)
+            {
+                <p class="cm-text-muted">Длинное содержимое прокручивает тело окна, а шапка и подвал с кнопками остаются на экране (строка @i).</p>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="() => _modalOpen = false">Отмена</Button>
+        <Button OnClick="SaveModal">Сохранить</Button>
+    </Footer>
+</Modal>
+
+<Modal Open="_strictOpen" Title="Проверка ВЫН умирающего" Size="ModalSize.Small" Dismissible="false" OnClose="() => _strictOpen = false">
+    <ChildContent>
+        <p>Касание мимо окна и Esc его не закрывают — только крестик или кнопка.</p>
+    </ChildContent>
+    <Footer>
+        <Button OnClick="() => _strictOpen = false">Готово</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private const int PageSize = 5;
+
+    private static readonly (string Name, (string Shade, string Css)[] Swatches)[] Palettes =
+    [
+        ("primary — графит, единственная нейтральная",
+        [
+            ("50", "bg-primary-50"), ("100", "bg-primary-100"), ("200", "bg-primary-200"), ("300", "bg-primary-300"),
+            ("400", "bg-primary-400"), ("500", "bg-primary-500"), ("600", "bg-primary-600"), ("700", "bg-primary-700"),
+            ("800", "bg-primary-800"), ("900", "bg-primary-900"), ("950", "bg-primary-950"),
+        ]),
+        ("secondary — тёплый камень",
+        [
+            ("50", "bg-secondary-50"), ("100", "bg-secondary-100"), ("200", "bg-secondary-200"), ("300", "bg-secondary-300"),
+            ("400", "bg-secondary-400"), ("500", "bg-secondary-500"), ("600", "bg-secondary-600"), ("700", "bg-secondary-700"),
+            ("800", "bg-secondary-800"), ("900", "bg-secondary-900"), ("950", "bg-secondary-950"),
+        ]),
+        ("accent — сталь: информация, выделение, фокус",
+        [
+            ("50", "bg-accent-50"), ("100", "bg-accent-100"), ("200", "bg-accent-200"), ("300", "bg-accent-300"),
+            ("400", "bg-accent-400"), ("500", "bg-accent-500"), ("600", "bg-accent-600"), ("700", "bg-accent-700"),
+            ("800", "bg-accent-800"), ("900", "bg-accent-900"), ("950", "bg-accent-950"),
+        ]),
+        ("success / warning / error — только статусы",
+        [
+            ("s-100", "bg-success-100"), ("s-500", "bg-success-500"), ("s-700", "bg-success-700"),
+            ("w-100", "bg-warning-100"), ("w-500", "bg-warning-500"), ("w-700", "bg-warning-700"),
+            ("e-100", "bg-error-100"), ("e-500", "bg-error-500"), ("e-700", "bg-error-700"),
+            ("page", "bg-page"), ("white", "bg-white"),
+        ]),
+    ];
+
+    private static readonly IReadOnlyList<DemoWeapon> AllWeapons =
+    [
+        new("Кольт .45 автоматический", "Пистолеты", "1d10+2", 15, 40),
+        new("Револьвер .38", "Пистолеты", "1d10", 15, 25),
+        new("Дробовик 12-го калибра", "Винтовки/дробовики", "4d6/2d6/1d6", 10, 40),
+        new("Винтовка Ли-Энфилд .303", "Винтовки/дробовики", "2d6+4", 110, 50),
+        new("Пистолет-пулемёт Томпсона", "Автоматы", "1d10+2", 20, 200),
+        new("Нож", "Ближний бой (драка)", "1d4+БкУ", 0, 2),
+        new("Дубинка", "Ближний бой (драка)", "1d6+БкУ", 0, 3),
+        new("Динамит (шашка)", "Метание", "4d10/3 м", 15, 2),
+    ];
+
+    private readonly List<DemoWeapon> _weapons = [.. AllWeapons];
+    private readonly IReadOnlyList<Tabs.Item> _tabs =
+    [
+        new("table", "Таблица", "fa-table"),
+        new("rows", "Строки", "fa-list", AllWeapons.Count),
+    ];
+
+    private bool _busy;
+    private bool _showClosable = true;
+    private bool _modalOpen;
+    private bool _strictOpen;
+    private string? _name;
+    private string? _occupation;
+    private int _strength = 50;
+    private bool _optional;
+    private IReadOnlyList<string> _connections = ["Мать, Элеонора", "Мискатоникский университет"];
+    private int _skill = 60;
+    private Difficulty _difficulty = Difficulty.Regular;
+    private int _bonus;
+    private int _penalty;
+    private D100Roll? _roll;
+    private string? _search;
+    private string _skillFilter = "";
+    private string _tab = "table";
+    private int _page = 1;
+    private DataSort _sort = new("name", Descending: false);
+    private AsyncContent<IReadOnlyList<string>>? _async;
+    private LoadMode _loadMode = LoadMode.Data;
+
+    private IEnumerable<DemoWeapon> Weapons => _weapons;
+
+    // Список постраничный, поэтому сортирует страница (как сделал бы API), а таблица только
+    // сообщает колонку: @bind-Sort. Непостраничной таблице хватит SortBy у колонки.
+    private List<DemoWeapon> FilteredWeapons
+    {
+        get
+        {
+            var filtered = _weapons
+                .Where(w => string.IsNullOrWhiteSpace(_search) || w.Name.Contains(_search, StringComparison.CurrentCultureIgnoreCase))
+                .Where(w => _skillFilter.Length == 0 || w.Skill == _skillFilter);
+            Func<DemoWeapon, object> key = _sort.Key switch
+            {
+                "skill" => w => w.Skill,
+                "range" => w => w.Range,
+                "price" => w => w.Price,
+                _ => w => w.Name,
+            };
+            return (_sort.Descending ? filtered.OrderByDescending(key) : filtered.OrderBy(key)).ToList();
+        }
+    }
+
+    private IEnumerable<DemoWeapon> PageOfWeapons => FilteredWeapons.Skip((_page - 1) * PageSize).Take(PageSize);
+
+    private void ResetFilter()
+    {
+        _search = null;
+        _skillFilter = "";
+        _page = 1;
+    }
+
+    private void ResetDemo()
+    {
+        ResetFilter();
+        _weapons.Clear();
+        _weapons.AddRange(AllWeapons);
+        _showClosable = true;
+        _roll = null;
+        Toasts.Info("Пример сброшен.");
+    }
+
+    private async Task SimulateBusyAsync()
+    {
+        _busy = true;
+        await Task.Delay(1500);
+        _busy = false;
+    }
+
+    private async Task SimulateSaveAsync()
+    {
+        using (Activity.BeginWrite())
+        {
+            await Task.Delay(1200);
+        }
+
+        Activity.ReportReachable(saved: true);
+    }
+
+    private async Task DeleteAsync(DemoWeapon weapon)
+    {
+        if (await Dialogs.ConfirmDeleteAsync("Удалить оружие?", $"«{weapon.Name}» будет удалено из справочника."))
+        {
+            _weapons.Remove(weapon);
+            _page = Math.Min(_page, Math.Max(1, (FilteredWeapons.Count + PageSize - 1) / PageSize));
+            Toasts.Success($"«{weapon.Name}» удалено.");
+        }
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        var confirmed = await Dialogs.ConfirmDeleteAsync("Удалить кампанию?", "«Маски Ньярлатотепа» и журнал встреч будут удалены.");
+        Toasts.Show(confirmed ? Tone.Success : Tone.Info, confirmed ? "Подтверждено." : "Отменено.");
+    }
+
+    private void SaveModal()
+    {
+        _modalOpen = false;
+        Toasts.Success("Оружие сохранено.");
+    }
+
+    private Task ReloadWith(LoadMode mode)
+    {
+        _loadMode = mode;
+        return _async?.ReloadAsync() ?? Task.CompletedTask;
+    }
+
+    private async Task<IReadOnlyList<string>> LoadDemoAsync(CancellationToken cancellationToken)
+    {
+        await Task.Delay(800, cancellationToken);
+        return _loadMode switch
+        {
+            LoadMode.Failure => throw new HttpRequestException("Нет связи"),
+            LoadMode.Empty => [],
+            _ => ["Харви Уолтерс", "Нора Флинн", "Ли Чан"],
+        };
+    }
+
+    private enum LoadMode
+    {
+        Data,
+        Empty,
+        Failure,
+    }
+
+    private sealed record DemoWeapon(string Name, string Skill, string Damage, int Range, int Price);
+}

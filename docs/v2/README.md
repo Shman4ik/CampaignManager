@@ -78,6 +78,7 @@ src/
 tests/
   CampaignManager.Core.Tests/    правила книги
   CampaignManager.Server.Tests/  API на настоящем Postgres через ApiClient
+  CampaignManager.UI.Tests/      UI-кит на bUnit
 tools/
   CampaignManager.Migrate/       перенос v1 → v2 (SCHEMA.md, «Перенос данных»)
 mobile/ (позже)

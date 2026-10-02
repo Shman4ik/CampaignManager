@@ -19,8 +19,23 @@
     <ProjectReference Include="..\CampaignManager.Contracts\CampaignManager.Contracts.csproj" />
   </ItemGroup>
 
+  <!--
+    Tailwind v4: токены — @theme в Styles/theme.css, конфига tailwind.config.js нет. Пакеты —
+    в package.json рядом, версии закреплены package-lock.json: v4 тянет нативные модули
+    (oxide, lightningcss), и `@import "tailwindcss"` должен разрешаться из node_modules проекта.
+    npm ci ставит их один раз — заново, только если поменялся lock-файл.
+  -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);node_modules/**</DefaultItemExcludes>
+  </PropertyGroup>
+
   <ItemGroup>
-    <Watch Include="./Styles/tailwind.css" Exclude="./wwwroot/**/*;obj/**/*;bin/**/*" />
+    <Content Remove="package.json;package-lock.json" />
+    <None Include="package.json;package-lock.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Watch Include="./Styles/*.css" Exclude="./wwwroot/**/*;obj/**/*;bin/**/*" />
   </ItemGroup>
 
   <!--
@@ -40,12 +55,30 @@
     <Content Remove="wwwroot\styles.css" />
   </ItemGroup>
 
-  <Target Name="Tailwind" BeforeTargets="ResolveProjectStaticWebAssets">
+  <!--
+    Нативные модули ставятся под платформу из настройки npm `os`. Если она задана глобально
+    (в ~/.npmrc владельца стоит os=linux), на Windows приезжают модули Linux и сборка CSS падает
+    с «Cannot find module lightningcss.win32-x64-msvc.node» — поэтому на Windows платформа
+    указывается явно. Вывод npm в предупреждения MSBuild не превращается: решает код возврата.
+  -->
+  <PropertyGroup>
+    <NpmEnvironment Condition="$([MSBuild]::IsOSPlatform('Windows'))">npm_config_os=win32</NpmEnvironment>
+  </PropertyGroup>
+
+  <Target Name="TailwindInstall"
+          Inputs="package-lock.json"
+          Outputs="node_modules/.package-lock.json">
+    <Exec Command="npm ci --no-audit --no-fund" EnvironmentVariables="$(NpmEnvironment)"
+          IgnoreStandardErrorWarningFormat="true" />
+  </Target>
+
+  <Target Name="Tailwind" DependsOnTargets="TailwindInstall" BeforeTargets="ResolveProjectStaticWebAssets">
     <Exec Condition="'$(Configuration)' != 'Release'"
-          Command="npx --yes tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css" />
+          Command="npx --no -- tailwindcss -i ./Styles/tailwind.css -o ./wwwroot/styles.css"
+          IgnoreStandardErrorWarningFormat="true" />
     <Exec Condition="'$(Configuration)' == 'Release'"
-          EnvironmentVariables="NODE_ENV=production"
-          Command="npx --yes tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css --minify" />
+          Command="npx --no -- tailwindcss -i ./Styles/tailwind.css -o ./wwwroot/styles.css --minify"
+          IgnoreStandardErrorWarningFormat="true" />
     <Error Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/styles.css')"
            Text="Tailwind did not produce wwwroot/styles.css." />
     <ItemGroup>

@@ -1,0 +1,372 @@
+/*
+  Оболочка: рельс меню (планшет и шире), нижняя панель (телефон), шапка страницы, cm-page.
+  Рельс и нижняя панель рисуются из одного списка пунктов (Layout/NavMenu.cs).
+  Граница — md (768px): iPad в обеих ориентациях получает рельс, телефон — нижнюю панель.
+*/
+@layer components {
+  .cm-shell {
+    min-height: 100dvh;
+  }
+
+  /* Колонка страницы. Не центрировать содержимое через max-w-* + mx-auto: элемент колонки
+     флекса с mx-auto теряет растяжение, и редкая страница схлопывается узким столбцом. */
+  .cm-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 100dvh;
+    padding-bottom: calc(var(--cm-tabbar-height) + env(safe-area-inset-bottom));
+  }
+
+  @media (min-width: 48rem) {
+    .cm-main {
+      margin-left: var(--cm-rail-width);
+      padding-bottom: 0;
+    }
+  }
+
+  /* ── Рельс ── как в iPadOS: иконка и подпись 11px под ней, подпись видна всегда —
+     наведения на планшете нет, title= её не заменит. Развернуть рельс нельзя: на iPad
+     широкое меню только отнимало ширину у страницы. */
+  .cm-rail {
+    display: none;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    width: var(--cm-rail-width);
+    flex-direction: column;
+    background-color: var(--color-primary-50);
+    border-right: 1px solid var(--color-primary-200);
+  }
+
+  @media (min-width: 48rem) {
+    .cm-rail {
+      display: flex;
+    }
+  }
+
+  .cm-rail-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: var(--cm-topbar-height);
+    border-bottom: 1px solid var(--color-primary-200);
+  }
+
+  .cm-rail-logo img {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+  }
+
+  .cm-rail-nav {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Подписей групп в рельсе нет — группы разделяет линейка, темнее обычной рамки. */
+  .cm-rail-group + .cm-rail-group::before {
+    content: "";
+    display: block;
+    height: 1px;
+    margin: 8px 12px;
+    background-color: var(--color-primary-300);
+  }
+
+  .cm-rail-footer {
+    flex-shrink: 0;
+    padding: 6px 4px;
+    border-top: 1px solid var(--color-primary-200);
+  }
+
+  /* 46px в высоту — тап-цель. */
+  .cm-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 46px;
+    margin-bottom: 1px;
+    padding: 5px 2px;
+    text-align: center;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--color-primary-500);
+    border-radius: 0.375rem;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  /* «Выйти» — кнопка, а не ссылка: без рамки и фона браузера, во всю ширину рельса. */
+  button.cm-rail-item {
+    width: 100%;
+    font: inherit;
+    background: none;
+    border: none;
+  }
+
+  /* Инициал пользователя в кружке — кабинет в рельсе и строка пользователя в листе «Ещё». */
+  .cm-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-white);
+    background: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-800));
+    border-radius: 999px;
+  }
+
+  .cm-avatar-lg {
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+
+  .cm-rail-item:hover {
+    background-color: var(--color-primary-100);
+    color: var(--color-primary-800);
+  }
+
+  .cm-rail-item.active {
+    background-color: var(--color-accent-50);
+    color: var(--color-accent-700);
+  }
+
+  .cm-rail-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 16px;
+  }
+
+  /* Одна строка без многоточия: ShortLabel подбирается так, чтобы влезать целиком
+     (не длиннее «Заклинания»). */
+  .cm-rail-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  .cm-rail-item.active .cm-rail-label {
+    font-weight: 600;
+  }
+
+  /* Счётчик — пилюля на плече иконки, подпись под ней остаётся читаемой. */
+  .cm-nav-badge {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 5px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    color: var(--color-white);
+    background: var(--color-error-500);
+    border: 1px solid var(--color-primary-50);
+    border-radius: 99px;
+  }
+
+  /* ── Нижняя панель телефона ── */
+  .cm-tabbar {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 50;
+    display: flex;
+    height: calc(var(--cm-tabbar-height) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--color-primary-50);
+    border-top: 1px solid var(--color-primary-200);
+  }
+
+  @media (min-width: 48rem) {
+    .cm-tabbar {
+      display: none;
+    }
+  }
+
+  .cm-tabbar-item {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 4px 2px;
+    font-size: 11px;
+    color: var(--color-primary-500);
+    text-decoration: none;
+    background: none;
+    border: none;
+  }
+
+  .cm-tabbar-item i {
+    font-size: 1.1rem;
+  }
+
+  .cm-tabbar-item span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cm-tabbar-item.active {
+    color: var(--color-accent-600);
+    font-weight: 600;
+  }
+
+  /* Лист «Ещё» — тот же Modal, прижатый к низу экрана. */
+  .cm-modal.cm-modal-sheet {
+    width: 100%;
+    max-width: none;
+    max-height: 80dvh;
+    margin: auto 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  .cm-sheet-section {
+    padding: 10px 4px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-primary-500);
+  }
+
+  .cm-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 48px;
+    padding: 0 12px;
+    font-size: 15px;
+    color: var(--color-primary-700);
+    text-decoration: none;
+    border-radius: 0.375rem;
+  }
+
+  .cm-sheet-item:hover,
+  .cm-sheet-item:active {
+    background: var(--color-primary-100);
+    color: var(--color-primary-900);
+  }
+
+  .cm-sheet-item.active {
+    color: var(--color-accent-700);
+    background: var(--color-accent-50);
+  }
+
+  .cm-sheet-item i {
+    width: 20px;
+    text-align: center;
+    color: inherit;
+  }
+
+  /* ── Шапка страницы ── 56px, липнет к верху. Заголовок — одна строка с многоточием:
+     длинное имя сценария рядом с пятью кнопками на портрете iPad иначе вылезало за край. */
+  .cm-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    height: var(--cm-topbar-height);
+    padding: 0 12px;
+    background: var(--color-page);
+    border-bottom: 1px solid var(--color-primary-200);
+  }
+
+  @media (min-width: 40rem) {
+    .cm-topbar {
+      padding: 0 20px;
+    }
+  }
+
+  .cm-topbar-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Router ставит фокус на h1 после перехода (FocusOnNavigate) — для экранного диктора,
+     рамка фокуса на заголовке зрячему не нужна. */
+  .cm-topbar-title:focus {
+    outline: none;
+  }
+
+  .cm-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  /* Тело страницы — прямо под PageHeader. */
+  .cm-page {
+    padding: 1rem 0.75rem 1.5rem;
+  }
+
+  @media (min-width: 40rem) {
+    .cm-page {
+      padding: 1.25rem 1.25rem 2rem;
+    }
+  }
+
+  /* ── Индикатор связи и сохранения ── вместо диалога переподключения circuit v1. */
+  .cm-connection {
+    position: fixed;
+    z-index: 60;
+    right: 0.75rem;
+    bottom: calc(var(--cm-tabbar-height) + env(safe-area-inset-bottom) + 0.75rem);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 36px;
+    max-width: calc(100vw - 1.5rem);
+    padding: 0.375rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.15);
+  }
+
+  @media (min-width: 48rem) {
+    .cm-connection {
+      right: 1.25rem;
+      bottom: 1.25rem;
+    }
+  }
+
+  .cm-connection-saving { background: var(--color-white); color: var(--color-primary-700); border-color: var(--color-primary-200); }
+  .cm-connection-saved { background: var(--color-success-50); color: var(--color-success-800); border-color: var(--color-success-200); }
+  .cm-connection-offline { background: var(--color-warning-50); color: var(--color-warning-900); border-color: var(--color-warning-300); }
+}

@@ -1,29 +1,81 @@
 @using CampaignManager.Contracts.Identity
+@using System.Security.Claims
+@using CampaignManager.Core.Identity
 @inject NavigationManager Navigation
 
-@* Кто вошёл и выход — для шапки. Оболочку (рельс, нижняя навигация) делает T1.6; ей этот
-   компонент и достаётся. *@
+@* Кто вошёл, кабинет и выход — подвал оболочки: Placement="Rail" — подвал рельса планшета,
+   Sheet — подвал листа «Ещё» телефона. Без сессии — «Войти» с возвратом на текущую страницу.
+   Вход и выход — серверные адреса (OIDC), поэтому полной загрузкой страницы. *@
 <AuthorizeView>
     <Authorized>
-        <div class="flex items-center gap-3">
-            <span class="text-sm text-slate-600" data-testid="current-user">
-                @context.User.Identity?.Name
-                <span class="ml-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">@RoleName(context.User)</span>
-            </span>
-            <button type="button" class="inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700"
-                    @onclick="Logout">
-                Выйти
+        @if (Placement == UserMenuPlacement.Rail)
+        {
+            <NavLink class="cm-rail-item" href="profile" aria-label="@($"Личный кабинет: {Name(context.User)}")">
+                <span class="cm-rail-icon"><span class="cm-avatar">@Initial(context.User)</span></span>
+                <span class="cm-rail-label">Кабинет</span>
+            </NavLink>
+            <button type="button" class="cm-rail-item" @onclick="Logout">
+                <span class="cm-rail-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
+                <span class="cm-rail-label">Выйти</span>
             </button>
-        </div>
+        }
+        else
+        {
+            <div class="cm-sheet-section">Учётная запись</div>
+            <div class="flex flex-wrap items-center gap-3 px-3 py-2" data-testid="current-user">
+                <span class="cm-avatar cm-avatar-lg" aria-hidden="true">@Initial(context.User)</span>
+                <span class="min-w-0 flex-1">
+                    <span class="block truncate font-semibold text-primary-800">@Name(context.User)</span>
+                    <Badge>@RoleName(context.User)</Badge>
+                </span>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-right-from-bracket" OnClick="Logout">Выйти</Button>
+            </div>
+            <NavLink class="cm-sheet-item" href="profile">
+                <i class="fa-solid fa-id-card" aria-hidden="true"></i>
+                <span class="flex-1">Личный кабинет</span>
+            </NavLink>
+        }
     </Authorized>
     <NotAuthorized>
-        <a href="@IdentityRoutes.LoginPage.TrimStart('/')" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-sm text-white">Войти</a>
+        @if (Placement == UserMenuPlacement.Rail)
+        {
+            <NavLink class="cm-rail-item" href="@LoginHref">
+                <span class="cm-rail-icon"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></span>
+                <span class="cm-rail-label">Войти</span>
+            </NavLink>
+        }
+        else
+        {
+            <div class="cm-sheet-section">Учётная запись</div>
+            <div class="px-3 py-2">
+                <Button Href="@LoginHref" Icon="fa-right-to-bracket" class="w-full">Войти</Button>
+            </div>
+        }
     </NotAuthorized>
 </AuthorizeView>
 
 @code {
-    private static string RoleName(System.Security.Claims.ClaimsPrincipal user) =>
-        user.IsInRole("Admin") ? "администратор" : user.IsInRole("Keeper") ? "Хранитель" : "игрок";
+    [Parameter] public UserMenuPlacement Placement { get; set; } = UserMenuPlacement.Rail;
+
+    // Клиентская страница выбора способа входа с возвратом сюда; на самой /login — без возврата на неё.
+    private string LoginHref
+    {
+        get
+        {
+            var current = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+            return current.StartsWith(IdentityRoutes.LoginPage, StringComparison.Ordinal) || current == "/"
+                ? IdentityRoutes.LoginPage.TrimStart('/')
+                : $"{IdentityRoutes.LoginPage.TrimStart('/')}?{IdentityRoutes.ReturnUrlParameter}={Uri.EscapeDataString(current)}";
+        }
+    }
+
+    private static string Name(ClaimsPrincipal user) => user.Identity?.Name ?? "";
+
+    private static string Initial(ClaimsPrincipal user) =>
+        Name(user) is { Length: > 0 } name ? char.ToUpper(name[0], CultureInfo.CurrentCulture).ToString() : "?";
+
+    private static string RoleName(ClaimsPrincipal user) =>
+        user.IsInRole(nameof(UserRole.Admin)) ? "администратор" : user.IsInRole(nameof(UserRole.Keeper)) ? "Хранитель" : "игрок";
 
     // Выход — серверный адрес: полная загрузка, после неё приложение стартует уже без сессии.
     private void Logout() => Navigation.NavigateTo(IdentityRoutes.Logout.TrimStart('/'), forceLoad: true);

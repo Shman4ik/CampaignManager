@@ -1,18 +1,62 @@
 @inherits LayoutComponentBase
+@using System.Security.Claims
 
-@* Временная оболочка каркаса. Настоящую (рельс, нижняя навигация, PageHeader) делает T1.6. *@
-<div class="cm-shell min-h-screen bg-stone-50 text-slate-800">
-    <header class="flex h-14 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
-        <a href="" class="text-lg font-semibold text-slate-700">CampaignManager 2.0</a>
-        <UserMenu />
-    </header>
-    <main class="p-4">
-        @Body
-    </main>
+@* Оболочка приложения: рельс (планшет), нижняя панель (телефон), колонка страницы и общие
+   хосты — диалог подтверждения, уведомления, индикатор связи. Страница внутри — PageHeader
+   и один <div class="cm-page">. Кнопки модулей в шапке (ширма, плеер) их компоненты кладут
+   отсюда в PageHeaderSlots. *@
+<div class="cm-shell">
+    <NavRail Items="_items">
+        <Footer><UserMenu Placement="UserMenuPlacement.Rail" /></Footer>
+    </NavRail>
+
+    <div class="cm-main">
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>@Body</ChildContent>
+            <ErrorContent>
+                <PageHeader Title="Ошибка" />
+                <div class="cm-page">
+                    <EmptyState Icon="fa-triangle-exclamation" Title="Что-то пошло не так"
+                                Message="На странице произошла ошибка. Обновите её; если повторится — сообщите, что делали.">
+                        <Actions>
+                            <Button Href="" Icon="fa-house">На главную</Button>
+                        </Actions>
+                    </EmptyState>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    </div>
+
+    <BottomNav Items="_items">
+        <Footer><UserMenu Placement="UserMenuPlacement.Sheet" /></Footer>
+    </BottomNav>
 </div>
+
+<DialogHost />
+<ToastHost />
+<ConnectionIndicator />
 
 <div id="blazor-error-ui" data-nosnippet>
     Произошла непредвиденная ошибка.
     <a href="." class="reload">Перезагрузить</a>
-    <button type="button" class="dismiss" aria-label="Закрыть">✕</button>
+    <button type="button" class="dismiss" aria-label="Скрыть сообщение"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 </div>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+    private IReadOnlyList<NavItem> _items = NavMenu.VisibleTo(new ClaimsPrincipal());
+
+    // Кто вошёл — из /api/v1/me (MeAuthenticationStateProvider): меню прячет чужие разделы.
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Ошибка на одной странице не должна запирать всё приложение: переход на другую её сбрасывает.
+        _errorBoundary?.Recover();
+
+        if (AuthenticationState is not null)
+        {
+            _items = NavMenu.VisibleTo((await AuthenticationState).User);
+        }
+    }
+}

@@ -1,0 +1,107 @@
+@layer base {
+  :root {
+    /* Размеры оболочки. Рельс 76px — столько, чтобы самая длинная подпись («Заклинания»)
+       шла одной строкой; шапка 56px; нижняя панель телефона 58px плюс безопасная зона. */
+    --cm-rail-width: 76px;
+    --cm-topbar-height: 56px;
+    --cm-tabbar-height: 58px;
+    --cm-focus-ring: 0 0 0 3px rgb(75 127 175 / 0.15);
+  }
+
+  /* Tailwind v4 красит рамку по умолчанию в currentColor; у нас она всегда светлая. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-primary-200);
+  }
+
+  html {
+    /* Без «резинового» отскока: на iPad страница уезжала вместе с шапкой, а рельс меню
+       (fixed) оставался на месте. WebKit читает свойство только с <html>. Только по
+       вертикали — горизонтальный отскок на тачпаде это жест «назад». */
+    overscroll-behavior-y: none;
+    /* Место под полосу прокрутки держится всегда: иначе страница, которая только-только
+       влезала, при появлении полосы теряет 15px и сетка перестраивается. На iPad полоса
+       накладная, правило ни на что не влияет. */
+    scrollbar-gutter: stable;
+    /* Прокрутка к якорю и к полю с ошибкой не прячет его под липкой шапкой. */
+    scroll-padding-top: calc(var(--cm-topbar-height) + 0.5rem);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    overflow-x: clip;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-primary-900);
+    background-color: var(--color-page);
+  }
+
+  /* Открыт Modal: страница под окном не прокручивается (ModalWindow.razor.js). */
+  html.cm-modal-open {
+    overflow: hidden;
+  }
+
+  /* Tailwind v4 вернул кнопкам браузерный курсор; на десктопе рука нужна. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  a {
+    color: var(--color-accent-600);
+  }
+
+  a:hover {
+    color: var(--color-accent-700);
+  }
+
+  /* Пререндера нет (D1): пока WebAssembly грузится, App.razor показывает заглушку,
+     а как только оболочка отрисовалась — заглушка прячется. Оформление целиком здесь, без
+     утилит на самом элементе: утилита (flex) из слоя utilities перебила бы display: none. */
+  #app-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100dvh;
+    color: var(--color-primary-500);
+  }
+
+  body:has(.cm-shell) #app-loading {
+    display: none;
+  }
+
+  /* Плашка необработанной ошибки WebAssembly: id и классы reload/dismiss — Blazor'а,
+     он сам ставит ей display: block. */
+  #blazor-error-ui {
+    display: none;
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 1000;
+    padding: 0.75rem 3.5rem 0.75rem 1rem;
+    background: var(--color-error-600);
+    color: var(--color-white);
+  }
+
+  #blazor-error-ui a {
+    color: inherit;
+  }
+
+  #blazor-error-ui .reload {
+    margin-left: 0.5rem;
+    text-decoration: underline;
+  }
+
+  #blazor-error-ui .dismiss {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.5rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}

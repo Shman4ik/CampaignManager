@@ -4,44 +4,44 @@
 
 @* Выбор способа входа. Сам вход — на сервере (OIDC через Auth0), сюда клиент и сервер только
    приводят: сервер — с прямой загрузки страницы под [Authorize], клиент — RedirectToLogin. *@
-<PageTitle>Вход</PageTitle>
+<PageHeader Title="Вход" />
 
-<h1 class="mb-2 text-2xl font-semibold">Вход</h1>
+<div class="cm-page">
+    @if (AuthStatus == "accessDenied")
+    {
+        <Alert Tone="Tone.Error" ShowIcon="true" Title="Вход закрыт">
+            Почта этой учётки не подтверждена или её нет в списке приглашённых.
+        </Alert>
+    }
+    else if (AuthStatus == "failed")
+    {
+        <Alert Tone="Tone.Warning" ShowIcon="true">Вход не удался. Попробуйте ещё раз.</Alert>
+    }
 
-@if (AuthStatus == "accessDenied")
-{
-    <p class="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-red-800" role="alert">
-        Этой учётке вход закрыт: почта не подтверждена или её нет в списке приглашённых.
-    </p>
-}
-else if (AuthStatus == "failed")
-{
-    <p class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-800" role="alert">
-        Вход не удался. Попробуйте ещё раз.
-    </p>
-}
-
-<AuthorizeView>
-    <Authorized>
-        <p class="mb-4">Вы вошли как <strong>@context.User.Identity?.Name</strong>.</p>
-        <div class="flex flex-wrap gap-3">
-            <a href="@SafeReturnUrl.TrimStart('/')" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-white">Продолжить</a>
-        </div>
-    </Authorized>
-    <NotAuthorized>
-        <p class="mb-4 text-slate-600">Через Google — если вы входили так раньше, второй раз это произойдёт само.</p>
-        <div class="flex flex-wrap gap-3">
-            <button type="button" class="inline-flex min-h-11 items-center rounded-md bg-slate-600 px-4 text-white"
-                    @onclick="() => Login(LoginMethods.Google)">
-                Войти через Google
-            </button>
-            <button type="button" class="inline-flex min-h-11 items-center rounded-md border border-slate-300 bg-white px-4 text-slate-700"
-                    @onclick="() => Login(LoginMethods.Email)">
-                Войти по почте и паролю
-            </button>
-        </div>
-    </NotAuthorized>
-</AuthorizeView>
+    <div class="cm-card">
+        <AuthorizeView>
+            <Authorized>
+                <div class="cm-card-body">
+                    <p>Вы вошли как <strong>@context.User.Identity?.Name</strong>.</p>
+                </div>
+                <div class="cm-card-footer">
+                    <Button Href="@SafeReturnUrl.TrimStart('/')" Icon="fa-arrow-right">Продолжить</Button>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="cm-card-body">
+                    <h2 class="cm-h6 mb-1">Как войти</h2>
+                    <p class="cm-text-muted">Через Google — если вы входили так раньше, второй раз это произойдёт само.</p>
+                    <p class="cm-text-muted">Учётки с паролем заводит администратор.</p>
+                </div>
+                <div class="cm-card-footer">
+                    <Button Icon="fa-brands fa-google" OnClick="() => Login(LoginMethods.Google)">Войти через Google</Button>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-envelope" OnClick="() => Login(LoginMethods.Email)">Войти по почте и паролю</Button>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</div>
 
 @code {
     [SupplyParameterFromQuery(Name = IdentityRoutes.ReturnUrlParameter)]

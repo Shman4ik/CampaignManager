@@ -1,0 +1,128 @@
+@using CampaignManager.Contracts.Platform
+@using CampaignManager.UI.Platform
+@implements IAsyncDisposable
+@inject ApiActivity Activity
+@inject IJSRuntime JS
+@inject IPingApi Ping
+@inject TimeProvider Time
+
+@* Связь и сохранение — плашка в углу, только когда есть что сказать: «Сохранение…», «Сохранено»,
+   «Нет связи». Вместо диалога переподключения circuit v1: экран Хранителя живёт в браузере и при
+   обрыве не пропадает, нужно лишь видеть, дошли ли правки. Стоит один раз в MainLayout. *@
+@switch (Activity.State)
+{
+    case ConnectionState.Saving:
+        <div class="cm-connection cm-connection-saving" role="status">
+            <span class="cm-spinner cm-spinner-sm" aria-hidden="true"></span>
+            <span>Сохранение…</span>
+        </div>
+        break;
+    case ConnectionState.Saved:
+        <div class="cm-connection cm-connection-saved" role="status">
+            <i class="fa-solid fa-check" aria-hidden="true"></i>
+            <span>Сохранено</span>
+        </div>
+        break;
+    case ConnectionState.Offline:
+        <div class="cm-connection cm-connection-offline" role="alert">
+            <i class="fa-solid fa-wifi" aria-hidden="true"></i>
+            <span>Нет связи с сервером</span>
+            <Button Variant="ButtonVariant.Ghost" Small="true" Busy="@_checking" OnClick="CheckAsync" class="-my-1 -mr-2">Проверить</Button>
+        </div>
+        break;
+}
+
+@code {
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _watch;
+    private DotNetObjectReference<ConnectionIndicator>? _self;
+    private CancellationTokenSource? _savedTimer;
+    private bool _checking;
+
+    protected override void OnInitialized() => Activity.Changed += OnChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _self = DotNetObjectReference.Create(this);
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Layout/ConnectionIndicator.razor.js");
+        _watch = await _module.InvokeAsync<IJSObjectReference>("watch", _self);
+    }
+
+    [JSInvokable]
+    public void SetBrowserOnline(bool online) => Activity.SetBrowserOnline(online);
+
+    private void OnChanged()
+    {
+        // «Сохранено» гаснет само: состояние считается от времени, перерисовать надо по таймеру.
+        if (Activity.State == ConnectionState.Saved)
+        {
+            _savedTimer?.Cancel();
+            _savedTimer = new CancellationTokenSource();
+            _ = RefreshAfterAsync(ApiActivity.SavedNoticeFor, _savedTimer.Token);
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshAfterAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delay, Time, cancellationToken);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Пришла новая запись — свой таймер у неё.
+        }
+    }
+
+    // Пробный запрос сам обновит состояние через обработчик ApiClient: ответ — связь есть.
+    private async Task CheckAsync()
+    {
+        _checking = true;
+        try
+        {
+            await Ping.PingAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // Нет связи — плашка останется, сообщать больше нечего.
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Activity.Changed -= OnChanged;
+        _savedTimer?.Cancel();
+        _savedTimer?.Dispose();
+        try
+        {
+            if (_watch is not null)
+            {
+                await _watch.InvokeVoidAsync("dispose");
+                await _watch.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Страница выгружается.
+        }
+
+        _self?.Dispose();
+    }
+}

@@ -1,0 +1,97 @@
+@* Кнопка или ссылка-кнопка. Рисует ровно классы cm-btn — те же, что у ручной разметки, своих
+   Tailwind-классов у компонента нет. Только иконка (без текста) — квадрат 44×44 (36×36 у Small)
+   и обязательный AriaLabel: на iPad нет наведения, title= ничего не объяснит. *@
+@if (Href is not null && !Disabled)
+{
+    <a href="@Href" class="@Classes" aria-label="@AriaLabel" @attributes="Attributes">@Content</a>
+}
+else
+{
+    <button type="@Type" class="@Classes" disabled="@(Disabled || Busy)" aria-busy="@(Busy ? "true" : null)"
+            aria-label="@AriaLabel" @onclick="OnClick" @attributes="Attributes">@Content</button>
+}
+
+@code {
+    [Parameter] public ButtonVariant Variant { get; set; } = ButtonVariant.Primary;
+
+    /// <summary>36px вместо 44px. Кнопки шапки страницы — всегда Small (шапка 56px).</summary>
+    [Parameter] public bool Small { get; set; }
+
+    /// <summary>
+    /// Иконка Font Awesome: <c>fa-plus</c> (solid), другой набор — со своим префиксом:
+    /// <c>fa-brands fa-google</c>, <c>fa-regular fa-floppy-disk</c>.
+    /// </summary>
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>Обязателен у кнопки без текста: «Изменить: Кольт .45».</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    /// <summary>Ссылка вместо кнопки (переход по адресу). У выключенной кнопки ссылки нет.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string Type { get; set; } = "button";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Идёт запрос: спиннер вместо иконки, кнопка выключена — двойного нажатия не будет.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool IconOnly => ChildContent is null;
+
+    private string IconClass => Icon!.StartsWith("fa-brands ", StringComparison.Ordinal) || Icon.StartsWith("fa-regular ", StringComparison.Ordinal)
+        ? Icon
+        : $"fa-solid {Icon}";
+
+    private IReadOnlyDictionary<string, object>? Attributes => Css.WithoutClass(AdditionalAttributes);
+
+    private string Classes => Css.Join(
+        "cm-btn",
+        VariantClass,
+        Small ? "cm-btn-sm" : null,
+        IconOnly ? "cm-btn-icon" : null,
+        Css.ClassOf(AdditionalAttributes));
+
+    private string VariantClass => Variant switch
+    {
+        ButtonVariant.Secondary => "cm-btn-secondary",
+        ButtonVariant.Success => "cm-btn-success",
+        ButtonVariant.Error => "cm-btn-error",
+        ButtonVariant.Warning => "cm-btn-warning",
+        ButtonVariant.OutlinePrimary => "cm-btn-outline-primary",
+        ButtonVariant.OutlineError => "cm-btn-outline-error",
+        ButtonVariant.Ghost => "cm-btn-ghost",
+        _ => "cm-btn-primary",
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (IconOnly && string.IsNullOrWhiteSpace(AriaLabel))
+        {
+            throw new InvalidOperationException("Кнопке без текста нужен AriaLabel: иконка одна ничего не говорит.");
+        }
+    }
+
+    private RenderFragment Content => __builder =>
+    {
+        if (Busy)
+        {
+            <span class="cm-spinner cm-spinner-sm" aria-hidden="true"></span>
+        }
+        else if (Icon is not null)
+        {
+            <i class="@IconClass" aria-hidden="true"></i>
+        }
+
+        if (ChildContent is not null)
+        {
+            <span>@ChildContent</span>
+        }
+    };
+}

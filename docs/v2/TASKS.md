@@ -293,6 +293,35 @@ iPad-вьюпорте.
 
 ### T1.6 — UI-кит и оболочка
 
+**Сделано 2026-10-02.** В `CampaignManager.UI`: Tailwind v4 с токенами в `@theme` (палитры только свои —
+`primary` единственная нейтральная, без `gray`/`slate`/`info`), классы `cm-*` в `@layer components`
+(утилиты перебивают их без «!»); свои шрифты (Inter, Bitter, JetBrains Mono) и Font Awesome 6.7.2
+без CDN и flowbite. Оболочка: рельс и нижняя панель телефона с листом «Ещё» из одного `NavMenu`,
+`PageHeader` со слотами модулей (`SectionOutlet`, `PageHeaderSlots`), `cm-page`, `ErrorBoundary`.
+Кит: `Button`, `Badge`, `Alert`, `Field`, `DataTable<T>`/`DataColumn`, `StringListEditor`,
+`ToastService`, `AsyncContent`, `Modal` (нативный `<dialog>`, закрытый ничего не рендерит) и
+`DialogService.ConfirmAsync`, `RollInput`, плюс перенесённые `Tabs`, `FilterPanel`, `Pagination`,
+`EmptyState`, `LoadingIndicator`. Индикатор связи и сохранения — `ApiActivity` + обработчик на каждом
+`HttpClient` в `Web.Client`. JS — модули `*.razor.js` через `IJSObjectReference`. Страница `/dev/ui`
+(только Development) проверена на 1366×1024, 1024×1366 и 390×844; Release-публикация в Production
+её прячет. Знание — [src/CampaignManager.UI/CLAUDE.md](../../src/CampaignManager.UI/CLAUDE.md).
+Отличия от карточки:
+- **Tailwind ставится из `UI/package.json`** (`npm ci` по lock-файлу в MSBuild-таргете), а не
+  `npx tailwindcss@3`: v4 тянет нативные модули, и `@import "tailwindcss"` должен разрешаться из
+  `node_modules` проекта. На Windows таргет ставит `npm_config_os=win32` — в `~/.npmrc` владельца `os=linux`;
+- новый тестовый проект **`tests/CampaignManager.UI.Tests`** (bUnit, 33 теста) — как предлагал AUDIT,
+  «Тесты»: поведение кита, вёрстка — в браузере;
+- `/Error` сервера получила свой `StaticLayout`: `MainLayout` теперь зависит от служб WebAssembly
+  (связь, диалоги), а статическая страница их не имеет;
+- **стык с T1.4 (влита раньше) сделан здесь же**: `UserMenu` — в подвале рельса и листа «Ещё»
+  (кабинет, «Войти»/«Выйти»), пункты меню по ролям из `/api/v1/me` (`NavAudience`), `/login`, «Нет
+  доступа» и «Загрузка…» `AuthorizeRouteView` — на компонентах кита. Вошедшее состояние проверено
+  bUnit-тестами, в браузере — гость (вход Auth0 агенту не пройти). Пункты меню ведут на разделы волны 2
+  и до них отвечают «Страница не найдена»;
+- окружение WebAssembly запекается при сборке (Debug — Development, publish — Production), поэтому
+  `/dev/ui` в `dotnet run` видна при любом окружении сервера;
+- пунктов паритета задача не закрывает (маршрутов v1 в ней нет).
+
 **Цель.** Дизайн-система и общие компоненты 2.0 в `UI` — до модулей, чтобы они собирались из
 готового, а не заводили свои копии.
 
