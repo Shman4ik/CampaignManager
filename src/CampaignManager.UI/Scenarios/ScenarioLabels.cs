@@ -30,6 +30,15 @@ public static class ScenarioLabels
         _ => Tone.Neutral,
     };
 
+    /// <summary>Тон метки вида факта — один на вкладку «Факты» и панель режима игры.</summary>
+    public static Tone FactTone(KeyFactType type) => type switch
+    {
+        KeyFactType.Truth => Tone.Error,
+        KeyFactType.Timeline => Tone.Info,
+        KeyFactType.Reward => Tone.Success,
+        _ => Tone.Stone,
+    };
+
     public static string CharacteristicName(Characteristic characteristic) =>
         InvestigatorCreationRules.Info(characteristic) is var info ? $"{info.Abbreviation} — {info.Name}" : characteristic.ToString();
 }

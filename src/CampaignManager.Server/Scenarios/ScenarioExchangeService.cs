@@ -310,11 +310,7 @@ public sealed class ScenarioExchangeService(
             try
             {
                 ScenarioPartsService.ApplyLocationFields(location, new LocationInput(source.Name, source.Address, source.Description));
-                location.MusicTags = MusicTags.Normalize(source.MusicTags);
-                if (location.MusicTags.Count > MusicTags.MaxCount || location.MusicTags.Any(t => t.Length > MusicTags.MaxLength))
-                {
-                    throw ApiProblemException.Invalid($"Настроений — не больше {MusicTags.MaxCount}, каждое — до {MusicTags.MaxLength} знаков.");
-                }
+                location.MusicTags = ScenarioPartsService.LocationMusicTags(source.MusicTags);
             }
             catch (ApiProblemException problem)
             {

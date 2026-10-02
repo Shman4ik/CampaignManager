@@ -1,5 +1,6 @@
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Core;
+using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Scenarios;
 
@@ -25,11 +26,18 @@ public static class ScenariosRoutes
     /// <summary><c>PUT</c> <see cref="ReorderRequest"/> — порядок строк одной части.</summary>
     public const string OrderPattern = ScenarioPattern + "/order";
 
+    /// <summary><c>GET</c> — прохождения сценария в кампаниях, которые ведёт вошедший (<see cref="ScenarioRunDto"/>): режим игры
+    /// берёт из них сыщиков для проверок (T2.5b). Создают прохождения — T2.5c.</summary>
+    public const string RunsPattern = ScenarioPattern + "/runs";
+
     /// <summary><c>POST</c> <see cref="LocationInput"/>.</summary>
     public const string LocationsPattern = ScenarioPattern + "/locations";
 
     /// <summary><c>PUT</c> <see cref="LocationInput"/>; <c>DELETE</c> — с вложенными локациями и проверками.</summary>
     public const string LocationPattern = LocationsPattern + "/{locationId:guid}";
+
+    /// <summary><c>PUT</c> <see cref="LocationMusicInput"/> — музыка локации: настроения и прибитые треки (T2.5b).</summary>
+    public const string LocationMusicPattern = LocationPattern + "/music";
 
     /// <summary><c>POST</c> <see cref="CheckInput"/> — проверка в локации.</summary>
     public const string LocationChecksPattern = LocationPattern + "/checks";
@@ -46,6 +54,10 @@ public static class ScenariosRoutes
     public const string HandoutsPattern = ScenarioPattern + "/handouts";
 
     public const string HandoutPattern = HandoutsPattern + "/{handoutId:guid}";
+
+    /// <summary><c>GET</c> — раздатка для показа игрокам (<see cref="HandoutScreenDto"/>): без пометки и заметки Хранителя.
+    /// Читает Хранитель и игрок кампании, где сценарий проходят (<c>ForHandoutAsync</c>).</summary>
+    public const string HandoutScreenPattern = HandoutPattern + "/screen";
 
     /// <summary><c>POST</c> <see cref="ScenarioCreatureInput"/> — тварь из бестиария.</summary>
     public const string CreaturesPattern = ScenarioPattern + "/creatures";
@@ -72,9 +84,13 @@ public static class ScenariosRoutes
 
     public static string Order(Guid scenarioId) => $"{Scenario(scenarioId)}/order";
 
+    public static string Runs(Guid scenarioId) => $"{Scenario(scenarioId)}/runs";
+
     public static string Locations(Guid scenarioId) => $"{Scenario(scenarioId)}/locations";
 
     public static string Location(Guid scenarioId, Guid locationId) => $"{Locations(scenarioId)}/{locationId}";
+
+    public static string LocationMusic(Guid scenarioId, Guid locationId) => $"{Location(scenarioId, locationId)}/music";
 
     public static string LocationChecks(Guid scenarioId, Guid locationId) => $"{Location(scenarioId, locationId)}/checks";
 
@@ -87,6 +103,8 @@ public static class ScenariosRoutes
     public static string Handouts(Guid scenarioId) => $"{Scenario(scenarioId)}/handouts";
 
     public static string Handout(Guid scenarioId, Guid handoutId) => $"{Handouts(scenarioId)}/{handoutId}";
+
+    public static string HandoutScreen(Guid scenarioId, Guid handoutId) => $"{Handout(scenarioId, handoutId)}/screen";
 
     public static string Creatures(Guid scenarioId) => $"{Scenario(scenarioId)}/creatures";
 
@@ -287,6 +305,18 @@ public sealed record KeyFactInput(KeyFactType Type, string Title, string? Conten
 /// </summary>
 public sealed record HandoutDto(Guid Id, int Ord, string Name, string? PlayerText, string? KeeperNote, Guid? FileId, string? FileUrl);
 
+/// <summary>
+/// Раздатка, как её видят игроки: картинка и текст. Пометки (<see cref="HandoutDto.Name"/>) и заметки Хранителя
+/// (<see cref="HandoutDto.KeeperNote"/>) в типе нет вовсе — показ и второй экран не могут их вывести даже по ошибке.
+/// <see cref="CanManage"/> — смотрит ведущий (Хранитель): «Закрыть» ведёт его к сценарию, игрока — на главную.
+/// </summary>
+public sealed record HandoutScreenDto(Guid Id, Guid ScenarioId, string? PlayerText, string? FileUrl, bool CanManage)
+{
+    /// <summary>То, что можно показать игрокам из раздатки рабочего места.</summary>
+    public static HandoutScreenDto Of(Guid scenarioId, HandoutDto handout, bool canManage) =>
+        new(handout.Id, scenarioId, handout.PlayerText, handout.FileUrl, canManage);
+}
+
 public sealed record HandoutInput(string Name, string? PlayerText = null, string? KeeperNote = null, Guid? FileId = null);
 
 /// <summary>
@@ -387,6 +417,18 @@ public sealed record ScenarioPregenDto(CharacterSummaryDto Character, bool IsRes
 /// <summary>Прегена из библиотеки — копией в сценарий: заготовка остаётся для других сценариев.</summary>
 public sealed record AddPregenRequest(Guid PregenId);
 
+/// <summary>
+/// Музыка локации: настроения (нормализуются, как теги фонотеки) и прибитые треки — играют, даже если тегов у них нет.
+/// Запись заменяет оба списка целиком.
+/// </summary>
+public sealed record LocationMusicInput(IReadOnlyList<string> Tags, IReadOnlyList<Guid> TrackIds);
+
+/// <summary>
+/// Прохождение сценария в кампании, которую ведёт вошедший: из её сыщиков режим игры предлагает выбор в проверке.
+/// Время — UTC, показывается в поясе браузера.
+/// </summary>
+public sealed record ScenarioRunDto(Guid Id, Guid CampaignId, string CampaignName, ScenarioRunStatus Status, DateTimeOffset? ScheduledAt);
+
 /// <summary>Часть сценария, у строк которой есть порядок.</summary>
 public enum ScenarioPart
 {
@@ -424,6 +466,15 @@ public interface IScenariosApi
     Task DeleteAsync(Guid scenarioId, CancellationToken cancellationToken = default);
 
     Task ReorderAsync(Guid scenarioId, ReorderRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Прохождения сценария в кампаниях, которые ведёт вошедший (администратору — все); незавершённые — первыми.</summary>
+    Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default);
+
+    /// <summary>Музыка локации: настроения и прибитые треки целиком. Трек не из фонотеки — 400.</summary>
+    Task<ScenarioLocationDto> SetLocationMusicAsync(Guid scenarioId, Guid locationId, LocationMusicInput input, CancellationToken cancellationToken = default);
+
+    /// <summary>Раздатка для показа игрокам — без пометки и заметки Хранителя. Не видна — 404.</summary>
+    Task<HandoutScreenDto> GetHandoutScreenAsync(Guid scenarioId, Guid handoutId, CancellationToken cancellationToken = default);
 
     Task<ScenarioLocationDto> AddLocationAsync(Guid scenarioId, LocationInput input, CancellationToken cancellationToken = default);
 

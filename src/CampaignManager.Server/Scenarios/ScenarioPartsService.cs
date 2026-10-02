@@ -1,5 +1,6 @@
 using CampaignManager.Contracts.Scenarios;
 using CampaignManager.Core;
+using CampaignManager.Core.Music;
 using CampaignManager.Core.Scenarios;
 using CampaignManager.Data;
 using CampaignManager.Data.Scenarios;
@@ -276,6 +277,26 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
         }
 
         ApplyLocationFields(location, input);
+    }
+
+    /// <summary>
+    /// Настроения локации — одна проверка на правку музыки (режим игры, T2.5b) и импорт (T2.5d): нормализация тегов фонотеки
+    /// (нижний регистр, «ё» → «е», без повторов), не больше <see cref="MusicTags.MaxCount"/>, каждое до <see cref="MusicTags.MaxLength"/>.
+    /// </summary>
+    internal static List<string> LocationMusicTags(IEnumerable<string?>? tags)
+    {
+        var normalized = MusicTags.Normalize(tags);
+        if (normalized.Count > MusicTags.MaxCount)
+        {
+            throw ApiProblemException.Invalid($"Настроений у локации — не больше {MusicTags.MaxCount}.");
+        }
+
+        if (normalized.FirstOrDefault(t => t.Length > MusicTags.MaxLength) is { } longTag)
+        {
+            throw ApiProblemException.Invalid($"Настроение «{longTag}» длиннее {MusicTags.MaxLength} знаков.");
+        }
+
+        return normalized;
     }
 
     /// <summary>Поля локации без проверки родителя по базе — её делает вызывающий (импорт ищет родителя по имени в файле).</summary>

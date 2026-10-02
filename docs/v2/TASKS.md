@@ -787,6 +787,29 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
 - Права — по `AccessPolicy`, флаги приходят в DTO.
 
 **T2.5b — Режим игры и раздатки.**
+
+**Сделано 2026-10-02.** `UI/Scenarios`: режим игры `ScenarioPlay` (на `ScenarioPage`, `?mode=play&location=&handout=&run=`,
+переходы с `replace`), `PlayFactsPanel`, показ `HandoutShowcase` (`Modal Placement="Showcase"`), общий `HandoutContent`,
+`LocationMusicModal`; «Показать» во вкладке «Раздатки», «Музыка» и «В режиме игры» во вкладке «Локации».
+`Server/Scenarios/ScenarioPlayService`: `GET …/runs`, `PUT …/locations/{id}/music`, `GET …/handouts/{id}/screen`;
+статическая страница `Server/Components/Pages/HandoutScreen` (`/scenarios/{id}/handouts/{handoutId}`). Контракты —
+`ScenarioRunDto`, `LocationMusicInput`, `HandoutScreenDto` (без пометки и `keeper_note` — тип не может их вывести).
+Миграций нет. Тесты — `Server.Tests/Scenarios/ScenarioPlayApiTests` (прохождения, музыка, права показа, JSON и HTML второго
+экрана без пометок Хранителя), `UI.Tests/ScenarioPlayTests`. Знание — [Server/Scenarios/CLAUDE.md](../../src/CampaignManager.Server/Scenarios/CLAUDE.md),
+[UI/Scenarios/CLAUDE.md](../../src/CampaignManager.UI/Scenarios/CLAUDE.md).
+Отличия от карточки и v1:
+- выбранное прохождение — четвёртый параметр адреса `run=` (по умолчанию — первое незавершённое); список прохождений — только
+  кампании, которые ведёт вошедший, создания прохождений нет (T2.5c);
+- уже `xl` (iPad в портрете) факты и раздатки — выдвижной панелью, а не третьей колонкой (v1 сжимал центр до 370px);
+- второй экран «нет раздатки / не ваша» — 200 с текстом, а не 404 (статус 404 у статической страницы .NET 10 уводит в
+  `/not-found`);
+- музыку локации правит отдельный адрес (оба списка целиком) — из режима игры и из вкладки «Локации»;
+- связи локации с тварями, предметами и раздатками v1 были мёртвыми (AUDIT) и в схеме их нет — в локации только описание,
+  музыка, проверки и вложенные локации; раздатки — в правой панели;
+- раздатки — только картинки и текст (PDF — вопрос владельцу, не делался);
+- проверка настроений локации одна на правку музыки и импорт T2.5d — `ScenarioPartsService.LocationMusicTags`.
+Стык записан в T2.5c.
+
 - **Стык с T2.5a готов:** рабочее место — `UI/Scenarios/ScenarioPage` (вкладки в `?tab=`); режим игры — тот же адрес с
   `?mode=play&location=&handout=` (`ScenarioLinks.Play`, параметры пока никто не читает). Сценарий целиком — `GET
   /api/v1/scenarios/{id}` (`ScenarioDto`: локации в порядке дерева с проверками, `MusicTags` и `TrackIds`, факты, раздатки с
@@ -808,6 +831,12 @@ Core, `ICharactersApi`), `CharactersApiClient`, `Server/Characters` (`CharacterS
   последний элемент колонки `.cm-main` (UI/Music/CLAUDE.md).
 
 **T2.5c — Прохождения и ваншоты.** `RunService`:
+- **Стык с T2.5b:** прохождения уже читает режим игры — `GET /api/v1/scenarios/{id}/runs` (`ScenarioPlayService.ListRunsAsync`,
+  `ScenarioRunDto`: кампания, состояние, время; только кампании, которые ведёт вошедший). `RunService` забирает чтение себе и
+  наращивает DTO (анонс, `signup_open`, брони), а не заводит второй список. Выбор в режиме игры — `?run=` (`ScenarioLinks.Play`);
+  по умолчанию — первое незавершённое, поэтому «Играть в кампании» сразу даёт сыщиков в проверках. Подписи состояний —
+  `ScenarioText.Of(ScenarioRunStatus)`. Второй экран игроку открывает **любое** прохождение сценария в его кампании
+  (`ForHandoutAsync`), в том числе завершённое — решить, так ли это нужно.
 - **Стык с T2.5a:** прегены сценария — `ScenarioDto.Pregens` (`IsReserved` — бронь в незавершённом прохождении,
   `ScenarioService.ReservedPregensAsync`); «Убрать» забронированного уже отказывает (409), удаление сценария с прохождениями —
   409 `in-use`. «Играть в кампании»/«Объявить ваншот» — кнопки на вкладке «Описание» (`ScenarioDescriptionTab`), там же

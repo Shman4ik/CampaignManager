@@ -1,3 +1,5 @@
+using CampaignManager.Core.Campaigns;
+
 namespace CampaignManager.Core.Scenarios;
 
 /// <summary>
@@ -29,5 +31,15 @@ public static class ScenarioText
         CheckTarget.Characteristic => "Характеристика",
         CheckTarget.Luck => "Удача",
         _ => target.ToString(),
+    };
+
+    /// <summary>Состояние прохождения сценария в кампании (выбор в режиме игры; анонс и запись — T2.5c).</summary>
+    public static string Of(ScenarioRunStatus status) => status switch
+    {
+        ScenarioRunStatus.Planned => "запланировано",
+        ScenarioRunStatus.Announced => "объявлено",
+        ScenarioRunStatus.Running => "идёт",
+        ScenarioRunStatus.Finished => "завершено",
+        _ => status.ToString(),
     };
 }
