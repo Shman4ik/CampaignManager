@@ -222,6 +222,59 @@ public sealed class SheetBuilderTests
         Assert.DoesNotContain(sheet.Skills, s => s.Checked); // в v1 импорт ставил отметку развития всем навыкам
     }
 
+    /// <summary>
+    /// 0 у навыка с базой в файле сценария (экспорт прегена «Безымянного тумана» с перенесённого листа v1, где 0 значил
+    /// «не заполнено») строки не заводит: родной язык остаётся ОБР, Уклонение — ½ ЛВК, Обаяние — база. Строка
+    /// и на самой базе лишняя; заводит её только значение выше базы.
+    /// </summary>
+    [Fact]
+    public void FromImport_ZeroOrBaseForSkillWithBase_NoRow_ValueIsBase()
+    {
+        var data = new ImportedCharacter
+        {
+            Name = "Преген",
+            Characteristics = Same with { },
+            Skills = new Dictionary<string, int>
+            {
+                ["Язык, родной"] = 0,
+                ["Уклонение"] = 0,
+                ["Обаяние"] = 0,
+                ["Плавание"] = 20,
+                ["Мифы Ктулху"] = 0,
+                ["Внимание"] = 26,
+            },
+        };
+
+        var sheet = SheetBuilder.FromImport(data, Catalog).Sheet;
+
+        Assert.Equal([Id("Внимание")], sheet.Skills.Select(s => s.SkillId));
+        Assert.Equal(80, sheet.Value(Catalog, SkillCodes.LanguageOwn));
+        Assert.Equal(35, sheet.Value(Catalog, SkillCodes.Dodge));
+        Assert.Equal(15, sheet.Value(Catalog, SkillCodes.Charm));
+
+        // Лист с такой строкой (перенесённый до исправления) её и не экспортирует
+        sheet.Skills.Add(Skill(OwnLanguage, 0));
+        Assert.DoesNotContain(OwnLanguage, SheetBuilder.ToImport(sheet, Catalog).Skills.Keys);
+    }
+
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(80, false)] // на базе (ОБР)
+    [InlineData(81, true)]
+    public void IsAboveBase_UsesBaseFormula(int value, bool expected) =>
+        Assert.Equal(expected, SkillCatalog.IsAboveBase(Def(OwnLanguage), value, Same));
+
+    [Fact]
+    public void AddsNothing_OnlyCatalogRowNotAboveBaseWithoutOtherData()
+    {
+        Assert.True(Skill("Плавание", 0).AddsNothing(Catalog, Same));
+        Assert.True(Skill("Плавание", 20).AddsNothing(Catalog, Same));
+        Assert.False(Skill("Плавание", 21).AddsNothing(Catalog, Same));
+        Assert.False((Skill("Плавание", 0) with { Checked = true }).AddsNothing(Catalog, Same)); // отметка развития — данные
+        Assert.False(Specialization("Наука", "геология", 0).AddsNothing(Catalog, Same));          // строка и есть навык
+        Assert.False(new SheetSkill { Name = "Хиромантия", Value = 0 }.AddsNothing(Catalog, Same));
+    }
+
     [Fact]
     public void ToImport_IsFixedPointOfFromImport_AndSkipsSkillsAtBase()
     {

@@ -83,9 +83,11 @@ public sealed class SheetConverterTests
         var (sheet, notes) = Convert("player-milie-mare");
 
         Assert.Equal("Врач-патологоанатом", sheet.Personal.Occupation);
-        Assert.Equal(75, Skill(sheet, SkillCodes.LanguageOwn).Value); // «Языки (родной)»
+        // «Языки (родной)» 75 = ОБР и Уклонение 32 = ½ ЛВК — на базе: строк нет, значения — формулы справочника
+        Assert.Equal(75, sheet.Value(TestCatalog.Skills, SkillCodes.LanguageOwn));
+        Assert.Null(sheet.Entry(TestCatalog.Id(SkillCodes.LanguageOwn)));
         Assert.Equal(20, Skill(sheet, "skill.science.pharmacy").Value); // «Наука фармакология »
-        Assert.Equal(32, Skill(sheet, SkillCodes.Dodge).Value);
+        Assert.Equal(32, sheet.Value(TestCatalog.Skills, SkillCodes.Dodge));
 
         var latin = sheet.Skills.Single(s => s.Name == "латынь");
         Assert.Equal(TestCatalog.Id(SkillCodes.LanguageForeign), latin.ParentSkillId);
@@ -190,6 +192,56 @@ public sealed class SheetConverterTests
         Assert.Equal("1d6", derringer.Damage);
         Assert.True(derringer.Impaling);
         Assert.Equal(Guid.Parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"), derringer.RowId);
+    }
+
+    /// <summary>
+    /// 0 у навыка с ненулевой базой в v1 значил «не заполнено»: строки нет, лист показывает базу справочника —
+    /// родной язык = ОБР, Уклонение = ½ ЛВК, Медицина = 1. Строка на самой базе тоже лишняя. Выше базы и с отметкой
+    /// развития строка остаётся.
+    /// </summary>
+    [Theory]
+    [InlineData("pregen-helen-wright", 66, 27)] // «Язык, родной» 0, Медицина 1, Уклонение 27 = 55 / 2
+    [InlineData("npc-henry-pierce", 85, 20)]    // «Языки (родной)» 0, Медицина 0, Уклонение 20 = 40 / 2
+    public void Skills_not_above_base_get_no_row_and_read_as_catalog_base(string fixture, int languageOwn, int dodge)
+    {
+        var (sheet, notes) = Convert(fixture);
+
+        foreach (var code in new[] { SkillCodes.LanguageOwn, SkillCodes.Dodge, "skill.medicine" })
+        {
+            Assert.Null(sheet.Entry(TestCatalog.Id(code)));
+        }
+
+        Assert.Equal(languageOwn, sheet.Value(TestCatalog.Skills, SkillCodes.LanguageOwn));
+        Assert.Equal(dodge, sheet.Value(TestCatalog.Skills, SkillCodes.Dodge));
+        Assert.Equal(1, sheet.Value(TestCatalog.Skills, "skill.medicine"));
+        Assert.Equal(dodge, DerivedAttributeRules.Compute(sheet, TestCatalog.Skills).Dodge);
+        Assert.DoesNotContain(sheet.Skills, row => row.AddsNothing(TestCatalog.Skills, sheet.Characteristics));
+        Assert.Contains("Язык, родной", notes.BelowBaseDropped);
+        Assert.True(notes.AtBaseDropped >= notes.BelowBaseDropped.Count);
+
+        // Документ после записи и чтения даёт те же значения
+        var read = CmJson.ReadSheet(CmJson.Write(sheet), CharacterSheet.CurrentVersion);
+        Assert.Equal(languageOwn, read.Value(TestCatalog.Skills, SkillCodes.LanguageOwn));
+    }
+
+    [Fact]
+    public void Skill_rows_above_base_or_checked_survive()
+    {
+        var (player, _) = Convert("player-milie-mare");
+        Assert.Equal(60, Skill(player, "skill.medicine").Value);
+        var (rene, _) = Convert("npc-rene-pierce");
+        Assert.Equal(60, Skill(rene, SkillCodes.Dodge).Value); // ½ ЛВК = 37
+
+        // Отметка развития на базе — данные: строка остаётся
+        var row = TestCatalog.Sheet("pregen-helen-wright");
+        var medicine = row["Character"]!["Skills"]!["SkillGroups"]!.AsArray()
+            .SelectMany(g => g!["Skills"]!.AsArray())
+            .Single(s => s!["Name"]!.GetValue<string>() == "Медицина")!;
+        medicine["IsUsed"] = true;
+        var (sheet, _) = Converter().Convert(row["Character"]!, isNpc: false);
+        var kept = Skill(sheet, "skill.medicine");
+        Assert.Equal(1, kept.Value);
+        Assert.True(kept.Checked);
     }
 
     [Theory]

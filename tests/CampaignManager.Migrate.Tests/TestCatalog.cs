@@ -29,6 +29,7 @@ public static class TestCatalog
             ["skill.fighting.brawl"] = 25,
             ["skill.firearms.handgun"] = 20,
             ["skill.language-other"] = 1,
+            ["skill.medicine"] = 1,
         };
         return new SkillCatalog(SkillCodes.BookNames.Select(pair => new SkillDefinition(StableId(pair.Key), pair.Value)
         {

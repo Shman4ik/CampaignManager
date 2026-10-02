@@ -31,6 +31,18 @@ public sealed class SheetNotes
     /// </summary>
     public List<string> DroppedBiography { get; } = [];
 
+    /// <summary>
+    /// Строки навыков справочника не выше базы и без других данных — не заведены (<see cref="SheetSkills.AddsNothing"/>):
+    /// лист показывает базу справочника. Сколько их всего.
+    /// </summary>
+    public int AtBaseDropped { get; set; }
+
+    /// <summary>
+    /// Из них — <b>ниже</b> базы: «Медицина 0» при базе 1. В v1 0 значил «не заполнено», перенесённый буквально он
+    /// перекрыл бы базу (родной язык 0 вместо ОБР). Имена навыков справочника, для отчёта.
+    /// </summary>
+    public List<string> BelowBaseDropped { get; } = [];
+
     public int CheckedDropped { get; set; }
 
     public int WeaponsLinked { get; set; }
@@ -44,7 +56,9 @@ public sealed class SheetNotes
 /// Скорость и Уклонение-зеркало вычисляются; у НПС расхождение с формулой уходит в <c>overrides</c>;</item>
 /// <item><c>Id</c> внутри JSON, <c>CharacterType</c>, <c>NewSkillName</c>/<c>NewSkillBaseValue</c>, группы
 /// навыков и <c>BaseValue</c>-строки не переносятся; <c>PlayerName</c> — из владельца строки;</item>
-/// <item>навык — по <c>SkillModelId</c>, затем по имени (<see cref="SkillNameResolver"/>), иначе самодельный;</item>
+/// <item>навык — по <c>SkillModelId</c>, затем по имени (<see cref="SkillNameResolver"/>), иначе самодельный;
+/// строка навыка справочника не выше базы и без отметки не заводится (<see cref="SheetSkills.AddsNothing"/>): 0 в v1 —
+/// «не заполнено», а не значение;</item>
 /// <item>оружие — текст книги и <c>catalogWeaponId</c>; разобранные блоки v1 не переносятся;</item>
 /// <item>деньги — числом, нечисловой остаток — в заметку финансов.</item>
 /// </list>
@@ -231,6 +245,25 @@ public sealed class SheetConverter(
                 sheet.Skills.Add(entry);
             }
         }
+
+        // Строка не выше базы ничего не добавляет к справочнику (то же правило, что у конструктора листа Core).
+        // Отбрасывается после слияния повторов: повтор выше базы спасает строку.
+        sheet.Skills.RemoveAll(row =>
+        {
+            if (!row.AddsNothing(catalog, sheet.Characteristics))
+            {
+                return false;
+            }
+
+            notes.AtBaseDropped++;
+            var skill = catalog.Find(row.SkillId)!;
+            if (row.Value < SkillCatalog.BaseValueOf(skill, sheet.Characteristics))
+            {
+                notes.BelowBaseDropped.Add(skill.Name);
+            }
+
+            return true;
+        });
     }
 
     /// <summary>

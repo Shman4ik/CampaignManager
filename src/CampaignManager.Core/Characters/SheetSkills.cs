@@ -50,6 +50,20 @@ public static class SheetSkills
         return created;
     }
 
+    /// <summary>
+    /// Строка ничего не добавляет к справочнику, и хранить её незачем: навык справочника не выше базы
+    /// (<see cref="SkillCatalog.IsAboveBase"/>), без отметки развития, без своего имени и родителя, без незнакомых
+    /// полей (<see cref="Documents.DocumentPart.Extra"/>). Свой навык и специализация вне справочника — не такие:
+    /// строка и есть сам навык.
+    /// </summary>
+    public static bool AddsNothing(this SheetSkill row, SkillCatalog catalog, Characteristics characteristics) =>
+        catalog.Find(row.SkillId) is { } skill
+        && !row.Checked
+        && string.IsNullOrWhiteSpace(row.Name)
+        && row.ParentSkillId is null
+        && row.Extra is not { Count: > 0 }
+        && !SkillCatalog.IsAboveBase(skill, row.Value, characteristics);
+
     /// <summary>Код справочника у строки (null у своего навыка и у специализации вне справочника).</summary>
     public static string? CodeOf(this SheetSkill skill, SkillCatalog catalog) => catalog.CodeOf(skill.SkillId);
 
