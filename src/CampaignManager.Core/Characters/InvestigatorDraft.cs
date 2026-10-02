@@ -246,10 +246,13 @@ public sealed class InvestigatorDraft
         }
     }
 
-    /// <summary>Вариант 3: восемь бросков в набор, раскладка начинается заново (стр. 46).</summary>
+    /// <summary>
+    /// Вариант 3: восемь бросков в набор — первые пять 3d6 × 5, последние три (2d6 + 6) × 5 (стр. 46); раскладка
+    /// начинается заново. Порядок не сортируется: по месту в наборе помощник знает, какими костями вписывать.
+    /// </summary>
     public void RollPool(IDiceRoller dice)
     {
-        Pool = InvestigatorCreationRules.RollPool(dice);
+        Pool = [.. Enumerable.Range(0, 8).Select(i => (i < PoolThreeD6 ? InvestigatorCreationRules.Roll3d6(dice) : InvestigatorCreationRules.Roll2d6Plus6(dice)).Value)];
         Rolled.Clear();
         EducationChecks.Clear();
     }
@@ -280,6 +283,12 @@ public sealed class InvestigatorDraft
             break;
         }
     }
+
+    /// <summary>Вариант 3: сколько бросков набора — 3d6 (остальные — 2d6 + 6).</summary>
+    public const int PoolThreeD6 = 5;
+
+    /// <summary>Значение места набора по сумме костей: первые пять — 3d6 × 5, остальные — (2d6 + 6) × 5.</summary>
+    public static int PoolValueFromDice(int index, int sum) => index < PoolThreeD6 ? sum * 5 : (sum + 6) * 5;
 
     /// <summary>Значения набора (вариант 3 или блиц), которые ещё можно дать характеристике.</summary>
     public List<int> AvailableFor(Characteristic key) =>

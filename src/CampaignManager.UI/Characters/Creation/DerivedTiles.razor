@@ -1,0 +1,34 @@
+@using CampaignManager.Core.Characters
+
+@* Вторичные атрибуты в помощнике — плитками; числа считает DerivedAttributeRules (Core), здесь только показ.
+   Рассудок нового сыщика = МОЩ (стр. 31). *@
+<dl class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" data-testid="derived">
+    @foreach (var (label, value) in Tiles)
+    {
+        <div class="rounded-md border border-primary-200 bg-primary-50 px-3 py-2" @key="label">
+            <dt class="text-xs text-primary-500">@label</dt>
+            <dd class="text-lg font-semibold text-primary-800">@value</dd>
+        </div>
+    }
+</dl>
+
+@code {
+    [Parameter, EditorRequired] public DerivedStats Derived { get; set; } = null!;
+
+    [Parameter] public int Luck { get; set; }
+
+    /// <summary>Рассудок на старте: МОЩ, не выше максимума; null — показывать максимум.</summary>
+    [Parameter] public int? Sanity { get; set; }
+
+    private IEnumerable<(string, string)> Tiles =>
+    [
+        ("ПЗ", Derived.MaxHitPoints.ToString(CultureInfo.CurrentCulture)),
+        ("ПМ", Derived.MaxMagicPoints.ToString(CultureInfo.CurrentCulture)),
+        ("Рассудок", (Sanity ?? Derived.MaxSanity).ToString(CultureInfo.CurrentCulture)),
+        ("Удача", Luck > 0 ? Luck.ToString(CultureInfo.CurrentCulture) : "—"),
+        ("Скорость", Derived.Move.ToString(CultureInfo.CurrentCulture)),
+        ("БкУ", Derived.DamageBonus),
+        ("Комплекция", Derived.Build.ToString(CultureInfo.CurrentCulture)),
+        ("Уклонение", Derived.Dodge.ToString(CultureInfo.CurrentCulture)),
+    ];
+}

@@ -1,0 +1,98 @@
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Characters.Creation
+
+@* Карточка листа НПС или прегена — одна в библиотеке (/npcs) и в сценарии (T2.5a: состав НПС, прегены). Что она
+   умеет, решают переданные обработчики, а не варианты компонента; роль и количество в сценарии — содержимое
+   (ChildContent), их рисует сценарий. Framed="false" — строка без своей рамки для места в чужой карточке: карточка
+   в карточке читалась мусором (знание v1); строки разделяет родитель (cm-stack). *@
+<article class="@(Framed ? "cm-card flex flex-col" : "flex flex-col")" data-testid="character-summary" data-character-id="@Character.Id">
+    <div class="@(Framed ? "cm-card-header flex-wrap gap-2" : "mb-2 flex flex-wrap items-center justify-between gap-2")">
+        <div class="flex min-w-0 items-center gap-3">
+            @if (Character.PortraitUrl is { } portrait)
+            {
+                <img src="@portrait" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
+            }
+            <a class="cm-card-title min-w-0 break-words hover:underline" href="@($"character/{Character.Id}")">@Character.Name</a>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-id-card" Href="@($"character/{Character.Id}")">Открыть</Button>
+            @if (Character.CanEdit && OnArchive.HasDelegate && Character.Status is not CharacterStatus.Archived)
+            {
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-box-archive" Busy="Busy"
+                        OnClick="() => OnArchive.InvokeAsync(Character)">@ArchiveLabel</Button>
+            }
+            @if (Character.CanEdit && OnRestore.HasDelegate && Character.Status is CharacterStatus.Archived)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" Busy="Busy"
+                        OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть</Button>
+            }
+        </div>
+    </div>
+    <div class="@(Framed ? "cm-card-body flex flex-1 flex-col gap-2" : "flex flex-col gap-2")">
+        <div class="flex flex-wrap gap-1.5">
+            <Badge Tone="@(Character.Kind is CharacterKind.Npc ? Tone.Error : Tone.Stone)">@CreationLinks.KindTitle(Character.Kind)</Badge>
+            @if (Character.Occupation is { } occupation)
+            {
+                <Badge Tone="Tone.Info">@occupation</Badge>
+            }
+            @if (Character.Age > 0)
+            {
+                <Badge Tone="Tone.Neutral">@Character.Age лет</Badge>
+            }
+            <Badge Tone="Tone.Neutral">@Place</Badge>
+            @if (Character.Status is CharacterStatus.Archived)
+            {
+                <Badge Tone="Tone.Warning">Архив</Badge>
+            }
+            @foreach (var scenario in Character.CastIn)
+            {
+                <Badge Tone="Tone.Success" Icon="fa-scroll">@scenario</Badge>
+            }
+        </div>
+        @if (Character.Gender is not null || Character.Residence is not null)
+        {
+            <div class="cm-meta">
+                @if (Character.Gender is { } gender)
+                {
+                    <span>@gender</span>
+                }
+                @if (Character.Residence is { } residence)
+                {
+                    <span><span class="cm-meta-label">Живёт:</span> @residence</span>
+                }
+            </div>
+        }
+        @if (Character.Backstory is { } backstory)
+        {
+            <p class="whitespace-pre-line text-sm text-primary-700">@backstory</p>
+        }
+        @ChildContent
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public CharacterSummaryDto Character { get; set; } = null!;
+
+    /// <summary>Своя рамка-карточка (сетка библиотеки) или строка внутри чужой карточки (сценарий).</summary>
+    [Parameter] public bool Framed { get; set; } = true;
+
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>«В архив» в библиотеке; сценарий подпишет «Убрать».</summary>
+    [Parameter] public string ArchiveLabel { get; set; } = "В архив";
+
+    [Parameter] public EventCallback<CharacterSummaryDto> OnArchive { get; set; }
+
+    [Parameter] public EventCallback<CharacterSummaryDto> OnRestore { get; set; }
+
+    /// <summary>Что показать под карточкой: роль и количество НПС в сценарии (T2.5a).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string Place => Character switch
+    {
+        { CampaignName: { } campaign } => $"Кампания «{campaign}»",
+        { ScenarioName: { } scenario } => $"Сценарий «{scenario}»",
+        _ => "Библиотека",
+    };
+}

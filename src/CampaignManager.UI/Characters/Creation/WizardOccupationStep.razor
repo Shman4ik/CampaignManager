@@ -1,0 +1,187 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Шаг «Род занятий» (стр. 31, 37–39): профессия, выбор в формуле очков (решает игрок, а не максимум) и слоты.
+   Слоты собирает CreationPlan (OccupationRules.BuildSlots), шаг их только показывает; выбор — по индексу слота в
+   черновике. Соседние слоты одной группы делят пул; навык с широким спектром даёт вписать свою специализацию. *@
+<div class="cm-stack">
+    <section>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="cm-section-title">Род занятий</h3>
+            <div class="flex min-w-60 flex-1 flex-wrap items-center justify-end gap-3">
+                <input type="search" class="cm-input max-w-72 flex-1" placeholder="Поиск по названию…" aria-label="Поиск профессии"
+                       data-testid="occupation-search" @bind="_search" @bind:event="oninput" />
+                <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
+                    <input type="checkbox" class="cm-checkbox" @bind="_lovecraftianOnly" /> лавкрафтовские
+                </label>
+            </div>
+        </div>
+        <div class="grid max-h-96 grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3" data-testid="occupations">
+            @foreach (var occupation in Filtered)
+            {
+                var selected = Draft.OccupationId == occupation.Id;
+                <button type="button" @key="occupation.Id" aria-pressed="@(selected ? "true" : "false")" data-testid="occupation"
+                        class="@($"flex min-h-11 flex-col rounded-md border px-3 py-2 text-left {(selected ? "border-accent-600 bg-accent-50 ring-1 ring-accent-600" : "border-primary-200 bg-white")}")"
+                        @onclick="() => SelectAsync(occupation)">
+                    <span class="font-semibold text-primary-800">
+                        @occupation.Name
+                        @if (occupation.IsLovecraftian)
+                        {
+                            <i class="fa-solid fa-book-skull ml-1 text-warning-700" aria-label="лавкрафтовская"></i>
+                        }
+                    </span>
+                    <span class="text-xs text-primary-500">@CatalogText.Of(occupation.SkillPointsFormula) · Средства @occupation.CreditRatingMin–@occupation.CreditRatingMax%</span>
+                </button>
+            }
+        </div>
+        @if (Filtered.Count == 0)
+        {
+            <p class="cm-text-muted mt-2">Профессии не найдены.</p>
+        }
+    </section>
+
+    @if (Plan.Occupation is { } chosen)
+    {
+        <section>
+            <h3 class="cm-section-title mb-2">Очки профессиональных навыков</h3>
+            @if (Plan.FormulaChoices.Count > 0)
+            {
+                <p class="mb-2 text-primary-700">Формула даёт выбор — решает игрок, а не наибольшее значение (стр. 38–39).</p>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (var key in Plan.FormulaChoices)
+                    {
+                        var choice = key;
+                        var points = OccupationRules.SkillPoints(chosen.Formula, Plan.Characteristics, choice);
+                        <Button Small="true" Variant="@(Draft.FormulaChoice == choice ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                                data-testid="@($"formula-{choice}")" OnClick="() => SelectFormulaAsync(choice)">
+                            ОБР × 2 + @InvestigatorCreationRules.Info(choice).Abbreviation × 2 = @points
+                        </Button>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="text-primary-700">@CatalogText.Of(chosen.Formula) = <strong>@Plan.OccupationBudget</strong> очков.</p>
+            }
+            <p class="cm-field-note mt-2">
+                Очки личного интереса: ИНТ × 2 = @Plan.PersonalBudget. Средства профессии — @Plan.CreditMin–@Plan.CreditMax%.
+            </p>
+        </section>
+
+        <section>
+            <h3 class="cm-section-title mb-2">Навыки профессии</h3>
+            <div class="grid grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-2">
+                @for (var i = 0; i < Plan.Slots.Count; i++)
+                {
+                    var index = i;
+                    var slot = Plan.Slots[index];
+                    <div class="flex flex-col gap-1" @key="index" data-testid="@($"slot-{index}")">
+                        <span class="cm-field-label">@slot.Label</span>
+                        @if (slot.Hint is { } hint)
+                        {
+                            <span class="cm-field-note">@hint</span>
+                        }
+                        @if (slot.Kind is OccupationSlotViewKind.CreditRating)
+                        {
+                            <span class="text-primary-700">@Draft.CreditRating% — задаётся на шаге «Навыки»</span>
+                        }
+                        else if (!slot.NeedsChoice)
+                        {
+                            <span class="text-primary-700"><i class="fa-solid fa-briefcase mr-1 text-accent-600" aria-hidden="true"></i>@Plan.NameOf(Plan.SlotKey(index))</span>
+                        }
+                        else
+                        {
+                            <select class="cm-input" aria-label="@slot.Label" value="@Plan.Choice(index)" @onchange="e => SetChoiceAsync(index, e)">
+                                <option value="">— выберите навык —</option>
+                                @foreach (var option in Plan.OptionsFor(index))
+                                {
+                                    <option value="@option">@Plan.NameOf(option)</option>
+                                }
+                                @foreach (var parent in slot.CustomParents)
+                                {
+                                    <option value="@(CustomPrefix + parent)">Другая специализация: @(Plan.Catalog.Find(parent)?.Name)…</option>
+                                }
+                            </select>
+                            @if (_customSlot == index && _customParent is { } customParent)
+                            {
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <input class="cm-input min-w-40 flex-1" placeholder="Например: латынь" aria-label="Своя специализация"
+                                           data-testid="custom-specialization" @bind="_customName" />
+                                    <Button Small="true" OnClick="() => AddCustomAsync(index, customParent)">Добавить</Button>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+            <p class="cm-field-note mt-2">
+                Профессиональных навыков всегда восемь плюс Средства. Пункты можно вложить не во все, но невложенное
+                сгорает (стр. 34).
+            </p>
+        </section>
+    }
+</div>
+
+@code {
+    private const string CustomPrefix = "custom:";
+    private string _search = "";
+    private bool _lovecraftianOnly;
+    private int? _customSlot;
+    private Guid? _customParent;
+    private string _customName = "";
+
+    [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
+
+    /// <summary>Профессии эпохи — DTO справочника (лавкрафтовская ли, формула словами).</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<OccupationDto> Occupations { get; set; } = [];
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private InvestigatorDraft Draft => Plan.Draft;
+
+    private List<OccupationDto> Filtered =>
+    [
+        .. Occupations
+            .Where(o => !_lovecraftianOnly || o.IsLovecraftian)
+            .Where(o => string.IsNullOrWhiteSpace(_search) || CatalogCodeTable.NormalizeName(o.Name).Contains(CatalogCodeTable.NormalizeName(_search), StringComparison.Ordinal)),
+    ];
+
+    private Task SelectAsync(OccupationDto occupation)
+    {
+        CreationPlan.SelectOccupation(Draft, OccupationCatalogs.From(occupation));
+        _customSlot = null;
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task SelectFormulaAsync(Characteristic choice)
+    {
+        Draft.FormulaChoice = choice;
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task SetChoiceAsync(int index, ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        if (value.StartsWith(CustomPrefix, StringComparison.Ordinal) && Guid.TryParse(value[CustomPrefix.Length..], out var parent))
+        {
+            _customSlot = index;
+            _customParent = parent;
+            _customName = "";
+            return Task.CompletedTask;
+        }
+
+        _customSlot = null;
+        Plan.SetChoice(index, value);
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task AddCustomAsync(int index, Guid parent)
+    {
+        if (Plan.AddSpecialization(index, parent, _customName) is null)
+            return Task.CompletedTask;
+
+        _customSlot = null;
+        return OnChanged.InvokeAsync();
+    }
+}

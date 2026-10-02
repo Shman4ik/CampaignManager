@@ -1,0 +1,161 @@
+@page "/character/create/{CampaignId:guid}"
+@page "/character/create/{Kind}"
+@attribute [Authorize]
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Platform
+@inject ICharactersApi Api
+@inject ICatalogApi<SkillDto> SkillsApi
+@inject NavigationManager Navigation
+
+@* «Новый лист» (T2.4): куда он ляжет и три способа — помощник главы 3, случайный сыщик (тот же помощник с
+   RandomDraft, открытый на «Итоге»), чистый лист; у НПС ещё быстрый НПС. Чистый лист создаётся только по кнопке:
+   переход по ссылке ничего не пишет, иначе перезагрузка заводила бы двойников. Все способы собирают лист одним
+   SheetBuilder (Core). Место проверяется до выбора — знание v1: иначе отказ приходил только на «Создать». *@
+<PageHeader Title="@CreationLinks.NewTitle(CreationKind)">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Href="@CreationLinks.Back(CreationKind, ScenarioId)">Назад</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Проверяю, куда ляжет лист…" Context="context">
+        <ChildContent>
+            <CreationPlace Context="context" />
+
+            @if (!context.CanCreate)
+            {
+                <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист здесь не завести" data-testid="create-refused">
+                    <ChildContent>@context.Reason</ChildContent>
+                    <Actions>
+                        @if (context.ActiveCharacterId is { } active)
+                        {
+                            <Button Small="true" Icon="fa-id-card" Href="@($"character/{active}")">Открыть активного сыщика</Button>
+                        }
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Href="">На главную</Button>
+                    </Actions>
+                </Alert>
+            }
+            else
+            {
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" ShowIcon="true" OnClose="() => _error = null">@_error</Alert>
+                }
+
+                <div class="cm-grid-cards" data-testid="create-options">
+                    <div class="cm-card">
+                        <div class="cm-card-body flex h-full flex-col gap-3">
+                            <h2 class="cm-section-title"><i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent-600" aria-hidden="true"></i>Помощник</h2>
+                            <p class="cm-text-muted flex-1">
+                                Пять шагов главы 3: характеристики и возраст, род занятий, навыки, биография, снаряжение. Любой бросок
+                                можно сделать здесь или вписать с настоящих костей.
+                            </p>
+                            <Button Icon="fa-wand-magic-sparkles" Href="@CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId)"
+                                    data-testid="create-wizard">Открыть помощник</Button>
+                        </div>
+                    </div>
+                    <div class="cm-card">
+                        <div class="cm-card-body flex h-full flex-col gap-3">
+                            <h2 class="cm-section-title"><i class="fa-solid fa-dice mr-2 text-accent-600" aria-hidden="true"></i>Случайный сыщик</h2>
+                            <p class="cm-text-muted flex-1">
+                                Помощник, заполненный бросками по тем же правилам, открывается на «Итоге»: любой шаг можно открыть и
+                                переиграть до создания.
+                            </p>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="create-random"
+                                    Href="@CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId, random: true)">Бросить</Button>
+                        </div>
+                    </div>
+                    @if (CreationKind is CharacterKind.Npc)
+                    {
+                        <div class="cm-card">
+                            <div class="cm-card-body flex h-full flex-col gap-3">
+                                <h2 class="cm-section-title"><i class="fa-solid fa-bolt mr-2 text-accent-600" aria-hidden="true"></i>Быстрый НПС</h2>
+                                <p class="cm-text-muted flex-1">
+                                    Встречный констебль за полминуты: типаж, пара чисел, боевой навык 25/40/70%, имя под эпоху (гл. 10).
+                                </p>
+                                <Button Variant="ButtonVariant.Secondary" Icon="fa-bolt" data-testid="create-quick"
+                                        OnClick="() => _quickOpen = true">Быстрый НПС</Button>
+                            </div>
+                        </div>
+                    }
+                    <div class="cm-card">
+                        <div class="cm-card-body flex h-full flex-col gap-3">
+                            <h2 class="cm-section-title"><i class="fa-solid fa-file mr-2 text-accent-600" aria-hidden="true"></i>Чистый лист</h2>
+                            <Field Label="Имя" Hint="@(CreationKind is CharacterKind.Player ? "(можно позже)" : null)">
+                                <input class="cm-input" maxlength="@CharacterLimits.NameLength" data-testid="blank-name" @bind="_blankName" />
+                            </Field>
+                            <p class="cm-text-muted flex-1">Пустой бланк: всё заполняете на листе сами — например, переносите бумажный лист.</p>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-file-circle-plus" Busy="_busy" data-testid="create-blank"
+                                    Disabled="@(CreationKind is not CharacterKind.Player && string.IsNullOrWhiteSpace(_blankName))"
+                                    OnClick="() => CreateBlankAsync(context)">Создать чистый лист</Button>
+                        </div>
+                    </div>
+                </div>
+
+                @if (_quickOpen)
+                {
+                    <QuickNpcModal Open="true" Era="context.Era" CampaignId="CampaignOrNull" ScenarioId="ScenarioId"
+                                   OnClose="() => _quickOpen = false" OnCreated="OpenCreated" />
+                }
+            }
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+@code {
+    private string _blankName = "";
+    private string? _error;
+    private bool _busy;
+    private bool _quickOpen;
+
+    /// <summary>Кампания игрока (маршрут <c>/character/create/{campaignId}</c>).</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    [Parameter] public string? Kind { get; set; }
+
+    /// <summary>Кампания-владелец НПС (<c>?campaignId=</c>) — у маршрута с видом.</summary>
+    [SupplyParameterFromQuery(Name = "campaignId")] public Guid? QueryCampaignId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "scenarioId")] public Guid? ScenarioId { get; set; }
+
+    private CharacterKind CreationKind => CampaignId is not null ? CharacterKind.Player : CreationLinks.KindFromRoute(Kind);
+
+    /// <summary>Преген живёт в сценарии или библиотеке — кампании у него нет.</summary>
+    private Guid? CampaignOrNull => CreationKind is CharacterKind.Pregen ? null : CampaignId ?? QueryCampaignId;
+
+    private string LoadKey => $"{CreationKind}:{CampaignOrNull}:{ScenarioId}";
+
+    private Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken) =>
+        Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+
+    private async Task CreateBlankAsync(CreationContextDto context)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var skills = await SkillsApi.ListAsync();
+            var sheet = SheetBuilder.Blank(SkillCatalogs.From(skills.Items), _blankName);
+            var created = await Api.CreateAsync(new CreateCharacterRequest
+            {
+                Kind = CreationKind,
+                CampaignId = CampaignOrNull,
+                ScenarioId = CreationKind is CharacterKind.Pregen ? ScenarioId : null,
+                Cast = CreationKind is CharacterKind.Npc && ScenarioId is { } scenario ? new NpcCastRequest(scenario) : null,
+                Sheet = sheet,
+            });
+            OpenCreated(created.Id);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OpenCreated(Guid id) => Navigation.NavigateTo($"character/{id}", replace: true);
+}

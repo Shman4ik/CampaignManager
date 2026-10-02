@@ -1,0 +1,193 @@
+@page "/npcs"
+@attribute [Authorize(Policy = Policies.Keeper)]
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Campaigns
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Characters.Creation
+@using CampaignManager.UI.Platform
+@inject ICharactersApi Api
+@inject ICampaignsApi CampaignsApi
+@inject DialogService Dialogs
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Библиотека НПС и прегенов (T2.4) — Хранителю. Вкладка и архив — в адресе (?tab=pregen&archived=true). НПС не
+   копируется: один лист живёт в библиотеке или в кампании, в сценарии он появляется связью (T2.5a), поэтому правка
+   листа видна во всех сценариях. «Удалить» — архив (статус листа с If-Match), безвозвратно отсюда ничего не пропадает.
+   Чужие НПС кампаний сюда не попадают — список фильтрует сервер правилом листа (AccessPolicy.ForCharacter). *@
+<PageHeader Title="НПС и прегены">
+    <Actions>
+        <Button Small="true" Icon="fa-bolt" data-testid="open-quick-npc" OnClick="OpenQuickAsync">Быстрый НПС</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-masks-theater" Href="@CreationLinks.Create(CharacterKind.Npc, null, null)">
+            <span class="hidden md:inline">НПС</span>
+        </Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" Href="@CreationLinks.Create(CharacterKind.Pregen, null, null)">
+            <span class="hidden md:inline">Преген</span>
+        </Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <Tabs Items="Items" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Вид листа" />
+    <FilterPanel OnReset="ResetFilters">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по имени, занятию, месту…" aria-label="Поиск"
+               data-testid="npc-search" @bind="_search" @bind:event="oninput" />
+        <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
+            <input type="checkbox" class="cm-checkbox" checked="@ShowArchived" data-testid="show-archived" @onchange="ToggleArchived" />
+            Архив
+        </label>
+    </FilterPanel>
+
+    <AsyncContent @ref="_content" Key="@LoadKey" Load="LoadAsync" LoadingMessage="Загружаю библиотеку…" Context="items">
+        <ChildContent>
+            @{ var found = Filter(items); }
+            @if (found.Count == 0)
+            {
+                <EmptyState Icon="fa-users-slash" Title="@EmptyTitle(items)"
+                            Message="@(items.Count == 0 && !ShowArchived ? "Создайте первого — он будет доступен во всех сценариях." : null)">
+                    <Actions>
+                        @if (!string.IsNullOrWhiteSpace(_search))
+                        {
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">Очистить фильтры</Button>
+                        }
+                        else if (!ShowArchived)
+                        {
+                            <Button Icon="fa-plus" Href="@CreationLinks.Create(Kind, null, null)">@(Kind is CharacterKind.Npc ? "Добавить НПС" : "Добавить прегена")</Button>
+                        }
+                    </Actions>
+                </EmptyState>
+            }
+            else
+            {
+                <div class="cm-grid-cards" data-testid="library">
+                    @foreach (var character in found)
+                    {
+                        <CharacterSummaryCard @key="character.Id" Character="character" Busy="@(_busy == character.Id)"
+                                              OnArchive="ArchiveAsync" OnRestore="RestoreAsync" />
+                    }
+                </div>
+            }
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+@if (_quickOpen)
+{
+    <QuickNpcModal Open="true" Campaigns="_keeperCampaigns" OnClose="() => _quickOpen = false" OnCreated="QuickCreated" />
+}
+
+@code {
+    private const string PregenTab = "pregen";
+    private AsyncContent<IReadOnlyList<CharacterSummaryDto>>? _content;
+    private string _search = "";
+    private Guid? _busy;
+    private bool _quickOpen;
+    private IReadOnlyList<CampaignSummaryDto> _keeperCampaigns = [];
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+
+    [SupplyParameterFromQuery(Name = "archived")] public bool? Archived { get; set; }
+
+    private string ActiveTab => Tab == PregenTab ? PregenTab : "npc";
+
+    private CharacterKind Kind => ActiveTab == PregenTab ? CharacterKind.Pregen : CharacterKind.Npc;
+
+    private bool ShowArchived => Archived is true;
+
+    private string LoadKey => $"{Kind}:{ShowArchived}";
+
+    private static readonly IReadOnlyList<Tabs.Item> Items =
+    [
+        new("npc", "НПС", "fa-masks-theater"),
+        new(PregenTab, "Прегены", "fa-user"),
+    ];
+
+    private Task<IReadOnlyList<CharacterSummaryDto>> LoadAsync(CancellationToken cancellationToken) =>
+        Api.ListAsync(Kind, ShowArchived, cancellationToken);
+
+    private List<CharacterSummaryDto> Filter(IReadOnlyList<CharacterSummaryDto> items)
+    {
+        if (string.IsNullOrWhiteSpace(_search))
+            return [.. items];
+
+        var needle = CampaignManager.Core.Catalogs.CatalogCodeTable.NormalizeName(_search);
+        return
+        [
+            .. items.Where(c => new[] { c.Name, c.Occupation, c.CampaignName, c.ScenarioName }.Concat(c.CastIn)
+                .Any(text => text is not null && CampaignManager.Core.Catalogs.CatalogCodeTable.NormalizeName(text).Contains(needle, StringComparison.Ordinal))),
+        ];
+    }
+
+    private string EmptyTitle(IReadOnlyList<CharacterSummaryDto> items) => items.Count > 0
+        ? "Никого по этим условиям."
+        : ShowArchived ? "Архив пуст." : Kind is CharacterKind.Npc ? "НПС пока нет." : "Прегенов пока нет.";
+
+    private string Url(string tab, bool archived)
+    {
+        List<string> query = [];
+        if (tab == PregenTab)
+            query.Add("tab=pregen");
+        if (archived)
+            query.Add("archived=true");
+        return query.Count == 0 ? "npcs" : "npcs?" + string.Join("&", query);
+    }
+
+    private void SelectTab(string key) => Navigation.NavigateTo(Url(key, ShowArchived), replace: true);
+
+    private void ToggleArchived(ChangeEventArgs e) => Navigation.NavigateTo(Url(ActiveTab, e.Value is true), replace: true);
+
+    private void ResetFilters()
+    {
+        _search = "";
+        if (ShowArchived)
+            Navigation.NavigateTo(Url(ActiveTab, false), replace: true);
+    }
+
+    private async Task OpenQuickAsync()
+    {
+        try
+        {
+            _keeperCampaigns = [.. (await CampaignsApi.GetCampaignsAsync()).Where(c => c.MyRole == CampaignRole.Keeper && c.CanEdit)];
+        }
+        catch (HttpRequestException)
+        {
+            _keeperCampaigns = []; // без списка кампаний НПС уйдёт в библиотеку
+        }
+
+        _quickOpen = true;
+    }
+
+    private void QuickCreated(Guid id) => Navigation.NavigateTo($"character/{id}");
+
+    private async Task ArchiveAsync(CharacterSummaryDto character)
+    {
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"В архив: «{character.Name}»?",
+                "Лист останется в архиве этой страницы, его можно вернуть.") { ConfirmText = "В архив", Details = null }))
+            return;
+
+        await SetStatusAsync(character, CharacterStatus.Archived, "Лист в архиве.");
+    }
+
+    private Task RestoreAsync(CharacterSummaryDto character) => SetStatusAsync(character, CharacterStatus.Active, "Лист вернулся из архива.");
+
+    private async Task SetStatusAsync(CharacterSummaryDto character, CharacterStatus status, string done)
+    {
+        _busy = character.Id;
+        try
+        {
+            await Api.SetStatusAsync(character.Id, status, character.Version);
+            Toasts.Success(done);
+            if (_content is not null)
+                await _content.ReloadAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+}
