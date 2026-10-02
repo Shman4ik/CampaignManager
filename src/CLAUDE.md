@@ -184,6 +184,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Music` | фонотека — справочник на том же сервисе; закреплённые настроения, пул сцены; плеер в шапке и панели | [Server/Music/CLAUDE.md](CampaignManager.Server/Music/CLAUDE.md), [UI/Music/CLAUDE.md](CampaignManager.UI/Music/CLAUDE.md) |
 | `Profile` | личный кабинет: имя и псевдонимы, заявка на Хранителя, настройки (`/api/v1/profile`) | [Server/Profile/CLAUDE.md](CampaignManager.Server/Profile/CLAUDE.md), [UI/Profile/CLAUDE.md](CampaignManager.UI/Profile/CLAUDE.md) |
 | `Admin` | пользователи и роли, заявки на Хранителя (`/api/v1/admin`); страница сирот файлов | [Server/Admin/CLAUDE.md](CampaignManager.Server/Admin/CLAUDE.md), [UI/Admin/CLAUDE.md](CampaignManager.UI/Admin/CLAUDE.md) |
+| `Scenarios` | библиотека сценариев, рабочее место одним запросом, части по строке (локации, проверки, факты, раздатки, твари, предметы), состав НПС и прегены | [Server/Scenarios/CLAUDE.md](CampaignManager.Server/Scenarios/CLAUDE.md), [UI/Scenarios/CLAUDE.md](CampaignManager.UI/Scenarios/CLAUDE.md) |
 
 **Отказ по смыслу — один механизм на все модули: `Platform/ApiProblemException`** (400 `invalid`, 409 `conflict`/`duplicate`/
 `in-use`/`stale`, 428 `version-required`); `DbUpdateConcurrencyException` (устаревший `xmin`) обработчик тоже превращает в 409

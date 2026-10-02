@@ -116,7 +116,7 @@
 | `Creation/InvestigatorWizardPage` + `Wizard*Step` | помощник `/character/wizard?campaignId=&scenarioId=&kind=npc&random=1` (вид — `npc` или `pregen`) |
 | `Creation/QuickNpcModal` | быстрый НПС; из сценария — с ролью и количеством (`Cast`) |
 | `Creation/CreationLinks`, `CreationPlace`, `DerivedTiles`, `Stepper` | адреса и черновик, «куда ляжет», плитки производных, «− n +» |
-| `Library/NpcLibraryPage`, `Library/CharacterSummaryCard` | `/npcs` (Хранитель): вкладки НПС/прегены и архив в адресе; карточка — одна и для сценария (T2.5a) |
+| `Library/NpcLibraryPage`, `Library/CharacterSummaryCard` | `/npcs` (Хранитель): вкладки НПС/прегены и архив в адресе; карточка — одна и для сценария (T2.5a); «В сценарий» у НПС — `OnCast` → `Scenarios/CastNpcDialog` |
 
 - **Всё считает Core** (`SheetBuilder`, `CreationPlan`, методы `InvestigatorDraft`, `QuickNpcRules`); страницы только
   показывают. Слоты профессии собирает `CreationPlan` страницы, шаги читают выбор по индексу слота (знание v1).

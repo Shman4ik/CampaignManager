@@ -23,6 +23,7 @@
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `Music/` | фонотека `/music`, плеер (кнопка в слоте шапки, панель внизу колонки, звук — модуль JS) — [Music/CLAUDE.md](Music/CLAUDE.md) |
+| `Scenarios/` | библиотека `/scenarios` и рабочее место сценария во вкладках — [Scenarios/CLAUDE.md](Scenarios/CLAUDE.md) |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
 
 Службы кита регистрирует `AddCampaignManagerUi(isDevelopment)` (зовёт `Web.Client`).
@@ -39,6 +40,9 @@
   `gray-*`/`slate-*` → `primary-*` (в v1 два серых спорили на одном экране), `info-*` → `accent-*`
   (повторяла hex-в-hex), `red/green/amber/blue-*` → `error/success/warning/accent-*`. Несуществующий
   класс Tailwind просто не соберёт — проверяй экран, а не только сборку.
+- **Числа в `style` не подставлять**: культура WebAssembly — `ru-RU`, `@(1.5)rem` превращается в «1,5rem», и браузер
+  молча выбрасывает правило (так в T2.5a пропал отступ дерева локаций). Шаги — классами (`pl-4`/`pl-10`…), а если
+  без числа никак — `ToString(CultureInfo.InvariantCulture)`.
 - Класс — **целым литералом** (`bg-error-100`), не `$"bg-{tone}-100"`: Tailwind ищет классы в
   исходниках текстом (`.razor` и `.cs` проекта, `.razor` сервера — `@source` в `tailwind.css`).
   Тоны компонентов — `Shared/Tone.cs` (`ToneClasses`).

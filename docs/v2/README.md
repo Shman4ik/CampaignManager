@@ -169,7 +169,7 @@ mobile/ (позже)
 | `/character/{id}`, `/character/create/{Kind}`, `/character/create/{CampaignId}`, `/character/wizard` | Characters — **есть** (T2.3 лист, T2.4 создание): «Новый лист» с помощником, случайным и чистым листом; `?random=1` у помощника |
 | `/npcs` | Characters — **есть** (T2.4): библиотека НПС и прегенов, архив, быстрый НПС |
 | `/occupations` | Catalogs — **есть** (T2.1): карточки, редактор слотов, «С правилами» |
-| `/scenarios`, `/scenarios/new`, `/scenarios/{id}`, `/scenarios/{id}/edit`, `/scenarios/{id}/handouts/{handoutId}` | Scenarios |
+| `/scenarios`, `/scenarios/new`, `/scenarios/{id}`, `/scenarios/{id}/edit`, `/scenarios/{id}/handouts/{handoutId}` | Scenarios — **есть** (T2.5a): библиотека, `/scenarios/new` — форма на той же странице, рабочее место с вкладками `?tab=`, `/edit` ведёт на «Описание» с открытой формой; второй экран раздатки и режим игры — T2.5b |
 | `/combat`, `/chase` | Encounters |
 | `/reference` | KeeperScreen — **есть** (T2.7): `/reference?block=…`, панель «Ширма» в шапке |
 | `/bestiary`, `/bestiary/creatures/edit/{id?}`, `/weapons`, `/items`, `/spells`, `/books`, `/skills`, `/skills/detail/{id}`, `/skills/edit`, `/skills/edit/{id}` | Catalogs — **есть** (T2.1); `/skills/detail/{id}` и `/skills/edit[/{id}]` ведут на `/skills?open={id}` (детали — раскрытая строка, правка — окно) |
@@ -204,6 +204,9 @@ mobile/ (позже)
    окно фазы развития. На перенесённых листах настоящих игроков — T3.1.*
 5. Сценарий: импорт JSON, правка локации, режим игры, проверка в локации, показ раздатки и второй
    экран, экспорт JSON.
+   *T2.5a (2026-10-02): правка локации, проверки, раздатки и состава НПС — под dev-входом на ветке `dev`, на копии
+   «Среди древних деревьев» (`[T2.5a] Копия …`, собрана через API); правка шапки с другого устройства — «Перечитать».
+   Импорт и экспорт — T2.5d, режим игры, проверка в локации и раздатки — T2.5b.*
 6. Ваншот: объявить, игрок бронирует прегена, Хранитель видит бронь.
 7. Бой с НПС сценария и тварью бестиария, заклинание, проверка Рассудка; перезагрузка вкладки
    посреди боя ничего не теряет.
