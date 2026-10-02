@@ -179,6 +179,47 @@ public static class SanityRules
         return before - mythos.Value;
     }
 
+    /// <summary>
+    /// Исход проверки ИНТ после потери ≥5 от одной причины (стр. 153): успех — сыщик осознал увиденное и
+    /// временно безумен (отметка ставит флаг приступа), провал — разум отгородился. Бросок делает игрок; лист
+    /// получает только исход, и подсказка гаснет — окно «последней причины» обнуляется.
+    /// </summary>
+    public static void ResolveIntCheck(CharacterSheet sheet, bool succeeded, DateTimeOffset? now = null)
+    {
+        if (succeeded)
+            SetTemporaryInsanity(sheet, true, now);
+
+        sheet.Condition.LastSanityLoss = 0;
+    }
+
+    /// <summary>
+    /// Всё, что панель рассудка показывает, одним расчётом — чтобы разметка не считала пороги сама (в v1
+    /// <c>SanityPanel</c> правила модель прямо во время рендера).
+    /// </summary>
+    public static SanityStatus Status(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var max = MaxSanity(sheet, catalog);
+        var current = Math.Clamp(sheet.Current.Sanity, 0, max);
+        var lostToday = sheet.Condition.SanityLostToday;
+        var permanentlyInsane = IsPermanentlyInsane(sheet);
+        var insane = IsInsane(sheet);
+
+        return new SanityStatus(
+            current,
+            max,
+            MythosValue(sheet, catalog),
+            lostToday,
+            IndefiniteInsanityThreshold(SanityAtDayStart(current, lostToday)),
+            sheet.Condition.LastSanityLoss,
+            NeedsIntCheck: sheet.Condition.LastSanityLoss >= TemporaryInsanityThreshold,
+            IndefiniteLoss: IsIndefiniteInsanityLoss(current, lostToday),
+            permanentlyInsane,
+            insane,
+            // Отметку безумия снимают и мимо SanityRules (чекбоксы, самолечение) — напоминание о приступе
+            // показывается, только пока сыщик безумен.
+            BoutDue: sheet.Condition.BoutDue && insane && !permanentlyInsane);
+    }
+
     /// <summary>«Новый день»: оба окна потерь обнуляются.</summary>
     public static void StartNewDay(CharacterSheet sheet)
     {
@@ -196,4 +237,22 @@ public static class SanityRules
         else if (!IsInsane(sheet))
             sheet.Condition.BoutDue = false; // безумие снято целиком — приступать не к чему
     }
+}
+
+/// <summary>Состояние рассудка для панели листа (<see cref="SanityRules.Status"/>).</summary>
+public sealed record SanityStatus(
+    int Current,
+    int Max,
+    int Mythos,
+    int LostToday,
+    int IndefiniteThreshold,
+    int LastLoss,
+    bool NeedsIntCheck,
+    bool IndefiniteLoss,
+    bool PermanentlyInsane,
+    bool Insane,
+    bool BoutDue)
+{
+    /// <summary>Заполненность полосы, 0–100.</summary>
+    public int Percent => Max > 0 ? Math.Clamp(Current * 100 / Max, 0, 100) : 0;
 }

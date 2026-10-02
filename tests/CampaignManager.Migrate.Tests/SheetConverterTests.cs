@@ -56,6 +56,28 @@ public sealed class SheetConverterTests
     }
 
     [Fact]
+    public void Phobias_and_magical_items_text_is_dropped_and_reported()
+    {
+        // Решение владельца 2026-10-02: текстовых граф «Фобии» и «Магические предметы» в 2.0 нет —
+        // остаются структурированные записи. Текст отбрасывается, лист попадает в отчёт.
+        var row = TestCatalog.Sheet("player-milie-mare");
+        var document = row["Character"]!;
+        document["Biography"]!["Phobias"] = "боится воды";
+        document["Biography"]!["MagicalItems"] = "  ";
+
+        var (sheet, notes) = Converter().Convert(document, isNpc: false);
+
+        Assert.Equal(["Фобии"], notes.DroppedBiography);
+        var json = CmJson.Write(sheet).RootElement.GetRawText();
+        Assert.DoesNotContain("phobias", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("воды", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("magicalItems", json, StringComparison.OrdinalIgnoreCase);
+
+        var (_, untouched) = Convert("player-milie-mare");
+        Assert.Empty(untouched.DroppedBiography);
+    }
+
+    [Fact]
     public void Player_sheet_skills_by_old_spellings_and_language_specialization()
     {
         var (sheet, notes) = Convert("player-milie-mare");

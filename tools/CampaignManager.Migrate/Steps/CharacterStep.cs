@@ -130,6 +130,12 @@ public static class CharacterStep
                 Collect(droppedLines, $"навык «{line}» на базовом значении", sheet.Personal.Name);
             }
 
+            if (notes.DroppedBiography.Count > 0)
+            {
+                // Решение владельца 2026-10-02: текстовых граф «Фобии» и «Магические предметы» в 2.0 нет
+                s.Report.Add(ReportSections.DroppedBiography, $"{label}: {string.Join(", ", notes.DroppedBiography)}");
+            }
+
             if (notes.Overrides.Count > 0)
             {
                 s.Report.Add(ReportSections.Overrides, $"{label}: {string.Join("; ", notes.Overrides)}");
