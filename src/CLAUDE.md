@@ -122,9 +122,24 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 
   и `CM_TEST_DB=Host=localhost;Port=55432;Database=campaignmanager_test;Username=postgres;Password=postgres`.
   Ветку Neon `dev` в `CM_TEST_DB` не подставлять: тестам нужна своя база, которую не жалко.
+- Порт для `-p` бывает занят не процессом, а резервом Windows (Hyper-V/WinNAT): `wslc` отвечает
+  `WSAEACCES`. Свободен ли порт — `netsh int ipv4 show excludedportrange protocol=tcp`.
+- Тесты адаптера MinIO — по `CM_TEST_MINIO=endpoint;accessKey;secretKey` (MinIO в `wslc`, см.
+  [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md)); без переменной пропускаются, в CI
+  MinIO нет — тесты API модуля файлов идут на хранилище в памяти.
 - Тесты схемы (`Server.Tests/Schema`) создают на сервере из `CM_TEST_DB` отдельную базу
   `cm_schema_<guid>`, поднимают её миграциями и удаляют после прогона (`SchemaDatabase`). Нужны права
   `CREATEDB` — у `postgres` в контейнере они есть.
+
+## Модули сервера
+
+| Модуль | Что | Знание |
+|---|---|---|
+| `Platform` | база, JSON, ошибки, health, OpenAPI, хост WebAssembly | этот файл |
+| `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
+
+Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат: у v1 dev и прод — один бакет. Без них
+сервер стартует, а файлы отвечают ошибкой с именем недостающей настройки.
 
 ## Запуск
 
