@@ -135,6 +135,7 @@ public sealed record HomeCharacterDto(Guid Id, string Name, string? Occupation, 
 public sealed record HomeAvailableCampaignDto(Guid Id, string Name, CampaignKind Kind, CampaignStatus Status, DateTimeOffset CreatedAt, string? KeeperName);
 
 /// <param name="IsMine">Я веду это прохождение (Хранитель его кампании).</param>
+/// <param name="CanReserve">Мне можно забронировать свободного прегена: я не веду игру и брони у меня в ней ещё нет (T2.5c).</param>
 public sealed record HomeOneShotDto(
     Guid RunId,
     Guid CampaignId,
@@ -144,7 +145,19 @@ public sealed record HomeOneShotDto(
     string? Announcement,
     string? KeeperName,
     bool IsMine,
-    IReadOnlyList<HomePregenDto> Pregens);
+    IReadOnlyList<HomePregenDto> Pregens,
+    bool CanReserve);
 
 /// <param name="ReservedBy">Кто забронировал (по псевдониму или имени); <c>null</c> — свободен или имени нет.</param>
-public sealed record HomePregenDto(Guid Id, string Name, string? Occupation, bool IsReserved, string? ReservedBy, bool IsMine);
+/// <param name="IsMine">Забронировал я.</param>
+/// <param name="MyCharacterId">Моя копия листа этого прегена (бронь моя).</param>
+/// <param name="CanRelease">Мне можно снять бронь: она моя или я веду игру.</param>
+public sealed record HomePregenDto(
+    Guid Id,
+    string Name,
+    string? Occupation,
+    bool IsReserved,
+    string? ReservedBy,
+    bool IsMine,
+    Guid? MyCharacterId,
+    bool CanRelease);

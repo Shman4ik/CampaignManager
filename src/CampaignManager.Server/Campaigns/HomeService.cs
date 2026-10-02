@@ -126,7 +126,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
             ],
             [.. available.Select(c => new HomeAvailableCampaignDto(c.Id, c.Name, c.Kind, c.Status, c.CreatedAt,
                 PublicNames.Of(c.Keeper?.DisplayName, c.Keeper?.UserName)))],
-            await OneShotsAsync(me, cancellationToken));
+            await OneShotsAsync(user, cancellationToken));
     }
 
     /// <summary>
@@ -134,8 +134,9 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
     /// (<see cref="AccessPolicy.CanReserveAsync"/>). Прегены — листы сценария прохождения, кроме архивных;
     /// бронь — строка <c>run_reservations</c>, кто занял — по псевдониму в кампании или имени.
     /// </summary>
-    private async Task<IReadOnlyList<HomeOneShotDto>> OneShotsAsync(Guid me, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<HomeOneShotDto>> OneShotsAsync(SignedInUser user, CancellationToken cancellationToken)
     {
+        var me = user.Id;
         var runs = await dbContext.ScenarioRuns
             .Where(r => r.SignupOpen)
             .OrderBy(r => r.ScheduledAt == null)
@@ -180,6 +181,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                 rr.RunId,
                 rr.PregenId,
                 rr.UserId,
+                rr.CharacterId,
                 Alias = dbContext.ScenarioRuns.Where(r => r.Id == rr.RunId)
                     .SelectMany(r => dbContext.CampaignMembers.Where(m => m.CampaignId == r.CampaignId && m.UserId == rr.UserId))
                     .Select(m => m.DisplayName)
@@ -190,28 +192,39 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
 
         return
         [
-            .. runs.Select(r => new HomeOneShotDto(
-                r.Id,
-                r.CampaignId,
-                r.ScenarioId,
-                r.ScenarioName,
-                r.ScheduledAt,
-                r.Announcement,
-                PublicNames.Of(r.Keeper?.DisplayName, r.Keeper?.UserName),
-                r.Keeper?.UserId == me,
-                [
-                    .. pregens.Where(p => p.ScenarioId == r.ScenarioId).Select(p =>
-                    {
-                        var reservation = reservations.FirstOrDefault(rr => rr.RunId == r.Id && rr.PregenId == p.Id);
-                        return new HomePregenDto(
-                            p.Id,
-                            p.Name ?? Unnamed,
-                            p.Occupation,
-                            reservation is not null,
-                            reservation is null ? null : PublicNames.Of(reservation.Alias, reservation.UserName),
-                            reservation?.UserId == me);
-                    }),
-                ])),
+            .. runs.Select(r =>
+            {
+                var leads = r.Keeper?.UserId == me;
+                var mineInRun = reservations.Any(rr => rr.RunId == r.Id && rr.UserId == me);
+                return new HomeOneShotDto(
+                    r.Id,
+                    r.CampaignId,
+                    r.ScenarioId,
+                    r.ScenarioName,
+                    r.ScheduledAt,
+                    r.Announcement,
+                    PublicNames.Of(r.Keeper?.DisplayName, r.Keeper?.UserName),
+                    leads,
+                    [
+                        .. pregens.Where(p => p.ScenarioId == r.ScenarioId).Select(p =>
+                        {
+                            var reservation = reservations.FirstOrDefault(rr => rr.RunId == r.Id && rr.PregenId == p.Id);
+                            var mine = reservation?.UserId == me;
+                            return new HomePregenDto(
+                                p.Id,
+                                p.Name ?? Unnamed,
+                                p.Occupation,
+                                reservation is not null,
+                                reservation is null ? null : PublicNames.Of(reservation.Alias, reservation.UserName),
+                                mine,
+                                mine ? reservation!.CharacterId : null,
+                                // Правило AccessPolicy.ForReservationAsync: сам игрок или Хранитель кампании прохождения.
+                                reservation is not null && (mine || leads || user.IsAdmin));
+                        }),
+                    ],
+                    // Ведущий не бронирует прегенов своей игры; одна бронь на игрока (UNIQUE (run_id, user_id)).
+                    CanReserve: !leads && !mineInRun);
+            }),
         ];
     }
 

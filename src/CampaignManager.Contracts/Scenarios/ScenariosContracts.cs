@@ -27,8 +27,12 @@ public static class ScenariosRoutes
     public const string OrderPattern = ScenarioPattern + "/order";
 
     /// <summary><c>GET</c> — прохождения сценария в кампаниях, которые ведёт вошедший (<see cref="ScenarioRunDto"/>): режим игры
-    /// берёт из них сыщиков для проверок (T2.5b). Создают прохождения — T2.5c.</summary>
+    /// берёт из них сыщиков для проверок (T2.5b); <c>POST</c> <see cref="PlayInCampaignRequest"/> — «Играть в кампании» (T2.5c,
+    /// <see cref="IRunsApi"/>).</summary>
     public const string RunsPattern = ScenarioPattern + "/runs";
+
+    /// <summary><c>POST</c> <see cref="AnnounceOneShotRequest"/> — «Объявить ваншот»: кампания, Хранитель и прохождение разом.</summary>
+    public const string OneShotPattern = ScenarioPattern + "/oneshot";
 
     /// <summary><c>POST</c> <see cref="LocationInput"/>.</summary>
     public const string LocationsPattern = ScenarioPattern + "/locations";
@@ -85,6 +89,8 @@ public static class ScenariosRoutes
     public static string Order(Guid scenarioId) => $"{Scenario(scenarioId)}/order";
 
     public static string Runs(Guid scenarioId) => $"{Scenario(scenarioId)}/runs";
+
+    public static string OneShot(Guid scenarioId) => $"{Scenario(scenarioId)}/oneshot";
 
     public static string Locations(Guid scenarioId) => $"{Scenario(scenarioId)}/locations";
 
@@ -424,10 +430,29 @@ public sealed record AddPregenRequest(Guid PregenId);
 public sealed record LocationMusicInput(IReadOnlyList<string> Tags, IReadOnlyList<Guid> TrackIds);
 
 /// <summary>
-/// Прохождение сценария в кампании, которую ведёт вошедший: из её сыщиков режим игры предлагает выбор в проверке.
-/// Время — UTC, показывается в поясе браузера.
+/// Прохождение сценария в кампании, которую ведёт вошедший: из её сыщиков режим игры предлагает выбор в проверке, а рабочее
+/// место показывает анонс, запись и брони (T2.5c, <see cref="IRunsApi"/>). Время — UTC, показывается в поясе браузера.
 /// </summary>
-public sealed record ScenarioRunDto(Guid Id, Guid CampaignId, string CampaignName, ScenarioRunStatus Status, DateTimeOffset? ScheduledAt);
+/// <param name="SignupOpen">Открыта запись: игроки бронируют прегенов сценария (ваншот).</param>
+/// <param name="Reservations">Брони прегенов этого прохождения.</param>
+public sealed record ScenarioRunDto(
+    Guid Id,
+    Guid CampaignId,
+    string CampaignName,
+    CampaignKind CampaignKind,
+    ScenarioRunStatus Status,
+    DateTimeOffset? ScheduledAt,
+    string? Announcement,
+    bool SignupOpen,
+    IReadOnlyList<RunReservationDto> Reservations,
+    bool CanEdit,
+    bool CanDelete);
+
+/// <summary>Бронь прегена в прохождении.</summary>
+/// <param name="PlayerName">Кто забронировал — по псевдониму в кампании или имени; <c>null</c> — имени нет (почт нет).</param>
+/// <param name="CharacterId">Копия листа у игрока; <c>null</c> — игрок её удалил.</param>
+/// <param name="CanRelease">Снять бронь можно мне: сам игрок или Хранитель этой кампании.</param>
+public sealed record RunReservationDto(Guid PregenId, string PregenName, string? PlayerName, Guid? CharacterId, bool CanRelease);
 
 /// <summary>Часть сценария, у строк которой есть порядок.</summary>
 public enum ScenarioPart
