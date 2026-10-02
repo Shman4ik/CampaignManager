@@ -3,7 +3,9 @@
 Модуль T2.3: `CharactersModule` (`AddCharactersModule`/`MapCharactersApi`), `CharacterService`. Маршруты, DTO и
 `ICharactersApi` — `Contracts/Characters`, клиент — `ApiClient/Characters`, страница —
 [UI/Characters/CLAUDE.md](../../CampaignManager.UI/Characters/CLAUDE.md). Таблица — `characters` из T1.2; миграций
-модуль не добавил. Создание листов и библиотека НПС и прегенов — `CharacterLibraryService` (T2.4); бронь прегенов — T2.5c.
+модуль не добавил. Создание листов и библиотека НПС и прегенов — `CharacterLibraryService` (T2.4); бронь прегена (T2.5c) — копия его листа
+игроку (`kind = Player`, `origin_character_id` = преген, кампания прохождения) пишет `RunService` модуля Scenarios, снятие брони
+уводит копию в архив.
 Строки `CharacterSummaryDto` собирает `CharacterSummaries.ReadAsync` — одна сборка для `/npcs` и для состава и прегенов
 сценария (T2.5a, видимость — правилом листа по прочитанной строке).
 
