@@ -1,0 +1,441 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+@using CampaignManager.Core.Dice
+
+@* Проверка навыка или характеристики — один компонент на всё приложение: диалог листа, проверка в
+   локации сценария (SkillCheckModal) и кости в бою (InCombat). Своей карточки не рисует: его место —
+   тело модалки или cm-card страницы.
+   Уровень успеха считает только Check (Core), цену Удачи — LuckRules, что разрешено после броска —
+   CheckRules. Здесь разметка и порядок шагов. Лист панель НЕ пишет: трата Удачи и отметка уходят
+   родителю через OnSheetChange, а он применяет их CheckRules.Apply и сохраняет своим путём. *@
+<div class="cm-stack" data-testid="skill-check-panel">
+    <section class="flex flex-col gap-3">
+        @if (IsPartyMode)
+        {
+            <Field Label="Кто проверяется">
+                <select class="cm-input" data-testid="check-subject" disabled="@IsLocked" @onchange="SelectInvestigator">
+                    <option value="" selected="@(_investigatorId is null)">— вписать значение вручную —</option>
+                    @foreach (var investigator in Party!)
+                    {
+                        <option value="@investigator.Id" selected="@(investigator.Id == _investigatorId)">@investigator.Label</option>
+                    }
+                </select>
+            </Field>
+            @if (Party!.Count == 0)
+            {
+                <p class="cm-field-note">Сыщиков нет — впишите значение навыка вручную.</p>
+            }
+        }
+
+        @if (CurrentSheet is { } sheet)
+        {
+            <Field Label="Что проверяем">
+                <select class="cm-input" data-testid="check-target" disabled="@IsLocked" @onchange="SelectTarget">
+                    <option value="" selected="@(_key.Length == 0)">— навык или характеристика —</option>
+                    <optgroup label="Характеристики">
+                        @foreach (var subject in CheckSubjects.Characteristics(sheet))
+                        {
+                            <option value="@subject.Key" selected="@(subject.Key == _key)">@subject.Name (@subject.Value)</option>
+                        }
+                        @{ var luck = CheckSubjects.Luck(sheet); }
+                        <option value="@luck.Key" selected="@(luck.Key == _key)">@luck.Name (@luck.Value)</option>
+                    </optgroup>
+                    @foreach (var group in CheckSubjects.SkillGroups(sheet, Catalog!))
+                    {
+                        <optgroup label="@group.Title">
+                            @foreach (var subject in group.Subjects)
+                            {
+                                <option value="@subject.Key" selected="@(subject.Key == _key)">@subject.Name (@subject.Value)</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+            </Field>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <Field Label="Что проверяем" Hint="(необязательно)">
+                    <input class="cm-input" data-testid="check-target-name" placeholder="Внимание, СИЛ, Удача…"
+                           disabled="@IsLocked" @bind="_manualName" @bind:event="oninput" />
+                </Field>
+                <Field Label="Значение">
+                    <input type="number" inputmode="numeric" min="0" max="200" class="cm-input" data-testid="check-value"
+                           disabled="@IsLocked" @bind="_manualValue" @bind:event="oninput" />
+                </Field>
+            </div>
+        }
+
+        @* Сложность и кости друг под другом: рядом в окне кнопки «Чрезвычайная ≤ 11» переносились бы. *@
+        <Field Label="Сложность" Group="true">
+            <DifficultyPicker @bind-Value="_difficulty" SkillValue="@Subject?.Value" Disabled="@IsLocked" />
+        </Field>
+        <Field Label="Бонусные и штрафные кости" Group="true">
+            <ExtraDicePicker @bind-Value="_netDice" Disabled="@IsLocked" />
+        </Field>
+    </section>
+
+    <section>
+        @if (_first is null)
+        {
+            @RollStep("first", OnFirstRollAsync)
+        }
+        else
+        {
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                @RenderAttempt(_first, _pushing ? "Первая проверка" : null)
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" data-testid="check-reset" OnClick="Reset">
+                    Новая проверка
+                </Button>
+            </div>
+
+            @if (_luckSpent is { } spent)
+            {
+                <Alert Tone="Tone.Success" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="check-luck-result">
+                    Удача: @_first.Outcome.Roll → @spent.ResultingRoll, @RulesText.Of(spent.Level) за @spent.Cost п.@LuckAfterText
+                </Alert>
+            }
+
+            @if (!_first.Outcome.Passed && _luckSpent is null && !_pushing)
+            {
+                @LuckBlock()
+            }
+
+            @if (!_first.Outcome.Passed && _luckSpent is null)
+            {
+                @PushBlock()
+            }
+
+            @if (FinalOutcome is { Passed: true })
+            {
+                @MarkBlock()
+            }
+        }
+    </section>
+</div>
+
+@code {
+    /// <summary>Лист, из которого берутся значения (диалог листа). Вместе с <see cref="Catalog"/>.</summary>
+    [Parameter] public CharacterSheet? Sheet { get; set; }
+
+    /// <summary>Справочник навыков: без него лист не читается (имена, коды, базы).</summary>
+    [Parameter] public SkillCatalog? Catalog { get; set; }
+
+    /// <summary>Сыщики на выбор (режим игры сценария). Их листы только читаются.</summary>
+    [Parameter] public IReadOnlyList<CheckInvestigator>? Party { get; set; }
+
+    /// <summary>Цель по ключу <see cref="CheckSubject.Key"/>: <c>skill:{id}</c>, <c>char:STR</c>, <c>luck</c>.</summary>
+    [Parameter] public string? InitialKey { get; set; }
+
+    /// <summary>Подпись цели для ручного ввода — «Внимание» из локации, если сыщик не выбран.</summary>
+    [Parameter] public string? InitialName { get; set; }
+
+    [Parameter] public Difficulty InitialDifficulty { get; set; }
+
+    /// <summary>Проверка в бою: повторять её нельзя (стр. 102).</summary>
+    [Parameter] public bool InCombat { get; set; }
+
+    /// <summary>
+    /// Игрок решил потратить Удачу или отметить навык. Задан — у <see cref="Sheet"/> появляются кнопки;
+    /// родитель применяет изменение (<see cref="CheckRules.Apply"/>) и сохраняет лист сам.
+    /// </summary>
+    [Parameter] public EventCallback<CheckSheetChange> OnSheetChange { get; set; }
+
+    private Guid? _investigatorId;
+    private string _key = "";
+    private string _manualName = "";
+    private int? _manualValue;
+    private Difficulty _difficulty;
+    private int _netDice;
+
+    private CheckSubject? _rolledSubject;
+    private CheckAttempt? _first;
+    private bool _pushing;
+    private CheckAttempt? _second;
+    private LuckRules.SpendOption? _luckSpent;
+    private bool _marked;
+
+    private bool IsSheetMode => Sheet is not null && Catalog is not null;
+
+    private bool IsPartyMode => !IsSheetMode && Party is not null && Catalog is not null;
+
+    /// <summary>Лист пишет родитель: кнопки Удачи и отметки — только у листа с обработчиком.</summary>
+    private bool CanChangeSheet => IsSheetMode && OnSheetChange.HasDelegate;
+
+    /// <summary>После броска условия не меняются: иначе на экране окажется итог чужой проверки.</summary>
+    private bool IsLocked => _first is not null;
+
+    private CharacterSheet? CurrentSheet => IsSheetMode
+        ? Sheet
+        : IsPartyMode ? Party!.FirstOrDefault(i => i.Id == _investigatorId)?.Sheet : null;
+
+    private CheckSubject? Subject
+    {
+        get
+        {
+            if (CurrentSheet is { } sheet)
+                return _key.Length == 0 ? null : CheckSubjects.FindByKey(sheet, Catalog!, _key);
+
+            return _manualValue is { } value and >= 0 ? CheckSubject.Manual(value, _manualName) : null;
+        }
+    }
+
+    private CheckOutcome? FinalOutcome =>
+        _second?.Outcome
+        ?? (_luckSpent is { } spent ? new CheckOutcome(spent.ResultingRoll, spent.Level, true) : _first?.Outcome);
+
+    private string LuckAfterText => CanChangeSheet ? $" Удача на листе — {Sheet!.Current.Luck}." : "";
+
+    protected override void OnInitialized()
+    {
+        _difficulty = InitialDifficulty;
+        _key = InitialKey ?? "";
+        _manualName = InitialName ?? "";
+    }
+
+    private void SelectInvestigator(ChangeEventArgs args) =>
+        _investigatorId = Guid.TryParse(args.Value?.ToString(), out var id) ? id : null;
+
+    private void SelectTarget(ChangeEventArgs args) => _key = args.Value?.ToString() ?? "";
+
+    private Task OnFirstRollAsync(D100Roll? roll)
+    {
+        if (roll is null || Subject is not { } subject)
+            return Task.CompletedTask;
+
+        _rolledSubject = subject;
+        _first = Attempt(roll, subject);
+        return Task.CompletedTask;
+    }
+
+    private Task OnPushRollAsync(D100Roll? roll)
+    {
+        if (roll is not null && _rolledSubject is { } subject)
+            _second = Attempt(roll, subject);
+
+        return Task.CompletedTask;
+    }
+
+    private CheckAttempt Attempt(D100Roll roll, CheckSubject subject) =>
+        new(roll, CheckRules.Evaluate(roll.Result, subject.Value, _difficulty));
+
+    private void Reset()
+    {
+        _first = null;
+        _second = null;
+        _pushing = false;
+        _luckSpent = null;
+        _marked = false;
+        _rolledSubject = null;
+    }
+
+    private async Task SpendLuckAsync(LuckRules.SpendOption option)
+    {
+        if (!CanChangeSheet || !option.Affordable || _luckSpent is not null)
+            return;
+
+        _luckSpent = option;
+        await OnSheetChange.InvokeAsync(new CheckSheetChange { LuckCost = option.Cost });
+    }
+
+    private async Task MarkAsync()
+    {
+        if (!CanChangeSheet || _rolledSubject is not { Kind: CheckSubjectKind.Skill } subject)
+            return;
+
+        _marked = true;
+        await OnSheetChange.InvokeAsync(new CheckSheetChange { Mark = subject });
+    }
+
+    private string Verdict(CheckOutcome outcome) => outcome switch
+    {
+        { Level: SuccessLevel.Critical } => "Критический успех: цель достигнута, и сверх того случается что-то хорошее (стр. 87).",
+        { Level: SuccessLevel.Fumble } => "Крах: хуже простого провала, последствия наступают сразу (стр. 87).",
+        { Passed: true } => "Проверка пройдена.",
+        { Level: >= SuccessLevel.Regular } => $"Для {DifficultyGenitive(_difficulty)} проверки этого мало — провал.",
+        _ => "Проверка провалена.",
+    };
+
+    private static string DifficultyGenitive(Difficulty difficulty) => difficulty switch
+    {
+        Difficulty.Hard => "трудной",
+        Difficulty.Extreme => "чрезвычайной",
+        _ => "обычной",
+    };
+
+    private RenderFragment RollStep(string step, Func<D100Roll?, Task> onRoll) => __builder =>
+    {
+        var subject = step == "first" ? Subject : _rolledSubject;
+        if (subject is null)
+        {
+            <p class="cm-field-note" data-testid="check-roll-hint">Сначала выберите, что проверяем, и значение.</p>
+            return;
+        }
+
+        var net = CheckRules.ClampNetDice(_netDice);
+        <Field Label="@(step == "first" ? "Бросок" : "Повторный бросок")" Group="true" data-testid="@($"check-roll-{step}")">
+            <RollInput Value="@subject.Value" Difficulty="@_difficulty" BonusDice="@Math.Max(0, net)" PenaltyDice="@Math.Max(0, -net)"
+                       Label="@subject.Name" RollChanged="@(roll => onRoll(roll))" />
+        </Field>
+        @if (net != 0)
+        {
+            <p class="cm-field-note mt-1">
+                Кости со стола: с бонусной впишите меньший из вариантов десятков, со штрафной — больший (стр. 89).
+            </p>
+        }
+    };
+
+    private RenderFragment RenderAttempt(CheckAttempt attempt, string? caption) => __builder =>
+    {
+        var outcome = attempt.Outcome;
+        var subject = _rolledSubject!;
+        <div class="flex min-w-0 items-center gap-4" data-testid="check-result">
+            <div class="check-roll">@outcome.Roll.ToString("00", CultureInfo.InvariantCulture)</div>
+            <div class="min-w-0">
+                @if (caption is not null)
+                {
+                    <div class="cm-section-title">@caption</div>
+                }
+                <Badge Tone="@LevelText.ToneOf(outcome.Level, outcome.Passed)" Solid="@LevelText.IsSolid(outcome.Level)"
+                       class="check-level" data-testid="check-level">@LevelText.Title(outcome.Level)</Badge>
+                <div class="mt-1 text-sm text-primary-700">@Verdict(outcome)</div>
+                <div class="cm-field-note">
+                    @subject.Name @subject.Value · @CheckRules.DifficultyLabel(_difficulty).ToLowerInvariant() сложность,
+                    нужно ≤ @Check.Target(subject.Value, _difficulty)@RulesText.RollDetail(attempt.Dice)
+                </div>
+            </div>
+        </div>
+    };
+
+    private RenderFragment LuckBlock() => __builder =>
+    {
+        var subject = _rolledSubject!;
+        var outcome = _first!.Outcome;
+        var reason = CheckRules.LuckBlockReason(subject, outcome, isPushed: false);
+        <div class="mt-4" data-testid="check-luck">
+            <h3 class="cm-section-title mb-2">Потратить Удачу</h3>
+            @if (reason is not null)
+            {
+                <p class="cm-field-note">@reason</p>
+            }
+            else
+            {
+                var luck = CurrentSheet?.Current.Luck;
+                var options = CheckRules.LuckOptions(outcome, subject.Value, _difficulty, luck ?? int.MaxValue);
+                if (options.Count == 0)
+                {
+                    <p class="cm-field-note">Удачей этот бросок до нужной сложности не дотянуть.</p>
+                }
+                else if (CanChangeSheet)
+                {
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var option in options)
+                        {
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-clover" Disabled="@(!option.Affordable)"
+                                    data-testid="@($"check-luck-{option.Level}")" OnClick="() => SpendLuckAsync(option)">
+                                @LevelText.Title(option.Level): @option.Cost@(option.Affordable ? "" : " — не хватает")
+                            </Button>
+                        }
+                    </div>
+                    <p class="cm-field-note mt-1">Удача сейчас @luck. Либо Удача, либо повторная проверка — не то и другое (стр. 97).</p>
+                }
+                else
+                {
+                    <ul class="list-disc pl-5 text-sm text-primary-700">
+                        @foreach (var option in options)
+                        {
+                            <li>@RulesText.Of(option.Level) — @option.Cost п. Удачи (выпадет @option.ResultingRoll)@(option.Affordable ? "" : " — у сыщика столько нет")</li>
+                        }
+                    </ul>
+                    <p class="cm-field-note mt-1">
+                        @(luck is { } current ? $"Удача сыщика {current}. " : "")Списывают пункты на листе сыщика — отсюда лист не меняется.
+                        Либо Удача, либо повторная проверка (стр. 97).
+                    </p>
+                }
+            }
+        </div>
+    };
+
+    private RenderFragment PushBlock() => __builder =>
+    {
+        var reason = CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat);
+        <div class="mt-4" data-testid="check-push">
+            <h3 class="cm-section-title mb-2">Повторная проверка</h3>
+            @if (reason is not null)
+            {
+                <p class="cm-field-note">@reason</p>
+            }
+            else if (!_pushing)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" data-testid="check-push-start"
+                        OnClick="() => _pushing = true">Повторная проверка</Button>
+                <p class="cm-field-note mt-1">Второй и последний шанс — с более тяжёлыми последствиями провала (стр. 82).</p>
+            }
+            else
+            {
+                <Alert Tone="Tone.Warning" ShowIcon="true" Title="Ставки выше: провал развязывает Хранителю руки" data-testid="check-push-warning">
+                    Игрок объясняет, что сыщик делает иначе — тратит время, рискует, давит сильнее; навык и сложность
+                    обычно прежние. Удачу на повторную проверку не тратят. При провале — урон, проверка Рассудка, потеря
+                    снаряжения, разлука с группой, плен, или цель достигнута дорогой ценой (стр. 82–84).
+                </Alert>
+
+                @if (_second is null)
+                {
+                    @RollStep("push", OnPushRollAsync)
+                    <Button Small="true" Variant="ButtonVariant.Secondary" class="mt-2" OnClick="() => _pushing = false">Не повторять</Button>
+                }
+                else
+                {
+                    @RenderAttempt(_second, "Повторная проверка")
+                    @if (_second.Outcome.Passed)
+                    {
+                        <Alert Tone="Tone.Success" Small="true" class="mt-3 mb-0" data-testid="check-push-passed">
+                            Цель достигнута, как при успехе первой проверки, — без дурных последствий (стр. 84).
+                        </Alert>
+                    }
+                    else
+                    {
+                        <Alert Tone="Tone.Error" ShowIcon="true" Title="Провал повторной проверки" class="mt-3 mb-0" data-testid="check-push-failed">
+                            Хранитель вправе обрушить серьёзные последствия: урон, проверку Рассудка, потерю снаряжения, плен.
+                            Лучше последствие, которое двигает историю, чем конец игры — плен вместо смерти, сделка, обморок (стр. 84).
+                        </Alert>
+                    }
+                }
+            }
+        </div>
+    };
+
+    private RenderFragment MarkBlock() => __builder =>
+    {
+        var subject = _rolledSubject!;
+        var reason = CheckRules.MarkBlockReason(subject, _netDice, _luckSpent is not null);
+        <div class="mt-4" data-testid="check-mark">
+            <h3 class="cm-section-title mb-2">Отметка для фазы развития</h3>
+            @if (reason is not null)
+            {
+                <p class="cm-field-note">@reason</p>
+            }
+            else if (CanChangeSheet)
+            {
+                var row = CheckSubjects.FindSkill(Sheet!, Catalog!, subject);
+                if (_marked)
+                {
+                    <p class="text-sm text-success-700"><i class="fa-solid fa-check mr-1" aria-hidden="true"></i>«@subject.Name» отмечен.</p>
+                }
+                else if (row is { Checked: true })
+                {
+                    <p class="cm-field-note">Отметка у «@subject.Name» уже стоит: за навык её ставят один раз (стр. 92).</p>
+                }
+                else
+                {
+                    <Button Small="true" Icon="fa-check" data-testid="check-mark-skill" OnClick="MarkAsync">Отметить «@subject.Name»</Button>
+                }
+            }
+            else
+            {
+                <p class="cm-field-note">Успех даёт отметку навыку «@subject.Name» — поставьте её на листе сыщика.</p>
+            }
+        </div>
+    };
+}

@@ -82,18 +82,49 @@ public sealed class LuckRulesTests
     }
 
     /// <summary>
-    /// При навыке 5–9 пятая часть — 1: «чрезвычайный успех» выкупает бросок до 01, а 01 — критический,
-    /// который купить нельзя. Поведение v1 сохранено — решается вместе с диалогом проверки (T2.7).
+    /// F-S03 исправлена (T2.7, решение владельца 2026-10-02): при навыке 5–9 пятая часть — 1, и в v1
+    /// «чрезвычайный успех» выкупал бросок до 01, а 01 — критический, который Удачей не покупают
+    /// (стр. 97). Теперь уровень с порогом 01 не предлагается.
     /// </summary>
     [Fact]
     [Trait("finding", "F-S03")]
-    public void Options_SmallTarget_ExtremeOptionLandsOnCriticalRoll()
+    public void Options_SmallTarget_NoOptionLandsOnCriticalRoll()
     {
-        var extreme = LuckRules.Options(30, 5, 99).Single(o => o.Level == SuccessLevel.Extreme);
+        Assert.Equal(
+        [
+            new LuckRules.SpendOption(SuccessLevel.Regular, 25, 5, true),
+            new LuckRules.SpendOption(SuccessLevel.Hard, 28, 2, true),
+        ], LuckRules.Options(30, 5, 99));
+    }
 
-        Assert.Equal(1, extreme.ResultingRoll);
-        Assert.Equal(29, extreme.Cost);
-        Assert.Equal(SuccessLevel.Critical, LuckRules.LevelOf(extreme.ResultingRoll, 5));
+    /// <summary>F-S03: то же для трудного уровня при навыке 2–3 и для любого уровня при навыке 1.</summary>
+    [Theory]
+    [Trait("finding", "F-S03")]
+    [InlineData(3, new[] { SuccessLevel.Regular })]
+    [InlineData(2, new[] { SuccessLevel.Regular })]
+    [InlineData(1, new SuccessLevel[0])]
+    public void Options_ThresholdOfOne_NeverOffered(int target, SuccessLevel[] expected)
+    {
+        var options = LuckRules.Options(50, target, 99);
+
+        Assert.Equal(expected, options.Select(o => o.Level));
+        Assert.All(options, o => Assert.NotEqual(SuccessLevel.Critical, LuckRules.LevelOf(o.ResultingRoll, target)));
+    }
+
+    /// <summary>Ни один предложенный вариант не даёт критического успеха — при любом навыке и броске.</summary>
+    [Fact]
+    [Trait("finding", "F-S03")]
+    public void Options_NeverBuyCritical_Exhaustive()
+    {
+        for (var target = 1; target <= 100; target++)
+        for (var roll = 1; roll <= 100; roll++)
+        {
+            foreach (var option in LuckRules.Options(roll, target, 99))
+            {
+                Assert.True(option.ResultingRoll > 1, $"бросок {roll}, навык {target}: {option}");
+                Assert.Equal(option.Level, LuckRules.LevelOf(option.ResultingRoll, target));
+            }
+        }
     }
 
     /// <summary>Одна трата на приложение: списывает Удачу и снимает отметку развития (в v1 — только одна из двух).</summary>

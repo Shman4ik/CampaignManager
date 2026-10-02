@@ -1,4 +1,5 @@
 using CampaignManager.Core.Dice;
+using CampaignManager.UI.KeeperScreen;
 using CampaignManager.UI.Platform;
 using CampaignManager.UI.Shared;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public static class UiServiceCollectionExtensions
         services.AddSingleton<ApiActivity>();
         services.AddSingleton<DialogService>();
         services.AddSingleton<ToastService>();
+        services.AddSingleton<KeeperScreenState>();
         return services;
     }
 }

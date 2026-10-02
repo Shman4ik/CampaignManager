@@ -1,0 +1,40 @@
+@implements IDisposable
+@inject KeeperScreenState Screen
+
+@* Ширма Хранителя на любой странице: кнопка «Ширма» в шапке (слот PageHeaderSlots.KeeperScreen — шапка о
+   модуле не знает) и панель справа поверх экрана (Modal с Placement="Drawer": бой, сценарий, лист под ней
+   остаются). Стоит в MainLayout. Игроку и гостю не рисуется ничего — меню и кнопки только прячут, защищать
+   тут нечего: ширма — справочник книги, данных за ней нет. *@
+<AuthorizeView Policy="@Policies.Keeper">
+    <Authorized>
+        <SectionContent SectionName="@PageHeaderSlots.KeeperScreen">
+            <Button Small="true" Variant="@(Screen.IsOpen ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-book-open"
+                    aria-expanded="@(Screen.IsOpen ? "true" : "false")" data-testid="keeper-screen-toggle" OnClick="Screen.Toggle">
+                Ширма
+            </Button>
+        </SectionContent>
+
+        <Modal Open="@Screen.IsOpen" OnClose="Screen.Close" Title="Ширма Хранителя" Placement="ModalPlacement.Drawer"
+               data-testid="keeper-screen">
+            <ChildContent>
+                <KeeperReference ActiveBlock="@Screen.ActiveBlock" ActiveBlockChanged="@Screen.Show" />
+            </ChildContent>
+            <Footer>
+                @* Ссылка, а не Button Href: переход заодно закрывает панель. *@
+                <a href="@KeeperScreenBlocks.Url(Screen.ActiveBlock)" class="cm-btn cm-btn-secondary cm-btn-sm"
+                   data-testid="keeper-screen-page" @onclick="Screen.Close">
+                    <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i><span>Открыть страницей</span>
+                </a>
+                <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="keeper-screen-close" OnClick="Screen.Close">Закрыть</Button>
+            </Footer>
+        </Modal>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    protected override void OnInitialized() => Screen.Changed += OnScreenChanged;
+
+    private void OnScreenChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Screen.Changed -= OnScreenChanged;
+}

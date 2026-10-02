@@ -171,7 +171,7 @@ mobile/ (позже)
 | `/occupations` | Catalogs |
 | `/scenarios`, `/scenarios/new`, `/scenarios/{id}`, `/scenarios/{id}/edit`, `/scenarios/{id}/handouts/{handoutId}` | Scenarios |
 | `/combat`, `/chase` | Encounters |
-| `/reference` | KeeperScreen |
+| `/reference` | KeeperScreen — **есть** (T2.7): `/reference?block=…`, панель «Ширма» в шапке |
 | `/bestiary`, `/bestiary/creatures/edit/{id?}`, `/weapons`, `/items`, `/spells`, `/books`, `/skills`, `/skills/detail/{id}`, `/skills/edit`, `/skills/edit/{id}` | Catalogs |
 | `/music` | Music |
 | `/profile` | Profile |
@@ -188,6 +188,8 @@ mobile/ (позже)
 3. Игрок: пройти помощник создания сыщика, получить лист в кампании, правка листа сохраняется сама.
 4. Лист: проверка навыка, трата Удачи, потеря рассудка с порогами, приступ безумия, фаза развития,
    книга Мифов.
+   *T2.7 (2026-10-02): диалог проверки с Удачей, повтором и отметкой — на тестовом листе `/dev/checks`;
+   на настоящем листе — после T2.3.*
 5. Сценарий: импорт JSON, правка локации, режим игры, проверка в локации, показ раздатки и второй
    экран, экспорт JSON.
 6. Ваншот: объявить, игрок бронирует прегена, Хранитель видит бронь.

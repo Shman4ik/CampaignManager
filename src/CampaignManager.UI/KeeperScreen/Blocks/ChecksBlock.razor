@@ -1,0 +1,111 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Checks
+@using CampaignManager.Core.Dice
+
+@* Ширма → «Проверки»: уровни успеха и сложность (гл. 5, стр. 80–91). Пороги в калькуляторе считает
+   Check (Core) — та же единственная копия, что у диалога проверки и боя. Числа в разметке не дублировать. *@
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Сколько нужно выбросить</h3>
+        <div class="mb-3 flex flex-wrap items-end gap-3">
+            <Field Label="Навык" class="w-28">
+                <input type="number" inputmode="numeric" min="1" max="200" class="cm-input" data-testid="ks-skill"
+                       @bind="_skill" @bind:event="oninput" />
+            </Field>
+            <p class="cm-field-note mb-2">Впишите значение — таблица пересчитается.</p>
+        </div>
+        <div class="cm-table-wrap">
+            <table class="cm-table" data-testid="ks-targets">
+                <thead>
+                    <tr>
+                        <th>Сложность</th>
+                        <th>Успех, если выпало</th>
+                        <th>Крах</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var difficulty in CheckRules.Difficulties)
+                    {
+                        var target = Check.Target(Skill, difficulty);
+                        <tr>
+                            <td>@CheckRules.DifficultyLabel(difficulty)</td>
+                            <td class="cm-dice">@(target > 1 ? $"01–{target:00}" : "только 01")</td>
+                            <td class="cm-dice">@(Check.Evaluate(96, Skill, difficulty) is SuccessLevel.Fumble ? "96–100" : "100")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="cm-field-note mt-2">
+            Крах считают от числа, которое нужно выбросить: меньше 50 — крах на 96–100, иначе только на 100 (стр. 88).
+            Поэтому у трудной проверки навыка 55 крах начинается уже с 96.
+        </p>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Шесть исходов броска (стр. 88–89)</h3>
+        <div class="cm-table-wrap">
+            <table class="cm-table">
+                <tbody>
+                    @foreach (var (level, rule) in Outcomes)
+                    {
+                        <tr>
+                            <td class="w-2/5">
+                                <Badge Tone="@LevelText.ToneOf(level, level.IsSuccess())" Solid="@LevelText.IsSolid(level)">@LevelText.Title(level)</Badge>
+                            </td>
+                            <td>@rule</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="cm-field-note mt-2">
+            У проверки два исхода — успех или провал. Уровни важны во встречных проверках и в бою; трудный успех на
+            обычной проверке не значит «сделал особенно хорошо» (стр. 81).
+        </p>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Какую сложность назначить</h3>
+        <ul class="list-disc space-y-2 pl-5 text-sm text-primary-700">
+            <li><strong>Против живого соперника</strong> — по его навыку или характеристике: ниже 50 — обычная, от 50 —
+                трудная, от 90 — чрезвычайная (стр. 81).</li>
+            <li><strong>Против обстоятельств</strong> — на глаз Хранителя: почти всё обычное, явно сложнее — трудная, на
+                пределе человеческих сил — чрезвычайная. Совсем лёгкое — без броска (стр. 81).</li>
+            <li><strong>Запугивание, Красноречие, Обаяние, Убеждение</strong> — от Психологии или того же навыка
+                собеседника. Сочувствует цели — без броска; резко против — на 1–2 уровня выше; весомый довод или явная
+                угроза — на уровень ниже (стр. 90–91).</li>
+            <li><strong>Предел</strong>: нельзя одолеть то, что больше 100 + значение сыщика. Силы объединяют, вычитая
+                характеристики помощников из характеристики препятствия (стр. 86).</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Особые проверки</h3>
+        <ul class="list-disc space-y-2 pl-5 text-sm text-primary-700">
+            <li><strong>Встречная</strong>: обе стороны бросают и сравнивают уровни успеха; равенство — у кого значение
+                выше. Сложность не задают — дают бонусную или штрафную кость; повтора нет (стр. 88–90).</li>
+            <li><strong>Два навыка одним броском</strong>: одно число сравнивают с обоими значениями; Хранитель говорит
+                заранее, нужен успех в обоих или хватит одного (стр. 90).</li>
+            <li><strong>Идея</strong> — против ИНТ, когда расследование застряло; <strong>Знания</strong> — против ОБР (стр. 88).</li>
+            <li><strong>Несколько сыщиков</strong>: где хватит одного успеха на всех (библиотека, поиск улик), а где провал
+                одного подводит всех (прокрасться мимо охраны), решает Хранитель (стр. 84).</li>
+        </ul>
+    </section>
+</div>
+
+@code {
+    private int? _skill = 50;
+
+    private int Skill => Math.Clamp(_skill ?? 0, 0, 200);
+
+    private static readonly (SuccessLevel Level, string Rule)[] Outcomes =
+    [
+        (SuccessLevel.Critical, "выпало 01"),
+        (SuccessLevel.Extreme, "не больше пятой части значения"),
+        (SuccessLevel.Hard, "не больше половины значения"),
+        (SuccessLevel.Regular, "не больше значения"),
+        (SuccessLevel.Failure, "больше значения, но не крах"),
+        (SuccessLevel.Fumble, "100; если нужно выбросить меньше 50 — 96–100"),
+    ];
+}

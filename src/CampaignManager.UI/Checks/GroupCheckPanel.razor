@@ -1,0 +1,257 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+@using CampaignManager.Core.Dice
+@inject IDiceRoller Dice
+
+@* Групповая проверка восприятия (гл. 10, стр. 200–201): один навык за всех сыщиков, «Бросить за всех»
+   и поле броска у каждого. Лучшего выбирает GroupCheck.Best (Core), а не разметка. Строки не
+   пересортировываются по результату: Хранитель вписывает броски по порядку, и строка не должна уезжать
+   из-под пальца. Листы только читаются — отметки игроки ставят у себя. Своей карточки не рисует.
+   Состав — Party (листы и справочник); без него сыщиков вписывают руками: имя и значение навыка. *@
+<div class="cm-stack" data-testid="group-check">
+    <section class="flex flex-col gap-3">
+        @if (IsPartyMode)
+        {
+            <Field Label="Навык">
+                <select class="cm-input" data-testid="group-check-skill" @onchange="SelectSkill">
+                    @foreach (var skill in CatalogSkills)
+                    {
+                        <option value="@skill.Id" selected="@(skill.Id == SkillId)">@skill.Name</option>
+                    }
+                </select>
+            </Field>
+        }
+        else
+        {
+            <Field Label="Навык">
+                <input class="cm-input" data-testid="group-check-skill" placeholder="Внимание" @bind="State.SkillName" @bind:event="oninput" />
+            </Field>
+        }
+
+        <div class="flex flex-wrap gap-2">
+            @foreach (var (id, name) in PerceptionSkills)
+            {
+                var active = IsPartyMode ? id == SkillId : string.Equals(State.SkillName.Trim(), name, StringComparison.OrdinalIgnoreCase);
+                <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                        OnClick="() => PickPerception(id, name)">@name</Button>
+            }
+        </div>
+
+        <Field Label="Сложность" Group="true">
+            <DifficultyPicker Value="@State.Difficulty" ValueChanged="d => State.Difficulty = d" />
+        </Field>
+
+        <div class="flex flex-wrap gap-2">
+            <Button Small="true" Icon="fa-dice-d20" Disabled="@(Rows.Count == 0)" data-testid="group-check-roll" OnClick="RollAll">
+                Бросить за всех
+            </Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Disabled="@(State.Rolls.Count == 0)" data-testid="group-check-clear"
+                    OnClick="() => State.Rolls.Clear()">Очистить броски</Button>
+            @if (!IsPartyMode)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" data-testid="group-check-add" OnClick="AddManual">
+                    Добавить сыщика
+                </Button>
+            }
+        </div>
+    </section>
+
+    <section>
+        @if (Rows.Count == 0)
+        {
+            <p class="cm-field-note" data-testid="group-check-empty">
+                @(IsPartyMode ? "В кампании нет активных сыщиков." : "Добавьте сыщиков — имя и значение навыка; броски можно вписать с костей.")
+            </p>
+        }
+        else
+        {
+            var rows = Rows;
+            var best = GroupCheck.Best(rows);
+            <div class="cm-table-wrap">
+                <table class="cm-table">
+                    <thead>
+                        <tr>
+                            <th>Сыщик</th>
+                            <th>@SkillTitle</th>
+                            <th>Выпало</th>
+                            <th>Результат</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in rows)
+                        {
+                            var isBest = best.Contains(row.Id);
+                            <tr class="@(isBest ? "bg-success-50" : null)" data-testid="group-check-row">
+                                <td>
+                                    @if (ManualRow(row.Id) is { } manual)
+                                    {
+                                        <div class="flex items-center gap-1">
+                                            <input class="cm-input cm-input-sm min-w-28" aria-label="Имя сыщика" placeholder="Имя"
+                                                   value="@manual.Name" @onchange="e => manual.Name = e.Value?.ToString() ?? string.Empty" />
+                                            <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-trash-can"
+                                                    AriaLabel="@($"Убрать: {(manual.Name.Length > 0 ? manual.Name : "сыщик")}")"
+                                                    OnClick="() => RemoveManual(manual)" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="font-semibold">@row.Name</div>
+                                        @if (Party?.FirstOrDefault(i => i.Id == row.Id)?.PlayerName is { Length: > 0 } player)
+                                        {
+                                            <div class="cm-field-note">@player</div>
+                                        }
+                                    }
+                                </td>
+                                <td class="whitespace-nowrap">
+                                    @if (ManualRow(row.Id) is { } manualValue)
+                                    {
+                                        <input type="number" inputmode="numeric" min="0" max="200" class="cm-input cm-input-sm w-20"
+                                               aria-label="@($"Навык: {row.Name}")" value="@manualValue.Value"
+                                               @onchange="e => SetManualValue(manualValue, e)" />
+                                    }
+                                    else
+                                    {
+                                        @row.Value
+                                    }
+                                    <span class="cm-field-note ml-1">≤ @Check.Target(row.Value, State.Difficulty)</span>
+                                </td>
+                                <td>
+                                    <input type="number" inputmode="numeric" min="1" max="100" class="cm-input cm-input-sm w-20 font-mono"
+                                           aria-label="@($"Выпало у {(row.Name.Length > 0 ? row.Name : "сыщика")}")"
+                                           value="@(State.Rolls.TryGetValue(row.Id, out var r) ? r : null)"
+                                           @onchange="e => SetRoll(row.Id, e)" />
+                                </td>
+                                <td>
+                                    @if (row.Outcome is { } outcome)
+                                    {
+                                        <Badge Tone="@LevelText.ToneOf(outcome.Level, outcome.Passed)" Solid="@LevelText.IsSolid(outcome.Level)">
+                                            @LevelText.Title(outcome.Level)
+                                        </Badge>
+                                        @if (!outcome.Passed && outcome.Level.IsSuccess())
+                                        {
+                                            <div class="cm-field-note">мало для этой сложности</div>
+                                        }
+                                        @if (isBest)
+                                        {
+                                            <div class="mt-1"><Badge Tone="Tone.Info" Icon="fa-star">Лучший результат</Badge></div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="cm-field-note">ещё не бросали</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="mt-3 text-sm text-primary-700" data-testid="group-check-summary">@Summary(rows, best)</p>
+            <p class="cm-field-note mt-1">
+                При равенстве уровней зацепку получают несколько сыщиков или тот, у кого навык выше, — решает Хранитель.
+                Провалившие могут пройти повторную проверку, если объяснят, как ищут иначе (стр. 200–201).
+            </p>
+        }
+    </section>
+</div>
+
+@code {
+    /// <summary>Состав кампании: листы читаются по навыку справочника. Вместе с <see cref="Catalog"/>.</summary>
+    [Parameter] public IReadOnlyList<CheckInvestigator>? Party { get; set; }
+
+    [Parameter] public SkillCatalog? Catalog { get; set; }
+
+    /// <summary>Состояние снаружи — чтобы броски пережили закрытие ширмы. Не задано — своё.</summary>
+    [Parameter] public GroupCheckDraft? Draft { get; set; }
+
+    private static readonly string[] ManualPerception = ["Внимание", "Слух", "Психология"];
+
+    private readonly GroupCheckDraft _ownDraft = new();
+
+    private GroupCheckDraft State => Draft ?? _ownDraft;
+
+    private bool IsPartyMode => Party is not null && Catalog is not null;
+
+    private IReadOnlyList<SkillDefinition> CatalogSkills => Catalog!.Skills
+        .Where(s => !Catalog.IsParent(s.Id))
+        .OrderBy(s => s.Name, StringComparer.CurrentCulture)
+        .ToList();
+
+    /// <summary>Навык состава: выбранный, иначе Внимание, иначе первый по имени.</summary>
+    private Guid? SkillId => State.SkillId
+        ?? Catalog?.FindByCode(GroupCheck.PerceptionSkillCodes[0])?.Id
+        ?? (IsPartyMode ? CatalogSkills.FirstOrDefault()?.Id : null);
+
+    /// <summary>Три навыка восприятия (стр. 199): из справочника, а без него — подписи.</summary>
+    private IEnumerable<(Guid? Id, string Name)> PerceptionSkills =>
+        IsPartyMode
+            ? GroupCheck.PerceptionSkillCodes.Select(code => Catalog!.FindByCode(code)).OfType<SkillDefinition>().Select(s => ((Guid?)s.Id, s.Name))
+            : ManualPerception.Select(name => ((Guid?)null, name));
+
+    private string SkillTitle => IsPartyMode
+        ? Catalog!.Find(SkillId)?.Name ?? "Навык"
+        : string.IsNullOrWhiteSpace(State.SkillName) ? "Навык" : State.SkillName.Trim();
+
+    private List<GroupCheckRow> Rows => (IsPartyMode
+            ? Party!.Select(i => (i.Id, i.Name, Value: SkillId is { } id ? CheckSubjects.CatalogSkill(i.Sheet, Catalog!, id)?.Value ?? 0 : 0))
+            : State.Manual.Select(m => (m.Id, m.Name, m.Value)))
+        .Select(row => new GroupCheckRow(row.Id, row.Name, row.Value,
+            State.Rolls.TryGetValue(row.Id, out var roll) ? CheckRules.Evaluate(roll, row.Value, State.Difficulty) : null))
+        .ToList();
+
+    private ManualInvestigator? ManualRow(Guid id) => IsPartyMode ? null : State.Manual.FirstOrDefault(m => m.Id == id);
+
+    private void SelectSkill(ChangeEventArgs args) =>
+        State.SkillId = Guid.TryParse(args.Value?.ToString(), out var id) ? id : null;
+
+    private void PickPerception(Guid? id, string name)
+    {
+        if (IsPartyMode)
+            State.SkillId = id;
+        else
+            State.SkillName = name;
+    }
+
+    private void RollAll()
+    {
+        foreach (var row in Rows)
+            State.Rolls[row.Id] = D100.Roll(Dice).Result;
+    }
+
+    private void SetRoll(Guid id, ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var roll) && roll is >= 1 and <= 100)
+            State.Rolls[id] = roll;
+        else
+            State.Rolls.Remove(id);
+    }
+
+    private void AddManual() => State.Manual.Add(new ManualInvestigator { Name = $"Сыщик {State.Manual.Count + 1}", Value = 25 });
+
+    private void RemoveManual(ManualInvestigator row)
+    {
+        State.Manual.Remove(row);
+        State.Rolls.Remove(row.Id);
+    }
+
+    private static void SetManualValue(ManualInvestigator row, ChangeEventArgs args) =>
+        row.Value = int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? Math.Clamp(value, 0, 200)
+            : 0;
+
+    private static string Summary(List<GroupCheckRow> rows, IReadOnlySet<Guid> best)
+    {
+        if (rows.All(r => r.Outcome is null))
+            return "Бросков ещё нет.";
+
+        if (best.Count == 0)
+            return "Никто не прошёл проверку — зацепка упущена.";
+
+        var winners = rows.Where(r => best.Contains(r.Id)).ToList();
+        var passed = rows.Count(r => r.Outcome is { Passed: true });
+        return $"Лучше всех: {string.Join(", ", winners.Select(r => r.Name))} — {RulesText.Of(winners[0].Outcome!.Level)}. " +
+               $"Прошли проверку: {passed} из {rows.Count}.";
+    }
+}
