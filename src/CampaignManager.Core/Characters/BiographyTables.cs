@@ -14,7 +14,51 @@ public static class BiographyTables
         string Key,
         string Title,
         string Hint,
-        IReadOnlyList<string> Options);
+        IReadOnlyList<string> Options)
+    {
+        /// <summary>Графа документа, куда пишет эта секция (ключи — те же, что у граф листа).</summary>
+        public string Read(Biography biography) => Key switch
+        {
+            "appearance" => biography.Appearance,
+            "ideals" => biography.IdealsAndPrinciples,
+            "people" => biography.SignificantPeople,
+            "places" => biography.ImportantPlaces,
+            "possessions" => biography.ValuablePossessions,
+            _ => biography.Traits,
+        };
+
+        public void Write(Biography biography, string value)
+        {
+            switch (Key)
+            {
+                case "appearance": biography.Appearance = value; break;
+                case "ideals": biography.IdealsAndPrinciples = value; break;
+                case "people": biography.SignificantPeople = value; break;
+                case "places": biography.ImportantPlaces = value; break;
+                case "possessions": biography.ValuablePossessions = value; break;
+                default: biography.Traits = value; break;
+            }
+        }
+
+        /// <summary>Пункт списка дописывается к графе новой строкой: у «Значимых людей» их два (стр. 41–42).</summary>
+        public void Append(Biography biography, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            var current = Read(biography);
+            Write(biography, string.IsNullOrWhiteSpace(current) ? value : current + "\n" + value);
+        }
+    }
+
+    /// <summary>Секция по ключу; null — такой нет.</summary>
+    public static Section? Find(string? key) => Sections.FirstOrDefault(s => s.Key == key);
+
+    /// <summary>Сколько из шести граф заполнено (книга просит хотя бы три, стр. 37).</summary>
+    public static int FilledCount(Biography biography) => Sections.Count(s => !string.IsNullOrWhiteSpace(s.Read(biography)));
+
+    /// <summary>Книга просит заполнить хотя бы столько граф (стр. 37).</summary>
+    public const int RecommendedFilled = 3;
 
     /// <summary>
     ///     «Описание» — уникальный образ, воплощающий Наружность (стр. 40).
@@ -149,4 +193,8 @@ public static class BiographyTables
         var roll = dice.Die(table.Count);
         return (roll, table[roll - 1]);
     }
+
+    /// <summary>Пункт по выпавшему (1–10, вписанному с настоящей кости) — «№. текст».</summary>
+    public static string Entry(IReadOnlyList<string> table, int roll) =>
+        roll >= 1 && roll <= table.Count ? $"{roll}. {table[roll - 1]}" : "";
 }

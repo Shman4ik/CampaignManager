@@ -15,7 +15,7 @@ namespace CampaignManager.Migrate.Catalogs;
 /// </summary>
 public static class OccupationSlots
 {
-    public static List<OccupationSlot> Build(JsonNode occupation, SkillCatalog catalog, SkillResolver skills, Action<string> problem)
+    public static List<OccupationSlot> Build(JsonNode occupation, SkillCatalog catalog, SkillNameResolver skills, Action<string> problem)
     {
         List<OccupationSlot> slots = [];
 

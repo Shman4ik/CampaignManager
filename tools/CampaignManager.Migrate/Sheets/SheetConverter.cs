@@ -44,14 +44,14 @@ public sealed class SheetNotes
 /// Скорость и Уклонение-зеркало вычисляются; у НПС расхождение с формулой уходит в <c>overrides</c>;</item>
 /// <item><c>Id</c> внутри JSON, <c>CharacterType</c>, <c>NewSkillName</c>/<c>NewSkillBaseValue</c>, группы
 /// навыков и <c>BaseValue</c>-строки не переносятся; <c>PlayerName</c> — из владельца строки;</item>
-/// <item>навык — по <c>SkillModelId</c>, затем по имени (<see cref="SkillResolver"/>), иначе самодельный;</item>
+/// <item>навык — по <c>SkillModelId</c>, затем по имени (<see cref="SkillNameResolver"/>), иначе самодельный;</item>
 /// <item>оружие — текст книги и <c>catalogWeaponId</c>; разобранные блоки v1 не переносятся;</item>
 /// <item>деньги — числом, нечисловой остаток — в заметку финансов.</item>
 /// </list>
 /// </summary>
 public sealed class SheetConverter(
     SkillCatalog catalog,
-    SkillResolver resolver,
+    SkillNameResolver resolver,
     IReadOnlyDictionary<Guid, (string Name, Guid SkillId)> catalogWeapons,
     IReadOnlyDictionary<Guid, string> catalogSpells,
     IReadOnlyDictionary<string, Guid> occupationsByName)

@@ -101,14 +101,15 @@ public sealed class DerivedAttributeRulesTests
     [InlineData(79, 4)]
     [InlineData(80, 3)]
     [InlineData(89, 3)]
-    [InlineData(90, 2)] // за пределами таблицы возраста формула просто продолжает счёт
+    [InlineData(90, 3)] // 90 лет — строка «80–89» (F-S01): вне таблицы — ближайшая строка, а не продолжение счёта
     public void ComputeMoveRate_ByAge_LosesOnePerDecadeFromForty(int age, int expected) =>
         Assert.Equal(expected, DerivedAttributeRules.ComputeMoveRate(Chars(str: 50, dex: 50, siz: 50), age));
 
     [Fact]
     [Trait("page", "31")]
-    public void ComputeMoveRate_VeryOld_NeverBelowOne() =>
-        Assert.Equal(1, DerivedAttributeRules.ComputeMoveRate(Chars(str: 40, dex: 40, siz: 50), 120));
+    [Trait("finding", "F-S01")]
+    public void ComputeMoveRate_BeyondTable_LastRowPenalty() =>
+        Assert.Equal(2, DerivedAttributeRules.ComputeMoveRate(Chars(str: 40, dex: 40, siz: 50), 120));
 
     /// <summary>Штраф Скорости за возраст объявлен дважды (AUDIT): в формуле и в таблице возраста.</summary>
     [Fact]

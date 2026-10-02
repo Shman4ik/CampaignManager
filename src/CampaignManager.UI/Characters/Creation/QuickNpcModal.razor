@@ -1,0 +1,269 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Scenarios
+@using CampaignManager.UI.Platform
+@inject ICharactersApi Api
+@inject ICatalogApi<SkillDto> SkillsApi
+@inject ICatalogApi<WeaponDto> WeaponsApi
+@inject IDiceRoller Dice
+
+@* «Быстрый НПС» (гл. 10, стр. 187–189): встречный констебль за полминуты — типаж, имя под эпоху, пара чисел, боевой
+   навык 25/40/70%, оружие из справочника. Форма ничего не считает: типаж, опытность и оружие — QuickNpcRules, лист —
+   SheetBuilder.QuickNpc (тот же конструктор, что у помощника). Из сценария (ScenarioId) лист и связь «НПС в
+   сценарии» уходят одной записью; отказ — окно остаётся открытым с текстом, иначе вышел бы двойник (знание v1).
+   Окно живёт, пока открыто: страница рисует его по условию, форма каждый раз новая. *@
+<Modal Open="Open" Title="Быстрый НПС" Size="ModalSize.Large" OnClose="OnClose" data-testid="quick-npc">
+    <ChildContent>
+        @if (_catalog is null)
+        {
+            <LoadingIndicator Message="Загружаю справочник навыков…" />
+        }
+        else
+        {
+            <form id="quick-npc-form" class="flex flex-col gap-4" @onsubmit="CreateAsync">
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Типаж">
+                    @foreach (var archetype in QuickNpcRules.Archetypes)
+                    {
+                        <Button Small="true" Icon="@archetype.Icon" data-testid="@($"archetype-{archetype.Key}")"
+                                Variant="@(_draft.ArchetypeKey == archetype.Key ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                                OnClick="() => QuickNpcRules.ApplyArchetype(_draft, archetype, _catalog)">@archetype.Label</Button>
+                    }
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Field Label="Имя" class="sm:col-span-2">
+                        <div class="flex gap-2">
+                            <input class="cm-input" required maxlength="@CharacterLimits.NameLength" data-testid="quick-name" @bind="_draft.Name" />
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" AriaLabel="Случайное имя под эпоху" OnClick="RandomName" />
+                        </div>
+                    </Field>
+                    <Field Label="Пол">
+                        <select class="cm-input" value="@_draft.Gender" @onchange="e => _draft.Gender = Enum.Parse<NameGender>(e.Value!.ToString()!)">
+                            <option value="@NameGender.Male">Мужской</option>
+                            <option value="@NameGender.Female">Женский</option>
+                        </select>
+                    </Field>
+                    <Field Label="Возраст">
+                        <input class="cm-input" type="number" min="1" max="120" @bind="_draft.Age" />
+                    </Field>
+                    <Field Label="Род занятий" class="sm:col-span-2">
+                        <input class="cm-input" maxlength="@CharacterLimits.NameLength" data-testid="quick-occupation" @bind="_draft.Occupation" />
+                    </Field>
+                    <Field Label="Удача">
+                        <input class="cm-input" type="number" min="0" max="99" @bind="_draft.Luck" />
+                    </Field>
+                </div>
+
+                <Field Label="Характеристики" Group="true" Note="Средний человек — все по 50; «Бросить» — формулами главы 3 (стр. 28–29).">
+                    <div class="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                        @foreach (var info in InvestigatorCreationRules.Characteristics)
+                        {
+                            <label class="flex flex-col gap-1 text-sm" @key="info.Key">
+                                <span class="cm-field-label">@info.Abbreviation</span>
+                                <input class="cm-input" type="number" min="1" max="99" value="@_draft.Characteristics[info.Key]"
+                                       @onchange="e => SetCharacteristic(info.Key, e)" />
+                            </label>
+                        }
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => _draft.Characteristics = QuickNpcRules.TypicalCharacteristics()">
+                            Средний человек
+                        </Button>
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice"
+                                OnClick="() => _draft.Characteristics = QuickNpcRules.RollCharacteristics(Dice)">Бросить</Button>
+                    </div>
+                </Field>
+
+                <Field Label="Опытность в бою" Group="true" Note="Неопытный — 25%, забияка или головорез — 40%, профессиональный убийца — 70% (стр. 187).">
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var (level, label) in QuickNpcRules.CombatLevels)
+                        {
+                            <Button Small="true" Variant="@(_draft.CombatLevel == level ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                                    OnClick="() => QuickNpcRules.ApplyCombatLevel(_draft, level, _catalog)">@label · @((int)level)%</Button>
+                        }
+                    </div>
+                </Field>
+
+                <Field Label="Оружие" Group="true">
+                    @if (_draft.Weapon is { } weapon)
+                    {
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-semibold text-primary-800">@weapon.Name</span>
+                            <span class="cm-dice text-sm text-primary-500">@weapon.Damage</span>
+                            <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => QuickNpcRules.ApplyWeapon(_draft, null, _catalog)">Убрать</Button>
+                        </div>
+                    }
+                    else if (_pickWeapon)
+                    {
+                        <CatalogSearch TItem="WeaponDto" Load="LoadWeapons" Name="w => w.Name" Meta="w => w.Damage"
+                                       Placeholder="Найти оружие…" OnSelect="SelectWeapon" OnCancel="() => _pickWeapon = false" />
+                    }
+                    else
+                    {
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-gun" OnClick="() => _pickWeapon = true">Выбрать из справочника</Button>
+                    }
+                </Field>
+
+                <Field Label="Ключевые навыки" Group="true" Note="Навык по занятию — от 50%, прочие ниже (гл. 10). Остальные навыки — база справочника.">
+                    <div class="flex flex-col gap-2">
+                        @foreach (var row in _draft.Skills)
+                        {
+                            <div class="flex flex-wrap items-center gap-2" @key="row">
+                                <SkillSelect Skills="_pickable" Value="row.SkillId" ValueChanged="id => row.SkillId = id" Label="Навык" />
+                                <input class="cm-input w-20" type="number" min="0" max="99" aria-label="Значение"
+                                       value="@row.Value" @onchange="e => row.Value = QuickNpcRules.ClampSkill(Number(e))" />
+                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-xmark" AriaLabel="Убрать навык"
+                                        OnClick="() => _draft.Skills.Remove(row)" />
+                            </div>
+                        }
+                        @if (_draft.Skills.Count < QuickNpcRules.MaxSkillRows)
+                        {
+                            <div>
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus"
+                                        OnClick="() => _draft.Skills.Add(new QuickNpcSkill { Value = 50 })">Навык</Button>
+                            </div>
+                        }
+                    </div>
+                </Field>
+
+                <Field Label="Кто он и что знает" Hint="(в предысторию листа)">
+                    <textarea class="cm-input" rows="2" @bind="_draft.Note"></textarea>
+                </Field>
+
+                @if (ScenarioId is not null)
+                {
+                    <div class="grid grid-cols-2 gap-3 sm:w-96">
+                        <Field Label="Роль в сценарии">
+                            <select class="cm-input" @bind="_role">
+                                <option value="@NpcRole.Neutral">Нейтрал</option>
+                                <option value="@NpcRole.Enemy">Враг</option>
+                                <option value="@NpcRole.Ally">Союзник</option>
+                            </select>
+                        </Field>
+                        <Field Label="Сколько">
+                            <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" @bind="_count" />
+                        </Field>
+                    </div>
+                }
+                else if (Campaigns.Count > 0)
+                {
+                    <Field Label="Куда" class="sm:w-96">
+                        <select class="cm-input" data-testid="quick-owner" value="@(_ownerId?.ToString() ?? "")"
+                                @onchange="e => _ownerId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                            <option value="">Библиотека НПС</option>
+                            @foreach (var campaign in Campaigns)
+                            {
+                                <option value="@campaign.Id">Кампания «@campaign.Name»</option>
+                            }
+                        </select>
+                    </Field>
+                }
+
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="quick-error">@_error</Alert>
+                }
+            </form>
+        }
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose" Disabled="_busy">Отмена</Button>
+        <Button Type="submit" form="quick-npc-form" Icon="fa-bolt" Busy="_busy" Disabled="@(_catalog is null)"
+                data-testid="quick-create">Создать</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private readonly QuickNpcDraft _draft = new();
+    private SkillCatalog? _catalog;
+    private IReadOnlyList<SkillDto> _pickable = [];
+    private bool _pickWeapon;
+    private bool _busy;
+    private string? _error;
+    private Guid? _ownerId;
+    private NpcRole _role = NpcRole.Neutral;
+    private int _count = 1;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback<Guid> OnCreated { get; set; }
+
+    /// <summary>Эпоха кампании или сценария — по ней имена (поле, а не разбор текста «1920-е»).</summary>
+    [Parameter] public Era Era { get; set; } = Era.Classic;
+
+    /// <summary>Кампания-владелец; null — библиотека (или выбор из <see cref="Campaigns"/>).</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    /// <summary>Сценарий: НПС сразу занят в нём (роль и количество — у появления).</summary>
+    [Parameter] public Guid? ScenarioId { get; set; }
+
+    /// <summary>Кампании Хранителя — выбор «куда» в библиотеке; пусто — выбора нет.</summary>
+    [Parameter] public IReadOnlyList<CampaignSummaryDto> Campaigns { get; set; } = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ownerId = CampaignId;
+        try
+        {
+            var skills = await SkillsApi.ListAsync();
+            _catalog = SkillCatalogs.From(skills.Items);
+            _pickable = [.. skills.Items.Where(s => !_catalog.IsParent(s.Id))];
+            QuickNpcRules.ApplyArchetype(_draft, QuickNpcRules.Archetypes[^1], _catalog);
+            RandomName();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+    }
+
+    private void RandomName() => _draft.Name = NameTables.RandomName(Era, _draft.Gender, Dice);
+
+    private void SetCharacteristic(Characteristic key, ChangeEventArgs e) =>
+        _draft.Characteristics[key] = Math.Clamp(Number(e), 1, InvestigatorCreationRules.MaxCharacteristic);
+
+    private static int Number(ChangeEventArgs e) => int.TryParse(e.Value?.ToString(), out var value) ? value : 0;
+
+    private async Task<IReadOnlyList<WeaponDto>> LoadWeapons() =>
+        [.. (await WeaponsApi.ListAsync()).Items.OrderBy(w => w.Name, StringComparer.CurrentCulture)];
+
+    private void SelectWeapon(WeaponDto weapon)
+    {
+        QuickNpcRules.ApplyWeapon(_draft, WeaponCatalogs.Data(weapon), _catalog!);
+        _pickWeapon = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_catalog is null || _busy)
+            return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var created = await Api.CreateAsync(new CreateCharacterRequest
+            {
+                Kind = CharacterKind.Npc,
+                CampaignId = ScenarioId is null ? _ownerId : CampaignId,
+                Sheet = SheetBuilder.QuickNpc(_draft, _catalog),
+                Cast = ScenarioId is { } scenario ? new NpcCastRequest(scenario, _role, Math.Clamp(_count, 1, CharacterLimits.MaxCastCount)) : null,
+            });
+            await OnCreated.InvokeAsync(created.Id);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Окно остаётся открытым: лист и связь пишутся вместе, повтор не даст двойника.
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

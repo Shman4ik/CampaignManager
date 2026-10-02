@@ -19,7 +19,8 @@ public sealed class InvestigatorCreationRulesTests
 
         Assert.Equal(7, bands.Count);
         Assert.Equal(InvestigatorCreationRules.MinAge, bands[0].MinAge);
-        Assert.Equal(InvestigatorCreationRules.MaxAge, bands[^1].MaxAge);
+        Assert.Equal(89, bands[^1].MaxAge); // 90 лет книга разрешает, но строка таблицы — «80–89» (F-S01)
+        Assert.Same(bands[^1], InvestigatorCreationRules.BandFor(InvestigatorCreationRules.MaxAge));
         for (var i = 1; i < bands.Count; i++)
             Assert.Equal(bands[i - 1].MaxAge + 1, bands[i].MinAge);
     }
@@ -68,23 +69,30 @@ public sealed class InvestigatorCreationRulesTests
     public void BandFor_EveryBoundary(int age, string expected) =>
         Assert.Equal(expected, InvestigatorCreationRules.BandFor(age).Name);
 
-    /// <summary>Вне 15–89 возраст молча считается «молодым». Поведение v1 сохранено, вопрос — в rules-findings.</summary>
+    /// <summary>
+    /// Возраст вне таблицы получает ближайшую строку, а не «Молодого» (F-S01, исправлено в T2.4): 90 лет книга
+    /// разрешает — им положена последняя строка «80–89»; старше и младше — по договорённости с Хранителем.
+    /// </summary>
     [Theory]
     [Trait("page", "30")]
     [Trait("finding", "F-S01")]
-    [InlineData(0)]
-    [InlineData(14)]
-    [InlineData(90)]
-    [InlineData(120)]
-    public void BandFor_OutsideTable_FallsBackToYoung(int age) =>
-        Assert.Equal("Молодой", InvestigatorCreationRules.BandFor(age).Name);
+    [InlineData(0, "Юный")]
+    [InlineData(14, "Юный")]
+    [InlineData(90, "Престарелый")]
+    [InlineData(120, "Престарелый")]
+    public void BandFor_OutsideTable_TakesNearestRow(int age, string expected) =>
+        Assert.Equal(expected, InvestigatorCreationRules.BandFor(age).Name);
 
     [Fact]
     [Trait("page", "30")]
-    public void Ages_MinIs15_MaxIs89()
+    [Trait("finding", "F-S01")]
+    public void Ages_FromFifteenToNinety_AsTheBookSays()
     {
         Assert.Equal(15, InvestigatorCreationRules.MinAge);
-        Assert.Equal(89, InvestigatorCreationRules.MaxAge);
+        Assert.Equal(90, InvestigatorCreationRules.MaxAge);
+        Assert.True(InvestigatorCreationRules.IsBookAge(90));
+        Assert.False(InvestigatorCreationRules.IsBookAge(91));
+        Assert.False(InvestigatorCreationRules.IsBookAge(14));
     }
 
     [Theory]

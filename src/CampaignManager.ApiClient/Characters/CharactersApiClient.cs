@@ -17,6 +17,25 @@ public sealed class CharactersApiClient(HttpClient http) : ICharactersApi
 {
     private static ContractsJsonContext Json => ContractsJsonContext.Default;
 
+    public async Task<CharacterCreatedDto> CreateAsync(CreateCharacterRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(CharactersRoutes.Characters, request, Json.CreateCharacterRequest, cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.CharacterCreatedDto, cancellationToken, withCode: true);
+    }
+
+    public async Task<CreationContextDto> GetCreationContextAsync(CharacterKind kind, Guid? campaignId, Guid? scenarioId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(CharactersRoutes.New(kind, campaignId, scenarioId), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.CreationContextDto, cancellationToken, withCode: true);
+    }
+
+    public async Task<IReadOnlyList<CharacterSummaryDto>> ListAsync(CharacterKind kind, bool archived, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(CharactersRoutes.Library(kind, archived), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.IReadOnlyListCharacterSummaryDto, cancellationToken, withCode: true);
+    }
+
     public async Task<CharacterDto> GetAsync(Guid characterId, CancellationToken cancellationToken = default)
     {
         using var response = await http.GetAsync(CharactersRoutes.Character(characterId), cancellationToken);

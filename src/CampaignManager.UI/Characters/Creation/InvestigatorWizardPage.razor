@@ -1,0 +1,300 @@
+@page "/character/wizard"
+@attribute [Authorize]
+@using System.Text.Json
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Documents
+@using CampaignManager.UI.Platform
+@inject ICharactersApi Api
+@inject ICatalogApi<SkillDto> SkillsApi
+@inject ICatalogApi<OccupationDto> OccupationsApi
+@inject BrowserStorage Storage
+@inject DialogService Dialogs
+@inject IDiceRoller Dice
+@inject NavigationManager Navigation
+
+@* Помощник создания сыщика (T2.4): способ и пять шагов главы 3 плюс «Итог». Черновик — InvestigatorDraft в
+   localStorage (переживает перезагрузку и уход со страницы), правила — Core: правки шагов — методы черновика,
+   профессия, слоты, бюджеты и проверки шагов — CreationPlan (слоты собирает он, шаги только показывают), лист —
+   SheetBuilder.FromDraft, тот же, что у быстрого НПС и импорта. «Случайный сыщик» (?random=1) — тот же помощник с
+   SheetBuilder.RandomDraft, открытый на «Итоге» (D6.4). Любой бросок можно вписать (RollInput / DiceInput). *@
+<PageHeader Title="@Title">
+    <Actions>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="RestartAsync" data-testid="wizard-restart">
+            <span class="hidden sm:inline">Заново</span>
+        </Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Href="@CreationLinks.Back(CreationKind, ScenarioId)">Выйти</Button>
+    </Actions>
+</PageHeader>
+
+<div class="cm-page">
+    <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Готовлю помощник…" Context="context">
+        <ChildContent>
+            <CreationPlace Context="context" />
+            @if (!context.CanCreate)
+            {
+                <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист здесь не завести" data-testid="create-refused">
+                    <ChildContent>@context.Reason</ChildContent>
+                    <Actions>
+                        @if (context.ActiveCharacterId is { } active)
+                        {
+                            <Button Small="true" Icon="fa-id-card" Href="@($"character/{active}")">Открыть активного сыщика</Button>
+                        }
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Href="">На главную</Button>
+                    </Actions>
+                </Alert>
+            }
+            else if (_catalog is not null)
+            {
+                var plan = Plan;
+                var step = CurrentStep;
+                var validation = plan.Validate(step);
+
+                <nav class="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
+                    @foreach (var item in Enum.GetValues<CreationStep>())
+                    {
+                        var target = item;
+                        var reachable = CanGoTo(plan, target);
+                        <Button Small="true" class="shrink-0" data-testid="@($"wizard-step-{(int)target}")"
+                                Variant="@(target == step ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                                Disabled="@(!reachable)" OnClick="() => GoToAsync(target)">
+                            <span class="cm-dice">@((int)target + 1)</span> @Steps[target].Title
+                        </Button>
+                    }
+                </nav>
+
+                <div class="cm-card" data-testid="@($"wizard-{step}")">
+                    <div class="cm-card-header">
+                        <span class="cm-card-title">@Steps[step].Title</span>
+                        <span class="cm-text-muted text-xs">@Steps[step].Reference</span>
+                    </div>
+                    <div class="cm-card-body">
+                        <p class="cm-text-muted mb-4">@Steps[step].Hint</p>
+                        @switch (step)
+                        {
+                            case CreationStep.Method:
+                                <WizardMethodStep Plan="plan" OnChanged="ChangedAsync" />
+                                break;
+                            case CreationStep.Characteristics:
+                                <WizardCharacteristicsStep Plan="plan" OnChanged="ChangedAsync" />
+                                break;
+                            case CreationStep.Occupation:
+                                <WizardOccupationStep Plan="plan" Occupations="_occupationDtos" OnChanged="ChangedAsync" />
+                                break;
+                            case CreationStep.Skills:
+                                <WizardSkillsStep Plan="plan" OnChanged="ChangedAsync" />
+                                break;
+                            case CreationStep.Biography:
+                                <WizardBiographyStep Plan="plan" OnChanged="ChangedAsync" />
+                                break;
+                            case CreationStep.Gear:
+                                <WizardGearStep Plan="plan" OnChanged="ChangedAsync" />
+                                break;
+                            default:
+                                <WizardSummaryStep Plan="plan" OnGoTo="GoToAsync" />
+                                break;
+                        }
+                    </div>
+                    <div class="cm-card-footer flex-wrap justify-between gap-3">
+                        <div class="min-w-0 flex-1 basis-60 text-sm text-warning-800" role="status" data-testid="wizard-validation">
+                            @if (step == CreationStep.Summary && plan.FirstInvalidStep() is { } invalid)
+                            {
+                                <span><i class="fa-solid fa-circle-exclamation mr-1" aria-hidden="true"></i>Шаг «@Steps[invalid].Title»: @plan.Validate(invalid)</span>
+                            }
+                            else if (validation is not null)
+                            {
+                                <span><i class="fa-solid fa-circle-exclamation mr-1" aria-hidden="true"></i>@validation</span>
+                            }
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Disabled="@(step == CreationStep.Method)"
+                                    OnClick="() => GoToAsync(step - 1)">Назад</Button>
+                            @if (step < CreationStep.Summary)
+                            {
+                                <Button Small="true" Icon="fa-arrow-right" Disabled="@(validation is not null)" data-testid="wizard-next"
+                                        OnClick="() => GoToAsync(step + 1)">Далее</Button>
+                            }
+                            else
+                            {
+                                <Button Small="true" Icon="fa-user-plus" Busy="_busy" Disabled="@(plan.FirstInvalidStep() is not null)"
+                                        data-testid="wizard-finish" OnClick="() => CreateAsync(context)">@FinishLabel</Button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" ShowIcon="true" class="mt-3" OnClose="() => _error = null">@_error</Alert>
+                }
+            }
+        </ChildContent>
+    </AsyncContent>
+</div>
+
+@code {
+    /// <summary>Шаг: заголовок, подсказка и страницы книги (глава 3).</summary>
+    private sealed record StepInfo(string Title, string Hint, string Reference);
+
+    private static readonly Dictionary<CreationStep, StepInfo> Steps = new()
+    {
+        [CreationStep.Method] = new("Способ", "Как определять характеристики и сколько сыщику лет: возрастные модификаторы применяются к броскам сразу.", "стр. 30, 45–46"),
+        [CreationStep.Characteristics] = new("Характеристики", "Восемь характеристик, возрастные модификаторы, проверки ОБР и Удача. Вторичные атрибуты считаются сами.", "стр. 28–31"),
+        [CreationStep.Occupation] = new("Род занятий", "Профессия задаёт навыки и очки профессиональных навыков.", "стр. 31, 37–39"),
+        [CreationStep.Skills] = new("Навыки", "Очки профессии — в её навыки и Средства, очки личного интереса (ИНТ × 2) — в любые, кроме Мифов Ктулху.", "стр. 34, 46"),
+        [CreationStep.Biography] = new("Биография", "Имя, хотя бы три графы из шести и одна ключевая связь.", "стр. 37, 40–43"),
+        [CreationStep.Gear] = new("Снаряжение", "Достаток — по Средствам; допишите вещи, которые сыщик носит с собой.", "стр. 44–45"),
+        [CreationStep.Summary] = new("Итог", "Так лист уйдёт в базу; после создания его можно править как обычно.", "стр. 47"),
+    };
+
+    private InvestigatorDraft _draft = new();
+    private SkillCatalog? _catalog;
+    private List<OccupationDto> _occupationDtos = [];
+    private List<OccupationDefinition> _occupations = [];
+    private string? _error;
+    private bool _busy;
+    private Era _era = Era.Classic;
+
+    [SupplyParameterFromQuery(Name = "campaignId")] public Guid? CampaignId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "scenarioId")] public Guid? ScenarioId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "kind")] public string? Kind { get; set; }
+
+    /// <summary>«Случайный сыщик»: черновик бросается заново и открывается на «Итоге».</summary>
+    [SupplyParameterFromQuery(Name = "random")] public string? Random { get; set; }
+
+    private CharacterKind CreationKind => CreationLinks.KindFromRoute(Kind);
+
+    private Guid? CampaignOrNull => CreationKind is CharacterKind.Pregen ? null : CampaignId;
+
+    private string LoadKey => $"{CreationKind}:{CampaignOrNull}:{ScenarioId}";
+
+    private string DraftKey => CreationLinks.DraftKey(CreationKind, CampaignOrNull, ScenarioId);
+
+    private string Title => CreationKind is CharacterKind.Player ? "Помощник создания сыщика" : $"{CreationLinks.NewTitle(CreationKind)}: помощник";
+
+    private string FinishLabel => CreationKind switch
+    {
+        CharacterKind.Npc => "Создать НПС",
+        CharacterKind.Pregen => "Создать прегена",
+        _ => "Создать сыщика",
+    };
+
+    private CreationStep CurrentStep => (CreationStep)Math.Clamp(_draft.StepIndex, 0, (int)CreationStep.Summary);
+
+    private OccupationDefinition? SelectedOccupation => _occupations.FirstOrDefault(o => o.Id == _draft.OccupationId);
+
+    private CreationPlan Plan => new(_draft, _catalog!, SelectedOccupation);
+
+    private async Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken)
+    {
+        var context = await Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+        if (!context.CanCreate)
+            return context;
+
+        _era = context.Era;
+        var skills = SkillsApi.ListAsync(cancellationToken);
+        var occupations = OccupationsApi.ListAsync(cancellationToken);
+        _catalog = SkillCatalogs.From((await skills).Items);
+        _occupationDtos = [.. (await occupations).Items.Where(o => o.Eras.Contains(_era)).OrderBy(o => o.Name, StringComparer.CurrentCulture)];
+        _occupations = [.. _occupationDtos.Select(OccupationCatalogs.From)];
+
+        if (Random is "1" or "true")
+        {
+            _draft = SheetBuilder.RandomDraft(_catalog, _occupations, _era, Dice);
+            await SaveDraftAsync();
+            // Адрес без random: перезагрузка не бросает заново, а открывает этот же черновик.
+            Navigation.NavigateTo(CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId), replace: true);
+        }
+        else
+        {
+            _draft = await RestoreDraftAsync() ?? new InvestigatorDraft();
+        }
+
+        _draft.Era = _era;
+        Plan.SyncSlots();
+        return context;
+    }
+
+    private async Task<InvestigatorDraft?> RestoreDraftAsync()
+    {
+        if (await Storage.GetAsync(DraftKey) is not { } json)
+            return null;
+
+        try
+        {
+            return CmJson.DeserializeDraft(json);
+        }
+        catch (JsonException)
+        {
+            await Storage.RemoveAsync(DraftKey);
+            return null;
+        }
+    }
+
+    private Task SaveDraftAsync() => Storage.SetAsync(DraftKey, CmJson.Serialize(_draft));
+
+    private async Task ChangedAsync()
+    {
+        Plan.SyncSlots();
+        await SaveDraftAsync();
+    }
+
+    /// <summary>Назад — всегда; вперёд — если все шаги до цели проходят проверку.</summary>
+    private static bool CanGoTo(CreationPlan plan, CreationStep target) =>
+        target <= (CreationStep)plan.Draft.StepIndex || Enum.GetValues<CreationStep>().Where(s => s < target).All(s => plan.Validate(s) is null);
+
+    private async Task GoToAsync(CreationStep target)
+    {
+        if (target < CreationStep.Method || target > CreationStep.Summary || !CanGoTo(Plan, target))
+            return;
+
+        _draft.StepIndex = (int)target;
+        _error = null;
+        await SaveDraftAsync();
+    }
+
+    private async Task RestartAsync()
+    {
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Начать заново?", "Черновик помощника на этом устройстве сотрётся.") { ConfirmText = "Начать заново" }))
+            return;
+
+        _draft = new InvestigatorDraft { Era = _era };
+        _error = null;
+        await SaveDraftAsync();
+    }
+
+    private async Task CreateAsync(CreationContextDto context)
+    {
+        var plan = Plan;
+        if (_busy || plan.FirstInvalidStep() is not null)
+            return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var created = await Api.CreateAsync(new CreateCharacterRequest
+            {
+                Kind = CreationKind,
+                CampaignId = CampaignOrNull,
+                ScenarioId = CreationKind is CharacterKind.Pregen ? ScenarioId : null,
+                Cast = CreationKind is CharacterKind.Npc && ScenarioId is { } scenario ? new NpcCastRequest(scenario) : null,
+                Sheet = SheetBuilder.FromDraft(plan),
+            });
+            await Storage.RemoveAsync(DraftKey);
+            Navigation.NavigateTo($"character/{created.Id}", replace: true);
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

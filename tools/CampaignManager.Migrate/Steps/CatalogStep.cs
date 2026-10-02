@@ -110,7 +110,7 @@ public static class CatalogStep
             BaseFormula = skill.BaseFormula,
             Category = skill.Category,
         }));
-        s.Resolver = new SkillResolver(s.SkillCatalog);
+        s.Resolver = new SkillNameResolver(s.SkillCatalog);
         s.Report.Count("games.Skills", s.V1.Skills.Count, "skills", s.Skills.Count, "минус только современные");
         ModernEraRemoved(s, "навыки", migrated.Count(m => m.Row.Bool("IsModern")));
     }

@@ -1,0 +1,76 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+
+@* Шаг «Снаряжение» (стр. 44–45): деньги по таблице II для Средств и эпохи (FinanceRules), образ жизни, вещи. *@
+<div class="cm-stack">
+    <section>
+        <h3 class="cm-section-title mb-2">Достаток</h3>
+        <dl class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            @foreach (var (label, value) in Money)
+            {
+                <div class="rounded-md border border-primary-200 bg-primary-50 px-3 py-2" @key="label">
+                    <dt class="text-xs text-primary-500">@label</dt>
+                    <dd class="text-lg font-semibold text-primary-800">@value</dd>
+                </div>
+            }
+        </dl>
+        <p class="text-primary-700"><strong>@Tier.Name.</strong> @Lifestyle.Housing</p>
+        <p class="text-primary-700">@Lifestyle.Transport</p>
+        <p class="cm-field-note mt-2">
+            Доллары США, столбец «@(Draft.Era is Era.Modern ? "наше время" : "1920-е")». Карманные деньги — ниже этой суммы траты за день не
+            считают. За вещи своего достатка платить не нужно — они уже есть.
+        </p>
+    </section>
+
+    <section>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="cm-section-title">Имущество и снаряжение</h3>
+            <Button Small="true" Icon="fa-plus" data-testid="add-equipment" OnClick="AddAsync">Предмет</Button>
+        </div>
+        @if (Draft.Equipment.Count == 0)
+        {
+            <p class="text-primary-700">Часто в начале записывать нечего — всё интересное найдётся в игре (стр. 44).</p>
+        }
+        @for (var i = 0; i < Draft.Equipment.Count; i++)
+        {
+            var index = i;
+            var item = Draft.Equipment[index];
+            <div class="flex flex-wrap items-center gap-2 border-t border-primary-200 py-2 first:border-t-0" @key="index">
+                <input class="cm-input min-w-40 flex-1" placeholder="Название" aria-label="Название предмета" value="@item.Name"
+                       @onchange="e => SetAsync(() => item.Name = e.Value?.ToString() ?? string.Empty)" />
+                <input class="cm-input min-w-48 flex-[2]" placeholder="Описание" aria-label="Описание предмета" value="@item.Description"
+                       @onchange="e => SetAsync(() => item.Description = e.Value?.ToString() ?? string.Empty)" />
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {item.Name}")"
+                        OnClick="() => SetAsync(() => Draft.Equipment.RemoveAt(index))" />
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private InvestigatorDraft Draft => Plan.Draft;
+
+    private FinanceRules.WealthTier Tier => FinanceRules.GetTier(Draft.CreditRating, Draft.Era);
+
+    private FinanceRules.Lifestyle Lifestyle => FinanceRules.GetLifestyle(Draft.CreditRating);
+
+    private IEnumerable<(string, string)> Money =>
+    [
+        ("Средства", $"{Draft.CreditRating}%"),
+        ("Наличные", $"${Tier.CashText}"),
+        ("Активы", Tier.Assets is null ? Tier.AssetsText : $"${Tier.AssetsText}"),
+        ("Карманные", $"${Tier.PocketMoneyText}"),
+    ];
+
+    private Task SetAsync(Action change)
+    {
+        change();
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task AddAsync() => SetAsync(() => Draft.Equipment.Add(new EquipmentItem()));
+}

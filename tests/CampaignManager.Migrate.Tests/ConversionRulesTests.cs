@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using CampaignManager.Core;
 using CampaignManager.Core.Catalogs;
+using CampaignManager.Core.Characters;
 using CampaignManager.Migrate.Catalogs;
 using CampaignManager.Migrate.Steps;
 using Xunit;

@@ -1,10 +1,9 @@
 using System.Text.RegularExpressions;
 using CampaignManager.Core.Catalogs;
-using CampaignManager.Core.Characters;
 
-namespace CampaignManager.Migrate.Catalogs;
+namespace CampaignManager.Core.Characters;
 
-/// <summary>Чем оказался навык v1, записанный строкой.</summary>
+/// <summary>Чем оказался навык, записанный строкой (лист v1, импорт сценария, профессия v1).</summary>
 public abstract record SkillMatch
 {
     /// <summary>Навык справочника.</summary>
@@ -15,12 +14,13 @@ public abstract record SkillMatch
 }
 
 /// <summary>
-/// Навык v1 по имени (лист, тварь, проверка в локации, профессия) — порядок SCHEMA, «Персонажи»: точное
+/// Навык по имени (лист v1, тварь, проверка в локации, профессия; импорт сценария — <see cref="SheetBuilder.FromImport"/>)
+/// — порядок SCHEMA, «Персонажи»: точное
 /// имя справочника или старое написание (<see cref="SkillCodes.FromName"/>), затем «родитель (специализация)»
 /// по имени в скобках, затем языки, записанные без родителя («Латынь», «Язык (французский)»). Не нашлось —
 /// null: это самодельный навык. Ничего не угадывает по похожести.
 /// </summary>
-public sealed partial class SkillResolver(SkillCatalog catalog)
+public sealed partial class SkillNameResolver(SkillCatalog catalog)
 {
     public SkillMatch? Resolve(string? rawName)
     {

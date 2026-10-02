@@ -15,7 +15,7 @@ public static class TestCatalog
 {
     public static SkillCatalog Skills { get; } = Build();
 
-    public static SkillResolver Resolver { get; } = new(Skills);
+    public static SkillNameResolver Resolver { get; } = new(Skills);
 
     public static Guid Id(string code) => Skills.FindByCode(code)!.Id;
 

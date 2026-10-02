@@ -1,0 +1,313 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@inject IDiceRoller Dice
+
+@* Шаг «Характеристики» (стр. 28–31, 45–46): значения способом шага «Способ», вычет за возраст, экстра-класс, проверки
+   улучшения ОБР, Удача. Каждый бросок — DiceInput (сумма NdM) или RollInput (d100): бросить здесь или вписать с
+   настоящих костей. Считает только Core: правки — методы InvestigatorDraft, производные — DerivedAttributeRules. *@
+<div class="cm-stack">
+    <section>
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="cm-section-title">Характеристики</h3>
+            @switch (Draft.Method)
+            {
+                case CreationMethod.Standard:
+                    <Button Small="true" Icon="fa-dice" data-testid="roll-all" OnClick="RollAllAsync">Бросить все</Button>
+                    break;
+                case CreationMethod.AssignRolls:
+                    <Button Small="true" Icon="fa-dice" data-testid="roll-pool" OnClick="RollPoolAsync">Бросить набор</Button>
+                    break;
+                case CreationMethod.PointBuy:
+                    <span class="cm-meta"><span class="cm-meta-label">Распределено:</span>
+                        <strong class="@(PointBuySpent == InvestigatorCreationRules.PointBuyBudget ? "text-success-700" : "text-warning-800")">
+                            @PointBuySpent / @InvestigatorCreationRules.PointBuyBudget
+                        </strong>
+                    </span>
+                    break;
+            }
+        </div>
+
+        @if (Draft.Method is CreationMethod.AssignRolls)
+        {
+            <div class="mb-3 flex flex-wrap gap-3" data-testid="pool">
+                @for (var i = 0; i < Draft.Pool.Count; i++)
+                {
+                    var index = i;
+                    var threeD6 = index < InvestigatorDraft.PoolThreeD6;
+                    <div class="flex flex-col gap-1" @key="index">
+                        <span class="cm-field-label">@(threeD6 ? "3d6" : "2d6 + 6") → <strong>@Draft.Pool[index]</strong></span>
+                        <DiceInput Count="@(threeD6 ? 3 : 2)" Sides="6" Label="@($"Набор, бросок {index + 1}")"
+                                   Value="PoolSum(index)" ValueChanged="sum => SetPoolAsync(index, sum)" />
+                    </div>
+                }
+            </div>
+            <p class="cm-field-note mb-2">
+                Бросьте набор или впишите выпавшее со стола, затем разложите значения по характеристикам. ИНТ и ТЕЛ книга
+                советует держать от @InvestigatorCreationRules.RecommendedIntelligenceSize.
+            </p>
+        }
+
+        <div class="cm-table-wrap">
+            <table class="cm-table">
+                <thead>
+                    <tr>
+                        <th class="text-left">Характеристика</th>
+                        <th class="text-left">@ValueHeader</th>
+                        @if (Band.DistributedPenalty > 0 || Band.AppearancePenalty > 0 || Band.EducationPenalty > 0)
+                        {
+                            <th class="text-center">Возраст</th>
+                        }
+                        @if (Draft.ExtraClass)
+                        {
+                            <th class="text-center">Экстра</th>
+                        }
+                        <th class="text-center">Итог</th>
+                        <th class="text-center">½ / ⅕</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var info in InvestigatorCreationRules.Characteristics)
+                    {
+                        var key = info.Key;
+                        var final = Draft.Value(key, Band);
+                        <tr @key="key">
+                            <td>
+                                <span class="font-semibold">@info.Abbreviation</span>
+                                <span class="cm-field-note ml-1 hidden sm:inline">@info.Name</span>
+                            </td>
+                            <td>
+                                @switch (Draft.Method)
+                                {
+                                    case CreationMethod.Standard:
+                                        <div class="flex min-w-40 items-center gap-2">
+                                            <DiceInput Count="@(info.Dice is CharacteristicDice.ThreeD6 ? 3 : 2)" Sides="6" Label="@info.Name"
+                                                       Value="InvestigatorCreationRules.DiceSumOf(key, Draft.Rolled.GetValueOrDefault(key))"
+                                                       ValueChanged="sum => SetFromDiceAsync(key, sum)" />
+                                            <span class="cm-dice hidden text-xs text-primary-500 md:inline">@info.DiceText</span>
+                                        </div>
+                                        break;
+                                    case CreationMethod.PointBuy:
+                                        <input type="number" class="cm-input w-24" data-testid="@($"char-{key}")" step="5"
+                                               min="@InvestigatorCreationRules.PointBuyMin" max="@InvestigatorCreationRules.PointBuyMax"
+                                               aria-label="@info.Name" value="@Draft.Rolled.GetValueOrDefault(key)" @onchange="e => SetValueAsync(key, e)" />
+                                        break;
+                                    default:
+                                        <select class="cm-input w-28" data-testid="@($"char-{key}")" aria-label="@info.Name"
+                                                value="@Draft.Rolled.GetValueOrDefault(key)" @onchange="e => SetValueAsync(key, e)">
+                                            <option value="0">—</option>
+                                            @foreach (var candidate in Draft.AvailableFor(key).OrderDescending())
+                                            {
+                                                <option value="@candidate">@candidate</option>
+                                            }
+                                        </select>
+                                        break;
+                                }
+                            </td>
+                            @if (Band.DistributedPenalty > 0 || Band.AppearancePenalty > 0 || Band.EducationPenalty > 0)
+                            {
+                                <td class="text-center">
+                                    @if (Band.PenaltyTargets.Contains(key))
+                                    {
+                                        <Stepper Value="@Draft.AgePenaltyDistribution.GetValueOrDefault(key)" Label="@($"Вычет за возраст: {info.Abbreviation}")"
+                                                 Prefix="−" OnStep="d => StepAsync(() => Draft.ChangeAgePenalty(key, d))" />
+                                    }
+                                    else if (key is Characteristic.APP && Band.AppearancePenalty > 0)
+                                    {
+                                        <span class="text-error-700">−@Band.AppearancePenalty</span>
+                                    }
+                                    else if (key is Characteristic.EDU && Band.EducationPenalty > 0)
+                                    {
+                                        <span class="text-error-700">−@Band.EducationPenalty</span>
+                                    }
+                                </td>
+                            }
+                            @if (Draft.ExtraClass)
+                            {
+                                <td class="text-center">
+                                    <Stepper Value="@Draft.ExtraClassBonus.GetValueOrDefault(key)" Label="@($"Экстра-класс: {info.Abbreviation}")"
+                                             Prefix="+" OnStep="d => StepAsync(() => Draft.ChangeExtraClass(key, d))" />
+                                </td>
+                            }
+                            <td class="text-center text-lg font-semibold" data-testid="@($"final-{key}")">@(Draft.Rolled.ContainsKey(key) ? final : "—")</td>
+                            <td class="text-center text-primary-500">@CharacteristicMath.Half(final) / @CharacteristicMath.Fifth(final)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (Band.DistributedPenalty > 0)
+        {
+            <p class="cm-field-note mt-2" data-testid="age-penalty-left">
+                «@Band.Name»: вычтите суммарно @Band.DistributedPenalty из
+                @string.Join(", ", Band.PenaltyTargets.Select(k => InvestigatorCreationRules.Info(k).Abbreviation)).
+                Осталось: <strong>@Draft.RemainingAgePenalty(Band)</strong>.
+            </p>
+        }
+    </section>
+
+    @if (Draft.ExtraClass)
+    {
+        <section>
+            <h3 class="cm-section-title mb-2">Сыщик экстра-класса</h3>
+            <div class="flex flex-wrap items-center gap-3">
+                <DiceInput Count="1" Sides="10" Label="Экстра-класс" Value="@(Draft.ExtraClassPool + 1)" ValueChanged="SetExtraAsync" />
+                <span class="text-primary-700">
+                    @(Draft.ExtraClassPool is { } pool ? $"1d10 − 1 = {pool}; осталось разложить: {Draft.RemainingExtraClass()}." : "Бросок ещё не сделан.")
+                </span>
+            </div>
+        </section>
+    }
+
+    <section>
+        <h3 class="cm-section-title mb-2">Проверки улучшения ОБР</h3>
+        @if (Band.EducationChecks == 0)
+        {
+            <p class="text-primary-700">В этом возрасте проверок улучшения ОБР нет.</p>
+        }
+        else
+        {
+            <p class="cm-field-note mb-2">
+                1d100 больше текущего ОБР — +1d10 к ОБР, не выше 99 (стр. 30). Впишите выпавшее со стола или оставьте пустым —
+                бросит помощник. Сделано @Draft.EducationChecks.Count из @Band.EducationChecks.
+            </p>
+            @if (Draft.CanAddEducationCheck)
+            {
+                <div class="flex flex-wrap items-end gap-3" data-testid="edu-check">
+                    <Field Label="1d100" Group="true">
+                        <RollInput Label="Проверка ОБР" Roll="_eduRoll" RollChanged="r => _eduRoll = r" />
+                    </Field>
+                    <Field Label="Прибавка 1d10" Group="true">
+                        <DiceInput Count="1" Sides="10" Label="Прибавка ОБР" Value="_eduGain" ValueChanged="g => _eduGain = g" />
+                    </Field>
+                    <Button Icon="fa-graduation-cap" data-testid="edu-check-add" OnClick="AddEducationCheckAsync">Записать проверку</Button>
+                </div>
+            }
+            else if (!Draft.CharacteristicsFilled)
+            {
+                <p class="text-primary-700">Сначала определите все восемь характеристик — проверка идёт против итогового ОБР.</p>
+            }
+            <ul class="mt-2 list-disc pl-5 text-sm text-primary-700">
+                @foreach (var check in Draft.EducationChecks)
+                {
+                    <li>@check.Text</li>
+                }
+            </ul>
+            @if (Draft.EducationChecks.Count > 0)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" class="mt-2" OnClick="ResetChecksAsync">Сбросить проверки</Button>
+            }
+        }
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Удача</h3>
+        <div class="flex flex-wrap items-center gap-3" data-testid="luck">
+            @for (var i = 0; i < LuckRollCount; i++)
+            {
+                var index = i;
+                <DiceInput Count="3" Sides="6" Label="@($"Удача, бросок {index + 1}")" Value="LuckSum(index)"
+                           ValueChanged="sum => SetLuckAsync(index, sum)" />
+            }
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-clover" data-testid="roll-luck" OnClick="RollLuckAsync">Бросить</Button>
+            <span class="text-primary-800">
+                @if (Draft.Luck > 0)
+                {
+                    <text>Удача <strong data-testid="luck-value">@Draft.Luck</strong></text>
+                }
+                else
+                {
+                    <text>3d6 × 5@(LuckRollCount > 1 ? " — в этом возрасте дважды, берётся лучший" : "")</text>
+                }
+            </span>
+        </div>
+    </section>
+
+    <section>
+        <h3 class="cm-section-title mb-2">Вторичные атрибуты</h3>
+        <DerivedTiles Derived="Derived" Luck="Draft.Luck" Sanity="Plan.Characteristics.Pow" />
+    </section>
+</div>
+
+@code {
+    private D100Roll? _eduRoll;
+    private int? _eduGain;
+
+    [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private InvestigatorDraft Draft => Plan.Draft;
+
+    private AgeBand Band => Plan.Band;
+
+    private int PointBuySpent => Draft.Rolled.Values.Sum();
+
+    private int LuckRollCount => Math.Max(1, Band.LuckRolls);
+
+    private string ValueHeader => Draft.Method switch
+    {
+        CreationMethod.Standard => "Бросок",
+        CreationMethod.PointBuy => "Пункты",
+        _ => "Из набора",
+    };
+
+    private DerivedStats Derived => DerivedAttributeRules.Compute(
+        new CharacterSheet { Characteristics = Plan.Characteristics, Personal = new PersonalInfo { Age = Draft.Age } }, Plan.Catalog);
+
+    private int? PoolSum(int index)
+    {
+        var value = Draft.Pool[index];
+        if (value <= 0 || value % 5 != 0)
+            return null;
+        return index < InvestigatorDraft.PoolThreeD6 ? value / 5 : value / 5 - 6;
+    }
+
+    private int? LuckSum(int index) => index < Draft.LuckRolls.Count && Draft.LuckRolls[index] % 5 == 0 ? Draft.LuckRolls[index] / 5 : null;
+
+    private Task StepAsync(Action change)
+    {
+        change();
+        return OnChanged.InvokeAsync();
+    }
+
+    private Task RollAllAsync() => StepAsync(() => Draft.RollAll(Dice));
+
+    private Task RollPoolAsync() => StepAsync(() => Draft.RollPool(Dice));
+
+    private Task SetPoolAsync(int index, int? sum) =>
+        StepAsync(() => Draft.SetPoolValue(index, sum is { } s ? InvestigatorDraft.PoolValueFromDice(index, s) : 0));
+
+    private Task SetFromDiceAsync(Characteristic key, int? sum) =>
+        StepAsync(() => Draft.SetCharacteristic(key, sum is { } s ? InvestigatorCreationRules.FromDiceSum(key, s) : 0));
+
+    private Task SetValueAsync(Characteristic key, ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var value) ? StepAsync(() => Draft.SetCharacteristic(key, value)) : Task.CompletedTask;
+
+    private Task SetExtraAsync(int? roll) => StepAsync(() => Draft.SetExtraClassRoll(roll));
+
+    private async Task AddEducationCheckAsync()
+    {
+        Draft.AddEducationCheck(new EnteredDiceRoller(Dice).Percentile(_eduRoll?.Result).Total(_eduGain, 1, 10));
+        _eduRoll = null;
+        _eduGain = null;
+        await OnChanged.InvokeAsync();
+    }
+
+    private Task ResetChecksAsync() => StepAsync(() => Draft.EducationChecks.Clear());
+
+    private Task RollLuckAsync() => StepAsync(() => Draft.RollLuck(Dice));
+
+    private Task SetLuckAsync(int index, int? sum)
+    {
+        var rolls = Enumerable.Range(0, LuckRollCount).Select(i => i < Draft.LuckRolls.Count ? Draft.LuckRolls[i] : 0).ToList();
+        rolls[index] = sum is { } s ? s * 5 : 0;
+        return StepAsync(() =>
+        {
+            Draft.SetLuckRolls(rolls);
+            // Пустые броски не теряют место: второй бросок «Юного» можно вписать раньше первого.
+            Draft.LuckRolls = rolls;
+        });
+    }
+}

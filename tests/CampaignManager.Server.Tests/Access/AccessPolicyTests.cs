@@ -231,6 +231,19 @@ public sealed class AccessPolicyTests(AccessWorld world) : IClassFixture<AccessW
         Assert.True(await world.PolicyFor("keeper").CanCreateCharacterAsync(CharacterKind.Npc, world.Campaign, Cancellation));
     }
 
+    // Библиотека НПС и прегенов (/npcs, T2.4) — Хранителю; что в ней видно, решает правило листа по строке.
+    [Theory]
+    [InlineData("player", false)]
+    [InlineData("outsider", false)]
+    [InlineData("keeper", true)]
+    [InlineData("otherKeeper", true)]
+    [InlineData("admin", true)]
+    public async Task Character_library_is_for_keepers(string user, bool expected)
+    {
+        TestDatabase.SkipIfMissing();
+        Assert.Equal(expected, await world.PolicyFor(user).CanBrowseCharacterLibraryAsync(Cancellation));
+    }
+
     // ── Справочники и фонотека ──
 
     // v1: четыре справочника не проверяли права на сервере вовсе.

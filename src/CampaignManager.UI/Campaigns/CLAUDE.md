@@ -16,8 +16,8 @@
 | `/campaigns/{id}/journal` | `CampaignJournalPage` | участники читают, Хранитель кампании (и админ) пишет |
 
 `/campaigns/{id}` в v1 не было, хотя на него вели ссылки сценария и помощника создания — теперь есть.
-Адреса листов (`character/{id}` — есть, T2.3; `character/wizard?campaignId=`, `character/create/{campaignId}`,
-`character/create/npc?campaignId=` — T2.4) и сценария (`scenarios/{id}`, T2.5) — маршруты v1.
+Адреса листов (`character/{id}` — T2.3; `character/wizard?campaignId=`, `character/create/{campaignId}` — «Другие способы»,
+`character/create/npc?campaignId=` — есть, T2.4) и сценария (`scenarios/{id}`, T2.5) — маршруты v1.
 
 ## Главная
 
