@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CampaignManager.Contracts;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Data;
+using CampaignManager.Data.Identity;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -36,10 +37,12 @@ public static class IdentityModule
 
         var auth0Domain = configuration["Authentication:Auth0:Domain"];
         var auth0ClientId = configuration["Authentication:Auth0:ClientId"];
-        if (string.IsNullOrWhiteSpace(auth0Domain) || string.IsNullOrWhiteSpace(auth0ClientId))
+        var auth0 = IsAuth0Configured(configuration);
+        if (!auth0 && !builder.Environment.IsDevelopment())
         {
             // В v1 пустая настройка давала 500 на каждый запрос (ArgumentException из middleware
-            // аутентификации); пусть лучше сервер не стартует и скажет почему.
+            // аутентификации); пусть лучше сервер не стартует и скажет почему. Исключение —
+            // Development: там без Auth0 работает тестовый вход (DevLogin).
             throw new InvalidOperationException(
                 "Нет настроек Auth0: Authentication:Auth0:Domain и Authentication:Auth0:ClientId.");
         }
@@ -54,7 +57,7 @@ public static class IdentityModule
             .PersistKeysToDbContext<CmDbContext>()
             .SetApplicationName("CampaignManager");
 
-        services.AddAuthentication(options =>
+        var authentication = services.AddAuthentication(options =>
             {
                 options.DefaultScheme = Scheme;
                 options.DefaultChallengeScheme = Scheme;
@@ -62,13 +65,19 @@ public static class IdentityModule
             })
             .AddPolicyScheme(Scheme, "Кука или JWT", options =>
                 options.ForwardDefaultSelector = context =>
-                    context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    auth0 && context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
                         ? JwtBearerDefaults.AuthenticationScheme
                         : CookieAuthenticationDefaults.AuthenticationScheme)
-            .AddCookie(options => ConfigureCookie(options))
-            .AddOpenIdConnect(options => ConfigureOpenIdConnect(options, auth0Domain, auth0ClientId,
-                configuration["Authentication:Auth0:ClientSecret"]))
-            .AddJwtBearer(options => ConfigureJwtBearer(options, auth0Domain, configuration["Authentication:Auth0:Audience"]));
+            .AddCookie(options => ConfigureCookie(options));
+
+        // Без Auth0 (только Development) схем OIDC и JWT нет вовсе: вход — только тестовый.
+        if (auth0)
+        {
+            authentication
+                .AddOpenIdConnect(options => ConfigureOpenIdConnect(options, auth0Domain!, auth0ClientId!,
+                    configuration["Authentication:Auth0:ClientSecret"]))
+                .AddJwtBearer(options => ConfigureJwtBearer(options, auth0Domain!, configuration["Authentication:Auth0:Audience"]));
+        }
 
         // Статическая /Error рендерится через Routes с AuthorizeRouteView.
         services.AddCascadingAuthenticationState();
@@ -79,8 +88,16 @@ public static class IdentityModule
     public static WebApplication UseIdentity(this WebApplication app)
     {
         app.UseAuthentication();
-        // Между ними: страница под [Authorize] без сессии сначала пробует автовход через Google.
-        app.UseAutoLogin();
+        if (IsAuth0Configured(app.Configuration))
+        {
+            // Между ними: страница под [Authorize] без сессии сначала пробует автовход через Google.
+            app.UseAutoLogin();
+        }
+        else
+        {
+            app.Logger.LogWarning("Auth0 не настроен: вход только тестовый, {DevLogin}?as=player|keeper|admin", IdentityRoutes.DevLogin);
+        }
+
         app.UseAuthorization();
         // Antiforgery — после авторизации: так требует ASP.NET Core.
         app.UseAntiforgery();
@@ -221,16 +238,7 @@ public static class IdentityModule
                 return;
             }
 
-            // Роль в куку не кладём: её каждый запрос читает CurrentUser из cm.users. Email/Name/NameIdentifier —
-            // те же claims, что у кук v1, поэтому и они продолжают работать.
-            context.Principal = new ClaimsPrincipal(new ClaimsIdentity(
-                [
-                    new Claim(CmClaims.UserId, user.Id.ToString()),
-                    new Claim(ClaimTypes.NameIdentifier, subject),
-                    new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(ClaimTypes.Name, user.DisplayName),
-                ],
-                context.Scheme.Name, ClaimTypes.Name, ClaimTypes.Role));
+            context.Principal = CreateSessionPrincipal(user, subject, context.Scheme.Name);
         };
     }
 
@@ -278,6 +286,28 @@ public static class IdentityModule
             },
         };
     }
+
+    /// <summary>Настроен ли вход через Auth0. Вне Development без него сервер не стартует.</summary>
+    public static bool IsAuth0Configured(IConfiguration configuration) =>
+        !string.IsNullOrWhiteSpace(configuration["Authentication:Auth0:Domain"])
+        && !string.IsNullOrWhiteSpace(configuration["Authentication:Auth0:ClientId"]);
+
+    /// <summary>
+    /// Claims куки входа — одни у входа через Auth0 и тестового (<see cref="DevLogin"/>). Роль в куку не
+    /// кладём: её каждый запрос читает CurrentUser из cm.users. Email/Name/NameIdentifier — те же claims,
+    /// что у кук v1, поэтому и они продолжают работать.
+    /// </summary>
+    internal static ClaimsPrincipal CreateSessionPrincipal(User user, string subject, string authenticationType,
+        params IEnumerable<Claim> extraClaims) =>
+        new(new ClaimsIdentity(
+            [
+                new Claim(CmClaims.UserId, user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, subject),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Name, user.DisplayName),
+                .. extraClaims,
+            ],
+            authenticationType, ClaimTypes.Name, ClaimTypes.Role));
 
     // Без MapInboundClaims email_verified приходит строкой "true"/"false".
     private static bool IsTrue(string? value) => bool.TryParse(value, out var result) && result;

@@ -110,6 +110,23 @@ public sealed class UserDirectory(
     }
 
     /// <summary>
+    /// Тестовый вход Development (<see cref="DevLogin"/>): тот же <see cref="SignInAsync"/>, что у входа
+    /// через Auth0, и затем роль, о которой попросили. Не в белом списке — <c>null</c>.
+    /// </summary>
+    public async Task<User?> DevSignInAsync(ExternalLogin login, UserRole role, CancellationToken cancellationToken = default)
+    {
+        var user = await SignInAsync(login, cancellationToken);
+        if (user is not null && user.Role != role)
+        {
+            user.Role = role;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Тестовый вход: пользователю {Email} назначена роль {Role}", login.Email, role);
+        }
+
+        return user;
+    }
+
+    /// <summary>
     /// Пользователь сессии: по <see cref="CmClaims.UserId"/> (куки 2.0), иначе по sub и почте (куки v1
     /// и токены приложения). Если строки нет или она ещё не привязана к Auth0 (перенесённая), а в сессии
     /// есть sub и подтверждённая почта — это первый запрос приложения с JWT: он и есть вход.

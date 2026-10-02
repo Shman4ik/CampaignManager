@@ -1,6 +1,8 @@
 @page "/login"
 @using CampaignManager.Contracts.Identity
+@using CampaignManager.Core.Identity
 @inject NavigationManager Navigation
+@inject UiEnvironment Environment
 
 @* Выбор способа входа. Сам вход — на сервере (OIDC через Auth0), сюда клиент и сервер только
    приводят: сервер — с прямой загрузки страницы под [Authorize], клиент — RedirectToLogin. *@
@@ -16,6 +18,10 @@
     else if (AuthStatus == "failed")
     {
         <Alert Tone="Tone.Warning" ShowIcon="true">Вход не удался. Попробуйте ещё раз.</Alert>
+    }
+    else if (AuthStatus == "unavailable")
+    {
+        <Alert Tone="Tone.Warning" ShowIcon="true">Вход через Auth0 на этом сервере не настроен — доступен только тестовый вход.</Alert>
     }
 
     <div class="cm-card">
@@ -41,6 +47,23 @@
             </NotAuthorized>
         </AuthorizeView>
     </div>
+
+    @* Только Development: на сервере вне его адреса /dev/login нет (404), кнопки здесь — лишь подсказка. *@
+    @if (Environment.IsDevelopment)
+    {
+        <div class="cm-card mt-4" data-testid="dev-login">
+            <div class="cm-card-body">
+                <h2 class="cm-h6 mb-1">Тестовый вход</h2>
+                <p class="cm-text-muted">Только в Development, без Auth0: пользователь dev-…@@cm.test с выбранной ролью.</p>
+            </div>
+            <div class="cm-card-footer">
+                @foreach (var (role, label) in DevRoles)
+                {
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-user-secret" OnClick="() => DevLogin(role)">Войти как @label</Button>
+                }
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -55,6 +78,12 @@
         string.IsNullOrEmpty(ReturnUrl) || !ReturnUrl.StartsWith('/') || ReturnUrl.StartsWith(IdentityRoutes.LoginPage)
             ? "/"
             : ReturnUrl;
+
+    private static readonly (UserRole Role, string Label)[] DevRoles =
+        [(UserRole.Player, "игрок"), (UserRole.Keeper, "Хранитель"), (UserRole.Admin, "администратор")];
+
+    private void DevLogin(UserRole role) =>
+        Navigation.NavigateTo(IdentityRoutes.DevLoginUrl(role.ToString().ToLowerInvariant(), SafeReturnUrl).TrimStart('/'), forceLoad: true);
 
     // Полная загрузка: вход — серверный адрес, клиентский роутер его не знает.
     private void Login(string method) =>

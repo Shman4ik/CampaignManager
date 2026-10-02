@@ -72,7 +72,7 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
 - **Страницы UI — `[Authorize(Policy = Policies.Keeper)]`, не `Roles`**: сервер проверяет атрибут
   страницы при прямой загрузке, а роли в куке нет.
 - Сервер без `Authentication:Auth0:Domain`/`ClientId` не стартует (в v1 это был 500 на каждый
-  запрос). Значения dev-приложения — в `Server/appsettings.Development.json` (копируются скриптом
+  запрос) — кроме Development: там без них доступен только тестовый вход (см. «Проверка под ролями»). Значения dev-приложения — в `Server/appsettings.Development.json` (копируются скриптом
   из `CampaignManager.Web/appsettings.Development.json` основного чекаута вместе со строкой подключения).
 
 ## UI и Tailwind
@@ -177,6 +177,25 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 
 Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат: у v1 dev и прод — один бакет. Без них
 сервер стартует, а файлы отвечают ошибкой с именем недостающей настройки.
+
+## Проверка под ролями
+
+Страницу под Гостем, Игроком, Хранителем и Админом агент проверяет в браузере **тестовым входом** —
+только в окружении Development (`dotnet run` берёт его из `launchSettings.json`), без Auth0 и на
+любом порту:
+
+```
+https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
+```
+
+- `as` — `player`, `keeper` или `admin`; пользователь — `dev-<роль>@cm.test`, его строка в `cm.users`
+  заводится тем же кодом, что при входе через Auth0, и получает эту роль. `&email=…` — войти конкретным
+  адресом (его роль тоже станет `as`). Гость — просто без входа или после выхода.
+- Сменить роль — снова `/dev/login?as=…` (кука перезаписывается); выйти — обычный `/account/logout`
+  или «Выйти» в меню, в Auth0 такая сессия не ходит.
+- На `/login` в Development есть те же кнопки «Войти как …».
+- Вне Development (`Testing`, `Production`, `Beta`) адреса нет — 404; это держит тест `DevLoginTests`.
+- Подробности — [Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md), «Тестовый вход».
 
 ## Запуск
 

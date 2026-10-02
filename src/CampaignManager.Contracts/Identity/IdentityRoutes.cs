@@ -20,6 +20,18 @@ public static class IdentityRoutes
 
     public const string ReturnUrlParameter = "returnUrl";
 
+    /// <summary>
+    /// Вход тестовым пользователем без Auth0 — <b>только в Development</b>, в остальных окружениях
+    /// адреса нет (404): <c>?as=player|keeper|admin[&amp;email=…][&amp;returnUrl=…]</c>.
+    /// </summary>
+    public const string DevLogin = "/dev/login";
+
+    /// <summary>Адрес тестового входа с ролью <paramref name="role"/> (имя члена <c>UserRole</c>) и возвратом на <paramref name="returnUrl"/>.</summary>
+    public static string DevLoginUrl(string role, string? returnUrl) =>
+        string.IsNullOrEmpty(returnUrl)
+            ? $"{DevLogin}?as={Uri.EscapeDataString(role)}"
+            : $"{DevLogin}?as={Uri.EscapeDataString(role)}&{ReturnUrlParameter}={Uri.EscapeDataString(returnUrl)}";
+
     /// <summary>Адрес входа выбранным способом (<see cref="LoginMethods"/>) с возвратом на <paramref name="returnUrl"/>.</summary>
     public static string LoginUrl(string? method, string? returnUrl)
     {
