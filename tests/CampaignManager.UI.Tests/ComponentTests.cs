@@ -31,6 +31,37 @@ public sealed class ComponentTests : KitContext
         Assert.Equal("cm-btn cm-btn-outline-error cm-btn-sm w-full", cut.Find("button").ClassName);
     }
 
+    /// <summary>
+    /// На телефоне шапка сворачивает кнопку с иконкой до значка правилом shell.css
+    /// (<c>.cm-topbar-actions .cm-btn:has(&gt; i) &gt; span</c> — в sr-only). Правило держится на этой разметке:
+    /// иконка и подпись — прямые дети кнопки, подпись — текст без aria-hidden и без своего aria-label у кнопки,
+    /// то есть она и есть имя кнопки для диктора. Сама вёрстка — в браузере на 390×844.
+    /// </summary>
+    [Fact]
+    public void Header_action_renders_icon_and_label_the_phone_rule_collapses()
+    {
+        var cut = Render<PageHeader>(p => p
+            .Add(h => h.Title, "Заклинания")
+            .Add(h => h.ShowModuleButtons, false)
+            .Add(h => h.Actions, builder =>
+            {
+                builder.OpenComponent<Button>(0);
+                builder.AddAttribute(1, nameof(Button.Small), true);
+                builder.AddAttribute(2, nameof(Button.Icon), "fa-plus");
+                builder.AddAttribute(3, nameof(Button.ChildContent), (RenderFragment)(b => b.AddContent(0, "Добавить заклинание")));
+                builder.CloseComponent();
+            }));
+
+        var button = cut.Find(".cm-topbar-actions > button.cm-btn.cm-btn-sm");
+        Assert.NotNull(button.QuerySelector(":scope > i.fa-plus[aria-hidden=true]"));
+        var label = button.QuerySelector(":scope > span");
+        Assert.NotNull(label);
+        Assert.Equal("Добавить заклинание", label.TextContent);
+        Assert.Null(label.GetAttribute("aria-hidden"));
+        Assert.Null(label.GetAttribute("class"));
+        Assert.Null(button.GetAttribute("aria-label"));
+    }
+
     [Fact]
     public void Data_table_sorts_by_clicked_column_and_flips_direction()
     {
