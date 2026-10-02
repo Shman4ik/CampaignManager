@@ -862,4 +862,41 @@ public static class ChaseRules
 
     /// <summary>Отметить, кто назначил внезапную помеху.</summary>
     public static void DeclareSuddenHazard(ChaseState chase, bool byPlayers) => chase.SuddenHazardByPlayers = byPlayers;
+
+    // ───────────────────── Обломки разрушенной преграды ─────────────────────
+
+    /// <summary>Урон обломков-помехи при провале — лёгкая травма таблицы III (для людей), как у v1; правится в локации.</summary>
+    public const string DebrisDamage = "1D3";
+
+    /// <summary>
+    /// Эффект урона преграде в результате, который её разрушит (ПЗ дойдут до 0). Только у такого результата Хранитель
+    /// решает, станут ли обломки помехой (стр. 136: «могут стать»). null — преграда устоит или её нет.
+    /// </summary>
+    public static EncounterEffect? BarrierBreaking(EncounterState state, EncounterResolution resolution) =>
+        state.Chase is not { } chase
+            ? null
+            : resolution.Effects.FirstOrDefault(e => e.Kind == EncounterEffectKind.BarrierDamage
+                                                     && chase.Location(e.Location ?? 0)?.Barrier is { } barrier
+                                                     && barrier.HitPointsLeft - Math.Max(0, e.Amount) <= 0);
+
+    /// <summary>Какой помехой лягут обломки по решению Хранителя; null — не лягут (по умолчанию).</summary>
+    public static Difficulty? DebrisOf(EncounterResolution resolution) =>
+        resolution.Effects.FirstOrDefault(e => e.Kind == EncounterEffectKind.BarrierDamage)?.Obstacle?.Hazard?.Difficulty;
+
+    /// <summary>
+    /// Решение Хранителя в предпросмотре разрушения преграды (стр. 136): оставить ли на её месте помеху-обломки и какой
+    /// сложности (обычная, трудная, чрезвычайная — как у любой помехи, стр. 133). <paramref name="difficulty"/> null — проход
+    /// свободен. Меняет только предложенный результат (<see cref="EncounterState.Pending"/>); применит его <c>Apply</c>.
+    /// В v1 (и до решения владельца 2026-10-02) обломки становились обычной помехой всегда.
+    /// </summary>
+    public static void SetDebris(EncounterState state, Difficulty? difficulty)
+    {
+        if (state.Pending is not { } pending || BarrierBreaking(state, pending) is not { Location: { } number } effect)
+            return;
+
+        var barrier = state.Chase!.Location(number)!.Barrier!;
+        effect.Obstacle = difficulty is { } chosen
+            ? new ChaseLocation { Number = number, Hazard = new ChaseHazard { Name = $"Обломки: {barrier.Name}", Difficulty = chosen, Damage = DebrisDamage } }
+            : null;
+    }
 }

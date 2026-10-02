@@ -9,8 +9,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace CampaignManager.Data.Encounters;
 
 /// <summary>
-/// Живое состояние стола: бой и погоня одной таблицей. У Хранителя не больше одной активной сцены
-/// каждого вида на кампанию — в том числе вне кампании (<c>NULLS NOT DISTINCT</c>).
+/// Живое состояние стола: бой и погоня одной таблицей. У Хранителя не больше одного активного <b>боя</b> на кампанию —
+/// в том числе вне кампании (<c>NULLS NOT DISTINCT</c>). Погонь — сколько угодно: разделившихся ведут отдельными
+/// погонями (стр. 142, решение владельца 2026-10-02).
 /// </summary>
 public sealed class Encounter : ICreatedAt, IUpdatedAt
 {
@@ -45,10 +46,10 @@ internal sealed class EncounterConfiguration : IEntityTypeConfiguration<Encounte
         entity.HasOne<Campaign>().WithMany().HasForeignKey(e => e.CampaignId).OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<ScenarioRun>().WithMany().HasForeignKey(e => e.RunId).OnDelete(DeleteBehavior.SetNull);
 
-        entity.HasIndex(e => new { e.KeeperId, e.Kind, e.CampaignId })
+        entity.HasIndex(e => new { e.KeeperId, e.CampaignId })
             .IsUnique()
             .AreNullsDistinct(false)
-            .HasFilter("status = 'Active'")
-            .HasDatabaseName("encounters_one_active");
+            .HasFilter("status = 'Active' AND kind = 'Combat'")
+            .HasDatabaseName("encounters_one_active_combat");
     }
 }

@@ -1,0 +1,32 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+
+@* Обломки разрушенной преграды (стр. 136) — решение Хранителя в предпросмотре: обломки только «могут стать» помехой. По
+   умолчанию — не оставлять (решение владельца 2026-10-02; в v1 помеха появлялась всегда). Выбор меняет предложенный
+   результат правилом Core (ChaseRules.SetDebris) и переживает перезагрузку вместе с ним. Своей карточки не рисует —
+   стоит в предпросмотре. *@
+@if (ChaseRules.BarrierBreaking(Session.State, Resolution) is not null)
+{
+    var debris = ChaseRules.DebrisOf(Resolution);
+    <Field Label="Обломки" Group="true" Note="Преграды больше нет; обломки могут стать помехой для тех, кто движется следом (стр. 136)">
+        <div class="flex flex-wrap gap-2" data-testid="chase-debris">
+            <Button Small="true" Variant="@(debris is null ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetAsync(null)"
+                    data-testid="chase-debris-none">Проход свободен</Button>
+            @foreach (var difficulty in Enum.GetValues<Difficulty>())
+            {
+                var chosen = difficulty;
+                <Button Small="true" Variant="@(debris == chosen ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetAsync(chosen)"
+                        data-testid="@($"chase-debris-{chosen}")">Помеха: @ChaseText.Of(chosen)</Button>
+            }
+        </div>
+    </Field>
+}
+
+@code {
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    [Parameter, EditorRequired] public EncounterResolution Resolution { get; set; } = null!;
+
+    private Task SetAsync(Difficulty? difficulty) => Session.ChangeAsync(state => ChaseRules.SetDebris(state, difficulty));
+}

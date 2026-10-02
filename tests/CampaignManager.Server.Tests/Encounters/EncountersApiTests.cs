@@ -17,7 +17,7 @@ using Xunit;
 namespace CampaignManager.Server.Tests.Encounters;
 
 /// <summary>
-/// Сцены через API (T2.6a): начать (одна активная на вид и кампанию), права ведущего, состояние с <c>If-Match</c> и
+/// Сцены через API (T2.6a): начать (один активный бой на кампанию, погонь — сколько угодно), права ведущего, состояние с <c>If-Match</c> и
 /// конфликт двух вкладок, перезагрузка посреди сцены, запись итогов в лист через API листа — в том числе с конфликтом
 /// версии листа.
 /// </summary>
@@ -58,7 +58,7 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
     }
 
     [Fact]
-    public async Task Keeper_starts_one_active_scene_per_kind_and_campaign()
+    public async Task Keeper_starts_one_active_combat_per_campaign()
     {
         TestDatabase.SkipIfMissing();
         var (keeper, player, otherKeeper, campaignId, _) = await TableAsync();
@@ -68,6 +68,7 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
             Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId), Cancellation));
         var chase = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
         var outside = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, null), Cancellation);
+        await Fails(HttpStatusCode.Conflict, () => Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, null), Cancellation));
 
         Assert.Equal(ApiProblemCodes.Conflict, conflict.Code);
         Assert.Contains("уже идёт", conflict.Message, StringComparison.Ordinal);
@@ -92,6 +93,34 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
         await Encounters(keeper).FinishAsync(combat.Id, combat.Version, Cancellation);
         var next = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId), Cancellation);
         Assert.NotEqual(combat.Id, next.Id);
+    }
+
+    /// <summary>
+    /// Разделившихся ведут отдельными погонями (стр. 142, решение владельца 2026-10-02): две активные погони в одной
+    /// кампании, у каждой свой документ; список «идут сейчас» отдаёт обе, бой при этом по-прежнему один.
+    /// </summary>
+    [Fact]
+    public async Task Two_chases_run_in_one_campaign_combat_stays_single()
+    {
+        TestDatabase.SkipIfMissing();
+        var (keeper, _, _, campaignId, _) = await TableAsync();
+        var api = Encounters(keeper);
+
+        var first = await api.StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
+        var second = await api.StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
+        Assert.NotEqual(first.Id, second.Id);
+
+        var state = first.State;
+        EncounterEngine.Note(state, "Харви свернул в переулок", Now);
+        await api.SaveStateAsync(first.Id, state, first.Version, Cancellation);
+
+        var active = await api.ListActiveAsync(EncounterKind.Chase, Cancellation);
+        Assert.Equal([first.Id, second.Id], active.Where(a => a.CampaignId == campaignId).Select(a => a.Id).Order());
+        Assert.Contains((await api.GetAsync(first.Id, Cancellation)).State.Log, e => e.Text == "Харви свернул в переулок");
+        Assert.DoesNotContain((await api.GetAsync(second.Id, Cancellation)).State.Log, e => e.Text == "Харви свернул в переулок");
+
+        await api.StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId), Cancellation);
+        await Fails(HttpStatusCode.Conflict, () => api.StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId), Cancellation));
     }
 
     [Fact]

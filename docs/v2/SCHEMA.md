@@ -563,8 +563,9 @@ create table cm.encounters (
     created_at     timestamptz not null default now(),
     updated_at     timestamptz not null default now()
 );
-create unique index encounters_one_active on cm.encounters (keeper_id, kind, campaign_id) nulls not distinct
-    where status = 'Active';
+-- Один активный бой на кампанию; погонь — сколько угодно (разделившихся ведут отдельными, 2026-10-02).
+create unique index encounters_one_active_combat on cm.encounters (keeper_id, campaign_id) nulls not distinct
+    where status = 'Active' and kind = 'Combat';
 
 -- ═══════════════════════ Служебное ═══════════════════════
 
@@ -755,5 +756,5 @@ where not exists (select 1 from cm.characters        where portrait_file_id = f.
   and not exists (select 1 from cm.music_tracks      where file_id = f.id);
 ```
 
-Остальные инварианты (владелец листа, один Хранитель на кампанию, одна активная сцена) держат
+Остальные инварианты (владелец листа, один Хранитель на кампанию, один активный бой) держат
 ограничения схемы: перенос, который их нарушит, просто упадёт на вставке — это и есть проверка.

@@ -76,6 +76,36 @@ public sealed class ChasePanelTests : KitContext
         Assert.Equal(3, session.State.Chase!.Runner(prey.Id)!.Location); // меняет только «Применить»
     }
 
+    /// <summary>
+    /// Обломки (стр. 136, решение владельца 2026-10-02): выбор — только у результата, который разрушит преграду; по умолчанию
+    /// «Проход свободен», нажатие меняет предложенный результат, а трассу — только «Применить».
+    /// </summary>
+    [Fact]
+    public void Debris_choice_shows_on_breaking_result_and_changes_only_the_pending()
+    {
+        var (session, _, pursuer) = Scene();
+        var location = session.State.Chase!.Location(5)!;
+        IRenderedComponent<CascadingValue<EncounterSession>> Choice(EncounterResolution pending) =>
+            Render<CascadingValue<EncounterSession>>(p => p
+                .Add(c => c.Value, session)
+                .Add(c => c.IsFixed, true)
+                .AddChildContent<ChaseDebrisChoice>(c => c.Add(x => x.Resolution, pending)));
+
+        var dent = ChaseActions.BreakBarrier(session.State, pursuer.Id, 5, 2, new Core.Dice.SeededDiceRoller(1)).Resolution;
+        Assert.Empty(Choice(dent).FindAll("[data-testid=chase-debris]"));
+
+        var smash = ChaseActions.BreakBarrier(session.State, pursuer.Id, 5, 9, new Core.Dice.SeededDiceRoller(1)).Resolution;
+        EncounterEngine.Propose(session.State, smash);
+        var cut = Choice(smash);
+        Assert.Contains("cm-btn-primary", cut.Find("[data-testid=chase-debris-none]").ClassName, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=chase-debris-Hard]").Click();
+
+        Assert.Equal(Difficulty.Hard, ChaseRules.DebrisOf(session.State.Pending!));
+        Assert.NotNull(location.Barrier);
+        Assert.Null(location.Hazard);
+    }
+
     [Fact]
     public void Track_names_runners_and_obstacles_in_words()
     {

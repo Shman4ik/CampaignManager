@@ -326,7 +326,10 @@ public enum EncounterEffectKind
     /// </summary>
     VehicleBuild,
 
-    /// <summary>Урон преграде в локации <see cref="EncounterEffect.Location"/>; 0 ПЗ — обломки становятся помехой (стр. 136).</summary>
+    /// <summary>
+    /// Урон преграде в локации <see cref="EncounterEffect.Location"/>; 0 ПЗ — преграды нет, а обломки становятся помехой, только
+    /// если Хранитель так решил (<see cref="EncounterEffect.Obstacle"/>, стр. 136).
+    /// </summary>
     BarrierDamage,
 
     /// <summary>Помеха или преграда <see cref="EncounterEffect.Obstacle"/> в локацию <see cref="EncounterEffect.Location"/> (стр. 141).</summary>
@@ -398,7 +401,10 @@ public sealed record EncounterEffect : DocumentPart
     /// <summary>Погоня: номер локации — преграды или новой помехи.</summary>
     public int? Location { get; set; }
 
-    /// <summary>Погоня: помеха или преграда, которую ставит <see cref="EncounterEffectKind.PlaceObstacle"/>.</summary>
+    /// <summary>
+    /// Погоня: помеха или преграда, которую ставит <see cref="EncounterEffectKind.PlaceObstacle"/>; у
+    /// <see cref="EncounterEffectKind.BarrierDamage"/> — помеха-обломки на месте разрушенной преграды (решение Хранителя).
+    /// </summary>
     public ChaseLocation? Obstacle { get; set; }
 }
 

@@ -96,6 +96,16 @@
     /// <summary>Своё в строке участника (погоня: роль, локация, СКО, действия) — ChildContent строки.</summary>
     [Parameter] public RenderFragment<EncounterParticipant>? RowContent { get; set; }
 
+    /// <summary>Своё в предпросмотре результата — решение Хранителя до «Применить» (погоня: обломки разрушенной преграды).</summary>
+    [Parameter] public RenderFragment<EncounterResolution>? PendingContent { get; set; }
+
+    /// <summary>
+    /// Таких сцен в кампании может идти несколько (погоня: разделившихся ведут отдельными погонями, стр. 142, решение
+    /// владельца 2026-10-02). Тогда <c>?campaign=</c> открывает сцену, только если она там одна, а у открытой сцены есть
+    /// переключатель между идущими и «Новая …» — ещё одна в той же кампании. Бой — один на кампанию (индекс базы).
+    /// </summary>
+    [Parameter] public bool AllowsMany { get; set; }
+
     private string Route => Kind == EncounterKind.Combat ? "combat" : "chase";
 
     private string MoodTag => Kind == EncounterKind.Combat ? "бой" : "погоня";
@@ -134,9 +144,9 @@
             }
 
             _active = await Api.ListActiveAsync(Kind);
-            var match = CampaignId is { } campaignId
-                ? _active.FirstOrDefault(a => a.CampaignId == campaignId)
-                : _active.Count == 1 ? _active[0] : null;
+            // Несколько идущих (в кампании или всего) — выбор в «Идут сейчас», а не первая попавшаяся.
+            IReadOnlyList<EncounterSummaryDto> candidates = CampaignId is { } campaignId ? [.. _active.Where(a => a.CampaignId == campaignId)] : _active;
+            var match = candidates.Count == 1 ? candidates[0] : null;
             if (match is not null)
             {
                 await OpenAsync(match.Id);
@@ -178,6 +188,8 @@
         }
 
         _catalog ??= SkillCatalogs.From((await Skills.ListAsync()).Items);
+        if (AllowsMany)
+            _active = await Api.ListActiveAsync(Kind);
         var session = new EncounterSession(Api, new EncounterSheetSync(Characters), Storage, Time);
         session.Start(encounter, _catalog);
         session.Changed += OnSessionChanged;
@@ -215,12 +227,14 @@
             _draftChoice = draft;
     }
 
-    private async Task StartAsync()
+    private Task StartAsync() => StartInAsync(_startCampaign);
+
+    private async Task StartInAsync(Guid? campaignId)
     {
         _starting = true;
         try
         {
-            var started = await Api.StartAsync(new StartEncounterRequest(Kind, _startCampaign));
+            var started = await Api.StartAsync(new StartEncounterRequest(Kind, campaignId));
             Navigation.NavigateTo($"{Route}?id={started.Id}");
         }
         catch (HttpRequestException error)
@@ -458,6 +472,10 @@
                         <div class="flex flex-wrap items-center justify-between gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
                             <div>
                                 <div class="font-medium">@(active.CampaignName ?? "Вне кампании")</div>
+                                @if (active.ParticipantNames.Count > 0)
+                                {
+                                    <div class="text-sm text-primary-700">@string.Join(", ", active.ParticipantNames)</div>
+                                }
                                 <div class="cm-meta">
                                     @(active.Round == 0 ? "расстановка" : $"раунд {active.Round}") · участников: @active.ParticipantCount ·
                                     @LocalTime.DateTime(active.UpdatedAt)
@@ -537,6 +555,10 @@
                         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить</Button>
                     </div>
                 </div>
+                @if (AllowsMany)
+                {
+                    @Siblings(session)
+                }
             </div>
         </section>
 
@@ -596,7 +618,12 @@
                     <section class="cm-section">
                         <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
                         <div class="cm-card"><div class="cm-card-body">
-                            <ResolutionPreview State="state" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying" />
+                            <ResolutionPreview State="state" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
+                                @if (PendingContent is not null)
+                                {
+                                    <CascadingValue Value="session" IsFixed="true">@PendingContent(pending)</CascadingValue>
+                                }
+                            </ResolutionPreview>
                         </div></div>
                     </section>
                 }
@@ -632,6 +659,46 @@
             </div>
         </section>
     };
+
+    /// <summary>
+    /// Идущие сцены этого вида (погони разделившихся): открытая отмечена, остальные — переход по <c>?id=</c>; «Новая …» —
+    /// ещё одна в той же кампании. Список читается при открытии сцены (переход между ними перечитывает).
+    /// </summary>
+    private RenderFragment Siblings(EncounterSession session) => __builder =>
+    {
+        var current = session.Encounter;
+        var others = _active.Where(a => a.Id != current.Id).ToList();
+        <div class="cm-card-body flex flex-wrap items-center gap-2 border-t border-primary-200" data-testid="encounter-siblings">
+            @if (others.Count > 0)
+            {
+                <span class="cm-meta">Идут: @(others.Count + 1)</span>
+                @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
+                <span class="cm-btn cm-btn-sm cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
+                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                    <span>@SceneLabel(current.CampaignId, current.CampaignName, [.. session.State.Participants.Select(p => p.Name)])</span>
+                </span>
+                @foreach (var other in others)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={other.Id}")" data-testid="sibling">
+                        @SceneLabel(other.CampaignId, other.CampaignName, other.ParticipantNames)
+                    </Button>
+                }
+            }
+            else
+            {
+                <span class="cm-meta">Разделились — ведите каждую группу своей погоней (стр. 142).</span>
+            }
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-code-branch" Busy="_starting"
+                    OnClick="() => StartInAsync(current.CampaignId)" data-testid="start-sibling">@($"Новая {EncounterText.Of(Kind).ToLowerInvariant()}")</Button>
+        </div>
+    };
+
+    /// <summary>Подпись сцены в переключателе: кто в ней (первые трое), кампания — если она не та, что у открытой.</summary>
+    private string SceneLabel(Guid? campaignId, string? campaignName, IReadOnlyList<string> names)
+    {
+        var who = names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
+        return campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
+    }
 
     private static string SaveText(EncounterSession session) => session.SaveState switch
     {

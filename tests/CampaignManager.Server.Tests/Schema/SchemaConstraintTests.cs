@@ -174,9 +174,9 @@ public sealed class SchemaConstraintTests(SchemaDatabase db) : IClassFixture<Sch
         await AssertViolatesAsync(PostgresErrorCodes.UniqueViolation, "skills_name", second);
     }
 
-    // NULLS NOT DISTINCT: и вне кампании у Хранителя одна активная сцена каждого вида.
+    // NULLS NOT DISTINCT: и вне кампании у Хранителя один активный бой. Погонь — сколько угодно (2026-10-02).
     [Fact]
-    public async Task Keeper_has_one_active_encounter_even_outside_campaign()
+    public async Task Keeper_has_one_active_combat_even_outside_campaign_but_many_chases()
     {
         TestDatabase.SkipIfMissing();
         var keeper = await db.AddUserAsync("Хранитель");
@@ -184,13 +184,15 @@ public sealed class SchemaConstraintTests(SchemaDatabase db) : IClassFixture<Sch
         {
             first.Encounters.Add(Encounter(keeper.Id));
             first.Encounters.Add(Encounter(keeper.Id, EncounterStatus.Finished));
+            first.Encounters.Add(Encounter(keeper.Id, kind: EncounterKind.Chase));
+            first.Encounters.Add(Encounter(keeper.Id, kind: EncounterKind.Chase));
             await first.SaveChangesAsync(Cancellation);
         }
 
         await using var second = db.CreateContext();
         second.Encounters.Add(Encounter(keeper.Id));
 
-        await AssertViolatesAsync(PostgresErrorCodes.UniqueViolation, "encounters_one_active", second);
+        await AssertViolatesAsync(PostgresErrorCodes.UniqueViolation, "encounters_one_active_combat", second);
     }
 
     // xmin как токен: правка с устаревшей версией — конфликт, а не молчаливая перезапись.
@@ -288,10 +290,10 @@ public sealed class SchemaConstraintTests(SchemaDatabase db) : IClassFixture<Sch
         SheetVersion = 1,
     };
 
-    private static Encounter Encounter(Guid keeperId, EncounterStatus status = EncounterStatus.Active) => new()
+    private static Encounter Encounter(Guid keeperId, EncounterStatus status = EncounterStatus.Active, EncounterKind kind = EncounterKind.Combat) => new()
     {
         KeeperId = keeperId,
-        Kind = EncounterKind.Combat,
+        Kind = kind,
         Status = status,
         State = JsonDocument.Parse("{}"),
         StateVersion = 1,

@@ -35,10 +35,18 @@ public static class ChaseEffects
                 string? note = null;
                 if (barrier.HitPointsLeft <= 0)
                 {
-                    // Разрушенная преграда — уже не преграда; обломки мешают тем, кто едет следом (стр. 136).
+                    // Разрушенная преграда — уже не преграда; обломки только «могут стать» помехой (стр. 136) — решил
+                    // Хранитель в предпросмотре (ChaseRules.SetDebris), по умолчанию проход свободен.
                     location.Barrier = null;
-                    location.Hazard = new ChaseHazard { Name = $"Обломки: {barrier.Name}", Difficulty = Difficulty.Regular, Damage = "1D3" };
-                    note = "разрушена — обломки стали помехой";
+                    if (effect.Obstacle?.Hazard is { } debris)
+                    {
+                        location.Hazard = debris with { };
+                        note = $"разрушена — обломки стали помехой ({ChaseText.Of(debris.Difficulty)})";
+                    }
+                    else
+                    {
+                        note = "разрушена — проход свободен";
+                    }
                 }
 
                 return new EffectPreview(effect.ParticipantId, name, $"{barrier.Name}: ПЗ", ChaseText.N(before), ChaseText.N(barrier.HitPointsLeft),
