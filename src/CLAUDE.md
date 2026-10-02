@@ -7,7 +7,7 @@
 
 | Проект | Что в нём | Ссылается на |
 |---|---|---|
-| `Core` | правила книги, документы | только BCL |
+| `Core` | правила книги, документы ([CLAUDE.md](CampaignManager.Core/CLAUDE.md)) | только BCL |
 | `Contracts` | DTO, маршруты, интерфейсы API | `Core` |
 | `ApiClient` | `HttpClient`-реализации интерфейсов | `Contracts` |
 | `Data` | `CmDbContext`, миграции схемы `cm` | `Core` |
@@ -21,8 +21,9 @@
 ## Правила
 
 - **`Core`, `Contracts`, `ApiClient` — `IsAotCompatible` и `IsTrimmable`** (D4: на них же будет
-  мобильное приложение). JSON — только через `ContractsJsonContext`: новый DTO добавляется туда
-  атрибутом `[JsonSerializable]`, иначе клиент не сможет его прочитать. Рефлексию анализаторы не
+  мобильное приложение). JSON — только через source-generated контексты: DTO — `ContractsJsonContext`,
+  документы Core — `CmJsonContext`; новый тип добавляется туда атрибутом `[JsonSerializable]`, иначе
+  клиент не сможет его прочитать. Рефлексию анализаторы не
   пропустят — не глушить их, а переписать без неё.
 - **Маршрут — константа в `Contracts`** (`PlatformRoutes.Ping`): сервер маппит её, клиент по ней
   ходит, строка одна.
@@ -91,8 +92,11 @@
   справочников (`CatalogEntry`), `music_tracks`, `scenarios`, `characters`, `encounters`. Устаревшая
   версия → `DbUpdateConcurrencyException` (API превратит в 409).
 - Документы (`characters.sheet`, `creatures.statblock`, `scenario_creatures.statblock`,
-  `encounters.state`) пока `JsonDocument`; типы из `Core` подставляет T1.7. `characters.name`/`occupation` —
-  generated-колонки из `sheet.personal.*`, только для чтения.
+  `encounters.state`) в `Data` — `JsonDocument`, и так и остаются: читать `CmJson.ReadSheet(sheet, sheetVersion)`
+  (апкастер видит версию из соседней колонки — конвертер EF её не видит), писать — присваивать
+  `CmJson.Write(документ)` вместе с `*_version = CurrentVersion`. Правка графа на месте без присваивания
+  EF не заметит. Типы и правила — `Core`, см. [Core/CLAUDE.md](CampaignManager.Core/CLAUDE.md).
+  `characters.name`/`occupation` — generated-колонки из `sheet.personal.*`, только для чтения.
 - **Чего EF не умеет — в миграции SQL-ом**, и при следующих миграциях это не трогать: уникальные индексы
   `lower(name)` у справочников и составной FK `characters (campaign_id, owner_id) → campaign_members`
   с `ON DELETE SET NULL (campaign_id)` (в модели он `ClientNoAction`: EF обнулил бы и `owner_id`,
@@ -106,7 +110,8 @@
 
 ## Тесты
 
-- `Core.Tests` — правила книги; `Server.Tests` — API через `ApiClient` на `WebApplicationFactory`
+- `Core.Tests` — правила книги (тесты T0.2, перенесённые на `Core`; кости — `ScriptedDice`, страница книги —
+  `[Trait("page", …)]`, находка — `[Trait("finding", "F-…")]`); `Server.Tests` — API через `ApiClient` на `WebApplicationFactory`
   (окружение `Testing`, чтобы не подхватить `appsettings.Development.json`) и тест архитектуры.
 - База тестов — `CM_TEST_DB` (D7); без неё тесты с базой пропускаются (`TestDatabase.SkipIfMissing`).
   Локально — одноразовый Postgres в `wslc`:

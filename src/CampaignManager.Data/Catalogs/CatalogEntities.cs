@@ -164,7 +164,7 @@ public sealed class Item : CatalogEntry
     public Guid? ImageFileId { get; set; }
 }
 
-/// <summary>Тварь бестиария. Статблок — документ (SCHEMA, «Статблок»); тип документа делает T1.7.</summary>
+/// <summary>Тварь бестиария. Статблок — документ Core <c>Statblock</c>: <c>CmJson.ReadStatblock(Statblock, StatblockVersion)</c> / <c>CmJson.Write</c>.</summary>
 public sealed class Creature : CatalogEntry
 {
     public CreatureType Type { get; set; }

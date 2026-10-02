@@ -1,5 +1,7 @@
 using System.Text.Json;
 using CampaignManager.Core.Campaigns;
+using CampaignManager.Core.Characters;
+using CampaignManager.Core.Documents;
 using CampaignManager.Data;
 using CampaignManager.Data.Campaigns;
 using CampaignManager.Data.Identity;
@@ -87,6 +89,7 @@ public sealed class SchemaDatabase : IAsyncLifetime
         return campaign;
     }
 
+    /// <summary>Лист — настоящий документ Core: generated-колонки читают его пути.</summary>
     public static JsonDocument Sheet(string name) =>
-        JsonDocument.Parse(JsonSerializer.Serialize(new { personal = new { name, occupation = "Антиквар" } }));
+        CmJson.Write(new CharacterSheet { Personal = new PersonalInfo { Name = name, Occupation = "Антиквар" } });
 }

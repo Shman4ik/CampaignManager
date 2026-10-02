@@ -21,7 +21,7 @@ public sealed class Encounter : ICreatedAt, IUpdatedAt
     public EncounterKind Kind { get; set; }
     public EncounterStatus Status { get; set; }
 
-    /// <summary>Снимок движка сцены; тип документа делают T1.7 и T2.6.</summary>
+    /// <summary>Снимок движка сцены — <c>Core.Encounters.EncounterState</c> (каркас T1.7, наполняет T2.6).</summary>
     public required JsonDocument State { get; set; }
 
     public int StateVersion { get; set; }

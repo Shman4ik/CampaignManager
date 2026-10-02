@@ -1,5 +1,4 @@
 using System.Reflection;
-using Xunit;
 
 namespace CampaignManager.Core.Tests;
 
