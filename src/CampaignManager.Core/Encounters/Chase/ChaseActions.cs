@@ -86,11 +86,15 @@ public static class ChaseActions
         if (!boosting)
             effects.Add(Effect(EncounterEffectKind.ChaseActionsSpent, actorId, 1));
 
+        var over = chase.Location(to) is { } entered && (entered.Barrier is not null || entered.Hazard is not null)
+            ? $"По воздуху — над «{entered.Barrier?.Name ?? entered.Hazard!.Name}» без проверки (стр. 142)."
+            : null;
         return Done(new EncounterResolution
         {
             Kind = EncounterLogKind.Move,
             ActorId = actorId,
             Title = $"{actor.Name}: локация {ChaseText.N(runner.Location)} → {ChaseText.N(to)}" + (boosting ? " (разгон)" : ""),
+            Lines = over is null ? [] : [over],
             Effects = effects,
         }, true);
     }
@@ -525,7 +529,8 @@ public static class ChaseActions
 
             if (next?.Hazard is not null)
             {
-                stop = $"впереди помеха «{next.Hazard.Name}» — пройти её с {ChaseText.PenaltyDice(penalty)}, без нового действия";
+                stop = $"впереди помеха «{next.Hazard.Name}» — её проходят без нового действия" +
+                       (penalty > 0 ? $", штрафных костей: {ChaseText.N(penalty)}" : ", без штрафа");
                 break;
             }
 
@@ -848,7 +853,7 @@ public static class ChaseActions
                 if (state.Find(occupantId) is not { } occupant)
                     continue;
 
-                var (damage, detail) = mishap.Harm is { Roll: { } entered } ? (entered, "вписано") : Amount(new ChaseHarm(crash.BuildLoss), dice);
+                var (damage, detail) = mishap.Harm is { Roll: { } entered } ? Amount(mishap.Harm, dice) : Amount(new ChaseHarm(crash.BuildLoss), dice);
                 lines.Add($"{occupant.Name}: урон {detail}.");
                 effects.AddRange(Hurt(occupant, Math.Max(0, damage), $"{crash.Name}: {detail}"));
             }

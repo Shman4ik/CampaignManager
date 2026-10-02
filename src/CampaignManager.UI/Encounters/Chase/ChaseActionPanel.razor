@@ -171,14 +171,14 @@ else
                 _damageFormula = next?.Hazard?.Damage;
                 _crash = runner.IsDriver ? VehicleReference.DefaultCrash(_difficulty).Name : null;
                 if (runner.IsDriver)
-                    UseSkill(actor, runner.Vehicle!.SkillCode);
+                    UseDriving(actor, runner);
                 break;
             case ChaseActionKind.Barrier:
                 _difficulty = next?.Barrier?.Difficulty ?? Difficulty.Regular;
                 _consequences = false;
                 _damageFormula = null;
                 if (runner.IsDriver)
-                    UseSkill(actor, runner.Vehicle!.SkillCode);
+                    UseDriving(actor, runner);
                 break;
             case ChaseActionKind.Melee:
                 UseSkill(actor, "skill.fighting.brawl");
@@ -186,7 +186,10 @@ else
                 _damageFormula = "1D3";
                 break;
             case ChaseActionKind.Maneuver:
-                UseSkill(actor, runner.IsDriver ? runner.Vehicle!.SkillCode : "skill.fighting.brawl");
+                if (runner.IsDriver)
+                    UseDriving(actor, runner);
+                else
+                    UseSkill(actor, "skill.fighting.brawl");
                 _defenceKind = null;
                 _damageFormula = null;
                 _crash = null;
@@ -221,8 +224,18 @@ else
                 break;
         }
 
+        if (_check.Value is null && action is not (ChaseActionKind.Move or ChaseActionKind.FloorIt or ChaseActionKind.Ram or ChaseActionKind.DriverControl))
+            UseSkill(actor, (action == ChaseActionKind.Hazard ? next?.Hazard?.Skill : action == ChaseActionKind.Barrier ? next?.Barrier?.Skill : null) ?? _check.Key);
+
         _target = Targets(action).Count == 1 ? Targets(action)[0].Id : _target is { } t && Targets(action).Any(p => p.Id == t) ? t : null;
         return action == ChaseActionKind.Move ? ProposeAsync() : Task.CompletedTask;
+    }
+
+    /// <summary>Навык водителя — вписанный у транспорта (или из листа), иначе ½ ЛВК: тот же, что у проверки скорости.</summary>
+    private void UseDriving(EncounterParticipant actor, ChaseRunner runner)
+    {
+        var skill = ChaseRules.SpeedSkill(actor, runner);
+        _check.Set(runner.Vehicle!.SkillCode, skill.Label, skill.Value);
     }
 
     private void UseSkill(EncounterParticipant actor, string key) =>
@@ -369,8 +382,9 @@ else
                 var vehicle = runner.IsDriver ? runner.Vehicle : null;
                 var dice = vehicle is null ? 1 : VehicleRules.DamageDice(vehicle.BuildLeft);
                 <p class="cm-meta">Без проверки атаки, с места. @(vehicle is null ? "Пешком — урон решает Хранитель (обычно 1d3)." : $"Транспорт: 1d10 за пункт Комплекции ({dice}d10); отдача — половина ПЗ преграды, если пробил (стр. 135–136).")</p>
-                <Field Label="Урон преграде" Group="true" Note="пусто — бросят кости">
-                    <DiceInput Count="dice" Sides="@(vehicle is null ? 3 : 10)" Value="_damage" ValueChanged="v => _damage = v" Label="Урон преграде" />
+                <Field Label="Урон преграде" Note="@($"пусто — {(vehicle is null ? "1d3" : $"{dice}d10")}")" class="w-32">
+                    <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
+                           @onchange="e => _damage = Number(e, allowZero: true)" aria-label="Урон преграде" />
                 </Field>
                 break;
             }
@@ -659,11 +673,11 @@ else
             @if (VehicleReference.FindCrash(_crash) is { } chosen)
             {
                 <Field Label="Комплекция −" Note="@($"пусто — {chosen.BuildLoss}")" class="w-28">
-                    <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_crashRoll?.ToString(CultureInfo.InvariantCulture))"
+                    <input type="number" inputmode="numeric" min="0" class="cm-input" aria-label="Потеря Комплекции" value="@(_crashRoll?.ToString(CultureInfo.InvariantCulture))"
                            @onchange="e => _crashRoll = Number(e, allowZero: true)" />
                 </Field>
                 <Field Label="Урон людям" Note="пусто — та же кость каждому" class="w-28">
-                    <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
+                    <input type="number" inputmode="numeric" min="0" class="cm-input" aria-label="Урон людям в аварии" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
                            @onchange="e => _damage = Number(e, allowZero: true)" />
                 </Field>
                 <p class="cm-meta w-full">@chosen.Examples</p>

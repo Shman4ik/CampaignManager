@@ -5,7 +5,9 @@ using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Encounters;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core.Characters;
+using CampaignManager.Core.Dice;
 using CampaignManager.Core.Encounters;
+using CampaignManager.Core.Encounters.Chase;
 using CampaignManager.Core.Identity;
 using CampaignManager.Data.Identity;
 using CampaignManager.Server.Tests.Campaigns;
@@ -273,8 +275,56 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
         };
         var crowd = new EncounterState { Participants = [.. Enumerable.Range(0, EncounterEngine.MaxParticipants + 1).Select(i => new EncounterParticipant { Name = $"Культист {i}" })] };
 
+        var stray = new EncounterState { Chase = new ChaseState { Runners = [new ChaseRunner { ParticipantId = Guid.NewGuid() }] } };
+
         await Fails(HttpStatusCode.BadRequest, () => api.SaveStateAsync(started.Id, twice, started.Version, Cancellation));
         await Fails(HttpStatusCode.BadRequest, () => api.SaveStateAsync(started.Id, crowd, started.Version, Cancellation));
+        await Fails(HttpStatusCode.BadRequest, () => api.SaveStateAsync(started.Id, stray, started.Version, Cancellation));
+    }
+
+    /// <summary>
+    /// Погоня (T2.6c) — свойство документа сцены: трасса, бегущие, разгон и предложенный результат переживают перезагрузку
+    /// (читаются из базы), урон помехи уходит в лист через API листа.
+    /// </summary>
+    [Fact]
+    public async Task Chase_survives_reload_and_hazard_damage_reaches_the_sheet()
+    {
+        TestDatabase.SkipIfMissing();
+        var (keeper, _, _, campaignId, sheetId) = await TableAsync();
+        var api = Encounters(keeper);
+        var started = await api.StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
+        var sheet = (await Characters(keeper).GetAsync(sheetId, Cancellation)).Sheet;
+
+        var state = started.State;
+        var harvey = EncounterParticipants.FromSheet(sheetId, CharacterKind.Player, sheet, Catalog);
+        var ghoul = new EncounterParticipant { Kind = ParticipantKind.Creature, Name = "Упырь", Side = EncounterSide.Enemies, HitPoints = 13, MaxHitPoints = 13, Stats = new ParticipantStats { Move = 9, Dex = 65, Con = 65 } };
+        EncounterEngine.Add(state, harvey, Now);
+        EncounterEngine.Add(state, ghoul, Now);
+        ChaseRules.Begin(state, 6);
+        ChaseRules.BeginSpeedChecks(state);
+        foreach (var runner in state.Chase!.Runners)
+            runner.SpeedChecked = true;
+        ChaseRules.Start(state, Now);
+        var hazardAt = state.Chase.Runner(harvey.Id)!.Location + 1;
+        state.Chase.Location(hazardAt)!.Hazard = new ChaseHazard { Name = "Забор", Damage = "1D6" };
+        var fall = ChaseActions.Hazard(state, harvey.Id, hazardAt, new ChaseCheck("Лазание", 40, 90),
+            new ChaseMishap(new ChaseHarm(Roll: 4), LostActionsRoll: 1), DiceRoller.Shared);
+        EncounterEngine.Propose(state, fall.Resolution);
+        var saved = await api.SaveStateAsync(started.Id, state, started.Version, Cancellation);
+
+        var reloaded = (await api.GetAsync(started.Id, Cancellation)).State;
+        Assert.Equal(ChasePhase.Active, reloaded.Chase!.Phase);
+        Assert.Equal("Забор", reloaded.Chase.Location(hazardAt)!.Hazard!.Name);
+        Assert.Equal(state.Chase.Runner(ghoul.Id)!.Location, reloaded.Chase.Runner(ghoul.Id)!.Location);
+        Assert.Equal(fall.Resolution.Id, reloaded.Pending!.Id);
+
+        EncounterEngine.Apply(reloaded, Now);
+        var flushed = await new EncounterSheetSync(Characters(keeper)).FlushAsync(reloaded, Catalog, Now, Cancellation);
+        await api.SaveStateAsync(started.Id, reloaded, saved.Version, Cancellation);
+
+        Assert.True(flushed);
+        Assert.Equal(8, (await Characters(keeper).GetAsync(sheetId, Cancellation)).Sheet.Current.HitPoints);
+        Assert.Equal(hazardAt, reloaded.Chase.Runner(harvey.Id)!.Location);
     }
 
     /// <summary>Клиент листа, перед первой записью которого «другое устройство» успевает записать лист.</summary>

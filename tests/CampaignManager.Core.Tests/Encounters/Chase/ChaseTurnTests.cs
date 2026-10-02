@@ -191,6 +191,40 @@ public sealed class ChaseTurnTests
     }
 
     [Fact]
+    [Trait("page", "142")]
+    public void Flyer_may_pass_over_ground_obstacles()
+    {
+        var byakhee = Runner("Бьякхи", ChaseRole.Pursuer, mov: 5);
+        byakhee.Stats.Fly = 16;
+        var state = Track(8, Runner("Артур", ChaseRole.Prey, mov: 16), byakhee);
+        ChaseRules.ChangeMode(state, byakhee.Id, MovementMode.Flying, null, Now);
+        state.Started();
+        state.PutBarrier(state.R(byakhee).Location + 1);
+
+        var actions = ChaseRules.AvailableActions(state, byakhee.Id);
+        Assert.Contains(ChaseActionKind.Move, actions);
+        Assert.Contains(ChaseActionKind.Barrier, actions);
+        Assert.Contains("По воздуху", ChaseActions.Move(state, byakhee.Id).Resolution.Lines.Single());
+    }
+
+    [Fact]
+    [Trait("page", "139")]
+    public void Nobody_attacks_their_own_car()
+    {
+        var driver = Runner("Водитель", ChaseRole.Prey);
+        var passenger = Runner("Пассажир", ChaseRole.Prey);
+        var vampire = Runner("Вампир", ChaseRole.Pursuer);
+        var state = Track(6, driver, passenger, vampire).InVehicle(driver, 5, speed: 8);
+        ChaseRules.SetPassenger(state, passenger.Id, driver.Id);
+        state.Started();
+        ChaseRules.SetPosition(state, vampire.Id, state.R(driver).Location);
+
+        Assert.Equal([vampire.Id], ChaseRules.CloseTargets(state, driver.Id).Select(p => p.Id));
+        Assert.Equal([vampire.Id], ChaseRules.RangedTargets(state, passenger.Id).Select(p => p.Id));
+        Assert.Equal([driver.Id, passenger.Id], ChaseRules.CloseTargets(state, vampire.Id).Select(p => p.Id));
+    }
+
+    [Fact]
     public void No_actions_out_of_turn_order_or_chase()
     {
         var (state, prey, _) = Pair();
@@ -277,9 +311,24 @@ public sealed class ChaseTurnTests
     }
 
     [Fact]
-    public void Returned_runner_is_back_in_the_chase()
+    [Trait("page", "139")]
+    public void Last_pursuer_gone_prey_escape()
     {
         var (state, prey, pursuer) = Pair();
+
+        state.Apply(ChaseActions.Track(state, pursuer.Id, Skill("Чтение следов", 50, 90), NoDice));
+
+        Assert.Equal(ChaseStatus.Escaped, ChaseRules.StatusOf(state, prey.Id));
+        Assert.Equal(ChasePhase.Ended, state.Chase!.Phase);
+        Assert.Contains(state.Log, e => e.Kind == EncounterLogKind.Escaped && e.Text.Contains("некому", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Returned_runner_is_back_in_the_chase()
+    {
+        var prey = Runner("Артур", ChaseRole.Prey);
+        var pursuer = Runner("Вампир", ChaseRole.Pursuer);
+        var state = Track(6, prey, pursuer, Runner("Упырь", ChaseRole.Pursuer)).Started();
         EncounterEngine.Apply(state, ChaseActions.Track(state, pursuer.Id, Skill("Чтение следов", 50, 90), NoDice).Resolution, Now);
         Assert.Equal(ChaseStatus.LostTrail, ChaseRules.StatusOf(state, pursuer.Id));
 

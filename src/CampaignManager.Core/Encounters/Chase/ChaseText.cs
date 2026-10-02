@@ -30,7 +30,7 @@ public static class ChaseText
 {
     public static string Of(ChasePhase phase) => phase switch
     {
-        ChasePhase.Setup => "Трасса",
+        ChasePhase.Setup => "Расстановка",
         ChasePhase.SpeedCheck => "Проверка скорости",
         ChasePhase.Active => "Погоня",
         ChasePhase.Ended => "Погоня окончена",

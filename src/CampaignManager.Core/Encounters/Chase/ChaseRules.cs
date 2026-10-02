@@ -567,11 +567,13 @@ public static class ChaseRules
         if (state.Chase is not { Phase: ChasePhase.Active } chase)
             return;
 
-        var pursuerFront = InChase(state).Where(x => x.Runner.Role == ChaseRole.Pursuer)
-            .Select(x => x.Runner.Location).DefaultIfEmpty(0).Max();
+        // Преследователей не осталось (отстали, потеряли след, без сознания) — гнаться некому: убегающие уходят.
+        var pursuers = InChase(state).Where(x => x.Runner.Role == ChaseRole.Pursuer).ToList();
+        var pursuerFront = pursuers.Select(x => x.Runner.Location).DefaultIfEmpty(0).Max();
         foreach (var (participant, runner) in InChase(state).Where(x => x.Runner.Role == ChaseRole.Prey && !x.Runner.IsPassenger).ToList())
         {
-            if (runner.Location < chase.LastLocation || runner.Location <= pursuerFront)
+            var reachedEnd = runner.Location >= chase.LastLocation && runner.Location > pursuerFront;
+            if (!reachedEnd && pursuers.Count > 0)
                 continue;
 
             List<string> names = [participant.Name];
@@ -589,7 +591,9 @@ public static class ChaseRules
             {
                 Kind = EncounterLogKind.Escaped,
                 ActorId = participant.Id,
-                Text = $"{string.Join(", ", names)}: трасса пройдена, преследователи позади — сбежал!",
+                Text = pursuers.Count == 0
+                    ? $"{string.Join(", ", names)}: гнаться больше некому — сбежал!"
+                    : $"{string.Join(", ", names)}: трасса пройдена, преследователи позади — сбежал!",
                 At = now,
             });
         }
@@ -671,7 +675,7 @@ public static class ChaseRules
 
         List<ChaseActionKind> actions = [];
         var attacksLeft = runner.Attacks < Math.Max(1, participant.Stats.AttacksPerRound);
-        var others = InChase(state).Where(x => x.Participant.Id != participantId).ToList();
+        var others = Others(state, participantId).ToList();
 
         if (runner.IsPassenger)
         {
@@ -691,7 +695,10 @@ public static class ChaseRules
         var hazard = barrier is null ? next?.Hazard : null;
         var sameLocation = others.Where(x => x.Runner.Location == runner.Location).ToList();
 
-        if (!wrecked && canMove && next is not null && barrier is null && hazard is null)
+        // Летящему помехи и преграды на земле обычно не мешают (стр. 142: летающим не нужны Прыжки и Лазание) — Хранитель
+        // может просто пропустить его над ними; проверка остаётся на выбор.
+        var flying = runner.Mode == MovementMode.Flying && runner.Vehicle is null;
+        if (!wrecked && canMove && next is not null && ((barrier is null && hazard is null) || flying))
             actions.Add(ChaseActionKind.Move);
         if (!wrecked && canMove && hazard is not null)
             actions.Add(ChaseActionKind.Hazard);
@@ -711,7 +718,7 @@ public static class ChaseRules
             actions.Add(ChaseActionKind.Ram);
         if (attacksLeft && others.Any(x => x.Runner.IsDriver))
             actions.Add(ChaseActionKind.Tyres);
-        if (chase.FloorIt && runner.IsDriver && !wrecked && hasAction && runner.Boost is null && next is not null)
+        if (chase.FloorIt && runner.IsDriver && !wrecked && hasAction && runner.Boost is null && next is not null && barrier is null)
             actions.Add(ChaseActionKind.FloorIt);
         if (hasAction && runner.Role == ChaseRole.Prey)
             actions.Add(ChaseActionKind.Hide);
@@ -727,16 +734,24 @@ public static class ChaseRules
     public static IReadOnlyList<EncounterParticipant> CloseTargets(EncounterState state, Guid participantId)
     {
         var location = state.Chase?.Runner(participantId)?.Location;
-        return [.. InChase(state).Where(x => x.Participant.Id != participantId && x.Runner.Location == location).Select(x => x.Participant)];
+        return [.. Others(state, participantId).Where(x => x.Runner.Location == location).Select(x => x.Participant)];
     }
 
     /// <summary>Цели огнестрела — любые в погоне (стр. 136, 139).</summary>
     public static IReadOnlyList<EncounterParticipant> RangedTargets(EncounterState state, Guid participantId) =>
-        [.. InChase(state).Where(x => x.Participant.Id != participantId).Select(x => x.Participant)];
+        [.. Others(state, participantId).Select(x => x.Participant)];
 
     /// <summary>Цели стрельбы по шинам — водители в погоне.</summary>
     public static IReadOnlyList<EncounterParticipant> VehicleTargets(EncounterState state, Guid participantId) =>
-        [.. InChase(state).Where(x => x.Participant.Id != participantId && x.Runner.IsDriver).Select(x => x.Participant)];
+        [.. Others(state, participantId).Where(x => x.Runner.IsDriver).Select(x => x.Participant)];
+
+    /// <summary>Остальные в погоне, кроме тех, кто едет в одной машине с участником (свой водитель, свои пассажиры).</summary>
+    private static IEnumerable<(EncounterParticipant Participant, ChaseRunner Runner)> Others(EncounterState state, Guid participantId)
+    {
+        var vehicle = state.Chase?.Runner(participantId) is { } runner ? runner.CarrierId ?? (runner.IsDriver ? participantId : null) : null;
+        return InChase(state).Where(x => x.Participant.Id != participantId
+                                         && (vehicle is null || (x.Participant.Id != vehicle && x.Runner.CarrierId != vehicle)));
+    }
 
     /// <summary>Убегающие, с которыми в одной локации есть преследователь: поимку можно объявить (стр. 135).</summary>
     public static IReadOnlyList<(EncounterParticipant Prey, IReadOnlyList<EncounterParticipant> Pursuers)> Contacts(EncounterState state)
@@ -793,12 +808,14 @@ public static class ChaseRules
         if (state.Chase is { } chase && !Resolved(chase, winner.Id, loser.Id))
             chase.Ties.Add(new ChaseTie { First = winner.Id, Second = loser.Id });
 
+        // Победитель встаёт сразу перед проигравшим (а не меняется с ним местами): так при трёх равных уже решённые пары
+        // не переворачиваются.
         var winnerIndex = state.Participants.IndexOf(winner);
         var loserIndex = state.Participants.IndexOf(loser);
         if (winnerIndex > loserIndex)
         {
-            state.Participants[loserIndex] = winner;
-            state.Participants[winnerIndex] = loser;
+            state.Participants.RemoveAt(winnerIndex);
+            state.Participants.Insert(loserIndex, winner);
         }
 
         EncounterEngine.Log(state, new EncounterLogEntry
