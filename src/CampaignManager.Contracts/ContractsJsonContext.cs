@@ -116,4 +116,7 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(AddPregenRequest))]
 [JsonSerializable(typeof(ReorderRequest))]
 [JsonSerializable(typeof(ScenarioImportReport))]
+[JsonSerializable(typeof(LocationMusicInput))]
+[JsonSerializable(typeof(HandoutScreenDto))]
+[JsonSerializable(typeof(IReadOnlyList<ScenarioRunDto>))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;

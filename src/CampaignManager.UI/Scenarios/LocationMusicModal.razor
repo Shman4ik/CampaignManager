@@ -1,0 +1,147 @@
+@using CampaignManager.Contracts.Music
+@using CampaignManager.Core.Music
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+@inject ICatalogApi<MusicTrackDto> Tracks
+@inject MusicPlayer Player
+
+@* Музыка локации: настроения (MusicTagPicker — известные теги фонотеки переключателями) и прибитые треки — играют, даже
+   если тегов у них нет. Пул и выбор трека — правило Core (MusicPool), запись — PUT …/locations/{id}/music: оба списка
+   целиком, правка локации (LocationInput) их не трогает. Фонотеку берёт у плеера, если тот её уже загрузил. *@
+<Modal Open="Open" Title="@($"Музыка: {Location?.Name}")" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="location-music">
+    <ChildContent>
+        <div class="flex flex-col gap-5">
+            <p class="cm-text-muted text-sm">
+                Кнопка «Музыка» в локации играет трек с любым из настроений или прибитый к локации — случайно, без повторов подряд.
+            </p>
+            <Field Label="Настроения" Group="true">
+                <MusicTagPicker Values="_tags" ValuesChanged="v => _tags = [.. v]" Known="KnownTags" />
+            </Field>
+            <Field Label="Прибитые треки" Group="true" Note="Играют в этой локации, даже если у них нет её настроений.">
+                @if (_library is null)
+                {
+                    <LoadingIndicator Message="Загружаю фонотеку…" />
+                }
+                else if (_library.Count == 0)
+                {
+                    <p class="cm-text-muted text-sm">Фонотека пуста — треки добавляют на странице «Музыка».</p>
+                }
+                else
+                {
+                    <input class="cm-input mb-2" type="search" placeholder="Найти трек" aria-label="Найти трек" @bind="_filter" @bind:event="oninput" />
+                    <div class="max-h-72 overflow-y-auto rounded-md border border-primary-200" data-testid="location-music-tracks">
+                        @foreach (var track in VisibleTracks)
+                        {
+                            var id = track.Id;
+                            <label class="flex min-h-11 cursor-pointer items-center gap-3 border-t border-primary-200 px-3 py-2 first:border-t-0" @key="id">
+                                <input type="checkbox" class="h-5 w-5 shrink-0" checked="@_trackIds.Contains(id)" @onchange="() => ToggleTrack(id)" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-sm text-primary-900">@track.Name</span>
+                                    @if (track.Tags.Count > 0)
+                                    {
+                                        <span class="block text-xs text-primary-500">@string.Join(", ", track.Tags)</span>
+                                    }
+                                </span>
+                            </label>
+                        }
+                    </div>
+                }
+            </Field>
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="location-music-error">@_error</Alert>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Busy="_saving" OnClick="SaveAsync" data-testid="location-music-save">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private List<string> _tags = [];
+    private HashSet<Guid> _trackIds = [];
+    private IReadOnlyList<MusicTrackDto>? _library;
+    private string _filter = "";
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public ScenarioLocationDto? Location { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private IReadOnlyList<string> KnownTags => _library is null ? [] : MusicTags.Normalize(_library.SelectMany(t => t.Tags));
+
+    // Прибитые — сверху: их видно, не листая фонотеку.
+    private IEnumerable<MusicTrackDto> VisibleTracks => (_library ?? [])
+        .Where(t => _filter.Length == 0 || t.Name.Contains(_filter.Trim(), StringComparison.CurrentCultureIgnoreCase)
+                                        || t.Tags.Any(tag => tag.Contains(MusicTags.Normalize(_filter), StringComparison.Ordinal)))
+        .OrderByDescending(t => _pinnedOnOpen.Contains(t.Id))
+        .ThenBy(t => t.Name, StringComparer.CurrentCulture);
+
+    private HashSet<Guid> _pinnedOnOpen = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opening = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opening)
+            return;
+
+        _tags = [.. Location?.MusicTags ?? []];
+        _trackIds = [.. Location?.TrackIds ?? []];
+        _pinnedOnOpen = [.. _trackIds];
+        _filter = "";
+        _error = null;
+        if (_library is not null)
+            return;
+
+        try
+        {
+            _library = Player.LibraryLoaded ? Player.Library : (await Tracks.ListAsync()).Items;
+        }
+        catch (HttpRequestException ex)
+        {
+            _library = [];
+            _error = ApiErrors.Describe(ex);
+        }
+    }
+
+    private void ToggleTrack(Guid id)
+    {
+        if (!_trackIds.Remove(id))
+            _trackIds.Add(id);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Location is null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.SetLocationMusicAsync(ScenarioId, Location.Id, new LocationMusicInput(_tags, [.. _trackIds]));
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

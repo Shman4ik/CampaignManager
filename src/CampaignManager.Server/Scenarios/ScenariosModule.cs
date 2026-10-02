@@ -14,6 +14,7 @@ public static class ScenariosModule
         builder.Services.AddScoped<ScenarioPartsService>();
         builder.Services.AddScoped<ScenarioCastService>();
         builder.Services.AddScoped<ScenarioExchangeService>();
+        builder.Services.AddScoped<ScenarioPlayService>();
         return builder;
     }
 
@@ -50,6 +51,18 @@ public static class ScenariosModule
             await s.ReorderAsync(scenarioId, input, ct);
             return TypedResults.NoContent();
         }).WithName("ReorderScenarioPart");
+
+        group.MapGet(ScenariosRoutes.RunsPattern, (Guid scenarioId, ScenarioPlayService p, CancellationToken ct) =>
+            p.ListRunsAsync(scenarioId, ct)).WithName("ListScenarioRuns");
+        group.MapPut(ScenariosRoutes.LocationMusicPattern, (Guid scenarioId, Guid locationId, LocationMusicInput input, ScenarioPlayService p,
+            CancellationToken ct) => p.SetLocationMusicAsync(scenarioId, locationId, input, ct)).WithName("SetScenarioLocationMusic");
+        group.MapGet(ScenariosRoutes.HandoutScreenPattern, async Task<IResult> (Guid scenarioId, Guid handoutId, HttpContext http,
+            ScenarioPlayService p, CancellationToken ct) =>
+        {
+            var handout = await p.GetHandoutScreenAsync(scenarioId, handoutId, ct);
+            http.Response.Headers.CacheControl = "private, no-store";
+            return TypedResults.Ok(handout);
+        }).WithName("GetHandoutScreen");
 
         group.MapPost(ScenariosRoutes.LocationsPattern, (Guid scenarioId, LocationInput input, ScenarioPartsService p, CancellationToken ct) =>
             p.AddLocationAsync(scenarioId, input, ct)).WithName("AddScenarioLocation");

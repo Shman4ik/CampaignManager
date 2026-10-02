@@ -9,13 +9,26 @@
    рисовались дважды, а сохранение просмотра затирало правки правки). Сценарий читается одним запросом, а пишется по
    строке: вкладка зовёт свой адрес API и просит страницу перечитать сценарий (OnChanged) — соседние вкладки и корень
    запись не трогает. Открытая вкладка — в адресе (?tab=). /scenarios/{id}/edit — старый адрес правки: ведёт на
-   «Описание» с открытой формой. Режим игры (?mode=play&location=&handout=) — T2.5b. *@
+   «Описание» с открытой формой. Режим игры — тот же адрес с ?mode=play&location=&handout=&run= (ScenarioPlay): вместо
+   вкладок — три колонки во всю высоту (.cm-play), шапка та же. *@
 <PageHeader Title="@(_scenario?.Name ?? "Сценарий")">
     <Actions>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Href="@ScenarioLinks.List">Сценарии</Button>
-        @if (_scenario?.CanEdit == true)
+        @if (IsPlay)
         {
-            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-scenario" OnClick="() => _formOpen = true">Описание</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-table-columns" data-testid="leave-play"
+                    Href="@ScenarioLinks.Workspace(ScenarioId)">Рабочее место</Button>
+        }
+        else
+        {
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Href="@ScenarioLinks.List">Сценарии</Button>
+            @if (_scenario?.CanEdit == true)
+            {
+                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-scenario" OnClick="() => _formOpen = true">Описание</Button>
+            }
+            @if (_scenario is not null)
+            {
+                <Button Small="true" Icon="fa-play" data-testid="enter-play" Href="@ScenarioLinks.Play(ScenarioId)">Режим игры</Button>
+            }
         }
         @if (_scenario is not null)
         {
@@ -26,7 +39,7 @@
     </Actions>
 </PageHeader>
 
-<div class="cm-page">
+<div class="@(IsPlay ? "cm-play" : "cm-page")">
     <AsyncContent @ref="_content" Key="ScenarioId" Load="LoadAsync" LoadingMessage="Загружаю сценарий…" Context="loaded"
                   ErrorTitle="Сценарий недоступен">
         <Empty>
@@ -36,39 +49,46 @@
         </Empty>
         <ChildContent>
             @{ var scenario = loaded!; }
-            <Tabs Items="TabItems(scenario)" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Части сценария" />
-            @switch (ActiveTab)
+            @if (IsPlay)
             {
-                case ScenarioLinks.Tabs.Text:
-                    <ScenarioTextTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Locations:
-                    <ScenarioLocationsTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Checks:
-                    <ScenarioChecksTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Facts:
-                    <ScenarioFactsTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Handouts:
-                    <ScenarioHandoutsTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Creatures:
-                    <ScenarioCreaturesTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Items:
-                    <ScenarioItemsTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Npcs:
-                    <ScenarioNpcsTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                case ScenarioLinks.Tabs.Pregens:
-                    <ScenarioPregensTab Scenario="scenario" OnChanged="ReloadAsync" />
-                    break;
-                default:
-                    <ScenarioDescriptionTab Scenario="scenario" OnEdit="() => _formOpen = true" OnOpenTab="SelectTab" />
-                    break;
+                <ScenarioPlay Scenario="scenario" LocationId="Location" HandoutId="Handout" RunId="Run" OnChanged="ReloadAsync" />
+            }
+            else
+            {
+                <Tabs Items="TabItems(scenario)" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Части сценария" />
+                @switch (ActiveTab)
+                {
+                    case ScenarioLinks.Tabs.Text:
+                        <ScenarioTextTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Locations:
+                        <ScenarioLocationsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Checks:
+                        <ScenarioChecksTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Facts:
+                        <ScenarioFactsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Handouts:
+                        <ScenarioHandoutsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Creatures:
+                        <ScenarioCreaturesTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Items:
+                        <ScenarioItemsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Npcs:
+                        <ScenarioNpcsTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    case ScenarioLinks.Tabs.Pregens:
+                        <ScenarioPregensTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        break;
+                    default:
+                        <ScenarioDescriptionTab Scenario="scenario" OnEdit="() => _formOpen = true" OnOpenTab="SelectTab" />
+                        break;
+                }
             }
         </ChildContent>
     </AsyncContent>
@@ -86,6 +106,17 @@
     [Parameter] public Guid ScenarioId { get; set; }
 
     [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+
+    /// <summary>Режим игры: <c>?mode=play</c> (<see cref="ScenarioLinks.Play"/>).</summary>
+    [SupplyParameterFromQuery(Name = "mode")] public string? Mode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "location")] public Guid? Location { get; set; }
+
+    [SupplyParameterFromQuery(Name = "handout")] public Guid? Handout { get; set; }
+
+    [SupplyParameterFromQuery(Name = "run")] public Guid? Run { get; set; }
+
+    private bool IsPlay => string.Equals(Mode, ScenarioLinks.PlayMode, StringComparison.OrdinalIgnoreCase);
 
     private string ActiveTab => Tab ?? ScenarioLinks.Tabs.Description;
 

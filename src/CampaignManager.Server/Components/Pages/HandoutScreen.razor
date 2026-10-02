@@ -1,0 +1,74 @@
+@page "/scenarios/{ScenarioId:guid}/handouts/{HandoutId:guid}"
+@layout StaticLayout
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [Authorize]
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.Server.Access
+@using Microsoft.AspNetCore.Authorization
+@using CampaignManager.Server.Scenarios
+@using CampaignManager.UI.Scenarios
+@inject ScenarioPlayService Play
+
+@* Второй экран: одна раздатка на весь экран — телевизор, проектор или телефон игрока. Страница статическая (как /Error):
+   рендерит сервер, WebAssembly ей не нужен, и на телевизоре у стола нечему отваливаться. Интерактивного сюда не
+   добавлять. Какая раздатка — целиком в адресе; права — ForHandoutAsync (Хранитель или игрок кампании, где сценарий
+   проходят). Пометки и заметки Хранителя в HandoutScreenDto нет. Листать соседние раздатки нельзя намеренно: игроку это
+   раскрыло бы ещё не выданные материалы. data-enhance-nav="false" — переход отсюда грузит приложение заново, а не
+   подменяет статическую страницу. *@
+<PageTitle>Раздатка</PageTitle>
+
+@if (_handout is null)
+{
+    <header class="cm-topbar">
+        <h1 class="cm-topbar-title">Раздатка</h1>
+    </header>
+    <div class="cm-page">
+        <div class="cm-card">
+            <div class="cm-card-body">
+                <h2 class="cm-h6 mb-1">Раздатка недоступна</h2>
+                <p class="cm-text-muted">Её нет, или вы не ведёте этот сценарий и не играете в кампании, где его проходят.</p>
+            </div>
+            <div class="cm-card-footer">
+                <a href="" class="cm-btn cm-btn-primary" data-enhance-nav="false"><i class="fa-solid fa-house" aria-hidden="true"></i><span>На главную</span></a>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="cm-handout-screen" data-testid="handout-screen">
+        <div class="cm-handout-bar">
+            <a href="@CloseHref" class="cm-btn cm-btn-secondary cm-btn-sm" data-enhance-nav="false">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i><span>Закрыть</span>
+            </a>
+        </div>
+        <HandoutContent Handout="_handout" />
+    </div>
+}
+
+@code {
+    private HandoutScreenDto? _handout;
+
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    [Parameter] public Guid ScenarioId { get; set; }
+
+    [Parameter] public Guid HandoutId { get; set; }
+
+    // Ведущий возвращается к режиму игры, игрок — на главную: сценария ему не открыть.
+    private string CloseHref => _handout?.CanManage == true ? ScenarioLinks.Play(ScenarioId) : "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _handout = await Play.GetHandoutScreenAsync(ScenarioId, HandoutId, HttpContext?.RequestAborted ?? CancellationToken.None);
+        }
+        catch (AccessDeniedException)
+        {
+            // «Нет раздатки» и «не ваша» неразличимы — как у API.
+            if (HttpContext is { Response.HasStarted: false })
+                HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+}

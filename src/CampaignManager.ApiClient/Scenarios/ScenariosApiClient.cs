@@ -44,6 +44,23 @@ public sealed class ScenariosApiClient(HttpClient http) : IScenariosApi
     public Task ReorderAsync(Guid scenarioId, ReorderRequest request, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Put, ScenariosRoutes.Order(scenarioId), request, Json.ReorderRequest, cancellationToken);
 
+    public async Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(ScenariosRoutes.Runs(scenarioId), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.IReadOnlyListScenarioRunDto, cancellationToken, withCode: true);
+    }
+
+    public Task<ScenarioLocationDto> SetLocationMusicAsync(Guid scenarioId, Guid locationId, LocationMusicInput input,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Put, ScenariosRoutes.LocationMusic(scenarioId, locationId), input, Json.LocationMusicInput, Json.ScenarioLocationDto,
+            cancellationToken);
+
+    public async Task<HandoutScreenDto> GetHandoutScreenAsync(Guid scenarioId, Guid handoutId, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(ScenariosRoutes.HandoutScreen(scenarioId, handoutId), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.HandoutScreenDto, cancellationToken, withCode: true);
+    }
+
     public Task<ScenarioLocationDto> AddLocationAsync(Guid scenarioId, LocationInput input, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, ScenariosRoutes.Locations(scenarioId), input, Json.LocationInput, Json.ScenarioLocationDto, cancellationToken);
 

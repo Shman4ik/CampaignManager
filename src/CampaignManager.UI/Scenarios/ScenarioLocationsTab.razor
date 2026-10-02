@@ -55,6 +55,10 @@
                             {
                                 <Badge Tone="Tone.Info" Icon="fa-dice-d20">@location.Checks.Count</Badge>
                             }
+                            @if (location.MusicTags.Count > 0 || location.TrackIds.Count > 0)
+                            {
+                                <Badge Icon="fa-music">@(location.MusicTags.Count + location.TrackIds.Count)</Badge>
+                            }
                             <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < siblings.Count - 1"
                                             OnUp="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, -1)"
                                             OnDown="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, 1)"
@@ -71,6 +75,17 @@
                             else
                             {
                                 <p class="cm-text-muted">Описания нет.</p>
+                            }
+                            @if (location.MusicTags.Count > 0 || location.TrackIds.Count > 0)
+                            {
+                                <p class="text-sm text-primary-600">
+                                    <i class="fa-solid fa-music mr-1 text-primary-400" aria-hidden="true"></i>
+                                    @(location.MusicTags.Count > 0 ? string.Join(", ", location.MusicTags) : "без настроений")
+                                    @if (location.TrackIds.Count > 0)
+                                    {
+                                        <span> · прибито треков: @location.TrackIds.Count</span>
+                                    }
+                                </p>
                             }
                             @if (location.Checks.Count > 0)
                             {
@@ -101,7 +116,11 @@
                                 {
                                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy" data-testid="add-nested"
                                             OnClick="() => Open(null, location.Id)">Вложенная локация</Button>
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-music" Disabled="Busy" data-testid="location-music-open"
+                                            OnClick="() => _music = location">Музыка</Button>
                                 }
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-play"
+                                        Href="@ScenarioLinks.Play(Scenario.Id, location.Id)">В режиме игры</Button>
                             </div>
                         </div>
                     }
@@ -114,11 +133,20 @@
 <LocationFormModal Open="_formOpen" ScenarioId="Scenario.Id" Location="_editing" Locations="Scenario.Locations" DefaultParentId="_parentId"
                    OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
 
+<LocationMusicModal Open="@(_music is not null)" ScenarioId="Scenario.Id" Location="_music" OnClose="() => _music = null" OnSaved="MusicSavedAsync" />
+
 @code {
     private readonly HashSet<Guid> _open = [];
     private bool _formOpen;
     private ScenarioLocationDto? _editing;
     private Guid? _parentId;
+    private ScenarioLocationDto? _music;
+
+    private async Task MusicSavedAsync()
+    {
+        _music = null;
+        await SavedAsync("Музыка локации сохранена.");
+    }
 
     /// <summary>Отступ уровня дерева — целыми классами (Tailwind ищет их текстом); глубже третьего — как третий.</summary>
     private static string Indent(int depth) => depth switch

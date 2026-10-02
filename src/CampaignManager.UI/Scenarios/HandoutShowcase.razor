@@ -1,0 +1,66 @@
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@* Показ раздатки игрокам: iPad разворачивают к столу — на экране только раздатка, на тёмном фоне, и крестик. Окно —
+   общий Modal (Placement Showcase: весь экран, верхний слой над шапкой и плеером). Какая раздатка открыта, решает адрес
+   (?handout=), страница лишь передаёт её сюда. Содержимое — HandoutContent, тот же, что на втором экране: пометки и
+   заметки Хранителя в HandoutScreenDto нет. «Второй экран» и «Скопировать адрес» — служебные, приглушены. *@
+<Modal Open="@(Handout is not null)" OnClose="OnClose" Title="Раздатка" Placement="ModalPlacement.Showcase" data-testid="handout-showcase">
+    @if (Handout is not null)
+    {
+        <div class="cm-handout-tools">
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-display" Href="@ScreenHref" target="_blank" rel="noopener"
+                    data-testid="second-screen">Второй экран</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_copied ? "fa-check" : "fa-link")" OnClick="CopyAsync">
+                @(_copied ? "Скопировано" : "Скопировать адрес")
+            </Button>
+            @if (_copyFailed)
+            {
+                <span class="cm-handout-address">@AbsoluteScreenUrl</span>
+            }
+        </div>
+        <HandoutContent Handout="Handout" />
+    }
+</Modal>
+
+@code {
+    private Guid? _shownId;
+    private bool _copied;
+    private bool _copyFailed;
+
+    /// <summary>Показанная раздатка; <c>null</c> — показа нет.</summary>
+    [Parameter] public HandoutScreenDto? Handout { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string ScreenHref => Handout is null ? "" : ScenarioLinks.HandoutScreen(Handout.ScenarioId, Handout.Id);
+
+    private string AbsoluteScreenUrl => Navigation.ToAbsoluteUri(ScreenHref).ToString();
+
+    protected override void OnParametersSet()
+    {
+        // Другая раздатка — «скопировано» относилось к прошлой.
+        if (Handout?.Id == _shownId)
+            return;
+
+        _shownId = Handout?.Id;
+        _copied = false;
+        _copyFailed = false;
+    }
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", AbsoluteScreenUrl);
+            _copied = true;
+            _copyFailed = false;
+        }
+        catch (JSException)
+        {
+            // Буфер доступен только по https и с разрешения браузера — тогда адрес текстом, его можно набрать на втором устройстве.
+            _copied = false;
+            _copyFailed = true;
+        }
+    }
+}
