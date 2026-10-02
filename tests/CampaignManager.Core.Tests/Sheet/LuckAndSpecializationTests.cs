@@ -122,8 +122,8 @@ public sealed class SpecializationRulesTests
     [InlineData(SkillCodes.Firearms, true)]
     [InlineData(SkillCodes.Survival, true)]
     [InlineData(SkillCodes.LanguageForeign, true)]
-    [InlineData("skill.nauka", false)]
-    [InlineData("skill.iskusstvo-remeslo", false)]
+    [InlineData("skill.science", false)]
+    [InlineData("skill.art-craft", false)]
     [InlineData(null, false)]
     public void ParentSharesProgress_ClosedList(string? parentCode, bool expected) =>
         Assert.Equal(expected, SpecializationRules.ParentSharesProgress(parentCode));

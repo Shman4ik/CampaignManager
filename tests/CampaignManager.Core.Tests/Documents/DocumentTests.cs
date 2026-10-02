@@ -170,16 +170,4 @@ public sealed class DocumentTests
         Assert.Equal(4, read.EducationChecks[0].Gain);
         Assert.Equal(Characteristic.DEX, read.FormulaChoice);
     }
-
-    /// <summary>Коды, на которые опираются правила, — транслит книжных имён той же функцией, что у переноса.</summary>
-    [Fact]
-    public void SkillCodes_AreTransliteratedBookNames()
-    {
-        foreach (var (code, name) in SkillCodes.BookNames)
-            Assert.Equal(code, CatalogCode.Skill(name));
-
-        Assert.Equal("skill.strelba-pistolet", CatalogCode.Skill("Стрельба (пистолет)")); // пример из SCHEMA
-        Assert.Equal("skill.iskusstvo-remeslo-akterskaya-igra", CatalogCode.Skill("Искусство/ремесло (актёрская игра)"));
-        Assert.Equal("skill.shchit-1920", CatalogCode.Skill("  Щит, 1920 "));
-    }
 }

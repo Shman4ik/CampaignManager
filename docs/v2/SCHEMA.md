@@ -131,7 +131,9 @@ create unique index campaign_members_one_keeper on cm.campaign_members (campaign
 
 -- ═══════════════════════ Справочники ═══════════════════════
 -- Общее у всех: code — стабильный ключ книжной записи (синхронизация с правилами идёт по нему,
--- переименование — обычный update); null у самодельных. source — страница книги; null — самодельное.
+-- переименование — обычный update); null у самодельных. У навыков — английское название книги
+-- по явной таблице Core/Catalogs/SkillCodes (skill.dodge, skill.firearms.handgun); у остальных
+-- справочников правило кода ещё не выбрано. source — страница книги; null — самодельное.
 -- Имя уникально без учёта регистра (индекс по lower(name)); поиск — триграммы (pg_trgm).
 -- Тексты описаний книги в публичный репозиторий не кладём (см. TASKS, T1.3, «Сиды»).
 
@@ -660,7 +662,7 @@ Enum'ы строками — в v1 журнал боя хранил `CombatActio
 | `Scenarios.ScenarioCreatures` (4), `ScenarioItems` (5) | `scenario_creatures`, `scenario_items` | Все совпадают с каталогом по имени → `creature_id`/`item_id`; статблок сохраняется как переопределение, только если отличается от бестиария. `Location` (текст, заполнен у 2 тварей и 5 предметов) → `location_note`. |
 | `ScenarioNpcs` (25) | `scenario_npcs` | Как есть. |
 | `Characters` (54) | `characters` | См. ниже. |
-| `Skills` (93) | `skills` | `code` — транслит имени (`skill.strelba-pistolet`); `Is1920`/`IsModern` → `eras`. |
+| `Skills` (93) | `skills` | `code` — по таблице `Core/Catalogs/SkillCodes` (`SkillCodes.FromName`): английское название книги в kebab-case (`skill.dodge`, `skill.cthulhu-mythos`), специализация — код родителя + `.` + английское название специализации (`skill.firearms.handgun`, `skill.fighting.brawl`); не транслит и не вычисляется из имени. Все 93 есть в таблице — навык без кода значит ошибку переноса. `Is1920`/`IsModern` → `eras`. |
 | `Occupations` (31) | `occupations` + `occupation_slots` | 193 названных навыка → слоты `Skill`; 5 названных специализаций («Язык, иностранный (латынь)» и др.) → `Specialization` с родителем; `SkillChoices` (24 варианта) → `Choice` + options; `SocialSkillSlots`/`FreeSkillSlots` → N слотов `Social`/`Free`; `Tags` (маска) → `text[]`. |
 | `Weapons` (108) | `weapons` | Данные чистые: все разобраны, у всех `SkillId`. Числа — из `*Info`. Колонка `CatalogWeaponId` у каталога не нужна (нигде не заполнена). |
 | `Spells` (91), `Books` (106) | `spells`, `books` + `book_spells` | `PossibleSpells` (165) → `book_spells`; сопоставятся ~68, остальные 97 — строкой без `spell_id`. |
@@ -696,7 +698,8 @@ Enum'ы строками — в v1 журнал боя хранил `CombatActio
   уходит в `overrides`, а не теряется.
 - Навыки (2811 строк, у 1851 нет `SkillModelId`) → `skillId` по `SkillModelId`, иначе по точному
   имени, иначе «родитель + специализация» по имени в скобках, иначе — с учётом старых написаний
-  («Языки (родной)» = «Язык, родной»), иначе самодельный навык с `category` из имени группы v1.
+  («Языки (родной)» = «Язык, родной»; написания v1 знает `SkillCodes.FromName`, дальше — навык с этим
+  кодом), иначе самодельный навык с `category` из имени группы v1 и `code` null.
   Несопоставленные — в отчёт. Отметка развития (`IsUsed`) переносится, кроме листов из импорта
   сценария, где она стоит у всех навыков сразу (ошибка v1).
 - Оружие (30 копий; у 14 нет `CatalogWeaponId`) → оружие листа: `catalogWeaponId` по

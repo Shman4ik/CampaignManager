@@ -70,7 +70,7 @@ internal static class Sheets
         {
             var skill = new SkillDefinition(Guid.NewGuid(), name)
             {
-                Code = code ?? (parent is null ? CatalogCode.Skill(name) : null),
+                Code = code ?? SkillCodes.FromName(name),
                 BaseValue = baseValue,
                 ParentId = parent,
                 BaseFormula = formula,
