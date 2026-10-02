@@ -35,7 +35,7 @@ dotnet run --project tools/CampaignManager.Migrate -- --settings <файл> --re
 | `Migrator.cs` | порядок шагов, очистка, сохранение входа, проверки SCHEMA после вставки |
 | `Steps/*` | люди → справочники → фонотека → кампании → сценарии → листы → состав НПС → история правок |
 | `Catalogs/OwnerDecisions.cs` | решения владельца 2026-10-02 данными: современные предметы, повторы, реквизит, разделы |
-| `Catalogs/SkillResolver.cs` | навык v1 по имени: справочник и старые написания (`SkillCodes`), «родитель (специализация)», языки |
+| `Core/Characters/SkillNameResolver` | навык v1 по имени: справочник и старые написания (`SkillCodes`), «родитель (специализация)», языки — переехал в Core (T2.4): им же импорт сценария (`SheetBuilder.FromImport`) |
 | `Catalogs/OccupationSlots.cs`, `StatblockConverter.cs` | четыре поля профессии → слоты; четыре jsonb твари → `Statblock` |
 | `Sheets/SheetConverter.cs` | лист v1 → `CharacterSheet` (не апкастер Core: нужен справочник) |
 | `Files/FileStore.cs` | `CopyObject` на стороне MinIO из боевого бакета в бакет среды |
