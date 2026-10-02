@@ -8,7 +8,11 @@ public static class MusicRoutes
     /// <summary>Треки — справочник: <c>/api/v1/catalogs/music</c>, все операции <see cref="ICatalogApi{T}"/>.</summary>
     public static readonly CatalogRoute Tracks = new("music");
 
-    /// <summary><c>GET</c> — мои закреплённые настроения (<see cref="PinnedTagsDto"/>); <c>PUT</c> <see cref="PinnedTagsRequest"/>.</summary>
+    /// <summary>
+    /// <c>GET</c> — мои закреплённые настроения (<see cref="PinnedTagsDto"/>); <c>PUT</c> <see cref="PinnedTagsRequest"/>.
+    /// Хранятся настройкой <see cref="Profile.PreferenceKeys.MusicPinnedTags"/> (та же строка, что у общего API
+    /// настроек профиля); здесь — типизированно, с нормализацией тегов и умолчаниями.
+    /// </summary>
     public const string PinnedTags = ApiRoutes.Prefix + "/music/pinned-tags";
 
     /// <summary><c>GET ?tag=…&amp;track=…</c> — треки пула сцены (<see cref="MusicPoolDto"/>).</summary>
@@ -17,12 +21,6 @@ public static class MusicRoutes
     public const string TagQuery = "tag";
 
     public const string TrackQuery = "track";
-
-    /// <summary>
-    /// Ключ настройки в <c>cm.user_preferences</c> (тот же, что в v1). Значение — JSON-массив строк; перенесённое
-    /// из v1 может быть строкой через запятую — сервер читает обе формы.
-    /// </summary>
-    public const string PinnedTagsPreferenceKey = "music.pinnedTags";
 
     public static string PoolUrl(MusicPool pool) =>
         Pool + "?" + string.Join('&',

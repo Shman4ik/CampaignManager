@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CampaignManager.Contracts.Music;
+using CampaignManager.Contracts.Profile;
 using CampaignManager.Core.Music;
 using CampaignManager.Data;
 using CampaignManager.Data.Music;
@@ -25,7 +26,7 @@ public sealed class MusicService(
     {
         var user = await RequireUserAsync(cancellationToken);
         var row = await db.UserPreferences.AsNoTracking()
-            .SingleOrDefaultAsync(p => p.UserId == user.Id && p.Key == MusicRoutes.PinnedTagsPreferenceKey, cancellationToken);
+            .SingleOrDefaultAsync(p => p.UserId == user.Id && p.Key == PreferenceKeys.MusicPinnedTags, cancellationToken);
         var tags = row is null ? [] : Read(row.Value.RootElement);
         return tags.Count > 0 ? new PinnedTagsDto(tags, IsDefault: false) : Defaults;
     }
@@ -51,7 +52,7 @@ public sealed class MusicService(
         if (tags.Count == 0)
         {
             await db.UserPreferences
-                .Where(p => p.UserId == user.Id && p.Key == MusicRoutes.PinnedTagsPreferenceKey)
+                .Where(p => p.UserId == user.Id && p.Key == PreferenceKeys.MusicPinnedTags)
                 .ExecuteDeleteAsync(cancellationToken);
             return Defaults;
         }
@@ -60,7 +61,7 @@ public sealed class MusicService(
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"""
              insert into cm.user_preferences (user_id, key, value, updated_at)
-             values ({user.Id}, {MusicRoutes.PinnedTagsPreferenceKey}, {json}::jsonb, now())
+             values ({user.Id}, {PreferenceKeys.MusicPinnedTags}, {json}::jsonb, now())
              on conflict (user_id, key) do update set value = excluded.value, updated_at = excluded.updated_at
              """,
             cancellationToken);

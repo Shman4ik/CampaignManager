@@ -6,6 +6,7 @@ using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Music;
 using CampaignManager.Contracts.Platform;
+using CampaignManager.Contracts.Profile;
 using CampaignManager.Core.Identity;
 using CampaignManager.Core.Music;
 using CampaignManager.Data;
@@ -284,7 +285,7 @@ public sealed class MusicApiTests(MusicApp app) : IClassFixture<MusicApp>
             db.UserPreferences.Add(new UserPreference
             {
                 UserId = app.Veteran.Id,
-                Key = MusicRoutes.PinnedTagsPreferenceKey,
+                Key = PreferenceKeys.MusicPinnedTags,
                 Value = JsonDocument.Parse("\"Погоня,сон, Бой\""),
             });
             await db.SaveChangesAsync(Cancellation);
