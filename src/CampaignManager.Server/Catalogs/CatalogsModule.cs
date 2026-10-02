@@ -7,7 +7,6 @@ using CampaignManager.Data.Catalogs;
 using CampaignManager.Server.Catalogs.Stores;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Net.Http.Headers;
 
 namespace CampaignManager.Server.Catalogs;
 
@@ -92,7 +91,7 @@ public static class CatalogsModule
             .WithName($"Create-{route.Name}");
 
         group.MapPut("{id:guid}", async Task<IResult> (Guid id, HttpRequest request, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
-                TypedResults.Ok(await catalog.UpdateAsync(id, await BodyAsync(request, itemType, cancellationToken), IfMatch(request), cancellationToken)))
+                TypedResults.Ok(await catalog.UpdateAsync(id, await BodyAsync(request, itemType, cancellationToken), HttpIfMatch.Version(request), cancellationToken)))
             .WithName($"Update-{route.Name}");
 
         group.MapDelete("{id:guid}", async Task<IResult> (Guid id, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
@@ -149,11 +148,4 @@ public static class CatalogsModule
 
     private static bool Flag(HttpRequest request, string name) =>
         bool.TryParse(request.Query[name], out var value) && value;
-
-    /// <summary><c>If-Match: "123"</c> → 123; нет заголовка или не версия — null (сервис ответит 428).</summary>
-    private static uint? IfMatch(HttpRequest request) =>
-        EntityTagHeaderValue.TryParseList(request.Headers.IfMatch, out var tags) && tags.Count == 1
-        && uint.TryParse(tags[0].Tag.AsSpan().Trim('"'), NumberStyles.None, CultureInfo.InvariantCulture, out var version)
-            ? version
-            : null;
 }

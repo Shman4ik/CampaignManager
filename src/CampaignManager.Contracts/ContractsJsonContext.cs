@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
+using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Music;
@@ -36,6 +37,13 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CampaignJournalDto))]
 [JsonSerializable(typeof(CampaignSessionDto))]
 [JsonSerializable(typeof(CampaignSessionInput))]
+[JsonSerializable(typeof(CharacterDto))]
+[JsonSerializable(typeof(CharacterSavedDto))]
+[JsonSerializable(typeof(SetPortraitRequest))]
+[JsonSerializable(typeof(SetStatusRequest))]
+[JsonSerializable(typeof(IReadOnlyList<PartyMemberDto>))]
+[JsonSerializable(typeof(IReadOnlyList<InvestigatorDto>))]
+[JsonSerializable(typeof(CampaignManager.Core.Characters.CharacterSheet))]
 [JsonSerializable(typeof(SkillDto))]
 [JsonSerializable(typeof(CatalogList<SkillDto>))]
 [JsonSerializable(typeof(CatalogFile<SkillDto>))]
