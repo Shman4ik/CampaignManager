@@ -4,6 +4,7 @@ using CampaignManager.Server.Campaigns;
 using CampaignManager.Server.Catalogs;
 using CampaignManager.Server.Files;
 using CampaignManager.Server.Identity;
+using CampaignManager.Server.Music;
 using CampaignManager.Server.Platform;
 using CampaignManager.Server.Profile;
 
@@ -17,6 +18,7 @@ builder.AddCampaignsModule();
 builder.AddCatalogsModule();
 builder.AddProfileModule();
 builder.AddAdminModule();
+builder.AddMusicModule();
 
 var app = builder.Build();
 
@@ -29,6 +31,7 @@ app.MapCampaignsApi();
 app.MapCatalogsApi();
 app.MapProfileApi();
 app.MapAdminApi();
+app.MapMusicApi();
 app.MapClientApp();
 
 app.Run();

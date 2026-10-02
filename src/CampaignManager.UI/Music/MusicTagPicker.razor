@@ -1,0 +1,74 @@
+@using CampaignManager.Core.Music
+
+@* Выбор настроений: известные теги фонотеки — переключатели, новый — полем (Enter или «Добавить»).
+   Отдаёт новый список на каждую правку (как StringListEditor). Теги приводятся к одному виду
+   (MusicTags: нижний регистр, «ё» → «е») — иначе «Бой» и «бой» разошлись бы по двум пулам. Своей
+   карточки не рисует. *@
+<div class="flex flex-col gap-2">
+    @if (Values.Count > 0)
+    {
+        <div class="flex flex-wrap gap-1.5" aria-label="Выбрано">
+            @foreach (var tag in Values)
+            {
+                var current = tag;
+                <Button Small="true" Variant="ButtonVariant.Primary" Icon="fa-xmark" AriaLabel="@($"Убрать: {current}")"
+                        OnClick="() => RemoveAsync(current)">@current</Button>
+            }
+        </div>
+    }
+
+    @if (Suggestions.Count > 0)
+    {
+        <div class="flex flex-wrap gap-1.5" aria-label="Есть в фонотеке">
+            @foreach (var tag in Suggestions)
+            {
+                var current = tag;
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="() => AddAsync(current)">@current</Button>
+            }
+        </div>
+    }
+
+    <div class="flex gap-2">
+        <input class="cm-input min-w-0 flex-1" placeholder="@Placeholder" aria-label="Новое настроение" maxlength="@MusicTags.MaxLength"
+               value="@_draft" @oninput="e => _draft = e.Value?.ToString() ?? string.Empty" @onkeydown="OnKeyDown" />
+        <Button Small="true" Variant="ButtonVariant.Secondary" Disabled="string.IsNullOrWhiteSpace(_draft)" OnClick="AddDraftAsync">Добавить</Button>
+    </div>
+</div>
+
+@code {
+    private string _draft = "";
+
+    [Parameter] public IReadOnlyList<string> Values { get; set; } = [];
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    /// <summary>Теги, которые уже есть в фонотеке, — подсказки.</summary>
+    [Parameter] public IReadOnlyList<string> Known { get; set; } = [];
+
+    [Parameter] public string Placeholder { get; set; } = "Новое настроение: «ритуал», «море»…";
+
+    private List<string> Suggestions => [.. Known.Where(t => !Values.Contains(t))];
+
+    private Task AddAsync(string tag)
+    {
+        var normalized = MusicTags.Normalize(tag);
+        return normalized.Length == 0 || Values.Contains(normalized)
+            ? Task.CompletedTask
+            : ValuesChanged.InvokeAsync([.. Values, normalized]);
+    }
+
+    private Task RemoveAsync(string tag) => ValuesChanged.InvokeAsync([.. Values.Where(t => t != tag)]);
+
+    private async Task AddDraftAsync()
+    {
+        // Через запятую — сразу несколько.
+        var added = MusicTags.Parse(_draft).Where(t => !Values.Contains(t)).ToList();
+        _draft = "";
+        if (added.Count > 0)
+        {
+            await ValuesChanged.InvokeAsync([.. Values, .. added]);
+        }
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Enter" ? AddDraftAsync() : Task.CompletedTask;
+}

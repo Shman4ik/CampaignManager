@@ -22,6 +22,12 @@ public abstract class CatalogStore<TEntity, TDto>
     /// <summary>Таблица кодов книги: префикс кода проверяется по ней.</summary>
     public abstract CatalogCodeTable Codes { get; }
 
+    /// <summary>
+    /// Есть ли у записей код книги. У фонотеки нет: присланный код сервис не читает, и импорт ищет
+    /// запись только по имени.
+    /// </summary>
+    public virtual bool HasCodes => true;
+
     /// <summary>Как назвать запись в сообщении: «Оружие», «Навык».</summary>
     public abstract string Noun { get; }
 

@@ -134,7 +134,7 @@ public sealed class CatalogService<TEntity, TDto>(
         foreach (var dto in incoming)
         {
             var name = dto.Name?.Trim() ?? "";
-            var code = string.IsNullOrWhiteSpace(dto.Code) ? null : dto.Code.Trim();
+            var code = !store.HasCodes || string.IsNullOrWhiteSpace(dto.Code) ? null : dto.Code.Trim();
             var target = code is not null && byCode.TryGetValue(code, out var withCode) ? withCode
                 : byName.GetValueOrDefault(NameKey(name)) is { } withName
                   && (!byCodeOnly || withName.Code is null) && (code is null || withName.Code is null || withName.Code == code)
@@ -233,7 +233,7 @@ public sealed class CatalogService<TEntity, TDto>(
         }
 
         string? code = null;
-        if (isNew && !string.IsNullOrWhiteSpace(dto.Code))
+        if (isNew && store.HasCodes && !string.IsNullOrWhiteSpace(dto.Code))
         {
             code = ValidCode(dto.Code.Trim());
             if (await store.Set(db).AnyAsync(e => e.Code == code, cancellationToken))

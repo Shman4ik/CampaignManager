@@ -1,0 +1,295 @@
+@using CampaignManager.Contracts.Music
+@using CampaignManager.Core.Music
+@using CampaignManager.UI.Platform
+@implements IAsyncDisposable
+@inject MusicPlayer Player
+@inject ICatalogApi<MusicTrackDto> Tracks
+@inject IMusicApi Music
+@inject BrowserStorage Storage
+@inject IJSRuntime JS
+
+@* Плеер Хранителя: кнопка «Музыка» в шапке (слот PageHeaderSlots.Music — шапка о модуле не знает) и панель
+   внизу колонки страницы. Стоит в MainLayout (через MusicPlayerHost, только Хранителю), поэтому переходы
+   между страницами её не пересоздают; сам звук — в MusicPlayerBar.razor.js, состояние — синглтон MusicPlayer.
+   Скрытая панель звук не останавливает: не рисуется только разметка. *@
+@if (_hasLibrary || Player.Current is not null)
+{
+    <SectionContent SectionName="@PageHeaderSlots.Music">
+        <Button Small="true" Variant="@(Player.IsPanelOpen ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                Icon="@(Player.IsPlaying ? "fa-volume-high" : "fa-music")" aria-expanded="@(Player.IsPanelOpen ? "true" : "false")"
+                data-testid="music-panel-toggle" AriaLabel="Музыка" OnClick="Player.TogglePanel">
+            @* На телефоне — только значок: в шапке там уже «Добавить» и «Ширма». *@
+            <span class="max-sm:sr-only">Музыка</span>
+        </Button>
+    </SectionContent>
+}
+
+@if (Player.IsPanelOpen)
+{
+    <section class="cm-music-bar" aria-label="Плеер" data-testid="music-bar">
+        <div class="cm-music-row">
+            <i class="@Css.Join("fa-solid fa-music cm-music-glyph", Player.IsPlaying ? "cm-music-glyph-live" : null)" aria-hidden="true"></i>
+
+            <div class="cm-music-title">
+                @if (Player.Current is { } track)
+                {
+                    <span class="cm-music-name" data-testid="music-current">@track.Name</span>
+                    @if (!string.IsNullOrWhiteSpace(Player.PoolLabel) && Player.PoolLabel != track.Name)
+                    {
+                        <span class="cm-music-pool">@Player.PoolLabel</span>
+                    }
+                }
+                else
+                {
+                    <span class="cm-music-pool">Музыка не играет</span>
+                }
+            </div>
+
+            <div class="cm-music-controls">
+                @* cm-music-start — кнопка может начать звук: модуль «расчехляет» аудио ещё на pointerdown,
+                   внутри настоящего жеста (иначе iPad откажет в play()). *@
+                <Button Small="true" Variant="ButtonVariant.Secondary" class="cm-music-start" Disabled="Player.Current is null"
+                        Icon="@(Player.IsPlaying ? "fa-pause" : "fa-play")" AriaLabel="@(Player.IsPlaying ? "Пауза" : "Продолжить")"
+                        data-testid="music-toggle-pause" OnClick="Player.TogglePause" />
+                <Button Small="true" Variant="ButtonVariant.Secondary" class="cm-music-start" Disabled="!Player.CanRoll"
+                        Icon="fa-shuffle" AriaLabel="Другой трек из того же настроения" OnClick="() => Player.Roll()" />
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Disabled="Player.Current is null"
+                        Icon="fa-stop" AriaLabel="Остановить" OnClick="Player.Stop" />
+                <div class="cm-music-volume">
+                    <Button Small="true" Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
+                            AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
+                    <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
+                </div>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_moodsOpen ? "fa-chevron-down" : "fa-chevron-up")"
+                        AriaLabel="@(_moodsOpen ? "Скрыть настроения" : "Показать настроения")" OnClick="() => _moodsOpen = !_moodsOpen" />
+                <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="Скрыть панель плеера" OnClick="Player.ClosePanel" />
+            </div>
+        </div>
+
+        @if (Player.Current is not null)
+        {
+            @* Разметка неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
+               C# эти элементы после первой отрисовки не патчит. Не привязывать к ним @bind и value с меняющимся
+               значением — ползунок начнёт вырываться из-под пальца. *@
+            <div class="cm-music-seek">
+                <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
+                <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0" aria-label="Позиция в треке" disabled />
+                <span class="cm-music-time" id="cm-music-duration">--:--</span>
+            </div>
+        }
+
+        @if (_moodsOpen || Player.Current is null)
+        {
+            <div class="cm-music-row cm-music-moods">
+                <span class="cm-music-pool">Настроение:</span>
+                @foreach (var tag in Player.PinnedTags)
+                {
+                    var current = tag;
+                    var count = Player.Resolve(MusicPool.Of([current])).Count;
+                    <Button Small="true" class="cm-music-start" Disabled="count == 0"
+                            Variant="@(IsCurrentPool(current) ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                            OnClick="() => Player.PlayTag(current)">@current</Button>
+                }
+                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-sliders" Href="music">Фонотека</Button>
+            </div>
+        }
+
+        @if (Player.NeedsGesture)
+        {
+            @* У «Включить звук» нет @onclick: её обрабатывает прямой слушатель модуля — запуск обязан
+               случиться синхронно внутри жеста, а путь через C# и обратно активацию уже теряет. *@
+            <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" Icon="fa-hand-pointer" class="mb-0" OnClose="() => Player.SetNeedsGesture(false)">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span>Браузер не разрешает запустить звук сам — это его защита от самоиграющих страниц.</span>
+                    <button type="button" id="cm-music-unlock" class="cm-btn cm-btn-primary cm-btn-sm">
+                        <i class="fa-solid fa-play" aria-hidden="true"></i><span>Включить звук</span>
+                    </button>
+                </div>
+            </Alert>
+        }
+
+        @if (Player.Error is { } error)
+        {
+            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" OnClose="Player.ClearError">@error</Alert>
+        }
+    </section>
+}
+
+@code {
+    private const string VolumeKey = "cm.music.volume";
+
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MusicPlayerBar>? _self;
+    private bool _moodsOpen;
+    private bool _hasLibrary;
+
+    // Что уже отправлено в браузер: отличить «сменился трек» от «подвинули громкость».
+    private long _pushedCommand = -1;
+    private bool _pushedPlaying;
+    private int _pushedVolume = -1;
+    private bool _pushedMuted;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Player.Changed += OnPlayerChanged;
+        _hasLibrary = Player.Library.Count > 0;
+
+        if (await Storage.GetAsync(VolumeKey) is { } saved && saved.Split(':') is [var volume, var muted]
+            && int.TryParse(volume, out var level))
+        {
+            Player.RestoreVolume(level, muted == "1");
+        }
+
+        try
+        {
+            if (!Player.LibraryLoaded)
+            {
+                Player.SetLibrary((await Tracks.ListAsync()).Items);
+            }
+
+            Player.SetPinnedTags(await Music.GetPinnedTagsAsync());
+        }
+        catch (HttpRequestException)
+        {
+            // Нет связи — панель покажет то, что есть; фонотеку перечитает страница /music.
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_module is null)
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Music/MusicPlayerBar.razor.js");
+            _self = DotNetObjectReference.Create(this);
+            var handshake = await _module.InvokeAsync<Handshake>("attach", _self);
+            // Панель пересоздалась поверх играющего трека — команду считаем доставленной, иначе
+            // перезарядка оборвала бы музыку.
+            if (handshake.HasTrack && Player.Current is { } current && handshake.TrackId == current.Id.ToString())
+            {
+                _pushedCommand = Player.CommandVersion;
+                _pushedPlaying = Player.IsPlaying;
+                _pushedVolume = Player.Volume;
+                _pushedMuted = Player.Muted;
+            }
+        }
+
+        await PushAsync();
+    }
+
+    /// <summary>Довести до браузера то, что разошлось с состоянием: трек, пауза, громкость.</summary>
+    private async Task PushAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_pushedCommand != Player.CommandVersion)
+            {
+                _pushedCommand = Player.CommandVersion;
+                _pushedPlaying = Player.IsPlaying;
+                _pushedVolume = Player.Volume;
+                _pushedMuted = Player.Muted;
+                if (Player.Current is { } track)
+                {
+                    await _module.InvokeVoidAsync("load", Describe(track), Player.Volume, Player.Muted);
+                }
+                else
+                {
+                    await _module.InvokeVoidAsync("stop");
+                }
+
+                return;
+            }
+
+            if (_pushedPlaying != Player.IsPlaying)
+            {
+                _pushedPlaying = Player.IsPlaying;
+                await _module.InvokeVoidAsync(Player.IsPlaying ? "resume" : "pause");
+            }
+
+            if (_pushedVolume != Player.Volume || _pushedMuted != Player.Muted)
+            {
+                _pushedVolume = Player.Volume;
+                _pushedMuted = Player.Muted;
+                await _module.InvokeVoidAsync("setVolume", Player.Volume, Player.Muted);
+                await Storage.SetAsync(VolumeKey, $"{Player.Volume}:{(Player.Muted ? 1 : 0)}");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Трек в том виде, в каком его понимает модуль. Словарь, а не record: аргументы интеропа обрезка не бережёт.</summary>
+    private static Dictionary<string, object?> Describe(MusicTrackDto track) => new()
+    {
+        ["id"] = track.Id.ToString(),
+        ["kind"] = track.IsYouTube ? "youtube" : "file",
+        ["youtubeId"] = track.YoutubeId,
+        ["url"] = track.FileUrl,
+        ["startSeconds"] = track.StartSeconds,
+        ["loop"] = track.Loop,
+        ["volume"] = track.Volume,
+    };
+
+    private bool IsCurrentPool(string tag) => Player.IsPlaying && Player.PoolLabel == tag;
+
+    private void OnVolumeInput(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var value))
+        {
+            Player.SetVolume(value);
+        }
+    }
+
+
+    private void OnPlayerChanged()
+    {
+        _hasLibrary = Player.Library.Count > 0;
+        InvokeAsync(StateHasChanged);
+    }
+
+    // ── Что сообщает браузер ──
+
+    [JSInvokable]
+    public void NotifyEnded() => Player.TrackEnded();
+
+    [JSInvokable]
+    public void NotifyError(string message) => Player.ReportError(message);
+
+    [JSInvokable]
+    public void NotifyNeedsGesture()
+    {
+        _moodsOpen = true;
+        Player.SetNeedsGesture(true);
+    }
+
+    [JSInvokable]
+    public void NotifyGestureResolved() => Player.SetNeedsGesture(false);
+
+    public async ValueTask DisposeAsync()
+    {
+        Player.Changed -= OnPlayerChanged;
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("detach", _self);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        finally
+        {
+            _self?.Dispose();
+        }
+    }
+
+    /// <summary>Что ответил модуль при подключении: играет ли уже что-нибудь.</summary>
+    private sealed record Handshake(bool HasTrack, string? TrackId);
+}

@@ -21,6 +21,7 @@
 | `Admin/` | `/admin/users`, `/admin/applications`, `/admin/files`, счётчик заявок `AdminBadges` — [CLAUDE.md](Admin/CLAUDE.md) |
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
+| `Music/` | фонотека `/music`, плеер (кнопка в слоте шапки, панель внизу колонки, звук — модуль JS) — [Music/CLAUDE.md](Music/CLAUDE.md) |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
 
 Службы кита регистрирует `AddCampaignManagerUi(isDevelopment)` (зовёт `Web.Client`).

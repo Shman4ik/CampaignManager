@@ -1,3 +1,4 @@
+using CampaignManager.Data.Catalogs;
 using CampaignManager.Data.Files;
 using CampaignManager.Data.Identity;
 using CampaignManager.Data.Infrastructure;
@@ -6,11 +7,14 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace CampaignManager.Data.Music;
 
-/// <summary>Трек фонотеки: файл в MinIO или ролик YouTube — ровно одно из двух (CHECK).</summary>
-public sealed class MusicTrack : ICreatedAt, IUpdatedAt
+/// <summary>
+/// Трек фонотеки: файл в MinIO или ролик YouTube — ровно одно из двух (CHECK). Фонотека — справочник
+/// (общий <c>CatalogService</c> сервера: список с ETag, правка с <c>If-Match</c>, импорт, журнал правок),
+/// поэтому трек — <see cref="CatalogEntry"/>. Кода книги и страницы-источника у трека нет: эти два свойства
+/// модель не отображает (колонок нет), они всегда <c>null</c>.
+/// </summary>
+public sealed class MusicTrack : CatalogEntry
 {
-    public Guid Id { get; set; } = Guid.CreateVersion7();
-    public required string Name { get; set; }
     public string? YoutubeId { get; set; }
     public Guid? FileId { get; set; }
     public int StartSeconds { get; set; }
@@ -18,12 +22,6 @@ public sealed class MusicTrack : ICreatedAt, IUpdatedAt
     public int Volume { get; set; } = 100;
     public List<string> Tags { get; set; } = [];
     public string? Notes { get; set; }
-    public Guid? CreatedById { get; set; }
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }
-
-    /// <summary>Системная <c>xmin</c>: фонотеку правят с двух устройств, как справочники.</summary>
-    public uint Version { get; set; }
 }
 
 internal sealed class MusicTrackConfiguration : IEntityTypeConfiguration<MusicTrack>
@@ -35,6 +33,9 @@ internal sealed class MusicTrackConfiguration : IEntityTypeConfiguration<MusicTr
             table.HasCheckConstraint("ck_music_tracks_volume", "volume BETWEEN 0 AND 100");
             table.HasCheckConstraint("ck_music_tracks_youtube_or_file", "(youtube_id IS NULL) <> (file_id IS NULL)");
         });
+        // Кода книги и источника у трека нет — колонок под них тоже.
+        entity.Ignore(t => t.Code);
+        entity.Ignore(t => t.Source);
         entity.Property(t => t.StartSeconds).HasDbDefault(0);
         entity.Property(t => t.Loop).HasDbDefault(true);
         entity.Property(t => t.Volume).HasDbDefault(100);

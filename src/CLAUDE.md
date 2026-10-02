@@ -180,6 +180,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
 | `Campaigns` | кампании, участники и псевдонимы, журнал встреч, главная (`/api/v1/home`) | [Server/Campaigns/CLAUDE.md](CampaignManager.Server/Campaigns/CLAUDE.md), [UI/Campaigns/CLAUDE.md](CampaignManager.UI/Campaigns/CLAUDE.md) |
 | `Catalogs` | семь справочников одним сервисом: список с ETag, правка с `If-Match`, импорт и экспорт JSON, синхронизация с правилами, журнал правок | [Server/Catalogs/CLAUDE.md](CampaignManager.Server/Catalogs/CLAUDE.md), [UI/Catalogs/CLAUDE.md](CampaignManager.UI/Catalogs/CLAUDE.md) |
+| `Music` | фонотека — справочник на том же сервисе; закреплённые настроения, пул сцены; плеер в шапке и панели | [Server/Music/CLAUDE.md](CampaignManager.Server/Music/CLAUDE.md), [UI/Music/CLAUDE.md](CampaignManager.UI/Music/CLAUDE.md) |
 | `Profile` | личный кабинет: имя и псевдонимы, заявка на Хранителя, настройки (`/api/v1/profile`) | [Server/Profile/CLAUDE.md](CampaignManager.Server/Profile/CLAUDE.md), [UI/Profile/CLAUDE.md](CampaignManager.UI/Profile/CLAUDE.md) |
 | `Admin` | пользователи и роли, заявки на Хранителя (`/api/v1/admin`); страница сирот файлов | [Server/Admin/CLAUDE.md](CampaignManager.Server/Admin/CLAUDE.md), [UI/Admin/CLAUDE.md](CampaignManager.UI/Admin/CLAUDE.md) |
 

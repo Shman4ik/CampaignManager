@@ -22,30 +22,33 @@ public static class CatalogsModule
     {
         var services = builder.Services;
         services.AddScoped<ISaveChangesInterceptor, CatalogAuditInterceptor>();
-        Add<Skill, SkillDto, SkillStore>(services);
-        Add<Occupation, OccupationDto, OccupationStore>(services);
-        Add<Weapon, WeaponDto, WeaponStore>(services);
-        Add<Spell, SpellDto, SpellStore>(services);
-        Add<Book, BookDto, BookStore>(services);
-        Add<Item, ItemDto, ItemStore>(services);
-        Add<Creature, CreatureDto, CreatureStore>(services);
+        AddCatalog<Skill, SkillDto, SkillStore>(services);
+        AddCatalog<Occupation, OccupationDto, OccupationStore>(services);
+        AddCatalog<Weapon, WeaponDto, WeaponStore>(services);
+        AddCatalog<Spell, SpellDto, SpellStore>(services);
+        AddCatalog<Book, BookDto, BookStore>(services);
+        AddCatalog<Item, ItemDto, ItemStore>(services);
+        AddCatalog<Creature, CreatureDto, CreatureStore>(services);
         return builder;
     }
 
     public static IEndpointRouteBuilder MapCatalogsApi(this IEndpointRouteBuilder app)
     {
         var json = ContractsJsonContext.Default;
-        Map<Skill, SkillDto>(app, json.CatalogFileSkillDto);
-        Map<Occupation, OccupationDto>(app, json.CatalogFileOccupationDto);
-        Map<Weapon, WeaponDto>(app, json.CatalogFileWeaponDto);
-        Map<Spell, SpellDto>(app, json.CatalogFileSpellDto);
-        Map<Book, BookDto>(app, json.CatalogFileBookDto);
-        Map<Item, ItemDto>(app, json.CatalogFileItemDto);
-        Map<Creature, CreatureDto>(app, json.CatalogFileCreatureDto);
+        MapCatalog<Skill, SkillDto>(app, json.CatalogFileSkillDto);
+        MapCatalog<Occupation, OccupationDto>(app, json.CatalogFileOccupationDto);
+        MapCatalog<Weapon, WeaponDto>(app, json.CatalogFileWeaponDto);
+        MapCatalog<Spell, SpellDto>(app, json.CatalogFileSpellDto);
+        MapCatalog<Book, BookDto>(app, json.CatalogFileBookDto);
+        MapCatalog<Item, ItemDto>(app, json.CatalogFileItemDto);
+        MapCatalog<Creature, CreatureDto>(app, json.CatalogFileCreatureDto);
         return app;
     }
 
-    private static void Add<TEntity, TDto, TStore>(IServiceCollection services)
+    /// <summary>
+    /// Справочник со своим хранилищем — им же встаёт в общий сервис фонотека (модуль Music).
+    /// </summary>
+    public static void AddCatalog<TEntity, TDto, TStore>(IServiceCollection services)
         where TEntity : CatalogEntry
         where TDto : CatalogItemDto
         where TStore : CatalogStore<TEntity, TDto>, new()
@@ -54,7 +57,8 @@ public static class CatalogsModule
         services.AddScoped<CatalogService<TEntity, TDto>>();
     }
 
-    private static void Map<TEntity, TDto>(IEndpointRouteBuilder app, JsonTypeInfo<CatalogFile<TDto>> fileType)
+    /// <summary>Эндпоинты справочника — те же у всех: список, правка, удаление, импорт, экспорт, синхронизация.</summary>
+    public static void MapCatalog<TEntity, TDto>(IEndpointRouteBuilder app, JsonTypeInfo<CatalogFile<TDto>> fileType)
         where TEntity : CatalogEntry
         where TDto : CatalogItemDto
     {

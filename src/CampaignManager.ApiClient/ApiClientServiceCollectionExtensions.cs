@@ -3,6 +3,7 @@ using CampaignManager.ApiClient.Campaigns;
 using CampaignManager.ApiClient.Catalogs;
 using CampaignManager.ApiClient.Files;
 using CampaignManager.ApiClient.Identity;
+using CampaignManager.ApiClient.Music;
 using CampaignManager.ApiClient.Platform;
 using CampaignManager.ApiClient.Profile;
 using CampaignManager.Contracts.Admin;
@@ -10,6 +11,7 @@ using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
+using CampaignManager.Contracts.Music;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Contracts.Profile;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +46,10 @@ public static class ApiClientServiceCollectionExtensions
         services.AddHttpClient<ICatalogApi<CreatureDto>, CreaturesApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IProfileApi, ProfileApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IAdminApi, AdminApiClient>(http => http.BaseAddress = baseAddress);
+
+        // Фонотека: треки — тот же справочник, сверх него — настроения и пул.
+        services.AddHttpClient<ICatalogApi<MusicTrackDto>, MusicTracksApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<IMusicApi, MusicApiClient>(http => http.BaseAddress = baseAddress);
         return services;
     }
 }
