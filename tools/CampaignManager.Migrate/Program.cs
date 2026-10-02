@@ -1,7 +1,7 @@
 // Перенос v1 → v2 (docs/v2/SCHEMA.md, «Перенос данных»; T1.3). Как запускать — tools/CampaignManager.Migrate/CLAUDE.md.
 //
 //   dotnet run --project tools/CampaignManager.Migrate -- --settings <файл> [--reset] [--report <путь>]
-//                                                           [--skip-files] [--keeper-time-zone Europe/Moscow]
+//                                                           [--skip-files] [--keeper-time-zone Europe/Prague]
 //                                                           [--note «строка в начало отчёта»]
 //
 // Строка подключения — CM_DB (как у dotnet ef), иначе ConnectionStrings:Cm из файла настроек. Настройки MinIO —

@@ -175,7 +175,10 @@ public static partial class ScenarioStep
             ? Era.Classic
             : null;
 
-    /// <summary>Время игры v1 «как ввели» (без пояса) — в UTC из пояса Хранителя.</summary>
+    /// <summary>
+    /// Время игры v1 «как ввели» (без пояса) — в UTC из пояса Хранителя; смещение — на саму дату (летом в Праге
+    /// +2, зимой +1). Время, которого в поясе нет (час перевода стрелок вперёд), сдвигается на час позже.
+    /// </summary>
     public static DateTimeOffset? ScheduledAt(string? text, string timeZone)
     {
         if (string.IsNullOrWhiteSpace(text)
@@ -185,7 +188,13 @@ public static partial class ScenarioStep
         }
 
         var zone = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
-        var utc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), zone);
+        local = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+        if (zone.IsInvalidTime(local))
+        {
+            local = local.AddHours(1);
+        }
+
+        var utc = TimeZoneInfo.ConvertTimeToUtc(local, zone);
         return new DateTimeOffset(utc, TimeSpan.Zero);
     }
 

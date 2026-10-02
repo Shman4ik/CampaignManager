@@ -127,9 +127,12 @@ public sealed class LuckRulesTests
         }
     }
 
-    /// <summary>Одна трата на приложение: списывает Удачу и снимает отметку развития (в v1 — только одна из двух).</summary>
+    /// <summary>
+    /// Одна трата на приложение: списывает Удачу и снимает отметку, поставленную за этот же бросок (купленный
+    /// успех её не даёт, стр. 97).
+    /// </summary>
     [Fact]
-    public void Spend_DeductsLuck_AndClearsDevelopmentCheck()
+    public void Spend_DeductsLuck_AndClearsMarkOfThisRoll()
     {
         var skill = Skill("Внимание", 40, isChecked: true);
         var sheet = NewSheet(50, skill);
@@ -141,6 +144,20 @@ public sealed class LuckRulesTests
         Assert.True(LuckRules.Spend(sheet, 10, skill));
         Assert.Equal(20, sheet.Current.Luck);
         Assert.False(skill.Checked);
+    }
+
+    /// <summary>Отметку, стоявшую до броска, трата не снимает: она заработана другим успехом.</summary>
+    [Fact]
+    public void Spend_WithoutMarkOfThisRoll_KeepsEarlierMark()
+    {
+        var skill = Skill("Внимание", 40, isChecked: true);
+        var sheet = NewSheet(50, skill);
+        sheet.Current.Luck = 30;
+
+        Assert.True(LuckRules.Spend(sheet, 10));
+
+        Assert.Equal(20, sheet.Current.Luck);
+        Assert.True(skill.Checked);
     }
 }
 

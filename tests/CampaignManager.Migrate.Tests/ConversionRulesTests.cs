@@ -115,8 +115,28 @@ public sealed class ConversionRulesTests
     [InlineData("2015", null)]
     public void Scenario_era_from_free_text(string text, Era? expected) => Assert.Equal(expected, ScenarioStep.EraOf(text));
 
+    /// <summary>Пояс Хранителя по умолчанию — Прага, смещение берётся на саму дату (летнее время).</summary>
+    [Theory]
+    [InlineData("2026-04-13T19:00:00", 17)] // летнее время, +2
+    [InlineData("2026-01-10T19:00:00", 18)] // зимнее, +1
+    [InlineData("2026-10-25T19:00:00", 18)] // день перевода назад: вечером уже +1
+    public void Scheduled_date_without_zone_is_keeper_local_time(string text, int utcHour)
+    {
+        var at = ScenarioStep.ScheduledAt(text, new MigrationOptions().KeeperTimeZone)!.Value;
+
+        Assert.Equal("Europe/Prague", new MigrationOptions().KeeperTimeZone);
+        Assert.Equal(TimeSpan.Zero, at.Offset);
+        Assert.Equal(utcHour, at.Hour);
+        Assert.Equal(DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture).Date, at.Date);
+    }
+
     [Fact]
-    public void Scheduled_date_without_zone_is_keeper_local_time() =>
+    public void Scheduled_date_in_spring_gap_moves_forward() =>
+        // 29 марта 2026 в Праге 02:00–03:00 не существует — 02:30 читается как 03:30 летнего (+2)
+        Assert.Equal(new DateTimeOffset(2026, 3, 29, 1, 30, 0, TimeSpan.Zero), ScenarioStep.ScheduledAt("2026-03-29T02:30:00", "Europe/Prague"));
+
+    [Fact]
+    public void Scheduled_date_other_zone_still_honoured() =>
         Assert.Equal(new DateTimeOffset(2026, 4, 13, 16, 0, 0, TimeSpan.Zero), ScenarioStep.ScheduledAt("2026-04-13T19:00:00", "Europe/Moscow"));
 
     [Theory]

@@ -139,7 +139,9 @@ public sealed class CheckRulesTests
         var passed = CheckRules.Evaluate(30, 60, Difficulty.Regular);
         var fumble = CheckRules.Evaluate(97, 60, Difficulty.Hard);
 
-        Assert.Null(CheckRules.LuckBlockReason(Luck, passed, isPushed: true));
+        // Удачу не тратят на проверку Удачи и на повтор — и пройденную тоже (её поднимают до уровня выше)
+        Assert.Equal("На проверку Удачи пункты Удачи не тратят (стр. 97).", CheckRules.LuckBlockReason(Luck, passed, isPushed: true));
+        Assert.Null(CheckRules.LuckBlockReason(Library, passed, false));
         Assert.Equal("На проверку Удачи пункты Удачи не тратят (стр. 97).", CheckRules.LuckBlockReason(Luck, Failed(), false));
         Assert.Equal("На повторную проверку Удачу не тратят: либо повтор, либо Удача (стр. 97).",
             CheckRules.LuckBlockReason(Library, Failed(), true));
@@ -251,6 +253,78 @@ public sealed class CheckRulesTests
         Assert.Equal(20, sheet.Current.Luck);
         Assert.True(spot.Checked); // отметка от прошлого успеха остаётся
         Assert.Equal("Внимание", subject.Name);
+    }
+
+    /// <summary>
+    /// Отметка, которую диалог поставил за этот же бросок, снимается, когда бросок поднимают Удачей: купленный
+    /// успех отметки не даёт (стр. 97).
+    /// </summary>
+    [Fact]
+    [Trait("page", "97")]
+    public void Apply_LuckAfterMarkOfThisRoll_UndoesThatMark()
+    {
+        var spot = Skill("Внимание", 40);
+        var sheet = NewSheet(50, spot);
+        sheet.Current.Luck = 30;
+        var subject = CheckSubjects.Skill(Catalog, spot);
+
+        Assert.True(CheckRules.Apply(sheet, Catalog, new CheckSheetChange { Mark = subject })); // успех отметили
+        Assert.True(spot.Checked);
+
+        var change = CheckRules.LuckSpend(subject, 15, markedThisRoll: true); // и подняли до трудного Удачей
+        Assert.Same(subject, change.UndoMarkOfThisRoll);
+        Assert.True(CheckRules.Apply(sheet, Catalog, change));
+
+        Assert.Equal(15, sheet.Current.Luck);
+        Assert.False(spot.Checked);
+    }
+
+    /// <summary>Отметка от другого броска остаётся: трата снимает только свою, за этот бросок.</summary>
+    [Fact]
+    [Trait("page", "97")]
+    public void Apply_LuckWithoutMarkOfThisRoll_KeepsSheetMark()
+    {
+        var spot = Skill("Внимание", 40, isChecked: true);
+        var sheet = NewSheet(50, spot);
+        sheet.Current.Luck = 30;
+        var subject = CheckSubjects.Skill(Catalog, spot);
+
+        var change = CheckRules.LuckSpend(subject, 10, markedThisRoll: false);
+        Assert.Null(change.UndoMarkOfThisRoll);
+        Assert.True(CheckRules.Apply(sheet, Catalog, change));
+
+        Assert.Equal(20, sheet.Current.Luck);
+        Assert.True(spot.Checked);
+    }
+
+    /// <summary>Отметка вместе с тратой Удачи не ставится: за купленный успех её нет (стр. 97).</summary>
+    [Fact]
+    [Trait("page", "97")]
+    public void Apply_MarkTogetherWithLuck_NotSet()
+    {
+        var spot = Skill("Внимание", 40);
+        var sheet = NewSheet(50, spot);
+        sheet.Current.Luck = 30;
+
+        Assert.True(CheckRules.Apply(sheet, Catalog, new CheckSheetChange { LuckCost = 10, Mark = CheckSubjects.Skill(Catalog, spot) }));
+
+        Assert.Equal(20, sheet.Current.Luck);
+        Assert.False(spot.Checked);
+    }
+
+    /// <summary>Удачи не хватило — не меняется ничего, и отметка за этот бросок тоже остаётся.</summary>
+    [Fact]
+    [Trait("page", "97")]
+    public void Apply_LuckBeyondCurrent_KeepsMarkOfThisRoll()
+    {
+        var spot = Skill("Внимание", 40, isChecked: true);
+        var sheet = NewSheet(50, spot);
+        sheet.Current.Luck = 5;
+
+        Assert.False(CheckRules.Apply(sheet, Catalog, CheckRules.LuckSpend(CheckSubjects.Skill(Catalog, spot), 6, markedThisRoll: true)));
+
+        Assert.Equal(5, sheet.Current.Luck);
+        Assert.True(spot.Checked);
     }
 
     [Fact]

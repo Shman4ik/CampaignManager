@@ -20,8 +20,18 @@ public sealed record CheckSheetChange
     /// <summary>Сколько пунктов Удачи списать (стр. 97); 0 — не тратили.</summary>
     public int LuckCost { get; init; }
 
-    /// <summary>Навык, которому поставить отметку развития (стр. 92); null — не отмечать.</summary>
+    /// <summary>
+    /// Навык, которому поставить отметку развития (стр. 92); null — не отмечать. Вместе с тратой Удачи
+    /// (<see cref="LuckCost"/> &gt; 0) игнорируется: успех, купленный Удачей, отметки не даёт (стр. 97).
+    /// </summary>
     public CheckSubject? Mark { get; init; }
+
+    /// <summary>
+    /// Навык, которому <b>этот же</b> диалог уже поставил отметку за этот бросок, а теперь бросок поднимают
+    /// Удачей: отметка за него снимается вместе с тратой. Отметку, стоявшую до броска, сюда не кладут.
+    /// Без <see cref="LuckCost"/> не значит ничего. Собирает <see cref="CheckRules.LuckSpend"/>.
+    /// </summary>
+    public CheckSubject? UndoMarkOfThisRoll { get; init; }
 }
 
 /// <summary>
@@ -80,19 +90,32 @@ public static class CheckRules
     /// Почему за этот бросок нельзя заплатить Удачей (стр. 97); null — можно. Крах считается с учётом
     /// сложности (<see cref="Check.Evaluate"/>): 97 на трудной проверке навыка 60 — уже крах, хотя
     /// <see cref="LuckRules.CanSpendOn"/> видит только обычную сложность.
+    /// <para>
+    /// Удачей и пройденную проверку поднимают до уровня выше (трудный успех во встречной проверке, стр. 97);
+    /// критический выше некуда — у него <see cref="LuckOptions"/> пуст.
+    /// </para>
     /// </summary>
     public static string? LuckBlockReason(CheckSubject subject, CheckOutcome outcome, bool isPushed)
     {
-        if (outcome.Passed)
-            return null;
         if (subject.Kind is CheckSubjectKind.Luck)
             return "На проверку Удачи пункты Удачи не тратят (стр. 97).";
         if (isPushed)
             return "На повторную проверку Удачу не тратят: либо повтор, либо Удача (стр. 97).";
-        if (outcome.Level is SuccessLevel.Fumble or SuccessLevel.Critical)
+        if (outcome.Level is SuccessLevel.Fumble)
             return "Крах вступает в силу в любом случае — выкупить его нельзя (стр. 97).";
         return null;
     }
+
+    /// <summary>
+    /// Что записать в лист, когда за этот бросок платят Удачей. <paramref name="markedThisRoll"/> — диалог уже
+    /// отметил навык за этот же бросок (успех отметили, потом решили поднять уровень): купленный успех отметки
+    /// не даёт (стр. 97), и эта отметка снимается. Отметку, стоявшую на листе до броска, трата не трогает.
+    /// </summary>
+    public static CheckSheetChange LuckSpend(CheckSubject subject, int cost, bool markedThisRoll) => new()
+    {
+        LuckCost = cost,
+        UndoMarkOfThisRoll = markedThisRoll && subject.Kind is CheckSubjectKind.Skill ? subject : null,
+    };
 
     /// <summary>
     /// Во что обойдётся дотянуть провал до нужной сложности и выше. Цены считает <see cref="LuckRules"/>;
@@ -135,18 +158,23 @@ public static class CheckRules
     /// Записывает в лист то, что решили в диалоге: списывает Удачу и ставит отметку развития. Строку навыка
     /// справочника, которого на листе нет, заводит с базой. Возвращает, изменился ли лист.
     /// <para>
-    /// Трата идёт через <see cref="LuckRules.Spend"/> <b>без навыка</b>: отметку за эту проверку диалог ещё не
-    /// ставил (её дают только после успеха, и не за купленный), а стоящая на навыке — от прошлого честного
-    /// успеха, и снимать её не за что (знание <c>Checks/CLAUDE.md</c> v1).
+    /// Правило «купленный успех отметки не даёт» (стр. 97) — в <see cref="LuckRules.Spend"/>: ей передаётся
+    /// только строка, отмеченная за этот же бросок (<see cref="CheckSheetChange.UndoMarkOfThisRoll"/>). Отметка,
+    /// стоявшая до броска, — от другого честного успеха, и снимать её не за что. <see cref="CheckSheetChange.Mark"/>
+    /// вместе с тратой Удачи не ставится.
     /// </para>
     /// </summary>
     public static bool Apply(CharacterSheet sheet, SkillCatalog catalog, CheckSheetChange change)
     {
-        var changed = false;
-
         if (change.LuckCost > 0)
-            changed |= LuckRules.Spend(sheet, change.LuckCost);
+        {
+            var markOfThisRoll = change.UndoMarkOfThisRoll is { Kind: CheckSubjectKind.Skill } undo
+                ? CheckSubjects.FindSkill(sheet, catalog, undo)
+                : null;
+            return LuckRules.Spend(sheet, change.LuckCost, markOfThisRoll);
+        }
 
+        var changed = false;
         if (change.Mark is { Kind: CheckSubjectKind.Skill } subject && DevelopmentPhaseRules.CanBeChecked(subject.SkillCode))
         {
             var row = CheckSubjects.FindSkill(sheet, catalog, subject) ?? AddCatalogRow(sheet, catalog, subject);

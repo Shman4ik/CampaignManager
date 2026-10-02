@@ -1,7 +1,9 @@
+using System.Text.Json.Nodes;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Documents;
 using CampaignManager.Data.Characters;
+using CampaignManager.Migrate.Catalogs;
 using CampaignManager.Migrate.Sheets;
 using CampaignManager.Migrate.V1;
 
@@ -14,6 +16,25 @@ namespace CampaignManager.Migrate.Steps;
 /// </summary>
 public static class CharacterStep
 {
+    /// <summary>
+    /// Точечная правка тестового листа (<see cref="OwnerDecisions.TestSheetsCurrentToMax"/>): текущие ПЗ, ПМ,
+    /// Рассудок и Удача — максимумы из v1, но не выше формулы Core. Максимум Рассудка v1 у такого листа — стартовый
+    /// (= МОЩ), а не потолок 99 − Мифы, поэтому и берётся он; Удача max v1 — выброшенная при создании.
+    /// </summary>
+    public static CurrentValues FillCurrentToMax(JsonNode v1Document, CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var derived = DerivedAttributeRules.Compute(sheet, catalog);
+        var v1 = v1Document.Obj("DerivedAttributes");
+
+        static int Pick(int? v1Max, int formulaMax) => v1Max is > 0 and var max ? Math.Min(max, formulaMax) : formulaMax;
+
+        sheet.Current.HitPoints = Pick(v1.Obj("HitPoints").Int("MaxValue"), derived.MaxHitPoints);
+        sheet.Current.MagicPoints = Pick(v1.Obj("MagicPoints").Int("MaxValue"), derived.MaxMagicPoints);
+        sheet.Current.Sanity = Pick(v1.Obj("Sanity").Int("MaxValue"), derived.MaxSanity);
+        sheet.Current.Luck = Pick(v1.Obj("Luck").Int("MaxValue"), derived.MaxLuck);
+        return sheet.Current;
+    }
+
     public static void Run(MigrationState s)
     {
         var converter = new SheetConverter(
@@ -74,6 +95,14 @@ public static class CharacterStep
 
             var document = row.Obj("Character") ?? throw new InvalidOperationException($"Лист {id} пуст.");
             var (sheet, notes) = converter.Convert(document, character.Kind == CharacterKind.Npc);
+            if (OwnerDecisions.TestSheetsCurrentToMax.ContainsKey(id))
+            {
+                var c = FillCurrentToMax(document, sheet, s.SkillCatalog);
+                s.Report.Add(ReportSections.Fixed,
+                    $"тестовый лист «{sheet.Personal.Name}» ({character.Kind}): текущие ПЗ, ПМ, Рассудок и Удача были нулями → "
+                    + $"{c.HitPoints}/{c.MagicPoints}/{c.Sanity}/{c.Luck} — максимумы v1 в пределах формулы (решение владельца, по id листа)");
+            }
+
             character.Sheet = CmJson.Write(sheet);
             character.SheetVersion = CharacterSheet.CurrentVersion;
 
@@ -114,7 +143,8 @@ public static class CharacterStep
 
             if (notes.Discrepancies.Count > 0)
             {
-                s.Report.Add(ReportSections.Warnings, $"лист {label}: вычисленное расходится с v1 (побеждает формула): {string.Join("; ", notes.Discrepancies)}");
+                // Решение владельца 2026-10-02: у сыщиков и прегенов верна формула, overrides им не заводятся
+                s.Report.Add(ReportSections.FormulaWins, $"{label}: {string.Join("; ", notes.Discrepancies)}");
             }
 
             byKind[character.Kind] = byKind.GetValueOrDefault(character.Kind) + 1;

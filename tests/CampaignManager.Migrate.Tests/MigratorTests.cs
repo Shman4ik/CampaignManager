@@ -148,7 +148,7 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Equal(V1Fixture.Template, copy.SourceScenarioId);
         var run = await db.ScenarioRuns.SingleAsync(Token);
         Assert.Equal((V1Fixture.Copy, ScenarioRunStatus.Finished, true), (run.ScenarioId, run.Status, run.SignupOpen));
-        Assert.Equal(new DateTimeOffset(2026, 4, 13, 16, 0, 0, TimeSpan.Zero), run.ScheduledAt);
+        Assert.Equal(new DateTimeOffset(2026, 4, 13, 17, 0, 0, TimeSpan.Zero), run.ScheduledAt); // 19:00 в Праге, летнее +2
 
         var template = await db.Scenarios
             .Include(s => s.Locations).ThenInclude(l => l.Checks)

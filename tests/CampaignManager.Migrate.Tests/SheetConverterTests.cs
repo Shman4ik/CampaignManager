@@ -78,6 +78,32 @@ public sealed class SheetConverterTests
         Assert.Equal(new SheetOverrides(), sheet.Overrides);
     }
 
+    /// <summary>
+    /// Точечная правка тестового листа с нулями (решение владельца): текущие = максимумы v1, но не выше формулы;
+    /// незаполненный максимум v1 — формула.
+    /// </summary>
+    [Fact]
+    public void Test_sheet_with_zeros_gets_current_values_from_maxima()
+    {
+        var row = TestCatalog.Sheet("player-milie-mare");
+        var document = row["Character"]!;
+        var derivedV1 = document["DerivedAttributes"]!;
+        derivedV1["HitPoints"] = new System.Text.Json.Nodes.JsonObject { ["Value"] = 0, ["MaxValue"] = 999 };
+        derivedV1["MagicPoints"] = new System.Text.Json.Nodes.JsonObject { ["Value"] = 0, ["MaxValue"] = 0 };
+        derivedV1["Sanity"] = new System.Text.Json.Nodes.JsonObject { ["Value"] = 0, ["MaxValue"] = 40 };
+        derivedV1["Luck"] = new System.Text.Json.Nodes.JsonObject { ["Value"] = 0, ["MaxValue"] = 70 };
+        var (sheet, _) = Converter().Convert(document, isNpc: false);
+        var formula = DerivedAttributeRules.Compute(sheet, TestCatalog.Skills);
+
+        var current = Steps.CharacterStep.FillCurrentToMax(document, sheet, TestCatalog.Skills);
+
+        Assert.Equal(formula.MaxHitPoints, current.HitPoints);   // 999 в v1 — не выше формулы
+        Assert.Equal(formula.MaxMagicPoints, current.MagicPoints); // не заполнен в v1 — формула
+        Assert.Equal(40, current.Sanity);                          // стартовый Рассудок v1, а не потолок 99 − Мифы
+        Assert.Equal(70, current.Luck);
+        Assert.Same(sheet.Current, current);
+    }
+
     [Fact]
     public void Npc_from_book_keeps_printed_values_in_overrides_and_loses_import_checkmarks()
     {
