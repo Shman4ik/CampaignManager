@@ -52,6 +52,12 @@
   Версия Tailwind — в `package.json`, точно. **На Windows таргет ставит `npm_config_os=win32`**:
   в `~/.npmrc` владельца `os=linux`, и npm ставил нативные модули Linux — сборка падала с
   «Cannot find module lightningcss.win32-x64-msvc.node».
+- **Отпечаток `styles.css` таргет считает сам** (`GetFileHash` → метаданные `Integrity` у `Content`).
+  Кэш статических ассетов (`obj/…/rpswa.dswa.cache.json`) узнаёт о смене файла только по
+  `ModifiedTime`: если содержимое сменилось, а время записи нет, отдаются прежние отпечаток, ETag и
+  `.gz`. С `Integrity` ключ кэша идёт от содержимого. Не убирать. Проверка целиком (правка `.razor`
+  → одна сборка → сервер отдаёт новый класс по новому отпечатку) — `pwsh tools/check-styles-fingerprint.ps1`,
+  она же шаг CI.
 
 ## Слои и каскад
 
