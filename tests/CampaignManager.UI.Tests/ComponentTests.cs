@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Bunit;
 using CampaignManager.UI.Layout;
 using CampaignManager.UI.Shared;
@@ -135,6 +136,40 @@ public sealed class ComponentTests : KitContext
     public void Phone_bar_has_room_for_four_items()
     {
         Assert.InRange(NavMenu.Items.Count(i => i.OnPhoneBar), 1, 4);
+    }
+
+    // Меню только прячет — защищает сервер; но гостю разделы под входом не показываются.
+    [Theory]
+    [InlineData(null, new[] { "" })]
+    [InlineData("Player", new[] { "", "campaigns", "weapons" })]
+    [InlineData("Keeper", new[] { "", "campaigns", "scenarios", "weapons" })]
+    public void Menu_shows_sections_by_role(string? role, string[] mustSee)
+    {
+        var user = role is null
+            ? new ClaimsPrincipal(new ClaimsIdentity())
+            : new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"));
+
+        var visible = NavMenu.VisibleTo(user).Select(i => i.Href).ToList();
+
+        Assert.All(mustSee, href => Assert.Contains(href, visible));
+        Assert.DoesNotContain("admin/users", visible);
+        if (role is null)
+        {
+            Assert.Single(visible);
+        }
+        else if (role == "Player")
+        {
+            Assert.DoesNotContain("scenarios", visible);
+        }
+    }
+
+    [Fact]
+    public void Admin_sees_every_section()
+    {
+        var admin = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Role, "Admin"), new Claim(ClaimTypes.Role, "Keeper")], "test"));
+
+        Assert.Equal(NavMenu.Items.Count, NavMenu.VisibleTo(admin).Count);
     }
 
     private static RenderFragment Columns => builder =>

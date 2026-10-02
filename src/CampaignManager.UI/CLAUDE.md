@@ -12,6 +12,7 @@
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
+| `Identity/` | `/login`, `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4) |
 | `Platform/` | `ApiActivity` — состояние связи и записи |
 | `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5), `/dev/ui` |
 | `wwwroot/` | свои шрифты (`fonts/`), Font Awesome 6.7.2 (`lib/fontawesome/`), `logo.svg`; `styles.css` — сборка, не в git |
@@ -105,11 +106,19 @@
   11px — не длиннее «Заклинания», иначе `ShortLabel` (тест `Rail_labels_fit_one_line`). Развернуть
   рельс нельзя — на столе широкое меню только отнимало ширину.
 - Телефон: на панели пункты с `OnPhoneBar` (не больше четырёх) и «Ещё» — лист со всем списком
-  (`Modal` с `Placement="Sheet"`), закрывается сам при переходе. «Последний сыщик» v1 на панели —
-  решит T2.3.
-- **Права на пункты** — `NavAudience` у пункта; пока входа нет, `MainLayout` показывает всё.
-  T1.4 фильтрует (`NavMenu.VisibleTo`) и кладёт «Войти»/«Выйти» в `Footer` рельса и листа. Счётчик
-  заявок — `Badges` (адрес пункта → число).
+  (`Modal` с `Placement="Sheet"`), закрывается сам при переходе. Состав панели («последний сыщик» v1
+  и т. п.) — решение владельца: в M2.
+- **Права на пункты** — `NavAudience` у пункта; `MainLayout` берёт принципал из каскадного
+  `AuthenticationState` (`MeAuthenticationStateProvider`, `/api/v1/me`) и показывает
+  `NavMenu.VisibleTo(user)`: гость — только «Главная», игрок — разделы под входом, Хранитель — свои,
+  администратор (несёт и роль Keeper) — всё. Меню только прячет — защищает сервер (`AccessPolicy`).
+  Роли сверяются по `nameof(UserRole.…)`. Счётчик заявок — `Badges` (адрес пункта → число), его
+  наполнит админка (T2.9).
+- **Кабинет, «Войти», «Выйти» — не пункты `NavMenu`**, а `UserMenu` в слоте `Footer`: в рельсе —
+  кабинет с инициалом и «Выйти» (без сессии — «Войти» с `returnUrl` текущей страницы), в листе
+  «Ещё» — имя, роль, «Выйти» и кабинет. Вход и выход — серверные адреса, `forceLoad: true`.
+- «Нет доступа» и «Загрузка…» `AuthorizeRouteView` (`Routes.razor`) — тоже на ките: `PageHeader` +
+  `EmptyState`, `LoadingIndicator`.
 - `ErrorBoundary` в `MainLayout` сбрасывается при переходе: ошибка одной страницы не запирает
   приложение. Плашка `#blazor-error-ui` — для ошибок вне страниц.
 
@@ -218,13 +227,14 @@
 
 `/dev/ui` и ссылка на неё с главной видны только при `UiEnvironment.IsDevelopment`. Окружение
 WebAssembly **запекается при сборке**: Debug (`dotnet run`) — Development, `dotnet publish` —
-Production, от окружения сервера не зависит. Страница без авторизации; если T1.4 включит
-обязательный вход для всех страниц — `/dev/*` оставить открытыми в Development.
+Production, от окружения сервера не зависит. Страницы `/dev/*` без `[Authorize]` и открыты гостю;
+данные за ними всё равно под правами API (`/dev/files` без входа получит 401).
 
 ## Тесты
 
 `tests/CampaignManager.UI.Tests` — bUnit: диалог (закрытый не рендерится, подтверждение), бросок
 (вписанный, вне 1–100, бонусные кости, уровни), таблица (сортировка в себе и снаружи), редактор
-списка, `AsyncContent`, `ToastService`, `ApiActivity`, правила меню. Базовый класс `KitContext`
+списка, `AsyncContent`, `ToastService`, `ApiActivity`, правила меню и пункты по ролям, `UserMenu`
+гостя и вошедшего (`AddAuthorization()` bUnit — вход Auth0 в браузере агента не пройти). Базовый класс `KitContext`
 регистрирует кит как `Web.Client`; JS-интероп в свободном режиме. Вёрстку bUnit не проверит —
 её смотрят в браузере.

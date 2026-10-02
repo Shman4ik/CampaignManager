@@ -1,11 +1,14 @@
 @inherits LayoutComponentBase
+@using System.Security.Claims
 
 @* Оболочка приложения: рельс (планшет), нижняя панель (телефон), колонка страницы и общие
    хосты — диалог подтверждения, уведомления, индикатор связи. Страница внутри — PageHeader
    и один <div class="cm-page">. Кнопки модулей в шапке (ширма, плеер) их компоненты кладут
    отсюда в PageHeaderSlots. *@
 <div class="cm-shell">
-    <NavRail Items="_items" />
+    <NavRail Items="_items">
+        <Footer><UserMenu Placement="UserMenuPlacement.Rail" /></Footer>
+    </NavRail>
 
     <div class="cm-main">
         <ErrorBoundary @ref="_errorBoundary">
@@ -24,7 +27,9 @@
         </ErrorBoundary>
     </div>
 
-    <BottomNav Items="_items" />
+    <BottomNav Items="_items">
+        <Footer><UserMenu Placement="UserMenuPlacement.Sheet" /></Footer>
+    </BottomNav>
 </div>
 
 <DialogHost />
@@ -39,10 +44,19 @@
 
 @code {
     private ErrorBoundary? _errorBoundary;
+    private IReadOnlyList<NavItem> _items = NavMenu.VisibleTo(new ClaimsPrincipal());
 
-    // Права на пункты меню проверит вход (T1.4): пока пользователя нет, видно всё.
-    private readonly IReadOnlyList<NavItem> _items = NavMenu.VisibleTo(_ => true).ToList();
+    // Кто вошёл — из /api/v1/me (MeAuthenticationStateProvider): меню прячет чужие разделы.
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
 
-    // Ошибка на одной странице не должна запирать всё приложение: переход на другую её сбрасывает.
-    protected override void OnParametersSet() => _errorBoundary?.Recover();
+    protected override async Task OnParametersSetAsync()
+    {
+        // Ошибка на одной странице не должна запирать всё приложение: переход на другую её сбрасывает.
+        _errorBoundary?.Recover();
+
+        if (AuthenticationState is not null)
+        {
+            _items = NavMenu.VisibleTo((await AuthenticationState).User);
+        }
+    }
 }

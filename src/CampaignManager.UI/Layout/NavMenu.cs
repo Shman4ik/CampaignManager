@@ -1,9 +1,13 @@
+using System.Security.Claims;
+using CampaignManager.Core.Identity;
+
 namespace CampaignManager.UI.Layout;
 
 /// <summary>
 /// Пункты меню — один список на рельс планшета и на нижнюю панель с листом «Ещё» телефона. В v1 их
 /// было два: <c>Sidebar</c> и <c>MobileBottomNav</c> (234 строки, на iPad мёртвая) расходились.
-/// Новый раздел приложения — одна строка здесь.
+/// Новый раздел приложения — одна строка здесь. Кабинет, вход и выход — не разделы: их рисует
+/// <c>UserMenu</c> в подвале рельса и листа.
 /// </summary>
 public static class NavMenu
 {
@@ -27,8 +31,6 @@ public static class NavMenu
 
         new("admin/users", "fa-users", "Пользователи", NavGroup.System, NavAudience.Admin, ShortLabel: "Аккаунты"),
         new("admin/applications", "fa-inbox", "Заявки", NavGroup.System, NavAudience.Admin),
-
-        new("profile", "fa-id-card", "Личный кабинет", NavGroup.Account, NavAudience.SignedIn, ShortLabel: "Кабинет"),
     ];
 
     /// <summary>Подписи групп в листе «Ещё»; в рельсе группы разделяет линейка.</summary>
@@ -36,13 +38,24 @@ public static class NavMenu
     {
         NavGroup.Reference => "Справочники",
         NavGroup.System => "Система",
-        NavGroup.Account => "Учётная запись",
         _ => "Основное",
     };
 
-    /// <summary>Пункты, которые видит пользователь с такими правами.</summary>
-    public static IEnumerable<NavItem> VisibleTo(Func<NavAudience, bool> canSee) =>
-        Items.Where(item => canSee(item.Audience));
+    /// <summary>
+    /// Пункты, которые видит пользователь (принципал из <c>/api/v1/me</c>). Меню только не показывает
+    /// лишнего — защищает сервер. Администратор несёт и роль Хранителя, поэтому видит всё.
+    /// </summary>
+    public static IReadOnlyList<NavItem> VisibleTo(ClaimsPrincipal user) =>
+        Items.Where(item => CanSee(item.Audience, user)).ToList();
+
+    public static bool CanSee(NavAudience audience, ClaimsPrincipal user) => audience switch
+    {
+        NavAudience.Everyone => true,
+        NavAudience.SignedIn => user.Identity?.IsAuthenticated == true,
+        NavAudience.Keeper => user.IsInRole(nameof(UserRole.Keeper)),
+        NavAudience.Admin => user.IsInRole(nameof(UserRole.Admin)),
+        _ => false,
+    };
 }
 
 /// <param name="Href">Адрес относительно корня, без ведущего «/»: так его понимает NavLink.</param>
@@ -66,12 +79,9 @@ public enum NavGroup
     Main,
     Reference,
     System,
-
-    /// <summary>Внизу рельса, отдельно от разделов.</summary>
-    Account,
 }
 
-/// <summary>Кому виден пункт. Права решает сервер (T1.4); меню только не показывает лишнего.</summary>
+/// <summary>Кому виден пункт. Права решает сервер (Access); меню только не показывает лишнего.</summary>
 public enum NavAudience
 {
     Everyone,
