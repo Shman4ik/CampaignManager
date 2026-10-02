@@ -11,7 +11,8 @@
 
 @* Библиотека сценариев — общая для Хранителей (в v1 «Шаблоны сценариев»; сценарии кампаний в 2.0 стали
    прохождениями, T2.5c). /scenarios/new — та же страница с открытой формой нового сценария: адрес v1 сохранён.
-   Кнопки — по флагам из API (удалить — автор или администратор). Импорт JSON — T2.5d. *@
+   Кнопки — по флагам из API (удалить — автор или администратор). «Импорт JSON» (T2.5d) — в панели фильтров, как у
+   справочников: в шапке на телефоне помещаются две кнопки. *@
 <PageHeader Title="Сценарии">
     <Actions>
         @if (_list?.CanCreate == true)
@@ -23,8 +24,17 @@
 
 <div class="cm-page">
     <FilterPanel OnReset="() => _search = string.Empty">
-        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию, месту, описанию…" aria-label="Поиск"
-               data-testid="scenario-search" @bind="_search" @bind:event="oninput" />
+        <ChildContent>
+            <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию, месту, описанию…" aria-label="Поиск"
+                   data-testid="scenario-search" @bind="_search" @bind:event="oninput" />
+        </ChildContent>
+        <Actions>
+            @if (_list?.CanCreate == true)
+            {
+                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-import" data-testid="scenario-import-open-dialog"
+                        OnClick="() => _importOpen = true">Импорт JSON</Button>
+            }
+        </Actions>
     </FilterPanel>
 
     <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
@@ -105,6 +115,8 @@
     </AsyncContent>
 </div>
 
+<ScenarioImportModal Open="_importOpen" OnClose="() => _importOpen = false" OnImported="ReloadAsync" OnOpen="Created" />
+
 <ScenarioFormModal Open="IsNew" OnClose="() => Navigation.NavigateTo(ScenarioLinks.List, replace: true)" OnCreated="Created" />
 
 @code {
@@ -112,6 +124,7 @@
     private ScenarioListDto? _list;
     private string _search = "";
     private Guid? _busy;
+    private bool _importOpen;
 
     private bool IsNew => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/') == ScenarioLinks.New;
 
@@ -136,6 +149,8 @@
     }
 
     private void Created(Guid id) => Navigation.NavigateTo(ScenarioLinks.Workspace(id), replace: true);
+
+    private Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
 
     private async Task DeleteAsync(ScenarioSummaryDto scenario)
     {

@@ -1,0 +1,109 @@
+@using CampaignManager.Contracts.Scenarios
+
+@* Отчёт импорта сценария: итог, счётчики, общие предупреждения и строки — сначала ошибки и предупреждения, все строки —
+   под раскрытием. Стоит внутри окна — своей карточки не рисует. *@
+<div class="grid gap-3" data-testid="scenario-import-report">
+    <Alert Tone="@SummaryTone" ShowIcon="true" class="mb-0" Title="@SummaryTitle">
+        <span>@Counts</span>
+    </Alert>
+
+    @if (Report.Warnings.Count > 0)
+    {
+        <Alert Tone="Tone.Warning" Small="true" class="mb-0">
+            <ul class="list-disc pl-5">
+                @foreach (var warning in Report.Warnings)
+                {
+                    <li>@warning</li>
+                }
+            </ul>
+        </Alert>
+    }
+
+    @{ var notable = Report.Lines.Where(l => l.Outcome is ScenarioImportOutcome.Failed || l.Message is not null).ToList(); }
+    @if (notable.Count > 0)
+    {
+        <div class="max-h-72 overflow-y-auto rounded-md border border-primary-200" data-testid="scenario-import-notable">
+            @foreach (var line in notable.OrderBy(l => l.Outcome is not ScenarioImportOutcome.Failed))
+            {
+                @Row(line)
+            }
+        </div>
+    }
+
+    @if (Report.Lines.Count > 0)
+    {
+        <details class="rounded-md border border-primary-200">
+            <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-primary-700">Все строки файла (@Report.Lines.Count)</summary>
+            <div class="max-h-72 overflow-y-auto border-t border-primary-200">
+                @foreach (var line in Report.Lines)
+                {
+                    @Row(line)
+                }
+            </div>
+        </details>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ScenarioImportReport Report { get; set; } = null!;
+
+    private Tone SummaryTone => Report.Failed > 0 ? Tone.Error : Report.Imported ? Tone.Success : Tone.Info;
+
+    private string SummaryTitle => Report switch
+    {
+        { Failed: > 0 } => $"Ошибок: {Report.Failed} — ничего не записано. Исправьте файл и проверьте снова.",
+        { Imported: true } => $"Готово: «{Report.ScenarioName}» записан.",
+        _ => $"Пробный прогон: «{Report.ScenarioName}» запишется так — ничего не записано.",
+    };
+
+    private string Counts =>
+        string.Join(" · ", new (string Label, int Value)[]
+            {
+                ("локаций", Report.Locations), ("проверок", Report.Checks), ("фактов", Report.KeyFacts), ("раздаток", Report.Handouts),
+                ("тварей", Report.Creatures), ("предметов", Report.Items), ("новых НПС", Report.NpcsCreated),
+                ("НПС из библиотеки", Report.NpcsReused), ("прегенов", Report.Pregens),
+            }
+            .Where(c => c.Value > 0)
+            .Select(c => $"{c.Label}: {c.Value}")
+            .DefaultIfEmpty("в файле нет частей — только шапка"));
+
+    private static RenderFragment Row(ScenarioImportLine line) =>
+        @<div class="flex items-baseline gap-3 border-t border-primary-100 px-3 py-1.5 text-sm first:border-t-0">
+            <Badge Tone="@ToneOf(line.Outcome)">@Label(line.Outcome)</Badge>
+            <span class="min-w-0 flex-1 break-words">
+                <span class="cm-text-muted">@PartLabel(line.Part):</span>
+                <span class="font-medium text-primary-800">@line.Name</span>
+                @if (line.Message is not null)
+                {
+                    <span class="@(line.Outcome is ScenarioImportOutcome.Failed ? "text-error-700" : "text-warning-700")"> — @line.Message</span>
+                }
+            </span>
+        </div>;
+
+    private static Tone ToneOf(ScenarioImportOutcome outcome) => outcome switch
+    {
+        ScenarioImportOutcome.Created => Tone.Success,
+        ScenarioImportOutcome.Reused => Tone.Info,
+        _ => Tone.Error,
+    };
+
+    private static string Label(ScenarioImportOutcome outcome) => outcome switch
+    {
+        ScenarioImportOutcome.Created => "новое",
+        ScenarioImportOutcome.Reused => "из библиотеки",
+        _ => "ошибка",
+    };
+
+    private static string PartLabel(ScenarioImportPart part) => part switch
+    {
+        ScenarioImportPart.Location => "Локация",
+        ScenarioImportPart.Check => "Проверка",
+        ScenarioImportPart.KeyFact => "Факт",
+        ScenarioImportPart.Handout => "Раздатка",
+        ScenarioImportPart.Creature => "Тварь",
+        ScenarioImportPart.Item => "Предмет",
+        ScenarioImportPart.Npc => "НПС",
+        ScenarioImportPart.Pregen => "Преген",
+        _ => "Сценарий",
+    };
+}
