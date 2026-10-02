@@ -155,7 +155,8 @@ public static class EncounterQueue
     {
         for (var i = Math.Max(0, from); i < state.TurnOrder.Count; i++)
         {
-            if (state.Find(state.TurnOrder[i]) is { IsOut: false } participant)
+            // Мёртвый (T2.6b) ход не получает, как и выбывший.
+            if (state.Find(state.TurnOrder[i]) is { IsOut: false, Dead: false } participant)
                 return participant.Id;
         }
 

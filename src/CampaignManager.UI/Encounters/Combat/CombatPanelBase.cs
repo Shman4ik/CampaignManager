@@ -9,8 +9,9 @@ namespace CampaignManager.UI.Encounters.Combat;
 /// — тот, чей ход (знание v1: панель следовала за активным участником). Панель правил не считает: собирает настройку,
 /// зовёт <see cref="CombatRules"/> и кладёт результат на предпросмотр — применяет его «Применить» страницы.
 /// </summary>
-public abstract class CombatPanelBase : ComponentBase
+public abstract class CombatPanelBase : ComponentBase, IDisposable
 {
+    private EncounterSession? _subscribed;
     private Guid? _followed;
 
     [CascadingParameter] public EncounterSession Session { get; set; } = null!;
@@ -26,7 +27,38 @@ public abstract class CombatPanelBase : ComponentBase
 
     protected EncounterParticipant? Actor => ActorId is { } id ? State.Find(id) : null;
 
+    /// <summary>
+    /// Сцена меняется не через параметры (каскад зафиксирован, у панелей параметров нет): панель подписана на
+    /// <see cref="EncounterSession.Changed"/> — новый ход, применённый результат, перечитанные листы.
+    /// </summary>
     protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_subscribed, Session))
+        {
+            if (_subscribed is not null)
+                _subscribed.Changed -= OnSessionChanged;
+            _subscribed = Session;
+            Session.Changed += OnSessionChanged;
+        }
+
+        Follow();
+    }
+
+    public void Dispose()
+    {
+        if (_subscribed is not null)
+            _subscribed.Changed -= OnSessionChanged;
+        GC.SuppressFinalize(this);
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(() =>
+    {
+        Follow();
+        StateHasChanged();
+    });
+
+    /// <summary>Действующий — за ходом; выбранный пропал из сцены — сброс.</summary>
+    protected virtual void Follow()
     {
         if (State.ActiveParticipantId != _followed)
         {

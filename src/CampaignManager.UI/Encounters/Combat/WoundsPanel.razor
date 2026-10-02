@@ -116,9 +116,13 @@
 
     private static bool Wounded(EncounterParticipant p) => !p.Dead && (p.HitPoints < p.MaxHitPoints || p.Unconscious || p.Dying);
 
-    protected override void OnParametersSet()
+    protected override void Follow()
     {
-        base.OnParametersSet();
+        base.Follow();
+        // Лечит тот, кто в сознании: у умирающего, чей ход, бинтовать некому — берём первого на ногах (лучшая Первая помощь).
+        if (Actor is null or { Dead: true } or { Unconscious: true } or { Dying: true })
+            ActorId = State.Participants.Where(p => !p.Dead && !p.Unconscious && !p.Dying)
+                .OrderByDescending(p => p.Profile.FirstAid).FirstOrDefault()?.Id;
         if (Patient is null or { Dead: true })
             _patientId = State.Participants.Where(Wounded).OrderByDescending(p => p.Dying).FirstOrDefault()?.Id;
     }

@@ -34,6 +34,21 @@ public sealed class RoundTests
     }
 
     [Fact]
+    [Trait("page", "118")]
+    public void Dead_GetsNoTurn()
+    {
+        var a = Make("А", dex: 80);
+        var b = Make("Б", dex: 60);
+        var c = Make("В", dex: 40);
+        var state = Battle(a, b, c);
+        b.Dead = true;
+
+        EncounterQueue.Next(state, Now);
+
+        Assert.Equal(c.Id, state.ActiveParticipantId);
+    }
+
+    [Fact]
     [Trait("page", "122")]
     public void RollInitiative_OrderByLevel_FirearmGetsBonusDie_CriticalAndFumbleNoted()
     {
