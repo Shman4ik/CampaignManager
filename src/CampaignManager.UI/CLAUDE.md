@@ -9,7 +9,7 @@
 
 | Папка | Что |
 |---|---|
-| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка) |
+| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
@@ -19,6 +19,7 @@
 | `Catalogs/` | справочники: общая `CatalogPage<T>`, страницы семи справочников, импорт и экспорт — [CLAUDE.md](Catalogs/CLAUDE.md) |
 | `Profile/` | личный кабинет `/profile` — [CLAUDE.md](Profile/CLAUDE.md) |
 | `Admin/` | `/admin/users`, `/admin/applications`, `/admin/files`, счётчик заявок `AdminBadges` — [CLAUDE.md](Admin/CLAUDE.md) |
+| `Characters/` | лист сыщика `/character/{id}`: секции, автосохранение, рассудок, книги, фаза развития — [CLAUDE.md](Characters/CLAUDE.md) |
 | `Checks/` | диалог проверки, групповая проверка — [Checks/CLAUDE.md](Checks/CLAUDE.md) |
 | `KeeperScreen/` | ширма Хранителя: кнопка, панель, `/reference` — [KeeperScreen/CLAUDE.md](KeeperScreen/CLAUDE.md) |
 | `Music/` | фонотека `/music`, плеер (кнопка в слоте шапки, панель внизу колонки, звук — модуль JS) — [Music/CLAUDE.md](Music/CLAUDE.md) |
