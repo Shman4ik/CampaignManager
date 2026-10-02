@@ -5,6 +5,7 @@ using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
+using CampaignManager.Contracts.Music;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Contracts.Profile;
 
@@ -69,4 +70,10 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(IReadOnlyList<KeeperApplicationDto>))]
 [JsonSerializable(typeof(KeeperApplicationDto))]
 [JsonSerializable(typeof(RejectApplicationRequest))]
+[JsonSerializable(typeof(MusicTrackDto))]
+[JsonSerializable(typeof(CatalogList<MusicTrackDto>))]
+[JsonSerializable(typeof(CatalogFile<MusicTrackDto>))]
+[JsonSerializable(typeof(PinnedTagsDto))]
+[JsonSerializable(typeof(PinnedTagsRequest))]
+[JsonSerializable(typeof(MusicPoolDto))]
 public sealed partial class ContractsJsonContext : JsonSerializerContext;
