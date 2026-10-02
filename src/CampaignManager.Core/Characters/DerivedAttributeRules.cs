@@ -35,7 +35,11 @@ public static class DerivedAttributeRules
     /// <summary>Уклонение = половина ЛВК (стр. 57) — база навыка.</summary>
     public static int ComputeDodge(Characteristics c) => c.Dex / 2;
 
-    /// <summary>Скорость 7/8/9 по СИЛ и ЛВК против ТЕЛ, минус 1 за каждое десятилетие с 40 лет (стр. 31).</summary>
+    /// <summary>
+    /// Скорость 7/8/9 по СИЛ и ЛВК против ТЕЛ (стр. 31) минус штраф строки возраста (стр. 30–31: −1 за каждое
+    /// десятилетие с 40 лет, у «80–89» — −5). Штраф — из <see cref="InvestigatorCreationRules.AgeBands"/>, в v1 он
+    /// жил ещё и формулой здесь (AUDIT). Возраст вне таблицы — ближайшая строка (F-S01), поэтому 90+ — тоже −5.
+    /// </summary>
     public static int ComputeMoveRate(Characteristics c, int age)
     {
         int move;
@@ -43,10 +47,7 @@ public static class DerivedAttributeRules
         else if (c.Str > c.Siz && c.Dex > c.Siz) move = 9;
         else move = 8;
 
-        if (age >= 40)
-            move = Math.Max(1, move - ((age - 40) / 10 + 1));
-
-        return move;
+        return Math.Max(1, move - InvestigatorCreationRules.BandFor(age).MovePenalty);
     }
 
     /// <summary>

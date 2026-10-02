@@ -43,7 +43,7 @@ public sealed class MigrationState(V1Database v1, CmDbContext db, IFileStore fil
     public SkillCatalog SkillCatalog { get; set; } = new([]);
 
     /// <summary>Навык v1 по имени — по справочнику, перенесённому выше.</summary>
-    public SkillResolver Resolver { get; set; } = new(new SkillCatalog([]));
+    public SkillNameResolver Resolver { get; set; } = new(new SkillCatalog([]));
 
     /// <summary>Реквизит сценария из справочника v1 (имя → строка v1): переносится предметом сценария.</summary>
     public Dictionary<string, System.Text.Json.Nodes.JsonObject> ScenarioProps { get; } = new(StringComparer.Ordinal);

@@ -84,10 +84,10 @@ public static class InvestigatorCreationRules
     public const int MinAge = 15;
 
     /// <summary>
-    /// Последний возраст таблицы. Книга говорит «до 90», таблица кончается на 89; что делать с 90 и с
-    /// возрастом вне таблицы — открытый вопрос (rules-findings F-S01), поведение v1 сохранено.
+    /// «…от 15 до 90 лет» (стр. 30). Таблица модификаторов кончается строкой «80–89»; 90 лет книга
+    /// разрешает, и им положена эта последняя строка (rules-findings F-S01, исправлено в T2.4).
     /// </summary>
-    public const int MaxAge = 89;
+    public const int MaxAge = 90;
 
     /// <summary>Характеристика не поднимается выше 99 (стр. 30).</summary>
     public const int MaxCharacteristic = 99;
@@ -151,9 +151,18 @@ public static class InvestigatorCreationRules
 
     public static CharacteristicInfo Info(Characteristic key) => Characteristics.First(c => c.Key == key);
 
-    /// <summary>Строка таблицы для возраста; вне 15–89 — «Молодой», как в v1 (rules-findings F-S01).</summary>
+    /// <summary>
+    /// Строка таблицы для возраста (стр. 30). Строки не суммируются — берётся ровно одна. Возраст вне таблицы
+    /// получает <b>ближайшую</b> строку: 90 лет (книга их разрешает) и старше — «80–89», младше 15 — «15–19».
+    /// Сыщик вне 15–90 — только по договорённости с Хранителем (там же); в v1 такой возраст молча
+    /// становился «Молодым» — без вычетов и с одной проверкой ОБР (rules-findings F-S01).
+    /// </summary>
     public static AgeBand BandFor(int age) =>
-        AgeBands.FirstOrDefault(b => age >= b.MinAge && age <= b.MaxAge) ?? AgeBands[1];
+        age < AgeBands[0].MinAge ? AgeBands[0]
+        : AgeBands.FirstOrDefault(b => age >= b.MinAge && age <= b.MaxAge) ?? AgeBands[^1];
+
+    /// <summary>Возраст в пределах, которые книга даёт игроку без договорённости с Хранителем (15–90, стр. 30).</summary>
+    public static bool IsBookAge(int age) => age is >= MinAge and <= MaxAge;
 
     /// <summary>Бросок характеристики её формулой.</summary>
     public static CharacteristicRoll Roll(Characteristic key, IDiceRoller dice) =>
@@ -183,6 +192,49 @@ public static class InvestigatorCreationRules
 
     /// <summary>Удача: 3d6 × 5 (стр. 30). Юные бросают дважды и берут лучший результат.</summary>
     public static CharacteristicRoll RollLuck(IDiceRoller dice) => Roll3d6(dice);
+
+    /// <summary>Все броски Удачи, положенные возрасту (у «Юного» — два, стр. 30).</summary>
+    public static List<int> RollLuck(AgeBand band, IDiceRoller dice) =>
+        [.. Enumerable.Range(0, Math.Max(1, band.LuckRolls)).Select(_ => RollLuck(dice).Value)];
+
+    /// <summary>Удача из бросков: лучший (стр. 30), 0 — бросков нет.</summary>
+    public static int BestLuck(IEnumerable<int> rolls) => rolls.DefaultIfEmpty(0).Max();
+
+    /// <summary>
+    /// Значение характеристики по сумме костей её формулы: 3d6 → × 5, 2d6 → (+ 6) × 5. Так вписывают
+    /// броски со стола (любой бросок можно вписать).
+    /// </summary>
+    public static int FromDiceSum(Characteristic key, int sum) =>
+        Info(key).Dice is CharacteristicDice.ThreeD6 ? sum * 5 : (sum + 6) * 5;
+
+    /// <summary>Сумма костей, давшая значение (обратная <see cref="FromDiceSum"/>); null — значение не из костей.</summary>
+    public static int? DiceSumOf(Characteristic key, int value)
+    {
+        if (value <= 0 || value % 5 != 0)
+            return null;
+
+        var sum = Info(key).Dice is CharacteristicDice.ThreeD6 ? value / 5 : value / 5 - 6;
+        var (min, max) = Info(key).Dice is CharacteristicDice.ThreeD6 ? (3, 18) : (2, 12);
+        return sum >= min && sum <= max ? sum : null;
+    }
+
+    /// <summary>
+    /// Значения набора, ещё не занятые другими (вариант 3 и блиц, стр. 46): набор минус уже разложенное —
+    /// повторы считаются поштучно. Один алгоритм на характеристики и блиц-навыки (в v1 — две копии).
+    /// </summary>
+    public static List<int> Available(IEnumerable<int> pool, IEnumerable<int> usedElsewhere)
+    {
+        var used = usedElsewhere.Where(v => v > 0).ToList();
+        List<int> available = [];
+        foreach (var value in pool)
+        {
+            if (value <= 0 || used.Remove(value))
+                continue;
+            available.Add(value);
+        }
+
+        return available;
+    }
 
     /// <summary>Проверка улучшения ОБР (стр. 30): 1d100 больше ОБР — +1d10, не выше 99.</summary>
     public static EducationCheck RollEducationCheck(int education, IDiceRoller dice)
