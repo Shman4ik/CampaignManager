@@ -314,22 +314,77 @@ public sealed class ChaseObstacleTests
         Assert.Equal(3, outcome.Amount(EncounterEffectKind.BarrierDamage));
     }
 
+    // Обломки только «могут стать» помехой (стр. 136) — решает Хранитель; по умолчанию проход свободен (решение владельца
+    // 2026-10-02; в v1 обломки всегда становились обычной помехой).
     [Fact]
     [Trait("page", "136")]
-    public void Broken_barrier_becomes_debris_hazard_breaker_stays()
+    [Trait("finding", "F-P22")]
+    public void Broken_barrier_leaves_no_debris_by_default_breaker_stays()
     {
         var (state, pursuer) = Scene(started: true);
         state.PutBarrier(2, hitPoints: 10);
 
         var outcome = ChaseActions.BreakBarrier(state, pursuer.Id, 2, 15, NoDice);
         Assert.True(outcome.Success);
+        Assert.NotNull(ChaseRules.BarrierBreaking(state, outcome.Resolution));
+        Assert.Null(ChaseRules.DebrisOf(outcome.Resolution));
         state.Apply(outcome);
 
         var location = state.Chase!.Location(2)!;
         Assert.Null(location.Barrier);
-        Assert.Equal(("Обломки: Забор", Difficulty.Regular, "1D3"), (location.Hazard!.Name, location.Hazard.Difficulty, location.Hazard.Damage));
+        Assert.Null(location.Hazard);
+        Assert.Equal(1, state.R(pursuer).Location);
+        Assert.Contains(ChaseActionKind.Move, ChaseRules.AvailableActions(state, pursuer.Id));
+        Assert.DoesNotContain(ChaseActionKind.Hazard, ChaseRules.AvailableActions(state, pursuer.Id));
+        Assert.Contains(state.Log.SelectMany(e => e.Lines), l => l.Contains("проход свободен", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [Trait("page", "136")]
+    [Trait("finding", "F-P22")]
+    [InlineData(Difficulty.Regular)]
+    [InlineData(Difficulty.Hard)]
+    public void Broken_barrier_debris_become_hazard_when_keeper_chooses(Difficulty difficulty)
+    {
+        var (state, pursuer) = Scene(started: true);
+        state.PutBarrier(2, hitPoints: 10);
+        var outcome = ChaseActions.BreakBarrier(state, pursuer.Id, 2, 15, NoDice);
+        EncounterEngine.Propose(state, outcome.Resolution);
+
+        // Решение в предпросмотре: передумать можно, пока результат не применён.
+        ChaseRules.SetDebris(state, Difficulty.Extreme);
+        ChaseRules.SetDebris(state, null);
+        Assert.Null(ChaseRules.DebrisOf(state.Pending!));
+        ChaseRules.SetDebris(state, difficulty);
+        Assert.Equal(difficulty, ChaseRules.DebrisOf(state.Pending!));
+        Assert.NotNull(state.Chase!.Location(2)!.Barrier); // предпросмотр трассу не меняет
+
+        EncounterEngine.Apply(state, DateTimeOffset.UnixEpoch);
+
+        var location = state.Chase!.Location(2)!;
+        Assert.Null(location.Barrier);
+        Assert.Equal(("Обломки: Забор", difficulty, ChaseRules.DebrisDamage), (location.Hazard!.Name, location.Hazard.Difficulty, location.Hazard.Damage));
         Assert.Equal(1, state.R(pursuer).Location);
         Assert.Contains(ChaseActionKind.Hazard, ChaseRules.AvailableActions(state, pursuer.Id));
+    }
+
+    [Fact]
+    [Trait("page", "136")]
+    [Trait("finding", "F-P22")]
+    public void Debris_choice_only_when_the_barrier_breaks()
+    {
+        var (state, pursuer) = Scene(started: true);
+        state.PutBarrier(2, hitPoints: 10);
+        var outcome = ChaseActions.BreakBarrier(state, pursuer.Id, 2, 4, NoDice);
+        EncounterEngine.Propose(state, outcome.Resolution);
+
+        Assert.Null(ChaseRules.BarrierBreaking(state, outcome.Resolution));
+        ChaseRules.SetDebris(state, Difficulty.Regular);
+        Assert.Null(ChaseRules.DebrisOf(state.Pending!));
+
+        EncounterEngine.Apply(state, DateTimeOffset.UnixEpoch);
+        Assert.Equal(6, state.Chase!.Location(2)!.Barrier!.HitPointsLeft);
+        Assert.Null(state.Chase.Location(2)!.Hazard);
     }
 
     [Theory]

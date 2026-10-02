@@ -230,7 +230,7 @@ public static class ChaseActions
             Kind = EncounterLogKind.BarrierBreak,
             ActorId = actorId,
             Title = destroyed
-                ? $"{actor.Name} разрушает «{name}»: ПЗ {ChaseText.N(before)} → 0, обломки стали помехой"
+                ? $"{actor.Name} разрушает «{name}»: ПЗ {ChaseText.N(before)} → 0"
                 : $"{actor.Name} бьёт «{name}»: ПЗ {ChaseText.N(before)} → {ChaseText.N(after)}",
             Lines = lines,
             Effects = effects,

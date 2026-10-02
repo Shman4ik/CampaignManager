@@ -52,14 +52,16 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
             .. rows.Select(r =>
             {
                 var state = CmJson.ReadEncounterState(r.State, r.StateVersion);
-                return new EncounterSummaryDto(r.Id, r.Kind, r.CampaignId, r.CampaignName, state.Round, state.Participants.Count, r.UpdatedAt);
+                return new EncounterSummaryDto(r.Id, r.Kind, r.CampaignId, r.CampaignName, state.Round, state.Participants.Count, r.UpdatedAt,
+                    [.. state.Participants.Select(p => p.Name)]);
             }),
         ];
     }
 
     /// <summary>
-    /// Новая сцена. У Хранителя одна активная сцена вида на кампанию (и одна вне кампаний) — уникальный индекс
-    /// <c>encounters_one_active</c>; вторая — 409 с текстом, клиент открывает уже идущую.
+    /// Новая сцена. У Хранителя один активный бой на кампанию (и один вне кампаний) — уникальный индекс
+    /// <c>encounters_one_active_combat</c>; второй — 409 с текстом, клиент открывает уже идущий. Погонь — сколько угодно:
+    /// разделившихся ведут отдельными погонями (стр. 142, решение владельца 2026-10-02).
     /// </summary>
     public async Task<EncounterDto> StartAsync(StartEncounterRequest request, CancellationToken cancellationToken)
     {
@@ -93,7 +95,7 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             throw ApiProblemException.Conflict(
-                $"{EncounterText.Of(request.Kind)} в этой кампании уже идёт — продолжите её или завершите.");
+                $"{EncounterText.Of(request.Kind)} в этой кампании уже идёт — продолжите его или завершите.");
         }
 
         logger.LogInformation("Сцена {EncounterId} ({Kind}) начата, кампания {CampaignId}", encounter.Id, encounter.Kind, encounter.CampaignId);

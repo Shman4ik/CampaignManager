@@ -60,7 +60,10 @@ public sealed class EncounterDto
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>Строка списка активных сцен: продолжить начатое.</summary>
+/// <summary>
+/// Строка списка активных сцен: продолжить начатое. <paramref name="ParticipantNames"/> — имена участников по порядку
+/// добавления: две погони одной кампании (разделившиеся) различают по тому, кто в них бежит.
+/// </summary>
 public sealed record EncounterSummaryDto(
     Guid Id,
     EncounterKind Kind,
@@ -68,9 +71,10 @@ public sealed record EncounterSummaryDto(
     string? CampaignName,
     int Round,
     int ParticipantCount,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<string> ParticipantNames);
 
-/// <summary>Новая сцена: вид и кампания (null — вне кампании). У Хранителя одна активная сцена вида на кампанию.</summary>
+/// <summary>Новая сцена: вид и кампания (null — вне кампании). У Хранителя один активный бой на кампанию; погонь — сколько угодно.</summary>
 public sealed record StartEncounterRequest(EncounterKind Kind, Guid? CampaignId);
 
 public sealed record EncounterSavedDto(uint Version, DateTimeOffset UpdatedAt);
