@@ -9,14 +9,25 @@
     @* Одна строка: имя и сторона, ПЗ, меню «⋯». Остальное (ПМ, Рассудок, числа) — по касанию имени, редкое действие — в меню. *@
     <div class="flex items-center gap-2">
         <button type="button" class="encounter-row-name" aria-expanded="@(_open ? "true" : "false")" @onclick="() => _open = !_open">
+            @* Знак хода — в своей колонке одной ширины у всех строк: имена стоят по одной вертикали (B6). *@
+            <span class="encounter-row-turn" aria-hidden="true">
+                @if (Active)
+                {
+                    <i class="fa-solid fa-play text-xs text-accent-700"></i>
+                }
+            </span>
             @if (Active)
             {
-                <i class="fa-solid fa-play text-xs text-accent-700" aria-hidden="true"></i>
                 <span class="sr-only">Ходит:</span>
             }
-            <span class="truncate font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
             <i class="@Css.Join("fa-solid fa-circle shrink-0 text-[0.625rem]", SideDot)" aria-hidden="true"></i>
             <span class="sr-only">Сторона: @EncounterText.Of(Participant.Side)</span>
+            <span class="min-w-0 break-words font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
+            @if (Participant.Dead)
+            {
+                @* «мёртв» — в той же строке, а не отдельной (строка не растёт на 34px). *@
+                <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
+            }
             <i class="@Css.Join("fa-solid text-xs text-primary-500", _open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
         </button>
         <div class="ml-auto w-36 shrink-0">
@@ -38,7 +49,7 @@
         <div class="mt-1 flex flex-wrap gap-1">
             @if (Participant.Dead)
             {
-                <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
+                @* «мёртв» — в строке имени. *@
             }
             else if (Participant.Dying)
             {
@@ -84,7 +95,7 @@
                 }
             </div>
             <p class="cm-meta mt-1">
-                @EncounterText.Of(Participant.Kind), сторона: @EncounterText.Of(Participant.Side), инициатива @Participant.Initiative ·
+                @EncounterText.Of(Participant.Kind) · сторона: @EncounterText.Of(Participant.Side) · инициатива @Participant.Initiative ·
                 СИЛ @Participant.Stats.Str · ЛВК @Participant.Stats.Dex · МОЩ @Participant.Stats.Pow ·
                 бонус к урону <DiceText Value="@Participant.Stats.DamageBonus" /> · Комплекция @Participant.Stats.Build@(Participant.Luck is { } luck ? $" · Удача {luck}" : "")@(Participant.Stats.Armor > 0 ? $" · Броня {Participant.Stats.Armor}" : "")
             </p>
@@ -132,7 +143,7 @@
     private bool _open;
 
     private bool HasState =>
-        Participant.Dead || Participant.Dying || Participant.Unconscious || Participant.MajorWound || (Participant.IsOut && !HideOutBadge)
+        (!Participant.Dead && (Participant.Dying || Participant.Unconscious)) || Participant.MajorWound || (Participant.IsOut && !HideOutBadge)
         || Writes.Count > 0 || CombatBadges.Any();
 
     /// <summary>Отметки боя участника (T2.6b).</summary>
