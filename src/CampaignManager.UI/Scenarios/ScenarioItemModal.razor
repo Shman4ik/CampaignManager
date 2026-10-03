@@ -1,9 +1,9 @@
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Api
 
-@* Предмет сценария: свой реквизит (имя обязательно — справочника за ним нет, как у резного идола «Среди древних
+@* Предмет сценария: свой предмет (имя обязательно — справочника за ним нет, как у резного идола «Среди древних
    деревьев») или предмет справочника со своими именем и описанием поверх (пусто — как в справочнике); где лежит и
-   заметки. Одна форма на «Свой реквизит» и «Изменить». *@
+   заметки. Одна форма на «Новый предмет» (название — из поиска, InitialName) и «Изменить». *@
 <Modal Open="Open" Title="@(Item is null ? "Новый предмет" : "Изменить предмет")" OnClose="CloseAsync" data-testid="item-form">
     <ChildContent>
         <form id="item-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
@@ -46,8 +46,11 @@
 
     [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
 
-    /// <summary>Правка этого предмета; <c>null</c> — новый свой реквизит.</summary>
+    /// <summary>Правка этого предмета; <c>null</c> — новый свой предмет.</summary>
     [Parameter] public ScenarioItemDto? Item { get; set; }
+
+    /// <summary>Название нового предмета, вписанное в поиск, — его в справочнике не нашлось.</summary>
+    [Parameter] public string? InitialName { get; set; }
 
     [Parameter] public EventCallback OnClose { get; set; }
 
@@ -57,7 +60,7 @@
     {
         if (Open && !_wasOpen)
         {
-            _name = Item?.OwnName;
+            _name = Item is null ? InitialName : Item.OwnName;
             _description = Item?.OwnDescription;
             _location = Item?.LocationNote;
             _notes = Item?.Notes;

@@ -32,14 +32,15 @@ public abstract class ScenarioTabBase : ComponentBase
     protected bool CanEdit => Scenario.CanEdit;
 
     /// <summary>
-    /// Удалить строку после подтверждения; отказ — тостом. <paramref name="confirmText"/> «Убрать» — связь, а не запись
-    /// (НПС, тварь, предмет остаются в библиотеке и справочниках): тогда без «действие нельзя отменить».
+    /// Удалить строку после подтверждения; отказ — тостом. Вопрос называет действие («Удалить локацию?»), имя объекта
+    /// идёт жирной строкой без кавычек (<paramref name="subject"/>, правило 7). <paramref name="confirmText"/> «Убрать» —
+    /// связь, а не запись (НПС, тварь, предмет остаются в библиотеке и справочниках): тогда без «действие нельзя отменить».
     /// </summary>
-    protected async Task DeleteAsync(string title, string message, Func<Task> delete, string done, string confirmText = "Удалить")
+    protected async Task DeleteAsync(string title, string subject, string message, Func<Task> delete, string done, string confirmText = "Удалить")
     {
         var request = confirmText == "Удалить"
-            ? new ConfirmRequest(title, message)
-            : new ConfirmRequest(title, message) { ConfirmText = confirmText, Details = null };
+            ? new ConfirmRequest(title, message) { Subject = subject }
+            : new ConfirmRequest(title, message) { Subject = subject, ConfirmText = confirmText, Details = null };
         if (!await Dialogs.ConfirmAsync(request))
             return;
 

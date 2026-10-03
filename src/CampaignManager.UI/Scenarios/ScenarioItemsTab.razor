@@ -2,8 +2,10 @@
 @using CampaignManager.UI.Platform
 @inject ICatalogApi<ItemDto> ItemsApi
 
-@* «Предметы» — из справочника (ссылкой) или свой реквизит сценария (решение владельца: реквизит «Среди древних
-   деревьев» перенесён так, а не в справочник). *@
+@* «Предметы» — из справочника (ссылкой) или свой предмет сценария (решение владельца: реквизит «Среди древних
+   деревьев» перенесён так, а не в справочник). Способ добавить один — «Добавить предмет» открывает над списком панель
+   поиска по справочнику (правило 6): нашёлся — добавляется сразу, нет — последняя строка «Добавить «текст»» открывает
+   форму нового предмета с этим названием (раньше — две кнопки «Свой реквизит» и «Из справочника», ревью g4, 10.3). *@
 <section class="cm-section">
     @* Заголовка секции над одноимённой вкладкой нет (правило 5): в строке действий вкладки — порядок и добавление. *@
     @if (CanEdit)
@@ -16,10 +18,19 @@
             }
             @if (!Reordering)
             {
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-gem" data-testid="add-prop" OnClick="() => OpenForm(null)">Добавить свой реквизит</Button>
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-item" OnClick="OpenPicker">Добавить из справочника</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-item" OnClick="() => _searching = !_searching">Добавить предмет</Button>
             }
         </div>
+        @if (_searching && !Reordering)
+        {
+            <div class="cm-card mb-3" data-testid="item-search">
+                <div class="cm-card-body">
+                    <CatalogSearch TItem="ItemDto" Load="LoadItemsAsync" Name="i => i.Name" Meta="i => i.Type ?? string.Empty" Also="i => [i.Type ?? string.Empty]"
+                                   Placeholder="Название предмета: найти в справочнике или завести новый" OnSelect="AddFromCatalogAsync" OnCustom="AddOwn"
+                                   OnCancel="() => _searching = false" />
+                </div>
+            </div>
+        }
     }
     @if (Scenario.Items.Count == 0)
     {
@@ -32,8 +43,8 @@
             @foreach (var item in Scenario.Items)
             {
                 var index = ids.IndexOf(item.Id);
-                <div class="flex flex-wrap items-start gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="item.Id" data-testid="item-row">
-                    @if (item.ImageUrl is { } image)
+                <div class="flex flex-wrap items-start gap-3 border-t border-primary-200 px-4 py-2 first:border-t-0" @key="item.Id" data-testid="item-row">
+                    @if (ImageUrls.Thumb(item.ImageUrl, 160) is { } image)
                     {
                         <img src="@image" alt="" class="h-12 w-12 shrink-0 rounded-md object-cover" loading="lazy" />
                     }
@@ -62,48 +73,32 @@
                         {
                             @if (item.Description is { } description)
                             {
-                                <Markdown Text="@description" class="text-sm" />
+                                <Markdown Text="@description" class="max-w-prose text-sm" />
                             }
                             @if (item.Notes is { } notes)
                             {
-                                <Markdown Text="@notes" class="text-sm text-primary-600" />
+                                <Markdown Text="@notes" class="max-w-prose text-sm text-primary-600" />
                             }
                         }
                     </div>
                     <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                     OnUp="() => MoveAsync(ScenarioPart.Items, ids, item.Id, -1)"
                                     OnDown="() => MoveAsync(ScenarioPart.Items, ids, item.Id, 1)"
-                                    OnEdit="() => OpenForm(item)" OnDelete="() => RemoveAsync(item)" DeleteLabel="Убрать" MenuLabel="@("Действия: " + item.Name)" />
+                                    OnEdit="() => OpenForm(item)" OnDelete="() => RemoveAsync(item)" DeleteLabel="@(item.ItemId is null ? "Удалить" : "Убрать")" Name="@item.Name" />
                 </div>
             }
         </div>
     }
 </section>
 
-<CatalogPickerModal TItem="ItemDto" Open="_picking" Title="Предмет из справочника" Load="LoadItemsAsync" Key="i => i.Id" Name="i => i.Name"
-                    Meta="i => i.Type" Also="i => [i.Type]" Empty="Справочник предметов пуст."
-                    Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
-    <div class="grid grid-cols-1 gap-3">
-        <Field Label="Где лежит">
-            <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_where" placeholder="в ящике стола" />
-        </Field>
-        <Field Label="Заметки">
-            <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
-        </Field>
-    </div>
-</CatalogPickerModal>
-
-<ScenarioItemModal Open="_formOpen" ScenarioId="Scenario.Id" Item="_editing" OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
+<ScenarioItemModal Open="_formOpen" ScenarioId="Scenario.Id" Item="_editing" InitialName="@_newName" OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
 
 @code {
     private readonly HashSet<Guid> _open = [];
-    private bool _picking;
-    private bool _adding;
-    private string? _addError;
-    private string? _where;
-    private string? _notes;
+    private bool _searching;
     private bool _formOpen;
     private ScenarioItemDto? _editing;
+    private string? _newName;
 
     private void Toggle(Guid id)
     {
@@ -113,59 +108,48 @@
 
     private RenderFragment ItemTitle(ScenarioItemDto item) => @<span class="flex flex-wrap items-center gap-2">
         <span class="font-semibold text-primary-900">@item.Name</span>
-        @if (item.ItemId is null)
-        {
-            <Badge Tone="Tone.Neutral" Icon="fa-gem">свой реквизит</Badge>
-        }
-        else if (item.Type is { } type)
+        @* Метка — только у предмета справочника (тип): «свой» у четырёх из пяти ничего не различал (правило 17). *@
+        @if (item.ItemId is not null && item.Type is { } type)
         {
             <Badge Tone="Tone.Stone">@type</Badge>
         }
     </span>;
 
-    private void OpenPicker()
-    {
-        (_where, _notes, _addError) = (null, null, null);
-        _picking = true;
-    }
-
     private void OpenForm(ScenarioItemDto? item)
     {
         _editing = item;
+        _newName = null;
         _formOpen = true;
     }
 
-    private async Task<IReadOnlyList<ItemDto>> LoadItemsAsync(CancellationToken cancellationToken) =>
-        [.. (await ItemsApi.ListAsync(cancellationToken)).Items.OrderBy(i => i.Name, StringComparer.CurrentCulture)];
-
-    private async Task AddAsync(ItemDto item)
+    /// <summary>В справочнике такого нет: форма нового предмета с вписанным названием.</summary>
+    private void AddOwn(string name)
     {
-        _adding = true;
-        _addError = null;
-        try
-        {
-            await Api.AddItemAsync(Scenario.Id, new ScenarioItemInput(item.Id, null, null, _where, _notes));
-            _picking = false;
-            await SavedAsync($"«{item.Name}» в сценарии.");
-        }
-        catch (HttpRequestException ex)
-        {
-            _addError = ApiErrors.Describe(ex);
-        }
-        finally
-        {
-            _adding = false;
-        }
+        _editing = null;
+        _newName = name;
+        _searching = false;
+        _formOpen = true;
+    }
+
+    private async Task<IReadOnlyList<ItemDto>> LoadItemsAsync() =>
+        [.. (await ItemsApi.ListAsync()).Items.OrderBy(i => i.Name, StringComparer.CurrentCulture)];
+
+    /// <summary>Предмет справочника — сразу в сценарий; «Где лежит» и заметки — потом, в «Изменить».</summary>
+    private Task AddFromCatalogAsync(ItemDto item)
+    {
+        _searching = false;
+        return RunAsync(() => Api.AddItemAsync(Scenario.Id, new ScenarioItemInput(item.Id)), $"Добавлено в сценарий: {item.Name}.");
     }
 
     private async Task SavedFormAsync()
     {
         var wasNew = _editing is null;
         _formOpen = false;
-        await SavedAsync(wasNew ? "Реквизит добавлен." : "Предмет сохранён.");
+        await SavedAsync(wasNew ? "Предмет добавлен." : "Предмет сохранён.");
     }
 
     private Task RemoveAsync(ScenarioItemDto item) =>
-        DeleteAsync($"Убрать «{item.Name}» из сценария?", item.ItemId is null ? "Свой реквизит удалится." : "В справочнике предмет останется.",
-            () => Api.DeleteItemAsync(Scenario.Id, item.Id), "Предмет убран.", item.ItemId is null ? "Удалить" : "Убрать");
+        DeleteAsync(item.ItemId is null ? "Удалить предмет?" : "Убрать предмет из сценария?", item.Name,
+            item.ItemId is null ? "Описание и заметки удалятся вместе с ним." : "В справочнике предмет останется.",
+            () => Api.DeleteItemAsync(Scenario.Id, item.Id), item.ItemId is null ? "Предмет удалён." : "Предмет убран.", item.ItemId is null ? "Удалить" : "Убрать");
 }

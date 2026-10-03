@@ -5,9 +5,12 @@
 @* Выбор записи справочника в окне — один на тварей и предметы сценария, НПС и прегенов из библиотеки (в v1 —
    почти одинаковые AddCreatureModal, AddItemModal, AddNpcModal со своими копиями поиска). Список приходит целиком
    (Load), поиск — без регистра, «ё» и лишних пробелов; выбранная строка подсвечена, под списком — свои поля
-   страницы (ChildContent: количество, где, заметки). Запись делает страница в OnPick: ошибка (Error) остаётся
-   в окне, окно не закрывается; пока идёт запись (Busy), кнопки выключены. Окно декларативное: Open. *@
-@* Список без полей под ним (навык оружия, заклинание книги) — повыше: 28vh из 696px показывали три записи. *@
+   страницы (ChildContent: количество, где, заметки; FieldsAlways — стоят выключенными с самого начала, чтобы окно не росло
+   и не сдвигалось после выбора строки). Запись делает страница в OnPick: ошибка (Error) остаётся в окне, окно не
+   закрывается; пока идёт запись (Busy), кнопки выключены; «Добавить» выключена с причиной (SelectReason). Extra — «Нет в списке?
+   Создать нового» под списком. Строка списка — в одну линию (название, справа тип или занятие). Окно декларативное: Open. *@
+@* Список без полей под ним (навык оружия, заклинание книги) — повыше: 28vh из 696px показывали три записи; с полями под ним — по высоте
+   экрана за вычетом полей, не выше 22rem. *@
 @* У верхнего края: после выбора строки поля «Сколько/Где» растут вниз, окно не прыгает. *@
 <Modal Open="Open" Title="@Title" OnClose="CloseAsync" class="cm-modal-top" data-testid="catalog-picker">
     <ChildContent>
@@ -32,15 +35,15 @@
                 }
                 else
                 {
-                    <div class="@Css.Join(ListClass ?? (ChildContent is null ? "max-h-[46vh]" : "max-h-[28vh]"), "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
+                    <div class="@Css.Join(ListClass ?? (ChildContent is null ? "max-h-[46vh]" : "max-h-[min(calc(100dvh-30rem),22rem)] min-h-24"), "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
                         @foreach (var item in found)
                         {
                             var selected = _selected is not null && Equals(Key(_selected), Key(item));
                             <button type="button" role="option" aria-selected="@(selected ? "true" : "false")" data-testid="picker-row"
-                                    class="@Css.Join("flex min-h-11 w-full flex-col items-start gap-0.5 border-t border-primary-200 px-3 py-2 text-left first:border-t-0",
+                                    class="@Css.Join("flex min-h-10 w-full flex-wrap items-baseline justify-between gap-x-3 border-t border-primary-200 px-3 py-1.5 text-left first:border-t-0",
                                                selected ? "bg-accent-50" : "hover:bg-primary-50")"
                                     @onclick="() => _selected = item">
-                                <span class="flex items-center gap-2 font-medium text-primary-900">
+                                <span class="flex min-w-0 items-center gap-2 font-medium text-primary-900">
                                     @if (selected)
                                     {
                                         <i class="fa-solid fa-check text-accent-600" aria-hidden="true"></i>
@@ -49,7 +52,7 @@
                                 </span>
                                 @if (Meta?.Invoke(item) is { Length: > 0 } meta)
                                 {
-                                    <span class="text-xs text-primary-500">@meta</span>
+                                    <span class="text-[0.8125rem] text-primary-600">@meta</span>
                                 }
                             </button>
                         }
@@ -60,9 +63,15 @@
                     }
                 }
             }
-            @if (_selected is not null && ChildContent is not null)
+            @if (Extra is not null)
             {
-                <div class="border-t border-primary-200 pt-3">@ChildContent(_selected)</div>
+                <div class="flex flex-wrap items-center gap-2 text-sm text-primary-600" data-testid="picker-extra">@Extra</div>
+            }
+            @if (ChildContent is not null && (_selected is not null || FieldsAlways))
+            {
+                <div class="border-t border-primary-200 pt-3">
+                    <fieldset class="contents" disabled="@(_selected is null)">@ChildContent(_selected!)</fieldset>
+                </div>
             }
             @if (Error is not null)
             {
@@ -128,6 +137,15 @@
 
     /// <summary>Поля под выбранной записью (количество, где, заметки).</summary>
     [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }
+
+    /// <summary>
+    /// Поля стоят с самого начала, выключенными, пока запись не выбрана: окно не растёт и не сдвигается после выбора.
+    /// Поля тогда не должны читать выбранную запись (до выбора её нет).
+    /// </summary>
+    [Parameter] public bool FieldsAlways { get; set; }
+
+    /// <summary>Что делать, если нужного нет в списке: «Создать нового», «Быстрый НПС» — под списком.</summary>
+    [Parameter] public RenderFragment? Extra { get; set; }
 
     [Parameter] public bool Busy { get; set; }
 
