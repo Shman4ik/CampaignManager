@@ -11,7 +11,7 @@
     Пробный файл удаляется, и решение пересобирается, даже если проверка упала.
 
     Сервер поднимается в Development (только там UseStaticWebAssets отдаёт ассеты UI из
-    исходников) с пустышками Auth0 и недоступной базой — главной странице база не нужна.
+    исходников) с пустышками Auth0 и недоступной базой — странице /login база не нужна.
 
 .EXAMPLE
     pwsh tools/check-styles-fingerprint.ps1
@@ -42,7 +42,8 @@ function Get-FreePort {
     try { return $listener.LocalEndpoint.Port } finally { $listener.Stop() }
 }
 
-# Поднимает собранный сервер, читает главную и styles.css по адресу из неё, гасит сервер.
+# Поднимает собранный сервер, читает /login и styles.css по адресу из неё, гасит сервер. Не главную: она под
+# [Authorize] и без сессии уводит в Auth0 (здесь — пустышка, ответ 500); /login открыта и рисует ту же оболочку.
 function Get-ServedStyles {
     $port = Get-FreePort
     $base = "http://127.0.0.1:$port"
@@ -71,7 +72,7 @@ function Get-ServedStyles {
         while ($true) {
             if ($server.HasExited) { throw "Сервер завершился с кодом $($server.ExitCode)" }
             try {
-                $html = $http.GetStringAsync("$base/").GetAwaiter().GetResult()
+                $html = $http.GetStringAsync("$base/login").GetAwaiter().GetResult()
                 break
             }
             catch {
@@ -81,7 +82,7 @@ function Get-ServedStyles {
         }
 
         $match = [regex]::Match($html, "$([regex]::Escape($stylesRoute))[^`"]*\.css")
-        if (-not $match.Success) { throw "На главной нет <link> на $stylesRoute*.css" }
+        if (-not $match.Success) { throw "На /login нет <link> на $stylesRoute*.css" }
 
         $request = [System.Net.Http.HttpRequestMessage]::new('GET', "$base/$($match.Value)")
         $request.Headers.AcceptEncoding.ParseAdd('gzip, br')
