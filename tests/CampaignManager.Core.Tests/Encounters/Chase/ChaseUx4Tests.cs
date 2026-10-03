@@ -61,6 +61,13 @@ public sealed class ChaseUx4Tests
         EncounterEngine.SetSide(state, thug.Id, EncounterSide.Neutral);
         Assert.Equal(ChaseRole.Prey, state.R(thug).Role);
 
+        // На проверке скорости погоня ещё не началась — роль идёт за стороной (#213).
+        ChaseRules.BeginSpeedChecks(state);
+        EncounterEngine.SetSide(state, thug.Id, EncounterSide.Enemies);
+        Assert.Equal(ChaseRole.Pursuer, state.R(thug).Role);
+        EncounterEngine.SetSide(state, thug.Id, EncounterSide.Investigators);
+        Assert.Equal(ChaseRole.Prey, state.R(thug).Role);
+
         state.Chase!.Phase = ChasePhase.Active;
         EncounterEngine.SetSide(state, thug.Id, EncounterSide.Enemies);
         Assert.Equal(ChaseRole.Prey, state.R(thug).Role); // посреди погони роль меняют отдельно

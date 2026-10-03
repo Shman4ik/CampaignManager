@@ -70,6 +70,8 @@
 
 @code {
     private EncounterSession? _session;
+    private ElementReference _pendingRef;
+    private EncounterResolution? _focusedPending;
     private IReadOnlyList<EncounterSummaryDto> _active = [];
     private IReadOnlyList<CampaignSummaryDto> _campaigns = [];
     private IReadOnlyList<IParticipantSource> _sources = [];
@@ -369,7 +371,7 @@
         });
 
         if (added.Count > 0)
-            Toasts.Success($"В сцене: {string.Join(", ", added)}.");
+            Toasts.Success($"{(added.Count > 1 ? "Добавлены" : "Добавлен")}: {string.Join(", ", added)}.");
         foreach (var reason in rejected)
             Toasts.Warning(reason);
     }
@@ -379,8 +381,8 @@
     {
         var writes = _session?.State.SheetWrites.Count(w => w.ParticipantId == participant.Id) ?? 0;
         return writes > 0
-            ? $"Он покинет сцену, добавить его можно снова. Не записанные в лист эффекты ({writes}) всё равно уйдут в лист."
-            : "Он покинет сцену, добавить его можно снова. Лист и бестиарий не меняются.";
+            ? $"Он покинет {Accusative}, добавить его можно снова. Не записанные в лист эффекты ({writes}) всё равно уйдут в лист."
+            : $"Он покинет {Accusative}, добавить его можно снова. Лист и бестиарий не меняются.";
     }
 
     private Task RemoveAsync(EncounterParticipant participant) => Change(state => EncounterEngine.Remove(state, participant.Id, Now));
@@ -443,18 +445,18 @@
         var pending = session.State.SheetWrites.Count;
         var message = pending > 0
             ? $"Не записано в листы: {pending}. После завершения эти эффекты в листы не попадут."
-            : "Сцена закроется, журнал останется в базе. Новую можно начать сразу.";
+            : Kind == EncounterKind.Chase ? "Погоня закроется, журнал останется в базе. Новую можно начать сразу." : "Бой закроется, журнал останется в базе. Новый можно начать сразу.";
         if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить {FinishWord}?", message) { ConfirmText = $"Завершить {FinishWord}" }))
             return;
 
-        await session.ChangeAsync(state => EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Finished, Text = "Сцена завершена.", At = Now }));
+        await session.ChangeAsync(state => EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Finished, Text = Finished, At = Now }));
         try
         {
             await Api.FinishAsync(session.Encounter.Id, session.Encounter.Version);
             await session.DiscardDraftAsync(session.Encounter.Id);
             StopLoop();
             _session = null;
-            _notice = "Сцена завершена.";
+            _notice = Finished;
             Navigation.NavigateTo(Route, replace: true);
         }
         catch (HttpRequestException error)
@@ -609,7 +611,6 @@
                                     : EncounterQueue.Order(state).Select(state.Find).OfType<EncounterParticipant>().ToList();
         // Мёртвые — серыми строками в конце списка: действий у них нет, а место они не отнимают.
         var order = queue.Where(p => !p.Dead).Concat(queue.Where(p => p.Dead)).ToList();
-        var lastEntry = state.Log.Count > 0 ? state.Log[^1] : null;
         var pending = state.Pending;
 
         @if (session.SaveState == EncounterSaveState.Conflict)
@@ -641,15 +642,12 @@
 
         <section class="cm-section">
             <div class="cm-card">
-                <div class="cm-card-body flex flex-wrap items-center justify-between gap-3">
-                    <div class="min-w-0" data-testid="round-status">
+                @* На телефоне «⋯» — справа от строки раунда, а не отдельной строкой под кнопками (#213, 390×844). *@
+                <div class="cm-card-body grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:flex-wrap">
+                    <div class="min-w-0 sm:flex-1" data-testid="round-status">
                         <div class="font-semibold">@(state.Round == 0 ? StageText(state) : $"Раунд {state.Round} · ходит {active?.Name ?? "—"}")</div>
-                        @if (lastEntry is not null)
-                        {
-                            <div class="cm-meta truncate" data-testid="last-entry">@EncounterDisplay.Plain(lastEntry.Text)</div>
-                        }
                     </div>
-                    <div class="cm-btn-row">
+                    <div class="cm-btn-row col-span-2">
                         @if (state.Chase is { Phase: ChasePhase.Ended })
                         {
                             <Button Icon="fa-flag-checkered" OnClick="FinishAsync" data-testid="finish-encounter">Завершить @FinishWord</Button>
@@ -667,6 +665,8 @@
                             <Button Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
                             <Button Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий ход</Button>
                         }
+                    </div>
+                    <div class="col-start-2 row-start-1">
                         @* «Завершить» — не рядом с «Следующим»: нажатие мимо закрывает сцену. Только в меню, под линейкой. *@
                         <RowMenu AriaLabel="Действия сцены">
                             <ChildContent>
@@ -681,7 +681,7 @@
                                     <RowMenuItem Icon="@RuleIcon(state.Combat.CinematicKnockout)" OnClick="() => Change(s => s.Combat.CinematicKnockout = !s.Combat.CinematicKnockout)">Нокаут манёвром: @RuleState(state.Combat.CinematicKnockout)</RowMenuItem>
                                     <RowMenuItem Icon="@RuleIcon(state.Combat.LuckToStayConscious)" OnClick="() => Change(s => s.Combat.LuckToStayConscious = !s.Combat.LuckToStayConscious)">Удача против обморока: @RuleState(state.Combat.LuckToStayConscious)</RowMenuItem>
                                 }
-                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">Все сцены</RowMenuItem>
+                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">@(Kind == EncounterKind.Chase ? "Все погони" : "Все бои")</RowMenuItem>
                             </ChildContent>
                             <Danger>
                                 <RowMenuItem Danger="true" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить @FinishWord</RowMenuItem>
@@ -745,7 +745,7 @@
                                         <Danger>
                                             <RowMenuItem Danger="true" Icon="fa-user-minus" OnClick="() => RemoveAsync(participant)"
                                                          ConfirmTitle="Убрать участника?" ConfirmMessage="@($"{Names.Plain(participant.Name)}: {RemoveMessage(participant)}")"
-                                                         ConfirmText="Убрать из сцены">Убрать из сцены</RowMenuItem>
+                                                         ConfirmText="@($"Убрать из {Genitive}")">Убрать из @Genitive</RowMenuItem>
                                         </Danger>
                                     </RowMenu>
                                 </Actions>
@@ -763,7 +763,8 @@
 
             @if (order.Count > 0)
             {
-                <div class="flex flex-col gap-4 lg:col-span-7">
+                @* На узком экране действие (форма, ход погони, результат) — над списком участников (#213, 390×844). *@
+                <div class="order-first flex flex-col gap-4 lg:order-none lg:col-span-7">
                     @if (StickyAction && !_effectOpen)
                     {
                         @* Колонка действия липнет под шапку: форма, результат и «Применить» всегда на виду. Пока есть
@@ -823,7 +824,7 @@
 
     private RenderFragment PendingBlock(EncounterSession session, EncounterResolution pending) => __builder =>
     {
-        <section class="cm-section" data-testid="pending-block">
+        <section class="cm-section focus:outline-hidden" data-testid="pending-block" tabindex="-1" @ref="_pendingRef">
             <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
             <div class="cm-card"><div class="cm-card-body">
                 <ResolutionPreview State="session.State" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
@@ -861,6 +862,38 @@
             }
         </section>
     };
+
+    /// <summary>
+    /// Новый результат — фокус на его блок: на узком экране «Применить» оказывалось на 300px выше видимой области (#213);
+    /// видимый блок фокус не сдвигает.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var pending = _session?.State.Pending;
+        if (pending is not null && !ReferenceEquals(pending, _focusedPending) && _pendingRef.Context is not null)
+        {
+            _focusedPending = pending;
+            try
+            {
+                await _pendingRef.FocusAsync(preventScroll: false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Блок ушёл из разметки до фокуса — ничего страшного.
+            }
+        }
+        else if (pending is null)
+        {
+            _focusedPending = null;
+        }
+    }
+
+    // Слово сцены на экране — «погоня» или «бой», не «сцена» (#213, образец владельца п. 1).
+    private string Accusative => Kind == EncounterKind.Chase ? "погоню" : "бой";
+
+    private string Genitive => Kind == EncounterKind.Chase ? "погони" : "боя";
+
+    private string Finished => Kind == EncounterKind.Chase ? "Погоня завершена." : "Бой завершён.";
 
     private static string SideDotClass(EncounterSide side) => side switch
     {
