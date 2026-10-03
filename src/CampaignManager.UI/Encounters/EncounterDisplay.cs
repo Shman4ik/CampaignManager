@@ -58,7 +58,8 @@ public static partial class EncounterDisplay
     [GeneratedRegex(@": (?:Атак за раунд|Защит за раунд|Проверок очереди), ")]
     private static partial Regex CounterLine();
 
-    [GeneratedRegex(@"^[^:]+: [^,→]+, [^→]+ → ")]
+    // «Кто: Что, было → стало»; в строках броска и урона («Урон: 2d6 = 4, … → 8») есть «=», у итога по участнику его нет.
+    [GeneratedRegex(@"^[^:=]+: [^,→=]+, [^,→=]+ → [^→]+$")]
     private static partial Regex EffectLine();
 
     [GeneratedRegex(@"\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*$")]

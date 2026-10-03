@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Bunit;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Encounters;
@@ -21,7 +22,7 @@ public sealed class EncounterUx4Tests : KitContext
         Assert.Equal(expected, EncounterDisplay.Plain(text));
 
     [Fact]
-    public void Counters_go_under_details_and_the_main_line_stays_visible()
+    public void Counters_are_not_shown_in_the_preview_at_all()
     {
         var state = new EncounterState();
         var ghoul = EncounterParticipants.FromStatblock(null, "Гуль", new Statblock { HitPoints = 13 });
@@ -38,10 +39,11 @@ public sealed class EncounterUx4Tests : KitContext
 
         var cut = Render<ResolutionPreview>(p => p.Add(c => c.State, state).Add(c => c.Resolution, resolution));
 
-        var main = cut.FindAll("[data-testid=resolution-preview] > div.cm-table-wrap tbody td").Select(td => td.TextContent.Trim()).ToList();
-        Assert.Contains("Урон 3", main);
-        Assert.DoesNotContain(main, cell => cell.Contains("за раунд", StringComparison.Ordinal));
-        Assert.Contains("за раунд", cut.Find("details").TextContent, StringComparison.Ordinal);
+        // Счётчики боя — внутреннее: ни строки в таблице, ни «Подробностей» (B30).
+        var main = cut.FindAll("[data-testid=resolution-preview] tbody td").Select(td => td.TextContent.Trim()).ToList();
+        Assert.Contains(main, cell => cell.StartsWith("Урон 3", StringComparison.Ordinal));
+        Assert.DoesNotContain("за раунд", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("details"));
     }
 
     [Fact]
@@ -56,7 +58,11 @@ public sealed class EncounterUx4Tests : KitContext
         Assert.Empty(cut.FindAll("[data-testid=stat-san]"));
         Assert.DoesNotContain("бонус к урону", cut.Markup, StringComparison.Ordinal);
         cut.Find("button.encounter-row-name").Click();
-        Assert.Contains("бонус к урону", cut.Markup, StringComparison.Ordinal);
+        // Числа — блоками «подпись значение»; вид и сторона в раскрытой строке не повторяются (они — точка и подпись цветов).
+        var numbers = cut.Find("[data-testid=participant-numbers]").TextContent;
+        Assert.Contains("Бонус к урону", numbers, StringComparison.Ordinal);
+        Assert.Contains("Инициатива 65", Regex.Replace(numbers, @"\s+", " "), StringComparison.Ordinal);
+        Assert.DoesNotContain("сторона:", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("БкУ", cut.Markup, StringComparison.Ordinal);
     }
 }

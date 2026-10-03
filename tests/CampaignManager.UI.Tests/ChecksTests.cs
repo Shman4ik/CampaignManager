@@ -74,7 +74,7 @@ public sealed class ChecksTests : KitContext
         cut.FindAll("[data-testid='check-roll-first'] button").Single(b => b.TextContent.Contains("Бросить")).Click();
 
         Assert.Equal("24", cut.Find(".check-roll").TextContent);
-        Assert.Contains("кости 74, 24", cut.Find("[data-testid='check-result']").TextContent);
+        Assert.Contains("бонусная кость: 74, 24", cut.Find("[data-testid='check-result']").TextContent);
     }
 
     /// <summary>Удача: панель отдаёт трату родителю и сама лист не меняет.</summary>

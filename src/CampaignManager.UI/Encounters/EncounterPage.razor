@@ -140,7 +140,7 @@
     /// </summary>
     [Parameter] public bool AllowsMany { get; set; }
 
-    /// <summary>Показать список идущих сцен, а не открывать единственную (<c>?list=1</c>, пункт «Все сцены»).</summary>
+    /// <summary>Показать список идущих сцен, а не открывать единственную (<c>?list=true</c>, пункт «Все бои» и «Все погони»).</summary>
     [Parameter] public bool ShowList { get; set; }
 
     /// <summary>
@@ -768,14 +768,8 @@
         <section class="@Css.Join("cm-section", StickyAction ? "md:sticky md:top-14 md:z-20 md:mb-1 md:bg-page md:pb-3" : null)" data-testid="round-strip">
             <div class="cm-card">
                 <div class="@Css.Join("cm-card-body flex flex-wrap items-center gap-x-3 gap-y-2", StickyAction ? "py-2.5" : null)">
-                    <div class="min-w-0 flex-1 basis-64" data-testid="round-status">
+                    <div class="min-w-0 flex-1 basis-48" data-testid="round-status">
                         <div class="font-semibold">@(state.Round == 0 ? StageText(state) : $"Раунд {state.Round} · ходит {active?.Name ?? "—"}")</div>
-                        @if (last is not null)
-                        {
-                            <button type="button" class="encounter-lastlog" data-testid="last-log" @onclick="FocusLogAsync">
-                                <span class="font-medium text-primary-900">@EncounterText.Of(last.Kind):</span> @EncounterDisplay.Plain(last.Text)
-                            </button>
-                        }
                     </div>
                     <div class="cm-btn-row">
                         @if (state.Chase is { Phase: ChasePhase.Ended })
@@ -795,8 +789,6 @@
                             <Button Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
                             <Button Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий ход</Button>
                         }
-                    </div>
-                    <div>
                         @* «Завершить» — не рядом с «Следующим»: нажатие мимо закрывает сцену. Только в меню, под линейкой. *@
                         <RowMenu AriaLabel="Действия сцены">
                             <ChildContent>
@@ -811,7 +803,7 @@
                                     <RowMenuItem Checked="state.Combat.CinematicKnockout" OnClick="() => Change(s => s.Combat.CinematicKnockout = !s.Combat.CinematicKnockout)">Нокаут манёвром</RowMenuItem>
                                     <RowMenuItem Checked="state.Combat.LuckToStayConscious" OnClick="() => Change(s => s.Combat.LuckToStayConscious = !s.Combat.LuckToStayConscious)">Удача против обморока</RowMenuItem>
                                 }
-                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">@(Kind == EncounterKind.Chase ? "Все погони" : "Все бои")</RowMenuItem>
+                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=true"))">@(Kind == EncounterKind.Chase ? "Все погони" : "Все бои")</RowMenuItem>
                             </ChildContent>
                             <Danger>
                                 <RowMenuItem Danger="true" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить @FinishWord</RowMenuItem>
@@ -819,6 +811,18 @@
                         </RowMenu>
                     </div>
                 </div>
+                @if (last is not null)
+                {
+                    @* Последняя запись — отдельной строкой на всю ширину: длинное «кто кого и чем» читается целиком, не обрезанное. *@
+                    <button type="button" class="encounter-lastlog" data-testid="last-log" @onclick="FocusLogAsync">
+                        @* «Вступили: …» — метка уже в тексте, второй раз её не пишем. *@
+                        @if (!EncounterDisplay.Plain(last.Text).StartsWith(EncounterText.Of(last.Kind), StringComparison.Ordinal))
+                        {
+                            <span class="font-medium text-primary-900">@EncounterText.Of(last.Kind):</span>
+                        }
+                        @(" ")@EncounterDisplay.Plain(last.Text)
+                    </button>
+                }
                 @if (AllowsMany)
                 {
                     @Siblings(session)
@@ -907,14 +911,14 @@
             {
                 @* На узком экране действие (форма, ход погони, результат) — над списком участников (#213, 390×844), а над ним — лента
                    участников с ПЗ: цель выбирают, не листая вниз к списку (B36). *@
-                <div class="order-first flex flex-col gap-4 lg:order-none lg:col-span-7">
+                <div class="order-first flex min-w-0 flex-col gap-4 lg:order-none lg:col-span-7">
                     @if (StickyAction)
                     {
                         @Ribbon(order, state)
                         @* Колонка действия липнет под полосой раунда: форма, результат и «Применить» всегда на виду. Пока есть результат,
                            форма и эффект спрятаны (hidden, не снесены — введённое остаётся): «Применить» стоит там, где была кнопка
                            действия. Открытый эффект Хранителя липкость не снимает — он прокручивается внутри колонки (B32). *@
-                        <StickyPane class="[--cm-sticky-top:8.75rem]" data-testid="action-pane">
+                        <StickyPane class="[--cm-sticky-top:10.25rem]" data-testid="action-pane">
                             @if (pending is not null)
                             {
                                 @PendingBlock(session, pending)
@@ -965,7 +969,7 @@
     private RenderFragment Ribbon(IReadOnlyList<EncounterParticipant> order, EncounterState state) => __builder =>
     {
         <div class="lg:hidden" data-testid="participants-ribbon">
-            <ul class="flex gap-2 overflow-x-auto pb-1" aria-label="Участники и их ПЗ">
+            <ul class="relative flex gap-2 overflow-x-auto pb-1" aria-label="Участники и их ПЗ">
                 @foreach (var participant in order)
                 {
                     <li @key="participant.Id" class="@Css.Join("flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-sm",
@@ -1004,7 +1008,7 @@
     private RenderFragment PendingBlock(EncounterSession session, EncounterResolution pending) => __builder =>
     {
         <section class="cm-section focus:outline-hidden" data-testid="pending-block" tabindex="-1" @ref="_pendingRef">
-            <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
+            <div class="cm-section-header encounter-head"><h2 class="cm-section-title">Результат</h2></div>
             <div class="cm-card"><div class="cm-card-body">
                 <ResolutionPreview State="session.State" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
                     @if (PendingContent is not null)
