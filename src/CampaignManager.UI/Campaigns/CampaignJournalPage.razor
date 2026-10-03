@@ -15,7 +15,7 @@
         <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-arrow-left" Href="@($"campaigns/{CampaignId}")">Кампания</Button>
         @if (_journal?.CanEdit == true)
         {
-            <Button Small="true" Icon="fa-plus" OnClick="() => OpenEditor(null)">Новая встреча</Button>
+            <Button Small="true" Icon="fa-calendar-plus" OnClick="() => OpenEditor(null)">Новая встреча</Button>
         }
     </Actions>
 </PageHeader>
@@ -47,7 +47,7 @@
                         {
                             var isLatest = session.Id == journal.Sessions[0].Id;
                             var open = _open.Contains(session.Id);
-                            var hasMore = !string.IsNullOrWhiteSpace(session.Summary) || !string.IsNullOrWhiteSpace(session.KeeperNotes);
+                            var hasMore = IsLong(session.Summary) || !string.IsNullOrWhiteSpace(session.KeeperNotes);
                             <article class="flex flex-col gap-3 border-t border-primary-200 px-4 py-4 first:border-t-0" @key="session.Id"
                                      aria-labelledby="@($"session-{session.Id}")">
                                 <div class="flex items-start gap-x-4 gap-y-2">
@@ -178,6 +178,13 @@
     /// <summary>Markdown-заголовки хроники мельче заголовка встречи и без книжной гарнитуры: иначе «Что было» спорит с названием.</summary>
     private const string MarkdownHeadings =
         "[&_h1]:font-sans [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-sans [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-sans [&_h3]:text-sm [&_h3]:font-semibold";
+
+    /// <summary>
+    /// Запись длиннее трёх строк: «Читать полностью» только там, где текст реально обрезан. Строк на экране отсюда не
+    /// посчитать, поэтому берём запас — длина или перевод строки (абзац, список), как у других сворачиваемых текстов.
+    /// </summary>
+    private static bool IsLong(string? summary) =>
+        !string.IsNullOrWhiteSpace(summary) && (summary.Length > 180 || summary.AsSpan().Count((char)10) >= 2);
 
     private void Toggle(Guid id)
     {

@@ -18,6 +18,14 @@ public sealed class User : ICreatedAt, IUpdatedAt
     public required string DisplayName { get; set; }
     public UserRole Role { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
+
+    /// <summary>
+    /// Когда человек появился в системе — то, что администратор читает как «Регистрация». У заведённого при входе — момент
+    /// заведения; у перенесённого из v1 — дата его первой записи там (кампания, место игрока, заявка, сценарий), а если
+    /// записей нет — пусто: <see cref="CreatedAt"/> у таких — день переноса, а не регистрации.
+    /// </summary>
+    public DateTimeOffset? RegisteredAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

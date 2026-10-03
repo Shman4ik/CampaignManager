@@ -63,7 +63,7 @@
                             <div class="mt-1">@Notes(context)</div>
                         }
                     </DataColumn>
-                    <DataColumn TItem="AdminUserDto" Title="Роль" SortBy="u => u.Role" HeaderClass="w-44">
+                    <DataColumn TItem="AdminUserDto" Title="Роль" SortBy="u => u.Role" HeaderClass="w-52">
                         @RoleSelect(context)
                     </DataColumn>
                     <DataColumn TItem="AdminUserDto" Title="Кампании" SortBy="u => u.CampaignCount">
@@ -72,8 +72,8 @@
                     <DataColumn TItem="AdminUserDto" Title="Листы" SortBy="u => u.CharacterCount">
                         @context.CharacterCount
                     </DataColumn>
-                    <DataColumn TItem="AdminUserDto" Title="Регистрация" SortBy="u => u.CreatedAt">
-                        <span class="whitespace-nowrap">@LocalTime.ShortDate(context.CreatedAt)</span>
+                    <DataColumn TItem="AdminUserDto" Title="Регистрация" SortBy="u => u.RegisteredAt ?? DateTimeOffset.MinValue">
+                        <span class="whitespace-nowrap">@(context.RegisteredAt is { } registered ? LocalTime.ShortDate(registered) : "—")</span>
                     </DataColumn>
                     <DataColumn TItem="AdminUserDto" Title="Последний вход" SortBy="u => u.LastLoginAt ?? DateTimeOffset.MinValue">
                         <span class="whitespace-nowrap">@(context.LastLoginAt is { } at ? LocalTime.ShortDate(at) : NeverSignedIn)</span>
@@ -88,7 +88,7 @@
                                 Кампаний: @context.CampaignCount · листов: @context.CharacterCount
                             </div>
                             <div class="text-sm text-primary-500">
-                                Зарегистрирован @LocalTime.Date(context.CreatedAt) · вход: @(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : NeverSignedIn)
+                                @(context.RegisteredAt is { } registered ? $"Зарегистрирован {LocalTime.Date(registered)} · " : "")вход: @(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : NeverSignedIn)
                             </div>
                             <div class="mt-1">@Notes(context)</div>
                         </div>
@@ -135,7 +135,7 @@
     }
 
     private RenderFragment RoleSelect(AdminUserDto user) =>
-        @<select class="cm-input min-w-36" aria-label="@($"Роль: {user.DisplayName}")" value="@user.Role" disabled="@(_busyUser == user.Id)"
+        @<select class="cm-input min-w-44" aria-label="@($"Роль: {user.DisplayName}")" value="@user.Role" disabled="@(_busyUser == user.Id)"
                  @key="(user.Id, user.Role, _selectGeneration)"
                  @onchange="e => ChangeRoleAsync(user, e.Value?.ToString())">
             @foreach (var role in Enum.GetValues<UserRole>())

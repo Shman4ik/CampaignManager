@@ -98,6 +98,10 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
 
         Assert.Equal(3, await db.Users.CountAsync(u => u.Email != "new@example.test", Token));
         Assert.Equal(UserRole.Admin, (await db.Users.SingleAsync(u => u.Email == "admin@example.test", Token)).Role);
+        // «Регистрация» — первая запись пользователя в v1 (у игрока это заявка, самая ранняя); записей нет — пусто
+        Assert.Equal(DateTimeOffset.Parse("2024-05-06T10:00:00Z"), (await db.Users.SingleAsync(u => u.Email == "player@example.test", Token)).RegisteredAt);
+        Assert.NotNull((await db.Users.SingleAsync(u => u.Email == "keeper@example.test", Token)).RegisteredAt);
+        Assert.Null((await db.Users.SingleAsync(u => u.Email == "admin@example.test", Token)).RegisteredAt);
         Assert.Equal(["ui.lastCharacterId"], await db.UserPreferences.Select(p => p.Key).ToListAsync(Token));
 
         // Кампания ваншота: Хранитель — участник с ролью, его строка «игрока» выброшена, псевдоним игрока сохранён

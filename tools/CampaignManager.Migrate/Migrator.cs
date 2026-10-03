@@ -87,6 +87,7 @@ public sealed class Migrator(string connectionString, IFileStore files, Migratio
                     DisplayName = previous.DisplayName,
                     Role = previous.Role,
                     LastLoginAt = previous.LastLoginAt,
+                    RegisteredAt = previous.RegisteredAt,
                     CreatedAt = previous.CreatedAt,
                     UpdatedAt = previous.UpdatedAt,
                 });

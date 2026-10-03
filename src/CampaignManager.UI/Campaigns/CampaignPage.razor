@@ -15,10 +15,11 @@
 <PageHeader Title="@(_details?.Campaign.Name ?? "Кампания")" Subtitle="@Subtitle" Game="true"
             DocumentTitle="@(_details is null ? "Кампания" : $"Кампания: {_details.Campaign.Name}")">
     <Actions>
-        <Button Small="true" Icon="fa-pen-nib" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
+        @* Пустой кампании нужно одно: позвать игроков — это главное действие, журнал пока вторичен. *@
+        <Button Small="true" Variant="@(NeedsPlayers ? ButtonVariant.Secondary : ButtonVariant.Primary)" Icon="fa-pen-nib" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
         @if (_details is { Campaign: { CanEdit: true, Status: not CampaignStatus.Completed } })
         {
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" OnClick="() => _inviting = true">Пригласить</Button>
+            <Button Small="true" Variant="@(NeedsPlayers ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-user-plus" OnClick="() => _inviting = true">Пригласить</Button>
         }
         @if (_details?.Campaign.CanEdit == true)
         {
@@ -42,12 +43,20 @@
             var campaign = details.Campaign;
             var active = campaign.Status != CampaignStatus.Completed;
         }
+        @* Заголовок в шапке — одна строка с многоточием: длинное название полностью — здесь, вид и эпоха — тут же. *@
+        <div class="cm-stack" data-testid="campaign-lead">
+            @if (campaign.Name.Length > LongName)
+            {
+                <h2 class="cm-h4 cm-title-serif break-words" data-testid="campaign-full-name">@campaign.Name</h2>
+            }
+            <p class="cm-text-muted">@CampaignLabels.Kind(campaign.Kind) · @CampaignLabels.Era(campaign.Era)</p>
+        </div>
+
         @* Хранителю без игроков — как они попадают в кампанию (сказано только здесь и на главной). *@
         @if (campaign.CanEdit && campaign.PlayerCount == 0 && active)
         {
-            <Alert Tone="Tone.Info" ShowIcon="true" Title="Игроков пока нет">
-                «Пригласить» даёт ссылку: игрок откроет её, войдёт и вступит. Кампания также видна всем вошедшим на главной
-                в блоке «Можно вступить» — игрок вступает сам и появляется здесь.
+            <Alert Tone="Tone.Info" ShowIcon="true">
+                «Пригласить» даёт ссылку на вступление. Игрок может и сам вступить с главной, из блока «Можно вступить».
             </Alert>
         }
 
@@ -120,13 +129,22 @@
             <section class="cm-section" aria-label="Прохождения">
                 <div class="cm-card">
                     <SectionHeader Title="Прохождения" Count="details.Runs.Count">
-                        <Actions><Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button></Actions>
+                        <Actions>
+                            @if (active)
+                            {
+                                <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button>
+                            }
+                        </Actions>
                     </SectionHeader>
-                    @if (details.Runs.Count == 0)
+                    @if (details.Runs.Count == 0 && active)
                     {
                         <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">
                             Игр по сценариям пока нет. Начать можно из сценария — «Играть в кампании».
                         </p>
+                    }
+                    else if (details.Runs.Count == 0)
+                    {
+                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">Игр по сценариям не было.</p>
                     }
                     @foreach (var run in details.Runs)
                     {
@@ -155,11 +173,17 @@
                 </div>
             </section>
 
+            @* Завершённой кампании НПС не добавляют (решение владельца №8): секция только там, где они уже есть. *@
+            @if (active || details.Npcs.Count > 0)
+            {
             <section class="cm-section" aria-label="НПС кампании">
                 <div class="cm-card">
                     <SectionHeader Title="НПС кампании" Count="details.Npcs.Count">
                         <Actions>
-                            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">НПС</Button>
+                            @if (active)
+                            {
+                                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">Добавить НПС</Button>
+                            }
                         </Actions>
                     </SectionHeader>
                     @if (details.Npcs.Count == 0)
@@ -177,23 +201,28 @@
                     }
                 </div>
             </section>
+            }
         }
 
         <p class="cm-text-muted">
             Создана @LocalTime.Date(campaign.CreatedAt)
             @if (details.LastSession is { } last)
             {
-                <span> · Последняя встреча: <a href="@($"campaigns/{CampaignId}/journal")" class="underline hover:no-underline">№@last.Number@(string.IsNullOrWhiteSpace(last.Title) ? "" : $" «{last.Title}»")</a>, @LocalTime.Date(last.SessionDate)</span>
+                <span> · <a href="@($"campaigns/{CampaignId}/journal")" class="inline-flex min-h-11 items-center underline hover:no-underline">Последняя встреча №@last.Number@(string.IsNullOrWhiteSpace(last.Title) ? "" : $" «{last.Title}»"), @LocalTime.Date(last.SessionDate)</a></span>
             }
         </p>
 
         @* Редкое и необратимое — внизу, а не первым на экране (правило 7). *@
-        @if (campaign.CanDelete || details.CanLeave)
+        @* Выйти из завершённой кампании не предлагаем: журнал — архив, который игрок потерял бы. *@
+        @{
+            var canLeave = details.CanLeave && active;
+        }
+        @if (campaign.CanDelete || canLeave)
         {
             <section class="cm-section mt-6" aria-label="Опасная зона">
                 <div class="cm-card">
                     <SectionHeader Title="Опасная зона" />
-                    @if (details.CanLeave)
+                    @if (canLeave)
                     {
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
                             <p class="min-w-0 flex-1 basis-64 text-sm text-primary-700">Журнал станет вам недоступен, лист останется у вас без кампании.</p>
@@ -236,13 +265,20 @@
     private string? _renameError;
     private bool _busy;
 
-    /// <summary>Статус, вид, эпоха и моя роль — одной серой строкой под названием, а не четырьмя бейджами.</summary>
+    /// <summary>Длиннее этого название не помещается в шапку на планшете и телефоне — его полностью показывает страница.</summary>
+    private const int LongName = 28;
+
+    /// <summary>Активной кампании без игроков нужно приглашение: оно главное действие страницы.</summary>
+    private bool NeedsPlayers => _details?.Campaign is { CanEdit: true, PlayerCount: 0, Status: not CampaignStatus.Completed };
+
+    /// <summary>
+    /// Статус и моя роль — то, что в шапке нельзя терять, поэтому подзаголовок короткий и помещается рядом с кнопками даже на
+    /// телефоне; вид и эпоха — на странице, под названием.
+    /// </summary>
     private string? Subtitle => _details?.Campaign is { } c
         ? string.Join(" · ", new[]
         {
             CampaignLabels.Status(c.Status),
-            CampaignLabels.Kind(c.Kind),
-            CampaignLabels.Era(c.Era),
             c.MyRole is { } role ? $"вы — {CampaignLabels.Role(role)}" : null,
         }.Where(part => part is not null))
         : null;

@@ -81,6 +81,7 @@ public sealed class UserDirectory(
                 Auth0Sub = login.Subject,
                 Email = login.Email,
                 DisplayName = string.IsNullOrWhiteSpace(login.Name) ? login.Email : login.Name.Trim(),
+                RegisteredAt = timeProvider.GetUtcNow(),
             };
             dbContext.Users.Add(user);
             logger.LogInformation("Заведён пользователь {Email}", login.Email);

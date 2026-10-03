@@ -8,6 +8,7 @@ namespace CampaignManager.Contracts.Admin;
 /// <param name="PendingApplications">Заявок на рассмотрении — счётчик у пункта «Заявки» в меню.</param>
 public sealed record AdminSummaryDto(int PendingApplications);
 
+/// <param name="RegisteredAt">Регистрация: у заведённого при входе — момент заведения; у перенесённого из v1 — дата его первой записи там, а если записей не было — <c>null</c>.</param>
 /// <param name="IsMe">Это я — свою роль администратор может снять, только если он не последний администратор.</param>
 /// <param name="HasPendingApplication">У человека заявка на рассмотрении.</param>
 /// <param name="CampaignCount">В скольких кампаниях он участник (Хранитель или игрок).</param>
@@ -17,7 +18,7 @@ public sealed record AdminUserDto(
     string Email,
     string DisplayName,
     UserRole Role,
-    DateTimeOffset CreatedAt,
+    DateTimeOffset? RegisteredAt,
     DateTimeOffset? LastLoginAt,
     bool IsMe,
     bool HasPendingApplication,
