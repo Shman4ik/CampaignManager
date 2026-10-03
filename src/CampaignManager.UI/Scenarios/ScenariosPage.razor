@@ -1,6 +1,7 @@
 @page "/scenarios"
 @page "/scenarios/new"
 @attribute [Authorize(Policy = Policies.Keeper)]
+@implements IDisposable
 @using CampaignManager.Contracts.Scenarios
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.UI.Platform
@@ -125,6 +126,14 @@
     private string _search = "";
     private Guid? _busy;
     private bool _importOpen;
+
+    // Окно «Новый сценарий» открыто адресом, поэтому странице нужна подписка на его смену: переход /scenarios ↔
+    // /scenarios/new сам её не перерисовывает (#165 — кнопка меняла адрес, окно не открывалось, «Отмена» не закрывала).
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
     private bool IsNew => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/') == ScenarioLinks.New;
 

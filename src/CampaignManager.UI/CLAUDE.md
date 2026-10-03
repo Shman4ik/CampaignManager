@@ -12,7 +12,7 @@
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator` |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
-| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки |
+| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки; `InfoLinks` — ссылки на серверные `/about` и `/legal` (страница входа, лист «Ещё»), переход полной загрузкой |
 | `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
 | `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5, загрузка и отдача; сироты — в админке), `/dev/ui`, `/dev/checks` (T2.7) |
 | `Campaigns/` | главная, кампании, участники, журнал — [CLAUDE.md](Campaigns/CLAUDE.md) |
@@ -194,6 +194,12 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
   401 — «сессия закончилась», без ответа — «нет связи», 5xx — общая фраза.
 
 ## Поля
+
+- **Строковый параметр компонента — с `@`.** `<ImagePicker Url="item.ImageUrl">` передаёт буквальную строку
+  `item.ImageUrl`, а не значение: превью всегда битое (так было у предметов, книг и формы раздатки). Выражение —
+  `Url="@item.ImageUrl"`; такие места ищет `grep -rnE '(Url|Src)="[a-z_][A-Za-z_.]*"' src --include=*.razor`.
+- **Страница, что зависит от адреса** (`/scenarios/new` — окно поверх списка), подписывается на
+  `Navigation.LocationChanged` и перерисовывается сама — иначе кнопка меняет адрес, а окно не открывается.
 
 - `<Field Label Hint Note Error>` — подпись, контрол, правило книги («(стр. 32)»), ошибка. Подпись
   обнимает контрол (`<label>`), id не нужен. Несколько контролов под одной подписью (флажки,
