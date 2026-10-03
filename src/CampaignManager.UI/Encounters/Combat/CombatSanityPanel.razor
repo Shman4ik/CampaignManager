@@ -35,22 +35,28 @@
         </details>
     }
     <div>
-        <Button Icon="fa-brain" Disabled="@(Actor is not { Sanity: not null })" DisabledReason="@(Actor is not { Sanity: not null } ? "Выберите, кто видит" : null)" OnClick="ResolveAsync" data-testid="sanity-resolve">Проверить Рассудок</Button>
+        <Button Icon="fa-brain" Disabled="@(Actor is not { Sanity: not null })" DisabledReason="@(Actor is not { Sanity: not null } ? "Выберите, кто видит" : null)" OnClick="ResolveAsync" data-testid="sanity-resolve">Проверить рассудок</Button>
     </div>
 </div>
 
 @code {
     private Guid? _creatureId;
     private string _success = "0";
-    private string _failure = "1D6";
+    private string _failure = "1d6";
     private D100Roll? _roll, _intRoll;
     private int? _loss;
 
     protected override void Follow()
     {
         base.Follow();
-        if (Actor is { Sanity: null })
-            ActorId = State.Participants.FirstOrDefault(p => p.Sanity is not null && !p.Dead)?.Id;
+        // «Кто видит» — тот, чей ход, если у него есть рассудок; иначе первый, кто в состоянии проверить его (не при смерти,
+        // не без сознания), а не просто первый сыщик списка (B28).
+        if (Actor is { Sanity: null } or null)
+        {
+            ActorId = State.Participants.Where(p => p.Sanity is not null && !p.Dead)
+                .OrderBy(p => p.Dying || p.Unconscious ? 1 : 0)
+                .FirstOrDefault()?.Id;
+        }
     }
 
     private static string Text(ChangeEventArgs e, char empty) => e.Value?.ToString() is { Length: > 0 } text ? text : empty.ToString();

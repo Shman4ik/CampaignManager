@@ -22,6 +22,10 @@ public static class EncountersModule
                 encounters.ListActiveAsync(kind, ct))
             .RequireAuthorization().WithName("ListActiveEncounters").WithTags(Tag);
 
+        app.MapGet(EncountersRoutes.Finished, (EncounterKind? kind, int? take, EncounterService encounters, CancellationToken ct) =>
+                encounters.ListFinishedAsync(kind, take ?? 10, ct))
+            .RequireAuthorization().WithName("ListFinishedEncounters").WithTags(Tag);
+
         app.MapPost(EncountersRoutes.Encounters, async Task<IResult> (StartEncounterRequest body, EncounterService encounters,
                 CancellationToken ct) =>
             {

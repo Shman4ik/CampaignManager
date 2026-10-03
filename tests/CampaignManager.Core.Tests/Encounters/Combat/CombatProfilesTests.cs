@@ -132,6 +132,33 @@ public sealed class CombatProfilesTests
     }
 
     [Fact]
+    public void Dodge_IsNotAnAttackSkill()
+    {
+        var catalog = new SkillCatalog(
+        [
+            new(Guid.NewGuid(), "Уклонение") { Code = SkillCodes.Dodge, BaseValue = 25, Category = SkillCategory.CombatGeneral },
+            new(Guid.NewGuid(), "Метание") { Code = "skill.throw", BaseValue = 20, Category = SkillCategory.CombatGeneral },
+        ]);
+
+        Assert.False(CombatProfiles.IsCombatSkill(catalog, catalog.FindByCode(SkillCodes.Dodge)!.Id));
+        Assert.True(CombatProfiles.IsCombatSkill(catalog, catalog.FindByCode("skill.throw")!.Id));
+    }
+
+    [Fact]
+    public void BrawlWeaponRow_IsTheSameAttackAsUnarmed_NotASecondOne()
+    {
+        var catalog = CombatCatalog();
+        var brawl = catalog.FindByCode("skill.fighting.brawl")!.Id;
+        var sheet = NewSheet(50);
+        sheet.Weapons.Add(new SheetWeapon { Name = "Драка", SkillId = brawl, Damage = "1d3 - 1" });
+        sheet.Weapons.Add(new SheetWeapon { Name = "Нож", SkillId = brawl, Damage = "1D4" });
+
+        var profile = CombatProfiles.FromSheet(sheet, catalog);
+
+        Assert.Equal(["Драка (без оружия)", "Нож"], profile.Attacks.Select(a => a.Name));
+    }
+
+    [Fact]
     public void PickedWeapon_GoesToSnapshotWithSkillOfParticipant_AndSurvivesRefresh()
     {
         var catalog = CombatCatalog();

@@ -39,8 +39,15 @@ public sealed class EncounterComponentTests : KitContext
             .Add(c => c.OnApply, () => applied = true)
             .Add(c => c.OnCancel, () => cancelled = true));
 
+        // Три столбца «кто / что / было → станет»; «Чем чревато» отдельным столбцом нет, а пояснение, которого в заголовке результата
+        // нет, стоит мелко под названием строки (B29).
+        Assert.DoesNotContain("Чем чревато", cut.Markup, StringComparison.Ordinal);
         var cells = cut.FindAll("tbody td").Select(td => td.TextContent.Trim()).ToList();
-        Assert.Equal(["Гуль", "Урон 8", "13", "5", "серьёзная рана, падает, нужна проверка ВЫН"], cells);
+        Assert.Equal(4, cells.Count);
+        Assert.Equal("Гуль", cells[0]);
+        Assert.StartsWith("Урон 8", cells[1], StringComparison.Ordinal);
+        Assert.Contains("серьёзная рана, падает, нужна проверка ВЫН", cells[1], StringComparison.Ordinal);
+        Assert.Equal(["13", "5"], cells[2..]);
         Assert.Equal(13, ghoul.HitPoints);
         Assert.DoesNotContain("Запишется в лист", cut.Markup, StringComparison.Ordinal); // у твари листа нет
 
@@ -66,7 +73,7 @@ public sealed class EncounterComponentTests : KitContext
         cut.FindAll("[data-testid=participant-chip]")[1].Click();
         Assert.Equal([state.Participants[1].Id], selected);
 
-        cut.Find("button:not([data-testid])").Click(); // «Все»
+        cut.Find("[data-testid=participant-all]").Click(); // «Все»
         Assert.Equal(2, selected.Count);
     }
 

@@ -20,7 +20,7 @@ export function place(button, panel, dotnet) {
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
     panel.style.visibility = "visible";
-    panel.querySelector("[role=menuitem]:not([disabled])")?.focus({ preventScroll: true });
+    panel.querySelector("[role^=menuitem]:not([disabled])")?.focus({ preventScroll: true });
 
     const onScroll = (event) => {
         if (!panel.contains(event.target)) {

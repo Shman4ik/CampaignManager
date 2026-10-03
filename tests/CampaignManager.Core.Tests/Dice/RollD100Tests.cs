@@ -142,7 +142,7 @@ public sealed class RollD100Tests
     {
         var roll = D100.Roll(ScriptedDice.Of(4, 2, 4), bonusDice: 1);
 
-        Assert.Equal(" [кости 24, 44 — бонусная кость]", RulesText.RollDetail(roll));
+        Assert.Equal(" (бонусная кость: 24, 44; взято 24)", RulesText.RollDetail(roll));
         Assert.Equal(string.Empty, RulesText.RollDetail(D100Roll.Entered(24)));
         Assert.Equal(string.Empty, RulesText.RollDetail(null));
         Assert.Equal("2 штрафные кости", RulesText.DescribeDice(2, isBonus: false));

@@ -78,7 +78,7 @@ public static class EncounterText
     public static string Of(EncounterLogKind kind) => kind switch
     {
         EncounterLogKind.Started => "Начало",
-        EncounterLogKind.Joined => "Вступил",
+        EncounterLogKind.Joined => "Вступили",
         EncounterLogKind.Left => "Покинул",
         EncounterLogKind.Round => "Раунд",
         EncounterLogKind.Delayed => "Отложил ход",

@@ -4,21 +4,17 @@
 <div class="flex flex-col gap-3" data-testid="maneuver-panel">
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field Label="Кто действует">
-            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто выполняет манёвр" Value="ActorId" ValueChanged="SelectActor" />
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто выполняет манёвр" Value="ActorId" ValueChanged="SelectActor" Grouped="true" />
         </Field>
         <Field Label="Цель">
-            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель манёвра" Value="_targetId" ValueChanged="v => _targetId = v" />
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель манёвра" Value="_targetId" ValueChanged="v => _targetId = v"
+                               Grouped="true" Perspective="Actor" />
         </Field>
     </div>
 
     <Field Label="Манёвр" Group="true">
-        @* Сеткой, а не строкой с переносом: «Невыгодное положение» не остаётся одиноко на второй строке. *@
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            @foreach (var type in Types)
-            {
-                <Button Small="true" Variant="@(type == _type ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _type = type">@CombatRules.NameOf(type)</Button>
-            }
-        </div>
+        @* Выбор из набора — Segmented (светлый с галочкой), а не тёмная плита главного действия: «Провести манёвр» одна (B24). *@
+        <Segmented TValue="ManeuverType" Options="TypeOptions" Value="_type" ValueChanged="v => _type = v" Label="Манёвр" />
     </Field>
 
     @if (Actor is { } actor && Target is { } target)
@@ -44,10 +40,7 @@
                     </select>
                 </Field>
                 <Field Label="Цель защищается" Group="true">
-                    <div class="flex flex-wrap gap-2">
-                        <Button Small="true" Variant="@(_reaction == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
-                        <Button Small="true" Variant="@(_reaction == DefenseReaction.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
-                    </div>
+                    <Segmented TValue="DefenseReaction" Options="Reactions" Value="_reaction" ValueChanged="v => _reaction = v" Label="Цель защищается" />
                 </Field>
                 <Field Label="Кости Хранителя" Group="true">
                     <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
@@ -81,6 +74,11 @@
     private int _net;
     private string? _skillKey;
     private D100Roll? _attackRoll, _defenseRoll;
+
+    private static readonly IReadOnlyList<SegmentOption<DefenseReaction>> Reactions =
+        [new(DefenseReaction.Dodge, "Уклонение"), new(DefenseReaction.FightBack, "Контратака")];
+
+    private IReadOnlyList<SegmentOption<ManeuverType>> TypeOptions => [.. Types.Select(t => new SegmentOption<ManeuverType>(t, CombatRules.NameOf(t)))];
 
     private IEnumerable<ManeuverType> Types => State.Combat.CinematicKnockout
         ? Enum.GetValues<ManeuverType>()

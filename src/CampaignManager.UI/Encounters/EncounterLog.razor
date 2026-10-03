@@ -1,9 +1,10 @@
 @using CampaignManager.Core.Encounters
 
 @* Журнал сцены — один на бой и погоню (в v1: CombatLog и ChaseLog с тремя switch-словарями). Подпись и категория —
-   EncounterText (Core), цвет — по категории, а не по каждому виду (знание журнала погони v1). Свежее сверху, раунд —
-   метка у записи. Лежит на всю ширину под рабочей областью: длинная запись в узкой колонке портрета iPad
-   разворачивалась на десяток строк (знание v1, Chase/CLAUDE.md). Своей карточки не рисует. *@
+   EncounterText (Core), полоса слева — по категории (насилие — нейтральная: красный в системе — «ошибка», а не «ударили»).
+   Запись — заголовок и одна строка итога («кто: что, было → стало»), остальное — под «Подробнее»: одна атака занимала 8–9
+   строк (B35). Свежее сверху, раунд — метка у записи. Лежит на всю ширину под рабочей областью: длинная запись в узкой колонке
+   портрета iPad разворачивалась на десяток строк (знание v1, Chase/CLAUDE.md). Своей карточки не рисует. *@
 @if (Entries.Count == 0)
 {
     <p class="cm-text-muted px-4 py-3">Записей пока нет.</p>
@@ -13,23 +14,39 @@ else
     <ol class="flex flex-col" data-testid="encounter-log">
         @foreach (var entry in Visible)
         {
+            var lines = EncounterDisplay.VisibleLines(entry);
+            var summary = EncounterDisplay.Summary(lines);
+            var more = summary is null ? lines : [.. lines.Where(l => !l.StartsWith(summary, StringComparison.Ordinal))];
+            var text = EncounterDisplay.Plain(entry.Text);
+            var label = EncounterText.Of(entry.Kind);
             <li @key="entry.Id" class="@Css.Join("encounter-log-entry", CategoryClass(EncounterText.Category(entry.Kind)))">
                 <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     @if (entry.Round > 0)
                     {
                         <span class="cm-meta font-mono">Р@(entry.Round)</span>
                     }
-                    <span class="text-sm font-semibold text-primary-700">@EncounterText.Of(entry.Kind)</span>
-                    <span class="text-primary-900">@EncounterDisplay.Plain(entry.Text)</span>
+                    @* «Вступили: …» — метка уже в тексте записи, второй раз её не пишем. *@
+                    @if (!text.StartsWith(label, StringComparison.Ordinal))
+                    {
+                        <span class="text-sm font-semibold text-primary-700">@label</span>
+                    }
+                    <span class="text-primary-900">@text</span>
                 </div>
-                @if (entry.Lines.Count > 0)
+                @if (summary is not null)
                 {
-                    <ul class="mt-1 flex flex-col gap-0.5 text-sm text-primary-700">
-                        @foreach (var line in entry.Lines)
-                        {
-                            <li>@EncounterDisplay.Plain(line)</li>
-                        }
-                    </ul>
+                    <div class="mt-0.5 text-sm text-primary-700" data-testid="log-summary">@summary</div>
+                }
+                @if (more.Count > 0)
+                {
+                    <details class="encounter-more">
+                        <summary class="cm-meta cursor-pointer">Подробнее (@more.Count)</summary>
+                        <ul class="mt-1 flex flex-col gap-0.5 text-sm text-primary-700">
+                            @foreach (var line in more)
+                            {
+                                <li>@line</li>
+                            }
+                        </ul>
+                    </details>
                 }
             </li>
         }

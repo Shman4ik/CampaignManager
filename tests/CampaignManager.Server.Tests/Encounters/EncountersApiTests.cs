@@ -4,6 +4,7 @@ using CampaignManager.ApiClient.Encounters;
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Encounters;
 using CampaignManager.Contracts.Platform;
+using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Dice;
 using CampaignManager.Core.Encounters;
@@ -426,5 +427,34 @@ public sealed class EncountersApiTests(CampaignsApp app) : IClassFixture<Campaig
         var cleared = await Encounters(keeper).GetAsync(chase.Id, Cancellation);
         await Encounters(keeper).SetRunAsync(chase.Id, null, cleared.Version, Cancellation);
         Assert.Null((await Encounters(keeper).GetAsync(chase.Id, Cancellation)).RunId);
+    }
+
+    [Fact]
+    public async Task Finished_encounters_are_listed_for_their_keeper_and_still_readable()
+    {
+        TestDatabase.SkipIfMissing();
+        var (keeper, _, otherKeeper, campaignId, _) = await TableAsync();
+        var combat = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Combat, campaignId), Cancellation);
+        var state = new EncounterState();
+        EncounterEngine.Add(state, EncounterParticipants.FromStatblock(null, "Глубоководный", new Statblock { HitPoints = 11 }), Now);
+        EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Note, Text = "Конец схватки", At = Now });
+        var saved = await Encounters(keeper).SaveStateAsync(combat.Id, state, combat.Version, Cancellation);
+        var chase = await Encounters(keeper).StartAsync(new StartEncounterRequest(EncounterKind.Chase, campaignId), Cancellation);
+
+        Assert.Empty(await Encounters(keeper).ListFinishedAsync(null, 10, Cancellation));
+        await Encounters(keeper).FinishAsync(combat.Id, saved.Version, Cancellation);
+
+        // Завершённый бой — в списке завершённых (не в идущих), с участниками; чужому Хранителю его не видно; журнал читается по GET.
+        var finished = Assert.Single(await Encounters(keeper).ListFinishedAsync(EncounterKind.Combat, 10, Cancellation));
+        Assert.Equal(combat.Id, finished.Id);
+        Assert.True(finished.Ended);
+        Assert.Equal(["Глубоководный"], finished.ParticipantNames);
+        Assert.Empty(await Encounters(keeper).ListFinishedAsync(EncounterKind.Chase, 10, Cancellation));
+        Assert.DoesNotContain(await Encounters(keeper).ListActiveAsync(EncounterKind.Combat, Cancellation), e => e.Id == combat.Id);
+        Assert.Contains(await Encounters(keeper).ListActiveAsync(EncounterKind.Chase, Cancellation), e => e.Id == chase.Id);
+        Assert.Empty(await Encounters(otherKeeper).ListFinishedAsync(null, 10, Cancellation));
+        var read = await Encounters(keeper).GetAsync(combat.Id, Cancellation);
+        Assert.Equal(EncounterStatus.Finished, read.Status);
+        Assert.Contains(read.State.Log, e => e.Text == "Конец схватки");
     }
 }

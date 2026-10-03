@@ -109,6 +109,23 @@ public sealed class EncounterEngineTests
     }
 
     [Fact]
+    public void Round_counters_are_previewed_by_the_engine_but_never_reach_the_log()
+    {
+        var (state, investigator, creature, _) = Scene();
+        var resolution = new EncounterResolution
+        {
+            Title = "Атака",
+            Effects = [new EncounterEffect { Kind = EncounterEffectKind.Attack, ParticipantId = creature.Id, Amount = 1, Flag = true }, Damage(investigator.Id, 3)],
+        };
+
+        Assert.Contains(EncounterEngine.Preview(state, resolution), l => l.IsCounter);
+        var outcome = EncounterEngine.Apply(state, resolution, Now);
+
+        Assert.DoesNotContain(outcome.Entry.Lines, l => l.Contains("за раунд", StringComparison.Ordinal));
+        Assert.Contains(outcome.Entry.Lines, l => l.Contains("Урон 3", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_changes_participants_logs_and_queues_sheet_writes()
     {
         var (state, investigator, creature, _) = Scene();

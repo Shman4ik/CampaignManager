@@ -14,6 +14,12 @@ public static class EncountersRoutes
     /// </summary>
     public const string Encounters = ApiRoutes.Prefix + "/encounters";
 
+    /// <summary>
+    /// <c>GET ?kind=&amp;take=</c> — недавно завершённые сцены вошедшего Хранителя, свежие первыми (журнал после игры):
+    /// <see cref="EncounterSummaryDto"/> с <c>Ended = true</c>. Открывает такую сцену обычный <c>GET {id}</c>.
+    /// </summary>
+    public const string Finished = Encounters + "/finished";
+
     /// <summary><c>GET</c> — <see cref="EncounterDto"/> и <c>ETag</c> с версией.</summary>
     public const string EncounterPattern = Encounters + "/{encounterId:guid}";
 
@@ -27,6 +33,9 @@ public static class EncountersRoutes
     public const string FinishPattern = EncounterPattern + "/finish";
 
     public static string Active(EncounterKind? kind) => kind is { } k ? $"{Encounters}?kind={k}" : Encounters;
+
+    public static string FinishedList(EncounterKind? kind, int take) =>
+        $"{Finished}?take={take.ToString(System.Globalization.CultureInfo.InvariantCulture)}" + (kind is { } k ? $"&kind={k}" : "");
 
     public static string Encounter(Guid encounterId) => $"{Encounters}/{encounterId}";
 
@@ -101,6 +110,9 @@ public sealed record EncounterSavedDto(uint Version, DateTimeOffset UpdatedAt);
 public interface IEncountersApi
 {
     Task<IReadOnlyList<EncounterSummaryDto>> ListActiveAsync(EncounterKind? kind, CancellationToken cancellationToken = default);
+
+    /// <summary>Недавно завершённые сцены вошедшего (не больше <paramref name="take"/>, свежие первыми): прочитать журнал после игры.</summary>
+    Task<IReadOnlyList<EncounterSummaryDto>> ListFinishedAsync(EncounterKind? kind, int take, CancellationToken cancellationToken = default);
 
     Task<EncounterDto> StartAsync(StartEncounterRequest request, CancellationToken cancellationToken = default);
 

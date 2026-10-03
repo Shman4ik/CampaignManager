@@ -65,33 +65,7 @@
         }
     </section>
 
-    @if (State.Combat.InitiativeRolls)
-    {
-    <section class="flex flex-col gap-2 border-t border-primary-200 pt-3" data-testid="initiative-block">
-        <h3 class="cm-card-title">Инициатива броском ЛВК</h3>
-            <details class="encounter-rolls">
-                <summary>Броски ЛВК со стола (необязательно)</summary>
-                <div class="mt-2 flex flex-col gap-2">
-                    @foreach (var p in State.Participants.Where(x => !x.Dead))
-                    {
-                        <div class="flex flex-wrap items-center gap-2" @key="p.Id">
-                            <span class="min-w-32 font-medium">@p.Name</span>
-                            <RollInput Label="@($"ЛВК {p.Name}")" Value="p.Stats.Dex" BonusDice="@(p.Combat.FirearmReady ? 1 : 0)"
-                                       Roll="@_initiative.GetValueOrDefault(p.Id)" RollChanged="r => _initiative[p.Id] = r" />
-                        </div>
-                    }
-                </div>
-            </details>
-            <div class="flex flex-wrap gap-2">
-                <Button Small="true" Icon="fa-dice-d20" Disabled="@(State.Participants.Count == 0)" OnClick="RollInitiativeAsync">Бросить инициативу всем</Button>
-                @if (State.Combat.InitiativeRolled)
-                {
-                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ChangeAsync(s => CombatRules.ClearInitiative(s, Now))">Снова по ЛВК</Button>
-                }
-            </div>
-            <p class="cm-meta">Порядок по уровню успеха, при равенстве — по ЛВК; держится до конца боя. Огнестрел наготове — бонусная кость.</p>
-    </section>
-    }
+    <InitiativeBlock Divided="true" />
 </div>
 
 @code {
@@ -123,14 +97,4 @@
 
     private Task LuckAsync(EncounterParticipant actor) =>
         CombatRules.StayConscious(State, actor.Id) is { } resolution ? ProposeAsync(resolution) : Task.CompletedTask;
-
-    private readonly Dictionary<Guid, D100Roll?> _initiative = [];
-
-    /// <summary>Вписанные броски — как есть, остальным бросит правило.</summary>
-    private async Task RollInitiativeAsync()
-    {
-        var entered = _initiative.Where(x => x.Value is not null).ToDictionary(x => x.Key, x => x.Value!);
-        await ChangeAsync(state => CombatRules.RollInitiative(state, entered, Dice, Now));
-        _initiative.Clear();
-    }
 }

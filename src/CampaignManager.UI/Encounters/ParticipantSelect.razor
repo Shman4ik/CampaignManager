@@ -2,27 +2,39 @@
 
 @* Выбор участника сцены — один на все панели (в v1 — 14 одинаковых <select> в семи панелях боя и пять в погоне).
    Один — выпадающий список (Value); несколько — ряд кнопок-переключателей 36px (Values, Multiple="true"): цели эффекта,
-   группа на проверку рассудка. Фильтр — Where (например, только с листом); выбывшие помечены, но выбрать их можно. *@
+   группа на проверку рассудка. Фильтр — Where (например, только с листом); выбывшие помечены, но выбрать их можно.
+   Grouped — по сторонам: в выпадающем списке — <optgroup>, у кнопок — свой ряд с подписью и «Все» на сторону вместо стены
+   из одиннадцати одинаковых кнопок (B21, B33). С Perspective группы — относительно участника: «Противники», «Нейтральные»,
+   «Свои» (цель атаки: сначала те, по кому бьют). *@
 @if (Multiple)
 {
-    <fieldset class="flex flex-wrap gap-2" aria-label="@Label">
-        @foreach (var participant in Options)
+    <fieldset class="flex flex-col gap-2" aria-label="@Label">
+        @foreach (var group in Groups())
         {
-            var on = Values.Contains(participant.Id);
-            <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm encounter-chip" aria-pressed="@(on ? "true" : "false")"
-                    data-testid="participant-chip" @onclick="() => ToggleAsync(participant.Id)">
-                @participant.Name
-                @if (participant.IsOut)
+            <div class="flex flex-wrap items-center gap-2" @key="group.Label">
+                @if (group.Label is not null)
                 {
-                    <span class="text-xs opacity-80">(выбыл)</span>
+                    <span class="cm-field-note w-24 shrink-0 font-medium text-primary-700">@group.Label</span>
                 }
-            </button>
-        }
-        @if (Options.Count > 1)
-        {
-            <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm" @onclick="AllAsync">
-                @(Options.All(p => Values.Contains(p.Id)) ? "Снять всех" : "Все")
-            </button>
+                @foreach (var participant in group.Items)
+                {
+                    var on = Values.Contains(participant.Id);
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm encounter-chip" aria-pressed="@(on ? "true" : "false")"
+                            data-testid="participant-chip" @onclick="() => ToggleAsync(participant.Id)">
+                        @participant.Name
+                        @if (participant.IsOut)
+                        {
+                            <span class="text-xs opacity-80">(выбыл)</span>
+                        }
+                    </button>
+                }
+                @if (group.Items.Count > 1)
+                {
+                    <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm" data-testid="participant-all" @onclick="() => AllAsync(group.Items)">
+                        @(group.Items.All(p => Values.Contains(p.Id)) ? "Снять всех" : "Все")
+                    </button>
+                }
+            </div>
         }
     </fieldset>
 }
@@ -30,9 +42,24 @@ else
 {
     <select class="cm-input" aria-label="@Label" data-testid="participant-select" value="@(Value?.ToString() ?? "")" @onchange="SelectAsync">
         <option value="">@Placeholder</option>
-        @foreach (var participant in Options)
+        @foreach (var group in Groups())
         {
-            <option value="@participant.Id" selected="@(Value == participant.Id)">@participant.Name@(participant.IsOut ? " (выбыл)" : "")</option>
+            @if (group.Label is null)
+            {
+                @foreach (var participant in group.Items)
+                {
+                    <option value="@participant.Id" selected="@(Value == participant.Id)">@participant.Name@(participant.IsOut ? " (выбыл)" : "")</option>
+                }
+            }
+            else
+            {
+                <optgroup label="@group.Label">
+                    @foreach (var participant in group.Items)
+                    {
+                        <option value="@participant.Id" selected="@(Value == participant.Id)">@participant.Name@(participant.IsOut ? " (выбыл)" : "")</option>
+                    }
+                </optgroup>
+            }
         }
     </select>
 }
@@ -57,7 +84,50 @@ else
 
     [Parameter] public EventCallback<IReadOnlySet<Guid>> ValuesChanged { get; set; }
 
+    /// <summary>Разбить по сторонам (подписанные группы), если в списке больше одной стороны.</summary>
+    [Parameter] public bool Grouped { get; set; }
+
+    /// <summary>
+    /// Чьими глазами смотрим на стороны: «Противники», «Нейтральные», «Свои» относительно него и в таком порядке — для цели
+    /// атаки. Без него группы по сторонам: «Сыщики», «Противники», «Нейтральные».
+    /// </summary>
+    [Parameter] public EncounterParticipant? Perspective { get; set; }
+
     private IReadOnlyList<EncounterParticipant> Options => Where is null ? Participants : [.. Participants.Where(Where)];
+
+    private sealed record Group(string? Label, IReadOnlyList<EncounterParticipant> Items);
+
+    private IReadOnlyList<Group> Groups()
+    {
+        var options = Options;
+        if (!Grouped || options.Select(p => p.Side).Distinct().Count() < 2)
+            return [new Group(null, options)];
+
+        var sides = options.Select(p => p.Side).Distinct();
+        if (Perspective is { } viewer)
+        {
+            // Противники первыми (по ним бьют), нейтральные, свои — последними.
+            return
+            [
+                .. sides.OrderBy(side => side == viewer.Side ? 2 : side == EncounterSide.Neutral ? 1 : 0)
+                    .Select(side => new Group(LabelFor(viewer, side), [.. options.Where(p => p.Side == side)])),
+            ];
+        }
+
+        return [.. sides.Order().Select(side => new Group(Capital(EncounterText.Of(side)), [.. options.Where(p => p.Side == side)]))];
+    }
+
+    private static string LabelFor(EncounterParticipant viewer, EncounterSide side)
+    {
+        if (side == viewer.Side)
+            return "Свои";
+        // Нейтральный смотрит на обе стороны одинаково: их так и зовут, «противниками» были бы все.
+        return viewer.Side == EncounterSide.Neutral
+            ? Capital(EncounterText.Of(side))
+            : side == EncounterSide.Neutral ? "Нейтральные" : "Противники";
+    }
+
+    private static string Capital(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
     private Task SelectAsync(ChangeEventArgs e) =>
         ValueChanged.InvokeAsync(Guid.TryParse(e.Value?.ToString(), out var id) ? id : null);
@@ -70,6 +140,14 @@ else
         return ValuesChanged.InvokeAsync(next);
     }
 
-    private Task AllAsync() =>
-        ValuesChanged.InvokeAsync(Options.All(p => Values.Contains(p.Id)) ? new HashSet<Guid>() : Options.Select(p => p.Id).ToHashSet());
+    /// <summary>«Все» — на свою группу: кто в ней уже выбран, снимается, иначе добавляются все.</summary>
+    private Task AllAsync(IReadOnlyList<EncounterParticipant> group)
+    {
+        var next = new HashSet<Guid>(Values);
+        if (group.All(p => next.Contains(p.Id)))
+            next.ExceptWith(group.Select(p => p.Id));
+        else
+            next.UnionWith(group.Select(p => p.Id));
+        return ValuesChanged.InvokeAsync(next);
+    }
 }

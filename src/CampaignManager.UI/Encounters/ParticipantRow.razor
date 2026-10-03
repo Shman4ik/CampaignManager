@@ -26,7 +26,8 @@
             <span class="break-words font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
             <i class="@Css.Join("fa-solid text-xs text-primary-500", _open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
         </button>
-        <div class="ml-auto flex w-28 shrink-0 justify-end xl:w-36">
+        @* Полоса ПЗ узкая (80px): имя тварей («Бесформенное отродье #1») остаётся в одну строку, список не прыгает по высоте (B15). *@
+        <div class="ml-auto flex w-20 shrink-0 justify-end xl:w-28">
             @if (Participant.Dead)
             {
                 @* «мёртв» — на месте полосы ПЗ, а не отдельной строкой (строка не растёт на 34px). *@
@@ -34,7 +35,19 @@
             }
             else
             {
-                <div class="w-full"><StatBar Label="ПЗ" Value="Participant.HitPoints" Max="Participant.MaxHitPoints" Kind="StatKind.HitPoints" TestId="stat-hp" /></div>
+                <div class="w-full">
+                    <StatBar Label="ПЗ" Value="Participant.HitPoints" Max="Participant.MaxHitPoints" Kind="StatKind.HitPoints" TestId="stat-hp" />
+                    @if (Participant.Sanity is { } sanityNow)
+                    {
+                        @* Рассудок сыщика — тонкая полоса под ПЗ, без цифр: за столом он нужен постоянно (проверки после видов тварей), а
+                           цифры — по касанию имени (B13). Подпись цветов — над списком участников. *@
+                        var percent = StatBar.Percent(sanityNow, Participant.MaxSanity ?? 99);
+                        <div class="cm-stat-track mt-1 h-1" role="meter" aria-label="Рассудок" aria-valuemin="0" aria-valuemax="@(Participant.MaxSanity ?? 99)"
+                             aria-valuenow="@sanityNow" data-testid="stat-san-thin">
+                            <div class="@StatBar.FillClass(StatKind.Sanity, percent)" style="width: @(percent)%"></div>
+                        </div>
+                    }
+                </div>
             }
         </div>
         @if (Actions is not null)
@@ -98,11 +111,24 @@
                     <StatBar Label="Рассудок" Value="sanity" Max="@(Participant.MaxSanity ?? 99)" Kind="StatKind.Sanity" TestId="stat-san" />
                 }
             </div>
-            <p class="cm-meta mt-1">
-                @EncounterText.Of(Participant.Kind) · сторона: @EncounterText.Of(Participant.Side) · инициатива @Participant.Initiative ·
-                СИЛ @Participant.Stats.Str · ЛВК @Participant.Stats.Dex · МОЩ @Participant.Stats.Pow ·
-                бонус к урону <DiceText Value="@Participant.Stats.DamageBonus" /> · Комплекция @Participant.Stats.Build@(Participant.Luck is { } luck ? $" · Удача {luck}" : "")@(Participant.Stats.Armor > 0 ? $" · Броня {Participant.Stats.Armor}" : "")
-            </p>
+            @* Вид и сторона — это точка и подпись цветов над списком, здесь их не повторяем (B14); числа — блоками «подпись значение»,
+               каждый не разрывается переносом. *@
+            <dl class="cm-meta mt-2 flex flex-wrap gap-x-4 gap-y-1" data-testid="participant-numbers">
+                <div class="whitespace-nowrap"><dt class="inline">Инициатива</dt> <dd class="inline font-medium text-primary-800">@Participant.Initiative</dd></div>
+                <div class="whitespace-nowrap"><dt class="inline">СИЛ</dt> <dd class="inline font-medium text-primary-800">@Participant.Stats.Str</dd></div>
+                <div class="whitespace-nowrap"><dt class="inline">ЛВК</dt> <dd class="inline font-medium text-primary-800">@Participant.Stats.Dex</dd></div>
+                <div class="whitespace-nowrap"><dt class="inline">МОЩ</dt> <dd class="inline font-medium text-primary-800">@Participant.Stats.Pow</dd></div>
+                <div class="whitespace-nowrap"><dt class="inline">Бонус к урону</dt> <dd class="inline font-medium text-primary-800"><DiceText Value="@Participant.Stats.DamageBonus" /></dd></div>
+                <div class="whitespace-nowrap"><dt class="inline">Комплекция</dt> <dd class="inline font-medium text-primary-800">@Participant.Stats.Build</dd></div>
+                @if (Participant.Luck is { } luck)
+                {
+                    <div class="whitespace-nowrap"><dt class="inline">Удача</dt> <dd class="inline font-medium text-primary-800">@luck</dd></div>
+                }
+                @if (Participant.Stats.Armor > 0)
+                {
+                    <div class="whitespace-nowrap"><dt class="inline">Броня</dt> <dd class="inline font-medium text-primary-800">@Participant.Stats.Armor</dd></div>
+                }
+            </dl>
         </div>
     }
 

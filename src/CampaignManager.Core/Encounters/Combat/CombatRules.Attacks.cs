@@ -107,20 +107,25 @@ public sealed record DamageRoll(
 {
     public string Describe()
     {
-        List<string> parts = [$"{Formula} = {CombatRules.N(Rolled)}"];
+        // «Урон: 1d3 = 2, бонус к урону −1 → 1.»: кости строчной d, знак — настоящим минусом, слово вместо «БкУ» (правила 11 и 13).
+        List<string> parts = [$"{DiceNotation.Format(Formula)} = {CombatRules.N(Rolled)}"];
         if (Bonus != 0)
-            parts.Add($"БкУ {CombatRules.N(Bonus)}");
+            parts.Add($"{Terms.DamageBonus} {Signed(Bonus)}");
         if (Extra > 0)
-            parts.Add($"проникающая {CombatRules.N(Extra)}");
-        var text = $"Урон: {string.Join(" + ", parts)} = {CombatRules.N(Raw)}";
+            parts.Add($"проникающая +{CombatRules.N(Extra)}");
         if (Armor > 0)
-            text += $" − броня {CombatRules.N(Armor)} = {CombatRules.N(Total)}";
+            parts.Add($"броня −{CombatRules.N(Armor)}");
+        var text = $"Урон: {string.Join(", ", parts)}";
+        if (parts.Count > 1)
+            text += $" → {CombatRules.N(Total)}";
         if (Critical)
             text += " (критический успех: максимум)";
         else if (Extreme)
             text += Impaling ? " (чрезвычайный успех: максимум и проникающая рана)" : " (чрезвычайный успех: максимум)";
         return text + ".";
     }
+
+    private static string Signed(int value) => value >= 0 ? $"+{CombatRules.N(value)}" : $"−{CombatRules.N(-value)}";
 }
 
 /// <summary>Итог атаки: результат для предпросмотра и числа, по которым его собрали (тесты и подписи).</summary>
@@ -218,7 +223,9 @@ public static partial class CombatRules
         if (!hit)
         {
             if (setup.Reaction != DefenseReaction.FightBack)
-                return Miss($"{defender.Name} уклоняется от атаки {attacker.Name}.");
+                return Miss(defenseRoll is { } dodge
+                    ? $"{attacker.Name}: промах — {defender.Name} уклонился ({N(dodge.Result)} против {N(defenseSkill)})."
+                    : $"{attacker.Name}: промах — {defender.Name} уклонился.");
 
             var counterAttack = setup.CounterAttackKey is { } key ? AttackOf(defender, key) : BestMelee(defender);
             var counter = RollDamage(counterAttack, defender.Stats.DamageBonus, SuccessLevel.Regular, canBeExtreme: false,

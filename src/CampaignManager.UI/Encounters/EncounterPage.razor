@@ -20,7 +20,6 @@
 @inject NavigationManager Navigation
 @inject ToastService Toasts
 @inject DialogService Dialogs
-@inject IJSRuntime JS
 
 @* Оболочка страницы сцены — одна на бой (/combat) и погоню (/chase), T2.6a. Начать или продолжить сцену, участники со
    снимком чисел, очередь, предпросмотр результата, эффект Хранителя, журнал; своё бой и погоня кладут в ChildContent
@@ -50,6 +49,10 @@
             @_error
             <div class="mt-2"><Button Small="true" Variant="ButtonVariant.Secondary" OnClick="LoadAsync">Повторить</Button></div>
         </Alert>
+    }
+    else if (_archive is not null)
+    {
+        @Archive(_archive)
     }
     else if (_session is null)
     {
@@ -84,6 +87,13 @@
     private bool _effectOpen;
     private string? _error;
     private string? _notice;
+    private EncounterDto? _archive;
+    private IReadOnlyList<EncounterSummaryDto> _finished = [];
+    private Guid? _finishedId;
+    private Guid? _lastCampaign;
+    private ElementReference _logRef;
+    private ElementReference _effectRef;
+    private bool _focusEffect;
     private (string Href, string Name)? _scenarioLink;
     private (uint Version, EncounterState State)? _draftChoice;
     private string _note = "";
@@ -117,6 +127,9 @@
     /// <summary>Своё в строке участника (погоня: роль, локация, СКО, действия) — ChildContent строки.</summary>
     [Parameter] public RenderFragment<EncounterParticipant>? RowContent { get; set; }
 
+    /// <summary>Расстановка боя до первого раунда (инициатива, огнестрел наготове): рядом со списком участников вместо формы действия.</summary>
+    [Parameter] public RenderFragment? SetupContent { get; set; }
+
     /// <summary>Своё в предпросмотре результата — решение Хранителя до «Применить» (погоня: обломки разрушенной преграды).</summary>
     [Parameter] public RenderFragment<EncounterResolution>? PendingContent { get; set; }
 
@@ -127,7 +140,7 @@
     /// </summary>
     [Parameter] public bool AllowsMany { get; set; }
 
-    /// <summary>Показать список идущих сцен, а не открывать единственную (<c>?list=1</c>, пункт «Все сцены»).</summary>
+    /// <summary>Показать список идущих сцен, а не открывать единственную (<c>?list=true</c>, пункт «Все бои» и «Все погони»).</summary>
     [Parameter] public bool ShowList { get; set; }
 
     /// <summary>
@@ -145,7 +158,9 @@
     /// <summary>Под заголовком: кампания и этап («Расстановка», «Раунд 2 · ходит Хелен»); статус сохранения — только если что-то не так.</summary>
     private string? Subtitle => _session is { } session
         ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", session.State.Chase?.Name, StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
-        : null;
+        : _archive is { } archive
+            ? string.Join(" · ", new[] { archive.CampaignName ?? "Вне кампании", archive.State.Chase?.Name, FinishedWord + ", журнал" }.Where(t => !string.IsNullOrEmpty(t)))
+            : null;
 
     private static string StageText(EncounterState state) => state.Chase is { Phase: ChasePhase.Ended } ? ChaseText.Of(ChasePhase.Ended)
         : state.Chase is { Phase: ChasePhase.SpeedCheck } ? ChaseText.Of(ChasePhase.SpeedCheck)
@@ -183,6 +198,7 @@
         _loading = true;
         _error = null;
         _session = null;
+        _archive = null;
         _loadedFor = EncounterId;
         try
         {
@@ -212,7 +228,11 @@
             }
 
             _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit)];
-            _startCampaign = CampaignId ?? (_campaigns.Count == 1 ? _campaigns[0].Id : null);
+            // После «Завершить» следующий бой обычно тех же людей: кампания только что законченного уже выбрана (B2).
+            _startCampaign = CampaignId
+                ?? (_lastCampaign is { } last && _campaigns.Any(c => c.Id == last) ? last : (Guid?)null)
+                ?? (_campaigns.Count == 1 ? _campaigns[0].Id : (Guid?)null);
+            _finished = await LoadFinishedAsync();
         }
         catch (HttpRequestException error)
         {
@@ -224,9 +244,18 @@
         }
     }
 
-    private static string RuleIcon(bool on) => on ? "fa-square-check" : "fa-square";
-
-    private static string RuleState(bool on) => on ? "включена" : "выключена";
+    /// <summary>Недавно завершённые сцены этого вида — журнал после игры; не вышло прочитать — списка просто нет.</summary>
+    private async Task<IReadOnlyList<EncounterSummaryDto>> LoadFinishedAsync()
+    {
+        try
+        {
+            return await Api.ListFinishedAsync(Kind, 8);
+        }
+        catch (HttpRequestException)
+        {
+            return [];
+        }
+    }
 
     private async Task SetRunAsync(Guid runId)
     {
@@ -263,14 +292,16 @@
         catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             _notice = "Такой сцены нет или её ведёт другой Хранитель.";
+            _finishedId = null;
             Navigation.NavigateTo(Route, replace: true);
             return;
         }
 
         if (encounter.Status != EncounterStatus.Active)
         {
-            _notice = "Эта сцена уже завершена — начните новую.";
-            Navigation.NavigateTo(Route, replace: true);
+            // Завершённую не ведут, но журнал читают: страница только для чтения (B3).
+            _archive = encounter;
+            _loading = false;
             return;
         }
 
@@ -328,6 +359,7 @@
         {
             // Нельзя начать (не Хранитель кампании, чужое прохождение) — обычное «Начать» с причиной.
             _notice = ApiErrors.Describe(error);
+            _finishedId = null;
             return false;
         }
     }
@@ -388,8 +420,6 @@
 
     private Task RemoveAsync(EncounterParticipant participant) => Change(state => EncounterEngine.Remove(state, participant.Id, Now));
 
-    private Task OpenSheetAsync(Guid sheetId) => JS.InvokeVoidAsync("open", $"character/{sheetId}", "_blank").AsTask();
-
     private Task ToggleOutAsync(EncounterParticipant participant) =>
         Change(state => EncounterEngine.Apply(state, new EncounterResolution
         {
@@ -446,8 +476,10 @@
         var pending = session.State.SheetWrites.Count;
         var message = pending > 0
             ? $"Не записано в листы: {pending}. После завершения эти эффекты в листы не попадут."
-            : Kind == EncounterKind.Chase ? "Погоня закроется, журнал останется в базе. Новую можно начать сразу." : "Бой закроется, журнал останется в базе. Новый можно начать сразу.";
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить {FinishWord}?", message) { ConfirmText = $"Завершить {FinishWord}" }))
+            : Kind == EncounterKind.Chase ? "Погоня закроется, журнал сохранится. Новую можно начать сразу." : "Бой закроется, журнал сохранится. Новый можно начать сразу.";
+        // Погоня уже окончена, и «Завершить погоню» — единственная главная кнопка: второй вопрос лишний (B37).
+        var over = session.State.Chase is { Phase: ChasePhase.Ended } && pending == 0;
+        if (!over && !await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить {FinishWord}?", message) { ConfirmText = $"Завершить {FinishWord}" }))
             return;
 
         await session.ChangeAsync(state => EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Finished, Text = Finished, At = Now }));
@@ -456,9 +488,13 @@
             await Api.FinishAsync(session.Encounter.Id, session.Encounter.Version);
             await session.DiscardDraftAsync(session.Encounter.Id);
             StopLoop();
+            _finishedId = session.Encounter.Id;
+            _lastCampaign = session.Encounter.CampaignId;
             _session = null;
             _notice = Finished;
-            Navigation.NavigateTo(Route, replace: true);
+            // Лобби, а не «единственная идущая откроется сама»: плашка с журналом и выбранная кампания видны, а идущая в другой
+            // кампании лежит в «Идут сейчас».
+            Navigation.NavigateTo($"{Route}?list=true", replace: true);
         }
         catch (HttpRequestException error)
         {
@@ -559,20 +595,29 @@
     {
         @if (_notice is not null)
         {
-            <Alert Tone="Tone.Info" OnClose="() => _notice = null">@_notice</Alert>
+            <Alert Tone="Tone.Info" OnClose="() => { _notice = null; _finishedId = null; }">
+                <ChildContent>@_notice</ChildContent>
+                <Actions>
+                    @if (_finishedId is { } finishedId)
+                    {
+                        @* Журнал закончившейся сцены не пропадает: после игры его перечитывают (B3). *@
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"{Route}?id={finishedId}")" data-testid="finished-journal">Журнал @ThisGenitive</Button>
+                    }
+                </Actions>
+            </Alert>
         }
-        @* Лобби — как пустое состояние по центру: значок, «Новый бой», строка и форма; идущие сцены — под ней той же ширины.
+        @* Лобби — как пустое состояние по центру: значок, «Новый бой» и форма; идущие сцены — под ней той же ширины.
            Карточка у левой линии оставляла пустой экран под собой (выбор владельца 2026-10-03, вариант Б). *@
         <div class="grid place-items-center pt-[10dvh]">
             <section class="w-full max-w-lg text-center" data-testid="lobby">
                 <i class="fa-solid @(Kind == EncounterKind.Combat ? "fa-hand-fist" : "fa-person-running") text-4xl text-primary-400" aria-hidden="true"></i>
                 <h2 class="cm-card-title mt-3 justify-center">@NewWord</h2>
-                <p class="cm-text-muted mt-1">Участников добавите после начала.</p>
                 <div class="mt-4 flex flex-wrap items-end justify-center gap-3 text-left">
                     @StartForm()
                 </div>
             </section>
             @ActiveList()
+            @FinishedList()
         </div>
     };
 
@@ -584,7 +629,7 @@
                 <option value="">— вне кампании —</option>
                 @foreach (var campaign in _campaigns)
                 {
-                    <option value="@campaign.Id">@campaign.Name</option>
+                    <option value="@campaign.Id" selected="@(_startCampaign == campaign.Id)">@campaign.Name</option>
                 }
             </select>
         </Field>
@@ -620,6 +665,64 @@
         }
     };
 
+    /// <summary>Завершённые — свёрнутым списком под идущими: журнал после игры (B3), не на самом видном месте.</summary>
+    private RenderFragment FinishedList() => __builder =>
+    {
+        @if (_finished.Count > 0)
+        {
+            <details class="cm-section mt-8 w-full max-w-xl text-left" data-testid="finished-list">
+                <summary class="cm-section-title flex min-h-8 cursor-pointer items-center">Завершённые (@_finished.Count)</summary>
+                <div class="cm-card">
+                    @foreach (var done in _finished)
+                    {
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            <div class="min-w-0">
+                                <div class="font-medium">@(done.CampaignName ?? "Вне кампании")</div>
+                                @if (done.ParticipantNames.Count > 0)
+                                {
+                                    <div class="text-sm text-primary-700">@string.Join(", ", done.ParticipantNames)</div>
+                                }
+                                <div class="cm-meta">@LocalTime.DateTime(done.UpdatedAt)</div>
+                            </div>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"{Route}?id={done.Id}")">Журнал</Button>
+                        </div>
+                    }
+                </div>
+            </details>
+        }
+    };
+
+    /// <summary>Завершённая сцена только для чтения: кто был и журнал. Продолжить её нельзя — только начать новую.</summary>
+    private RenderFragment Archive(EncounterDto archive) => __builder =>
+    {
+        var state = archive.State;
+        <section class="cm-section" data-testid="archive">
+            <div class="cm-section-header encounter-head">
+                <h2 class="cm-section-title">Участники</h2>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-play" Href="@Route" class="ml-auto">@NewWord</Button>
+            </div>
+            <div class="cm-card max-w-2xl">
+                @foreach (var participant in state.Participants)
+                {
+                    <div class="flex items-center gap-3 border-t border-primary-200 px-4 py-2 first:border-t-0">
+                        <i class="@Css.Join("fa-solid fa-circle shrink-0 text-[0.625rem]", SideDotClass(participant.Side))" aria-hidden="true"></i>
+                        <span class="sr-only">Сторона: @EncounterText.Of(participant.Side)</span>
+                        <span class="min-w-0 flex-1 font-semibold text-primary-900">@participant.Name</span>
+                        <span class="cm-meta font-mono">ПЗ @participant.HitPoints/@participant.MaxHitPoints</span>
+                        @if (participant.Dead)
+                        {
+                            <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+        <section class="cm-section">
+            <div class="cm-section-header"><h2 class="cm-section-title">Журнал</h2></div>
+            <div class="cm-card"><EncounterLog Entries="state.Log" /></div>
+        </section>
+    };
+
     private RenderFragment Scene(EncounterSession session) => __builder =>
     {
         var state = session.State;
@@ -629,6 +732,11 @@
         // Мёртвые — серыми строками в конце списка: действий у них нет, а место они не отнимают.
         var order = queue.Where(p => !p.Dead).Concat(queue.Where(p => p.Dead)).ToList();
         var pending = state.Pending;
+        // Расстановка боя (раунд 0): форма атаки с пустыми «— выберите —» не нужна, нужны участники и «Начать бой» (B5).
+        var preFight = StickyAction && state.Round == 0;
+        var showAction = order.Count > 0 && !preFight;
+        // Последняя запись журнала — под шапкой сцены (правило 14); записи «Лист» — служебные, их не показываем.
+        var last = StickyAction ? state.Log.LastOrDefault(e => e.Kind != EncounterLogKind.Sheet) : null;
 
         @if (session.SaveState == EncounterSaveState.Conflict)
         {
@@ -657,14 +765,15 @@
             </Alert>
         }
 
-        <section class="cm-section">
+        @* Полоса раунда бою липнет под шапку: «Следующий ход» и последняя запись журнала на виду, пока страница прокручивается к
+           результату или к длинному списку участников (B17, B34). У погони полоса обычная (колонка высокая, свои липкие блоки). *@
+        <section class="@Css.Join("cm-section", StickyAction ? "md:sticky md:top-14 md:z-20 md:mb-1 md:bg-page md:pb-3" : null)" data-testid="round-strip">
             <div class="cm-card">
-                @* На телефоне «⋯» — справа от строки раунда, а не отдельной строкой под кнопками (#213, 390×844). *@
-                <div class="cm-card-body grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:flex-wrap">
-                    <div class="min-w-0 sm:flex-1" data-testid="round-status">
+                <div class="@Css.Join("cm-card-body flex flex-wrap items-center gap-x-3 gap-y-2", StickyAction ? "py-2.5" : null)">
+                    <div class="min-w-0 flex-1 basis-48" data-testid="round-status">
                         <div class="font-semibold">@(state.Round == 0 ? StageText(state) : $"Раунд {state.Round} · ходит {active?.Name ?? "—"}")</div>
                     </div>
-                    <div class="cm-btn-row col-span-2">
+                    <div class="cm-btn-row">
                         @if (state.Chase is { Phase: ChasePhase.Ended })
                         {
                             <Button Icon="fa-flag-checkered" OnClick="FinishAsync" data-testid="finish-encounter">Завершить @FinishWord</Button>
@@ -682,23 +791,21 @@
                             <Button Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
                             <Button Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий ход</Button>
                         }
-                    </div>
-                    <div class="col-start-2 row-start-1">
                         @* «Завершить» — не рядом с «Следующим»: нажатие мимо закрывает сцену. Только в меню, под линейкой. *@
                         <RowMenu AriaLabel="Действия сцены">
                             <ChildContent>
                                 @if (AllowsMany)
                                 {
-                                    <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">Новая @FinishWord (разделились)</RowMenuItem>
+                                    <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">@NewWord (разделились)</RowMenuItem>
                                 }
                                 @if (Kind == EncounterKind.Combat)
                                 {
-                                    @* Необязательные правила — настройка сцены, а не действие персонажа: живут здесь, а не во вкладке «Прочее». *@
-                                    <RowMenuItem Icon="@RuleIcon(state.Combat.InitiativeRolls)" OnClick="() => Change(s => s.Combat.InitiativeRolls = !s.Combat.InitiativeRolls)">Инициатива броском ЛВК: @RuleState(state.Combat.InitiativeRolls)</RowMenuItem>
-                                    <RowMenuItem Icon="@RuleIcon(state.Combat.CinematicKnockout)" OnClick="() => Change(s => s.Combat.CinematicKnockout = !s.Combat.CinematicKnockout)">Нокаут манёвром: @RuleState(state.Combat.CinematicKnockout)</RowMenuItem>
-                                    <RowMenuItem Icon="@RuleIcon(state.Combat.LuckToStayConscious)" OnClick="() => Change(s => s.Combat.LuckToStayConscious = !s.Combat.LuckToStayConscious)">Удача против обморока: @RuleState(state.Combat.LuckToStayConscious)</RowMenuItem>
+                                    @* Необязательные правила — настройка сцены, а не действие персонажа: пункты с галочкой, не «выключена» в названии (B18). *@
+                                    <RowMenuItem Checked="state.Combat.InitiativeRolls" OnClick="() => Change(s => s.Combat.InitiativeRolls = !s.Combat.InitiativeRolls)">Инициатива броском ЛВК</RowMenuItem>
+                                    <RowMenuItem Checked="state.Combat.CinematicKnockout" OnClick="() => Change(s => s.Combat.CinematicKnockout = !s.Combat.CinematicKnockout)">Нокаут манёвром</RowMenuItem>
+                                    <RowMenuItem Checked="state.Combat.LuckToStayConscious" OnClick="() => Change(s => s.Combat.LuckToStayConscious = !s.Combat.LuckToStayConscious)">Удача против обморока</RowMenuItem>
                                 }
-                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">@(Kind == EncounterKind.Chase ? "Все погони" : "Все бои")</RowMenuItem>
+                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=true"))">@(Kind == EncounterKind.Chase ? "Все погони" : "Все бои")</RowMenuItem>
                             </ChildContent>
                             <Danger>
                                 <RowMenuItem Danger="true" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить @FinishWord</RowMenuItem>
@@ -706,6 +813,18 @@
                         </RowMenu>
                     </div>
                 </div>
+                @if (last is not null)
+                {
+                    @* Последняя запись — отдельной строкой на всю ширину: длинное «кто кого и чем» читается целиком, не обрезанное. *@
+                    <button type="button" class="encounter-lastlog" data-testid="last-log" @onclick="FocusLogAsync">
+                        @* «Вступили: …» — метка уже в тексте, второй раз её не пишем. *@
+                        @if (!EncounterDisplay.Plain(last.Text).StartsWith(EncounterText.Of(last.Kind), StringComparison.Ordinal))
+                        {
+                            <span class="font-medium text-primary-900">@EncounterText.Of(last.Kind):</span>
+                        }
+                        @(" ")@EncounterDisplay.Plain(last.Text)
+                    </button>
+                }
                 @if (AllowsMany)
                 {
                     @Siblings(session)
@@ -714,7 +833,7 @@
         </section>
 
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-            <section class="cm-section lg:col-span-5">
+            <section class="@Css.Join("cm-section", showAction ? "lg:col-span-5" : "lg:col-span-7")">
                 @* «Участник» — у списка, а не в шапке: в шапке настроение и плеер. Пустая сцена — только эта кнопка. *@
                 @* «Добавить» — вторичная: главная кнопка на экране одна (действие); заголовок той же высоты, что «Действие» (B1, B2). *@
                 <div class="cm-section-header encounter-head">
@@ -728,6 +847,10 @@
                         @foreach (var side in order.Select(p => p.Side).Distinct().Order())
                         {
                             <span><i class="@Css.Join("fa-solid fa-circle text-[0.625rem]", SideDotClass(side))" aria-hidden="true"></i> @EncounterText.Of(side)</span>
+                        }
+                        @if (order.Any(p => p.Sanity is not null && !p.Dead))
+                        {
+                            <span><i class="fa-solid fa-grip-lines text-xs" aria-hidden="true"></i> тонкая полоса под ПЗ — рассудок</span>
                         }
                     </p>
                     <div class="cm-card">
@@ -756,7 +879,8 @@
                                             }
                                             @if (participant.SourceCharacterId is { } sheetId)
                                             {
-                                                <RowMenuItem Icon="fa-id-card" OnClick="() => OpenSheetAsync(sheetId)">Открыть лист</RowMenuItem>
+                                                @* Ссылка, а не window.open из обработчика: Safari на iPad блокирует такую вкладку (B16). *@
+                                                <RowMenuItem Icon="fa-id-card" Href="@($"character/{sheetId}")" Target="_blank">Открыть лист</RowMenuItem>
                                             }
                                         </ChildContent>
                                         <Danger>
@@ -778,16 +902,25 @@
                 }
             </section>
 
-            @if (order.Count > 0)
+            @if (preFight && order.Count > 0 && SetupContent is not null)
             {
-                @* На узком экране действие (форма, ход погони, результат) — над списком участников (#213, 390×844). *@
-                <div class="order-first flex flex-col gap-4 lg:order-none lg:col-span-7">
-                    @if (StickyAction && !_effectOpen)
+                <div class="lg:col-span-5" data-testid="setup-column">
+                    <CascadingValue Value="session" IsFixed="true">@SetupContent</CascadingValue>
+                </div>
+            }
+
+            @if (showAction)
+            {
+                @* На узком экране действие (форма, ход погони, результат) — над списком участников (#213, 390×844), а над ним — лента
+                   участников с ПЗ: цель выбирают, не листая вниз к списку (B36). *@
+                <div class="order-first flex min-w-0 flex-col gap-4 lg:order-none lg:col-span-7 lg:self-stretch">
+                    @if (StickyAction)
                     {
-                        @* Колонка действия липнет под шапку: форма, результат и «Применить» всегда на виду. Пока есть
-                           результат, форма и эффект спрятаны (hidden, не снесены — введённое остаётся): «Применить»
-                           стоит там, где была кнопка действия, и страница не сдвигается. *@
-                        <StickyPane data-testid="action-pane">
+                        @Ribbon(order, state)
+                        @* Колонка действия липнет под полосой раунда: форма, результат и «Применить» всегда на виду. Пока есть результат,
+                           форма и эффект спрятаны (hidden, не снесены — введённое остаётся): «Применить» стоит там, где была кнопка
+                           действия. Открытый эффект Хранителя липкость не снимает — он прокручивается внутри колонки (B32). *@
+                        <StickyPane class="[--cm-sticky-top:10.5rem]" data-testid="action-pane">
                             @if (pending is not null)
                             {
                                 @PendingBlock(session, pending)
@@ -800,20 +933,12 @@
                     }
                     else
                     {
-                        @* Открытый «Эффект Хранителя» снимает липкость боя: у колонки нет своей прокрутки внутри страницы (#213). *@
                         @if (pending is not null)
                         {
-                            @if (StickyAction)
-                            {
-                                <div data-testid="action-pane">@PendingBlock(session, pending)</div>
-                            }
-                            else
-                            {
-                                <StickyPane data-testid="action-pane">@PendingBlock(session, pending)</StickyPane>
-                            }
+                            <StickyPane data-testid="action-pane">@PendingBlock(session, pending)</StickyPane>
                         }
 
-                        <div class="@(pending is not null && StickyAction ? "hidden" : "flex flex-col gap-4")">
+                        <div class="flex flex-col gap-4">
                             <CascadingValue Value="session" IsFixed="true">@ChildContent</CascadingValue>
                             @EffectBlock(state)
                         </div>
@@ -824,7 +949,7 @@
 
         @if (state.Log.Count > 0)
         {
-            <section class="cm-section">
+            <section class="cm-section scroll-mt-40 focus:outline-hidden" tabindex="-1" @ref="_logRef" data-testid="journal-section">
                 <div class="cm-section-header"><h2 class="cm-section-title">Журнал</h2></div>
                 <div class="cm-card">
                     <div class="cm-card-body flex flex-wrap items-end gap-2 border-b border-primary-200">
@@ -839,10 +964,53 @@
         }
     };
 
+    /// <summary>
+    /// Лента участников над действием на узком экране (портрет iPad): имя и ПЗ в одну строку каждый, листается вбок. Список
+    /// участников с ПЗ целей лежит ниже действия — без ленты цель выбирали, не видя здоровья противников (B36).
+    /// </summary>
+    private RenderFragment Ribbon(IReadOnlyList<EncounterParticipant> order, EncounterState state) => __builder =>
+    {
+        <div class="lg:hidden" data-testid="participants-ribbon">
+            <ul class="relative flex gap-2 overflow-x-auto pb-1" aria-label="Участники и их ПЗ">
+                @foreach (var participant in order)
+                {
+                    <li @key="participant.Id" class="@Css.Join("flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-sm",
+                                                           participant.Id == state.ActiveParticipantId ? "border-accent-600 bg-accent-50" : "border-primary-200 bg-white",
+                                                           participant.Dead || participant.IsOut ? "opacity-60" : null)">
+                        <i class="@Css.Join("fa-solid fa-circle text-[0.625rem]", SideDotClass(participant.Side))" aria-hidden="true"></i>
+                        <span class="sr-only">Сторона: @EncounterText.Of(participant.Side)</span>
+                        <span class="font-semibold text-primary-900">@participant.Name</span>
+                        @if (participant.Dead)
+                        {
+                            <span class="font-medium text-error-700">мёртв</span>
+                        }
+                        else
+                        {
+                            <span class="@Css.Join("font-mono", participant.Dying ? "font-semibold text-error-700" : "text-primary-700")">@participant.HitPoints/@participant.MaxHitPoints</span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    };
+
+    /// <summary>Последняя запись журнала — на полный журнал под сценой: фокус на раздел прокручивает к нему.</summary>
+    private async Task FocusLogAsync()
+    {
+        try
+        {
+            await _logRef.FocusAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Раздела уже нет — ничего страшного.
+        }
+    }
+
     private RenderFragment PendingBlock(EncounterSession session, EncounterResolution pending) => __builder =>
     {
         <section class="cm-section focus:outline-hidden" data-testid="pending-block" tabindex="-1" @ref="_pendingRef">
-            <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
+            <div class="cm-section-header encounter-head"><h2 class="cm-section-title">Результат</h2></div>
             <div class="cm-card"><div class="cm-card-body">
                 <ResolutionPreview State="session.State" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
                     @if (PendingContent is not null)
@@ -854,18 +1022,21 @@
         </section>
     };
 
-    /// <summary>Эффект Хранителя — свёрнут: раскрывается по касанию, чтобы не занимать колонку ради редкой правки.</summary>
+    /// <summary>
+    /// Эффект Хранителя — свёрнут: раскрывается по касанию, чтобы не занимать колонку ради редкой правки. Раскрытый остаётся в
+    /// липкой колонке действия, колонка прокручивается внутри, а раскрытие само подводит к его началу (B32).
+    /// </summary>
     private RenderFragment EffectBlock(EncounterState state) => __builder =>
     {
         if (state.Chase is { Phase: ChasePhase.Ended })
             return;
 
-        <section class="cm-section" data-testid="effect-section">
+        <section class="cm-section focus:outline-hidden" tabindex="-1" @ref="_effectRef" data-testid="effect-section">
             @* Заголовок-переключатель: подпись не обрезается («Урон, лечение, рассудок…» читалась обрезанной, B9). *@
             <div class="cm-section-header encounter-head">
                 <h2 class="cm-section-title">Эффект Хранителя</h2>
                 <Button Variant="ButtonVariant.Secondary" Icon="@(_effectOpen ? "fa-chevron-up" : "fa-chevron-down")" class="ml-auto"
-                        OnClick="() => _effectOpen = !_effectOpen" aria-expanded="@(_effectOpen ? "true" : "false")" data-testid="effect-toggle">@(_effectOpen ? "Свернуть" : "Открыть")</Button>
+                        OnClick="ToggleEffect" aria-expanded="@(_effectOpen ? "true" : "false")" data-testid="effect-toggle">@(_effectOpen ? "Свернуть" : "Открыть")</Button>
             </div>
             @if (!_effectOpen)
             {
@@ -880,12 +1051,31 @@
         </section>
     };
 
+    private void ToggleEffect()
+    {
+        _effectOpen = !_effectOpen;
+        _focusEffect = _effectOpen;
+    }
+
     /// <summary>
     /// Новый результат — фокус на его блок: на узком экране «Применить» оказывалось на 300px выше видимой области (#213);
     /// видимый блок фокус не сдвигает.
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_focusEffect)
+        {
+            _focusEffect = false;
+            try
+            {
+                await _effectRef.FocusAsync();
+            }
+            catch (InvalidOperationException)
+            {
+                // Блок эффекта ушёл из разметки до фокуса.
+            }
+        }
+
         var pending = _session?.State.Pending;
         if (pending is not null && !ReferenceEquals(pending, _focusedPending) && _pendingRef.Context is not null)
         {
@@ -911,6 +1101,11 @@
     private string Genitive => Kind == EncounterKind.Chase ? "погони" : "боя";
 
     private string Finished => Kind == EncounterKind.Chase ? "Погоня завершена." : "Бой завершён.";
+
+    private string FinishedWord => Kind == EncounterKind.Chase ? "завершена" : "завершён";
+
+    /// <summary>«этого боя» / «этой погони» — подпись ссылки на журнал.</summary>
+    private string ThisGenitive => Kind == EncounterKind.Chase ? "этой погони" : "этого боя";
 
     private static string SideDotClass(EncounterSide side) => side switch
     {

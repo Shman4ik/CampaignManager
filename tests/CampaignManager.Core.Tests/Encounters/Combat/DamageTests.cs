@@ -70,6 +70,19 @@ public sealed class DamageTests
     }
 
     [Theory]
+    // «Урон: 1d3 = 2, бонус к урону −1 → 1.»: строчная d, слово вместо «БкУ», настоящий минус.
+    [InlineData("1D3", 2, -1, 0, 0, 1, "Урон: 1d3 = 2, бонус к урону −1 → 1.")]
+    [InlineData("2d6", 4, 4, 0, 0, 8, "Урон: 2d6 = 4, бонус к урону +4 → 8.")]
+    [InlineData("1d8", 5, 0, 0, 2, 3, "Урон: 1d8 = 5, броня −2 → 3.")]
+    [InlineData("1d10", 6, 0, 0, 0, 6, "Урон: 1d10 = 6.")]
+    public void Describe_IsPlainRussianWithoutAbbreviations(string formula, int rolled, int bonus, int extra, int armor, int total, string expected)
+    {
+        var damage = new DamageRoll(formula, rolled, bonus, extra, rolled + bonus + extra, armor, total, false, false, false);
+
+        Assert.Equal(expected, damage.Describe());
+    }
+
+    [Theory]
     [Trait("page", "106")]
     [InlineData(false, 4, 4, 6)]
     [InlineData(true, 4, 2, 3)] // половинный БкУ — с округлением вниз, и максимум тоже делится

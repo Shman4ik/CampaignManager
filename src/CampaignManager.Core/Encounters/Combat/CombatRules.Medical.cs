@@ -110,7 +110,7 @@ public static partial class CombatRules
         if (target.Dead)
             return $"{target.Name} мёртв.";
         if (target.Dying && !target.Stabilized)
-            return $"{target.Name} при смерти: сначала первая помощь, потом Медицина (стр. 118).";
+            return $"{target.Name} при смерти: сначала первая помощь, потом Медицина.";
         if (!target.Dying && target.Combat.MedicineReceived)
             return $"Медицина {target.Name} по этой ране уже оказана — снова только после нового урона.";
         if (!target.Dying && target.HitPoints >= target.MaxHitPoints && !target.Unconscious)
