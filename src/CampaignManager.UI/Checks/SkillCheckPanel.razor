@@ -28,6 +28,15 @@
             }
         }
 
+        @if (Subject is { } head && head.Name.Length > 0)
+        {
+            @* Цель крупно: заголовок окна называет сыщика, а что именно проверяют, было видно только в select. *@
+            <div class="flex flex-wrap items-baseline gap-x-3" data-testid="check-subject-head">
+                <span class="text-lg font-semibold text-primary-900">@head.Name</span>
+                <span class="font-mono text-lg text-primary-700">@head.Value%</span>
+            </div>
+        }
+
         @if (CurrentSheet is { } sheet)
         {
             <Field Label="Что проверяем">
@@ -75,6 +84,14 @@
             <ExtraDicePicker @bind-Value="_netDice" Disabled="@IsLocked" />
         </Field>
     </section>
+
+    @if (Help is not null && _key.StartsWith("skill:", StringComparison.Ordinal))
+    {
+        <details class="skill-help" data-testid="check-help">
+            <summary class="cm-tap-row cursor-pointer font-medium text-accent-700">Справка по навыку</summary>
+            <div class="pt-2">@Help(_key)</div>
+        </details>
+    }
 
     <section>
         @if (_first is null)
@@ -133,7 +150,7 @@
 
     [Parameter] public Difficulty InitialDifficulty { get; set; }
 
-    /// <summary>Проверка в бою: повторять её нельзя (стр. 102).</summary>
+    /// <summary>Проверка в бою: повторять её нельзя.</summary>
     [Parameter] public bool InCombat { get; set; }
 
     /// <summary>
@@ -141,6 +158,9 @@
     /// родитель применяет изменение (<see cref="CheckRules.Apply"/>) и сохраняет лист сам.
     /// </summary>
     [Parameter] public EventCallback<CheckSheetChange> OnSheetChange { get; set; }
+
+    /// <summary>Справка по цели (лист: описание навыка из справочника) — строкой «Справка» в окне, а не отдельным шагом до проверки.</summary>
+    [Parameter] public RenderFragment<string>? Help { get; set; }
 
     private Guid? _investigatorId;
     private string _key = "";
@@ -186,7 +206,7 @@
         ?? (_luckSpent is { } spent ? new CheckOutcome(spent.ResultingRoll, spent.Level, true) : _first?.Outcome);
 
     /// <summary>
-    /// Пройденную проверку Удачей поднимают до уровня выше (стр. 97) — кнопки только у листа с обработчиком,
+    /// Пройденную проверку Удачей поднимают до уровня выше — кнопки только у листа с обработчиком,
     /// и только если есть до чего поднимать: у каждого успеха иначе висел бы пустой блок.
     /// </summary>
     private bool CanRaiseByLuck => CanChangeSheet
@@ -244,7 +264,7 @@
         if (!CanChangeSheet || !option.Affordable || _luckSpent is not null || _rolledSubject is not { } subject)
             return;
 
-        // Купленный успех отметки не даёт (стр. 97): если её поставили за этот же бросок — она снимается
+        // Купленный успех отметки не даёт: если её поставили за этот же бросок — она снимается
         // вместе с тратой; отметку, стоявшую на листе до броска, трата не трогает.
         var change = CheckRules.LuckSpend(subject, option.Cost, markedThisRoll: _marked);
         _luckSpent = option;
@@ -261,13 +281,14 @@
         await OnSheetChange.InvokeAsync(new CheckSheetChange { Mark = subject });
     }
 
-    private string Verdict(CheckOutcome outcome) => outcome switch
+    /// <summary>Пояснение к итогу. Обычный успех и провал уже сказаны значком уровня — повторять их нечего.</summary>
+    private string? Verdict(CheckOutcome outcome) => outcome switch
     {
-        { Level: SuccessLevel.Critical } => "Критический успех: цель достигнута, и сверх того случается что-то хорошее (стр. 87).",
-        { Level: SuccessLevel.Fumble } => "Крах: хуже простого провала, последствия наступают сразу (стр. 87).",
-        { Passed: true } => "Проверка пройдена.",
+        { Level: SuccessLevel.Critical } => "Цель достигнута, и сверх того случается что-то хорошее.",
+        { Level: SuccessLevel.Fumble } => "Хуже простого провала: последствия наступают сразу.",
+        { Passed: true } => null,
         { Level: >= SuccessLevel.Regular } => $"Для {DifficultyGenitive(_difficulty)} проверки этого мало — провал.",
-        _ => "Проверка провалена.",
+        _ => null,
     };
 
     private static string DifficultyGenitive(Difficulty difficulty) => difficulty switch
@@ -294,7 +315,7 @@
         @if (net != 0)
         {
             <p class="cm-field-note mt-1">
-                Кости со стола: с бонусной впишите меньший из вариантов десятков, со штрафной — больший (стр. 89).
+                Кости со стола: с бонусной впишите меньший из вариантов десятков, со штрафной — больший.
             </p>
         }
     };
@@ -312,10 +333,12 @@
                 }
                 <Badge Tone="@LevelText.ToneOf(outcome.Level, outcome.Passed)" Solid="@LevelText.IsSolid(outcome.Level)"
                        class="check-level" data-testid="check-level">@LevelText.Title(outcome.Level)</Badge>
-                <div class="mt-1 text-sm text-primary-700">@Verdict(outcome)</div>
+                @if (Verdict(outcome) is { } verdict)
+                {
+                    <div class="mt-1 text-sm text-primary-700">@verdict</div>
+                }
                 <div class="cm-field-note">
-                    @subject.Name @subject.Value · @CheckRules.DifficultyLabel(_difficulty).ToLowerInvariant() сложность,
-                    нужно ≤ @Check.Target(subject.Value, _difficulty)@RulesText.RollDetail(attempt.Dice)
+                    Нужно ≤ @Check.Target(subject.Value, _difficulty) (@CheckRules.DifficultyLabel(_difficulty).ToLowerInvariant() сложность)@RulesText.RollDetail(attempt.Dice)
                 </div>
             </div>
         </div>
@@ -327,7 +350,7 @@
         var outcome = _first!.Outcome;
         var reason = CheckRules.LuckBlockReason(subject, outcome, isPushed: false);
         <div class="mt-4" data-testid="check-luck">
-            <h3 class="cm-section-title mb-2">@(outcome.Passed ? "Поднять уровень Удачей" : "Потратить Удачу")</h3>
+            <h3 class="mb-2 text-sm font-semibold text-primary-700">@(outcome.Passed ? "Поднять уровень Удачей" : "Потратить Удачу")</h3>
             @if (reason is not null)
             {
                 <p class="cm-field-note">@reason</p>
@@ -354,12 +377,12 @@
                     @if (outcome.Passed)
                     {
                         <p class="cm-field-note mt-1" data-testid="check-luck-raise-note">
-                            Удача сейчас @luck. Успех, купленный Удачей, отметки для развития не даёт (стр. 97)@(_marked ? " — отметка за этот бросок снимется" : "").
+                            Удача сейчас @luck. Успех, купленный Удачей, отметки для развития не даёт@(_marked ? " — отметка за этот бросок снимется" : "").
                         </p>
                     }
                     else
                     {
-                        <p class="cm-field-note mt-1">Удача сейчас @luck. Либо Удача, либо повторная проверка — не то и другое (стр. 97).</p>
+                        <p class="cm-field-note mt-1">Удача сейчас @luck. Либо Удача, либо повторная проверка — не то и другое.</p>
                     }
                 }
                 else
@@ -372,7 +395,7 @@
                     </ul>
                     <p class="cm-field-note mt-1">
                         @(luck is { } current ? $"Удача сыщика {current}. " : "")Списывают пункты на листе сыщика — отсюда лист не меняется.
-                        Либо Удача, либо повторная проверка (стр. 97).
+                        Либо Удача, либо повторная проверка.
                     </p>
                 }
             }
@@ -383,7 +406,7 @@
     {
         var reason = CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat);
         <div class="mt-4" data-testid="check-push">
-            <h3 class="cm-section-title mb-2">Повторная проверка</h3>
+            <h3 class="mb-2 text-sm font-semibold text-primary-700">Повторная проверка</h3>
             @if (reason is not null)
             {
                 <p class="cm-field-note">@reason</p>
@@ -392,14 +415,14 @@
             {
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" data-testid="check-push-start"
                         OnClick="() => _pushing = true">Повторная проверка</Button>
-                <p class="cm-field-note mt-1">Второй и последний шанс — с более тяжёлыми последствиями провала (стр. 82).</p>
+                <p class="cm-field-note mt-1">Второй и последний шанс — с более тяжёлыми последствиями провала.</p>
             }
             else
             {
                 <Alert Tone="Tone.Warning" ShowIcon="true" Title="Ставки выше: провал развязывает Хранителю руки" data-testid="check-push-warning">
                     Игрок объясняет, что сыщик делает иначе — тратит время, рискует, давит сильнее; навык и сложность
                     обычно прежние. Удачу на повторную проверку не тратят. При провале — урон, проверка Рассудка, потеря
-                    снаряжения, разлука с группой, плен, или цель достигнута дорогой ценой (стр. 82–84).
+                    снаряжения, разлука с группой, плен, или цель достигнута дорогой ценой.
                 </Alert>
 
                 @if (_second is null)
@@ -413,14 +436,14 @@
                     @if (_second.Outcome.Passed)
                     {
                         <Alert Tone="Tone.Success" Small="true" class="mt-3 mb-0" data-testid="check-push-passed">
-                            Цель достигнута, как при успехе первой проверки, — без дурных последствий (стр. 84).
+                            Цель достигнута, как при успехе первой проверки, — без дурных последствий.
                         </Alert>
                     }
                     else
                     {
                         <Alert Tone="Tone.Error" ShowIcon="true" Title="Провал повторной проверки" class="mt-3 mb-0" data-testid="check-push-failed">
                             Хранитель вправе обрушить серьёзные последствия: урон, проверку Рассудка, потерю снаряжения, плен.
-                            Лучше последствие, которое двигает историю, чем конец игры — плен вместо смерти, сделка, обморок (стр. 84).
+                            Лучше последствие, которое двигает историю, чем конец игры — плен вместо смерти, сделка, обморок.
                         </Alert>
                     }
                 }
@@ -433,7 +456,7 @@
         var subject = _rolledSubject!;
         var reason = CheckRules.MarkBlockReason(subject, _netDice, _luckSpent is not null);
         <div class="mt-4" data-testid="check-mark">
-            <h3 class="cm-section-title mb-2">Отметка для фазы развития</h3>
+            <h3 class="mb-2 text-sm font-semibold text-primary-700">Отметка для фазы развития</h3>
             @if (reason is not null)
             {
                 <p class="cm-field-note">@reason</p>
@@ -447,7 +470,7 @@
                 }
                 else if (row is { Checked: true })
                 {
-                    <p class="cm-field-note">Отметка у «@subject.Name» уже стоит: за навык её ставят один раз (стр. 92).</p>
+                    <p class="cm-field-note">Отметка у «@subject.Name» уже стоит: за навык её ставят один раз.</p>
                 }
                 else
                 {

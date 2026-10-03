@@ -8,16 +8,11 @@
     <div class="flex flex-wrap items-center gap-2">
         <input type="search" class="cm-input min-w-48 flex-1" placeholder="@Placeholder" aria-label="@Placeholder"
                data-testid="catalog-search-input" @bind="_query" @bind:event="oninput" />
-        @if (OnCustom.HasDelegate)
-        {
-            <Button Small="true" Variant="ButtonVariant.Secondary" Disabled="@string.IsNullOrWhiteSpace(_query)" data-testid="catalog-search-custom"
-                    OnClick="CustomAsync">Вручную</Button>
-        }
         <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="OnCancel">Отмена</Button>
     </div>
     @if (_items is null)
     {
-        <p class="cm-field-note py-2">Загружаю справочник…</p>
+        <p class="cm-field-note py-2"><i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i>Загружаю справочник…</p>
     }
     else if (_error is not null)
     {
@@ -26,7 +21,7 @@
     else
     {
         var found = Found();
-        @if (found.Count > 0)
+        @if (found.Count > 0 || (OnCustom.HasDelegate && !string.IsNullOrWhiteSpace(_query)))
         {
             <div class="catalog-search-results">
                 @foreach (var item in found)
@@ -35,15 +30,19 @@
                         <span class="font-medium text-primary-900">@Name(item)</span>
                         @if (Meta?.Invoke(item) is { Length: > 0 } meta)
                         {
-                            <span class="text-xs text-primary-500">@meta</span>
+                            <span class="text-sm text-primary-600">@meta</span>
                         }
                     </button>
                 }
+                @if (OnCustom.HasDelegate && !string.IsNullOrWhiteSpace(_query))
+                {
+                    @* Один путь «добавить»: найденное — или то, что вписано в поле, последней строкой. *@
+                    <button type="button" class="catalog-search-row" data-testid="catalog-search-custom" @onclick="CustomAsync">
+                        <span class="font-medium text-accent-700"><i class="fa-solid fa-plus mr-1" aria-hidden="true"></i>Добавить «@_query.Trim()»</span>
+                        <span class="text-sm text-primary-600">своя запись, не из справочника</span>
+                    </button>
+                }
             </div>
-        }
-        else if (!string.IsNullOrWhiteSpace(_query))
-        {
-            <p class="cm-field-note py-2">В справочнике такого нет@(OnCustom.HasDelegate ? " — можно завести вручную" : "").</p>
         }
     }
 </div>

@@ -22,7 +22,7 @@
    правку уносит автосохранение (SheetAutoSave: слепок раз в 3 с, If-Match, черновик в localStorage).
    Правила — только Core: блоки зовут SanityRules, MythosBookRules, DevelopmentPhaseRules и т. д.
    Вычисляемое (максимумы, БкУ, Комплекция, Скорость, Уклонение) — только для чтения. *@
-<PageHeader Title="@Title" Game="true">
+<PageHeader Title="@Title" Subtitle="@Subtitle" Game="true">
     <Actions>
         @if (_context is not null && !_context.ReadOnly)
         {
@@ -30,9 +30,9 @@
                 <i class="fa-solid @SaveStateIcon" aria-hidden="true"></i>
                 <span class="hidden md:inline">@SaveStateText</span>
             </span>
-            <Button Small="true" Icon="fa-floppy-disk" AriaLabel="Сохранить лист" Busy="@_saver.IsBusy"
+            <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy"
                     Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
-                    OnClick="SaveNowAsync" />
+                    OnClick="SaveNowAsync">Сохранить</Button>
         }
     </Actions>
 </PageHeader>
@@ -41,10 +41,10 @@
     <AsyncContent @ref="_content" Key="CharacterId" Load="LoadAsync" LoadingMessage="Загружаю лист…" Context="loaded"
                   ErrorTitle="Лист недоступен">
         <Empty>
-            <EmptyState Icon="fa-id-card" Title="Лист не найден."
-                        Message="Его нет, или он не ваш. Свой лист открывается с главной.">
-                <Actions><Button Href="" Icon="fa-house">На главную</Button></Actions>
-            </EmptyState>
+            <Alert Tone="Tone.Warning" ShowIcon="true" Title="Нет доступа к этому листу" data-testid="sheet-not-found">
+                <ChildContent>Такого листа нет, или он принадлежит другому игроку.</ChildContent>
+                <Actions><Button Href="" Icon="fa-house">К моим листам</Button></Actions>
+            </Alert>
         </Empty>
         <ChildContent>
             @{ var context = loaded!; }
@@ -54,8 +54,7 @@
                     <a class="sheet-nav-link" href="@($"character/{CharacterId}#{SheetSections.Anchor(section)}")"
                        data-testid="@($"nav-{section.Id}")">
                         <i class="fa-solid @section.Icon" aria-hidden="true"></i>
-                        <span class="hidden sm:inline">@section.Title</span>
-                        <span class="sm:hidden">@section.ShortTitle</span>
+                        <span>@section.Title</span>
                     </a>
                 }
             </nav>
@@ -180,7 +179,7 @@
             </CascadingValue>
 
             <SkillCheckModal @bind-Open="_checkOpen" Title="@($"Проверка — {context.Sheet.Personal.Name}")" Sheet="@context.Sheet"
-                             Catalog="@context.Catalog" InitialKey="@_checkKey"
+                             Catalog="@context.Catalog" InitialKey="@_checkKey" Help="@SkillHelp"
                              OnSheetChange="@(context.ReadOnly ? default(EventCallback<CheckSheetChange>) : EventCallback.Factory.Create<CheckSheetChange>(this, ApplyCheck))" />
         </ChildContent>
     </AsyncContent>
@@ -203,7 +202,23 @@
 
     [Parameter] public Guid CharacterId { get; set; }
 
-    private string Title => _context?.Sheet.Personal.Name is { Length: > 0 } name ? name : "Лист сыщика";
+    private string KindTitle => _context?.Character.Kind switch
+    {
+        CharacterKind.Npc => "НПС",
+        CharacterKind.Pregen => "Готовый сыщик",
+        _ => "Лист сыщика",
+    };
+
+    private string Title => _context?.Sheet.Personal.Name is { Length: > 0 } name ? $"{KindTitle}: {name}" : "Лист сыщика";
+
+    /// <summary>Контекст листа под заголовком: кампания или библиотека и статус — в том числе «В архиве».</summary>
+    private string? Subtitle => _context?.Character is { } character
+        ? string.Join(" · ", new[]
+        {
+            character.CampaignName ?? (character.Kind is CharacterKind.Player ? "Без кампании" : "Библиотека"),
+            CampaignLabels.CharacterStatus(character.Status),
+        })
+        : null;
 
     protected override void OnInitialized() => _saver = new SheetAutoSave(Api, Storage);
 
@@ -434,6 +449,17 @@
         if (_context is not null && CheckRules.Apply(_context.Sheet, _context.Catalog, change))
             StateHasChanged();
     }
+
+    /// <summary>Справка по навыку внутри окна проверки — один тап по имени ведёт сразу к броску.</summary>
+    private RenderFragment SkillHelp(string key) => __builder =>
+    {
+        if (_context is { } context && key.StartsWith("skill:", StringComparison.Ordinal)
+            && Guid.TryParse(key.AsSpan("skill:".Length), out var id)
+            && context.Skills.FirstOrDefault(s => s.Id == id) is { } dto)
+        {
+            <SkillDetails Skill="dto" Catalog="context.Skills" />
+        }
+    };
 
     private bool IsOpen(SheetSectionInfo section) => !_collapsed.Contains(section.Id);
 

@@ -2,11 +2,12 @@
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.Core.Characters
 
-@* Шаг «Навыки» (стр. 34, 46): очки профессии — в её навыки и Средства, очки личного интереса — в любые, кроме
+@* Шаг «Навыки»: очки профессии — в её навыки и Средства, очки личного интереса — в любые, кроме
    Мифов (их пунктами не покупают). Блиц раздаёт готовые значения вместо очков. Бюджеты, база (родной язык = ОБР,
    Уклонение = ½ ЛВК), лимит и итог — CreationPlan; шаг только показывает и передаёт числа. *@
 <div class="cm-stack">
-    <section class="flex flex-wrap items-center justify-between gap-3">
+    @* Остаток очков и сброс липнут под шапкой: вводишь значения в конце длинного списка, а остаток нужен перед глазами. *@
+    <section class="wizard-budgets flex flex-wrap items-center justify-between gap-3">
         <div class="cm-meta" data-testid="budgets">
             @if (Draft.Method is CreationMethod.Blitz)
             {
@@ -26,7 +27,7 @@
                 <span><span class="cm-meta-label">Лимит навыка:</span> <strong>@cap%</strong></span>
             }
         </div>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-eraser" OnClick="ResetAsync">Сбросить распределение</Button>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-eraser" OnClick="ResetAsync">Сбросить</Button>
     </section>
 
     @if (Draft.Method is CreationMethod.Blitz)
@@ -35,7 +36,7 @@
             <h3 class="cm-section-title mb-2">Навыки профессии и Средства</h3>
             <p class="cm-field-note mb-2">
                 Каждому — значение из набора, «не обращая внимания на базовые значения»; навык, чья база выше, остаётся на базе.
-                Средства — в пределах профессии, @Plan.CreditMin–@Plan.CreditMax% (стр. 46).
+                Средства — в пределах профессии, @Plan.CreditMin–@Plan.CreditMax%.
             </p>
             <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
                 @foreach (var key in Plan.BlitzSkillKeys)
@@ -60,7 +61,7 @@
         <section>
             <h3 class="cm-section-title mb-2">Личные навыки</h3>
             <p class="cm-field-note mb-2">
-                @InvestigatorCreationRules.BlitzPersonalSkillCount навыка по +@InvestigatorCreationRules.BlitzPersonalSkillBonus% к базе (стр. 46).
+                @InvestigatorCreationRules.BlitzPersonalSkillCount навыка по +@InvestigatorCreationRules.BlitzPersonalSkillBonus% к базе.
             </p>
             <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                 @for (var i = 0; i < InvestigatorCreationRules.BlitzPersonalSkillCount; i++)
@@ -89,7 +90,7 @@
                            value="@Draft.CreditRating" @onchange="e => ChangeAsync(() => Plan.SetCreditRating(Number(e)))" />
                 </Field>
                 <p class="min-w-60 flex-1 text-primary-700">
-                    Диапазон профессии — @Plan.CreditMin–@Plan.CreditMax%; пункты идут из очков профессии (стр. 34).
+                    Диапазон профессии — @Plan.CreditMin–@Plan.CreditMax%; пункты идут из очков профессии.
                     <span class="cm-field-note block">Достаток: @FinanceRules.GetTier(Draft.CreditRating, Draft.Era).Name.</span>
                 </p>
             </div>
@@ -101,8 +102,8 @@
                 <div class="flex min-w-60 flex-1 flex-wrap items-center justify-end gap-3">
                     <input type="search" class="cm-input max-w-72 flex-1" placeholder="Поиск по навыку…" aria-label="Поиск навыка"
                            @bind="_search" @bind:event="oninput" />
-                    <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
-                        <input type="checkbox" class="cm-checkbox" @bind="_occupationOnly" /> только профессии
+                    <label class="cm-tap-row text-sm text-primary-700">
+                        <input type="checkbox" class="cm-checkbox" @bind="_showAll" /> все навыки
                     </label>
                 </div>
             </div>
@@ -160,9 +161,13 @@
                     </tbody>
                 </table>
             </div>
+            @if (!_showAll && string.IsNullOrWhiteSpace(_search))
+            {
+                <p class="cm-field-note mt-2">Показаны навыки профессии и те, куда вложены личные очки. Остальные — по поиску или галочке «все навыки».</p>
+            }
             <p class="cm-field-note mt-2">
                 Мифы Ктулху пунктами не покупают; Средства — выше, в пределах профессии. Родной язык равен ОБР, Уклонение —
-                половине ЛВК (стр. 34, 57, 77).
+                половине ЛВК.
             </p>
         </section>
     }
@@ -170,7 +175,7 @@
 
 @code {
     private string _search = "";
-    private bool _occupationOnly;
+    private bool _showAll;
 
     [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
 
@@ -186,7 +191,11 @@
             var credit = Plan.CreditRating is { } c ? CreationPlan.KeyOf(c.Id) : "";
             var all = Plan.SkillKeys.Where(k => k != credit);
             var occupational = Plan.OccupationSkillKeys.Where(k => k != credit);
-            var ordered = _occupationOnly ? occupational : occupational.Concat(all.Where(k => !Plan.IsOccupationSkill(k)));
+            // По умолчанию — навыки профессии и те, куда уже вложены очки: остальные ~60 строк свёрнуты (поиск или «все навыки»).
+            var rest = all.Where(k => !Plan.IsOccupationSkill(k));
+            var ordered = _showAll || !string.IsNullOrWhiteSpace(_search)
+                ? occupational.Concat(rest)
+                : occupational.Concat(rest.Where(k => Draft.PersonalPoints.GetValueOrDefault(k) > 0));
             if (string.IsNullOrWhiteSpace(_search))
                 return ordered;
 

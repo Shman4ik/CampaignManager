@@ -1,26 +1,25 @@
 @using CampaignManager.Contracts.Catalogs
 @using CampaignManager.Core.Characters
+@inject ToastService Toasts
 
 @* Снаряжение — список «название + описание»; из справочника предметов берётся копия текста. Магические
    предметы — тоже сюда: текстовой графы «Магические предметы» в 2.0 нет (решение владельца 2026-10-02). *@
 <section data-testid="equipment">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 class="cm-section-title">Снаряжение</h3>
-        <div class="flex flex-wrap gap-2">
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-magnifying-glass" OnClick="() => _adding = true">Из справочника</Button>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="equipment-add" OnClick="AddEmpty">Предмет</Button>
-        </div>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Добавить предмет" data-testid="equipment-add"
+                OnClick="() => _adding = true">Добавить</Button>
     </div>
     @if (_adding)
     {
         <div class="mb-3">
-            <CatalogSearch TItem="ItemDto" Load="Context.Catalogs.ItemsAsync" Name="i => i.Name" Placeholder="Найти предмет…"
+            <CatalogSearch TItem="ItemDto" Load="Context.Catalogs.ItemsAsync" Name="i => i.Name" Placeholder="Найти предмет или вписать новый…"
                            Meta="i => i.Type ?? string.Empty" OnSelect="Add" OnCustom="AddNamed" OnCancel="() => _adding = false" />
         </div>
     }
     @if (Sheet.Equipment.Count == 0)
     {
-        <p class="text-sm italic text-primary-400">Пусто.</p>
+        <EmptyState Compact="true" Title="@Terms.Empty("предметов")" />
     }
     @for (var i = 0; i < Sheet.Equipment.Count; i++)
     {
@@ -30,7 +29,7 @@
             <input class="cm-input" placeholder="Предмет" aria-label="Предмет" @bind="item.Name" />
             <input class="cm-input col-span-2 row-start-2 sm:col-span-1 sm:row-start-auto" placeholder="Описание" aria-label="@($"{item.Name}: описание")"
                    @bind="item.Description" />
-            <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {item.Name}")"
+            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {item.Name}")"
                     OnClick="() => Remove(item)" />
         </div>
     }
@@ -47,8 +46,6 @@
 
     private void AddNamed(string name) => Append(new EquipmentItem { Name = name });
 
-    private void AddEmpty() => Append(new EquipmentItem());
-
     private void Append(EquipmentItem item)
     {
         Sheet.Equipment.Add(item);
@@ -56,9 +53,17 @@
         Context.Changed();
     }
 
+    /// <summary>Убирает сразу; вернуть можно из тоста 8 секунд.</summary>
     private void Remove(EquipmentItem item)
     {
+        var index = Sheet.Equipment.IndexOf(item);
         Sheet.Equipment.Remove(item);
         Context.Changed();
+        Toasts.Removed(string.IsNullOrWhiteSpace(item.Name) ? "предмет" : Names.Plain(item.Name), () =>
+        {
+            Sheet.Equipment.Insert(Math.Min(Math.Max(index, 0), Sheet.Equipment.Count), item);
+            Context.Changed();
+            return Task.CompletedTask;
+        });
     }
 }

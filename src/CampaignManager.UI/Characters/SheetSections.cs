@@ -9,12 +9,12 @@ public sealed record SheetSectionInfo(string Id, string Title, string Icon, stri
 /// </summary>
 public static class SheetSections
 {
-    public static readonly SheetSectionInfo Personal = new("personal", "Личные данные", "fa-user", "Сыщик");
+    public static readonly SheetSectionInfo Personal = new("personal", "Личные данные", "fa-user", "Личные данные");
     public static readonly SheetSectionInfo Skills = new("skills", "Навыки", "fa-graduation-cap", "Навыки");
-    public static readonly SheetSectionInfo Combat = new("combat", "Оружие и заклинания", "fa-gun", "Оружие");
-    public static readonly SheetSectionInfo Equipment = new("equipment", "Снаряжение и финансы", "fa-suitcase", "Вещи");
-    public static readonly SheetSectionInfo Sanity = new("sanity", "Рассудок и безумие", "fa-brain", "Рассудок");
-    public static readonly SheetSectionInfo Biography = new("biography", "Биография и заметки", "fa-book", "Биография");
+    public static readonly SheetSectionInfo Combat = new("combat", "Оружие и заклинания", "fa-gun", "Оружие и заклинания");
+    public static readonly SheetSectionInfo Equipment = new("equipment", "Снаряжение и деньги", "fa-suitcase", "Снаряжение и деньги");
+    public static readonly SheetSectionInfo Sanity = new("sanity", "Рассудок, безумие, Мифы", "fa-brain", "Рассудок, безумие, Мифы");
+    public static readonly SheetSectionInfo Biography = new("biography", "Биография и заметки", "fa-book", "Биография и заметки");
 
     public static IReadOnlyList<SheetSectionInfo> All { get; } = [Personal, Skills, Combat, Equipment, Sanity, Biography];
 

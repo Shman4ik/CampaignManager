@@ -13,8 +13,8 @@
             OnClick="() => _adding = Adding.Own">Свой навык</Button>
 </div>
 <p class="cm-field-note mb-3">
-    Тап по имени навыка — справка и «Проверка»; тап по СИЛ, ЛВК… в «Личных данных» — проверка характеристики.
-    В скобках — база; галочка — отметка успеха для фазы развития (стр. 92).
+    Коснитесь названия навыка — откроется проверка (справка по навыку — в ней же). В скобках — базовое значение;
+    галочка — отметка успеха для фазы развития. Три числа справа: значение, половина, пятая часть.
 </p>
 
 @if (_adding == Adding.Specialization)
@@ -40,10 +40,11 @@
             </datalist>
         </Field>
         <Button Small="true" Icon="fa-plus" Disabled="@(_parentId is null || string.IsNullOrWhiteSpace(_name))" data-testid="specialization-add"
+                DisabledReason="@(_parentId is null ? "Выберите навык" : "Впишите специализацию")"
                 OnClick="AddSpecialization">Добавить</Button>
         <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
         <p class="cm-field-note w-full">
-            Специализация, которой нет в справочнике, получает базу соседней, иначе 1% (стр. 52).
+            Если такой специализации нет в справочнике, её значение — база ближайшей по смыслу, а при её отсутствии 1%.
         </p>
     </div>
 }
@@ -56,7 +57,7 @@ else if (_adding == Adding.Own)
         <Field Label="Значение" class="w-24">
             <input type="number" inputmode="numeric" min="0" max="99" class="cm-input" @bind="_value" />
         </Field>
-        <Button Small="true" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_name)" data-testid="own-skill-add" OnClick="AddOwn">Добавить</Button>
+        <Button Small="true" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_name)" DisabledReason="Впишите название" data-testid="own-skill-add" OnClick="AddOwn">Добавить</Button>
         <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
         <p class="cm-field-note w-full">Свой навык живёт только на этом листе — в справочник он не попадает.</p>
     </div>
@@ -82,7 +83,7 @@ else
                 @foreach (var fold in group.Folds)
                 {
                     <details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)">
-                        <summary>@fold.ParentName — ещё @fold.Lines.Count</summary>
+                        <summary>@fold.ParentName: показать ещё @fold.Lines.Count</summary>
                         @foreach (var line in fold.Lines)
                         {
                             <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
@@ -95,19 +96,6 @@ else
     </div>
 }
 
-<Modal Open="@(_info is not null)" OnClose="() => _info = null" Title="@(_info?.Name ?? "")" Size="ModalSize.Large">
-    <ChildContent>
-        @if (_info is not null)
-        {
-            <SkillDetails Skill="_info" Catalog="Context.Skills" />
-        }
-    </ChildContent>
-    <Footer>
-        <Button Variant="ButtonVariant.Secondary" OnClick="() => _info = null">Закрыть</Button>
-        <Button Icon="fa-dice-d20" data-testid="skill-info-check" OnClick="CheckFromInfo">Проверка</Button>
-    </Footer>
-</Modal>
-
 @code {
     private enum Adding { None, Specialization, Own }
 
@@ -116,7 +104,6 @@ else
     private Guid? _parentId;
     private string _name = "";
     private int _value = 1;
-    private Contracts.Catalogs.SkillDto? _info;
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
@@ -174,24 +161,8 @@ else
         Context.Changed();
     }
 
-    /// <summary>Навык справочника — справка с «Проверкой»; свой — сразу проверка (справки у него нет).</summary>
-    private void Open(SkillLine line)
-    {
-        if (line.Definition is { } definition && Context.Skills.FirstOrDefault(s => s.Id == definition.Id) is { } dto)
-            _info = dto;
-        else
-            Context.Check(line.Key);
-    }
-
-    private void CheckFromInfo()
-    {
-        if (_info is null)
-            return;
-
-        var key = $"skill:{_info.Id}";
-        _info = null;
-        Context.Check(key);
-    }
+    /// <summary>Касание имени — сразу проверка навыка; справка лежит в самом окне проверки.</summary>
+    private void Open(SkillLine line) => Context.Check(line.Key);
 
     private void AddSpecialization()
     {
