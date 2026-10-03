@@ -243,6 +243,60 @@ public sealed class CatalogPageTests : KitContext
         Assert.NotEmpty(page.FindAll("dialog"));
     }
 
+    // UX-1 U5 (#174): ошибка у поля и сводка у кнопки — а не алерт вверху окна, до которого не долистать.
+    [Fact]
+    public void Saving_an_empty_form_marks_the_field_and_counts_errors_by_the_button()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.Contains("Добавить предмет", page.Markup, StringComparison.Ordinal));
+
+        page.FindAll("button").First(b => b.TextContent.Contains("Добавить предмет", StringComparison.Ordinal)).Click();
+        page.FindAll("dialog button").First(b => b.TextContent.Contains("Сохранить", StringComparison.Ordinal)).Click();
+
+        Assert.Equal("Нужно название.", page.Find("dialog .cm-field-error").TextContent);
+        Assert.Equal("true", page.Find("dialog input[aria-invalid]").GetAttribute("aria-invalid"));
+        Assert.Contains("Проверьте поля: 1", page.Find("dialog .cm-form-errors").TextContent, StringComparison.Ordinal);
+        Assert.Empty(_api.Created);
+
+        // Исправили — ошибка гаснет сама, не дожидаясь второго нажатия.
+        page.Find("dialog input").Change("Бинокль");
+        Assert.Empty(page.FindAll("dialog .cm-field-error"));
+    }
+
+    [Fact]
+    public void Form_asks_for_the_era_only_when_the_catalog_has_more_than_one()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь", Era.Classic), Item("Бинокль", Era.Classic)];
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        Assert.DoesNotContain("Наши дни", page.Find("dialog").TextContent, StringComparison.Ordinal);
+
+    }
+
+    [Fact]
+    public void Form_asks_for_the_era_when_the_catalog_has_both()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь", Era.Classic), Item("Лазер", Era.Modern)];
+        var varied = Render<ItemsPage>();
+        varied.WaitForAssertion(() => Assert.NotEmpty(varied.FindAll("[aria-label='Изменить: Фонарь']")));
+        varied.Find("table [aria-label='Изменить: Фонарь']").Click();
+        Assert.Contains("Наши дни", varied.Find("dialog").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Thumbnails_ask_the_server_for_a_narrow_copy_of_our_own_files_only()
+    {
+        Assert.Equal("/api/v1/files/abc?w=480", Catalogs.ImageUrls.Thumb("/api/v1/files/abc"));
+        Assert.Equal("/api/v1/files/abc?w=160", Catalogs.ImageUrls.Thumb("/api/v1/files/abc", 160));
+        Assert.Equal("https://example.test/a.png", Catalogs.ImageUrls.Thumb("https://example.test/a.png"));
+        Assert.Null(Catalogs.ImageUrls.Thumb(null));
+    }
+
     private static ItemDto Item(string name, params Era[] eras) => new()
     {
         Id = Guid.NewGuid(),
@@ -278,8 +332,18 @@ public sealed class CatalogPageTests : KitContext
         public Task<CatalogList<ItemDto>> ListAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new CatalogList<ItemDto>(Items, CanEdit));
 
-        public Task<ItemDto> CreateAsync(ItemDto item, CancellationToken cancellationToken = default) =>
-            Failure is not null ? throw Failure : Task.FromResult(item);
+        public List<ItemDto> Created { get; } = [];
+
+        public Task<ItemDto> CreateAsync(ItemDto item, CancellationToken cancellationToken = default)
+        {
+            if (Failure is not null)
+            {
+                throw Failure;
+            }
+
+            Created.Add(item);
+            return Task.FromResult(item);
+        }
 
         public Task<ItemDto> UpdateAsync(ItemDto item, CancellationToken cancellationToken = default) =>
             Failure is not null ? throw Failure : Task.FromResult(item);
