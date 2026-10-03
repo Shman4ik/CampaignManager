@@ -206,22 +206,25 @@ public sealed class SheetSkillLayoutTests
     }
 
     [Fact]
-    public void Play_mode_shows_only_developed_skills_alphabetically_and_all_lines_include_the_rest()
+    public void Play_mode_shows_every_unfolded_skill_alphabetically_and_search_also_sees_folded_ones()
     {
         var sheet = NewSheet(50,
             Skill("Слух", 45),
-            Skill("Внимание", 25, isChecked: true), // на базе, но с отметкой развития — за столом она нужна
-            Skill("Психология", 10), // строка есть, но на базе
             Skill("Стрельба (пистолет)", 60),
-            Skill(Mythos, 4),
             new SheetSkill { Name = "Гадание на картах", Value = 30 });
 
-        var developed = SheetSkillLayout.Developed(sheet, Catalog);
+        var visible = SheetSkillLayout.Visible(sheet, Catalog);
 
-        Assert.Equal(["Внимание", "Гадание на картах", Mythos, "Слух", "Стрельба (пистолет)"], developed.Select(l => l.Name));
+        // Навык на базе без строки листа — виден (база справочника), развитая специализация — тоже
+        Assert.Contains(visible, l => l.Name == "Психология" && l.Value == 10 && l.Entry is null);
+        Assert.Contains(visible, l => l.Name == "Стрельба (пистолет)" && l.Value == 60);
+        Assert.Contains(visible, l => l.Name == "Гадание на картах");
+        // Специализация на базе свёрнута, как на листе, а родитель строкой не бывает
+        Assert.DoesNotContain(visible, l => l.Name is "Стрельба (винтовка)" or Firearms);
+        Assert.Equal(visible.Select(l => l.Name).OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), visible.Select(l => l.Name));
+
         var all = SheetSkillLayout.All(sheet, Catalog);
-        Assert.Contains(all, l => l.Name == "Психология" && l.Value == 10);
-        Assert.Contains(all, l => l.Name == "Стрельба (винтовка)"); // свёрнутая специализация тоже ищется
+        Assert.Contains(all, l => l.Name == "Стрельба (винтовка)"); // свёрнутую специализацию находит поиск
         Assert.Equal(all.Count, all.Select(l => l.Key).Distinct().Count());
         Assert.Equal(all.Select(l => l.Name).OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), all.Select(l => l.Name));
     }

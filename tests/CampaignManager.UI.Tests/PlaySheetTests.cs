@@ -12,7 +12,7 @@ namespace CampaignManager.UI.Tests;
 
 /// <summary>
 /// Режим «Игра» листа (решение владельца 2026-10-03): полоса состояния пишет лист теми же правилами, что «Состояние» и
-/// «Рассудок» листа (урон — серьёзная рана, потеря ≥5 — проверка ИНТ), навыки — только развитые, поиск — по всем,
+/// «Рассудок» листа (урон — серьёзная рана, потеря ≥5 — проверка ИНТ), навыки — все, развитые отличаются от базовых,
 /// только для чтения — управление выключено.
 /// </summary>
 public sealed class PlaySheetTests : KitContext
@@ -125,14 +125,16 @@ public sealed class PlaySheetTests : KitContext
     }
 
     [Fact]
-    public void Skills_list_only_developed_ones_and_search_finds_a_skill_at_base()
+    public void Skills_list_all_with_base_ones_muted_and_search_narrows_the_list()
     {
         var sheet = Sheet();
         sheet.Skills.Add(new SheetSkill { SkillId = Spot.Id, Value = 60, Checked = true });
         sheet.Skills.Add(new SheetSkill { SkillId = Listen.Id, Value = 20 }); // строка есть, но на базе
         var cut = Render<PlaySkills>(sheet);
 
-        Assert.Equal(["Внимание"], cut.FindAll(".play-skill-name").Select(e => e.TextContent));
+        // Все три по алфавиту; Плавание без строки листа — на базе справочника
+        Assert.Equal(["Внимание", "Плавание", "Слух"], cut.FindAll(".play-skill-name").Select(e => e.TextContent));
+        Assert.Equal(["Плавание", "Слух"], cut.FindAll(".play-skill-base .play-skill-name").Select(e => e.TextContent));
         Assert.Single(cut.FindAll(".play-skill-tick i")); // отметка развития видна
 
         cut.Find("[data-testid='play-skill-search']").Input("плав");

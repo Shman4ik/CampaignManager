@@ -110,11 +110,15 @@ public static class SheetSkillLayout
     }
 
     /// <summary>
-    /// Навыки режима «Игра» (решение владельца 2026-10-03): только развитые — значение выше базы или отметка развития,
-    /// одним списком по алфавиту. Навык на базе за столом находит поиск по <see cref="All"/>.
+    /// Навыки режима «Игра» (решение владельца 2026-10-03): все, что лист показывает развёрнутыми, — «Частые» и
+    /// остальные, одним списком по алфавиту. Специализации на базе свёрнуты, как на листе (их десятки, экран бы не
+    /// вместил); их находит поиск по <see cref="All"/>.
     /// </summary>
-    public static IReadOnlyList<SkillLine> Developed(CharacterSheet sheet, SkillCatalog catalog) =>
-        [.. All(sheet, catalog).Where(l => l.Value > l.BaseValue || l.Checked)];
+    public static IReadOnlyList<SkillLine> Visible(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var sections = Sections(sheet, catalog);
+        return [.. sections.Frequent.Concat(sections.Others).OrderBy(l => AlphabeticKey(l.Name), StringComparer.Ordinal)];
+    }
 
     /// <summary>Все строки листа — «Частые», остальные и свёрнутые специализации — одним списком по алфавиту, без дублей.</summary>
     public static IReadOnlyList<SkillLine> All(CharacterSheet sheet, SkillCatalog catalog)
