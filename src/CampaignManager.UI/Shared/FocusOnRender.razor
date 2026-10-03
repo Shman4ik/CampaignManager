@@ -1,0 +1,32 @@
+@* Ставит фокус в поле страницы, когда оно появилось (однократно). Страница, чьи поля рисует AsyncContent после загрузки,
+   не может сделать это в своём OnAfterRenderAsync: он отрабатывает раньше, чем поле попало в разметку, а само поле
+   `autofocus` на странице, подставленной после первой отрисовки, не получает. Компонент стоит рядом с полем, в том же
+   содержимом: его первая отрисовка — в том же пакете, что и поле. Цель — функция, потому что ElementReference
+   записывается после отрисовки, а в параметре осталась бы пустая копия. Ничего не рисует. *@
+@code {
+    /// <summary>Поле, в которое ставить фокус: <c>() => _nameInput</c>.</summary>
+    [Parameter, EditorRequired] public Func<ElementReference> Target { get; set; } = null!;
+
+    /// <summary>Когда ставить; у страницы, которой фокус нужен не всегда (новая запись, а не правка), — условие.</summary>
+    [Parameter] public bool When { get; set; } = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !When)
+        {
+            return;
+        }
+
+        try
+        {
+            await Target().FocusAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Поля уже нет (страница ушла) или оно не получило ссылку — фокус необязателен.
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace CampaignManager.UI.Tests;
 
-/// <summary>Слоты профессии: порядок меняют «выше»/«ниже», крайние слоты без лишней стрелки.</summary>
+/// <summary>Слоты профессии: порядок меняют «Выше»/«Ниже» в меню строки «⋯», крайним слотам лишнего пункта нет (O5).</summary>
 public sealed class OccupationSlotsEditorTests : KitContext
 {
     [Fact]
@@ -20,9 +20,9 @@ public sealed class OccupationSlotsEditorTests : KitContext
             .Add(c => c.Slots, [first, second])
             .Add(c => c.SlotsChanged, list => saved = list));
 
-        Assert.Empty(editor.FindAll("[aria-label='Слот 1 выше']"));
-        Assert.Empty(editor.FindAll("[aria-label='Слот 2 ниже']"));
-        editor.Find("[aria-label='Слот 1 ниже']").Click();
+        editor.Find("button[aria-label='Действия: слот 1']").Click();
+        Assert.DoesNotContain(editor.FindAll("[role=menuitem]"), i => i.TextContent.Contains("Выше", StringComparison.Ordinal));
+        editor.FindAll("[role=menuitem]").Single(i => i.TextContent.Contains("Ниже", StringComparison.Ordinal)).Click();
 
         Assert.Equal([OccupationSlotKind.Free, OccupationSlotKind.Social], saved!.Select(s => s.Kind));
     }

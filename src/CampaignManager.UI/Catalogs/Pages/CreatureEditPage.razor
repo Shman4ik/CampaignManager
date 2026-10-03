@@ -16,10 +16,14 @@
    летает), атак за раунд у твари, а не у атаки, броня с оговоркой, уклонение, потеря рассудка,
    инициатива (0 — по ЛВК). Ссылка на страницу защищена политикой Keeper; запись — сервером.
 
+   g6 (F6b): «Сохранить» и «К бестиарию» спрашивали «Выйти?» после успешной записи — страница выставляла флаг, а
+   NavigationLock читал параметр прошлого рендера (E1); теперь перед переходом зовётся UnsavedChangesGuard.Allow().
+   Заголовок — имя на момент открытия, а не живое поле (E6); у новой твари фокус в «Названии» (E9).
+
    UX-1 U5 (#176): панель «Отмена / Сохранить» липнет к низу (страница в 2000+ px), ошибка названия — у поля,
    сводка «Проверьте поля: N» у кнопки и прокрутка к первому полю; уход с несохранённого спрашивает; «0» там, где
    значения нет, — пустое поле; «Удалить» — внизу страницы (на карточке бестиария его нет). *@
-<PageHeader Title="@(Id is null ? "Новое существо" : $"Существо: {_creature?.Name}")">
+<PageHeader Title="@_title">
     <Actions>
         <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-left" OnClick="LeaveAsync">К бестиарию</Button>
     </Actions>
@@ -37,8 +41,9 @@
                 <div class="cm-section-header"><h2 class="cm-section-title">Основное</h2></div>
                 <div class="cm-card">
                     <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <FocusOnRender Target="() => _nameInput" When="Id is null" />
                         <Field Label="Название" Required="true" Error="@ErrorOf(errors, "name")" class="sm:col-span-2">
-                            <input class="cm-input" aria-invalid="@(errors.ContainsKey("name") && _attempt > 0 ? "true" : null)" @bind="c.Name" />
+                            <input @ref="_nameInput" class="cm-input" aria-invalid="@(errors.ContainsKey("name") && _attempt > 0 ? "true" : null)" @bind="c.Name" />
                         </Field>
                         <Field Label="Тип">
                             <select class="cm-input" @bind="c.Type">
@@ -48,7 +53,7 @@
                                 }
                             </select>
                         </Field>
-                        <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="c.Source" /></Field>
+                        <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="c.Source" /></Field>
                         <Field Label="Описание" Note="Его видят и игроки — вместе с названием и картинкой; статблок им не отдаётся." class="sm:col-span-2 lg:col-span-4">
                             <textarea class="cm-input" rows="4" @bind="c.Description"></textarea>
                         </Field>
@@ -59,23 +64,26 @@
             <section class="cm-section">
                 <div class="cm-section-header"><h2 class="cm-section-title">Характеристики</h2></div>
                 <div class="cm-card">
-                    <div class="cm-card-body grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                    @* Шесть в ряд уже в портрете (поля ~100px) и по три на телефоне (E7); у каждого поля видимая подпись —
+                       «Среднее» и «Кости» (E3: второй ряд полей был без слова, а подсказка пропадала после ввода). *@
+                    <div class="cm-card-body grid grid-cols-3 gap-3 md:grid-cols-6 md:gap-4">
                         @foreach (var (label, stat, index) in Stats(s))
                         {
                             var current = stat;
                             <Field Label="@label" Group="true">
-                                <OptionalNumber AriaLabel="@($"{label}, среднее")" @bind-Value="current.Value" />
-                                <input class="cm-input cm-dice mt-1" placeholder="@(index == 0 ? "3D6×5" : null)" aria-label="@($"{label}, кости")" @bind="current.Dice" />
+                                <label class="cr-sub"><span>Среднее</span><OptionalNumber AriaLabel="@($"{label}, среднее")" @bind-Value="current.Value" /></label>
+                                <label class="cr-sub"><span>Кости</span><input class="cm-input cm-dice" placeholder="@(index == 0 ? "3d6 × 5" : null)" aria-label="@($"{label}, кости")" @bind="current.Dice" /></label>
                             </Field>
                         }
                     </div>
                     <div class="cm-card-body grid grid-cols-2 gap-4 border-t border-primary-200 sm:grid-cols-3 lg:grid-cols-6">
                         <Field Label="ПЗ"><OptionalNumber AriaLabel="ПЗ" @bind-Value="s.HitPoints" /></Field>
                         <Field Label="ПМ"><OptionalNumber AriaLabel="ПМ" @bind-Value="s.MagicPoints" /></Field>
-                        <Field Label="Бонус к урону" Note="К урону, не к попаданию: «+1D4».">
-                            <input class="cm-input cm-dice" @bind="s.DamageBonus" />
+                        <Field Label="Бонус к урону" Note="К урону, не к попаданию. Пусто — 0.">
+                            <input class="cm-input cm-dice" placeholder="+1d4" aria-label="Бонус к урону" value="@(s.DamageBonus == "0" ? "" : s.DamageBonus)"
+                                   @onchange="e => s.DamageBonus = BonusOf(e.Value?.ToString())" />
                         </Field>
-                        <Field Label="Комплекция"><input class="cm-input" type="number" @bind="s.Build" /></Field>
+                        <Field Label="Комплекция" Note="Пусто — 0."><OptionalNumber Min="null" AriaLabel="Комплекция" @bind-Value="s.Build" /></Field>
                         <Field Label="Уклонение" Hint="(%)"><OptionalNumber Max="100" AriaLabel="Уклонение, %" @bind-Value="s.Dodge" /></Field>
                         <Field Label="Инициатива" Note="Пусто — по ЛВК."><OptionalNumber AriaLabel="Инициатива" @bind-Value="s.Initiative" /></Field>
                     </div>
@@ -85,23 +93,24 @@
             <section class="cm-section">
                 <div class="cm-section-header"><h2 class="cm-section-title">Движение, броня, рассудок</h2></div>
                 <div class="cm-card">
-                    <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    @* Шесть колонок в альбоме (три ряда вместо четырёх), четыре в портрете, одна на телефоне (E7). *@
+                    <div class="cm-card-body grid gap-4 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
                         <Field Label="Скорость"><OptionalNumber AriaLabel="Скорость" @bind-Value="s.Speed.Move" /></Field>
-                        <Field Label="Плавание" Note="Пусто — половина скорости."><input class="cm-input" type="number" min="0" @bind="s.Speed.Swim" /></Field>
+                        <Field Label="Плавание" Note="Пусто — ½ скорости."><input class="cm-input" type="number" min="0" @bind="s.Speed.Swim" /></Field>
                         <Field Label="Полёт" Note="Пусто — не летает."><input class="cm-input" type="number" min="0" @bind="s.Speed.Fly" /></Field>
-                        <Field Label="Скорость словами" Hint="(если в книге так)"><input class="cm-input" placeholder="перекатывание 10" @bind="s.Speed.Note" /></Field>
+                        <Field Label="Скорость словами" Note="Если в книге так." class="sm:col-span-2 lg:col-span-3"><input class="cm-input" placeholder="перекатывание 10" @bind="s.Speed.Note" /></Field>
                         <Field Label="@Terms.AttacksPerRound" Note="У твари, не у атаки.">
                             <input class="cm-input" type="number" min="0" @bind="s.AttacksPerRound" />
                         </Field>
-                        <Field Label="Оговорка к атакам" class="sm:col-span-2 lg:col-span-3">
+                        <Field Label="Оговорка к атакам" class="sm:col-span-2 md:col-span-3 lg:col-span-5">
                             <textarea class="cm-input" rows="2" @bind="s.AttacksPerRoundNote"></textarea>
                         </Field>
                         <Field Label="Броня"><OptionalNumber AriaLabel="Броня" @bind-Value="s.Armor" /></Field>
-                        <Field Label="Оговорка к броне" Note="«Брони нет» с оговоркой — настоящая защита: «огнестрел — минимальный урон»." class="sm:col-span-2 lg:col-span-3">
+                        <Field Label="Оговорка к броне" Note="Например: огнестрел — минимальный урон." class="sm:col-span-2 md:col-span-3">
                             <textarea class="cm-input" rows="2" @bind="s.ArmorNote"></textarea>
                         </Field>
-                        <Field Label="Потеря Рассудка" Note="@SanityNote(s.SanityLoss)" class="sm:col-span-2">
-                            <input class="cm-input cm-dice" placeholder="1/1D8" @bind="s.SanityLoss" @bind:event="oninput" />
+                        <Field Label="Потеря Рассудка" Note="@SanityNote(s.SanityLoss)" class="sm:col-span-2 md:col-span-4 lg:col-span-2">
+                            <input class="cm-input cm-dice" placeholder="1/1d8" @bind="s.SanityLoss" @bind:event="oninput" />
                         </Field>
                     </div>
                 </div>
@@ -116,11 +125,13 @@
                             var attack = s.Attacks[i];
                             var index = i;
                             <div class="grid gap-2 border-t border-primary-100 pt-3 first:border-t-0 first:pt-0" @key="attack">
+                                @* «Вид» стоит в ряду с названием, а не падает на свою строку (E7: в портрете ряд не влезал, и корзина уезжала
+                                   вместе с «Видом»); корзина — рядом с описанием, во второй строке. *@
                                 <div class="cm-field-row flex flex-wrap items-end gap-2">
-                                    <Field Label="Атака" class="min-w-40 flex-1"><input class="cm-input" @bind="attack.Name" /></Field>
-                                    <Field Label="Навык" Hint="(%)" class="w-24"><input class="cm-input" type="number" min="0" @bind="attack.SkillValue" /></Field>
-                                    <Field Label="Урон" class="w-36" Note="@DamageNote(attack)"><input class="cm-input cm-dice" @bind="attack.Damage" @bind:event="oninput" /></Field>
-                                    <Field Label="Бонус к урону" class="w-44">
+                                    <Field Label="Атака" class="min-w-28 flex-1"><input class="cm-input" @bind="attack.Name" /></Field>
+                                    <Field Label="Навык" Hint="(%)" class="w-20"><input class="cm-input" type="number" min="0" @bind="attack.SkillValue" /></Field>
+                                    <Field Label="Урон" class="w-28" Note="@DamageNote(attack)"><input class="cm-input cm-dice" @bind="attack.Damage" @bind:event="oninput" /></Field>
+                                    <Field Label="Бонус к урону" class="w-40">
                                         <select class="cm-input" @bind="attack.DamageBonusMode">
                                             @foreach (var mode in Enum.GetValues<CreatureDamageBonusMode>())
                                             {
@@ -136,11 +147,13 @@
                                             }
                                         </select>
                                     </Field>
+                                </div>
+                                <div class="flex items-start gap-2">
+                                    <textarea class="cm-input min-w-0 flex-1" rows="2" placeholder="Описание атаки (как в бестиарии)" aria-label="@($"Описание атаки: {attack.Name}")"
+                                              @bind="attack.Description"></textarea>
                                     <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать атаку: {attack.Name}")"
                                             OnClick="() => RemoveWithUndo(s.Attacks, index, attack.Name)" />
                                 </div>
-                                <textarea class="cm-input w-full" rows="2" placeholder="Описание атаки (как в бестиарии)" aria-label="@($"Описание атаки: {attack.Name}")"
-                                          @bind="attack.Description"></textarea>
                             </div>
                         }
                         <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Attacks.Add(new CreatureAttack())">Добавить атаку</Button></div>
@@ -276,6 +289,8 @@
         (System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto>)CampaignManager.Contracts.ContractsJsonContext.Default.GetTypeInfo(typeof(CreatureDto))!;
 
     private CreatureDto? _creature;
+    private string _title = "Существо";
+    private ElementReference _nameInput;
     private UnsavedChangesGuard? _guard;
     private string? _initialJson;
     private bool _saving;
@@ -297,6 +312,7 @@
         {
             _creature = new CreatureDto();
             _initialJson = JsonSerializer.Serialize(_creature, CreatureJson);
+            _title = "Новое существо";
             return _creature;
         }
 
@@ -312,6 +328,8 @@
             _initialJson = JsonSerializer.Serialize(_creature, CreatureJson);
         }
 
+        // Имя в заголовке — на момент открытия: пока название правят (или стёрли), «Существо: » с пустым хвостом не мигает (E6).
+        _title = _creature is { Name: { Length: > 0 } name } ? $"Существо: {name}" : "Существо";
         StateHasChanged(); // имя — в шапке, она вне AsyncContent
 
         return _creature ?? new CreatureDto();
@@ -326,7 +344,7 @@
 
     private string? ErrorOf(Dictionary<string, string> errors, string key) => _attempt > 0 ? errors.GetValueOrDefault(key) : null;
 
-    // Бой бросает только то, что понимает DiceFormula: «1д6» и «1D6+БкУ» — да, «см. описание» — нет.
+    // Бой бросает только то, что понимает DiceFormula: «1d6» и «1d6 + бонус к урону» — да, «см. описание» — нет.
     // Это предупреждение, а не запрет: такой урон сохранится текстом.
     private static string? DamageNote(CreatureAttack attack) =>
         attack.DamageBonusMode == CreatureDamageBonusMode.OnlyBonus || string.IsNullOrWhiteSpace(attack.Damage)
@@ -337,15 +355,26 @@
     // Предел привыкания (стр. 167) — максимум провальной части, тем же разбором, что и бросок.
     private static string? SanityNote(string? sanityLoss) =>
         string.IsNullOrWhiteSpace(sanityLoss)
-            ? "«успех/провал»: 0/1D6."
+            ? "Успех/провал: 0/1d6."
             : $"Предел привыкания — {SanityLossFormula.MaxLoss(sanityLoss)}.";
+
+    // Свой переход: вопроса «Выйти?» не будет ни после «Сохранить», ни после ответа «Выйти без сохранения» (E1, E8).
+    // Одного _leaving мало — NavigationLock читает Dirty прошлого рендера, а NavigateTo зовёт его сразу.
+    private void GoTo(string uri)
+    {
+        _leaving = true;
+        _guard?.Allow();
+        Navigation.NavigateTo(uri);
+    }
+
+    // Пусто — «0»: бонус к урону хранится строкой книги, а «0» в форме выглядел введённым (E5).
+    private static string BonusOf(string? text) => string.IsNullOrWhiteSpace(text) ? "0" : text.Trim();
 
     private async Task LeaveAsync()
     {
         if (_guard is null || await _guard.ConfirmLeaveAsync())
         {
-            _leaving = true; // вопрос уже задан: NavigationLock второй раз не спрашивает
-            Navigation.NavigateTo(Id is { } id ? $"bestiary?open={id}" : "bestiary");
+            GoTo(Id is { } id ? $"bestiary?open={id}" : "bestiary");
         }
     }
 
@@ -370,8 +399,7 @@
         {
             var saved = Id is null ? await Api.CreateAsync(_creature) : await Api.UpdateAsync(_creature);
             Toasts.Success($"Сохранено: {Names.Plain(saved.Name)}.");
-            _leaving = true;
-            Navigation.NavigateTo($"bestiary?open={saved.Id}");
+            GoTo($"bestiary?open={saved.Id}");
         }
         catch (ApiException ex)
         {
@@ -400,8 +428,7 @@
         {
             await Api.DeleteAsync(id);
             Toasts.Success($"Удалено: {Names.Plain(creature.Name)}.");
-            _leaving = true;
-            Navigation.NavigateTo("bestiary");
+            GoTo("bestiary");
         }
         catch (HttpRequestException ex)
         {

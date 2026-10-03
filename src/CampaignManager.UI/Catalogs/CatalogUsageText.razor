@@ -1,0 +1,72 @@
+@using CampaignManager.Contracts.Catalogs
+
+@* «Используется: оружие Кольт, профессия Врач и ещё 4.» — кто держит запись справочника (S5). Имена жирным и без
+   обрамляющих кавычек (правило 7); «и ещё N» — ссылка на справочник, где держатели лежат, с поиском по этой записи
+   (профессии находят навык по слотам): не пересчитывать вслепую, а открыть и увидеть. У держателя без своего справочника
+   (лист сыщика) ссылки нет — «и ещё N» простым текстом. Стоит внутри Alert или абзаца, своей разметки вокруг не рисует. *@
+<span>Используется: @for (var i = 0; i < _shown.Count; i++)
+{
+    var (kind, name) = _shown[i];
+    @if (i > 0)
+    {
+        <text>, </text>
+    }
+    @(kind)<strong class="font-semibold">@name</strong>
+}@if (More > 0)
+{
+    <text> и </text>
+    @if (MoreHref is { } href)
+    {
+        <a href="@href" class="font-semibold underline">ещё @More</a>
+    }
+    else
+    {
+        <text>ещё @More</text>
+    }
+}.</span>
+
+@code {
+    private static readonly string[] Kinds = ["лист сыщика", "оружие", "профессия", "специализация"];
+
+    private List<(string Kind, string Name)> _shown = [];
+
+    /// <summary>Держатели; первые — по именам.</summary>
+    [Parameter, EditorRequired] public CatalogUsage Usage { get; set; } = CatalogUsage.None;
+
+    /// <summary>Сколько имён показать, остальные — «и ещё N».</summary>
+    [Parameter] public int Show { get; set; } = 3;
+
+    /// <summary>Имя записи, которую хотят удалить: поиск по нему в справочнике держателей.</summary>
+    [Parameter] public string? Query { get; set; }
+
+    private int More => Usage.Count - _shown.Count;
+
+    protected override void OnParametersSet() => _shown = [.. Usage.Examples.Take(Show).Select(Split)];
+
+    private string? MoreHref =>
+        Query is { Length: > 0 } && Usage.Examples.Count > 0 && RouteOf(Usage.Examples[0]) is { } route
+            ? $"{route}?q={Uri.EscapeDataString(Query)}"
+            : null;
+
+    // «профессия Врач» → («профессия »; «Врач»). Незнакомое начало — имя целиком: сервер мог назвать нового держателя.
+    private static (string Kind, string Name) Split(string example)
+    {
+        foreach (var kind in Kinds)
+        {
+            if (example.StartsWith(kind + " ", StringComparison.Ordinal))
+            {
+                return (kind + " ", example[(kind.Length + 1)..]);
+            }
+        }
+
+        return ("", example);
+    }
+
+    private static string? RouteOf(string example) => Split(example).Kind switch
+    {
+        "профессия " => "occupations",
+        "оружие " => "weapons",
+        "специализация " => "skills",
+        _ => null,
+    };
+}

@@ -10,7 +10,7 @@
              Filters="Filters" Toggles="Toggles" ErasOf="s => s.Eras" SearchAlso="s => [ParentName(s)]" TableFrom="TableBreakpoint.Md"
              State="_state" New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
     <Columns Context="view">
-        <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[46%]" Context="s">
+        <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[56%]" Context="s">
             <span class="font-medium text-primary-800">@s.Name</span>
             @if (s.IsUncommon)
             {
@@ -21,10 +21,11 @@
                 <EraBadges Values="s.Eras" />
             }
         </DataColumn>
-        <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" HeaderClass="w-[14%]" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
+        <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" HeaderClass="w-[12%]" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
         @if (!view.IsFixed("category"))
         {
-            <DataColumn TItem="SkillDto" Title="Категория" SortBy="s => CatalogText.Of(s.Category)" Context="s">@CatalogText.Of(s.Category)</DataColumn>
+            @* ~220px (S3): девять категорий по 9–30 знаков занимали 305px, а названию не хватало места. *@
+            <DataColumn TItem="SkillDto" Title="Категория" SortBy="s => CatalogText.Of(s.Category)" HeaderClass="w-56" Context="s">@CatalogText.Of(s.Category)</DataColumn>
         }
     </Columns>
     <CardTemplate Context="s">
@@ -62,20 +63,13 @@
     private IEnumerable<SkillDto> Parents(SkillDto skill) =>
         _skills.Where(s => s.ParentId is null && s.Id != skill.Id).OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase);
 
+    // Порядок полей — по тому, что заполняют чаще (S4): название, категория, база, особенности; «Специализация» —
+    // у редких записей (58% навыков самостоятельные), поэтому ниже, рядом с источником.
     private RenderFragment<SkillDto> Form => s => __builder =>
     {
         <div class="grid gap-4 sm:grid-cols-2">
-            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2" Note="Специализация пишется с родителем в скобках: «Наука (химия)».">
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2" Note="Специализация пишется с родителем в скобках: Наука (химия).">
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="s.Name" />
-            </Field>
-            <Field Label="Специализация навыка">
-                <select class="cm-input" @bind="s.ParentId">
-                    <option value="">— самостоятельный навык —</option>
-                    @foreach (var parent in Parents(s))
-                    {
-                        <option value="@parent.Id">@parent.Name</option>
-                    }
-                </select>
             </Field>
             <Field Label="Категория">
                 <select class="cm-input" @bind="s.Category">
@@ -85,7 +79,7 @@
                     }
                 </select>
             </Field>
-            <Field Label="База" Hint="(%)" Note="Число или формула: ½ ЛВК, ОБР.">
+            <Field Label="База" Hint="(%)" Note="Число, ½ ЛВК или ОБР.">
                 <div class="flex gap-2">
                     <select class="cm-input w-36 shrink-0" aria-label="Формула базы" value="@(s.BaseFormula ?? "")"
                             @onchange="e => s.BaseFormula = e.Value is string { Length: > 0 } formula ? formula : null">
@@ -103,6 +97,7 @@
                 <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="s.IsUncommon" /><span>Необычный навык</span></label>
                 <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="s.CanRetry" /><span>Проверку можно повторить</span></label>
             </Field>
+            <Field Label="Время" Note="Сколько занимает проверка."><input class="cm-input" placeholder="1 час" @bind="s.TimeRequired" /></Field>
             <div class="sm:col-span-2"><EraPicker Show="_state.ErasVary" @bind-Values="s.Eras" /></div>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="5" @bind="s.Description"></textarea></Field>
             <Field Label="Примеры применения" Group="true" class="sm:col-span-2">
@@ -115,8 +110,16 @@
                 <StringListEditor Values="s.OpposingSkills" ValuesChanged="v => s.OpposingSkills = [.. v]" ItemLabel="Навык" />
             </Field>
             <div class="grid content-start gap-4">
-                <Field Label="Время"><input class="cm-input" placeholder="1 час" @bind="s.TimeRequired" /></Field>
-                <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
+                <Field Label="Специализация навыка" Note="Пусто — самостоятельный навык.">
+                    <select class="cm-input" @bind="s.ParentId">
+                        <option value="">—</option>
+                        @foreach (var parent in Parents(s))
+                        {
+                            <option value="@parent.Id">@parent.Name</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="s.Source" /></Field>
             </div>
         </div>
     };

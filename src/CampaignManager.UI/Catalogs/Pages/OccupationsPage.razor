@@ -5,9 +5,9 @@
 @inject ICatalogApi<SkillDto> SkillsApi
 
 @* Профессии — единственный справочник на карточках, а не таблицей: формула, Средства и до десятка
-   навыков чипами в строку таблицы не сжать. Профессий три десятка — без страниц. Кнопки карточки
-   подписаны: голые иконки — только в плотной таблице. Счётчик «навыков: N из 8» — проверка правила
-   книги (стр. 37), он же у Хранителя в форме. «С правилами» — синхронизация с сидом книги по коду. *@
+   навыков чипами в строку таблицы не сжать. Профессий три десятка — страницы по 12. «Изменить» — иконка-карандаш в
+   шапке карточки (O1: кнопка 232×44 с подписью занимала четверть карточки). Счётчик «навыков: N из 8» — проверка
+   правила книги (стр. 37), он же у Хранителя в форме. «Сверить с книгой правил» — синхронизация с сидом книги. *@
 <CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию" Plural="профессий"
              Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="12" Sorts="Sorts" Sync="true" State="_state" Validate="Validate"
              New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form" FormSize="ModalSize.Large">
@@ -26,6 +26,14 @@
                         @if (view.ShowEra)
                         {
                             <EraBadges Values="occupation.Eras" />
+                        }
+                        @if (view.CanEdit)
+                        {
+                            @* «Удалить» — в окне правки (правило 7). Иконка 32px рядом с названием, как в таблицах. *@
+                            <div class="cm-compact shrink-0">
+                                <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(occupation.Name)}")"
+                                        OnClick="() => view.Edit(occupation)" />
+                            </div>
                         }
                     </div>
                     <div class="cm-card-body flex-1 text-sm">
@@ -48,13 +56,6 @@
                             <Alert Tone="Tone.Warning" Small="true" class="mb-0 mt-2">Навыков @count из @OccupationRules.RequiredSkillCount — по книге ровно восемь плюс Средства.</Alert>
                         }
                     </div>
-                    @if (view.CanEdit)
-                    {
-                        <div class="cm-card-footer flex-wrap justify-end">
-                            @* «Удалить» — в окне правки (правило 7). *@
-                            <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="() => view.Edit(occupation)">Изменить профессию</Button>
-                        </div>
-                    }
                 </article>
             }
         </div>
@@ -163,11 +164,11 @@
 
     private RenderFragment<OccupationDto> Form => o => __builder =>
     {
-        <div class="grid gap-4 sm:grid-cols-2">
-            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
+        <div class="grid gap-4 sm:grid-cols-6">
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-3">
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="o.Name" />
             </Field>
-            <Field Label="Очки навыков" class="sm:col-span-2" Note="Если формула даёт выбор, берётся выбранная характеристика.">
+            <Field Label="Очки навыков" class="sm:col-span-3" Note="Если формула даёт выбор, берётся выбранная характеристика.">
                 <select class="cm-input" @bind="o.SkillPointsFormula">
                     @foreach (var formula in Enum.GetValues<SkillPointsFormula>())
                     {
@@ -175,21 +176,30 @@
                     }
                 </select>
             </Field>
-            <div class="grid grid-cols-2 gap-4">
-                <Field Label="Средства от" Error="@_state.For("credit")"><input class="cm-input" type="number" min="0" max="99" aria-invalid="@_state.Invalid("credit")" @bind="o.CreditRatingMin" /></Field>
-                <Field Label="Средства до"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMax" /></Field>
-            </div>
-            <Field Label="Особенности" Group="true">
-                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="o.IsLovecraftian" /><span>Из Лавкрафта</span></label>
+            @* «Средства» — одна подпись и два поля «от — до» (O4): прежние «Средства от» и «Средства до» переносились на вторую
+               строку подписи, а флажок «Из Лавкрафта» стоял под своей подписью «Особенности» на другой линии. *@
+            <Field Label="Средства" Group="true" Error="@_state.For("credit")" class="sm:col-span-2">
+                <div class="flex items-center gap-2">
+                    <label class="flex items-center gap-2 text-sm text-primary-700">от
+                        <input class="cm-input w-20" type="number" min="0" max="99" aria-label="Средства от" aria-invalid="@_state.Invalid("credit")" @bind="o.CreditRatingMin" />
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-primary-700">до
+                        <input class="cm-input w-20" type="number" min="0" max="99" aria-label="Средства до" @bind="o.CreditRatingMax" />
+                    </label>
+                </div>
             </Field>
-            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="o.Source" /></Field>
-            <div class="sm:col-span-2 lg:col-span-4"><EraPicker Show="_state.ErasVary" @bind-Values="o.Eras" /></div>
-            <Field Label="Навыки профессии" Group="true" class="sm:col-span-2 lg:col-span-4"
-                   Note="Нужно ровно восемь; Средства — не слот, их задаёт диапазон.">
+            <Field Label="Источник" Note="Книга и страница." class="sm:col-span-2"><input class="cm-input" @bind="o.Source" /></Field>
+            <div class="cm-field sm:col-span-2">
+                <span class="cm-field-label max-sm:hidden" aria-hidden="true">&nbsp;</span>
+                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="o.IsLovecraftian" /><span>@Terms.FromLovecraft</span></label>
+            </div>
+            <div class="sm:col-span-6"><EraPicker Show="_state.ErasVary" @bind-Values="o.Eras" /></div>
+            <Field Label="Навыки профессии" Group="true" class="sm:col-span-6"
+                   Note="Ровно восемь навыков; Средства — выше, диапазоном.">
                 <OccupationSlotsEditor Slots="o.Slots" SlotsChanged="v => o.Slots = v" Skills="_skills" />
             </Field>
-            <Field Label="Теги" Group="true" class="sm:col-span-2 lg:col-span-4" Note="Для взвешенного выбора навыков в случайном черновике сыщика.">
-                <StringListEditor Values="o.Tags" ValuesChanged="v => o.Tags = [.. v]" ItemLabel="Тег" Placeholder="Научная, Боевая…" />
+            <Field Label="Теги" Group="true" class="sm:col-span-6" Note="Для взвешенного выбора навыков в случайном черновике сыщика.">
+                <StringListEditor Values="o.Tags" ValuesChanged="v => o.Tags = [.. v]" ItemLabel="Тег" Chips="true" Placeholder="Научная, Боевая…" />
             </Field>
         </div>
     };

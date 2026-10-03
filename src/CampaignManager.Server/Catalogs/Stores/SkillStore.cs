@@ -34,9 +34,9 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
         var children = await db.Skills.AsNoTracking().Where(s => s.ParentId == id).Select(s => s.Name).ToListAsync(cancellationToken);
         return
         [
-            .. weapons.Order().Select(n => $"оружие «{n}»"),
-            .. occupations.Order().Select(n => $"профессия «{n}»"),
-            .. children.Order().Select(n => $"специализация «{n}»"),
+            .. weapons.Order().Select(n => $"оружие {n}"),
+            .. occupations.Order().Select(n => $"профессия {n}"),
+            .. children.Order().Select(n => $"специализация {n}"),
         ];
     }
 
