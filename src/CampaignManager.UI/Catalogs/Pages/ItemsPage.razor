@@ -9,7 +9,7 @@
              Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
              New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore" State="_state">
     <Columns Context="view">
-        <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[32%]" Context="item">
+        <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[50%]" Context="item">
             <span class="font-medium text-primary-800">@item.Name</span>
             @if (view.ShowEra)
             {
@@ -19,13 +19,18 @@
             {
                 <i class="fa-regular fa-image ml-1.5 text-primary-400" role="img" aria-label="Есть картинка"></i>
             }
+            @* Описание — строкой под названием, а не своим столбцом: после переноса цены оно есть у единиц, и пустой
+               столбец занимал 450px. Длинное — в раскрытии. *@
+            @if (!string.IsNullOrWhiteSpace(item.Description))
+            {
+                <p class="cm-meta line-clamp-2">@item.Description</p>
+            }
         </DataColumn>
         @if (!view.IsFixed("type"))
         {
             <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" Context="item">@item.Type</DataColumn>
         }
         <DataColumn TItem="ItemDto" Title="Цена" SortBy="i => i.Price ?? decimal.MaxValue" HeaderClass="w-[11%] whitespace-nowrap" CellClass="whitespace-nowrap" AlignEnd="true" Context="item">@PriceText.Format(item.Price)</DataColumn>
-        <DataColumn TItem="ItemDto" Title="Описание" CellClass="cm-clip text-primary-600" Context="item">@item.Description</DataColumn>
     </Columns>
     <CardTemplate Context="item">
         <p class="font-medium text-primary-800">@item.Name</p>
@@ -41,7 +46,7 @@
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="item.Name" />
             </Field>
             <Field Label="Тип" Note="Выберите из списка или впишите новый."><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
-            <Field Label="Цена" Hint="($, 1920-е)" Note="Пусто — цена не указана. Условия («за ночь», «от») — в описании.">
+            <Field Label="Цена" Hint="($)" Note="Пусто — цена не указана. Условия («за ночь», «от») — в описании.">
                 <input class="cm-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="9,50" @bind="item.Price" />
             </Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="item.Source" /></Field>
@@ -62,8 +67,8 @@
 </CatalogPage>
 
 @code {
-    /// <summary>Столько описания входит в колонку на портрете iPad (замер v1).</summary>
-    private const int VisibleDescription = 60;
+    /// <summary>Столько описания входит под названием в две строки : длиннее — в раскрытие.</summary>
+    private const int VisibleDescription = 80;
 
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<CatalogFilter<ItemDto>> _filters = [];
@@ -85,9 +90,9 @@
         {
             <img src="@item.ImageUrl" alt="@item.Name" class="max-h-72 max-w-full rounded-md" loading="lazy" />
         }
-        else
+        @if (!string.IsNullOrWhiteSpace(item.Description))
         {
-            <span class="cm-text-muted">Описание раскрыто в строке.</span>
+            <p class="@(item.ImageUrl is not null ? "mt-2 " : "")whitespace-pre-line text-sm text-primary-700">@item.Description</p>
         }
     };
 }

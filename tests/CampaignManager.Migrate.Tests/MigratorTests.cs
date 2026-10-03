@@ -6,6 +6,7 @@ using CampaignManager.Core.Documents;
 using CampaignManager.Core.Identity;
 using CampaignManager.Core.Scenarios;
 using CampaignManager.Data;
+using CampaignManager.Migrate.Catalogs;
 using CampaignManager.Migrate.Files;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -111,25 +112,41 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Equal("DEX/2", (await db.Skills.SingleAsync(s => s.Code == SkillCodes.Dodge, Token)).BaseFormula);
         Assert.All(await db.Skills.ToListAsync(Token), s => Assert.Equal([Era.Classic], s.Eras));
 
-        var occupation = await db.Occupations.Include(o => o.Slots).ThenInclude(s => s.Options).SingleAsync(Token);
-        Assert.Equal("occupation.private-investigator", occupation.Code);
-        Assert.Equal(["Academic", "Social"], occupation.Tags);
-        Assert.Equal(
-            [OccupationSlotKind.AnySpecialization, OccupationSlotKind.Specialization, OccupationSlotKind.Skill,
-             OccupationSlotKind.Choice, OccupationSlotKind.Social, OccupationSlotKind.Free],
-            occupation.Slots.OrderBy(s => s.Ord).Select(s => s.Kind));
-        Assert.Equal(2, occupation.Slots.Single(s => s.Kind == OccupationSlotKind.Choice).Options.Count);
+        // Профессии сразу как после «С правилами»: книжная — по сиду, Средства — не слот, теги русские
+        var occupations = await db.Occupations.Include(o => o.Slots).ThenInclude(s => s.Options).ToListAsync(Token);
+        var occupation = occupations.Single(o => o.Code == "occupation.private-investigator");
+        var seed = OccupationSeed.Rows.Single(r => r.Code == "occupation.private-investigator");
+        Assert.Equal((seed.Formula, seed.CreditRatingMin, seed.CreditRatingMax), (occupation.SkillPointsFormula, occupation.CreditRatingMin, occupation.CreditRatingMax));
+        Assert.Equal(OccupationTags.Translate(seed.Tags), occupation.Tags);
+        Assert.DoesNotContain(occupations.SelectMany(o => o.Slots), s => s.SkillId == V1Fixture.CreditRating);
+        Assert.Equal(seed.Social, occupation.Slots.Count(s => s.Kind == OccupationSlotKind.Social));
+        Assert.Equal(seed.Free, occupation.Slots.Count(s => s.Kind == OccupationSlotKind.Free));
+        Assert.All(occupations.SelectMany(o => o.Tags), tag => Assert.DoesNotMatch("^[A-Za-z]+$", tag));
+
+        // Самодельная профессия: слот Средств убран, теги переведены, остальное как в v1
+        var homebrew = occupations.Single(o => o.Code is null);
+        Assert.Equal(["Научная", "Социальная"], homebrew.Tags);
+        Assert.Equal([OccupationSlotKind.AnySpecialization], homebrew.Slots.Select(s => s.Kind));
+        Assert.Equal(0, homebrew.Slots.Single().Ord);
+
+        // Заклинания: тип — первый из составных, остальное — «Также: …», стоимость в ПМ
+        var spells = await db.Spells.ToDictionaryAsync(s => s.Name, Token);
+        Assert.Equal(("Атака", "10 ПМ, 1d4 рассудка", "напев\n\nТакже: Проклятие."), (spells["Свой напев"].SpellType, spells["Свой напев"].Cost, spells["Свой напев"].Description));
+        Assert.Equal(("Связь", "ПМ варьирует, 5 МОЩ", "Также: с божеством."), (spells["Свой зов"].SpellType, spells["Свой зов"].Cost, spells["Свой зов"].Description));
+        Assert.Equal("1 ПМ", spells["Знак Старших богов"].Cost);
 
         var weapon = await db.Weapons.SingleAsync(Token);
         Assert.Equal(("weapon.38-or-9mm-revolver", 25m, (decimal?)null, "", 100, 15), (weapon.Code, weapon.CostClassic!.Value, weapon.CostModern, weapon.Notes, weapon.Malfunction!.Value, weapon.BaseRangeM!.Value));
         Assert.Equal(V1Fixture.Handgun, weapon.SkillId);
+        Assert.Null(weapon.Source); // страницы книги в v1 не было: пусто, в интерфейсе «—»
 
         var book = await db.Books.Include(b => b.Spells).SingleAsync(Token);
         Assert.Equal(1, book.Spells.Count(s => s.SpellId != null));
         Assert.Equal(2, book.Spells.Count);
 
         var items = (await db.Items.ToListAsync(Token)).OrderBy(i => i.Name, StringComparer.Ordinal).ToList();
-        Assert.Equal(["«Форд» Model T", "Аккордеон", "Фляга"], items.Select(i => i.Name));
+        Assert.Equal(["«Форд» Model T", "Аккордеон", "Иномарка на пробу", "Фляга"], items.Select(i => i.Name));
+        Assert.Equal("Транспорт", items.Single(i => i.Name == "Иномарка на пробу").Type);
         Assert.Equal("Развлечения", items.Single(i => i.Name == "Аккордеон").Type);
         Assert.Equal("item.canteen", items.Single(i => i.Name == "Фляга").Code);
 
@@ -224,6 +241,11 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Single(report.Sections[ReportSections.MovedToScenario]);
         Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("запись закрыта", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.Files], l => l.Contains("missing.jpg", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("по правилам книги", StringComparison.Ordinal) && l.Contains("теги", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("Средства убраны из слотов", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.StartsWith("заклинания: составной тип", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.StartsWith("заклинания: стоимость в ПМ", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("«Иномарки» → «Транспорт»", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.Warnings], l => l.Contains("Хиромантия", StringComparison.Ordinal));
         Assert.DoesNotContain("@example.test", report.ToMarkdown(DateTimeOffset.UnixEpoch), StringComparison.Ordinal);
     }

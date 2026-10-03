@@ -138,7 +138,7 @@
                                         </select>
                                     </Field>
                                     <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать атаку: {attack.Name}")"
-                                            OnClick="() => s.Attacks.RemoveAt(index)" />
+                                            OnClick="() => RemoveWithUndo(s.Attacks, index, attack.Name)" />
                                 </div>
                                 <textarea class="cm-input w-full" rows="2" placeholder="Описание атаки (как в бестиарии)" aria-label="@($"Описание атаки: {attack.Name}")"
                                           @bind="attack.Description"></textarea>
@@ -161,7 +161,7 @@
                                 <input class="cm-input min-w-40 flex-1" aria-label="Навык" placeholder="Внимание" @bind="skill.Name" />
                                 <input class="cm-input w-24" type="number" min="0" aria-label="Значение навыка, %" @bind="skill.Value" />
                                 <input class="cm-input min-w-32 flex-1" aria-label="Оговорка навыка" placeholder="оговорка книги" @bind="skill.Note" />
-                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать навык: {skill.Name}")" OnClick="() => s.Skills.RemoveAt(index)" />
+                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать навык: {skill.Name}")" OnClick="() => RemoveWithUndo(s.Skills, index, skill.Name)" />
                             </div>
                         }
                         <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Skills.Add(new CreatureSkill())">Добавить навык</Button></div>
@@ -180,7 +180,7 @@
                             <div class="flex flex-wrap items-start gap-2" @key="ability">
                                 <input class="cm-input w-full sm:w-56" aria-label="Умение" placeholder="Регенерация" @bind="ability.Name" />
                                 <textarea class="cm-input min-w-48 flex-1" rows="3" aria-label="@($"Описание: {ability.Name}")" @bind="ability.Text"></textarea>
-                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать умение: {ability.Name}")" OnClick="() => s.SpecialAbilities.RemoveAt(index)" />
+                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать умение: {ability.Name}")" OnClick="() => RemoveWithUndo(s.SpecialAbilities, index, ability.Name)" />
                             </div>
                         }
                         <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.SpecialAbilities.Add(new SpecialAbility())">Добавить особое умение</Button></div>
@@ -233,12 +233,12 @@
                         </Actions>
                     </Alert>
                 }
-                <div class="flex flex-wrap items-center justify-end gap-3">
+                <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                     @if (_attempt > 0)
                     {
                         <FormErrors Errors="[.. errors.Values]" Attempt="_attempt" Container=".cr-edit" />
                     }
-                    <Button Variant="ButtonVariant.Ghost" Icon="fa-eye" OnClick="() => _preview = true">Как будет в бестиарии</Button>
+                    <Button Variant="ButtonVariant.Ghost" Icon="fa-eye" AriaLabel="Как будет в бестиарии" OnClick="() => _preview = true"><span class="hidden sm:inline">Как будет в бестиарии</span></Button>
                     <Button Variant="ButtonVariant.Secondary" OnClick="LeaveAsync">Отмена</Button>
                     <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
                 </div>
@@ -269,6 +269,23 @@
 
 @code {
     private bool _preview;
+
+    /// <summary>
+    /// Убрать строку списка твари и дать вернуть её: корзина без вопроса, зато тост «Убрано: … — Отменить» (8 с). Диалог
+    /// на каждую атаку замедлял бы правку статблока, а несохранённую страницу и так можно закрыть без записи.
+    /// </summary>
+    private void RemoveWithUndo<T>(List<T> list, int index, string? name)
+    {
+        var item = list[index];
+        var what = item switch { CreatureAttack => "атака", CreatureSkill => "навык", _ => "умение" };
+        list.RemoveAt(index);
+        Toasts.Removed(string.IsNullOrWhiteSpace(name) ? what : name, () =>
+        {
+            list.Insert(Math.Min(index, list.Count), item);
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
+    }
 
     private static readonly System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto> CreatureJson =
         (System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto>)CampaignManager.Contracts.ContractsJsonContext.Default.GetTypeInfo(typeof(CreatureDto))!;

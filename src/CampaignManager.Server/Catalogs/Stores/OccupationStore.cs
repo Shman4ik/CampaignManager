@@ -187,59 +187,37 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
         var byCode = await db.Skills.AsNoTracking().Where(s => s.Code != null)
             .ToDictionaryAsync(s => s.Code!, s => (s.Id, s.Name), cancellationToken);
 
-        return OccupationSeed.Rows.Select(row =>
+        OccupationSlotDto Dto(OccupationSeedSlot slot) => slot.Kind switch
         {
-            List<OccupationSlotDto> slots = [];
-            foreach (var name in row.Skills)
+            OccupationSlotKind.Choice => new OccupationSlotDto
             {
-                slots.Add(SeedSlot(name, byCode));
-            }
-
-            foreach (var choice in row.Choices)
-            {
-                var options = choice.Options.Select(o => OccupationSeed.ResolveSkill(o)?.Code).ToList();
-                slots.Add(new OccupationSlotDto
-                {
-                    Kind = OccupationSlotKind.Choice,
-                    ChooseCount = choice.Count,
-                    Options = options.Select(c => c is not null && byCode.TryGetValue(c, out var s) ? s.Id : Guid.Empty).ToList(),
-                    OptionNames = [.. choice.Options],
-                });
-            }
-
-            slots.AddRange(Enumerable.Repeat(0, row.Social).Select(_ => new OccupationSlotDto { Kind = OccupationSlotKind.Social }));
-            slots.AddRange(Enumerable.Repeat(0, row.Free).Select(_ => new OccupationSlotDto { Kind = OccupationSlotKind.Free }));
-            return new OccupationDto
-            {
-                Code = row.Code,
-                Name = row.Name,
-                SkillPointsFormula = row.Formula,
-                CreditRatingMin = row.CreditRatingMin,
-                CreditRatingMax = row.CreditRatingMax,
-                Eras = [.. row.Eras.Where(Enum.IsDefined)],
-                IsLovecraftian = row.IsLovecraftian,
-                Tags = [.. row.Tags],
-                Slots = slots,
-            };
-        }).ToList();
-    }
-
-    private static OccupationSlotDto SeedSlot(string name, Dictionary<string, (Guid Id, string Name)> byCode)
-    {
-        var resolved = OccupationSeed.ResolveSkill(name);
-        var found = resolved is { } r && byCode.TryGetValue(r.Code, out var skill) ? skill : default;
-        return resolved switch
-        {
-            { Specialization: { } spec } => new OccupationSlotDto
-            {
-                Kind = OccupationSlotKind.Specialization, SkillId = found.Id, SkillName = found.Name ?? name, Specialization = spec,
+                Kind = slot.Kind,
+                ChooseCount = slot.ChooseCount,
+                Options = [.. slot.Options.Select(o => o.Code is not null && byCode.TryGetValue(o.Code, out var s) ? s.Id : Guid.Empty)],
+                OptionNames = [.. slot.Options.Select(o => o.Name)],
             },
-            { Code: var code } when OccupationSeed.HasSpecializations(code) => new OccupationSlotDto
+            OccupationSlotKind.Social or OccupationSlotKind.Free => new OccupationSlotDto { Kind = slot.Kind },
+            _ => new OccupationSlotDto
             {
-                Kind = OccupationSlotKind.AnySpecialization, SkillId = found.Id, SkillName = found.Name ?? name,
+                Kind = slot.Kind,
+                SkillId = slot.SkillCode is not null && byCode.TryGetValue(slot.SkillCode, out var found) ? found.Id : Guid.Empty,
+                SkillName = slot.SkillCode is not null && byCode.TryGetValue(slot.SkillCode, out var named) ? named.Name : slot.SkillName,
+                Specialization = slot.Specialization,
             },
-            _ => new OccupationSlotDto { Kind = OccupationSlotKind.Skill, SkillId = found.Id, SkillName = found.Name ?? name },
         };
+
+        return OccupationSeed.Rows.Select(row => new OccupationDto
+        {
+            Code = row.Code,
+            Name = row.Name,
+            SkillPointsFormula = row.Formula,
+            CreditRatingMin = row.CreditRatingMin,
+            CreditRatingMax = row.CreditRatingMax,
+            Eras = [.. row.Eras.Where(Enum.IsDefined)],
+            IsLovecraftian = row.IsLovecraftian,
+            Tags = OccupationTags.Translate(row.Tags),
+            Slots = [.. OccupationSeed.SlotsOf(row).Select(Dto)],
+        }).ToList();
     }
 
     private static async Task<SkillCatalog> SkillCatalogAsync(CmDbContext db, CancellationToken cancellationToken) =>

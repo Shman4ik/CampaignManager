@@ -21,15 +21,10 @@
         <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[12%]" Context="b">@Dash(b.Language)</DataColumn>
         <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[16%]" Context="b">@Dash(b.Author)</DataColumn>
         <DataColumn TItem="BookDto" Title="@Terms.SanityLoss" HeaderClass="whitespace-normal" Context="b"><DiceText Value="@b.SanityLoss" /></DataColumn>
-        @if (ShowMythos(view))
+        @* Четыре числовых столбца были пусты у 70–90% книг и отнимали треть ширины: одно «Числа» — только то, что есть. *@
+        @if (ShowNumbers(view))
         {
-            <DataColumn TItem="BookDto" Title="Мифы (начальное)" HeaderClass="whitespace-normal" SortBy="b => b.MythosInitial" AlignEnd="true" Context="b">@Plus(b.MythosInitial)</DataColumn>
-            <DataColumn TItem="BookDto" Title="Мифы (полное)" HeaderClass="whitespace-normal" SortBy="b => b.MythosFull" AlignEnd="true" Context="b">@Plus(b.MythosFull)</DataColumn>
-            <DataColumn TItem="BookDto" Title="Значение Мифов" HeaderClass="whitespace-normal" SortBy="b => b.MythosRating" AlignEnd="true" Context="b">@b.MythosRating</DataColumn>
-        }
-        @if (ShowOccultism(view))
-        {
-            <DataColumn TItem="BookDto" Title="Оккультизм" HeaderClass="whitespace-normal" SortBy="b => b.OccultismBonus" AlignEnd="true" Context="b">@Plus(b.OccultismBonus)</DataColumn>
+            <DataColumn TItem="BookDto" Title="Мифы (чтение, значение) / Оккультизм" HeaderClass="w-[26%] whitespace-normal" SortBy="b => b.MythosRating ?? b.OccultismBonus" Context="b">@Numbers(b)</DataColumn>
         }
     </Columns>
     <CardTemplate Context="b">
@@ -79,13 +74,19 @@
 
     private readonly CatalogFormState _state = new();
 
-    // Столбец без данных не рисуем: у большинства книг эти числа пусты, а пустая колонка отнимает ширину у названия.
-    private static bool ShowMythos(CatalogView<BookDto> view) =>
-        view.Filters.GetValueOrDefault("type") != nameof(BookType.OccultBook)
-        && view.Filtered.Any(b => b.MythosInitial is not null || b.MythosFull is not null || b.MythosRating is not null);
+    // Столбец без данных не рисуем (ни одной книги в выдаче с числами); внутри — только то, что у книги есть.
+    private static bool ShowNumbers(CatalogView<BookDto> view) =>
+        view.Filtered.Any(b => b.MythosInitial is not null || b.MythosFull is not null || b.MythosRating is not null || b.OccultismBonus is not null);
 
-    private static bool ShowOccultism(CatalogView<BookDto> view) =>
-        view.Filters.GetValueOrDefault("type") != nameof(BookType.MythosBook) && view.Filtered.Any(b => b.OccultismBonus is not null);
+    private static string Numbers(BookDto b)
+    {
+        List<string> parts = [];
+        if (b.MythosInitial is not null) parts.Add($"начальное {Plus(b.MythosInitial)}");
+        if (b.MythosFull is not null) parts.Add($"полное {Plus(b.MythosFull)}");
+        if (b.MythosRating is not null) parts.Add($"значение {b.MythosRating}");
+        if (b.OccultismBonus is not null) parts.Add($"Оккультизм {Plus(b.OccultismBonus)}");
+        return parts.Count == 0 ? "—" : string.Join(" · ", parts);
+    }
 
     private static string Dash(string? text) => string.IsNullOrWhiteSpace(text) ? "—" : text;
 

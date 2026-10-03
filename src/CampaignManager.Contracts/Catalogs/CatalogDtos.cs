@@ -238,7 +238,12 @@ public sealed class ItemDto : CatalogItemDto
     public string? Description { get; set; }
 
     /// <summary>Цена в долларах 1920-х; null — не указана.</summary>
-    public decimal? Price { get; set; }
+    /// <summary>Цена без хвоста нулей: 9000.00 в поле формы — «9000» (число то же, сравнение черновика не видит разницы).</summary>
+    public decimal? Price
+    {
+        get;
+        set => field = value / 1.0000000000000000000000000000m;
+    }
 
     public Guid? ImageFileId { get; set; }
 

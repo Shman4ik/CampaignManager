@@ -34,6 +34,13 @@ public abstract class CatalogStore<TEntity, TDto>
     /// <summary>Чем занята запись, когда её нельзя удалить: «оружием или профессиями».</summary>
     public virtual string UsedBy => "другими записями";
 
+    /// <summary>
+    /// Кто именно держит запись («оружие «Кольт»», «профессия «Врач»»): имена до пяти штук, чтобы отказ при удалении
+    /// говорил, что убрать. У справочников, где это не посчитано, пусто — остаётся общее «используется …».
+    /// </summary>
+    public virtual Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
+
     public abstract DbSet<TEntity> Set(CmDbContext db);
 
     /// <summary>Запрос с детьми (слоты, заклинания книги, картинки) — для чтения и правки.</summary>

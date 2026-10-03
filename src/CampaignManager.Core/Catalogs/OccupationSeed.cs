@@ -247,6 +247,39 @@ public static partial class OccupationSeed
             : null;
     }
 
+    /// <summary>
+    /// Слоты профессии сида по порядку: названные навыки, выборы, социальные, свободные. Одна раскладка для
+    /// «С правилами» на сервере и для переноса v1: оба превращают коды навыков в id своей базы.
+    /// </summary>
+    public static IReadOnlyList<OccupationSeedSlot> SlotsOf(OccupationSeedRow row)
+    {
+        List<OccupationSeedSlot> slots = [];
+        foreach (var name in row.Skills)
+        {
+            var resolved = ResolveSkill(name);
+            slots.Add(resolved switch
+            {
+                { Specialization: { } spec } => new OccupationSeedSlot(OccupationSlotKind.Specialization) { SkillCode = resolved.Value.Code, SkillName = name, Specialization = spec },
+                { Code: var code } when HasSpecializations(code) => new OccupationSeedSlot(OccupationSlotKind.AnySpecialization) { SkillCode = code, SkillName = name },
+                { Code: var code } => new OccupationSeedSlot(OccupationSlotKind.Skill) { SkillCode = code, SkillName = name },
+                _ => new OccupationSeedSlot(OccupationSlotKind.Skill) { SkillName = name },
+            });
+        }
+
+        foreach (var choice in row.Choices)
+        {
+            slots.Add(new OccupationSeedSlot(OccupationSlotKind.Choice)
+            {
+                ChooseCount = choice.Count,
+                Options = [.. choice.Options.Select(o => (ResolveSkill(o)?.Code, o))],
+            });
+        }
+
+        slots.AddRange(Enumerable.Range(0, row.Social).Select(_ => new OccupationSeedSlot(OccupationSlotKind.Social)));
+        slots.AddRange(Enumerable.Range(0, row.Free).Select(_ => new OccupationSeedSlot(OccupationSlotKind.Free)));
+        return slots;
+    }
+
     /// <summary>Есть ли у навыка специализации в таблице кодов — тогда слот «Стрельба» значит «любая стрельба».</summary>
     public static bool HasSpecializations(string code) =>
         SkillCodes.BookNames.Keys.Any(other => other.StartsWith(code + ".", StringComparison.Ordinal));
@@ -284,3 +317,51 @@ public sealed record OccupationSeedRow(string Code, SkillPointsFormula Formula, 
 
 /// <summary>«Выбрать <paramref name="Count"/> из перечисленных».</summary>
 public sealed record OccupationSeedChoice(int Count, IReadOnlyList<string> Options);
+
+/// <summary>
+/// Слот профессии сида: навык — кодом справочника (<see cref="SkillCode"/> пуст, если имя не распознано).
+/// </summary>
+public sealed record OccupationSeedSlot(OccupationSlotKind Kind)
+{
+    public string? SkillCode { get; init; }
+
+    public string? SkillName { get; init; }
+
+    public string? Specialization { get; init; }
+
+    public int ChooseCount { get; init; } = 1;
+
+    public IReadOnlyList<(string? Code, string Name)> Options { get; init; } = [];
+}
+
+/// <summary>
+/// Теги профессий по-русски (решение владельца 2026-10-03): ключи — английские имена битов тега v1 и сида,
+/// в справочник они попадают уже переведёнными. Незнакомый тег (своё слово Хранителя) остаётся как есть.
+/// </summary>
+public static class OccupationTags
+{
+    private static readonly Dictionary<string, string> Russian = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Academic"] = "Научная",
+        ["Social"] = "Социальная",
+        ["Combat"] = "Боевая",
+        ["Physical"] = "Физическая",
+        ["Stealth"] = "Скрытная",
+        ["Technical"] = "Техническая",
+        ["Medical"] = "Медицинская",
+        ["Investigative"] = "Расследовательская",
+        ["Artistic"] = "Творческая",
+        ["Occult"] = "Оккультная",
+        ["Outdoor"] = "На природе",
+        ["Criminal"] = "Криминальная",
+        ["Language"] = "Языковая",
+        ["Nautical"] = "Морская",
+        ["Scholarly"] = "Книжная",
+    };
+
+    public static string Translate(string tag) => Russian.GetValueOrDefault(tag.Trim(), tag.Trim());
+
+    /// <summary>Перевод списка без повторов с сохранением порядка.</summary>
+    public static List<string> Translate(IEnumerable<string> tags) =>
+        [.. tags.Select(Translate).Where(t => t.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];
+}

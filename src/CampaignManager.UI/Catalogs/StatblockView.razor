@@ -139,15 +139,27 @@
         get
         {
             var s = Statblock;
-            yield return (Terms.DamageBonusTitle, string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus, null);
-            yield return (Terms.Build, s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture), null);
+            // Нули «Бонус к урону: 0» и «Комплекция: 0» не рисуем: у твари без значения они читались как данные.
+            if (!string.IsNullOrWhiteSpace(s.DamageBonus) && s.DamageBonus.Trim() != "0")
+            {
+                yield return (Terms.DamageBonusTitle, s.DamageBonus, null);
+            }
+
+            if (s.Build != 0)
+            {
+                yield return (Terms.Build, s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture), null);
+            }
+
             if (Speed(s.Speed) is { } speed)
             {
                 yield return (Terms.Speed, speed, null);
             }
 
             yield return (Terms.AttacksPerRound, $"{s.AttacksPerRound}", s.AttacksPerRoundNote);
-            yield return ("Броня", s.Armor > 0 ? $"{s.Armor}" : Terms.None, s.ArmorNote);
+            // Без числа и с оговоркой — одна оговорка («Брони нет, но регенерирует…»), а не «—» и её же пересказ рядом.
+            yield return s.Armor > 0 || string.IsNullOrWhiteSpace(s.ArmorNote)
+                ? ("Броня", s.Armor > 0 ? $"{s.Armor}" : Terms.None, s.ArmorNote)
+                : ("Броня", s.ArmorNote!, null);
             if (s.Dodge > 0)
             {
                 yield return (Terms.Dodge, $"{s.Dodge}%", null);

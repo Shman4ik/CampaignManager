@@ -153,12 +153,13 @@ public static partial class CatalogStep
                 CreditRatingMax = max,
                 Eras = [.. Classic],
                 IsLovecraftian = row.Bool("IsLovecraftian"),
-                Tags = OccupationSlots.Tags(row.Int("Tags") ?? 0),
+                Tags = OccupationTags.Translate(OccupationSlots.Tags(row.Int("Tags") ?? 0)),
                 CreatedAt = row.Time("CreatedAt") ?? default,
                 UpdatedAt = row.Time("LastUpdated") ?? default,
             };
             occupation.Slots = OccupationSlots.Build(row, s.SkillCatalog, s.Resolver,
                 problem => s.Report.Add(ReportSections.Warnings, $"профессия «{occupation.Name}»: {problem}"));
+            ApplyRules(s, occupation);
             foreach (var slot in occupation.Slots.Where(slot => slot.Kind == Core.Catalogs.OccupationSlotKind.Specialization))
             {
                 s.Report.Add(ReportSections.Fixed,
@@ -172,6 +173,107 @@ public static partial class CatalogStep
 
         s.Report.Count("games.Occupations", s.V1.Occupations.Count, "occupations", s.Occupations.Count, $"минус только современные; слотов — {slots}");
     }
+
+    /// <summary>
+    /// Профессия сразу в виде после «С правилами» (решение владельца 2026-10-03): у книжной — формула, Средства,
+    /// слоты, теги и признак из сида Core (та же раскладка <see cref="OccupationSeed.SlotsOf"/>, что у сервера),
+    /// Средства — не слот; у самодельной слот Средств убирается, теги переводятся.
+    /// </summary>
+    private static void ApplyRules(MigrationState s, Occupation occupation)
+    {
+        var row = occupation.Code is null ? null : OccupationSeed.Rows.FirstOrDefault(r => r.Code == occupation.Code);
+        var creditId = s.SkillCatalog.FindByCode(SkillCodes.CreditRating)?.Id;
+        List<string> changed = [];
+        var oldTags = occupation.Tags;
+        if (row is null)
+        {
+            if (occupation.Slots.RemoveAll(slot => slot.Kind == Core.Catalogs.OccupationSlotKind.Skill && slot.SkillId == creditId) > 0)
+            {
+                changed.Add("Средства убраны из слотов");
+                for (var i = 0; i < occupation.Slots.Count; i++)
+                {
+                    occupation.Slots[i].Ord = i;
+                }
+            }
+
+            occupation.Tags = OccupationTags.Translate(oldTags);
+        }
+        else
+        {
+            if (occupation.SkillPointsFormula != row.Formula)
+            {
+                changed.Add("формула очков");
+            }
+
+            if (occupation.CreditRatingMin != row.CreditRatingMin || occupation.CreditRatingMax != row.CreditRatingMax)
+            {
+                changed.Add("Средства от/до");
+            }
+
+            occupation.SkillPointsFormula = row.Formula;
+            occupation.CreditRatingMin = row.CreditRatingMin;
+            occupation.CreditRatingMax = row.CreditRatingMax;
+            occupation.IsLovecraftian = row.IsLovecraftian;
+            occupation.Tags = OccupationTags.Translate(row.Tags);
+
+            Guid? Id(string? code) => code is null ? null : s.SkillCatalog.FindByCode(code)?.Id;
+            var slots = new List<OccupationSlot>();
+            foreach (var slot in OccupationSeed.SlotsOf(row))
+            {
+                var made = new OccupationSlot { Kind = slot.Kind, Ord = slots.Count, ChooseCount = slot.ChooseCount, Specialization = slot.Specialization };
+                if (slot.Kind == Core.Catalogs.OccupationSlotKind.Choice)
+                {
+                    foreach (var option in slot.Options)
+                    {
+                        if (Id(option.Code) is { } optionId)
+                        {
+                            made.Options.Add(new OccupationSlotOption { SkillId = optionId });
+                        }
+                        else
+                        {
+                            s.Report.Add(ReportSections.Warnings, $"профессия «{occupation.Name}»: вариант сида «{option.Name}» не найден в справочнике");
+                        }
+                    }
+                }
+                else if (slot.Kind is Core.Catalogs.OccupationSlotKind.Skill or Core.Catalogs.OccupationSlotKind.AnySpecialization
+                         or Core.Catalogs.OccupationSlotKind.Specialization)
+                {
+                    if (Id(slot.SkillCode) is not { } skillId)
+                    {
+                        s.Report.Add(ReportSections.Warnings, $"профессия «{occupation.Name}»: навык сида «{slot.SkillName}» не найден в справочнике — слот не перенесён");
+                        continue;
+                    }
+
+                    made.SkillId = skillId;
+                }
+
+                slots.Add(made);
+            }
+
+            if (!SlotsEqual(occupation.Slots, slots))
+            {
+                changed.Add("слоты навыков");
+            }
+
+            occupation.Slots = slots;
+        }
+
+        if (!oldTags.SequenceEqual(occupation.Tags))
+        {
+            changed.Add("теги");
+        }
+
+        if (changed.Count > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"профессия «{occupation.Name}»: по правилам книги — {string.Join(", ", changed)}");
+        }
+    }
+
+    private static bool SlotsEqual(List<OccupationSlot> a, List<OccupationSlot> b) =>
+        a.Count == b.Count && a.Zip(b).All(p =>
+            p.First.Kind == p.Second.Kind && p.First.SkillId == p.Second.SkillId && p.First.Specialization == p.Second.Specialization
+            && p.First.ChooseCount == p.Second.ChooseCount
+            && p.First.Options.Select(o => o.SkillId).Order().SequenceEqual(p.Second.Options.Select(o => o.SkillId).Order()));
 
     private static void Weapons(MigrationState s)
     {
@@ -277,6 +379,7 @@ public static partial class CatalogStep
 
     private static void Spells(MigrationState s)
     {
+        int splitTypes = 0, unitCosts = 0;
         foreach (var row in s.V1.Spells)
         {
             var v1Name = row.Text("Name")!;
@@ -286,16 +389,29 @@ public static partial class CatalogStep
                 s.Report.Add(ReportSections.Homebrew, $"заклинание «{v1Name}»");
             }
 
+            var (spellType, also) = SpellRules.SplitType(row.Text("SpellType"));
+            if (also is not null)
+            {
+                splitTypes++;
+            }
+
+            var costV1 = TextRules.GreaterOrEqual(row.Text("Cost"));
+            var cost = SpellRules.Cost(costV1);
+            if (cost != costV1)
+            {
+                unitCosts++;
+            }
+
             var spell = new Spell
             {
                 Id = row.Guid("Id")!.Value,
                 Code = code,
                 Name = NameFor(SpellCodes.Table, code, v1Name, "заклинание", s.Report),
                 AltNames = row.Strings("AlternativeNames"),
-                SpellType = row.Text("SpellType") ?? "",
-                Cost = TextRules.GreaterOrEqual(row.Text("Cost")),
+                SpellType = spellType,
+                Cost = cost,
                 CastingTime = row.Text("CastingTime"),
-                Description = TextRules.GreaterOrEqual(row.Str("Description")) ?? "",
+                Description = SpellRules.AppendAlso(TextRules.GreaterOrEqual(row.Str("Description")) ?? "", also),
                 CreatedAt = row.Time("CreatedAt") ?? default,
                 UpdatedAt = row.Time("LastUpdated") ?? default,
             };
@@ -307,6 +423,16 @@ public static partial class CatalogStep
         if (gte > 0)
         {
             s.Report.Add(ReportSections.Fixed, $"заклинания: «>=» → «≥» в стоимости и описании — {gte}");
+        }
+
+        if (splitTypes > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"заклинания: составной тип («Атака/Проклятие») — первый из составных, остальные строкой «Также: …» в описание — {splitTypes}");
+        }
+
+        if (unitCosts > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"заклинания: стоимость в ПМ вместо «магии» — {unitCosts}");
         }
 
         s.Report.Count("games.Spells", s.V1.Spells.Count, "spells", s.Spells.Count);
@@ -368,10 +494,9 @@ public static partial class CatalogStep
 
     private static void Items(MigrationState s)
     {
-        List<string> movedTypes = [];
+        Dictionary<string, List<string>> movedTypes = [];
         List<string> conditional = [];
         var priced = 0;
-        var movedFrom = "";
         foreach (var row in s.V1.Items)
         {
             var v1Name = row.Text("Name")!;
@@ -402,8 +527,9 @@ public static partial class CatalogStep
             var type = row.Text("Type");
             if (type is not null && OwnerDecisions.ItemTypeFixes.TryGetValue(type, out var fixedType))
             {
-                movedTypes.Add($"«{v1Name}»");
-                movedFrom = $"«{type}» → «{fixedType}»";
+                var move = $"«{type}» → «{fixedType}»";
+                movedTypes.TryAdd(move, []);
+                movedTypes[move].Add($"«{v1Name}»");
                 type = fixedType;
             }
 
@@ -451,9 +577,9 @@ public static partial class CatalogStep
             s.Db.Items.Add(item);
         }
 
-        if (movedTypes.Count > 0)
+        foreach (var (move, names) in movedTypes.OrderBy(m => m.Key, StringComparer.Ordinal))
         {
-            s.Report.Add(ReportSections.Fixed, $"предметы: раздел {movedFrom} — {movedTypes.Count} ({string.Join(", ", movedTypes.Order(StringComparer.Ordinal))})");
+            s.Report.Add(ReportSections.Fixed, $"предметы: раздел {move} — {names.Count} ({string.Join(", ", names.Order(StringComparer.Ordinal))})");
         }
 
         if (priced > 0)
