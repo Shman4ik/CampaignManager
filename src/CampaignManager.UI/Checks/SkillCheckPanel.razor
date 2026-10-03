@@ -128,6 +128,12 @@
             {
                 @MarkBlock()
             }
+
+            @if (Details is not null)
+            {
+                @* Исход из сценария — под результатом: за столом его читают сразу, не закрывая окно. *@
+                <div class="mt-4" data-testid="check-details">@Details</div>
+            }
         }
     </section>
 </div>
@@ -161,6 +167,15 @@
 
     /// <summary>Справка по цели (лист: описание навыка из справочника) — строкой «Справка» в окне, а не отдельным шагом до проверки.</summary>
     [Parameter] public RenderFragment<string>? Help { get; set; }
+
+    /// <summary>Сыщик, выбранный по умолчанию (режим состава): запоминается между проверками. Если его нет в <see cref="Party"/> — не выбран никто.</summary>
+    [Parameter] public Guid? InitialInvestigatorId { get; set; }
+
+    /// <summary>Выбран другой сыщик (или «вписать вручную» — <c>null</c>): родитель запоминает его для следующей проверки.</summary>
+    [Parameter] public EventCallback<Guid?> OnInvestigatorChanged { get; set; }
+
+    /// <summary>Пояснение под результатом броска (в локации сценария — исходы «Успех»/«Провал»). До броска не показывается.</summary>
+    [Parameter] public RenderFragment? Details { get; set; }
 
     private Guid? _investigatorId;
     private string _key = "";
@@ -221,10 +236,15 @@
         _difficulty = InitialDifficulty;
         _key = InitialKey ?? "";
         _manualName = InitialName ?? "";
+        if (InitialInvestigatorId is { } initial && IsPartyMode && Party!.Any(i => i.Id == initial))
+            _investigatorId = initial;
     }
 
-    private void SelectInvestigator(ChangeEventArgs args) =>
+    private Task SelectInvestigator(ChangeEventArgs args)
+    {
         _investigatorId = Guid.TryParse(args.Value?.ToString(), out var id) ? id : null;
+        return OnInvestigatorChanged.InvokeAsync(_investigatorId);
+    }
 
     private void SelectTarget(ChangeEventArgs args) => _key = args.Value?.ToString() ?? "";
 
