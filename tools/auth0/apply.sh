@@ -40,7 +40,8 @@ methods = options.setdefault("authentication_methods", {})
 methods.setdefault("password", {"enabled": True})["enabled"] = True
 methods["passkey"] = {"enabled": True}
 options["passkey_options"] = {
-    "challenge_ui": "both",                 # кнопка «Войти с ключом доступа» и автозаполнение
+    "challenge_ui": "button",               # только по кнопке: без автозаполнения, которое
+                                            # предлагает passkey при каждом открытии страницы
     "progressive_enrollment_enabled": True,  # после входа по паролю предложить создать ключ
     "local_enrollment_enabled": True,        # и на новом устройстве тоже
 }
