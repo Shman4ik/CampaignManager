@@ -40,7 +40,7 @@ public sealed record DamageOutcome(
     public string Note()
     {
         if (InstantDeath)
-            return "урон не меньше максимума ПЗ — мгновенная смерть";
+            return "мгновенная смерть (урон не меньше максимума ПЗ)";
 
         List<string> notes = [];
         if (MajorWound)

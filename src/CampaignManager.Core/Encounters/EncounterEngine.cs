@@ -39,7 +39,34 @@ public static class EncounterEngine
     /// Добавить участника. Один лист — один раз (повтор — отказ с текстом); тварей одного вида — сколько угодно, они
     /// получают номера «#1», «#2» (знание v1). Посреди раунда новичок встаёт в очередь по инициативе.
     /// </summary>
-    public static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now)
+    public static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now) =>
+        Add(state, participant, now, log: true);
+
+    /// <summary>
+    /// Добавить нескольких за раз: в журнале одна запись «Вступили: …» вместо строки на каждого (восемь строк шума в
+    /// начале боя). Отказы — по одному на отклонённого, как у <see cref="Add(EncounterState, EncounterParticipant, DateTimeOffset)"/>.
+    /// </summary>
+    public static List<AddOutcome> AddRange(EncounterState state, IEnumerable<EncounterParticipant> participants, DateTimeOffset now)
+    {
+        var outcomes = participants.Select(p => Add(state, p, now, log: false)).ToList();
+        var joined = outcomes.Select(o => o.Participant).OfType<EncounterParticipant>().ToList();
+        if (joined.Count > 0)
+        {
+            Log(state, new EncounterLogEntry
+            {
+                Kind = EncounterLogKind.Joined,
+                ActorId = joined.Count == 1 ? joined[0].Id : null,
+                Text = joined.Count == 1
+                    ? $"{joined[0].Name} вступает в сцену ({EncounterText.Of(joined[0].Side)})."
+                    : $"Вступили: {string.Join(", ", joined.Select(p => p.Name))}.",
+                At = now,
+            });
+        }
+
+        return outcomes;
+    }
+
+    private static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now, bool log)
     {
         if (participant.SourceCharacterId is { } characterId
             && state.Participants.FirstOrDefault(p => p.SourceCharacterId == characterId) is { } present)
@@ -56,13 +83,17 @@ public static class EncounterEngine
         EncounterQueue.OnAdded(state, participant.Id);
         if (state.Chase is not null)
             ChaseRules.OnAdded(state, participant);
-        Log(state, new EncounterLogEntry
+        if (log)
         {
-            Kind = EncounterLogKind.Joined,
-            ActorId = participant.Id,
-            Text = $"{participant.Name} вступает в сцену ({EncounterText.Of(participant.Side)}).",
-            At = now,
-        });
+            Log(state, new EncounterLogEntry
+            {
+                Kind = EncounterLogKind.Joined,
+                ActorId = participant.Id,
+                Text = $"{participant.Name} вступает в сцену ({EncounterText.Of(participant.Side)}).",
+                At = now,
+            });
+        }
+
         return new AddOutcome(participant, null);
     }
 
@@ -91,8 +122,13 @@ public static class EncounterEngine
 
     public static void SetSide(EncounterState state, Guid participantId, EncounterSide side)
     {
-        if (state.Find(participantId) is { } participant)
-            participant.Side = side;
+        if (state.Find(participantId) is not { } participant)
+            return;
+
+        participant.Side = side;
+        // Роль в погоне выводится из стороны (противники преследуют) — пока погоня не началась; потом роль меняют отдельно.
+        if (state.Chase is { Phase: ChasePhase.Setup })
+            ChaseRules.SetRole(state, participantId, side == EncounterSide.Enemies ? ChaseRole.Pursuer : ChaseRole.Prey);
     }
 
     /// <summary>Положить результат на предпросмотр. Прежний неприменённый выбрасывается.</summary>

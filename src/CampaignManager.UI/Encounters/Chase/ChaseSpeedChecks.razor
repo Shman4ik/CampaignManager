@@ -8,11 +8,18 @@
    результат правилом Core (эффект через Apply, запись в журнал). Пассажиры проверку не проходят (стр. 139). Посреди погони
    здесь те, кто присоединился или пересел (стр. 140–141). Своей карточки не рисует. *@
 <div data-testid="chase-speed-checks">
+    @if (Rows.Count(x => !x.Runner.SpeedChecked) > 1)
+    {
+        <div class="flex justify-end border-b border-primary-200 px-3 py-2">
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-check-double" OnClick="RecordAllAsync" data-testid="speed-record-all">Записать все</Button>
+        </div>
+    }
     @foreach (var (participant, runner) in Rows)
     {
         var skill = ChaseRules.SpeedSkill(participant, runner);
-        <div @key="participant.Id" class="flex flex-wrap items-end gap-3 border-t border-primary-200 px-3 py-3 first:border-t-0">
-            <div class="min-w-40">
+        @* Три колонки: кто, бросок или итог, кнопка. Итог и кнопка стоят в своих колонках — строка не меняет высоту, когда вписали бросок. *@
+        <div @key="participant.Id" class="grid items-end gap-x-3 gap-y-2 border-t border-primary-200 px-3 py-3 first:border-t-0 md:grid-cols-[minmax(10rem,1fr)_minmax(0,2fr)_9rem]">
+            <div>
                 <div class="font-semibold text-primary-900">@participant.Name</div>
                 <div class="cm-meta">
                     @ChaseText.Of(runner.Role) · СКО @ChaseRules.BaseMove(participant, runner)
@@ -24,9 +31,15 @@
             </div>
             @if (runner.SpeedChecked)
             {
-                <Badge Tone="@(runner.SpeedModifier switch { > 0 => Tone.Success, < 0 => Tone.Warning, _ => Tone.Neutral })" Icon="fa-check">
-                    @(runner.SpeedModifier switch { > 0 => "+1 к СКО", < 0 => "−1 к СКО", _ => "без поправки" })
-                </Badge>
+                <div>
+                    <Badge Tone="@(runner.SpeedModifier switch { > 0 => Tone.Success, < 0 => Tone.Warning, _ => Tone.Neutral })" Icon="fa-check">
+                        @(runner.SpeedModifier switch { > 0 => "+1 к СКО", < 0 => "−1 к СКО", _ => "без поправки" })
+                    </Badge>
+                </div>
+                @if (!PendingOnly)
+                {
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => ReopenAsync(participant.Id)" data-testid="speed-reopen">Исправить</Button>
+                }
             }
             else
             {
@@ -34,7 +47,7 @@
                     <RollInput Value="skill.Value" PenaltyDice="skill.PenaltyDice" Label="@($"Скорость: {participant.Name}")"
                                Roll="RollOf(participant.Id)" RollChanged="r => _rolls[participant.Id] = r" />
                 </Field>
-                <Button Small="true" Icon="fa-check" class="mb-1" OnClick="() => RecordAsync(participant.Id)" data-testid="speed-record">Записать</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-check" OnClick="() => RecordAsync(participant.Id)" data-testid="speed-record">Записать</Button>
             }
         </div>
     }
@@ -55,6 +68,22 @@
     ];
 
     private D100Roll? RollOf(Guid id) => _rolls.GetValueOrDefault(id);
+
+    private Task ReopenAsync(Guid participantId) => Session.ChangeAsync(state => ChaseRules.ReopenSpeedCheck(state, participantId));
+
+    /// <summary>Записать всем, у кого проверки ещё нет: вписанный бросок берётся как есть, остальным бросают кости.</summary>
+    private async Task RecordAllAsync()
+    {
+        var pending = Rows.Where(x => !x.Runner.SpeedChecked).Select(x => x.Participant.Id).ToList();
+        var rolls = pending.ToDictionary(id => id, id => RollOf(id)?.Result);
+        foreach (var id in pending)
+            _rolls.Remove(id);
+        await Session.ChangeAsync(state =>
+        {
+            foreach (var id in pending)
+                EncounterEngine.Apply(state, ChaseActions.SpeedCheck(state, id, rolls[id], Dice).Resolution, Session.Now);
+        });
+    }
 
     private async Task RecordAsync(Guid participantId)
     {

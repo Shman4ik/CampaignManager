@@ -207,7 +207,7 @@ public static partial class CombatRules
         else
         {
             if (level <= SuccessLevel.Failure)
-                return Miss($"{attacker.Name} промахивается по {defender.Name} ({N(roll.Result)} против {N(skill)}).");
+                return Miss($"{attacker.Name} промахивается. Цель: {defender.Name} ({N(roll.Result)} против {N(skill)}).");
 
             hit = defenseLevel <= SuccessLevel.Failure || AttackerWinsOpposed(level, defenseLevel, setup.Reaction);
             // Численное превосходство считает только настоящие защиты (стр. 106).
@@ -329,7 +329,7 @@ public static partial class CombatRules
         if (level < required)
         {
             var needed = required == SuccessLevel.Regular ? $"против {N(skill)}" : $"нужен {RulesText.Of(required)}";
-            return Miss($"{attacker.Name} промахивается по {defender.Name} ({N(roll.Result)}, {needed}).");
+            return Miss($"{attacker.Name} промахивается. Цель: {defender.Name} ({N(roll.Result)}, {needed}).");
         }
 
         // На сверхбольшой дальности проникающая рана — только при критическом успехе (стр. 110).
@@ -460,7 +460,7 @@ public static partial class CombatRules
         return new AttackOutcome
         {
             Resolution = Resolution(EncounterLogKind.Attack, attacker.Id,
-                $"{attacker.Name} попадает по {defender.Name} ({attack.Name})" + WoundTitle(damage.Total, wound), lines, effects),
+                $"{attacker.Name} попадает. Цель: {defender.Name} ({attack.Name})" + WoundTitle(damage.Total, wound), lines, effects),
             Hit = true,
             Damage = damage,
             Wound = wound,
@@ -468,7 +468,7 @@ public static partial class CombatRules
     }
 
     private static string WoundTitle(int total, DamageOutcome? wound) =>
-        total <= 0 ? ": урона нет." : $": урон {N(total)}{(wound is { } w && w.Note() is { Length: > 0 } note ? $" — {note}" : "")}.";
+        total <= 0 ? ". Урона нет." : $". Урон {N(total)}{(wound is { } w && w.Note() is { Length: > 0 } note ? $", {note}" : "")}.";
 
     private static int ArmorOf(EncounterParticipant defender, int coverArmor, bool ignores) =>
         ignores ? 0 : defender.Stats.Armor + Math.Max(0, coverArmor);

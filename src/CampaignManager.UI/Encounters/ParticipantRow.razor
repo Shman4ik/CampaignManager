@@ -4,81 +4,90 @@
    и бейджи). Всегда внутри карточки «Участники»: своей карточки не рисует, только линейку сверху и полосу-акцент у того,
    чей ход. Полосы — StatBar с цифрами; состояние — бейджами с подписью (смысл не держится на title, наведения нет).
    Действия строки — кнопки с подписью, переносятся рядом. Своё бой и погоня кладут в ChildContent (оружие, локация). *@
-<div class="@Css.Join("encounter-row", Active ? "encounter-row-active" : null, Participant.IsOut ? "encounter-row-out" : null)"
+<div class="@Css.Join("encounter-row", Active ? "encounter-row-active" : null, Participant.IsOut || Participant.Dead ? "encounter-row-out" : null)"
      data-testid="participant-row" aria-current="@(Active ? "step" : null)">
-    <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                @if (Active)
-                {
-                    <i class="fa-solid fa-play text-xs text-accent-700" aria-hidden="true"></i>
-                    <span class="sr-only">Ходит:</span>
-                }
-                <span class="font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
-                <Badge Tone="@SideTone">@EncounterText.Of(Participant.Side)</Badge>
-                <span class="cm-meta">@EncounterText.Of(Participant.Kind) · иниц. @Participant.Initiative</span>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(Participant.Note))
+    @* Одна строка: имя и сторона, ПЗ, меню «⋯». Остальное (ПМ, Рассудок, числа) — по касанию имени, редкое действие — в меню. *@
+    <div class="flex items-center gap-2">
+        <button type="button" class="encounter-row-name" aria-expanded="@(_open ? "true" : "false")" @onclick="() => _open = !_open">
+            @if (Active)
             {
-                <div class="cm-meta mt-0.5">@Participant.Note</div>
+                <i class="fa-solid fa-play text-xs text-accent-700" aria-hidden="true"></i>
+                <span class="sr-only">Ходит:</span>
             }
-            <div class="mt-1 flex flex-wrap gap-1">
-                @if (Participant.Dead)
-                {
-                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
-                }
-                else if (Participant.Dying)
-                {
-                    <Badge Tone="Tone.Error" Solid="true" Icon="fa-heart-crack">@(Participant.Stabilized ? "при смерти, стабилизирован" : "при смерти")</Badge>
-                }
-                else if (Participant.Unconscious)
-                {
-                    <Badge Tone="Tone.Error" Icon="fa-bed">без сознания</Badge>
-                }
-                @if (Participant.MajorWound)
-                {
-                    <Badge Tone="Tone.Warning" Icon="fa-droplet">серьёзная рана</Badge>
-                }
-                @* Состояние боя (T2.6b) — словами: прицел, укрытие, захват, заклинившее оружие, сотворение. *@
-                @foreach (var (tone, icon, text) in CombatBadges)
-                {
-                    <Badge Tone="tone" Icon="@icon">@text</Badge>
-                }
-                @if (Participant.IsOut)
-                {
-                    <Badge Tone="Tone.Neutral" Icon="fa-person-walking-arrow-right">выбыл</Badge>
-                }
-                @foreach (var write in Writes)
-                {
-                    <Badge Tone="@(write.Blocked ? Tone.Error : Tone.Warning)" Icon="fa-file-pen">
-                        @(write.Error is null ? "пишется в лист" : "не записано в лист")
-                    </Badge>
-                }
-            </div>
+            <span class="truncate font-semibold text-primary-900" data-testid="participant-name">@Participant.Name</span>
+            <Badge Tone="@SideTone">@EncounterText.Of(Participant.Side)</Badge>
+            <i class="@Css.Join("fa-solid text-xs text-primary-500", _open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+        </button>
+        <div class="ml-auto w-36 shrink-0">
+            <StatBar Label="ПЗ" Value="Participant.HitPoints" Max="Participant.MaxHitPoints" Kind="StatKind.HitPoints" TestId="stat-hp" />
         </div>
         @if (Actions is not null)
         {
-            <div class="flex flex-wrap gap-2">@Actions</div>
+            <div class="flex shrink-0 items-center gap-1">@Actions</div>
         }
     </div>
 
-    <div class="encounter-stats mt-2">
-        <div class="encounter-stats-grid">
-            <StatBar Label="ПЗ" Value="Participant.HitPoints" Max="Participant.MaxHitPoints" Kind="StatKind.HitPoints" TestId="stat-hp" />
-            @if (Participant.MaxMagicPoints > 0)
+    @if (HasState)
+    {
+        <div class="mt-1 flex flex-wrap gap-1">
+            @if (Participant.Dead)
             {
-                <StatBar Label="ПМ" Value="Participant.MagicPoints" Max="Participant.MaxMagicPoints" Kind="StatKind.MagicPoints" TestId="stat-mp" />
+                <Badge Tone="Tone.Error" Solid="true" Icon="fa-cross">мёртв</Badge>
             }
-            @if (Participant.Sanity is { } sanity)
+            else if (Participant.Dying)
             {
-                <StatBar Label="Рассудок" Value="sanity" Max="@(Participant.MaxSanity ?? 99)" Kind="StatKind.Sanity" TestId="stat-san" />
+                <Badge Tone="Tone.Error" Solid="true" Icon="fa-heart-crack">@(Participant.Stabilized ? "при смерти, стабилизирован" : "при смерти")</Badge>
+            }
+            else if (Participant.Unconscious)
+            {
+                <Badge Tone="Tone.Error" Icon="fa-bed">без сознания</Badge>
+            }
+            @if (Participant.MajorWound)
+            {
+                <Badge Tone="Tone.Warning" Icon="fa-droplet">серьёзная рана</Badge>
+            }
+            @* Состояние боя (T2.6b) — словами: прицел, укрытие, захват, заклинившее оружие, сотворение. *@
+            @foreach (var (tone, icon, text) in CombatBadges)
+            {
+                <Badge Tone="tone" Icon="@icon">@text</Badge>
+            }
+            @if (Participant.IsOut)
+            {
+                <Badge Tone="Tone.Neutral" Icon="fa-person-walking-arrow-right">выбыл</Badge>
+            }
+            @foreach (var write in Writes)
+            {
+                <Badge Tone="@(write.Blocked ? Tone.Error : Tone.Warning)" Icon="fa-file-pen">
+                    @(write.Error is null ? "пишется в лист" : "не записано в лист")
+                </Badge>
             }
         </div>
-        <p class="cm-meta mt-1">
-            СИЛ @Participant.Stats.Str · ЛВК @Participant.Stats.Dex · МОЩ @Participant.Stats.Pow · БкУ @Participant.Stats.DamageBonus
-            · Компл. @Participant.Stats.Build@(Participant.Luck is { } luck ? $" · Удача {luck}" : "")@(Participant.Stats.Armor > 0 ? $" · Броня {Participant.Stats.Armor}" : "")
-        </p>
-    </div>
+    }
+
+    @if (_open)
+    {
+        <div class="encounter-stats mt-2">
+            <div class="encounter-stats-grid">
+                @if (Participant.MaxMagicPoints > 0)
+                {
+                    <StatBar Label="ПМ" Value="Participant.MagicPoints" Max="Participant.MaxMagicPoints" Kind="StatKind.MagicPoints" TestId="stat-mp" />
+                }
+                @if (Participant.Sanity is { } sanity)
+                {
+                    <StatBar Label="Рассудок" Value="sanity" Max="@(Participant.MaxSanity ?? 99)" Kind="StatKind.Sanity" TestId="stat-san" />
+                }
+            </div>
+            <p class="cm-meta mt-1">
+                @EncounterText.Of(Participant.Kind), инициатива @Participant.Initiative ·
+                СИЛ @Participant.Stats.Str · ЛВК @Participant.Stats.Dex · МОЩ @Participant.Stats.Pow ·
+                бонус к урону <DiceText Value="@Participant.Stats.DamageBonus" /> · Комплекция @Participant.Stats.Build@(Participant.Luck is { } luck ? $" · Удача {luck}" : "")@(Participant.Stats.Armor > 0 ? $" · Броня {Participant.Stats.Armor}" : "")
+            </p>
+            @if (!string.IsNullOrWhiteSpace(Participant.Note))
+            {
+                <p class="cm-meta mt-0.5">@Participant.Note</p>
+            }
+        </div>
+    }
 
     @foreach (var write in Writes.Where(w => w.Error is not null))
     {
@@ -114,6 +123,12 @@
 
     /// <summary>Раунд сцены — для отметок одного раунда (укрытие).</summary>
     [Parameter] public int Round { get; set; }
+
+    private bool _open;
+
+    private bool HasState =>
+        Participant.Dead || Participant.Dying || Participant.Unconscious || Participant.MajorWound || Participant.IsOut
+        || Writes.Count > 0 || CombatBadges.Any();
 
     /// <summary>Отметки боя участника (T2.6b).</summary>
     private IEnumerable<(Tone Tone, string Icon, string Text)> CombatBadges
