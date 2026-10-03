@@ -95,5 +95,9 @@ public static partial class Terms
     /// (это <see cref="Dice.DiceNotation.Format"/>).
     /// </summary>
     public static string Normalize(string? text) =>
-        string.IsNullOrEmpty(text) ? text ?? "" : DamageBonusAbbreviation().Replace(text, DamageBonus);
+        string.IsNullOrEmpty(text)
+            ? text ?? ""
+            // «1/2БкУ» из данных → «1/2 бонус к урону»: сокращение, прилипшее к числу, получает пробел.
+            : DamageBonusAbbreviation().Replace(text, m =>
+                m.Index > 0 && char.IsDigit(text[m.Index - 1]) ? " " + DamageBonus : DamageBonus);
 }

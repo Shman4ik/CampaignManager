@@ -28,8 +28,9 @@
    вкладки посреди сцены возвращает всё, включая неприменённый результат и неписанные в лист эффекты (UI/Encounters/CLAUDE.md). *@
 <PageHeader Title="@EncounterText.Of(Kind)" DocumentTitle="@DocumentTitle" Subtitle="@Subtitle" Game="true">
     <Actions>
-        @* Одна кнопка настроения («Бой» / «Погоня»); сам плеер — слот «Плеер» шапки. *@
-        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@EncounterText.Of(Kind)" />
+        @* Одна кнопка настроения; сам плеер — слот «Плеер» шапки. Подпись — «Музыка боя», а не голое «Бой»: рядом с
+           заголовком «Бой» кнопка читалась вторым заголовком. *@
+        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@MoodButtonText" />
         @if (_scenarioLink is { } scenario)
         {
             @* Сцена идёт по прохождению сценария: назад в режим игры — одним касанием, не через «Сценарии → сценарий → партия». *@
@@ -513,6 +514,8 @@
 
     private string NewWord => Kind == EncounterKind.Combat ? "Новый бой" : "Новая погоня";
 
+    private string MoodButtonText => Kind == EncounterKind.Combat ? "Музыка боя" : "Музыка погони";
+
     private string StartWord => Kind == EncounterKind.Combat ? "Начать бой" : "Начать погоню";
 
     private DateTimeOffset Now => Time.GetUtcNow();
@@ -558,27 +561,60 @@
         {
             <Alert Tone="Tone.Info" OnClose="() => _notice = null">@_notice</Alert>
         }
-        <section class="cm-section">
-            <div class="cm-card">
-                <div class="cm-card-header"><h2 class="cm-card-title">@NewWord</h2></div>
-                <div class="cm-card-body flex flex-wrap items-end gap-3">
-                    <Field Label="Кампания" class="w-full sm:w-80">
-                        <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
-                                @onchange="e => _startCampaign = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
-                            <option value="">— вне кампании —</option>
-                            @foreach (var campaign in _campaigns)
-                            {
-                                <option value="@campaign.Id">@campaign.Name</option>
-                            }
-                        </select>
-                    </Field>
-                    <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">@StartWord</Button>
-                </div>
+        @if (LobbyCentered)
+        {
+            @* Вариант Б (временный, ?lobby=b — выбор владельца): лобби как пустое состояние по центру — значок, «Новый бой»,
+               строка и форма; идущие сцены — под ней той же ширины. *@
+            <div class="grid place-items-center pt-[10dvh]">
+                <section class="w-full max-w-lg text-center" data-testid="lobby-centered">
+                    <i class="fa-solid @(Kind == EncounterKind.Combat ? "fa-hand-fist" : "fa-person-running") text-4xl text-primary-400" aria-hidden="true"></i>
+                    <h2 class="cm-card-title mt-3 justify-center">@NewWord</h2>
+                    <p class="cm-text-muted mt-1">Участников добавите после начала.</p>
+                    <div class="mt-4 flex flex-wrap items-end justify-center gap-3 text-left">
+                        @StartForm()
+                    </div>
+                </section>
+                @ActiveList("cm-section mt-8 w-full max-w-xl text-left")
             </div>
-        </section>
+        }
+        else
+        {
+            @* Лобби — маленькая форма: карточка по содержимому (max-w-xl), идущие сцены — рядом с lg, а не под ней.
+               Во всю колонку селект и «Начать» занимали левую четверть пустой карточки. *@
+            <div class="grid items-start gap-x-7 lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]">
+                <section class="cm-section max-w-xl">
+                    <div class="cm-section-header"><h2 class="cm-section-title">@NewWord</h2></div>
+                    <div class="cm-card">
+                        <div class="cm-card-body flex flex-wrap items-end gap-3">
+                            @StartForm()
+                        </div>
+                    </div>
+                </section>
+                @ActiveList("cm-section max-w-2xl")
+            </div>
+        }
+    };
+
+    private RenderFragment StartForm() => __builder =>
+    {
+        <Field Label="Кампания" class="w-full sm:w-80">
+            <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
+                    @onchange="e => _startCampaign = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                <option value="">— вне кампании —</option>
+                @foreach (var campaign in _campaigns)
+                {
+                    <option value="@campaign.Id">@campaign.Name</option>
+                }
+            </select>
+        </Field>
+        <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">@StartWord</Button>
+    };
+
+    private RenderFragment ActiveList(string sectionClass) => __builder =>
+    {
         @if (_active.Count > 0)
         {
-            <section class="cm-section">
+            <section class="@sectionClass">
                 <div class="cm-section-header"><h2 class="cm-section-title">Идут сейчас</h2></div>
                 <div class="cm-card">
                     @foreach (var active in _active)
@@ -602,6 +638,10 @@
             </section>
         }
     };
+
+    /// <summary>Временный флаг <c>?lobby=b</c> — второй вариант лобби для выбора владельцем (2026-10-03).</summary>
+    private bool LobbyCentered =>
+        new Uri(Navigation.Uri).Query.Contains("lobby=b", StringComparison.Ordinal);
 
     private RenderFragment Scene(EncounterSession session) => __builder =>
     {

@@ -59,16 +59,39 @@
         }
         else
         {
-            @* auto-fit, а не auto-fill общего cm-grid-cards: две-три карточки растягиваются на всю строку, а не жмутся слева с пустыми колонками. *@
-            <div class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]" data-testid="campaigns-grid">
+            @* auto-fill: карточка — по колонке сетки, а не на всю строку. С auto-fit одна кампания игрока растягивалась на
+               ~1050px с содержимым в левой трети. 320px — чтобы в портрете iPad (колонка ~690px) встало две колонки. *@
+            <div class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]" data-testid="campaigns-grid">
                 @foreach (var campaign in shown)
                 {
                     <article class="cm-card flex flex-col" @key="campaign.Id" aria-labelledby="@($"campaign-{campaign.Id}")">
-                        <div class="cm-card-header flex-col items-start gap-1">
-                            <a id="@($"campaign-{campaign.Id}")" href="@($"campaigns/{campaign.Id}")" class="cm-card-title inline-flex min-h-11 items-center hover:underline">@campaign.Name</a>
-                            <div class="flex flex-wrap items-center gap-1.5">
-                                <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
+                        @* «⋯» — в шапке у названия: в подвале рядом с «Открыть» и «Журналом» ему не хватало 5px, и он уходил отдельной строкой. *@
+                        <div class="cm-card-header items-start gap-2">
+                            <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                                <a id="@($"campaign-{campaign.Id}")" href="@($"campaigns/{campaign.Id}")" class="cm-card-title inline-flex min-h-11 items-center hover:underline">@campaign.Name</a>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
+                                </div>
                             </div>
+                            @if (campaign.CanEdit || campaign.CanDelete)
+                            {
+                                <span class="shrink-0">
+                                    <RowMenu AriaLabel="@($"Действия: {campaign.Name}")">
+                                        <ChildContent>
+                                            @if (campaign.CanEdit)
+                                            {
+                                                <RowMenuItem Icon="fa-pen" OnClick="() => OpenForm(campaign)">Изменить</RowMenuItem>
+                                            }
+                                        </ChildContent>
+                                        <Danger>
+                                            @if (campaign.CanDelete)
+                                            {
+                                                <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(campaign)">Удалить</RowMenuItem>
+                                            }
+                                        </Danger>
+                                    </RowMenu>
+                                </span>
+                            }
                         </div>
                         <div class="cm-card-body flex-1">
                             @* Одна таблица «подпись — значение»: строки не переносятся по-разному у разных карточек. *@
@@ -92,27 +115,9 @@
                             </dl>
                         </div>
                         <div class="cm-card-footer">
-                            <Button Small="true" Icon="fa-arrow-right" Href="@($"campaigns/{campaign.Id}")">Открыть</Button>
+                            @* Не primary: главная на экране — «Новая кампания» в шапке, три тёмные «Открыть» спорили с ней. *@
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-right" Href="@($"campaigns/{campaign.Id}")">Открыть</Button>
                             <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen-nib" Href="@($"campaigns/{campaign.Id}/journal")">Журнал</Button>
-                            @if (campaign.CanEdit || campaign.CanDelete)
-                            {
-                                <span class="ml-auto">
-                                    <RowMenu AriaLabel="@($"Действия: {campaign.Name}")">
-                                        <ChildContent>
-                                            @if (campaign.CanEdit)
-                                            {
-                                                <RowMenuItem Icon="fa-pen" OnClick="() => OpenForm(campaign)">Изменить</RowMenuItem>
-                                            }
-                                        </ChildContent>
-                                        <Danger>
-                                            @if (campaign.CanDelete)
-                                            {
-                                                <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(campaign)">Удалить</RowMenuItem>
-                                            }
-                                        </Danger>
-                                    </RowMenu>
-                                </span>
-                            }
                         </div>
                     </article>
                 }

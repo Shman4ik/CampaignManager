@@ -2,7 +2,8 @@
 @* Кости на экране — единственная точка вывода (правило 13): 1d6 + 2, 3d6 × 5, строчная d, пробелы вокруг
    операторов. Формула хранится как её ввели, форматируется здесь; остальной текст строки (например
    «+ бонус к урону») не трогается. Не разрывается переносом внутри броска. *@
-<span class="@Css.Join("cm-dice whitespace-nowrap", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">@Formatted</span>
+@* Перенос — только перед «бонус к урону»: «1d8 + 1/2 бонус к урону» одной строкой держал столбец урона на 180px. *@
+<span class="@Css.Join("cm-dice", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">@Parts()</span>
 
 @code {
     [Parameter] public string? Value { get; set; }
@@ -15,6 +16,20 @@
 
     // Сокращение «БкУ» из данных тоже приводится к словарю (Terms): кость и бонус к урону пишутся в одном месте.
     private string Formatted => string.IsNullOrWhiteSpace(Value) ? Empty : CampaignManager.Core.Terms.Normalize(DiceNotation.Format(Value.Trim()));
+
+    private RenderFragment Parts() => __builder =>
+    {
+        var text = Formatted;
+        var at = text.IndexOf(" " + CampaignManager.Core.Terms.DamageBonus, StringComparison.Ordinal);
+        if (at > 0)
+        {
+            <span class="whitespace-nowrap">@text[..at]</span>@(" ")<span class="whitespace-nowrap">@text[(at + 1)..]</span>
+        }
+        else
+        {
+            <span class="whitespace-nowrap">@text</span>
+        }
+    };
 
     /// <summary>Тот же текст без разметки — для подписей, тостов и журнала.</summary>
     public static string Format(string? value) => CampaignManager.Core.Terms.Normalize(DiceNotation.Format(value));

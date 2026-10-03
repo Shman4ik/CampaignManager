@@ -46,6 +46,7 @@ public sealed class TermsTests
     [Theory]
     [InlineData("1d4 + Б.К.У.", "1d4 + бонус к урону")]
     [InlineData("1d4+БкУ", "1d4+бонус к урону")]
+    [InlineData("1d8 + 1/2БкУ", "1d8 + 1/2 бонус к урону")]
     [InlineData("Б. К. У.", "бонус к урону")]
     [InlineData("без изменений", "без изменений")]
     public void Normalize_replaces_the_damage_bonus_abbreviation(string input, string expected) =>

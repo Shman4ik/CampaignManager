@@ -43,7 +43,8 @@
             var campaign = details.Campaign;
             var active = campaign.Status != CampaignStatus.Completed;
         }
-        @* Заголовок в шапке — одна строка с многоточием: длинное название полностью — здесь, вид и эпоха — тут же. *@
+        @* Заголовок в шапке — одна строка с многоточием: длинное название полностью — здесь, вид и эпоха — тут же.
+           Статус и роль уже в подзаголовке шапки — здесь их не повторяем. *@
         <div class="cm-stack mb-3" data-testid="campaign-lead">
             @if (campaign.Name.Length > LongName)
             {
@@ -60,149 +61,157 @@
             </Alert>
         }
 
-        <section class="cm-section" aria-label="Участники">
-            <div class="cm-card">
-                <SectionHeader Title="Участники" Count="details.Members.Count" />
-                @foreach (var member in details.Members)
-                {
-                    <div class="flex items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="member.UserId">
-                        <div class="min-w-0 flex-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="font-semibold text-primary-800">@CampaignLabels.Person(member.Name)</span>
-                                @if (member.Role == CampaignRole.Keeper)
-                                {
-                                    <Badge Tone="Tone.Info" Icon="fa-book-skull">Хранитель</Badge>
-                                }
-                                @if (member.IsMe)
-                                {
-                                    <Badge Tone="Tone.Neutral">Вы</Badge>
-                                }
-                            </div>
-                            <div class="text-sm text-primary-500">
-                                В кампании с @LocalTime.Date(member.JoinedAt)@(member.Alias is null ? "" : " · имя задано для этой кампании")
-                            </div>
-                            @* Сыщики игрока: Хранителю — все листы, игроку — его активный. У Хранителя листов нет. *@
-                            @if (member.Role == CampaignRole.Player)
-                            {
-                                @if (member.Characters.Count > 0)
-                                {
-                                    <div class="mt-2 flex flex-wrap gap-2">
-                                        @foreach (var character in member.Characters)
+        @* Ландшафт: участники слева, прохождения и НПС — колонкой справа (2:1). Во всю колонку строка участника
+           держала «⋯» в ~1000px от имени, а короткие секции пустовали. Игроку правой колонки нет — список по содержимому. *@
+        <div class="@(campaign.CanEdit ? "grid items-start gap-x-7 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "max-w-3xl")">
+            <div class="min-w-0">
+                <section class="cm-section" aria-label="Участники">
+                    <div class="cm-card">
+                        <SectionHeader Title="Участники" Count="details.Members.Count" />
+                        @foreach (var member in details.Members)
+                        {
+                            <div class="flex items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="member.UserId">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-semibold text-primary-800">@CampaignLabels.Person(member.Name)</span>
+                                        @if (member.Role == CampaignRole.Keeper)
                                         {
-                                            <CharacterChip Character="character" @key="character.Id" />
+                                            <Badge Tone="Tone.Info" Icon="fa-book-skull">Хранитель</Badge>
+                                        }
+                                        @if (member.IsMe)
+                                        {
+                                            <Badge Tone="Tone.Neutral">Вы</Badge>
+                                        }
+                                    </div>
+                                    <div class="text-sm text-primary-500">
+                                        В кампании с @LocalTime.Date(member.JoinedAt)@(member.Alias is null ? "" : " · имя задано для этой кампании")
+                                    </div>
+                                    @* Сыщики игрока: Хранителю — все листы, игроку — его активный. У Хранителя листов нет. *@
+                                    @if (member.Role == CampaignRole.Player)
+                                    {
+                                        @if (member.Characters.Count > 0)
+                                        {
+                                            <div class="mt-2 flex flex-wrap gap-2">
+                                                @foreach (var character in member.Characters)
+                                                {
+                                                    <CharacterChip Character="character" @key="character.Id" />
+                                                }
+                                            </div>
+                                        }
+                                        else if (campaign.CanEdit || member.IsMe)
+                                        {
+                                            <div class="mt-1 text-sm text-primary-500">Листа пока нет</div>
+                                        }
+                                    }
+                                </div>
+                                @{
+                                    var canRemove = member.CanRemove && !member.IsMe && active;
+                                }
+                                @if (member.CanRename || canRemove)
+                                {
+                                    <RowMenu AriaLabel="@($"Действия: {CampaignLabels.Person(member.Name)}")">
+                                        <ChildContent>
+                                            @if (member.CanRename)
+                                            {
+                                                <RowMenuItem Icon="fa-signature" OnClick="() => StartRename(member)">Имя в кампании</RowMenuItem>
+                                            }
+                                        </ChildContent>
+                                        <Danger>
+                                            @if (canRemove)
+                                            {
+                                                <RowMenuItem Icon="fa-user-minus" Danger="true" OnClick="() => RemoveAsync(member)">Исключить</RowMenuItem>
+                                            }
+                                        </Danger>
+                                    </RowMenu>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+            </div>
+
+            @if (campaign.CanEdit)
+            {
+                <div class="min-w-0">
+                    @* Завершённой кампании без игр секция ничего не скажет — не рисуем (правило 4). *@
+                    @if (active || details.Runs.Count > 0)
+                    {
+                        <section class="cm-section" aria-label="Прохождения">
+                            <div class="cm-card">
+                                <SectionHeader Title="Прохождения" Count="details.Runs.Count">
+                                    <Actions>
+                                        @if (active)
+                                        {
+                                            <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button>
+                                        }
+                                    </Actions>
+                                </SectionHeader>
+                                @if (details.Runs.Count == 0 && active)
+                                {
+                                    <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">
+                                        Игр по сценариям пока нет. Начать можно из сценария — «Играть в кампании».
+                                    </p>
+                                }
+                                @foreach (var run in details.Runs)
+                                {
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0"
+                                         @key="run.RunId" data-testid="campaign-run">
+                                        <div class="min-w-0 flex-1 basis-56">
+                                            <a href="@ScenarioLinks.Workspace(run.ScenarioId)" class="inline-flex min-h-11 items-center font-semibold text-primary-800 hover:underline">@run.ScenarioName</a>
+                                            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-primary-500">
+                                                <Badge Tone="ScenarioLabels.RunTone(run.Status)">@ScenarioLabels.RunStatus(run.Status)</Badge>
+                                                @if (run.SignupOpen && run.Status != ScenarioRunStatus.Finished)
+                                                {
+                                                    <Badge Tone="Tone.Info">Запись открыта</Badge>
+                                                }
+                                                @if (run.ScheduledAt is { } at)
+                                                {
+                                                    <span>@LocalTime.DateTime(at)</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        @if (run.Status != ScenarioRunStatus.Finished)
+                                        {
+                                            <Button Small="true" Icon="fa-play" Href="@ScenarioLinks.Play(run.ScenarioId, runId: run.RunId)">Играть</Button>
                                         }
                                     </div>
                                 }
-                                else if (campaign.CanEdit || member.IsMe)
-                                {
-                                    <div class="mt-1 text-sm text-primary-500">Листа пока нет</div>
-                                }
-                            }
-                        </div>
-                        @{
-                            var canRemove = member.CanRemove && !member.IsMe && active;
-                        }
-                        @if (member.CanRename || canRemove)
-                        {
-                            <RowMenu AriaLabel="@($"Действия: {CampaignLabels.Person(member.Name)}")">
-                                <ChildContent>
-                                    @if (member.CanRename)
-                                    {
-                                        <RowMenuItem Icon="fa-signature" OnClick="() => StartRename(member)">Имя в кампании</RowMenuItem>
-                                    }
-                                </ChildContent>
-                                <Danger>
-                                    @if (canRemove)
-                                    {
-                                        <RowMenuItem Icon="fa-user-minus" Danger="true" OnClick="() => RemoveAsync(member)">Исключить</RowMenuItem>
-                                    }
-                                </Danger>
-                            </RowMenu>
-                        }
-                    </div>
-                }
-            </div>
-        </section>
+                            </div>
+                        </section>
+                    }
 
-        @if (campaign.CanEdit)
-        {
-            <section class="cm-section" aria-label="Прохождения">
-                <div class="cm-card">
-                    <SectionHeader Title="Прохождения" Count="details.Runs.Count">
-                        <Actions>
-                            @if (active)
-                            {
-                                <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button>
-                            }
-                        </Actions>
-                    </SectionHeader>
-                    @if (details.Runs.Count == 0 && active)
+                    @* Завершённой кампании НПС не добавляют (решение владельца №8): секция только там, где они уже есть. *@
+                    @if (active || details.Npcs.Count > 0)
                     {
-                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">
-                            Игр по сценариям пока нет. Начать можно из сценария — «Играть в кампании».
-                        </p>
-                    }
-                    else if (details.Runs.Count == 0)
-                    {
-                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">Игр по сценариям не было.</p>
-                    }
-                    @foreach (var run in details.Runs)
-                    {
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0"
-                             @key="run.RunId" data-testid="campaign-run">
-                            <div class="min-w-0 flex-1 basis-56">
-                                <a href="@ScenarioLinks.Workspace(run.ScenarioId)" class="inline-flex min-h-11 items-center font-semibold text-primary-800 hover:underline">@run.ScenarioName</a>
-                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-primary-500">
-                                    <Badge Tone="ScenarioLabels.RunTone(run.Status)">@ScenarioLabels.RunStatus(run.Status)</Badge>
-                                    @if (run.SignupOpen && run.Status != ScenarioRunStatus.Finished)
+                    <section class="cm-section" aria-label="НПС кампании">
+                        <div class="cm-card">
+                            <SectionHeader Title="НПС кампании" Count="details.Npcs.Count">
+                                <Actions>
+                                    @if (active)
                                     {
-                                        <Badge Tone="Tone.Info">Запись открыта</Badge>
+                                        <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">Добавить НПС</Button>
                                     }
-                                    @if (run.ScheduledAt is { } at)
+                                </Actions>
+                            </SectionHeader>
+                            @if (details.Npcs.Count == 0)
+                            {
+                                <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">НПС кампании пока нет.</p>
+                            }
+                            else
+                            {
+                                <div class="flex flex-wrap gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                                    @foreach (var npc in details.Npcs)
                                     {
-                                        <span>@LocalTime.DateTime(at)</span>
+                                        <CharacterChip Character="npc" @key="npc.Id" />
                                     }
                                 </div>
-                            </div>
-                            @if (run.Status != ScenarioRunStatus.Finished)
-                            {
-                                <Button Small="true" Icon="fa-play" Href="@ScenarioLinks.Play(run.ScenarioId, runId: run.RunId)">Играть</Button>
                             }
                         </div>
+                    </section>
                     }
                 </div>
-            </section>
-
-            @* Завершённой кампании НПС не добавляют (решение владельца №8): секция только там, где они уже есть. *@
-            @if (active || details.Npcs.Count > 0)
-            {
-            <section class="cm-section" aria-label="НПС кампании">
-                <div class="cm-card">
-                    <SectionHeader Title="НПС кампании" Count="details.Npcs.Count">
-                        <Actions>
-                            @if (active)
-                            {
-                                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">Добавить НПС</Button>
-                            }
-                        </Actions>
-                    </SectionHeader>
-                    @if (details.Npcs.Count == 0)
-                    {
-                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">НПС кампании пока нет.</p>
-                    }
-                    else
-                    {
-                        <div class="flex flex-wrap gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
-                            @foreach (var npc in details.Npcs)
-                            {
-                                <CharacterChip Character="npc" @key="npc.Id" />
-                            }
-                        </div>
-                    }
-                </div>
-            </section>
             }
-        }
+        </div>
 
         <p class="cm-text-muted">
             Создана @LocalTime.Date(campaign.CreatedAt)
@@ -219,7 +228,7 @@
         }
         @if (campaign.CanDelete || canLeave)
         {
-            <section class="cm-section mt-6" aria-label="Опасная зона">
+            <section class="cm-section mt-6 max-w-2xl" aria-label="Опасная зона">
                 <div class="cm-card">
                     <SectionHeader Title="Опасная зона" />
                     @if (canLeave)
@@ -271,13 +280,7 @@
     /// <summary>
     /// Всё, что узкая шапка (телефон) обрезает, одной строкой на странице: статус, моя роль, вид и эпоха.
     /// </summary>
-    private static string FactsLine(CampaignSummaryDto c) => string.Join(" · ", new[]
-    {
-        CampaignLabels.Status(c.Status),
-        c.MyRole is { } role ? $"вы — {CampaignLabels.Role(role)}" : null,
-        CampaignLabels.Kind(c.Kind),
-        CampaignLabels.Era(c.Era),
-    }.Where(part => part is not null));
+    private static string FactsLine(CampaignSummaryDto c) => $"{CampaignLabels.Kind(c.Kind)} · {CampaignLabels.Era(c.Era)}";
 
     /// <summary>Активной кампании без игроков нужно приглашение: оно главное действие страницы.</summary>
     private bool NeedsPlayers => _details?.Campaign is { CanEdit: true, PlayerCount: 0, Status: not CampaignStatus.Completed };
