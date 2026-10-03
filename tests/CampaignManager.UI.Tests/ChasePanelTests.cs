@@ -108,6 +108,28 @@ public sealed class ChasePanelTests : KitContext
         Assert.Null(location.Hazard);
     }
 
+    /// <summary>Поимка (H11): объявляет Хранитель через предпросмотр, а не сразу; блок контакта — предупреждение, не ошибка.</summary>
+    [Fact]
+    public void Contact_offers_to_declare_the_catch_and_it_goes_through_the_preview()
+    {
+        var (session, prey, pursuer) = Scene();
+        ChaseRules.SetPosition(session.State, pursuer.Id, session.State.Chase!.Runner(prey.Id)!.Location);
+
+        var cut = Render<CascadingValue<EncounterSession>>(p => p
+            .Add(c => c.Value, session)
+            .Add(c => c.IsFixed, true)
+            .AddChildContent<ChaseTrackPanel>());
+
+        var contact = cut.Find("[data-testid=chase-contact]");
+        Assert.Contains("настигнут", contact.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("error", contact.ClassName, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=chase-catch]").Click();
+
+        Assert.NotNull(session.State.Pending); // предпросмотр, а не сразу «пойман»
+        Assert.Equal(ChaseStatus.Running, ChaseRules.StatusOf(session.State, prey.Id));
+    }
+
     [Fact]
     public void Track_names_runners_and_obstacles_in_words()
     {

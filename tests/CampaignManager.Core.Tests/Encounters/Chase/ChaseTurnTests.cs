@@ -256,6 +256,17 @@ public sealed class ChaseTurnTests
     }
 
     [Fact]
+    public void Chase_end_entry_names_the_outcomes_in_groups_with_capitals()
+    {
+        var (state, prey, pursuer) = Pair();
+
+        EncounterEngine.Apply(state, ChaseRules.Catch(state, prey.Id, pursuer.Id)!, Now);
+
+        var end = state.Log.Last(e => e.Text.StartsWith("Погоня окончена", StringComparison.Ordinal));
+        Assert.Equal($"Погоня окончена. Пойманы: {prey.Name}.", end.Text);
+    }
+
+    [Fact]
     [Trait("page", "135")]
     public void Catch_one_of_two_prey_chase_goes_on()
     {
