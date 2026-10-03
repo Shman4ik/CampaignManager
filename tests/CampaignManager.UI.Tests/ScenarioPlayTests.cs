@@ -132,21 +132,22 @@ public sealed class ScenarioPlayTests : KitContext
     }
 
     [Fact]
-    public void Facts_panel_opens_on_handouts_and_keeps_fact_kinds_collapsed_until_asked()
+    public void Facts_panel_opens_on_handouts_and_keeps_facts_collapsed_until_touched()
     {
         var scenario = Scenario();
         scenario.KeyFacts = [new(Guid.NewGuid(), 0, KeyFactType.Backstory, "Что было", "Старый дом.")];
         var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario));
 
-        // Раздатки первыми: «Показать игрокам» — на первом экране, без прокрутки через факты.
+        // Раздатки первыми: «Показать» — на первом экране, без прокрутки через факты.
         Assert.Single(cut.FindAll("[data-testid=show-handout]"));
         Assert.Empty(cut.FindAll("[data-testid=play-key-facts]"));
 
         cut.FindAll("[role=tab]").Single(t => t.TextContent.Contains("Факты")).Click();
         Assert.Empty(cut.FindAll("[data-testid=play-handout]"));
+        Assert.Contains("Что было", cut.Find("[data-testid=play-fact]").TextContent);
         Assert.DoesNotContain("Старый дом.", cut.Markup);
 
-        cut.Find("[data-testid=toggle-all-facts]").Click();
+        cut.Find("[data-testid=play-fact] button").Click();
         Assert.Contains("Старый дом.", cut.Markup);
     }
 
