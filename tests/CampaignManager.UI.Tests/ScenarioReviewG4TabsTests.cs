@@ -250,7 +250,7 @@ public sealed class ScenarioReviewG4TabsTests : KitContext
         cut.WaitForState(() => cut.FindAll("[data-testid=picker-row]").Count == 1);
 
         Assert.True(cut.Find("fieldset").HasAttribute("disabled"));
-        Assert.Contains("Выберите НПС", cut.Find("[data-testid=modal-footer-hint]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Выберите НПС", cut.Find("[data-testid=disabled-reason]").TextContent, StringComparison.Ordinal);
         Assert.NotEmpty(cut.FindAll("[data-testid=quick-npc]"));
         Assert.Contains("Создать нового", cut.Find("[data-testid=picker-extra]").TextContent, StringComparison.Ordinal);
 
@@ -310,7 +310,7 @@ public sealed class ScenarioReviewG4TabsTests : KitContext
             .Add(m => m.ChildContent, row => builder => builder.AddContent(0, $"Поля {row}")));
 
         Assert.DoesNotContain("Поля", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Выберите тварь", cut.Find("[data-testid=modal-footer-hint]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Выберите тварь", cut.Find("[data-testid=disabled-reason]").TextContent, StringComparison.Ordinal);
 
         cut.Find("[data-testid=picker-row]").Click();
         Assert.Contains("Поля Гуль", cut.Markup, StringComparison.Ordinal);
