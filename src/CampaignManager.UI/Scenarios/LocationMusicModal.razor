@@ -7,29 +7,34 @@
 
 @* Музыка локации: настроения (MusicTagPicker — известные теги фонотеки переключателями) и прибитые треки — играют, даже
    если тегов у них нет. Пул и выбор трека — правило Core (MusicPool), запись — PUT …/locations/{id}/music: оба списка
-   целиком, правка локации (LocationInput) их не трогает. Фонотеку берёт у плеера, если тот её уже загрузил. *@
-<Modal Open="Open" Title="@($"Музыка: {Location?.Name}")" OnClose="CloseAsync" data-testid="location-music">
+   целиком, правка локации (LocationInput) их не трогает. Фонотеку берёт у плеера, если тот её уже загрузил.
+   Окно — исключение для окон «длинного списка» (решение владельца): Large, настроения и список треков рядом, список тянется
+   на остаток высоты — прокрутка одна, у списка; прежние Medium и три ряда чипов выше списка давали две прокрутки и 1,5 трека
+   на виду. В портрете и на телефоне блоки друг под другом. Заголовок — «Глагол объект», локация — первой строкой тела. *@
+<Modal Open="Open" Title="Изменить музыку" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="location-music">
     <ChildContent>
-        <div class="flex flex-col gap-5">
-            <Field Label="Настроения" Group="true">
+        <p class="mb-4 text-sm text-primary-600">Локация: <strong class="font-semibold text-primary-800">@Names.Plain(Location?.Name)</strong></p>
+        <div class="grid gap-5 md:grid-cols-5">
+            <Field Label="Настроения" Group="true" class="md:col-span-3">
                 <MusicTagPicker Values="_tags" ValuesChanged="v => _tags = [.. v]" Known="KnownTags" />
             </Field>
-            <Field Label="Закрепить треки" Group="true" Note="Играют здесь, даже если у них нет этих настроений.">
+            <Field Label="Закрепить треки" Group="true" Note="Играют здесь и без этих настроений." class="min-w-0 md:col-span-2">
                 @if (_library is null)
                 {
                     <LoadingIndicator Message="Загружаю фонотеку…" />
                 }
                 else if (_library.Count == 0)
                 {
-                    <p class="cm-text-muted text-sm">Фонотека пуста — треки добавляют на странице «Музыка».</p>
+                    <p class="cm-text-muted text-sm">Фонотека пуста — треки добавляют на странице «Фонотека».</p>
                 }
                 else
                 {
                     <input class="cm-input mb-2" type="search" placeholder="Найти трек" aria-label="Найти трек" @bind="_filter" @bind:event="oninput" />
-                    <div class="max-h-72 overflow-y-auto rounded-md border border-primary-200" data-testid="location-music-tracks">
+                    @* Список — на остаток высоты окна (шапка, подвал, поиск и подпись вычтены), а не 288px внутри прокручиваемого окна. *@
+                    <div class="max-h-[calc(100dvh-26rem)] min-h-44 overflow-y-auto rounded-md border border-primary-200" data-testid="location-music-tracks">
                         @foreach (var group in Groups)
                         {
-                            <div class="sticky top-0 border-t border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-600 first:border-t-0" @key="group.Key">@group.Key</div>
+                            <div class="sticky top-0 border-t border-primary-200 bg-primary-50 px-3 py-1 text-[0.8125rem] font-semibold uppercase tracking-wide text-primary-600 first:border-t-0" @key="group.Key">@group.Key</div>
                             @foreach (var track in group)
                             {
                                 var id = track.Id;

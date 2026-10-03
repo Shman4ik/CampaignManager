@@ -13,7 +13,9 @@
 @* Библиотека сценариев — общая для Хранителей (в v1 «Шаблоны сценариев»; сценарии кампаний в 2.0 стали
    прохождениями, T2.5c). /scenarios/new — та же страница с открытой формой нового сценария: адрес v1 сохранён.
    Создание — в шапке («Новый сценарий», «Импорт JSON»); поиск — только когда сценариев больше шести (до тех пор
-   пять карточек видны целиком). Карточка открывается касанием; «Удалить» — в «⋯» карточки, по флагу из API. *@
+   пять карточек видны целиком). Карточка открывается касанием; «Удалить» — в «⋯» карточки, по флагу из API (у сценария
+   с партиями пункт выключен и называет причину). Эпоха на карточке и в форме — только если в библиотеке есть сценарии
+   разных эпох (правило 12); автор — только если это не вы (IsAuthor). *@
 <PageHeader Title="Сценарии">
     <Actions>
         @if (_list?.CanCreate == true)
@@ -37,15 +39,15 @@
 <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
                   IsEmpty="l => l.Items.Count == 0">
         <Empty>
-            <EmptyState Icon="fa-masks-theater" Title="Сценариев пока нет." Message="Заведите первый кнопкой «Новый сценарий» — он будет доступен всем Хранителям." />
+            <EmptyState Compact="true" Title="Сценариев пока нет." />
         </Empty>
         <ChildContent>
             @{ var found = Filter(list.Items); }
             @if (found.Count == 0)
             {
-                <EmptyState Icon="fa-magnifying-glass" Title="Ничего не найдено.">
+                <EmptyState Icon="fa-magnifying-glass" Title="Нет сценариев по этим условиям.">
                     <Actions>
-                        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => _search = string.Empty">Очистить поиск</Button>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => _search = string.Empty">Сбросить фильтры</Button>
                     </Actions>
                 </EmptyState>
             }
@@ -58,23 +60,40 @@
                         <article class="cm-card flex flex-col" @key="scenario.Id" data-testid="scenario-card">
                             <div class="cm-card-header">
                                 <a class="cm-card-title flex min-h-11 min-w-0 flex-1 items-center break-words hover:underline"
-                                   href="@ScenarioLinks.Workspace(scenario.Id)">@scenario.Name</a>
+                                   href="@ScenarioLinks.Workspace(scenario.Id)">
+                                    <span>
+                                        @scenario.Name
+                                        @* Две карточки с одним названием («Эликсир жизни» и его переделка) различает хвост, а не только метка ниже. *@
+                                        @if (scenario.SourceScenarioName is not null && SameNameCount(scenario) > 1)
+                                        {
+                                            <span class="font-normal text-primary-600"> · переделка</span>
+                                        }
+                                    </span>
+                                </a>
                                 @if (scenario.CanDelete)
                                 {
                                     <RowMenu AriaLabel="@($"Действия: {scenario.Name}")">
                                         <Danger>
-                                            <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(scenario)">Удалить сценарий</RowMenuItem>
+                                            @if (scenario.RunCount > 0)
+                                            {
+                                                @* Пока сценарий идёт в кампаниях, сервер откажет: пункт выключен и называет причину (правило 8). *@
+                                                <RowMenuItem Icon="fa-trash-can" Danger="true" Disabled="true">Удалить нельзя: идёт в кампаниях (@scenario.RunCount)</RowMenuItem>
+                                            }
+                                            else
+                                            {
+                                                <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(scenario)">Удалить сценарий</RowMenuItem>
+                                            }
                                         </Danger>
                                     </RowMenu>
                                 }
                             </div>
                             <a class="cm-card-body flex flex-1 flex-col gap-2 no-underline" href="@ScenarioLinks.Workspace(scenario.Id)" tabindex="-1">
                                 <div class="flex flex-wrap gap-1.5">
-                                    @if (scenario.Era is { } era)
+                                    @if (ErasVary && scenario.Era is { } era)
                                     {
                                         <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
                                     }
-                                    @if (scenario.SettingDate is { } date && date != (scenario.Era is { } e2 ? CatalogText.Of(e2) : null))
+                                    @if (scenario.SettingDate is { } date)
                                     {
                                         <Badge Tone="Tone.Neutral">@date</Badge>
                                     }
@@ -87,7 +106,10 @@
                                         <Badge Tone="Tone.Warning" Icon="fa-code-branch" class="max-w-full whitespace-normal">Переделка «@source»</Badge>
                                     }
                                 </div>
-                                <p class="line-clamp-3 text-sm text-primary-700">@(scenario.Summary ?? "Описания нет.")</p>
+                                @if (scenario.Summary is { } summary)
+                                {
+                                    <p class="line-clamp-3 text-sm text-primary-700">@summary</p>
+                                }
                                 <div class="cm-meta mt-auto">
                                     @if (scenario.LocationCount + scenario.NpcCount + scenario.HandoutCount + scenario.PregenCount == 0)
                                     {
@@ -100,7 +122,7 @@
                                         <span><span class="cm-meta-label">Раздаток:</span> @scenario.HandoutCount</span>
                                         @if (scenario.PregenCount > 0)
                                         {
-                                            <span><span class="cm-meta-label">Прегенов:</span> @scenario.PregenCount</span>
+                                            <span><span class="cm-meta-label">Готовых сыщиков:</span> @scenario.PregenCount</span>
                                         }
                                     }
                                     @if (scenario.RunCount > 0)
@@ -108,7 +130,7 @@
                                         <span><span class="cm-meta-label">Партий:</span> @scenario.RunCount</span>
                                     }
                                 </div>
-                                <div class="text-sm text-primary-600">@(scenario.AuthorName is { } author ? $"{author} · " : "")Изменён @LocalTime.Date(scenario.UpdatedAt)</div>
+                                <div class="text-sm text-primary-600">@(!scenario.IsAuthor && scenario.AuthorName is { } author ? $"{author} · " : "")Изменён @LocalTime.Date(scenario.UpdatedAt)</div>
                             </a>
                         </article>
                     }
@@ -118,9 +140,10 @@
     </AsyncContent>
 </div>
 
-<ScenarioImportModal Open="_importOpen" OnClose="() => _importOpen = false" OnImported="ReloadAsync" OnOpen="Created" />
+<ScenarioImportModal Open="_importOpen" OnClose="() => _importOpen = false" OnImported="ReloadAsync" OnOpen="Created"
+                     ExistingNames="@(_list?.Items.Select(i => i.Name).ToList() ?? [])" />
 
-<ScenarioFormModal Open="IsNew" OnClose="() => Navigation.NavigateTo(ScenarioLinks.List, replace: true)" OnCreated="Created" />
+<ScenarioFormModal Open="IsNew" AskEra="ErasVary" OnClose="() => Navigation.NavigateTo(ScenarioLinks.List, replace: true)" OnCreated="Created" />
 
 @code {
     private AsyncContent<ScenarioListDto>? _content;
@@ -140,6 +163,15 @@
     public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
     private bool IsNew => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/') == ScenarioLinks.New;
+
+    /// <summary>
+    /// В библиотеке есть сценарии разных эпох: только тогда эпоха что-то различает (правило 12) — карточка рисует метку,
+    /// форма спрашивает. Современная эпоха не переносится, так что пока это всегда «нет».
+    /// </summary>
+    private bool ErasVary => _list is not null && _list.Items.Select(i => i.Era).Distinct().Skip(1).Any();
+
+    private int SameNameCount(ScenarioSummaryDto scenario) =>
+        _list?.Items.Count(i => string.Equals(i.Name, scenario.Name, StringComparison.CurrentCultureIgnoreCase)) ?? 0;
 
     private async Task<ScenarioListDto> LoadAsync(CancellationToken cancellationToken)
     {
@@ -167,10 +199,8 @@
 
     private async Task DeleteAsync(ScenarioSummaryDto scenario)
     {
-        var message = scenario.RunCount > 0
-            ? "Нельзя удалить, пока сценарий идёт в кампаниях."
-            : "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС останутся в библиотеке, прегены — тоже.";
-        if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{scenario.Name}»?", message))
+        const string consequence = "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС и готовые сыщики останутся в библиотеке.";
+        if (!await Dialogs.ConfirmDeleteAsync("сценарий", scenario.Name, consequence, reversible: false))
             return;
 
         try

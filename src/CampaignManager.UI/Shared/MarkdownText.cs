@@ -48,6 +48,34 @@ public static class MarkdownText
         return document.ToHtml(Pipeline);
     }
 
+    /// <summary>
+    /// Заголовки текста по порядку — для «Содержания» (<see cref="MarkdownHeading"/>): уровень, текст и номер среди всех
+    /// заголовков документа (<c>h1…h6</c> в разметке идут в том же порядке, поэтому по номеру их находят без id).
+    /// </summary>
+    public static IReadOnlyList<MarkdownHeading> Headings(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return [];
+        }
+
+        var result = new List<MarkdownHeading>();
+        foreach (var heading in Markdig.Markdown.Parse(markdown, Pipeline).Descendants<HeadingBlock>())
+        {
+            var text = heading.Inline is null
+                ? ""
+                : string.Concat(heading.Inline.Descendants().Select(i => i switch
+                {
+                    LiteralInline literal => literal.Content.ToString(),
+                    CodeInline code => code.Content,
+                    _ => "",
+                }));
+            result.Add(new MarkdownHeading(heading.Level, text.Trim(), result.Count));
+        }
+
+        return result;
+    }
+
     /// <summary>Абсолютный адрес — только безопасные схемы; относительный (без схемы) — свой сайт.</summary>
     public static bool IsSafeUrl(string? url)
     {
@@ -70,3 +98,6 @@ public static class MarkdownText
                || scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase);
     }
 }
+
+/// <summary>Заголовок Markdown-текста: уровень 1–6, текст и номер среди всех заголовков документа.</summary>
+public sealed record MarkdownHeading(int Level, string Text, int Index);

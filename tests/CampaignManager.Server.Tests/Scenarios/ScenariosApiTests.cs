@@ -62,12 +62,16 @@ public sealed class ScenariosApiTests(CampaignsApp app) : IClassFixture<Campaign
         Assert.True(created.CanDelete);
         Assert.Equal("Автор", created.AuthorName);
         Assert.Equal(Era.Classic, created.Era);
+        Assert.True(created.IsAuthor);
 
         var list = await Api(otherKeeper).ListAsync(Cancellation);
         Assert.True(list.CanCreate);
         var row = Assert.Single(list.Items, s => s.Id == created.Id);
         Assert.True(row.CanEdit);
         Assert.False(row.CanDelete);
+        Assert.False(row.IsAuthor);
+        Assert.False((await Api(otherKeeper).GetAsync(created.Id, Cancellation)).IsAuthor);
+        Assert.True((await Api(author).ListAsync(Cancellation)).Items.Single(s => s.Id == created.Id).IsAuthor);
         Assert.True((await Api(admin).ListAsync(Cancellation)).Items.Single(s => s.Id == created.Id).CanDelete);
     }
 

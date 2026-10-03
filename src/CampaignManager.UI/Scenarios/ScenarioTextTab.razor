@@ -1,22 +1,29 @@
 @inherits ScenarioTabBase
 @using CampaignManager.Contracts.Platform
 @using CampaignManager.UI.Platform
+@implements IAsyncDisposable
 @inject BrowserStorage Storage
+@inject IJSRuntime JS
 
 @* «Текст» — основной текст Хранителя в Markdown (v1 «Журнал»). Читается Markdown-ом, правится на месте с
    предпросмотром. Запись — отдельный адрес с версией корня: шапку и части она не трогает, а правку текста с
    другого устройства не затирает (409 и «Перечитать»). Набранное, пока не записано, живёт черновиком в
-   localStorage (cm.scenario-text:{id}): текст длинный, обрыв связи или «Перечитать» не должны его съесть. *@
+   localStorage (cm.scenario-text:{id}): текст длинный, обрыв связи или «Перечитать» не должны его съесть.
+   Чтение: текст — своей ширины (max-w-prose), справа с lg липкое «Содержание» по заголовкам Markdown (Хранитель листает
+   многостраничный текст за столом); заголовков меньше трёх — содержания нет, а карточка сужается (правило «Ширина»).
+   Правка: «Предпросмотр», «Отмена» и «Сохранить» — в липкой шапке карточки: поле выше экрана, и «Сохранить» не надо искать. *@
 <section class="cm-section">
-    <div class="cm-card">
+    <div class="@Css.Join("cm-card", !_editing && !HasContents ? "lg:max-w-3xl" : null)">
         @if (_editing)
         {
-            <div class="cm-card-header flex-wrap gap-2">
+            <div class="cm-card-header sticky top-14 z-10 flex-wrap gap-2 rounded-t-lg bg-white">
                 <span class="cm-card-title">Текст Хранителя</span>
-                <div class="flex flex-wrap gap-2">
+                <div class="cm-btn-row">
                     <Button Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
                         @(_preview ? "Редактор" : "Предпросмотр")
                     </Button>
+                    <Button Variant="ButtonVariant.Secondary" Disabled="_saving" OnClick="CancelAsync">Отмена</Button>
+                    <Button Icon="fa-floppy-disk" Busy="_saving" data-testid="save-text" OnClick="SaveAsync">Сохранить</Button>
                 </div>
             </div>
             <div class="cm-card-body flex flex-col gap-3">
@@ -43,10 +50,6 @@
                     </Alert>
                 }
             </div>
-            <div class="cm-card-footer flex-wrap gap-2">
-                <Button Variant="ButtonVariant.Secondary" Disabled="_saving" OnClick="CancelAsync">Отмена</Button>
-                <Button Icon="fa-floppy-disk" Busy="_saving" data-testid="save-text" OnClick="SaveAsync">Сохранить</Button>
-            </div>
         }
         else
         {
@@ -58,7 +61,7 @@
                     <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-text" OnClick="EditAsync">Изменить текст</Button>
                 }
             </div>
-            <div class="cm-card-body">
+            <div class="@Css.Join("cm-card-body", HasContents ? "grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]" : null)">
                 @if (string.IsNullOrWhiteSpace(Scenario.BodyMd))
                 {
                     <p class="cm-text-muted">Текста пока нет.</p>
@@ -66,7 +69,25 @@
                 else
                 {
                     @* Строка не длиннее ~80 знаков: на всю ширину (1200px) это 130 знаков, читать тяжело. *@
-                    <Markdown Text="@Scenario.BodyMd" class="max-w-prose" data-testid="scenario-body" />
+                    <div @ref="_body" class="min-w-0">
+                        <Markdown Text="@Scenario.BodyMd" class="max-w-prose" data-testid="scenario-body" />
+                    </div>
+                    @if (HasContents)
+                    {
+                        <nav class="cm-sticky-pane hidden self-start lg:block" aria-label="Содержание" data-testid="scenario-contents">
+                            <p class="cm-section-title mb-1">Содержание</p>
+                            <ul class="flex flex-col">
+                                @foreach (var heading in Contents)
+                                {
+                                    var current = heading;
+                                    <li>
+                                        <button type="button" class="@Css.Join("flex min-h-8 w-full items-center py-1 text-left text-sm text-primary-700 hover:text-primary-900 hover:underline", current.Level switch { 1 => "font-semibold", 2 => "pl-3", _ => "pl-6 text-primary-600" })"
+                                                @onclick="() => GoToAsync(current)">@current.Text</button>
+                                    </li>
+                                }
+                            </ul>
+                        </nav>
+                    }
                 }
             </div>
         }
@@ -85,6 +106,57 @@
     private uint _version;
 
     private bool _rebase;
+    private ElementReference _body;
+    private IJSObjectReference? _module;
+
+    /// <summary>Заголовки первых трёх уровней — «Содержание»; разбор — когда текст сменился, а не на каждую перерисовку.</summary>
+    private string? _contentsSource;
+    private IReadOnlyList<MarkdownHeading> _contents = [];
+
+    private IReadOnlyList<MarkdownHeading> Contents
+    {
+        get
+        {
+            if (!string.Equals(_contentsSource, Scenario.BodyMd, StringComparison.Ordinal))
+            {
+                _contentsSource = Scenario.BodyMd;
+                _contents = [.. MarkdownText.Headings(Scenario.BodyMd).Where(h => h.Level <= 3 && h.Text.Length > 0)];
+            }
+
+            return _contents;
+        }
+    }
+
+    /// <summary>Содержание нужно тексту с тремя и больше заголовками: меньше — оглавлять нечего.</summary>
+    private bool HasContents => Contents.Count >= 3;
+
+    private async Task GoToAsync(MarkdownHeading heading)
+    {
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Scenarios/ScenarioTextTab.razor.js");
+            await _module.InvokeVoidAsync("scrollToHeading", _body, heading.Index);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // Прокрутка к заголовку — удобство: без неё текст читается так же.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // Страница уже выгружается.
+        }
+    }
 
     protected override void OnParametersSet()
     {

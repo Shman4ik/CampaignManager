@@ -5,27 +5,28 @@
 @inject IRunsApi Runs
 @inject ICampaignsApi Campaigns
 
-@* Одна форма партии (T2.5c): «Начать игру», «Объявить ваншот» и правка — анонс, дата, состояние, запись. В v1 анонс
+@* Одна форма партии (T2.5c): «Начать игру», «Объявить разовую игру» и правка — анонс, дата, состояние, запись. В v1 анонс
    правился в двух формах сценария с разной обработкой даты, а сохранение затирало правки локаций с другой вкладки; здесь
    прохождение — своя строка и свой адрес. Время — в поясе браузера (LocalTime.ToInput/FromInput), сервер хранит UTC.
-   Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
-<Modal Open="Open" Title="@Title" Size="ModalSize.Medium" OnClose="CloseAsync">
+   Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. «Начать игру» выключена, пока
+   кампания не выбрана, и говорит об этом над кнопками; фокус после загрузки списка кампаний — в «Кампанию». *@
+<Modal Open="Open" Title="@Title" Size="ModalSize.Medium" OnClose="CloseAsync" FooterHint="@(NeedsCampaign ? ChooseCampaign : null)">
     <ChildContent>
         <form id="run-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             @if (Mode == RunFormMode.PlayInCampaign)
             {
-                <Field Label="Кампания" Required="true" Error="@_campaignError" >
+                <Field Label="Кампания" Required="true">
                     @if (_campaigns is null)
                     {
                         <LoadingIndicator Message="Загружаю кампании…" />
                     }
                     else if (_campaigns.Count == 0)
                     {
-                        <p class="cm-text-muted">Нет кампаний, которые вы ведёте. <a class="underline" href="campaigns">Создать кампанию</a> или объявить ваншот.</p>
+                        <p class="cm-text-muted">Нет кампаний, которые вы ведёте. <a class="underline" href="campaigns">Создать кампанию</a> или объявить разовую игру.</p>
                     }
                     else
                     {
-                        <select class="cm-input" data-testid="run-campaign" autofocus @bind="_campaignId">
+                        <select class="cm-input" data-testid="run-campaign" @ref="_campaignSelect" @bind="_campaignId">
                             <option value="">Выберите кампанию</option>
                             @foreach (var campaign in _campaigns)
                             {
@@ -37,15 +38,9 @@
             }
             @if (Mode == RunFormMode.OneShot)
             {
-                <Field Label="Название ваншота" Note="@($"Пусто — «{ScenarioName} (ваншот)». Вы — Хранитель.")">
-                    <input class="cm-input" maxlength="@CampaignLimits.NameLength" data-testid="oneshot-name" @bind="_campaignName" />
+                <Field Label="Название разовой игры" Note="@($"Пусто — «{ScenarioName} (разовая игра)».")">
+                    <input class="cm-input" maxlength="@CampaignLimits.NameLength" data-testid="oneshot-name" autofocus @bind="_campaignName" />
                 </Field>
-                @if (PregenCount == 0)
-                {
-                    <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" class="mb-0">
-                        У сценария нет готовых сыщиков — записываться будет не на кого.
-                    </Alert>
-                }
             }
             @if (Mode == RunFormMode.Edit)
             {
@@ -66,7 +61,7 @@
             @if (Mode != RunFormMode.PlayInCampaign)
             {
                 <Field Label="Анонс" Hint="Markdown" Note="Видят все на главной, пока открыта запись.">
-                    <textarea class="cm-input" rows="6" maxlength="@RunLimits.AnnouncementLength" data-testid="run-announcement" @bind="_announcement"></textarea>
+                    <textarea class="cm-input" rows="4" maxlength="@RunLimits.AnnouncementLength" data-testid="run-announcement" @bind="_announcement"></textarea>
                 </Field>
             }
             @if (Mode == RunFormMode.Edit)
@@ -74,11 +69,11 @@
                 <label class="flex min-h-11 items-start gap-2">
                     <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" data-testid="run-signup" disabled="@(_status == ScenarioRunStatus.Finished)" @bind="_signupOpen" />
                     <span>
-                        Открыта запись на прегенов
-                        <span class="block text-sm text-primary-500">
+                        Открыта запись на места
+                        <span class="block text-sm text-primary-600">
                             @(_status == ScenarioRunStatus.Finished
                                 ? "Завершённая партия закрывает запись сама."
-                                : "Ваншот на главной: игроки бронируют прегенов сценария и получают копию листа.")
+                                : "Игроки выбирают готового сыщика на главной.")
                         </span>
                     </span>
                 </label>
@@ -96,7 +91,7 @@
         @if (!(Mode == RunFormMode.PlayInCampaign && _campaigns is { Count: 0 }))
         {
             <Button Type="submit" form="run-form" Busy="_saving" data-testid="run-save"
-                    Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is null)">@SaveText</Button>
+                    Disabled="NeedsCampaign">@SaveText</Button>
         }
     </Footer>
 </Modal>
@@ -109,8 +104,6 @@
     [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
 
     [Parameter] public string ScenarioName { get; set; } = "";
-
-    [Parameter] public int PregenCount { get; set; }
 
     /// <summary>Правка этой партии (<see cref="RunFormMode.Edit"/>).</summary>
     [Parameter] public ScenarioRunDto? Run { get; set; }
@@ -127,21 +120,27 @@
     private DateTime? _scheduledAt;
     private string? _announcement;
     private bool _signupOpen;
-    private string? _campaignError;
     private string? _error;
     private bool _saving;
+    private ElementReference _campaignSelect;
+    private bool _focusCampaign;
+
+    /// <summary>«Начать игру» без кампании невозможна: кнопка выключена, причина — строкой над кнопками (правило 8).</summary>
+    private bool NeedsCampaign => Mode == RunFormMode.PlayInCampaign && _campaigns is { Count: > 0 } && _campaignId is null;
+
+    private static readonly RenderFragment ChooseCampaign = builder => builder.AddContent(0, "Выберите кампанию");
 
     private string Title => Mode switch
     {
         RunFormMode.PlayInCampaign => "Начать игру",
-        RunFormMode.OneShot => "Объявить ваншот",
+        RunFormMode.OneShot => "Объявить разовую игру",
         _ => "Изменить анонс и запись",
     };
 
     private string SaveText => Mode switch
     {
         RunFormMode.PlayInCampaign => "Начать игру",
-        RunFormMode.OneShot => "Объявить ваншот",
+        RunFormMode.OneShot => "Объявить разовую игру",
         _ => "Сохранить",
     };
 
@@ -157,7 +156,6 @@
             _scheduledAt = LocalTime.ToInput(Run?.ScheduledAt);
             _announcement = Run?.Announcement;
             _signupOpen = Run?.SignupOpen ?? false;
-            _campaignError = null;
             _error = null;
             _campaigns = null;
             if (Mode == RunFormMode.PlayInCampaign)
@@ -165,6 +163,7 @@
                 try
                 {
                     _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit && c.Status != CampaignStatus.Completed)];
+                    _focusCampaign = true;
                 }
                 catch (HttpRequestException ex)
                 {
@@ -177,15 +176,32 @@
         _wasOpen = Open;
     }
 
-    private async Task SaveAsync()
+    // Список кампаний приходит после открытия окна: `autofocus` к тому времени уже отработал на дате, поэтому фокус — руками.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Mode == RunFormMode.PlayInCampaign && _campaignId is null)
+        if (!_focusCampaign || _campaigns is not { Count: > 0 })
         {
-            _campaignError = "Выберите кампанию.";
             return;
         }
 
-        _campaignError = null;
+        _focusCampaign = false;
+        try
+        {
+            await _campaignSelect.FocusAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Окно успели закрыть — фокусировать нечего.
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (NeedsCampaign || _saving)
+        {
+            return;
+        }
+
         _saving = true;
         _error = null;
         try

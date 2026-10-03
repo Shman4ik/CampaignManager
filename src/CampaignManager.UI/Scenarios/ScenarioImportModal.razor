@@ -6,17 +6,18 @@
 @* Импорт сценария файлом (T2.5d) — по образцу импорта справочников: файл уходит на сервер как есть, сначала «Проверить»
    (пробный прогон с отчётом по строкам), потом «Импортировать». Импорт — одна транзакция: хоть одна строка с ошибкой —
    не записано ничего. Всегда новый сценарий; «Название копии» — чтобы экспорт, импортированный обратно, не путался с
-   исходным в списке. *@
-<Modal Open="Open" Title="Импорт сценария" OnClose="CloseAsync" data-testid="scenario-import">
+   исходным в списке. Название уже занято — «Проверить» само ставит «(копия)» и говорит об этом одной строкой. Причина
+   выключенных кнопок — над ними (FooterHint), чтобы подвал не прыгал, когда файл выбран. *@
+<Modal Open="Open" Title="Импорт сценария" OnClose="CloseAsync" FooterHint="@(_file is null && _report?.Imported != true ? NeedFile : null)" data-testid="scenario-import">
     <ChildContent>
         <div class="grid gap-4">
             <div class="flex flex-col gap-2">
                 <p class="cm-text-muted">Файл, скачанный кнопкой «Экспорт JSON» на странице сценария.</p>
                 <FilePicker Accept=".json,application/json" FileName="@_fileName" OnChange="PickAsync" data-testid="scenario-import-file" />
             </div>
-            <Field Label="Название копии" Note="Пусто — название из файла.">
+            <Field Label="Название копии" Note="@(_nameAdded ? $"Такой сценарий уже есть, поэтому к названию добавлено «{CopySuffix}»." : "Пусто — название из файла.")">
                 <input class="cm-input" maxlength="@ScenarioLimits.NameLength" @bind="_name" @bind:event="oninput"
-                       @bind:after="() => _report = null" data-testid="scenario-import-name" />
+                       @bind:after="NameEdited" data-testid="scenario-import-name" />
             </Field>
             @if (_error is not null)
             {
@@ -36,7 +37,7 @@
         }
         else
         {
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-vial" Busy="_busy" Disabled="_file is null" DisabledReason="Сначала выберите файл"
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-vial" Busy="_busy" Disabled="_file is null"
                     OnClick="() => RunAsync(dryRun: true)" data-testid="scenario-import-check">Проверить</Button>
             <Button Icon="fa-file-import" Busy="_busy" Disabled="_file is null"
                     OnClick="() => RunAsync(dryRun: false)" data-testid="scenario-import-run">Импортировать</Button>
@@ -54,8 +55,23 @@
     private bool _busy;
     private string? _error;
     private ScenarioImportReport? _report;
+    private bool _nameAdded;
+
+    private const string CopySuffix = "(копия)";
+
+    private static readonly RenderFragment NeedFile = builder => builder.AddContent(0, "Сначала выберите файл");
+
+    /// <summary>Название поправили руками: прежний отчёт устарел, автоподстановка больше ни при чём.</summary>
+    private void NameEdited()
+    {
+        _report = null;
+        _nameAdded = false;
+    }
 
     [Parameter] public bool Open { get; set; }
+
+    /// <summary>Названия сценариев библиотеки: совпавшее название получает «(копия)» само.</summary>
+    [Parameter] public IReadOnlyCollection<string> ExistingNames { get; set; } = [];
 
     [Parameter] public EventCallback OnClose { get; set; }
 
@@ -96,6 +112,14 @@
         try
         {
             _report = await Api.ImportAsync(new MemoryStream(_file), dryRun, _name);
+            if (dryRun && string.IsNullOrWhiteSpace(_name) && !_report.Imported && IsTaken(_report.ScenarioName))
+            {
+                // Название из файла занято: ставим «(копия)» сами и проверяем заново — отчёт должен описывать то, что запишется.
+                _name = $"{_report.ScenarioName} {CopySuffix}";
+                _nameAdded = true;
+                _report = await Api.ImportAsync(new MemoryStream(_file), dryRun, _name);
+            }
+
             if (_report.Imported)
             {
                 await OnImported.InvokeAsync();
@@ -111,6 +135,9 @@
             _busy = false;
         }
     }
+
+    private bool IsTaken(string name) =>
+        ExistingNames.Any(n => string.Equals(n.Trim(), name.Trim(), StringComparison.CurrentCultureIgnoreCase));
 
     private async Task OpenAsync()
     {
@@ -132,6 +159,7 @@
         _file = null;
         _fileName = null;
         _name = "";
+        _nameAdded = false;
         _report = null;
         _error = null;
     }
