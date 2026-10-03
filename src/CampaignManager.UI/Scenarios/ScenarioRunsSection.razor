@@ -20,9 +20,14 @@
         </div>
     </div>
     <AsyncContent @ref="_content" Key="Scenario.Id" Load="LoadAsync" LoadingMessage="Загружаю партии…" Context="runs">
+        @* Счётчик «Партий» в шапке считает все партии сценария, список — только в кампаниях, которые ведёт этот Хранитель:
+           разницу называем, чтобы «Партий: 1» не стояло рядом с «Пока не проходили». *@
+        @{
+            var hidden = Math.Max(0, Scenario.RunCount - runs.Count);
+        }
         @if (runs.Count == 0)
         {
-            <EmptyState Compact="true" Title="Пока не проходили." />
+            <EmptyState Compact="true" Title="@(hidden > 0 ? $"В ваших кампаниях не проходили. Партий в чужих кампаниях: {hidden}." : "Пока не проходили.")" />
         }
         else
         {
@@ -111,6 +116,10 @@
                     </div>
                 }
             </div>
+            @if (hidden > 0)
+            {
+                <p class="cm-text-muted mt-2 text-sm" data-testid="runs-hidden">Ещё партий в чужих кампаниях: @hidden.</p>
+            }
         }
     </AsyncContent>
 </section>
@@ -146,7 +155,7 @@
         _formOpen = false;
         Toasts.Success(mode switch
         {
-            RunFormMode.PlayInCampaign => $"Сценарий играют в кампании «{run.CampaignName}».",
+            RunFormMode.PlayInCampaign => $"Игра началась в кампании «{run.CampaignName}».",
             RunFormMode.OneShot => $"Ваншот объявлен: кампания «{run.CampaignName}», запись открыта.",
             _ => "Партия сохранена.",
         });

@@ -6,11 +6,11 @@
 
 @* Одна форма на создание и правку кампании (в v1 — две одинаковые модалки в CampaignsPage).
    Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
-<Modal Open="Open" Title="@(Campaign is null ? "Новая кампания" : "Изменить кампанию")" Size="ModalSize.Small" OnClose="CloseAsync">
+<Modal Open="Open" Title="@(Campaign is null ? "Новая кампания" : "Изменить кампанию")" Size="ModalSize.Small" OnClose="CloseAsync" MinHeight="26rem">
     <ChildContent>
         <form id="campaign-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             <Field Label="Название" Error="@_nameError">
-                <input class="cm-input" maxlength="@CampaignLimits.NameLength" @bind="_name" @bind:event="oninput"
+                <input class="cm-input" maxlength="@CampaignLimits.NameLength" @bind="_name" @bind:event="oninput" @bind:after="ClearNameError"
                        placeholder="Например: «Маски Ньярлатхотепа»" />
             </Field>
             @* Подсказка про ваншот — только когда он выбран; у существующей кампании, которую делают ваншотом, — предупреждение. *@
@@ -119,6 +119,15 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    /// <summary>Ошибка «Название обязательно» уходит, как только его начали вводить, а не при следующем «Создать».</summary>
+    private void ClearNameError()
+    {
+        if (!string.IsNullOrWhiteSpace(_name))
+        {
+            _nameError = null;
         }
     }
 

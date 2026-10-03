@@ -298,7 +298,7 @@ public sealed class ChecksTests : KitContext
             .Add(c => c.Sheet, Sheet())
             .Add(c => c.Catalog, Catalog)
             .Add(c => c.InitialKey, $"skill:{Spot.Id}")
-            .Add(c => c.Details, "<p>Исход из сценария</p>"));
+            .Add(c => c.Details, passed => "<p>Исход из сценария</p>"));
 
         Assert.Empty(cut.FindAll("[data-testid='check-details']"));
         cut.Find("[data-testid='check-roll-first'] input").Change("70");
@@ -315,7 +315,7 @@ public sealed class ChecksTests : KitContext
             .Add(m => m.Catalog, Catalog)
             .Add(m => m.InitialKey, $"skill:{Spot.Id}")
             .Add(m => m.InitialInvestigatorId, ann.Id)
-            .Add(m => m.Details, "<p>Исход</p>"));
+            .Add(m => m.Details, passed => "<p>Исход</p>"));
 
         cut.Find("[data-testid='check-roll-first'] input").Change("70");
         Assert.Contains("Исход", cut.Find("[data-testid='check-details']").TextContent);

@@ -28,14 +28,15 @@
             }
         }
 
-        @if (Subject is { } head && head.Name.Length > 0)
-        {
-            @* Цель крупно: заголовок окна называет сыщика, а что именно проверяют, было видно только в select. *@
-            <div class="flex flex-wrap items-baseline gap-x-3" data-testid="check-subject-head">
+        @* Цель крупно: заголовок окна называет сыщика, а что именно проверяют, было видно только в select. Строка занимает место
+           и пока цель не выбрана, иначе окно подрастало бы на выборе. *@
+        <div class="flex min-h-7 flex-wrap items-baseline gap-x-3" data-testid="check-subject-head">
+            @if (Subject is { } head && head.Name.Length > 0)
+            {
                 <span class="text-lg font-semibold text-primary-900">@head.Name</span>
                 <span class="font-mono text-lg text-primary-700">@head.Value%</span>
-            </div>
-        }
+            }
+        </div>
 
         @if (CurrentSheet is { } sheet)
         {
@@ -107,6 +108,13 @@
                 </Button>
             </div>
 
+            @if (Details is not null)
+            {
+                @* Исход из сценария — сразу под результатом броска, до Удачи и повтора: за столом его читают первым,
+                   не прокручивая окно. Выпавший исход — сверху и выделен, остальные Details прячет сам. *@
+                <div class="mt-4" data-testid="check-details">@Details(FinalOutcome is { Passed: true })</div>
+            }
+
             @if (_luckSpent is { } spent)
             {
                 <Alert Tone="Tone.Success" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="check-luck-result">
@@ -127,12 +135,6 @@
             @if (FinalOutcome is { Passed: true })
             {
                 @MarkBlock()
-            }
-
-            @if (Details is not null)
-            {
-                @* Исход из сценария — под результатом: за столом его читают сразу, не закрывая окно. *@
-                <div class="mt-4" data-testid="check-details">@Details</div>
             }
         }
     </section>
@@ -180,8 +182,11 @@
     /// <summary>Выбран другой сыщик (или «вписать вручную» — <c>null</c>): родитель запоминает его для следующей проверки.</summary>
     [Parameter] public EventCallback<Guid?> OnInvestigatorChanged { get; set; }
 
-    /// <summary>Пояснение под результатом броска (в локации сценария — исходы «Успех»/«Провал»). До броска не показывается.</summary>
-    [Parameter] public RenderFragment? Details { get; set; }
+    /// <summary>
+    /// Пояснение сразу под результатом броска (в локации сценария — исходы «Успех»/«Провал»); параметр — итог проверки с учётом
+    /// Удачи и повтора: <c>true</c> — пройдена. До броска не показывается.
+    /// </summary>
+    [Parameter] public RenderFragment<bool>? Details { get; set; }
 
     private Guid? _investigatorId;
     private string _key = "";

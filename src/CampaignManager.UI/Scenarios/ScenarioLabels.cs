@@ -56,12 +56,18 @@ public static class ScenarioLabels
     };
 
     /// <summary>Тон метки вида факта — один на вкладку «Факты» и панель режима игры.</summary>
-    public static Tone FactTone(KeyFactType type) => type switch
+    /// <summary>
+    /// Вид факта — не состояние: цвет бейджа ничего не обещал бы («красная» истина читалась как ошибка, «зелёная» награда — как успех),
+    /// поэтому все виды одного тона, а различает их значок.
+    /// </summary>
+    public static Tone FactTone(KeyFactType type) => Tone.Neutral;
+
+    public static string FactIcon(KeyFactType type) => type switch
     {
-        KeyFactType.Truth => Tone.Error,
-        KeyFactType.Timeline => Tone.Info,
-        KeyFactType.Reward => Tone.Success,
-        _ => Tone.Stone,
+        KeyFactType.Truth => "fa-eye",
+        KeyFactType.Timeline => "fa-timeline",
+        KeyFactType.Reward => "fa-gift",
+        _ => "fa-clock-rotate-left",
     };
 
     public static string CharacteristicName(Characteristic characteristic) =>
