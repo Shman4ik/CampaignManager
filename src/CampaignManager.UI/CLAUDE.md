@@ -10,7 +10,7 @@
 
 | Папка | Что |
 |---|---|
-| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `play.css` (режим «Игра» листа), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки), `kit.css` (подсказки по касанию, меню «⋯», выбор файла, сводка ошибок, липкая колонка, полоса страниц, пустая строка), `music.css` (плеер: панель и полоса) |
+| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `wizard.css` (помощник создания сыщика), `play.css` (режим «Игра» листа), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки), `kit.css` (подсказки по касанию, меню «⋯», выбор файла, сводка ошибок, липкая колонка, полоса страниц, пустая строка), `music.css` (плеер: панель и полоса) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator`; волна UX-0b — `RowMenu`/`RowMenuItem`, `BookRef`, `Abbr`, `FilePicker`, `SectionHeader`, `FormErrors`/`ValidationScroll`, `UnsavedChangesGuard`, `StickyPane`, `DiceText`, `Names` (см. «Компоненты UX-0b») |
 | `Layout/` | `MainLayout`, `BareLayout` (колонка без рельса — только `/login`), `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки; `InfoLinks` — ссылки на `/about` и `/legal` (страница входа, лист «Ещё»); сами страницы — статические, их рендерит сервер (`Server/Components/Pages/About.razor`, `Legal.razor`, `[ExcludeFromInteractiveRouting]`, каркас `Server/Components/InfoShell`: те же поля, что у остальных страниц (колонка `cm-main` отступает на рельс — в нём знак), «← На главную» слева в шапке — вошедшему на `/`, гостю на `/login` (главная для гостя — страница Auth0), заголовок вкладки «О сайте — Campaign Manager»; бот Google и Auth0 читают HTML без JS), текст — `Pages/AboutContent`, `LegalContent` (адреса v1, на `/legal` ссылаются Google-клиент и Auth0; тест `Info_pages_are_open_without_sign_in_with_text_in_html`) |
@@ -371,7 +371,9 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
 компонент. Тон и подпись уровня — `LevelText` (общий с диалогом проверки). Проверка навыка целиком
 (сложность, кости, Удача, повтор, отметка) — не своя разметка вокруг `RollInput`, а `Checks/SkillCheckPanel`.
 Сумма костей NdM (прирост 1d10, 2d6 Рассудка, 2d10 Средств) — `DiceInput`: та же пара «вписать / бросить», значение —
-сумма; правило Core получает её через `EnteredDiceRoller.Total`.
+сумма; правило Core получает её через `EnteredDiceRoller.Total`. Годное число `DiceInput` отдаёт **сразу при наборе** (`oninput`), негодное при наборе
+пропускает («1» на пути к «13»), ошибку показывает уход из поля; `Placeholder` — подсказка вместо «3d6» («сумма»), `RollText` — кнопка броска словом, а не
+кубиком (отдельное поле Удачи). Числовое поле, которое должно обновлять черновик на каждое нажатие, — не голый `@onchange`, а `Characters/Creation/NumberInput`.
 
 ## Связь вместо circuit
 
