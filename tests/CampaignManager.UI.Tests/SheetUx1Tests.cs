@@ -85,6 +85,11 @@ public sealed class SheetUx1Tests : KitContext
         var hurt = new CharacterSheet { Current = new CurrentValues { HitPoints = 5 } };
         hurt.Overrides.MaxHitPoints = 12;
         Assert.Single(Render<PersonalPanel>(hurt).FindAll("[data-testid='open-recovery']"));
+
+        // умирающему и мёртвому окно ничего не записало бы — кнопки с пустым окном нет (g2 7.2.4)
+        var dying = new CharacterSheet { Current = new CurrentValues { HitPoints = 0 }, Condition = new SheetCondition { Dying = true } };
+        dying.Overrides.MaxHitPoints = 12;
+        Assert.Empty(Render<PersonalPanel>(dying).FindAll("[data-testid='open-recovery']"));
     }
 
     [Fact]

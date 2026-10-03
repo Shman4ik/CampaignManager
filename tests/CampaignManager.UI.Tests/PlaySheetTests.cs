@@ -258,7 +258,7 @@ public sealed class PlaySheetTests : KitContext
         var context = new SheetContext(new CharacterDto { Sheet = sheet, CanEdit = true }, catalog, [], null!, () => { }, _checks.Add);
         var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<PlayWeapons>());
 
-        Assert.Contains("Ближний бой (драка)", cut.Find("[data-testid='play-weapon-fallback']").TextContent);
+        Assert.Contains("Ближний бой (драка) — навык не указан", cut.Find("[data-testid='play-weapon-fallback']").TextContent);
         cut.Find("[data-testid='play-weapon-check']").Click();
         Assert.Equal($"skill:{brawl.Id}", Assert.Single(_checks));
     }

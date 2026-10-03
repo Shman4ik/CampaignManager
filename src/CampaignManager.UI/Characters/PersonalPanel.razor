@@ -183,9 +183,13 @@
 
     private CharacterSheet Sheet => Context.Sheet;
 
-    /// <summary>Лечить есть что: ПЗ не полные, есть серьёзная рана или сыщик без сознания / при смерти.</summary>
-    private bool NeedsHealing => Sheet.Current.HitPoints < DerivedAttributeRules.Compute(Sheet, Context.Catalog).MaxHitPoints
-        || Sheet.Condition.MajorWound || Sheet.Condition.Unconscious || Sheet.Condition.Dying;
+    /// <summary>
+    /// Лечить есть что: ПЗ не полные, есть серьёзная рана или сыщик без сознания. Умирающему и мёртвому — нечего: окно
+    /// ничего бы не записало (сначала первая помощь, она — в тревоге «При смерти»), и кнопка с пустым окном не нужна (g2 7.2.4).
+    /// </summary>
+    private bool NeedsHealing => Sheet.Condition is { Dying: false, Dead: false }
+        && (Sheet.Current.HitPoints < DerivedAttributeRules.Compute(Sheet, Context.Catalog).MaxHitPoints
+            || Sheet.Condition.MajorWound || Sheet.Condition.Unconscious);
 
     private bool HasOverrides => Sheet.Overrides is { MaxHitPoints: not null } or { MaxMagicPoints: not null } or { MaxSanity: not null }
         or { DamageBonus: not null } or { Build: not null } or { Move: not null };
