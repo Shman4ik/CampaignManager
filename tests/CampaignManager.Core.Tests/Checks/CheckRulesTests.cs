@@ -71,7 +71,7 @@ public sealed class CheckRulesTests
     [Fact]
     [Trait("page", "83")]
     public void PushBlockReason_Luck() =>
-        Assert.Equal("Проверку Удачи повторить нельзя (стр. 83).", CheckRules.PushBlockReason(Luck, Failed(), false));
+        Assert.Equal("Проверку Удачи повторить нельзя.", CheckRules.PushBlockReason(Luck, Failed(), false));
 
     [Theory]
     [Trait("page", "102")]
@@ -119,7 +119,7 @@ public sealed class CheckRulesTests
     {
         var fumble = CheckRules.Evaluate(97, 60, Difficulty.Hard);
 
-        Assert.Equal("Крах наступает сразу, повторной проверкой его не отменить (стр. 87).",
+        Assert.Equal("Крах наступает сразу, повторной проверкой его не отменить.",
             CheckRules.PushBlockReason(Library, fumble, false));
     }
 
@@ -140,12 +140,12 @@ public sealed class CheckRulesTests
         var fumble = CheckRules.Evaluate(97, 60, Difficulty.Hard);
 
         // Удачу не тратят на проверку Удачи и на повтор — и пройденную тоже (её поднимают до уровня выше)
-        Assert.Equal("На проверку Удачи пункты Удачи не тратят (стр. 97).", CheckRules.LuckBlockReason(Luck, passed, isPushed: true));
+        Assert.Equal("На проверку Удачи пункты Удачи не тратят.", CheckRules.LuckBlockReason(Luck, passed, isPushed: true));
         Assert.Null(CheckRules.LuckBlockReason(Library, passed, false));
-        Assert.Equal("На проверку Удачи пункты Удачи не тратят (стр. 97).", CheckRules.LuckBlockReason(Luck, Failed(), false));
-        Assert.Equal("На повторную проверку Удачу не тратят: либо повтор, либо Удача (стр. 97).",
+        Assert.Equal("На проверку Удачи пункты Удачи не тратят.", CheckRules.LuckBlockReason(Luck, Failed(), false));
+        Assert.Equal("На повторную проверку Удачу не тратят: либо повтор, либо Удача.",
             CheckRules.LuckBlockReason(Library, Failed(), true));
-        Assert.Equal("Крах вступает в силу в любом случае — выкупить его нельзя (стр. 97).",
+        Assert.Equal("Крах вступает в силу в любом случае — выкупить его нельзя.",
             CheckRules.LuckBlockReason(Library, fumble, false));
         Assert.Null(CheckRules.LuckBlockReason(Library, Failed(), false));
         Assert.Null(CheckRules.LuckBlockReason(Strength, Failed(), false));
@@ -216,12 +216,12 @@ public sealed class CheckRulesTests
     {
         Assert.StartsWith("Отметку для развития ставят только навыкам", CheckRules.MarkBlockReason(Strength, 0, false));
         Assert.StartsWith("Отметку для развития ставят только навыкам", CheckRules.MarkBlockReason(Luck, 0, false));
-        Assert.Equal("Мифы Ктулху и Средства никогда не отмечают (стр. 92).",
+        Assert.Equal("Мифы Ктулху и Средства никогда не отмечают.",
             CheckRules.MarkBlockReason(new CheckSubject(CheckSubjectKind.Skill, "Мифы Ктулху", 5) { SkillCode = SkillCodes.Mythos }, 0, false));
-        Assert.Equal("Мифы Ктулху и Средства никогда не отмечают (стр. 92).",
+        Assert.Equal("Мифы Ктулху и Средства никогда не отмечают.",
             CheckRules.MarkBlockReason(new CheckSubject(CheckSubjectKind.Skill, "Средства", 30) { SkillCode = SkillCodes.CreditRating }, 0, false));
-        Assert.Equal("Проверка шла с бонусной костью — навык не отмечают (стр. 92).", CheckRules.MarkBlockReason(Library, 1, false));
-        Assert.Equal("Успех куплен Удачей — отметки за него нет (стр. 97).", CheckRules.MarkBlockReason(Library, 0, true));
+        Assert.Equal("Проверка шла с бонусной костью — навык не отмечают.", CheckRules.MarkBlockReason(Library, 1, false));
+        Assert.Equal("Успех куплен Удачей — отметки за него нет.", CheckRules.MarkBlockReason(Library, 0, true));
         Assert.StartsWith("Значение вписано вручную", CheckRules.MarkBlockReason(Manual, 0, false));
         Assert.Null(CheckRules.MarkBlockReason(Library, 0, false));
         Assert.Null(CheckRules.MarkBlockReason(Library, -2, false)); // штрафная кость отметке не мешает

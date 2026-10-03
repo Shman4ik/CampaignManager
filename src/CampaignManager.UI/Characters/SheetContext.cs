@@ -39,6 +39,13 @@ public sealed class SheetContext(
     /// <summary>Блок изменил лист — перерисовать страницу.</summary>
     public void Changed() => changed();
 
+    /// <summary>
+    /// Проверка ИНТ открыта из тревоги Рассудка («Потеряно ≥5 по одной причине»): когда окно закроют после броска, страница
+    /// сама отметит исход (успех — безумие, провал — разум отгородился). Обычная проверка ИНТ из плитки характеристики
+    /// ничего не отмечает.
+    /// </summary>
+    public bool IntCheckPending { get; set; }
+
     /// <summary>Открыть диалог проверки с целью (<c>skill:{id}</c>, <c>char:STR</c>, <c>luck</c>; null — выбрать в окне).</summary>
     public void Check(string? key) => check(key);
 }

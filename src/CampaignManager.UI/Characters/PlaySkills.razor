@@ -2,20 +2,22 @@
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.Core.Characters
 
-@* Навыки режима «Игра» — все, что лист показывает развёрнутыми (решение владельца 2026-10-03,
-   SheetSkillLayout.Visible), по алфавиту сверху вниз; колонок столько, сколько влезает (play.css: 1 на телефоне,
-   3 в портрете iPad, 4 в ландшафте), — поэтому CSS columns, а не явное деление, как у листа.
-   Развитые — жирным, на базе — приглушены. Специализации на базе свёрнуты, как на листе; их находит поиск (All).
+@* Навыки режима «Игра» — все, что лист показывает развёрнутыми (решение владельца 2026-10-03, SheetSkillLayout.Sections):
+   «Частые» первым блоком (решение оркестратора, g2 1.2: «Внимание», «Слух», «Скрытность» нужны за столом чаще, чем
+   сороковой навык по алфавиту), ниже остальные по алфавиту. Колонок столько, сколько влезает (play.css: 1 на телефоне, 2 в
+   портрете iPad, 3–4 в ландшафте), — поэтому CSS columns, а не явное деление, как у листа.
+   Развитые — жирным, на базе — приглушены только значения меньше 20 (g2 1.17: родной язык 75 и Уклонение 22 «на базе» — одни из
+   самых больших чисел листа, приглушать их нельзя). Специализации на базе свёрнуты, как на листе; их находит поиск (All).
    Строка целиком — кнопка проверки (SkillCheckModal, тот же ключ строки, что у листа); отметку развития ставит
-   окно проверки, здесь она только видна. *@
+   окно проверки, здесь она только видна. Над списком одна строка о числах (g2 1.3): «значение · ½ · ⅕». *@
 <section class="cm-card play-skills" aria-label="Навыки" data-testid="play-skills">
     <div class="play-card-head">
         <h2 class="cm-section-title">Навыки</h2>
         <input type="search" class="cm-input play-search" placeholder="Найти навык" aria-label="Найти навык"
                data-testid="play-skill-search" @bind="_search" @bind:event="oninput" />
     </div>
-    @{ var lines = Lines(); }
-    @if (lines.Count == 0)
+    @{ var sections = Sections(); }
+    @if (sections.All(s => s.Lines.Count == 0))
     {
         <div class="play-card-empty">
             <EmptyState Compact="true" Title="@(_search.Length > 0 ? Terms.EmptyFiltered("навыков") : Terms.Empty("навыков"))" />
@@ -23,40 +25,69 @@
     }
     else
     {
-        <div class="play-skill-cols">
-            @foreach (var line in lines)
-            {
-                <button type="button" @key="line.Key" class="@Css.Join("play-skill", line.Value > line.BaseValue ? null : "play-skill-base")"
-                        aria-label="@($"Проверка: {line.Name}, {line.Value}{(line.Checked ? ", отмечен для развития" : "")}")"
-                        data-testid="@($"play-skill-{line.Name}")" @onclick="() => Context.Check(line.Key)">
-                    <span class="play-skill-tick" aria-hidden="true">
-                        @if (line.Checked)
-                        {
-                            <i class="fa-solid fa-check"></i>
-                        }
-                    </span>
-                    <span class="play-skill-name">@line.Name</span>
-                    <span class="play-skill-value">@line.Value</span>
-                    <span class="play-skill-part">@CharacteristicMath.Half(line.Value)</span>
-                    <span class="play-skill-part">@CharacteristicMath.Fifth(line.Value)</span>
-                </button>
-            }
-        </div>
+        <p class="play-skill-legend" data-testid="play-skill-legend">значение · ½ · ⅕</p>
+        @foreach (var section in sections.Where(s => s.Lines.Count > 0))
+        {
+            <section data-testid="@section.TestId">
+                @if (section.Title is not null)
+                {
+                    <h3 class="play-skill-subtitle">@section.Title</h3>
+                }
+                <div class="play-skill-cols">
+                    @foreach (var line in section.Lines)
+                    {
+                        <button type="button" @key="line.Key" class="@Css.Join("play-skill", IsMuted(line) ? "play-skill-base" : null)"
+                                aria-label="@($"Проверка: {line.Name}, {line.Value}{(line.Checked ? ", отмечен для развития" : "")}")"
+                                data-testid="@($"play-skill-{line.Name}")" @onclick="() => Context.Check(line.Key)">
+                            <span class="play-skill-tick" aria-hidden="true">
+                                @if (line.Checked)
+                                {
+                                    <i class="fa-solid fa-check"></i>
+                                }
+                            </span>
+                            <span class="play-skill-name">@line.Name</span>
+                            <span class="play-skill-value">@line.Value</span>
+                            <span class="play-skill-part">@CharacteristicMath.Half(line.Value)</span>
+                            <span class="play-skill-part">@CharacteristicMath.Fifth(line.Value)</span>
+                        </button>
+                    }
+                </div>
+            </section>
+        }
     }
 </section>
 
 @code {
+    private sealed record Block(string? Title, string TestId, IReadOnlyList<SkillLine> Lines);
+
     private string _search = "";
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
-    private IReadOnlyList<SkillLine> Lines()
+    /// <summary>
+    /// Приглушаются только значения на базе справочника и меньше 20: родной язык 75 и Уклонение 22 — «на базе», но не «ничего».
+    /// </summary>
+    internal static bool IsMuted(SkillLine line) => line.Value <= line.BaseValue && line.Value < MutedBelow;
+
+    private const int MutedBelow = 20;
+
+    private IReadOnlyList<Block> Sections()
     {
         var query = CatalogCodeTable.NormalizeName(_search);
         if (query.Length == 0)
-            return SheetSkillLayout.Visible(Context.Sheet, Context.Catalog);
+        {
+            var sections = SheetSkillLayout.Sections(Context.Sheet, Context.Catalog);
+            return
+            [
+                new Block(sections.Frequent.Count > 0 ? "Частые" : null, "play-skills-frequent", sections.Frequent),
+                new Block(sections.Frequent.Count > 0 ? "Остальные по алфавиту" : null, "play-skills-others", sections.Others),
+            ];
+        }
 
-        return [.. SheetSkillLayout.All(Context.Sheet, Context.Catalog)
-            .Where(l => CatalogCodeTable.NormalizeName(l.Name).Contains(query, StringComparison.Ordinal))];
+        return
+        [
+            new Block(null, "play-skills-found", [.. SheetSkillLayout.All(Context.Sheet, Context.Catalog)
+                .Where(l => CatalogCodeTable.NormalizeName(l.Name).Contains(query, StringComparison.Ordinal))]),
+        ];
     }
 }

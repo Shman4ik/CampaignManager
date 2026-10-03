@@ -1,9 +1,12 @@
+@using System.Text.RegularExpressions
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
 
-@* Заклинания и «При себе» режима «Игра» — только чтение: название и цена заклинания, вещи списком, деньги. Пустая
-   секция не рисуется (правило пустых состояний); правка — в режиме «Лист». Обе — одной колонкой (play-side-stack):
-   в портрете она встаёт рядом с оружием, а не третьим рядом под ним. *@
+@* Заклинания и «При себе» режима «Игра» — только чтение. Пустая секция не рисуется (правило пустых состояний); правка —
+   в режиме «Лист». Обе — одной колонкой (play-side-stack): в портрете они встают рядом друг с другом под оружием.
+   Заклинание — строка-кнопка (g2 1.12, решение оркестратора): касание раскрывает время сотворения и описание, цена
+   («10 ПМ, 1d3 рассудка») видна сразу; применения (списать ПМ и Рассудок) здесь нет — их вычитают шагом в плитках.
+   «При себе» (g2 1.9) — простой список через « · », а не «таблетки»: те нажимаются (отметки состояния), предметы — нет. *@
 <div class="play-side-stack">
     @if (Sheet.Spells.Count > 0)
     {
@@ -11,11 +14,44 @@
             <div class="play-card-head"><h2 class="cm-section-title">Заклинания</h2></div>
             @foreach (var spell in Sheet.Spells)
             {
-                <div class="play-row">
-                    <div class="play-row-name min-w-0 flex-1">@spell.Name</div>
-                    @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                var detailed = Detailed(spell);
+                var open = detailed && _open.Contains(spell);
+                @* Записи-record равны по значению: открытые строки — по ссылке, @key на них не ставим (CLAUDE.md модуля). *@
+                <div class="play-spell" data-testid="play-spell">
+                    @if (detailed)
                     {
-                        <div class="play-row-meta text-right">@spell.Cost</div>
+                        <button type="button" class="play-row play-row-button" aria-expanded="@(open ? "true" : "false")" data-testid="play-spell-toggle"
+                                @onclick="() => Toggle(spell)">
+                            <i class="fa-solid fa-chevron-right play-row-chevron" aria-hidden="true"></i>
+                            <span class="play-row-name min-w-0 flex-1">@spell.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                            {
+                                <span class="play-row-meta text-right">@CostText(spell.Cost)</span>
+                            }
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="play-row">
+                            <span class="play-row-name min-w-0 flex-1">@spell.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                            {
+                                <span class="play-row-meta text-right">@CostText(spell.Cost)</span>
+                            }
+                        </div>
+                    }
+                    @if (open)
+                    {
+                        <div class="play-spell-detail" data-testid="play-spell-detail">
+                            @if (!string.IsNullOrWhiteSpace(spell.CastingTime))
+                            {
+                                <p class="play-spell-time">Время сотворения: @spell.CastingTime</p>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(spell.Description))
+                            {
+                                <Markdown Text="@spell.Description" />
+                            }
+                        </div>
                     }
                 </div>
             }
@@ -27,12 +63,16 @@
             <div class="play-card-head"><h2 class="cm-section-title">При себе</h2></div>
             @if (Sheet.Equipment.Count > 0)
             {
-                <ul class="play-tags">
-                    @foreach (var item in Sheet.Equipment)
+                <p class="play-gear">
+                    @for (var i = 0; i < Sheet.Equipment.Count; i++)
                     {
-                        <li class="play-tag">@item.Name</li>
+                        if (i > 0)
+                        {
+                            <span class="play-gear-sep" aria-hidden="true"> · </span>
+                        }
+                        <span class="play-gear-item">@Sheet.Equipment[i].Name</span>
                     }
-                </ul>
+                </p>
             }
             @if (Sheet.Finances.Cash is { } cash)
             {
@@ -43,7 +83,26 @@
 </div>
 
 @code {
+    private readonly HashSet<SheetSpell> _open = new(ReferenceEqualityComparer.Instance);
+
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
     private CharacterSheet Sheet => Context.Sheet;
+
+    private static bool Detailed(SheetSpell spell) =>
+        !string.IsNullOrWhiteSpace(spell.Description) || !string.IsNullOrWhiteSpace(spell.CastingTime);
+
+    private void Toggle(SheetSpell spell)
+    {
+        if (!_open.Remove(spell))
+            _open.Add(spell);
+    }
+
+    /// <summary>
+    /// Цена из данных одним словарём (правило 11): «1d6 магии» → «1d6 ПМ» — единица пунктов магии одна на весь список, —
+    /// и «Рассудка» с заглавной (у НПС) — строчной.
+    /// </summary>
+    internal static string CostText(string cost) =>
+        Regex.Replace(Regex.Replace(cost.Trim(), @"(?<=\d)\s*магии", " ПМ", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase),
+            "Рассудка", "рассудка", RegexOptions.CultureInvariant);
 }

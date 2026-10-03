@@ -29,47 +29,65 @@
         }
 
         @* Цель крупно: заголовок окна называет сыщика, а что именно проверяют, было видно только в select. Строка занимает место
-           и пока цель не выбрана, иначе окно подрастало бы на выборе. *@
-        <div class="flex min-h-7 flex-wrap items-baseline gap-x-3" data-testid="check-subject-head">
-            @if (Subject is { } head && head.Name.Length > 0)
+           и пока цель не выбрана, иначе окно подрастало бы на выборе. Справа — «Другой навык»: полный список из 90 вариантов
+           не нужен, пока окно открыто с конкретным навыком, — раньше он стоял вторым блоком и троил число («Внимание 63%»,
+           «Внимание (63)», «Обычная ≤ 63», g2 7.1.2). *@
+        <div class="flex min-h-8 flex-wrap items-center justify-between gap-x-3">
+            <div class="flex min-h-7 flex-wrap items-baseline gap-x-3" data-testid="check-subject-head">
+                @if (Subject is { } head && head.Name.Length > 0)
+                {
+                    <span class="text-lg font-semibold text-primary-900">@head.Name</span>
+                    <span class="font-mono text-lg text-primary-700">@head.Value%</span>
+                }
+            </div>
+            @if (CurrentSheet is not null && _key.Length > 0 && !_changingTarget && !IsLocked)
             {
-                <span class="text-lg font-semibold text-primary-900">@head.Name</span>
-                <span class="font-mono text-lg text-primary-700">@head.Value%</span>
+                <button type="button" class="sheet-link" data-testid="check-change-target" @onclick="() => _changingTarget = true">
+                    <i class="fa-solid fa-repeat" aria-hidden="true"></i>Другой навык
+                </button>
             }
         </div>
 
         @if (CurrentSheet is { } sheet)
         {
-            <Field Label="Что проверяем">
-                <select class="cm-input" data-testid="check-target" disabled="@IsLocked" @onchange="SelectTarget">
-                    <option value="" selected="@(_key.Length == 0)">— навык или характеристика —</option>
-                    <optgroup label="Характеристики">
-                        @foreach (var subject in CheckSubjects.Characteristics(sheet))
-                        {
-                            <option value="@subject.Key" selected="@(subject.Key == _key)">@subject.Name (@subject.Value)</option>
-                        }
-                        @{ var luck = CheckSubjects.Luck(sheet); }
-                        <option value="@luck.Key" selected="@(luck.Key == _key)">@luck.Name (@luck.Value)</option>
-                    </optgroup>
-                    @foreach (var group in CheckSubjects.SkillGroups(sheet, Catalog!))
-                    {
-                        <optgroup label="@group.Title">
-                            @foreach (var subject in group.Subjects)
+            @if (!IsLocked && (_key.Length == 0 || _changingTarget))
+            {
+                <Field Label="Что проверяем">
+                    <select class="cm-input" data-testid="check-target" disabled="@IsLocked" @onchange="SelectTarget">
+                        <option value="" selected="@(_key.Length == 0)">— навык или характеристика —</option>
+                        <optgroup label="Характеристики">
+                            @foreach (var subject in CheckSubjects.Characteristics(sheet))
                             {
                                 <option value="@subject.Key" selected="@(subject.Key == _key)">@subject.Name (@subject.Value)</option>
                             }
+                            @{ var luck = CheckSubjects.Luck(sheet); }
+                            <option value="@luck.Key" selected="@(luck.Key == _key)">@luck.Name (@luck.Value)</option>
                         </optgroup>
-                    }
-                </select>
-            </Field>
+                        @foreach (var group in CheckSubjects.SkillGroups(sheet, Catalog!))
+                        {
+                            <optgroup label="@group.Title">
+                                @foreach (var subject in group.Subjects)
+                                {
+                                    <option value="@subject.Key" selected="@(subject.Key == _key)">@subject.Name (@subject.Value)</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </Field>
+            }
         }
         else if (!FixedSubject)
         {
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                <Field Label="Что проверяем">
-                    <input class="cm-input" data-testid="check-target-name" placeholder="Внимание, СИЛ, Удача…"
-                           disabled="@IsLocked" @bind="_manualName" @bind:event="oninput" />
-                </Field>
+            @* Цель пришла из сценария (InitialName) — она уже названа крупной строкой выше, поле «Что проверяем» её бы повторило
+               (g4 13.10: цель называлась трижды); вписывают только значение. *@
+            <div class="@(string.IsNullOrWhiteSpace(InitialName) ? "grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "max-w-40")">
+                @if (string.IsNullOrWhiteSpace(InitialName))
+                {
+                    <Field Label="Что проверяем">
+                        <input class="cm-input" data-testid="check-target-name" placeholder="Внимание, СИЛ, Удача…"
+                               disabled="@IsLocked" @bind="_manualName" @bind:event="oninput" />
+                    </Field>
+                }
                 <Field Label="Значение">
                     <input type="number" inputmode="numeric" min="0" max="200" class="cm-input" data-testid="check-value"
                            disabled="@IsLocked" @bind="_manualValue" @bind:event="oninput" />
@@ -77,22 +95,28 @@
             </div>
         }
 
-        @* Сложность и кости друг под другом: рядом в окне кнопки «Чрезвычайная ≤ 11» переносились бы. *@
-        <Field Label="Сложность" Group="true">
-            <DifficultyPicker @bind-Value="_difficulty" SkillValue="@Subject?.Value" Disabled="@IsLocked" />
-        </Field>
-        <Field Label="Бонусные и штрафные кости" Group="true">
-            <ExtraDicePicker @bind-Value="_netDice" Disabled="@IsLocked" />
-        </Field>
+        @* Сложность и кости — условия броска: выбираются до него. «Бросок» следует сразу за ними — на 834×1056 и 1194×696 он виден
+           без прокрутки окна (g2 7.1.1: раньше стоял вторым экраном, а справка — над ним). После броска условия заперты и
+           итог уже называет их («Нужно ≤ 63 (обычная сложность)»): два заблокированных переключателя убираются, чтобы Удача и
+           повтор — то, что делают дальше, — не уходили за край окна (g2 7.1.4). *@
+        @if (!IsLocked)
+        {
+            <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-1">
+                    <span class="cm-field-label">Сложность</span>
+                    <DifficultyPicker @bind-Value="_difficulty" SkillValue="@Subject?.Value" Disabled="@IsLocked" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <span class="cm-field-label">Кости</span>
+                    <ExtraDicePicker @bind-Value="_netDice" Disabled="@IsLocked" />
+                </div>
+            </div>
+        }
+        else if (_netDice != 0)
+        {
+            <p class="cm-field-note" data-testid="check-conditions">@CheckRules.ExtraDiceLabel(CheckRules.ClampNetDice(_netDice))</p>
+        }
     </section>
-
-    @if (Help is not null && _key.StartsWith("skill:", StringComparison.Ordinal))
-    {
-        <details class="skill-help" data-testid="check-help">
-            <summary class="cm-tap-row cursor-pointer font-medium text-accent-700">Справка по навыку</summary>
-            <div class="pt-2">@Help(_key)</div>
-        </details>
-    }
 
     <section>
         @if (_first is null)
@@ -138,6 +162,15 @@
             }
         }
     </section>
+
+    @* Справка — последним блоком: открытая, она занимала экран-два и уносила бросок с результатом (g2 7.1.3). *@
+    @if (Help is not null && _key.StartsWith("skill:", StringComparison.Ordinal))
+    {
+        <details class="skill-help" data-testid="check-help">
+            <summary class="cm-tap-row cursor-pointer font-medium text-accent-700">Справка по навыку</summary>
+            <div class="pt-2">@Help(_key)</div>
+        </details>
+    }
 </div>
 
 @code {
@@ -188,6 +221,12 @@
     /// </summary>
     [Parameter] public RenderFragment<bool>? Details { get; set; }
 
+    /// <summary>
+    /// Итог проверки изменился (бросок, повторный бросок, Удача, «Новая проверка»): ключ цели и пройдена ли она с учётом
+    /// Удачи и повтора; <c>Passed = null</c> — броска нет. Нужен листу: проверку ИНТ из тревоги Рассудка он закрывает сам.
+    /// </summary>
+    [Parameter] public EventCallback<CheckResolution> OnResolution { get; set; }
+
     private Guid? _investigatorId;
     private string _key = "";
     private string _manualName = "";
@@ -201,6 +240,12 @@
     private CheckAttempt? _second;
     private LuckRules.SpendOption? _luckSpent;
     private bool _marked;
+
+    /// <summary>Выбор цели из полного списка раскрыт («Другой навык»); пока цель не выбрана, список виден сам.</summary>
+    private bool _changingTarget;
+
+    private ElementReference _resultRef;
+    private bool _scrollToResult;
 
     private bool IsSheetMode => Sheet is not null && Catalog is not null;
 
@@ -242,6 +287,23 @@
 
     private string LuckAfterText => CanChangeSheet ? $" Удача на листе — {Sheet!.Current.Luck}." : "";
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToResult)
+            return;
+
+        // Фокус на результате прокручивает к нему тело окна: после броска игрок видит число и уровень, а не условия.
+        _scrollToResult = false;
+        try
+        {
+            await _resultRef.FocusAsync();
+        }
+        catch (Exception error) when (error is InvalidOperationException or JSException or JSDisconnectedException)
+        {
+            // Результат уже убрали («Новая проверка») или JS недоступен — прокрутка необязательна.
+        }
+    }
+
     protected override void OnInitialized()
     {
         _difficulty = InitialDifficulty;
@@ -249,6 +311,8 @@
         _manualName = InitialName ?? "";
         if (InitialInvestigatorId is { } initial && IsPartyMode && Party!.Any(i => i.Id == initial))
             _investigatorId = initial;
+        else if (IsPartyMode && Party!.Count == 1)
+            _investigatorId = Party[0].Id; // единственного сыщика не выбирают: значение его навыка подставляется сразу (g4 13.12)
         _manualValue = InitialValue;
     }
 
@@ -267,21 +331,25 @@
 
         _rolledSubject = subject;
         _first = Attempt(roll, subject);
-        return Task.CompletedTask;
+        _scrollToResult = true;
+        return NotifyAsync();
     }
 
     private Task OnPushRollAsync(D100Roll? roll)
     {
         if (roll is not null && _rolledSubject is { } subject)
+        {
             _second = Attempt(roll, subject);
+            _scrollToResult = true;
+        }
 
-        return Task.CompletedTask;
+        return NotifyAsync();
     }
 
     private CheckAttempt Attempt(D100Roll roll, CheckSubject subject) =>
         new(roll, CheckRules.Evaluate(roll.Result, subject.Value, _difficulty));
 
-    private void Reset()
+    private Task Reset()
     {
         _first = null;
         _second = null;
@@ -289,7 +357,10 @@
         _luckSpent = null;
         _marked = false;
         _rolledSubject = null;
+        return NotifyAsync();
     }
+
+    private Task NotifyAsync() => OnResolution.InvokeAsync(new CheckResolution(_rolledSubject?.Key, FinalOutcome?.Passed));
 
     private async Task SpendLuckAsync(LuckRules.SpendOption option)
     {
@@ -302,6 +373,7 @@
         _luckSpent = option;
         _marked = false;
         await OnSheetChange.InvokeAsync(change);
+        await NotifyAsync();
     }
 
     private async Task MarkAsync()
@@ -356,7 +428,9 @@
     {
         var outcome = attempt.Outcome;
         var subject = _rolledSubject!;
-        <div class="flex min-w-0 items-center gap-4" data-testid="check-result">
+        @* Результат — цель прокрутки после броска (_scrollToResult): окно не должно оставаться на условиях, когда выпало число.
+           Последний нарисованный (повторный бросок) перекрывает ссылку первого. *@
+        <div class="flex min-w-0 items-center gap-4 outline-hidden" tabindex="-1" @ref="_resultRef" data-testid="check-result">
             <div class="check-roll">@outcome.Roll.ToString("00", CultureInfo.InvariantCulture)</div>
             <div class="min-w-0">
                 @if (caption is not null)
@@ -380,22 +454,20 @@
     {
         var subject = _rolledSubject!;
         var outcome = _first!.Outcome;
-        var reason = CheckRules.LuckBlockReason(subject, outcome, isPushed: false);
+        // Невозможное не рисуется (правило 8, g4 13.11): «пункты Удачи на проверку Удачи не тратят» и «Удачей не дотянуть» —
+        // объяснение того, чего нельзя сделать, а не действие.
+        if (CheckRules.LuckBlockReason(subject, outcome, isPushed: false) is not null)
+            return;
+
+        var luck = CurrentSheet?.Current.Luck;
+        var options = CheckRules.LuckOptions(outcome, subject.Value, _difficulty, luck ?? int.MaxValue);
+        if (options.Count == 0)
+            return;
+
         <div class="mt-4" data-testid="check-luck">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">@(outcome.Passed ? "Поднять уровень Удачей" : "Потратить Удачу")</h3>
-            @if (reason is not null)
-            {
-                <p class="cm-field-note">@reason</p>
-            }
-            else
-            {
-                var luck = CurrentSheet?.Current.Luck;
-                var options = CheckRules.LuckOptions(outcome, subject.Value, _difficulty, luck ?? int.MaxValue);
-                if (options.Count == 0)
-                {
-                    <p class="cm-field-note">Удачей этот бросок до нужной сложности не дотянуть.</p>
-                }
-                else if (CanChangeSheet)
+            @{
+                if (CanChangeSheet)
                 {
                     <div class="flex flex-wrap gap-2">
                         @foreach (var option in options)
@@ -436,14 +508,13 @@
 
     private RenderFragment PushBlock() => __builder =>
     {
-        var reason = CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat);
+        // Повторить нельзя (бой, Удача, крах) — блока нет: объяснение невозможного не действие (правило 8, g4 13.11).
+        if (CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat) is not null)
+            return;
+
         <div class="mt-4" data-testid="check-push">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">Повторная проверка</h3>
-            @if (reason is not null)
-            {
-                <p class="cm-field-note">@reason</p>
-            }
-            else if (!_pushing)
+            @if (!_pushing)
             {
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" data-testid="check-push-start"
                         OnClick="() => _pushing = true">Бросить повторно</Button>
@@ -486,6 +557,15 @@
     private RenderFragment MarkBlock() => __builder =>
     {
         var subject = _rolledSubject!;
+
+        // Нечего отмечать — блока нет (правило 4): характеристикам, Удаче, Мифам и Средствам отметку не ставят никогда, и абзац
+        // «ставят только навыкам» про то, чего на экране нет, был лишним (g2 7.1.5).
+        if (subject.Kind is CheckSubjectKind.Characteristic or CheckSubjectKind.Luck
+            || subject.Kind is CheckSubjectKind.Skill && !DevelopmentPhaseRules.CanBeChecked(subject.SkillCode))
+        {
+            return;
+        }
+
         var reason = CheckRules.MarkBlockReason(subject, _netDice, _luckSpent is not null);
         <div class="mt-4" data-testid="check-mark">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">Отметка для фазы развития</h3>
@@ -498,20 +578,20 @@
                 var row = CheckSubjects.FindSkill(Sheet!, Catalog!, subject);
                 if (_marked)
                 {
-                    <p class="text-sm text-success-700"><i class="fa-solid fa-check mr-1" aria-hidden="true"></i>«@subject.Name» отмечен.</p>
+                    <p class="text-sm text-success-700"><i class="fa-solid fa-check mr-1" aria-hidden="true"></i>@Names.Strong(subject.Name) отмечен.</p>
                 }
                 else if (row is { Checked: true })
                 {
-                    <p class="cm-field-note">Отметка у «@subject.Name» уже стоит: за навык её ставят один раз.</p>
+                    <p class="cm-field-note">Отметка у @Names.Strong(subject.Name) уже стоит: за навык её ставят один раз.</p>
                 }
                 else
                 {
-                    <Button Small="true" Icon="fa-check" data-testid="check-mark-skill" OnClick="MarkAsync">Отметить «@subject.Name»</Button>
+                    <Button Small="true" Icon="fa-check" data-testid="check-mark-skill" OnClick="MarkAsync">Отметить: @Names.Clean(subject.Name)</Button>
                 }
             }
             else
             {
-                <p class="cm-field-note">Успех даёт отметку навыку «@subject.Name» — поставьте её на листе сыщика.</p>
+                <p class="cm-field-note">Успех даёт отметку навыку @Names.Strong(subject.Name) — поставьте её на листе сыщика.</p>
             }
         </div>
     };

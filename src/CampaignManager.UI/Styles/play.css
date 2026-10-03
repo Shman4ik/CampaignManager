@@ -89,7 +89,10 @@
   /* Телефон: пороги переносятся на вторую строку — подпись каждой плитки занимает две строки, иначе число ПЗ вставало
      ниже числа ПМ в соседней плитке. */
   @media (width < 40rem) {
-    .play-vital-label {
+    /* Только второй ряд плиток (Рассудок · Удача): у Рассудка пояснение «за день 0 из 10» переносится, и число Удачи иначе
+       вставало выше. У первого ряда (ПЗ · ПМ) пояснения на телефоне нет — лишнего места ему не нужно. */
+    .play-vital[data-k="san"] .play-vital-label,
+    .play-vital[data-k="luck"] .play-vital-label {
       min-height: 2.5rem;
     }
   }
@@ -100,7 +103,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    min-height: 1.5rem;
+    min-height: 2rem; /* пол 32px (g2 1.5); отрицательные поля возвращают строке подписей прежние 18px, число не съезжает */
+    margin-block: -0.4375rem;
     font: inherit;
     letter-spacing: inherit;
     text-transform: inherit;
@@ -220,6 +224,27 @@
     }
   }
 
+  /* НПС без Удачи (g2 8.1): три плитки. В 2×2 последняя занимает ряд целиком, в ландшафте — те же веса без четвёртой. */
+  @container vitals (min-width: 340px) {
+    .play-vital-grid[data-count="3"] .play-vital:last-child {
+      grid-column: 1 / -1;
+      border-left: 0;
+      border-top: 1px solid var(--color-primary-200);
+    }
+  }
+
+  @container vitals (min-width: 1000px) {
+    .play-vital-grid[data-count="3"] {
+      grid-template-columns: 1.6fr 1fr 1.6fr;
+    }
+
+    .play-vital-grid[data-count="3"] .play-vital:last-child {
+      grid-column: auto;
+      border-top: 0;
+      border-left: 1px solid var(--color-primary-200);
+    }
+  }
+
   /* Телефон, 2×2: плитка ~180px — поля плитки уже, иначе «14 / 14» и шаг ПМ не встают в строку. */
   @container vitals (max-width: 559.98px) {
     .play-vital-in {
@@ -327,6 +352,11 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.375rem;
+  }
+
+  /* «Мёртв» — отдельной группой с промежутком: рядом с «Без сознания» одно касание хоронило сыщика (g2 1.14). */
+  .play-flag-group-end {
+    margin-inline-start: auto;
   }
 
   .play-flag {
@@ -496,6 +526,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
+    align-items: start; /* карточки по своей высоте: короткие «Заклинания» рядом с длинным «При себе» не тянутся пустотой */
     gap: 0.625rem;
     min-width: 0;
   }
@@ -511,9 +542,37 @@
     display: none;
   }
 
-  @container play (min-width: 600px) {
+  /* Уже ландшафта (телефон и портрет): оружие, заклинания, «при себе» и заметки — между характеристиками и навыками, а не
+     после сорока шести навыков (g2 1.1: на телефоне оружие стояло на ~1900px ниже состояния). Пустая колонка не занимает ни
+     места, ни зазора. */
+  @container play (max-width: 999.98px) {
+    .play-body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .play-side {
+      order: -1;
+    }
+
+    .play-side:not(:has(.play-card)) {
+      display: none;
+    }
+  }
+
+  /* Портрет iPad: оружие — во всю ширину, под ним заклинания и «при себе» рядом, заметки снова во всю ширину. */
+  @container play (min-width: 600px) and (max-width: 999.98px) {
     .play-side {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .play-side > [data-testid="play-weapons"],
+    .play-side > [data-testid="play-notes"] {
+      grid-column: 1 / -1;
+    }
+
+    .play-side-stack {
+      display: contents;
     }
   }
 
@@ -522,10 +581,6 @@
   @container play (min-width: 1000px) {
     .play-body:has(.play-side .play-card) {
       grid-template-columns: minmax(0, 1fr) 19rem;
-    }
-
-    .play-side {
-      grid-template-columns: minmax(0, 1fr);
     }
   }
 
@@ -577,16 +632,35 @@
     }
   }
 
-  @container skills (min-width: 640px) {
-    .play-skill-cols {
-      columns: 3;
+  /* Три и четыре колонки — только в ландшафте: в портрете iPad (~704px) в колонке ~210px «Стрельба (пистолет-пулемёт)» шла в
+     три строки, и колонки выходили неровными (g2 1.18); там — две. */
+  @container play (min-width: 1000px) {
+    @container skills (min-width: 640px) {
+      .play-skill-cols {
+        columns: 3;
+      }
+    }
+
+    @container skills (min-width: 960px) {
+      .play-skill-cols {
+        columns: 4;
+      }
     }
   }
 
-  @container skills (min-width: 960px) {
-    .play-skill-cols {
-      columns: 4;
-    }
+  .play-skill-legend {
+    margin: 0;
+    padding: 0 0.875rem 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--color-primary-600);
+  }
+
+  .play-skill-subtitle {
+    margin: 0;
+    padding: 0.375rem 0.875rem 0.125rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-primary-700);
   }
 
   /* Строка навыка — целиком кнопка проверки, 28px (пол плотной строки-кнопки) во всю ширину колонки: все навыки листа
@@ -709,20 +783,69 @@
     font-size: 0.625rem;
   }
 
-  .play-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
+  /* Подпись под строкой оружия: чем идёт проверка, если навыка в строке нет. */
+  .play-row-note {
+    font-size: 0.8125rem;
+    color: var(--color-primary-600);
+  }
+
+  /* Заклинание — строка-кнопка: касание раскрывает описание. Высота — пол строки-кнопки (28px) и больше. */
+  .play-row-button {
+    width: 100%;
+    min-height: 2rem;
+    text-align: left;
+  }
+
+  .play-row-button:hover {
+    background: var(--color-accent-50);
+  }
+
+  .play-row-chevron {
+    flex: none;
+    width: 0.75rem;
+    font-size: 0.6875rem;
+    color: var(--color-primary-500);
+    transition: transform 0.12s;
+  }
+
+  .play-row-button[aria-expanded="true"] .play-row-chevron {
+    transform: rotate(90deg);
+  }
+
+  .play-spell-detail {
+    padding: 0 0.875rem 0.625rem 2.125rem;
+    font-size: 0.8125rem;
+    color: var(--color-primary-800);
+  }
+
+  .play-spell-time {
+    margin: 0 0 0.25rem;
+    color: var(--color-primary-600);
+  }
+
+  /* «При себе»: предметы простым текстом через « · » — не таблетки (те нажимаются, предметы нет). */
+  .play-gear {
+    margin: 0;
+    padding: 0 0.875rem 0.625rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--color-primary-800);
+  }
+
+  .play-gear-sep {
+    color: var(--color-primary-400);
+  }
+
+  .play-notes-body {
     padding: 0 0.875rem 0.625rem;
   }
 
-  .play-tag {
-    padding: 0.1875rem 0.625rem;
+  .play-notes-text .cm-markdown {
+    font-size: 0.875rem;
+  }
+
+  .play-spell-detail .cm-markdown {
     font-size: 0.8125rem;
-    color: var(--color-primary-700);
-    background: var(--color-primary-100);
-    border: 1px solid var(--color-primary-200);
-    border-radius: 9999px;
   }
 
   .play-money {
@@ -762,6 +885,24 @@
 
   .sheet-mode a:hover {
     color: var(--color-primary-800);
+  }
+
+  /* Телефон: подпись — только у активного сегмента (два значка подряд ничего не называли, g2 0.6); у второго — sr-only. */
+  @media (width < 48rem) {
+    .sheet-mode a:not([aria-current="page"]) span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .sheet-mode a:not([aria-current="page"]) {
+      padding-inline: 0.5rem;
+      gap: 0;
+    }
   }
 
   .sheet-mode a[aria-current="page"] {

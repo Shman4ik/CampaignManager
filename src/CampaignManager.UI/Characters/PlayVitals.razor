@@ -1,20 +1,27 @@
 @using CampaignManager.Core.Characters
+@inject DialogService Dialogs
 
 @* Полоса состояния режима «Игра» (макет владельца 2026-10-03): ПЗ · ПМ · Рассудок · Удача одной карточкой. Шаг ±1 —
    правка числа, как в «Состоянии» листа; урон — одна атака через WoundRules.ApplyDamage; потеря Рассудка — одна
    причина через SanityRules.ApplyLoss, только вписанным числом (кнопки костей владелец убрал: кости бросают за
    столом; бросок в приложении остался в «Рассудке» листа). Ниже — отметки тела
    переключателями и безумие только состоянием: переключает его блок «Рассудок» (#157). Подсказки исхода (рана,
-   проверка ИНТ, приступ) — те же компоненты, что у листа. Только для чтения — всё под fieldset disabled. *@
+   проверка ИНТ, приступ) — те же компоненты, что у листа.
+   Только для чтения (g2 1.8: нечего выключать «без причины» — правило 8): плитки показывают числа и полосу, шага, «Урон»,
+   «Потеря», тревог и невключённых отметок нет; включённые отметки — состоянием. У НПС Удачи нет (g2 8.1).
+   «Мёртв» отделён от остальных отметок и спрашивает подтверждение (g2 1.14): одно касание не должно хоронить сыщика. *@
 @{
     var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog);
     var sanity = SanityRules.Status(Sheet, Context.Catalog);
+    var edit = !Context.ReadOnly;
+    var hasLuck = Context.Character.Kind is not CharacterKind.Npc;
 }
 <section class="cm-card play-vitals" aria-label="Состояние" data-testid="play-vitals">
-    <fieldset class="play-fieldset" disabled="@Context.ReadOnly">
-        <div class="play-vital-grid">
-            <PlayVital Key="hp" Title="ПЗ" Kind="StatKind.HitPoints" Value="Sheet.Current.HitPoints" Max="derived.MaxHitPoints"
+    <div class="play-fieldset">
+        <div class="play-vital-grid" data-count="@(hasLuck ? 4 : 3)">
+            <PlayVital Key="hp" Title="ПЗ" Kind="StatKind.HitPoints" Value="Sheet.Current.HitPoints" Max="derived.MaxHitPoints" ReadOnly="!edit"
                        Note="@($"серьёзная от {WoundRules.MajorWoundThreshold(derived.MaxHitPoints)} · смерть от {Math.Max(1, derived.MaxHitPoints)}")"
+                       HideNoteOnPhone="true"
                        OnStep="d => SetHitPoints(Sheet.Current.HitPoints + d, derived.MaxHitPoints)">
                 <Extra>
                     @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой. *@
@@ -26,10 +33,10 @@
                     </div>
                 </Extra>
             </PlayVital>
-            <PlayVital Key="mp" Title="ПМ" Kind="StatKind.MagicPoints" Value="Sheet.Current.MagicPoints" Max="derived.MaxMagicPoints"
+            <PlayVital Key="mp" Title="ПМ" Kind="StatKind.MagicPoints" Value="Sheet.Current.MagicPoints" Max="derived.MaxMagicPoints" ReadOnly="!edit"
                        OnStep="d => Set(v => Sheet.Current.MagicPoints = v, Sheet.Current.MagicPoints + d, derived.MaxMagicPoints)" />
-            <PlayVital Key="san" Title="Рассудок" Kind="StatKind.Sanity" Value="Sheet.Current.Sanity" Max="derived.MaxSanity"
-                       Note="@($"за день −{sanity.LostToday} из {sanity.IndefiniteThreshold}")"
+            <PlayVital Key="san" Title="Рассудок" Kind="StatKind.Sanity" Value="Sheet.Current.Sanity" Max="derived.MaxSanity" ReadOnly="!edit"
+                       Note="@($"за день {(sanity.LostToday > 0 ? $"−{sanity.LostToday}" : "0")} из {sanity.IndefiniteThreshold}")"
                        OnStep="d => Set(v => Sheet.Current.Sanity = v, Sheet.Current.Sanity + d, derived.MaxSanity)">
                 <Extra>
                     <div class="play-pill">
@@ -38,56 +45,94 @@
                     </div>
                 </Extra>
             </PlayVital>
-            <PlayVital Key="luck" Title="Удача" Kind="StatKind.Luck" Value="Sheet.Current.Luck" Max="derived.MaxLuck"
-                       OnStep="d => Set(v => Sheet.Current.Luck = v, Sheet.Current.Luck + d, derived.MaxLuck)">
-                <Label>
-                    <button type="button" class="play-vital-check" aria-label="Проверка Удачи" data-testid="play-luck-check" @onclick='() => Context.Check("luck")'>
-                        Удача<i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
-                    </button>
-                </Label>
-            </PlayVital>
-        </div>
-
-        <div class="play-flags">
-            <div class="play-flag-group" role="group" aria-label="Отметки">
-                @foreach (var flag in ConditionFlags.Body)
-                {
-                    var on = flag.Get(Sheet.Condition);
-                    <button type="button" class="@Css.Join("play-flag", on ? "play-flag-on" : null, FlagTone(flag.Key, on))"
-                            aria-pressed="@(on ? "true" : "false")" data-testid="@($"play-flag-{flag.Key}")" @onclick="() => Toggle(flag, !on)">
-                        @if (on)
-                        {
-                            <i class="fa-solid @flag.Icon" aria-hidden="true"></i>
-                        }
-                        @flag.Label
-                    </button>
-                }
-            </div>
-            @if (MindStates(sanity).Count > 0)
+            @if (hasLuck)
             {
-                @* Безумие — состояние, а не переключатель: его ставят и снимают в «Рассудке» листа (#157). *@
-                <div class="play-flag-group" aria-label="Разум" data-testid="play-mind">
-                    @foreach (var (text, strong) in MindStates(sanity))
-                    {
-                        <span class="@Css.Join("play-flag play-flag-mind", strong ? "play-flag-on" : null)">
-                            <i class="fa-solid fa-brain" aria-hidden="true"></i>@text
-                        </span>
-                    }
-                </div>
+                <PlayVital Key="luck" Title="Удача" Kind="StatKind.Luck" Value="Sheet.Current.Luck" Max="derived.MaxLuck" ReadOnly="!edit"
+                           OnStep="d => Set(v => Sheet.Current.Luck = v, Sheet.Current.Luck + d, derived.MaxLuck)">
+                    <Label>
+                        <button type="button" class="play-vital-check" aria-label="Проверка Удачи" data-testid="play-luck-check" @onclick='() => Context.Check("luck")'>
+                            Удача<i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+                        </button>
+                    </Label>
+                </PlayVital>
             }
         </div>
 
-        <div class="play-vitals-alerts">
-            <WoundAlert Hit="_lastHit" AlertClass="mb-0" />
-            <SanityPrompts OnBout="() => _boutOpen = true" AlertClass="mb-0" />
-        </div>
-    </fieldset>
+        @if (edit)
+        {
+            <div class="play-flags">
+                <div class="play-flag-group" role="group" aria-label="Отметки">
+                    @foreach (var flag in ConditionFlags.Body.Where(f => f.Key != DeadKey))
+                    {
+                        var on = flag.Get(Sheet.Condition);
+                        <button type="button" class="@Css.Join("play-flag", on ? "play-flag-on" : null, FlagTone(flag.Key, on))"
+                                aria-pressed="@(on ? "true" : "false")" data-testid="@($"play-flag-{flag.Key}")" @onclick="() => Toggle(flag, !on)">
+                            @if (on)
+                            {
+                                <i class="fa-solid @flag.Icon" aria-hidden="true"></i>
+                            }
+                            @flag.Label
+                        </button>
+                    }
+                </div>
+                @* «Мёртв» — отдельной группой с промежутком и вопросом: необратимое состояние игры, правило 7. *@
+                <div class="play-flag-group play-flag-group-end" role="group" aria-label="Смерть">
+                    @{
+                        var dead = ConditionFlags.Body.First(f => f.Key == DeadKey);
+                        var isDead = dead.Get(Sheet.Condition);
+                    }
+                    <button type="button" class="@Css.Join("play-flag", isDead ? "play-flag-on" : null, FlagTone(DeadKey, isDead))"
+                            aria-pressed="@(isDead ? "true" : "false")" data-testid="@($"play-flag-{DeadKey}")" @onclick="() => ToggleDeadAsync(dead, !isDead)">
+                        @if (isDead)
+                        {
+                            <i class="fa-solid @dead.Icon" aria-hidden="true"></i>
+                        }
+                        @dead.Label
+                    </button>
+                </div>
+                @if (MindStates(sanity).Count > 0)
+                {
+                    @* Безумие — состояние, а не переключатель: его ставят и снимают в «Рассудке» листа (#157). *@
+                    <div class="play-flag-group" aria-label="Разум" data-testid="play-mind">
+                        @foreach (var (text, strong) in MindStates(sanity))
+                        {
+                            <span class="@Css.Join("play-flag play-flag-mind", strong ? "play-flag-on" : null)">
+                                <i class="fa-solid fa-brain" aria-hidden="true"></i>@text
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        else if (ReadOnlyStates(sanity) is { Count: > 0 } states)
+        {
+            @* Только чтение: только то, что включено, — состояние, а не кнопки. *@
+            <div class="play-flags" data-testid="play-states">
+                <div class="play-flag-group" aria-label="Состояние сыщика">
+                    @foreach (var (text, icon, tone) in states)
+                    {
+                        <span class="@Css.Join("play-flag play-flag-on", tone)"><i class="fa-solid @icon" aria-hidden="true"></i>@text</span>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (edit)
+        {
+            <div class="play-vitals-alerts">
+                <WoundAlert Hit="_lastHit" AlertClass="mb-0" />
+                <SanityPrompts OnBout="() => _boutOpen = true" AlertClass="mb-0" />
+            </div>
+        }
+    </div>
 </section>
 
 <InsanityBoutModal @bind-Open="_boutOpen" OnAcquire="AcquireFromBout" />
 <InsanityConditionModal @bind-Open="_conditionOpen" Kind="_conditionKind" />
 
 @code {
+    private const string DeadKey = "dead";
+
     private int _damage = 1;
     private int _sanityLoss = 1;
     private DamageOutcome? _lastHit;
@@ -141,6 +186,24 @@
         Context.Changed();
     }
 
+    /// <summary>«Мёртв» ставят только после вопроса; снять отметку (ошиблись) можно сразу.</summary>
+    private async Task ToggleDeadAsync(ConditionFlag flag, bool on)
+    {
+        if (on)
+        {
+            var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest("Отметить сыщика мёртвым?", "Сыщик выбывает из игры.")
+            {
+                Subject = Sheet.Personal.Name,
+                ConfirmText = "Отметить мёртвым",
+                Details = "Отметку можно снять.",
+            });
+            if (!confirmed)
+                return;
+        }
+
+        Toggle(flag, on);
+    }
+
     /// <summary>Классы — целыми литералами: Tailwind и сборщик CSS собранное имя не увидят.</summary>
     private static string? FlagTone(string key, bool on) => !on ? null : key switch
     {
@@ -166,6 +229,18 @@
 
         foreach (var condition in Sheet.InsanityConditions.Where(c => c.Active))
             states.Add(($"{(condition.Kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")}: {condition.Name}", false));
+
+        return states;
+    }
+
+    /// <summary>Только чтение: включённые отметки тела и разума одним рядом (текст, значок, тон).</summary>
+    private List<(string Text, string Icon, string? Tone)> ReadOnlyStates(SanityStatus sanity)
+    {
+        var states = new List<(string, string, string?)>();
+        foreach (var flag in ConditionFlags.Body.Where(f => f.Get(Sheet.Condition)))
+            states.Add((flag.Label, flag.Icon, FlagTone(flag.Key, true)));
+        foreach (var (text, strong) in MindStates(sanity))
+            states.Add((text, "fa-brain", strong ? "play-flag-mind" : null));
 
         return states;
     }

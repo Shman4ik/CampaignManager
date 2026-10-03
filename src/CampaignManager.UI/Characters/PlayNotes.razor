@@ -1,0 +1,43 @@
+@* Заметки в режиме «Игра» (g2 1.15, решение оркестратора): заметки по ходу игры — самое частое, что игрок пишет за столом, а
+   они лежали в самом конце «Листа» (~4900px, на телефоне ~8400). Тот же текст, что графа «Заметки» биографии
+   (Biography.Notes), — не вторая копия. Значений листа блок не меняет, поэтому «правка значений только в Листе» не
+   нарушена. Только чтение: показывается, если заметки есть; поле пишет автосохранение листа, как и всё остальное. *@
+@if (!Context.ReadOnly || !string.IsNullOrWhiteSpace(Bio.Notes))
+{
+    <section class="cm-card play-card" aria-label="Заметки" data-testid="play-notes">
+        <div class="play-card-head">
+            <h2 class="cm-section-title">Заметки</h2>
+            @if (!Context.ReadOnly && !string.IsNullOrWhiteSpace(Bio.Notes))
+            {
+                <button type="button" class="sheet-link" data-testid="play-notes-toggle" @onclick="() => _preview = !_preview">
+                    <i class="fa-solid @(_preview ? "fa-pen" : "fa-eye")" aria-hidden="true"></i>@(_preview ? "Править" : "Просмотр")
+                </button>
+            }
+        </div>
+        <div class="play-notes-body">
+            @if (Context.ReadOnly || _preview)
+            {
+                <div class="play-notes-text"><Markdown Text="@Bio.Notes" /></div>
+            }
+            else
+            {
+                <textarea class="cm-input" rows="3" aria-label="Заметки" placeholder="Заметки по ходу игры. Можно Markdown."
+                          data-testid="play-notes-field" value="@Bio.Notes" @onchange="Set"></textarea>
+            }
+        </div>
+    </section>
+}
+
+@code {
+    private bool _preview;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CampaignManager.Core.Characters.Biography Bio => Context.Sheet.Biography;
+
+    private void Set(ChangeEventArgs e)
+    {
+        Bio.Notes = e.Value?.ToString() ?? "";
+        Context.Changed();
+    }
+}
