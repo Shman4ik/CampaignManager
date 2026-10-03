@@ -1,6 +1,5 @@
 @page "/join/{CampaignId:guid}"
 @attribute [Authorize]
-@using System.Security.Claims
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.UI.Platform
 @inject ICampaignsApi Api
@@ -9,8 +8,10 @@
 
 @* Ссылка-приглашение («Пригласить» на странице кампании). Вошедшему показывает, куда его зовут, и даёт вступить;
    участнику сразу открывает кампанию. Не вошедшего приложение отправит на вход и вернёт сюда. Кампании нет или она
-   завершена — 404 сервера: «приглашение недействительно». Вступление — тот же JoinAsync, что и на главной. *@
-<PageHeader Title="@(_invite is null ? "Приглашение" : $"Приглашение: {_invite.Name}")" DocumentTitle="@(_invite is null ? "Приглашение" : $"Приглашение: {_invite.Name}")" />
+   завершена — 404 сервера: «приглашение недействительно». Вступление — тот же JoinAsync, что и на главной, и тоже сразу, с
+   именем профиля (одно касание вместо двух; имя в кампании меняется потом в «⋯ → Имя в кампании», JN2). Название кампании — только
+   в карточке, шапка просто «Приглашение» (JN1: длинное название стояло и в шапке, и в карточке, и в заголовке окна). *@
+<PageHeader Title="Приглашение" />
 
 <div class="cm-page">
         <AsyncContent Key="CampaignId" Load="LoadAsync" LoadingMessage="Открываю приглашение…" Context="invite" ErrorTitle="Приглашение недоступно">
@@ -27,7 +28,7 @@
                             <div>
                                 <h2 class="cm-card-title" data-testid="invite-name">@invite!.Name</h2>
                                 <p class="text-sm text-primary-500">
-                                    @CampaignLabels.Kind(invite.Kind) · @CampaignLabels.Era(invite.Era) · @CampaignLabels.Status(invite.Status)
+                                    @CampaignLabels.Kind(invite.Kind) · @CampaignLabels.Status(invite.Status)
                                 </p>
                             </div>
                             <div class="cm-meta">
@@ -38,18 +39,17 @@
                                 <span><span class="cm-meta-label">Игроков:</span> @invite.PlayerCount</span>
                             </div>
                             <p class="text-sm text-primary-600">Вас пригласили в эту кампанию. Вступив, вы увидите журнал и сможете завести сыщика.</p>
+                            @if (_error is not null)
+                            {
+                                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+                            }
                             <div class="cm-btn-row">
-                                <Button Icon="fa-right-to-bracket" OnClick="() => _joining = true">Вступить</Button>
+                                <Button Icon="fa-right-to-bracket" Busy="_busy" OnClick="JoinAsync">Вступить</Button>
                                 <Button Variant="ButtonVariant.Secondary" Href="">Не сейчас</Button>
                             </div>
                         </div>
                     </div>
                 </section>
-                <AuthorizeView>
-                    <MemberNameModal Open="_joining" Title="@($"Вступить: {invite.Name}")" ConfirmText="Вступить"
-                                     Value="@ProfileName(context.User)" ProfileName="@ProfileName(context.User)"
-                                     Busy="_busy" Error="@_error" OnSave="JoinAsync" OnClose="() => _joining = false" />
-                </AuthorizeView>
             </ChildContent>
         </AsyncContent>
 </div>
@@ -59,15 +59,10 @@
 
     private CampaignInviteDto? _invite;
 
-    private RenderFragment HomeAction => @<Button Href="" Icon="fa-house" Small="true">На главную</Button>;
+    private RenderFragment HomeAction => @<Button Href="" Variant="ButtonVariant.Secondary" Icon="fa-house" Small="true">На главную</Button>;
 
-    private bool _joining;
     private bool _busy;
     private string? _error;
-
-    /// <summary>Имя профиля для поля «Имя в кампании»; почту не подставляем.</summary>
-    private static string? ProfileName(ClaimsPrincipal user) =>
-        user.Identity?.Name is { } name && !name.Contains('@', StringComparison.Ordinal) ? name : null;
 
     /// <summary>
     /// Участнику страница не нужна — уходим в кампанию. Закрытая (404) приглашением не является — пустое место, не ошибка.
@@ -85,7 +80,6 @@
             }
 
             _invite = invite;
-            StateHasChanged(); // название — в шапке, вне AsyncContent
             return invite;
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -94,15 +88,15 @@
         }
     }
 
-    private async Task JoinAsync(string displayName)
+    private async Task JoinAsync()
     {
         _busy = true;
         _error = null;
         try
         {
-            await Api.JoinAsync(CampaignId, new JoinCampaignRequest(displayName));
-            _joining = false;
-            Toasts.Success("Вы в кампании.");
+            // Пустой псевдоним — участник идёт за именем профиля.
+            await Api.JoinAsync(CampaignId, new JoinCampaignRequest(""));
+            Toasts.Success("Вы в кампании:", subject: _invite?.Name);
             Navigation.NavigateTo($"campaigns/{CampaignId}");
         }
         catch (HttpRequestException ex)

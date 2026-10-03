@@ -182,11 +182,12 @@ public sealed class ComponentTests : KitContext
         Assert.InRange(NavMenu.Items.Count(i => i.OnPhoneBar), 1, 4);
     }
 
-    // Меню только прячет — защищает сервер; но гостю разделы под входом не показываются.
+    // Меню только прячет — защищает сервер; гостю не показывается ничего: «Главная» — страница под входом (S8), «Войти» — в подвале.
+    // Хранителю — и «Ширма» (R3): закладка на планшете без кнопки в шапке.
     [Theory]
-    [InlineData(null, new[] { "" })]
+    [InlineData(null, new string[0])]
     [InlineData("Player", new[] { "", "campaigns", "weapons" })]
-    [InlineData("Keeper", new[] { "", "campaigns", "scenarios", "weapons" })]
+    [InlineData("Keeper", new[] { "", "campaigns", "scenarios", "weapons", "reference" })]
     public void Menu_shows_sections_by_role(string? role, string[] mustSee)
     {
         var user = role is null
@@ -199,11 +200,12 @@ public sealed class ComponentTests : KitContext
         Assert.DoesNotContain("admin/users", visible);
         if (role is null)
         {
-            Assert.Single(visible);
+            Assert.Empty(visible);
         }
         else if (role == "Player")
         {
             Assert.DoesNotContain("scenarios", visible);
+            Assert.DoesNotContain("reference", visible);
         }
     }
 

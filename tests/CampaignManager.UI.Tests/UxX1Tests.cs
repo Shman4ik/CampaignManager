@@ -121,22 +121,24 @@ public sealed class UxX1Tests : KitContext
         Assert.Contains("Добавить НПС", keeper.Markup, StringComparison.Ordinal);
     }
 
-    // В шапке длинное название обрезается, поэтому страница показывает его целиком и строку вида и эпохи; статус и роль —
-    // только в подзаголовке шапки, второй раз их не повторяем.
+    // Название — в шапке и переносится до двух строк (P4): второго крупного заголовка в теле нет, как и строки «Вид · Эпоха»;
+    // статус и роль — в подзаголовке шапки.
     [Fact]
-    public void Long_campaign_name_is_shown_in_full_under_the_header_with_kind_and_era()
+    public void Long_campaign_name_wraps_in_the_header_and_has_no_second_heading()
     {
         var details = Details(keeper: true);
         var longName = "Очень длинное название кампании для проверки переноса строки в шапке";
         UseCampaign(details with { Campaign = details.Campaign with { Name = longName } });
 
         var cut = Render<CampaignPage>(p => p.Add(c => c.CampaignId, CampaignId));
-        cut.WaitForElement("[data-testid=campaign-full-name]");
+        cut.WaitForElement("[data-testid=campaign-run]");
 
-        Assert.Equal(longName, cut.Find("[data-testid=campaign-full-name]").TextContent);
-        var facts = cut.Find("[data-testid=campaign-facts]").TextContent;
-        Assert.Contains("Кампания", facts, StringComparison.Ordinal);
-        Assert.DoesNotContain("вы — Хранитель", facts, StringComparison.Ordinal);
+        Assert.Equal(longName, cut.Find("h1").TextContent);
+        Assert.Contains("cm-topbar-title-wrap", cut.Find("h1").ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid=campaign-full-name]"));
+        Assert.Empty(cut.FindAll("[data-testid=campaign-facts]"));
+        Assert.Contains("вы — Хранитель", cut.Find("[data-testid=page-subtitle]").TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("1920", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -160,8 +162,10 @@ public sealed class UxX1Tests : KitContext
 
     // ── Ссылка-приглашение ──────────────────────────────────────────────────
 
+    // JN2: «Вступить» — одно касание, без окна с именем: участник идёт за именем профиля (пустой псевдоним), а своё имя в кампании
+    // меняет потом в «⋯ → Имя в кампании». Название кампании — в карточке, шапка просто «Приглашение» (JN1).
     [Fact]
-    public void Join_page_joins_with_the_chosen_name_and_opens_the_campaign()
+    public void Join_page_joins_at_once_with_the_profile_name_and_opens_the_campaign()
     {
         AddAuthorization().SetAuthorized("Алиса");
         JoinCampaignRequest? sent = null;
@@ -178,12 +182,14 @@ public sealed class UxX1Tests : KitContext
 
         var cut = Render<JoinCampaignPage>(p => p.Add(j => j.CampaignId, CampaignId));
         Assert.Equal("Маски", cut.WaitForElement("[data-testid=invite-name]").TextContent);
+        Assert.Equal("Приглашение", cut.Find("h1").TextContent);
         Assert.Contains("Иван", cut.Markup, StringComparison.Ordinal);
 
         cut.FindAll("button").Single(b => b.TextContent.Contains("Вступить", StringComparison.Ordinal)).Click();
-        cut.WaitForElement("#member-name-form").Submit();
 
         cut.WaitForAssertion(() => Assert.NotNull(sent));
+        Assert.Equal("", sent!.DisplayName);
+        Assert.Empty(cut.FindAll("#member-name-form"));
         Assert.EndsWith($"/campaigns/{CampaignId}", Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri, StringComparison.Ordinal);
     }
 

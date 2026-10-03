@@ -47,7 +47,9 @@ public sealed record CampaignRunDto(
     DateTimeOffset? ScheduledAt,
     bool SignupOpen);
 
-public sealed record CampaignLastSessionDto(Guid Id, int Number, DateOnly SessionDate, string? Title);
+/// <param name="Excerpt">Первая строка хроники одним предложением без разметки (до 160 знаков); <c>null</c> — хроника пуста.
+/// Игроку — карточка «Последняя встреча» на странице кампании.</param>
+public sealed record CampaignLastSessionDto(Guid Id, int Number, DateOnly SessionDate, string? Title, string? Excerpt = null);
 
 /// <summary>
 /// Что видит человек, открывший ссылку-приглашение: кампания, куда можно вступить. Почт нет — Хранитель по имени.

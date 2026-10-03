@@ -5,10 +5,12 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 
-@* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и прегены — кто какого занял.
-   Бронь (T2.5c): «Забронировать» у свободного прегена, пока у меня нет брони в этой игре и я её не веду (CanReserve);
-   у своего — «Лист» (копия прегена у меня в кампании) и «Снять бронь»; ведущий снимает любую (CanRelease). Флаги — с
-   сервера, решает он же. Анонс сжат до трёх строк («Подробнее»), прегены — за кнопкой «Выбрать сыщика» (StartCollapsed). *@
+@* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и готовые сыщики — кто какого занял.
+   Запись на место (T2.5c; в коде и API — бронь): «Занять» у свободного сыщика, пока у меня нет места в этой игре и я её не
+   веду (CanReserve), — вторичной кнопкой: тёмная кнопка в каждой строке давала до четырёх primary на экране, главная
+   здесь одна — «Вступить» (H5). У своего — «Лист» (копия сыщика у меня в кампании) и «Снять запись»; ведущий снимает любую
+   (CanRelease). Флаги — с сервера, решает он же. Анонс сжат до трёх строк («Подробнее»), сыщики — за кнопкой «Выбрать сыщика»
+   (StartCollapsed). *@
 <article class="cm-card flex flex-col" aria-labelledby="@($"run-{Run.RunId}")">
     <div class="cm-card-header">
         <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48">@Run.ScenarioName</h3>
@@ -39,9 +41,10 @@
                 @* Анонс сжат до трёх строк: вложенной прокрутки нет (на тач-экране она ловила жест страницы). *@
                 <div class="mt-2">
                     <Markdown Text="@Run.Announcement" class="@(_announcementOpen ? null : "line-clamp-3")" />
-                    <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm mt-1" aria-expanded="@(_announcementOpen ? "true" : "false")"
+                    <button type="button" class="cm-link-btn" aria-expanded="@(_announcementOpen ? "true" : "false")"
                             data-testid="announcement-toggle" @onclick="() => _announcementOpen = !_announcementOpen">
                         @(_announcementOpen ? "Свернуть описание" : "Подробнее")
+                        <i class="fa-solid @(_announcementOpen ? "fa-chevron-up" : "fa-chevron-down") text-xs" aria-hidden="true"></i>
                     </button>
                 </div>
             }
@@ -60,7 +63,7 @@
             <h4 class="mb-1 text-sm font-semibold text-primary-800">Готовые сыщики</h4>
             @if (Run.Pregens.Count == 0)
             {
-                <p class="cm-text-muted">Хранитель ещё не добавил прегенов.</p>
+                <p class="cm-text-muted">Хранитель ещё не добавил готовых сыщиков.</p>
             }
             else
             {
@@ -96,13 +99,13 @@
                                 }
                                 @if (!pregen.IsReserved && Run.CanReserve)
                                 {
-                                    <Button Small="true" Icon="fa-hand" Busy="@(_busy == pregen.Id)" Disabled="@(_busy is not null)"
-                                            data-testid="reserve" OnClick="() => ReserveAsync(pregen)">Забронировать</Button>
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-hand" Busy="@(_busy == pregen.Id)" Disabled="@(_busy is not null)"
+                                            data-testid="reserve" OnClick="() => ReserveAsync(pregen)">Занять</Button>
                                 }
                                 @if (pregen.CanRelease)
                                 {
                                     <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-user-xmark" Busy="@(_busy == pregen.Id)"
-                                            Disabled="@(_busy is not null)" data-testid="release" OnClick="() => ReleaseAsync(pregen)">Снять бронь</Button>
+                                            Disabled="@(_busy is not null)" data-testid="release" OnClick="() => ReleaseAsync(pregen)">Снять запись</Button>
                                 }
                             </span>
                         </li>
@@ -135,7 +138,7 @@
         try
         {
             await Runs.ReserveAsync(Run.RunId, pregen.Id);
-            Toasts.Success($"«{pregen.Name}» ваш: копия листа — в кампании ваншота, правьте её как свою.");
+            Toasts.Success("Вы заняли:", subject: pregen.Name);
             await OnChanged.InvokeAsync();
         }
         catch (HttpRequestException ex)
@@ -151,11 +154,12 @@
 
     private async Task ReleaseAsync(HomePregenDto pregen)
     {
-        var whose = pregen.IsMine ? "Ваша копия листа" : $"Копия листа у игрока{(pregen.ReservedBy is { } by ? $" «{by}»" : "")}";
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Снять бронь «{pregen.Name}»?",
-                $"Преген снова свободен. {whose} уйдёт в архив.")
+        var whose = pregen.IsMine ? "Ваша копия листа" : $"Копия листа у игрока{(pregen.ReservedBy is { } by ? $" {by}" : "")}";
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Снять запись?",
+                $"Готовый сыщик снова свободен. {whose} уйдёт в архив.")
             {
-                ConfirmText = "Снять бронь",
+                Subject = pregen.Name,
+                ConfirmText = "Снять запись",
                 Details = null,
             }))
         {
@@ -166,7 +170,7 @@
         try
         {
             await Runs.ReleaseAsync(Run.RunId, pregen.Id);
-            Toasts.Success("Бронь снята.");
+            Toasts.Success("Запись снята:", subject: pregen.Name);
             await OnChanged.InvokeAsync();
         }
         catch (HttpRequestException ex)

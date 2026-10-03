@@ -8,8 +8,9 @@
 @inject ToastService Toasts
 @inject DialogService Dialogs
 
-@* Личный кабинет: имя, роль и заявка на Хранителя, сводка по играм. Его видит и игрок — проверять и на
-   телефоне. Данные только свои: сервер берёт пользователя из сессии. Знание — Profile/CLAUDE.md. *@
+@* Личный кабинет: имя, роль и заявка на Хранителя. Его видит и игрок — проверять и на телефоне. Данные только свои:
+   сервер берёт пользователя из сессии. Архетип «форма страницей»: одна колонка max-w-2xl у левого края (справа ничего:
+   «Мои игры» и абзац «Мои данные» убраны — PR1, PR2). Знание — Profile/CLAUDE.md. *@
 <PageHeader Title="Кабинет" />
 
 <div class="cm-page">
@@ -17,19 +18,18 @@
         @{
             var profile = _profile ?? loaded;
         }
-        @* Архетип «форма страницей»: формы — колонкой по содержимому (max-w-2xl) у левого края, сводка «Мои игры» и
-           «Мои данные» — справа с lg, на портрете и телефоне — под формами. Во всю колонку поле имени тянулось на ~1000px. *@
-        <div class="grid items-start gap-x-7 lg:grid-cols-[minmax(0,42rem)_minmax(0,20rem)]">
+        @* Формы — колонкой по содержимому (max-w-2xl) у левого края: во всю колонку поле имени тянулось на ~1000px. *@
+        <div>
             <div class="max-w-2xl">
                 <section class="cm-section" aria-labelledby="profile-title">
                     <div class="cm-section-header"><h2 id="profile-title" class="cm-section-title">Профиль</h2></div>
                     <div class="cm-card">
                         <div class="cm-card-body cm-stack">
+                            @* Имя — только полем ниже, без заголовка-дубля (PR4); здесь — почта и роль. *@
                             <div class="flex flex-wrap items-center gap-3">
                                 <span class="cm-avatar cm-avatar-lg" aria-hidden="true">@Initial(profile.DisplayName)</span>
                                 <div class="min-w-0 flex-1 basis-40">
-                                    <div class="truncate font-semibold text-primary-800" data-testid="profile-name">@profile.DisplayName</div>
-                                    <div class="truncate text-sm text-primary-500">@profile.Email</div>
+                                    <div class="truncate text-primary-700" data-testid="profile-email">@profile.Email</div>
                                 </div>
                                 <Badge Tone="RoleLabels.RoleTone(profile.Role)">@RoleLabels.Role(profile.Role)</Badge>
                             </div>
@@ -37,7 +37,7 @@
                             <form class="flex flex-col gap-3" @onsubmit="SaveNameAsync">
                                 <Field Label="Отображаемое имя" Note="Так вас видят в меню и в кампаниях, где у вас нет своего имени.">
                                     <input class="cm-input" maxlength="@ProfileLimits.DisplayNameLength" autocomplete="nickname"
-                                           @bind="_name" @bind:event="oninput" />
+                                           data-testid="profile-name" @bind="_name" @bind:event="oninput" />
                                 </Field>
 
                                 @if (profile.AliasCount > 0)
@@ -79,11 +79,13 @@
                                         <div class="flex flex-wrap items-center gap-2">
                                             <Badge Tone="RoleLabels.StatusTone(application.Status)">@ApplicationLabel(application.Status)</Badge>
                                             <span class="text-sm text-primary-500">от @LocalTime.Date(application.CreatedAt)</span>
+                                            @* «Отозвать» — отдельно от «Сохранить текст»: две кнопки с опасной в одной строке слипались на 8px (PR3). *@
+                                            @if (application.Status is KeeperApplicationStatus.Pending)
+                                            {
+                                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-rotate-left" Disabled="_applying" class="ml-auto"
+                                                        data-testid="withdraw" OnClick="WithdrawAsync">Отозвать заявку</Button>
+                                            }
                                         </div>
-                                        @if (application.Status is KeeperApplicationStatus.Pending)
-                                        {
-                                            <p class="mt-2 text-sm text-primary-600">После одобрения вы станете Хранителем. Пока заявку не рассмотрели, её текст можно дописать, а саму заявку — отозвать.</p>
-                                        }
                                         @if (application.Status is KeeperApplicationStatus.Rejected && application.ReviewComment is { } comment)
                                         {
                                             <p class="mt-2 text-sm text-primary-700"><span class="cm-meta-label">Комментарий:</span> @comment</p>
@@ -110,8 +112,6 @@
                                             <Button Type="submit" Icon="fa-floppy-disk" Busy="_applying"
                                                     Disabled="@(string.Equals(_pendingMessage?.Trim() ?? "", profile.LatestApplication.Message, StringComparison.Ordinal))"
                                                     DisabledReason="Измените текст, чтобы сохранить">Сохранить текст</Button>
-                                            <Button Variant="ButtonVariant.OutlineError" Icon="fa-rotate-left" Disabled="_applying"
-                                                    OnClick="WithdrawAsync">Отозвать заявку</Button>
                                         </div>
                                     </form>
                                 }
@@ -139,37 +139,11 @@
                     </section>
                 }
             </div>
-            <div class="max-w-2xl">
-                <section class="cm-section" aria-labelledby="games-title">
-                    <div class="cm-section-header"><h2 id="games-title" class="cm-section-title">Мои игры</h2></div>
-                    <div class="cm-card">
-                        <a href="campaigns" class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0 hover:bg-primary-50">
-                            <i class="fa-solid fa-map w-5 text-center text-primary-400" aria-hidden="true"></i>
-                            <span class="flex-1">Кампании</span>
-                            <span class="font-semibold text-primary-700">@profile.CampaignCount</span>
-                            <i class="fa-solid fa-chevron-right text-xs text-primary-400" aria-hidden="true"></i>
-                        </a>
-                        @* Отдельного списка сыщиков нет (листы — на главной у кампании), поэтому строка не ссылка. *@
-                        <div class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0">
-                            <i class="fa-solid fa-user w-5 text-center text-primary-400" aria-hidden="true"></i>
-                            <span class="flex-1">Сыщики</span>
-                            <span class="font-semibold text-primary-700">@profile.CharacterCount</span>
-                        </div>
-                    </div>
-                </section>
 
-                <section class="cm-section" aria-labelledby="data-title">
-                    <div class="cm-section-header"><h2 id="data-title" class="cm-section-title">Мои данные</h2></div>
-                    <div class="cm-card">
-                        <div class="cm-card-body">
-                            <p class="text-sm text-primary-600">
-                                О вас хранится только нужное для игры: почта для входа (другим игрокам не видна), имя, роль и созданные
-                                вами материалы. Чтобы удалить учётную запись, напишите администратору.
-                            </p>
-                        </div>
-                    </div>
-                </section>
-            </div>
+            @* Что хранится о человеке — на странице «Правовая информация», а не абзацем в кабинете (PR1). *@
+            <p class="cm-text-muted text-sm">
+                <a href="legal" class="inline-flex min-h-8 items-center underline hover:no-underline" data-testid="legal-link">Подробнее о ваших данных — в правовой информации</a>
+            </p>
         </div>
     </AsyncContent>
 </div>
@@ -224,7 +198,7 @@
         {
             var replaced = _replaceAliases ? _profile.AliasCount : 0;
             Show(await Api.UpdateDisplayNameAsync(new UpdateDisplayNameRequest(_name, _replaceAliases)));
-            Toasts.Success(replaced > 0 ? $"Имя сохранено. Своё имя сброшено в кампаниях: {replaced}." : "Имя сохранено.");
+            Toasts.Success(replaced > 0 ? $"Имя сохранено. Своё имя сброшено в кампаниях: {replaced}." : "Имя сохранено:", subject: replaced > 0 ? null : _profile?.DisplayName);
             // Меню показывает имя из /api/v1/me — перечитать, без перезагрузки приложения.
             await Session.RefreshAsync();
         }

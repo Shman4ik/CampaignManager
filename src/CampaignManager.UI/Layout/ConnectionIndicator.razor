@@ -4,23 +4,17 @@
 @inject ApiActivity Activity
 @inject IJSRuntime JS
 @inject IPingApi Ping
-@inject TimeProvider Time
 
-@* Связь и сохранение — плашка в углу, только когда есть что сказать: «Сохранение…», «Сохранено»,
-   «Нет связи». Вместо диалога переподключения circuit v1: экран Хранителя живёт в браузере и при
-   обрыве не пропадает, нужно лишь видеть, дошли ли правки. Стоит один раз в MainLayout. *@
+@* Связь и сохранение — плашка в углу, только когда есть что сказать: «Сохранение…» и «Нет связи». «Сохранено» здесь
+   нет (правило 17: одно подтверждение на действие, его даёт тост с объектом — «Кампания сохранена.»; плашка рядом с
+   тостом дублировала его, а на телефоне лежала под ним). Вместо диалога переподключения circuit v1: экран Хранителя
+   живёт в браузере и при обрыве не пропадает, нужно лишь видеть, дошли ли правки. Стоит один раз в MainLayout. *@
 @switch (Activity.State)
 {
     case ConnectionState.Saving:
         <div class="cm-connection cm-connection-saving" role="status">
             <span class="cm-spinner cm-spinner-sm" aria-hidden="true"></span>
             <span>Сохранение…</span>
-        </div>
-        break;
-    case ConnectionState.Saved:
-        <div class="cm-connection cm-connection-saved" role="status">
-            <i class="fa-solid fa-check" aria-hidden="true"></i>
-            <span>Сохранено</span>
         </div>
         break;
     case ConnectionState.Offline:
@@ -36,7 +30,6 @@
     private IJSObjectReference? _module;
     private IJSObjectReference? _watch;
     private DotNetObjectReference<ConnectionIndicator>? _self;
-    private CancellationTokenSource? _savedTimer;
     private bool _checking;
 
     protected override void OnInitialized() => Activity.Changed += OnChanged;
@@ -56,31 +49,7 @@
     [JSInvokable]
     public void SetBrowserOnline(bool online) => Activity.SetBrowserOnline(online);
 
-    private void OnChanged()
-    {
-        // «Сохранено» гаснет само: состояние считается от времени, перерисовать надо по таймеру.
-        if (Activity.State == ConnectionState.Saved)
-        {
-            _savedTimer?.Cancel();
-            _savedTimer = new CancellationTokenSource();
-            _ = RefreshAfterAsync(ApiActivity.SavedNoticeFor, _savedTimer.Token);
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private async Task RefreshAfterAsync(TimeSpan delay, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(delay, Time, cancellationToken);
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (OperationCanceledException)
-        {
-            // Пришла новая запись — свой таймер у неё.
-        }
-    }
+    private void OnChanged() => InvokeAsync(StateHasChanged);
 
     // Пробный запрос сам обновит состояние через обработчик ApiClient: ответ — связь есть.
     private async Task CheckAsync()
@@ -103,8 +72,6 @@
     public async ValueTask DisposeAsync()
     {
         Activity.Changed -= OnChanged;
-        _savedTimer?.Cancel();
-        _savedTimer?.Dispose();
         try
         {
             if (_watch is not null)

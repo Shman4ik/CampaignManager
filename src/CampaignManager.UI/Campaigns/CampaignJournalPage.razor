@@ -15,7 +15,8 @@
         <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-arrow-left" Href="@($"campaigns/{CampaignId}")">Кампания</Button>
         @if (_journal?.CanEdit == true)
         {
-            <Button Small="true" Icon="fa-calendar-plus" OnClick="() => OpenEditor(null)">Новая встреча</Button>
+            @* Перо — только здесь: «Журнал» у остальных кнопок — чтение, у него книга (H9). *@
+            <Button Small="true" Icon="fa-pen-nib" OnClick="() => OpenEditor(null)">Новая встреча</Button>
         }
     </Actions>
 </PageHeader>
@@ -43,9 +44,13 @@
                 <section class="cm-section" aria-label="Встречи">
                     <div class="cm-card">
                         <SectionHeader Title="Встречи" Count="journal.Sessions.Count" />
-                        @foreach (var session in journal.Sessions)
+                        @foreach (var (session, index) in journal.Sessions.Select((session, index) => (session, index)))
                         {
-                            var isLatest = session.Id == journal.Sessions[0].Id;
+                            var isLatest = index == 0;
+                            // Сценарий — один раз на подряд идущие встречи одного прохождения: стена одинаковых кнопок «Среди древних
+                            // деревьев» перед каждой записью читалась как повтор (J3).
+                            var showScenario = session.ScenarioName is not null
+                                && (index == 0 || journal.Sessions[index - 1].ScenarioName != session.ScenarioName);
                             var open = _open.Contains(session.Id);
                             var hasMore = IsLong(session.Summary) || !string.IsNullOrWhiteSpace(session.KeeperNotes);
                             <article class="flex flex-col gap-3 border-t border-primary-200 px-4 py-4 first:border-t-0" @key="session.Id"
@@ -57,11 +62,23 @@
                                             <time datetime="@session.SessionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
                                                 @LocalTime.Date(session.SessionDate)
                                             </time>
+                                            @if (showScenario)
+                                            {
+                                                @if (journal.CanEdit && session.ScenarioId is { } scenarioId)
+                                                {
+                                                    <a href="@($"scenarios/{scenarioId}")" class="inline-flex min-h-8 items-center no-underline hover:underline"><Badge Tone="Tone.Info" Icon="fa-scroll">@session.ScenarioName</Badge></a>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Tone="Tone.Info" Icon="fa-scroll">@session.ScenarioName</Badge>
+                                                }
+                                            }
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(session.Title))
                                         {
-                                            @* h2, а не h3: «##» в хронике — тоже h2 (уровни задаёт общий Markdown и сдвигать их он не умеет), и h2 под h3 переворачивал бы структуру. *@
-                                            <h2 class="cm-h4 cm-title-serif mt-1">@session.Title</h2>
+                                            @* h2, а не h3: «##» в хронике — тоже h2 (уровни задаёт общий Markdown и сдвигать их он не умеет), и h2 под h3 переворачивал бы структуру.
+                                               18px, а не 24: три заголовка подряд крупнее заголовка страницы (15px) спорили с шапкой (J4). *@
+                                            <h2 class="cm-title-serif mt-1 text-lg">@session.Title</h2>
                                         }
                                     </div>
                                     @if (journal.CanEdit)
@@ -77,26 +94,10 @@
                                     }
                                 </div>
 
-                                @if (session.ScenarioName is not null || session.ScenarioCompleted)
+                                @if (session.ScenarioCompleted)
                                 {
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        @if (session.ScenarioName is not null)
-                                        {
-                                            @if (journal.CanEdit && session.ScenarioId is { } scenarioId)
-                                            {
-                                                <a href="@($"scenarios/{scenarioId}")" class="cm-btn cm-btn-secondary cm-btn-sm">
-                                                    <i class="fa-solid fa-scroll" aria-hidden="true"></i><span>@session.ScenarioName</span>
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <Badge Tone="Tone.Info" Icon="fa-scroll">@session.ScenarioName</Badge>
-                                            }
-                                        }
-                                        @if (session.ScenarioCompleted)
-                                        {
-                                            <Badge Tone="Tone.Success" Icon="fa-flag-checkered">Сценарий завершён</Badge>
-                                        }
+                                    <div>
+                                        <Badge Tone="Tone.Success" Icon="fa-flag-checkered">Сценарий завершён</Badge>
                                     </div>
                                 }
 
@@ -117,10 +118,10 @@
                                 @if (hasMore)
                                 {
                                     <div>
-                                        <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm" aria-expanded="@(open ? "true" : "false")"
+                                        <button type="button" class="cm-link-btn" aria-expanded="@(open ? "true" : "false")"
                                                 data-testid="session-toggle" @onclick="() => Toggle(session.Id)">
-                                            <i class="fa-solid @(open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
                                             <span>@(open ? "Свернуть" : "Читать полностью")</span>
+                                            <i class="fa-solid @(open ? "fa-chevron-up" : "fa-chevron-down") text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                 }
@@ -131,17 +132,22 @@
                                 {
                                     <Alert Tone="Tone.Info" Small="true" Icon="fa-graduation-cap" class="mb-0"
                                            Title="Фаза развития сыщиков">
-                                        <p>
-                                            Откройте лист сыщика и проведите фазу развития: проверки отмеченных навыков,
-                                            Рассудок за навыки от 90%, самолечение, Средства. <BookRef Page="92" />
-                                        </p>
+                                        @* Шаги — в листе, здесь одна строка и значок книги (J2); на телефоне кнопки листов — колонкой во всю плашку (J1). *@
+                                        <p>Проведите фазу развития в листе. <BookRef Page="92" /></p>
                                         @if (journal.Investigators.Count > 0)
                                         {
-                                            <div class="cm-btn-row mt-2">
+                                            <div class="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                                 @foreach (var investigator in journal.Investigators)
                                                 {
-                                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user"
-                                                            Href="@($"character/{investigator.CharacterId}")">@InvestigatorLabel(investigator)</Button>
+                                                    <a href="@($"character/{investigator.CharacterId}")" class="cm-btn cm-btn-secondary cm-btn-sm max-w-full"
+                                                       data-testid="investigator-link">
+                                                        <i class="fa-solid fa-user shrink-0" aria-hidden="true"></i>
+                                                        <span class="truncate">@investigator.Name</span>
+                                                        @if (investigator.PlayerName is { } player)
+                                                        {
+                                                            <span class="hidden shrink-0 font-normal text-primary-600 md:inline">(@player)</span>
+                                                        }
+                                                    </a>
                                                 }
                                             </div>
                                         }
@@ -194,9 +200,6 @@
         }
     }
 
-    private static string InvestigatorLabel(JournalInvestigator investigator) =>
-        investigator.PlayerName is { } player ? $"{investigator.Name} ({player})" : investigator.Name;
-
     private async Task<CampaignJournalDto?> LoadAsync(CancellationToken cancellationToken)
     {
         try
@@ -222,14 +225,14 @@
     private async Task SavedAsync(CampaignSessionDto session)
     {
         _editorOpen = false;
-        Toasts.Success($"Встреча №{session.Number} записана.");
+        Toasts.Success("Встреча записана:", subject: $"№{session.Number}");
         await ReloadAsync();
     }
 
     private async Task DeleteAsync(CampaignSessionDto session)
     {
         var title = string.IsNullOrWhiteSpace(session.Title) ? $"Встреча №{session.Number}" : $"Встреча №{session.Number}: {session.Title}";
-        if (!await Dialogs.ConfirmDeleteAsync("запись журнала", title, "Удалится вместе с хроникой и заметками.", reversible: false))
+        if (!await Dialogs.ConfirmDeleteAsync("встречу", title, "Удалится вместе с хроникой и заметками.", reversible: false))
         {
             return;
         }
@@ -237,7 +240,7 @@
         try
         {
             await Api.DeleteSessionAsync(CampaignId, session.Id);
-            Toasts.Success("Запись удалена.");
+            Toasts.Success("Встреча удалена:", subject: title);
             await ReloadAsync();
         }
         catch (HttpRequestException ex)

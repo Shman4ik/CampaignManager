@@ -24,31 +24,40 @@ public sealed class ToastService(TimeProvider time)
 
     public event Action? Changed;
 
-    public void Success(string message, string? title = null) => Show(Tone.Success, message, title);
+    /// <remarks>
+    /// <paramref name="subject"/> — имя объекта отдельным параметром (правило 7): <c>Success("Кампания создана:", subject: name)</c>
+    /// рисуется «Кампания создана: <b>Норман и сыновья</b>» — жирным и без обрамляющих кавычек (<see cref="Names.Clean"/>).
+    /// <see cref="ToastMessage.Message"/> остаётся целым текстом («Кампания создана: Норман и сыновья»); имя в нём стоит последним.
+    /// Строкой с кавычками по-прежнему можно, но имя в именительном падеже и жирным — единственный вид по правилу.
+    /// </remarks>
+    public void Success(string message, string? title = null, string? subject = null) => Show(Tone.Success, message, title, subject: subject);
 
-    public void Info(string message, string? title = null) => Show(Tone.Info, message, title);
+    public void Info(string message, string? title = null, string? subject = null) => Show(Tone.Info, message, title, subject: subject);
 
-    public void Warning(string message, string? title = null) => Show(Tone.Warning, message, title);
+    public void Warning(string message, string? title = null, string? subject = null) => Show(Tone.Warning, message, title, subject: subject);
 
-    public void Error(string message, string? title = null) => Show(Tone.Error, message, title);
+    public void Error(string message, string? title = null, string? subject = null) => Show(Tone.Error, message, title, subject: subject);
 
     /// <summary>
     /// Тост с действием «Отменить», 8 секунд. Для правки данных листа в строке (убрали оружие, заклинание,
     /// фобию): строку убирают сразу, а вернуть можно отсюда. <paramref name="undo"/> вызывается по нажатию;
     /// если он падает, показывается ошибка.
     /// </summary>
-    public void Undo(string message, Func<Task> undo, string? title = null)
+    public void Undo(string message, Func<Task> undo, string? title = null, string? subject = null)
     {
         ArgumentNullException.ThrowIfNull(undo);
-        Show(Tone.Info, message, title, new ToastAction("Отменить", undo));
+        Show(Tone.Info, message, title, new ToastAction("Отменить", undo), subject);
     }
 
-    /// <summary>«Убрано: Кольт .45 — Отменить»: <see cref="Undo"/> с готовым текстом.</summary>
-    public void Removed(string subject, Func<Task> undo) => Undo($"Убрано: {subject}", undo);
+    /// <summary>«Убрано: <b>Кольт .45</b> — Отменить»: <see cref="Undo"/> с готовым текстом.</summary>
+    public void Removed(string subject, Func<Task> undo) => Undo("Убрано:", undo, subject: subject);
 
-    public void Show(Tone tone, string message, string? title = null, ToastAction? action = null)
+    public void Show(Tone tone, string message, string? title = null, ToastAction? action = null, string? subject = null)
     {
-        var toast = new ToastMessage(++_nextId, tone, message, title, action);
+        var name = Names.Clean(subject);
+        var toast = name.Length == 0
+            ? new ToastMessage(++_nextId, tone, message, title, action)
+            : new ToastMessage(++_nextId, tone, $"{message} {name}", title, action, name);
         _messages.Add(toast);
         if (_messages.Count > MaxVisible)
         {
@@ -95,7 +104,15 @@ public sealed class ToastService(TimeProvider time)
     }
 }
 
-public sealed record ToastMessage(long Id, Tone Tone, string Message, string? Title, ToastAction? Action = null);
+/// <param name="Message">Целый текст сообщения; если есть <paramref name="Subject"/>, он стоит в конце и выводится жирным.</param>
+/// <param name="Subject">Имя объекта без кавычек (<see cref="Names.Clean"/>) — хвост <paramref name="Message"/>.</param>
+public sealed record ToastMessage(long Id, Tone Tone, string Message, string? Title, ToastAction? Action = null, string? Subject = null)
+{
+    /// <summary>Текст до имени объекта: «Убрано:».</summary>
+    public string Lead => Subject is { Length: > 0 } && Message.EndsWith(Subject, StringComparison.Ordinal)
+        ? Message[..^Subject.Length]
+        : Message;
+}
 
 /// <summary>Кнопка в тосте: подпись и что сделать по нажатию.</summary>
 public sealed record ToastAction(string Label, Func<Task> Callback);

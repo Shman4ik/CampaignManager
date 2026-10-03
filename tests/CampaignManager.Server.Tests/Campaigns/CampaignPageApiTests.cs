@@ -112,6 +112,41 @@ public sealed class CampaignPageApiTests(CampaignsApp app) : IClassFixture<Campa
         Assert.Equal("Вторая", last.Title);
     }
 
+    // P7: игроку карточка «Последняя встреча» показывает первую строку хроники — без разметки и не длиннее предела.
+    [Fact]
+    public async Task Last_session_carries_the_first_line_of_the_chronicle_without_markdown()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync();
+        var campaign = await app.AddCampaignAsync(keeper, player);
+        await app.Api(keeper).AddSessionAsync(campaign.Id, new(new DateOnly(2026, 9, 20), 1, "Дом", "\n## **Штурм** дома\nВторая строка.", "Тайна", null, false), Cancellation);
+
+        var asPlayer = await app.Api(player).GetCampaignAsync(campaign.Id, Cancellation);
+
+        Assert.Equal("Штурм дома", asPlayer.LastSession!.Excerpt);
+        Assert.DoesNotContain("Тайна", await app.Http(player).GetStringAsync(CampaignsRoutes.Campaign(campaign.Id), Cancellation));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   \n  ", null)]
+    [InlineData("- пункт списка\nещё", "пункт списка")]
+    [InlineData("> цитата", "цитата")]
+    [InlineData("Просто строка.", "Просто строка.")]
+    public void Excerpt_takes_the_first_meaningful_line(string? summary, string? expected) =>
+        Assert.Equal(expected, Server.Campaigns.CampaignService.Excerpt(summary));
+
+    [Fact]
+    public void Long_excerpt_is_cut_at_a_word_with_an_ellipsis()
+    {
+        var excerpt = Server.Campaigns.CampaignService.Excerpt(string.Join(' ', Enumerable.Repeat("слово", 60)))!;
+
+        Assert.True(excerpt.Length <= Server.Campaigns.CampaignService.ExcerptLength + 1);
+        Assert.EndsWith("слово…", excerpt, StringComparison.Ordinal);
+    }
+
     // Ссылка-приглашение: страница /join/{id} показывает, куда зовут. Видна любому вошедшему, пока кампания не завершена —
     // как и в «Можно вступить» на главной; участнику — всегда; завершённая постороннему — 404.
     [Fact]

@@ -58,7 +58,9 @@ public sealed class ProfilePageTests : KitContext
 
         cut.WaitForAssertion(() => Assert.Equal(new UpdateDisplayNameRequest("Дмитрий Петров", true), _api.LastRename));
         Assert.Equal(1, _session.Refreshes);
-        cut.WaitForAssertion(() => Assert.Equal("Дмитрий Петров", cut.Find("[data-testid='profile-name']").TextContent));
+        // Имя — только полем, заголовка-дубля нет (PR4).
+        cut.WaitForAssertion(() => Assert.Equal("Дмитрий Петров", cut.Find("[data-testid='profile-name']").GetAttribute("value")));
+        Assert.Empty(cut.FindAll("div[data-testid='profile-name']"));
     }
 
     [Fact]
