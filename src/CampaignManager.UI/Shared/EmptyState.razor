@@ -1,31 +1,59 @@
-@* Пустой список. Сам — карточка, поэтому ставится на место списка, а не внутрь другой карточки.
-   Текст — две короткие фразы, вторая подсказывает действие: «В базе нет существ.» /
-   «Добавьте первое существо, чтобы начать.» Пусто из-за фильтра — «Нет существ по этим
-   условиям.» и вторичная «Очистить фильтры» рядом с основным действием. *@
-<div class="cm-card">
-    <div class="cm-card-body flex flex-col items-center justify-center px-6 py-10 text-center">
-        <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
-            <i class="fa-solid @Icon text-2xl text-primary-400" aria-hidden="true"></i>
+@* Пустой список. Два вида (design-system.md, п. 4):
+   • Compact — одна строка текста 13px внутри секции, без иконки и абзаца: «Нет книг.» Так показывают пустую
+     секцию, вкладку и список внутри карточки;
+   • обычный — карточка, иконка 40px, высота ≤ 160px. Только когда пуста вся страница-список и в шапке нет
+     действия добавления. Сам — карточка, поэтому ставится на место списка, а не внутрь другой карточки.
+   Текст — по смыслу одна из двух фраз: EmptyState.None("книг") → «Нет книг.» (пусто) и
+   EmptyState.NoneByFilter("книг") → «Нет книг по этим условиям.» (пусто из-за фильтра). Второго названия
+   «Очистить фильтры» не заводим: в такой карточке одна кнопка «Сбросить фильтры» (Actions).
+   Нулевая секция, в которой нечему быть («Игроки (0)»), не рисуется вовсе — пустое состояние ей не нужно. *@
+@if (Compact)
+{
+    <p class="cm-empty-compact" data-testid="empty-state">@Title</p>
+}
+else
+{
+    <div class="cm-card" data-testid="empty-state">
+        <div class="cm-card-body flex flex-col items-center justify-center px-6 py-6 text-center">
+            <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary-100">
+                <i class="fa-solid @Icon text-lg text-primary-500" aria-hidden="true"></i>
+            </div>
+            <h2 class="cm-h6">@Title</h2>
+            @if (!string.IsNullOrEmpty(Message))
+            {
+                <p class="cm-text-muted max-w-prose">@Message</p>
+            }
+            @if (Actions is not null)
+            {
+                <div class="mt-4 flex flex-wrap justify-center gap-2">@Actions</div>
+            }
         </div>
-        <h2 class="cm-h6">@Title</h2>
-        @if (!string.IsNullOrEmpty(Message))
-        {
-            <p class="cm-text-muted max-w-prose">@Message</p>
-        }
-        @if (Actions is not null)
-        {
-            <div class="mt-5 flex flex-wrap justify-center gap-2">@Actions</div>
-        }
     </div>
-</div>
+}
 
 @code {
+    /// <summary>«Нет книг.» / «Нет книг по этим условиям.» — см. <see cref="None"/> и <see cref="NoneByFilter"/>.</summary>
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
+    /// <summary>Вторая короткая фраза большой карточки. У <see cref="Compact"/> не выводится.</summary>
     [Parameter] public string? Message { get; set; }
 
+    /// <summary>Иконка большой карточки, 40px. У <see cref="Compact"/> иконки нет.</summary>
     [Parameter] public string Icon { get; set; } = "fa-magnifying-glass";
 
-    /// <summary>Основное действие (Primary, «Добавить …») и, если пусто из-за фильтра, Secondary «Очистить фильтры».</summary>
+    /// <summary>Одна строка текста 13px внутри секции — без карточки, иконки и абзаца.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>
+    /// Кнопки большой карточки — <b>только если действия нет ни в шапке страницы, ни в заголовке секции</b>
+    /// (одно действие — одно место). Исключение — пустой результат фильтра: одна «Сбросить фильтры».
+    /// У <see cref="Compact"/> не выводятся.
+    /// </summary>
     [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>«Нет книг.» — пусто. Дополнение родительного падежа множественного числа: «книг», «существ».</summary>
+    public static string None(string plural) => $"Нет {plural}.";
+
+    /// <summary>«Нет книг по этим условиям.» — пусто из-за фильтра или поиска.</summary>
+    public static string NoneByFilter(string plural) => $"Нет {plural} по этим условиям.";
 }

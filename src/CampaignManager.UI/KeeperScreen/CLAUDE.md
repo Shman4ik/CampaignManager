@@ -19,7 +19,7 @@
   адресе: `?block=checks|dice|push|luck|damage|firearms|sanity|chase|group` (незнакомое — «Проверки»).
   Переключение вкладок — `NavigateTo(..., replace: true)`, историю «назад» не забивает. Права —
   `[Authorize(Policy = Policies.Keeper)]`: игрок получает «Нет доступа», гость — вход. Кнопку «Ширма» в шапке
-  страница прячет (`ShowModuleButtons="false"`). Из панели — «Открыть страницей» на текущий раздел.
+  страница прячет (`PageHeader Game="true" ShowScreenButton="false"`). Из панели — «Открыть страницей» на текущий раздел.
 
 ## Как устроено
 

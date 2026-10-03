@@ -8,20 +8,20 @@
 @inject BrowserStorage Storage
 @inject IJSRuntime JS
 
-@* Плеер Хранителя: кнопка «Музыка» в шапке (слот PageHeaderSlots.Music — шапка о модуле не знает) и панель
+@* Плеер Хранителя: кнопка «Плеер» в шапке (слоты PageHeaderSlots.Music и MusicPlaying — шапка о модуле не знает) и панель
    внизу колонки страницы. Стоит в MainLayout (через MusicPlayerHost, только Хранителю), поэтому переходы
    между страницами её не пересоздают; сам звук — в MusicPlayerBar.razor.js, состояние — синглтон MusicPlayer.
    Скрытая панель звук не останавливает: не рисуется только разметка. *@
 @if (_hasLibrary || Player.Current is not null)
 {
-    <SectionContent SectionName="@PageHeaderSlots.Music">
-        <Button Small="true" Variant="@(Player.IsPanelOpen ? ButtonVariant.Primary : ButtonVariant.Secondary)"
-                Icon="@(Player.IsPlaying ? "fa-volume-high" : "fa-music")" aria-expanded="@(Player.IsPanelOpen ? "true" : "false")"
-                data-testid="music-panel-toggle" OnClick="Player.TogglePanel">
-            @* На телефоне шапка сама оставит только значок (shell.css, .cm-topbar-actions). *@
-            Музыка
-        </Button>
-    </SectionContent>
+    @* Игровая страница (PageHeader Game="true") — кнопка в слоте Music; остальные — только пока есть трек
+       (слот MusicPlaying): плеер можно вызвать с любой страницы, пока играет музыка. *@
+    <SectionContent SectionName="@PageHeaderSlots.Music">@PlayerButton</SectionContent>
+}
+
+@if (Player.Current is not null)
+{
+    <SectionContent SectionName="@PageHeaderSlots.MusicPlaying">@PlayerButton</SectionContent>
 }
 
 @if (Player.IsPanelOpen)
@@ -116,6 +116,16 @@
 }
 
 @code {
+    private RenderFragment PlayerButton => __builder =>
+    {
+        <Button Small="true" Variant="@(Player.IsPanelOpen ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                Icon="@(Player.IsPlaying ? "fa-volume-high" : "fa-headphones")" aria-expanded="@(Player.IsPanelOpen ? "true" : "false")"
+                data-testid="music-panel-toggle" OnClick="Player.TogglePanel">
+            @* На телефоне шапка сама оставит только значок (shell.css, .cm-topbar-actions). *@
+            Плеер
+        </Button>
+    };
+
     private const string VolumeKey = "cm.music.volume";
 
     private IJSObjectReference? _module;

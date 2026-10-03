@@ -6,7 +6,9 @@ namespace CampaignManager.UI.Layout;
 /// <summary>
 /// Пункты меню — один список на рельс планшета и на нижнюю панель с листом «Ещё» телефона. В v1 их
 /// было два: <c>Sidebar</c> и <c>MobileBottomNav</c> (234 строки, на iPad мёртвая) расходились.
-/// Новый раздел приложения — одна строка здесь. Кабинет, вход и выход — не разделы: их рисует
+/// Новый раздел приложения — одна строка здесь. Подпись пункта — заголовок страницы (<c>PageHeader Title</c>)
+/// слово в слово: «Фонотека», «Бестиарий», «Пользователи»; не влезает в рельс — переименовать страницу,
+/// а не заводить второе слово (<c>ShortLabel</c> — для страниц с составным заголовком, не для сокращений). Кабинет, вход и выход — не разделы: их рисует
 /// <c>UserMenu</c> в подвале рельса и листа.
 /// </summary>
 public static class NavMenu
@@ -19,17 +21,17 @@ public static class NavMenu
         new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
         new("scenarios", "fa-masks-theater", "Сценарии", NavGroup.Main, NavAudience.Keeper),
         new("npcs", "fa-user-secret", "НПС", NavGroup.Main, NavAudience.Keeper),
-        new("music", "fa-music", "Музыка", NavGroup.Main, NavAudience.Keeper),
+        new("music", "fa-music", "Фонотека", NavGroup.Main, NavAudience.Keeper),
 
         new("weapons", "fa-gun", "Оружие", NavGroup.Reference, NavAudience.SignedIn),
-        new("bestiary", "fa-skull", "Существа", NavGroup.Reference, NavAudience.SignedIn),
+        new("bestiary", "fa-skull", "Бестиарий", NavGroup.Reference, NavAudience.SignedIn),
         new("items", "fa-box", "Предметы", NavGroup.Reference, NavAudience.SignedIn),
         new("occupations", "fa-user-tie", "Профессии", NavGroup.Reference, NavAudience.SignedIn),
         new("skills", "fa-brain", "Навыки", NavGroup.Reference, NavAudience.SignedIn),
         new("spells", "fa-hat-wizard", "Заклинания", NavGroup.Reference, NavAudience.SignedIn),
         new("books", "fa-book-open", "Книги", NavGroup.Reference, NavAudience.SignedIn),
 
-        new("admin/users", "fa-users", "Пользователи", NavGroup.System, NavAudience.Admin, ShortLabel: "Аккаунты"),
+        new("admin/users", "fa-users", "Пользователи", NavGroup.System, NavAudience.Admin),
         new("admin/applications", "fa-inbox", "Заявки", NavGroup.System, NavAudience.Admin),
         new("admin/files", "fa-folder-open", "Файлы", NavGroup.System, NavAudience.Admin),
     ];
@@ -60,7 +62,7 @@ public static class NavMenu
 }
 
 /// <param name="Href">Адрес относительно корня, без ведущего «/»: так его понимает NavLink.</param>
-/// <param name="ShortLabel">Подпись в рельсе, если <paramref name="Label"/> не влезает одной строкой в 76px
+/// <param name="ShortLabel">Подпись в рельсе, если <paramref name="Label"/> не влезает одной строкой в рельс (90px)
 /// (не длиннее «Заклинания»).</param>
 /// <param name="OnPhoneBar">На нижней панели телефона; остальное — в листе «Ещё». Влезает четыре пункта.</param>
 public sealed record NavItem(

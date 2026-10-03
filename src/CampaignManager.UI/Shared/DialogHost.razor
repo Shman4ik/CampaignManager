@@ -1,21 +1,29 @@
 @implements IDisposable
 @inject DialogService Dialogs
 
-@* Окно DialogService.ConfirmAsync. Стоит один раз в MainLayout. Фокус по умолчанию — на «Отмене»:
-   Enter после случайного касания не должен удалять. *@
+@* Окно DialogService.ConfirmAsync. Стоит один раз в MainLayout. Фокус по умолчанию — на «Отмене»
+   у необратимого (Error): Enter после случайного касания не должен удалять; у обычного подтверждения —
+   на главной кнопке. *@
 @if (Dialogs.Current is { } request)
 {
     <Modal Open="true" Title="@request.Title" Size="ModalSize.Small" OnClose="() => Dialogs.Complete(false)">
         <ChildContent>
-            <p>@request.Message</p>
+            @if (request.Subject is { } subject)
+            {
+                <p class="font-semibold text-primary-900" data-testid="confirm-dialog-subject">@subject</p>
+            }
+            @if (!string.IsNullOrEmpty(request.Message))
+            {
+                <p class="@(request.Subject is null ? null : "mt-1")">@request.Message</p>
+            }
             @if (!string.IsNullOrEmpty(request.Details))
             {
-                <p class="mt-2 text-[0.8125rem] text-primary-500">@request.Details</p>
+                <p class="mt-2 text-[0.8125rem] text-primary-600">@request.Details</p>
             }
         </ChildContent>
         <Footer>
-            <Button Variant="ButtonVariant.Secondary" autofocus OnClick="() => Dialogs.Complete(false)">@request.CancelText</Button>
-            <Button Variant="@request.ConfirmVariant" data-testid="confirm-dialog-ok" OnClick="() => Dialogs.Complete(true)">@request.ConfirmText</Button>
+            <Button Variant="ButtonVariant.Secondary" autofocus="@(request.ConfirmVariant == ButtonVariant.Error)" OnClick="() => Dialogs.Complete(false)">@request.CancelText</Button>
+            <Button Variant="@request.ConfirmVariant" autofocus="@(request.ConfirmVariant != ButtonVariant.Error)" data-testid="confirm-dialog-ok" OnClick="() => Dialogs.Complete(true)">@request.ConfirmText</Button>
         </Footer>
     </Modal>
 }

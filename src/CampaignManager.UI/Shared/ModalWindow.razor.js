@@ -39,6 +39,7 @@ export function show(dialog, dotnet, dismissible) {
     dialog.addEventListener("click", onClick);
     dialog.addEventListener("close", onClose);
     dialog.showModal();
+    focusFirst(dialog);
 
     openCount++;
     document.documentElement.classList.add("cm-modal-open");
@@ -69,4 +70,21 @@ export function show(dialog, dotnet, dismissible) {
             }
         },
     };
+}
+
+// showModal() ставит фокус на первый фокусируемый элемент — а это «Закрыть» в шапке. По правилам окна
+// фокус идёт в первое поле тела; в окне без полей — на главную кнопку подвала. Явный autofocus
+// (подтверждение удаления ставит его на «Отмену») побеждает.
+function focusFirst(dialog) {
+    const target =
+        dialog.querySelector("[autofocus]:not(:disabled)") ??
+        dialog.querySelector(
+            ".cm-modal-body :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea, [contenteditable=true]):not(:disabled):not([readonly])"
+        ) ??
+        dialog.querySelector(".cm-modal-footer .cm-btn:is(.cm-btn-primary, .cm-btn-error):not(:disabled)") ??
+        dialog.querySelector(".cm-modal-footer .cm-btn:not(:disabled)");
+
+    if (target instanceof HTMLElement) {
+        target.focus({ preventScroll: true });
+    }
 }

@@ -1,6 +1,9 @@
 @* Кнопка или ссылка-кнопка. Рисует ровно классы cm-btn — те же, что у ручной разметки, своих
    Tailwind-классов у компонента нет. Только иконка (без текста) — квадрат 44×44 (36×36 у Small)
-   и обязательный AriaLabel: на iPad нет наведения, title= ничего не объяснит. *@
+   и обязательный AriaLabel: на iPad нет наведения, title= ничего не объяснит.
+   Small (36px) — только кнопки шапки страницы и плотные таблицы каталога; css даёт 36px лишь внутри
+   .cm-topbar и .cm-table-dense, в остальных местах Small — те же 44px. Выключенная кнопка называет
+   причину (DisabledReason): строка 13px рядом, aria-describedby на кнопке. *@
 @if (Href is not null && !Disabled)
 {
     <a href="@Href" class="@Classes" aria-label="@AriaLabel" @attributes="Attributes">@Content</a>
@@ -8,13 +11,18 @@
 else
 {
     <button type="@Type" class="@Classes" disabled="@(Disabled || Busy)" aria-busy="@(Busy ? "true" : null)"
-            aria-label="@AriaLabel" @onclick="OnClick" @attributes="Attributes">@Content</button>
+            aria-label="@AriaLabel" aria-describedby="@(ShowReason ? _reasonId : null)" @onclick="OnClick" @attributes="Attributes">@Content</button>
+}
+
+@if (ShowReason)
+{
+    <span id="@_reasonId" class="cm-btn-reason" data-testid="disabled-reason">@DisabledReason</span>
 }
 
 @code {
     [Parameter] public ButtonVariant Variant { get; set; } = ButtonVariant.Primary;
 
-    /// <summary>36px вместо 44px. Кнопки шапки страницы — всегда Small (шапка 56px).</summary>
+    /// <summary>36px вместо 44px — только кнопки шапки страницы (56px) и плотные таблицы каталога. Остальным не ставить: вне них css всё равно рисует 44px.</summary>
     [Parameter] public bool Small { get; set; }
 
     /// <summary>
@@ -33,6 +41,13 @@ else
 
     [Parameter] public bool Disabled { get; set; }
 
+    /// <summary>
+    /// Почему кнопка выключена, одной строкой: «Введите название», «Выберите файл». Показывается
+    /// только пока кнопка выключена (<see cref="Disabled"/>); у действия, которое невозможно в
+    /// принципе, кнопку не рисуют вовсе. Идёт сразу после кнопки (справа, а если не влезает — под ней).
+    /// </summary>
+    [Parameter] public string? DisabledReason { get; set; }
+
     /// <summary>Идёт запрос: спиннер вместо иконки, кнопка выключена — двойного нажатия не будет.</summary>
     [Parameter] public bool Busy { get; set; }
 
@@ -42,6 +57,10 @@ else
 
     [Parameter(CaptureUnmatchedValues = true)]
     public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private readonly string _reasonId = $"btn-reason-{Guid.NewGuid():N}";
+
+    private bool ShowReason => Disabled && !string.IsNullOrWhiteSpace(DisabledReason);
 
     private bool IconOnly => ChildContent is null;
 

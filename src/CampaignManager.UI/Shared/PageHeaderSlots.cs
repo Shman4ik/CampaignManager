@@ -8,8 +8,14 @@ namespace CampaignManager.UI.Shared;
 /// </summary>
 public static class PageHeaderSlots
 {
-    /// <summary>Кнопка панели плеера (Music, T2.8).</summary>
+    /// <summary>Кнопка панели плеера (Music, T2.8) на игровых страницах (<c>PageHeader Game="true"</c>).</summary>
     public const string Music = "page-header-music";
+
+    /// <summary>
+    /// Та же кнопка плеера, но только пока есть текущий трек: шапка негровых страниц показывает её, чтобы
+    /// плеер можно было вызвать с любой страницы, пока играет музыка.
+    /// </summary>
+    public const string MusicPlaying = "page-header-music-playing";
 
     /// <summary>Кнопка ширмы Хранителя (KeeperScreen, T2.7).</summary>
     public const string KeeperScreen = "page-header-keeper-screen";
