@@ -28,8 +28,9 @@
    вкладки посреди сцены возвращает всё, включая неприменённый результат и неписанные в лист эффекты (UI/Encounters/CLAUDE.md). *@
 <PageHeader Title="@EncounterText.Of(Kind)" DocumentTitle="@DocumentTitle" Subtitle="@Subtitle" Game="true">
     <Actions>
-        @* Одна кнопка настроения («Бой» / «Погоня»); сам плеер — слот «Плеер» шапки. *@
-        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@EncounterText.Of(Kind)" />
+        @* Одна кнопка настроения; сам плеер — слот «Плеер» шапки. Подпись — «Музыка боя», а не голое «Бой»: рядом с
+           заголовком «Бой» кнопка читалась вторым заголовком. *@
+        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@MoodButtonText" />
         @if (_scenarioLink is { } scenario)
         {
             @* Сцена идёт по прохождению сценария: назад в режим игры — одним касанием, не через «Сценарии → сценарий → партия». *@
@@ -513,6 +514,8 @@
 
     private string NewWord => Kind == EncounterKind.Combat ? "Новый бой" : "Новая погоня";
 
+    private string MoodButtonText => Kind == EncounterKind.Combat ? "Музыка боя" : "Музыка погони";
+
     private string StartWord => Kind == EncounterKind.Combat ? "Начать бой" : "Начать погоню";
 
     private DateTimeOffset Now => Time.GetUtcNow();
@@ -558,49 +561,53 @@
         {
             <Alert Tone="Tone.Info" OnClose="() => _notice = null">@_notice</Alert>
         }
-        <section class="cm-section">
-            <div class="cm-card">
-                <div class="cm-card-header"><h2 class="cm-card-title">@NewWord</h2></div>
-                <div class="cm-card-body flex flex-wrap items-end gap-3">
-                    <Field Label="Кампания" class="w-full sm:w-80">
-                        <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
-                                @onchange="e => _startCampaign = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
-                            <option value="">— вне кампании —</option>
-                            @foreach (var campaign in _campaigns)
-                            {
-                                <option value="@campaign.Id">@campaign.Name</option>
-                            }
-                        </select>
-                    </Field>
-                    <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">@StartWord</Button>
-                </div>
-            </div>
-        </section>
-        @if (_active.Count > 0)
-        {
-            <section class="cm-section">
-                <div class="cm-section-header"><h2 class="cm-section-title">Идут сейчас</h2></div>
+        @* Лобби — маленькая форма: карточка по содержимому (max-w-xl), идущие сцены — рядом с lg, а не под ней.
+           Во всю колонку селект и «Начать» занимали левую четверть пустой карточки. *@
+        <div class="grid items-start gap-x-7 lg:grid-cols-[minmax(0,36rem)_minmax(0,1fr)]">
+            <section class="cm-section max-w-xl">
+                <div class="cm-section-header"><h2 class="cm-section-title">@NewWord</h2></div>
                 <div class="cm-card">
-                    @foreach (var active in _active)
-                    {
-                        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
-                            <div>
-                                <div class="font-medium">@(active.CampaignName ?? "Вне кампании")</div>
-                                @if (active.ParticipantNames.Count > 0)
+                    <div class="cm-card-body flex flex-wrap items-end gap-3">
+                        <Field Label="Кампания" class="w-full sm:w-80">
+                            <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
+                                    @onchange="e => _startCampaign = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                                <option value="">— вне кампании —</option>
+                                @foreach (var campaign in _campaigns)
                                 {
-                                    <div class="text-sm text-primary-700">@string.Join(", ", active.ParticipantNames)</div>
+                                    <option value="@campaign.Id">@campaign.Name</option>
                                 }
-                                <div class="cm-meta">
-                                    @(active.Round == 0 ? "расстановка" : $"раунд {active.Round}") · участников: @active.ParticipantCount ·
-                                    @LocalTime.DateTime(active.UpdatedAt)
-                                </div>
-                            </div>
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-right" Href="@($"{Route}?id={active.Id}")">Продолжить</Button>
-                        </div>
-                    }
+                            </select>
+                        </Field>
+                        <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">@StartWord</Button>
+                    </div>
                 </div>
             </section>
-        }
+            @if (_active.Count > 0)
+            {
+                <section class="cm-section max-w-2xl">
+                    <div class="cm-section-header"><h2 class="cm-section-title">Идут сейчас</h2></div>
+                    <div class="cm-card">
+                        @foreach (var active in _active)
+                        {
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                                <div>
+                                    <div class="font-medium">@(active.CampaignName ?? "Вне кампании")</div>
+                                    @if (active.ParticipantNames.Count > 0)
+                                    {
+                                        <div class="text-sm text-primary-700">@string.Join(", ", active.ParticipantNames)</div>
+                                    }
+                                    <div class="cm-meta">
+                                        @(active.Round == 0 ? "расстановка" : $"раунд {active.Round}") · участников: @active.ParticipantCount ·
+                                        @LocalTime.DateTime(active.UpdatedAt)
+                                    </div>
+                                </div>
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-right" Href="@($"{Route}?id={active.Id}")">Продолжить</Button>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
     };
 
     private RenderFragment Scene(EncounterSession session) => __builder =>
