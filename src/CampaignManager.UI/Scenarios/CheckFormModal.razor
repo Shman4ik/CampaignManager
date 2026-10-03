@@ -8,12 +8,12 @@
    навыками), характеристика или Удача; сложность — по книге (стр. 80), теми же кнопками, что в диалоге проверки;
    что узнают при успехе и при провале. В режиме игры (T2.5b) «Проверить» откроет общий диалог проверки по
    сыщикам кампании прохождения. Ошибка — в окне. *@
-<Modal Open="Open" Title="@(Check is null ? "Новая проверка" : "Проверка")" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="check-form">
+<Modal Open="Open" Title="@(Check is null ? "Новая проверка" : "Изменить проверку")" Size="ModalSize.Large" OnClose="CloseAsync" data-testid="check-form">
     <ChildContent>
         <form id="check-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             @if (Check is null)
             {
-                <Field Label="Локация" class="sm:w-96">
+                <Field Label="Локация" Required="true">
                     <select class="cm-input" data-testid="check-location" value="@(_locationId?.ToString() ?? "")"
                             @onchange="e => _locationId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
                         <option value="">— выберите —</option>
@@ -29,7 +29,7 @@
                     @foreach (var target in Enum.GetValues<CheckTarget>())
                     {
                         var active = target == _target;
-                        <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)" role="radio"
+                        <Button Variant="ButtonVariant.Secondary" role="radio" class="@(active ? "border-accent-500 bg-accent-100 text-accent-800 ring-2 ring-accent-500" : null)"
                                 aria-checked="@(active ? "true" : "false")" data-testid="@($"check-target-{target}")"
                                 OnClick="() => _target = target">@ScenarioText.Of(target)</Button>
                     }
@@ -50,7 +50,7 @@
             }
             else if (_target is CheckTarget.Characteristic)
             {
-                <Field Label="Характеристика" class="sm:w-72">
+                <Field Label="Характеристика">
                     <select class="cm-input" data-testid="check-characteristic" value="@(_characteristic?.ToString() ?? "")"
                             @onchange="e => _characteristic = Enum.TryParse<Characteristic>(e.Value?.ToString(), out var c) ? c : null">
                         <option value="">— выберите —</option>
@@ -61,14 +61,14 @@
                     </select>
                 </Field>
             }
-            <Field Label="Сложность" Group="true" Note="Трудная — половина значения, чрезвычайная — пятая часть (стр. 80).">
+            <Field Label="Сложность" Group="true" Note="Трудная — половина значения навыка, чрезвычайная — пятая часть.">
                 <DifficultyPicker @bind-Value="_difficulty" />
             </Field>
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field Label="При успехе">
+                <Field Label="При успехе" Note="Текст для Хранителя: что узнают сыщики.">
                     <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" data-testid="check-success" @bind="_onSuccess"></textarea>
                 </Field>
-                <Field Label="При провале">
+                <Field Label="При провале" Note="Текст для Хранителя: что происходит.">
                     <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" @bind="_onFailure"></textarea>
                 </Field>
             </div>

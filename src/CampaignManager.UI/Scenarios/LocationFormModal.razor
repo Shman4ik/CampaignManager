@@ -5,19 +5,15 @@
    музыку локации (T2.5b) и её проверки эта форма не трогает, поэтому правило v1 «новое поле обязано попасть в
    глубокое копирование» больше не нужно: копии нет. Родителем нельзя выбрать саму локацию и её потомков (сервер
    тоже не даст). Ошибка — в окне, окно не закрывается. *@
-<Modal Open="Open" Title="@(Location is null ? "Новая локация" : $"Локация: {Location.Name}")" Size="ModalSize.Large" OnClose="CloseAsync"
+<Modal Open="Open" Title="@(Location is null ? "Новая локация" : "Изменить локацию")" Size="ModalSize.Large" OnClose="CloseAsync"
        data-testid="location-form">
     <ChildContent>
         <form id="location-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field Label="Название" Error="@_nameError">
+                <Field Label="Название" Required="true" Error="@_nameError">
                     <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="location-name" @bind="_name" @bind:event="oninput" />
                 </Field>
-                <Field Label="Адрес">
-                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_address" />
-                </Field>
-            </div>
-            <Field Label="Внутри локации" class="sm:w-96">
+                <Field Label="Внутри локации">
                 <select class="cm-input" data-testid="location-parent" value="@(_parentId?.ToString() ?? "")"
                         @onchange="e => _parentId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
                     <option value="">— верхний уровень —</option>
@@ -26,11 +22,15 @@
                         <option value="@parent.Id">@(new string(' ', depth * 3))@parent.Name</option>
                     }
                 </select>
+                </Field>
+            </div>
+            <Field Label="Где находится">
+                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_address" />
             </Field>
-            <Field Label="Описание" Hint="(Markdown, для Хранителя)" Group="true">
+            <Field Label="Описание" Hint="Markdown, только для Хранителя" Group="true">
                 <div class="mb-2 flex flex-wrap gap-2">
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
-                        @(_preview ? "Редактор" : "Просмотр")
+                    <Button Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
+                        @(_preview ? "Редактор" : "Предпросмотр")
                     </Button>
                 </div>
                 @if (_preview)

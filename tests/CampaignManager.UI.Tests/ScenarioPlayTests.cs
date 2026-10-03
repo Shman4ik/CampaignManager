@@ -113,6 +113,57 @@ public sealed class ScenarioPlayTests : KitContext
     }
 
     [Fact]
+    public void Facts_panel_opens_on_handouts_and_keeps_fact_kinds_collapsed_until_asked()
+    {
+        var scenario = Scenario();
+        scenario.KeyFacts = [new(Guid.NewGuid(), 0, KeyFactType.Backstory, "Что было", "Старый дом.")];
+        var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario));
+
+        // Раздатки первыми: «Показать игрокам» — на первом экране, без прокрутки через факты.
+        Assert.Single(cut.FindAll("[data-testid=show-handout]"));
+        Assert.Empty(cut.FindAll("[data-testid=play-key-facts]"));
+
+        cut.FindAll("[role=tab]").Single(t => t.TextContent.Contains("Факты")).Click();
+        Assert.Empty(cut.FindAll("[data-testid=play-handout]"));
+        Assert.DoesNotContain("Старый дом.", cut.Markup);
+
+        cut.Find("[data-testid=toggle-all-facts]").Click();
+        Assert.Contains("Старый дом.", cut.Markup);
+    }
+
+    [Fact]
+    public void Outcomes_of_the_only_check_are_open_at_once()
+    {
+        var cut = Play(HouseId);
+
+        Assert.Contains("Находит дневник.", cut.Find("[data-testid=play-checks]").TextContent);
+        cut.Find("[data-testid=play-check] button[aria-expanded]").Click();
+        Assert.DoesNotContain("Находит дневник.", cut.Find("[data-testid=play-checks]").TextContent);
+    }
+
+    [Fact]
+    public void Checks_come_before_the_location_description()
+    {
+        var scenario = Scenario();
+        scenario.Locations[0].Description = "Длинное описание дома.";
+        var cut = Render<ScenarioPlay>(p => p.Add(c => c.Scenario, scenario).Add(c => c.LocationId, HouseId));
+
+        var markup = cut.Find("[data-testid=play-location-detail]").InnerHtml;
+        Assert.True(markup.IndexOf("play-checks", StringComparison.Ordinal) < markup.IndexOf("Длинное описание дома.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Overview_keeps_the_scenario_text_collapsed()
+    {
+        var scenario = Scenario();
+        scenario.BodyMd = "Стена текста сценария.";
+        var cut = Render<ScenarioPlay>(p => p.Add(c => c.Scenario, scenario));
+
+        Assert.NotNull(cut.Find("[data-testid=play-body]"));
+        Assert.Null(cut.Find("[data-testid=play-body]").GetAttribute("open"));
+    }
+
+    [Fact]
     public void Play_link_keeps_location_handout_and_run_in_the_address() =>
         Assert.Equal($"scenarios/{ScenarioId}?mode=play&location={HouseId}&handout={HandoutId}&run={RunId}",
             ScenarioLinks.Play(ScenarioId, HouseId, HandoutId, RunId));

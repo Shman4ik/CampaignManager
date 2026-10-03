@@ -5,7 +5,7 @@
 @inject IRunsApi Runs
 @inject ICampaignsApi Campaigns
 
-@* Одна форма прохождения (T2.5c): «Играть в кампании», «Объявить ваншот» и правка — анонс, дата, состояние, запись. В v1 анонс
+@* Одна форма партии (T2.5c): «Начать игру», «Объявить ваншот» и правка — анонс, дата, состояние, запись. В v1 анонс
    правился в двух формах сценария с разной обработкой даты, а сохранение затирало правки локаций с другой вкладки; здесь
    прохождение — своя строка и свой адрес. Время — в поясе браузера (LocalTime.ToInput/FromInput), сервер хранит UTC.
    Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
@@ -14,15 +14,14 @@
         <form id="run-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             @if (Mode == RunFormMode.PlayInCampaign)
             {
-                <Field Label="Кампания" Error="@_campaignError"
-                       Note="Кампании, которые вы ведёте. Содержимое сценария не копируется: правка сценария видна во всех прохождениях.">
+                <Field Label="Кампания" Required="true" Error="@_campaignError" Note="Из тех, что вы ведёте. Сценарий не копируется.">
                     @if (_campaigns is null)
                     {
                         <LoadingIndicator Message="Загружаю кампании…" />
                     }
                     else if (_campaigns.Count == 0)
                     {
-                        <p class="cm-text-muted">Нет кампаний, которые вы ведёте. Заведите кампанию на странице «Кампании» или объявите ваншот.</p>
+                        <p class="cm-text-muted">Нет кампаний, которые вы ведёте. <a class="underline" href="campaigns">Создать кампанию</a> или объявить ваншот.</p>
                     }
                     else
                     {
@@ -38,7 +37,7 @@
             }
             @if (Mode == RunFormMode.OneShot)
             {
-                <Field Label="Название кампании" Note="@($"Пусто — «{ScenarioName} (ваншот)». Вы станете её Хранителем.")">
+                <Field Label="Название ваншота" Note="@($"Пусто — «{ScenarioName} (ваншот)». Вы — Хранитель.")">
                     <input class="cm-input" maxlength="@CampaignLimits.NameLength" data-testid="oneshot-name" @bind="_campaignName" />
                 </Field>
                 @if (PregenCount == 0)
@@ -60,13 +59,13 @@
                 </Field>
             }
 
-            <Field Label="Дата и время игры" Note="Время — по часам этого устройства.">
+            <Field Label="Дата и время игры" Hint="по часам этого устройства">
                 <input type="datetime-local" class="cm-input" data-testid="run-date" @bind="_scheduledAt" />
             </Field>
 
             @if (Mode != RunFormMode.PlayInCampaign)
             {
-                <Field Label="Анонс" Hint="(Markdown)" Note="Его видят на главной все, пока открыта запись: что за игра, где и когда, кого ждут.">
+                <Field Label="Анонс" Hint="Markdown" Note="Видят все на главной, пока открыта запись.">
                     <textarea class="cm-input" rows="6" maxlength="@RunLimits.AnnouncementLength" data-testid="run-announcement" @bind="_announcement"></textarea>
                 </Field>
             }
@@ -78,15 +77,11 @@
                         Открыта запись на прегенов
                         <span class="block text-sm text-primary-500">
                             @(_status == ScenarioRunStatus.Finished
-                                ? "Завершённое прохождение запись закрывает само."
+                                ? "Завершённая партия закрывает запись сама."
                                 : "Ваншот на главной: игроки бронируют прегенов сценария и получают копию листа.")
                         </span>
                     </span>
                 </label>
-            }
-            @if (Mode == RunFormMode.OneShot)
-            {
-                <p class="cm-text-muted text-sm">Запись откроется сразу: ваншот появится на главной у всех, и игроки смогут забронировать прегенов.</p>
             }
 
             @if (_error is not null)
@@ -98,7 +93,8 @@
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
         <Button Type="submit" form="run-form" Busy="_saving" data-testid="run-save"
-                Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is not { Count: > 0 })">@SaveText</Button>
+                Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is not { Count: > 0 })"
+                DisabledReason="Нет кампании для игры">@SaveText</Button>
     </Footer>
 </Modal>
 
@@ -113,7 +109,7 @@
 
     [Parameter] public int PregenCount { get; set; }
 
-    /// <summary>Правка этого прохождения (<see cref="RunFormMode.Edit"/>).</summary>
+    /// <summary>Правка этой партии (<see cref="RunFormMode.Edit"/>).</summary>
     [Parameter] public ScenarioRunDto? Run { get; set; }
 
     [Parameter] public EventCallback OnClose { get; set; }
@@ -134,15 +130,15 @@
 
     private string Title => Mode switch
     {
-        RunFormMode.PlayInCampaign => "Играть в кампании",
+        RunFormMode.PlayInCampaign => "Начать игру",
         RunFormMode.OneShot => "Объявить ваншот",
-        _ => $"Прохождение: {Run?.CampaignName}",
+        _ => "Изменить анонс и запись",
     };
 
     private string SaveText => Mode switch
     {
-        RunFormMode.PlayInCampaign => "Начать прохождение",
-        RunFormMode.OneShot => "Объявить",
+        RunFormMode.PlayInCampaign => "Начать игру",
+        RunFormMode.OneShot => "Объявить ваншот",
         _ => "Сохранить",
     };
 
