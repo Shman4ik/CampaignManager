@@ -16,11 +16,11 @@
             <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
             @if (ActiveSource?.UsesScenario == true)
             {
-                @if (_runs.Count > 0)
+                @if (_runOptions.Count > 0)
                 {
                     <select class="cm-input" aria-label="Сценарий прохождения" data-testid="picker-run" value="@(_chosenRunId?.ToString() ?? "")" @onchange="SelectRunAsync">
                         <option value="">Выберите сценарий</option>
-                        @foreach (var run in _runs)
+                        @foreach (var run in _runOptions)
                         {
                             <option value="@run.Id">@run.ScenarioName · @ScenarioText.Of(run.Status)</option>
                         }
@@ -107,6 +107,8 @@
     private Guid? _scenarioId;
     private IReadOnlyList<ScenarioSummaryDto> _scenarios = [];
     private IReadOnlyList<ScenarioRunDto> _runs = [];
+    private IReadOnlyList<ScenarioRunDto> _runOptions = [];
+    private Guid? _seenRunId;
     private Guid? _runsFor;
     private bool _runsLoaded;
     private Guid? _chosenRunId;
@@ -139,6 +141,19 @@
         if (!Open || Sources.Count == 0)
             return;
 
+        // Сцена получила другое прохождение не из этого окна (режим игры, «Бой» из прохождения): окно встаёт на него.
+        if (RunId != _seenRunId)
+        {
+            _seenRunId = RunId;
+            if (RunId is { } current && _runs.FirstOrDefault(r => r.Id == current) is { } known && _chosenRunId != current)
+            {
+                _chosenRunId = current;
+                _scenarioId = known.ScenarioId;
+                foreach (var source in Sources.Where(s => s.UsesScenario))
+                    _results.Remove(source.Key);
+            }
+        }
+
         if (_tab.Length == 0)
             _tab = Context.CampaignId is null && Sources.Count > 1 ? Sources[1].Key : Sources[0].Key;
         if (!_results.ContainsKey(_tab))
@@ -166,22 +181,24 @@
                 _runs = [.. await Runs.ListForCampaignAsync(campaignId)];
                 _runsFor = campaignId;
                 _runsLoaded = true;
+                _runOptions = RunOptions(_runs, RunId);
                 if (_chosenRunId is null && RunId is { } current && _runs.FirstOrDefault(r => r.Id == current) is { } known)
                 {
                     _chosenRunId = known.Id;
                     _scenarioId = known.ScenarioId;
                 }
-                else if (_chosenRunId is null && _runs.Count == 1)
+                else if (_chosenRunId is null && _runOptions.Count == 1)
                 {
                     // Единственная партия — выбрана сама, без лишнего касания; страница узнает о ней, как о выбранной руками.
-                    _chosenRunId = _runs[0].Id;
-                    _scenarioId = _runs[0].ScenarioId;
-                    if (_runs[0].Id != RunId)
-                        await OnRunChosen.InvokeAsync(_runs[0].Id);
+                    var only = _runOptions[0];
+                    _chosenRunId = only.Id;
+                    _scenarioId = only.ScenarioId;
+                    if (only.Id != RunId)
+                        await OnRunChosen.InvokeAsync(only.Id);
                 }
             }
 
-            if (source.UsesScenario && _runs.Count == 0 && _scenarios.Count == 0)
+            if (source.UsesScenario && _runOptions.Count == 0 && _scenarios.Count == 0)
                 _scenarios = [.. (await Scenarios.ListAsync()).Items.OrderBy(s => s.Name, StringComparer.CurrentCulture)];
             _results[_tab] = await source.LoadAsync(Context with { ScenarioId = _scenarioId }, CancellationToken.None);
         }
@@ -195,6 +212,16 @@
         }
     }
 
+    /// <summary>
+    /// Сценарий — один раз: у двух прохождений одного сценария остаётся прохождение сцены, а без него — самое свежее
+    /// (список от API идёт от свежих к старым). Порядок сценариев сохраняется.
+    /// </summary>
+    internal static IReadOnlyList<ScenarioRunDto> RunOptions(IReadOnlyList<ScenarioRunDto> runs, Guid? sceneRunId) =>
+    [
+        .. runs.GroupBy(r => r.ScenarioId)
+            .Select(g => g.FirstOrDefault(r => r.Id == sceneRunId) ?? g.First()),
+    ];
+
     private async Task SelectScenarioAsync(ChangeEventArgs e)
     {
         _scenarioId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
@@ -205,7 +232,7 @@
 
     private async Task SelectRunAsync(ChangeEventArgs e)
     {
-        var run = Guid.TryParse(e.Value?.ToString(), out var id) ? _runs.FirstOrDefault(r => r.Id == id) : null;
+        var run = Guid.TryParse(e.Value?.ToString(), out var id) ? _runOptions.FirstOrDefault(r => r.Id == id) : null;
         _chosenRunId = run?.Id;
         _scenarioId = run?.ScenarioId;
         foreach (var source in Sources.Where(s => s.UsesScenario))
