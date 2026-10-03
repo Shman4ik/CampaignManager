@@ -20,17 +20,16 @@
    профессия, слоты, бюджеты и проверки шагов — CreationPlan (слоты собирает он, шаги только показывают), лист —
    SheetBuilder.FromDraft, тот же, что у быстрого НПС и импорта. «Случайный сыщик» (?random=1) — тот же помощник с
    SheetBuilder.RandomDraft, открытый на «Итоге» (D6.4). Любой бросок можно вписать (RollInput / DiceInput). *@
-<PageHeader Title="@Title">
+<PageHeader Title="@Title" Subtitle="@(_context is null ? null : CreationLinks.PlaceText(_context))">
     <Actions>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="RestartAsync" data-testid="wizard-restart">Заново</Button>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Href="@CreationLinks.Back(CreationKind, ScenarioId)">Выйти</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="RestartAsync" data-testid="wizard-restart">Начать заново</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-xmark" Href="@CreationLinks.Back(CreationKind, ScenarioId)" data-testid="wizard-cancel">Отменить создание</Button>
     </Actions>
 </PageHeader>
 
 <div class="cm-page">
     <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Готовлю помощник…" Context="context">
         <ChildContent>
-            <CreationPlace Context="context" />
             @if (!context.CanCreate)
             {
                 <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист здесь не завести" data-testid="create-refused">
@@ -40,7 +39,6 @@
                         {
                             <Button Small="true" Icon="fa-id-card" Href="@($"character/{active}")">Открыть активного сыщика</Button>
                         }
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Href="">На главную</Button>
                     </Actions>
                 </Alert>
             }
@@ -50,24 +48,22 @@
                 var step = CurrentStep;
                 var validation = plan.Validate(step);
 
-                <nav class="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
+                <nav class="mb-3 flex flex-wrap gap-2" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
                     @foreach (var item in Enum.GetValues<CreationStep>())
                     {
                         var target = item;
                         var reachable = CanGoTo(plan, target);
-                        <Button Small="true" class="shrink-0" data-testid="@($"wizard-step-{(int)target}")"
-                                Variant="@(target == step ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                        @* Текущий шаг — рамка, пройденный — с галочкой: главная кнопка кадра одна, «Далее». *@
+                        <Button class="shrink-0" data-testid="@($"wizard-step-{(int)target}")" aria-current="@(target == step ? "step" : null)"
+                                Variant="@(target == step ? ButtonVariant.OutlinePrimary : ButtonVariant.Secondary)"
+                                Icon="@(target < step ? "fa-check" : null)"
                                 Disabled="@(!reachable)" OnClick="() => GoToAsync(target)">
-                            <span class="cm-dice">@((int)target + 1)</span> @Steps[target].Title
+                            @((int)target + 1)<span class="@(target == step ? null : "max-sm:sr-only")">. @Steps[target].Title</span>
                         </Button>
                     }
                 </nav>
 
                 <div class="cm-card" data-testid="@($"wizard-{step}")">
-                    <div class="cm-card-header">
-                        <span class="cm-card-title">@Steps[step].Title</span>
-                        <span class="cm-text-muted text-xs">@Steps[step].Reference</span>
-                    </div>
                     <div class="cm-card-body">
                         <p class="cm-text-muted mb-4">@Steps[step].Hint</p>
                         @switch (step)
@@ -95,7 +91,7 @@
                                 break;
                         }
                     </div>
-                    <div class="cm-card-footer flex-wrap justify-between gap-3">
+                    <div class="cm-card-footer wizard-footer flex-wrap justify-between gap-3">
                         <div class="min-w-0 flex-1 basis-60 text-sm text-warning-800" role="status" data-testid="wizard-validation">
                             @if (step == CreationStep.Summary && plan.FirstInvalidStep() is { } invalid)
                             {
@@ -107,16 +103,16 @@
                             }
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Disabled="@(step == CreationStep.Method)"
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Disabled="@(step == CreationStep.Method)"
                                     OnClick="() => GoToAsync(step - 1)">Назад</Button>
                             @if (step < CreationStep.Summary)
                             {
-                                <Button Small="true" Icon="fa-arrow-right" Disabled="@(validation is not null)" data-testid="wizard-next"
+                                <Button Icon="fa-arrow-right" Disabled="@(validation is not null)" data-testid="wizard-next"
                                         OnClick="() => GoToAsync(step + 1)">Далее</Button>
                             }
                             else
                             {
-                                <Button Small="true" Icon="fa-user-plus" Busy="_busy" Disabled="@(plan.FirstInvalidStep() is not null)"
+                                <Button Icon="fa-user-plus" Busy="_busy" Disabled="@(plan.FirstInvalidStep() is not null)"
                                         data-testid="wizard-finish" OnClick="() => CreateAsync(context)">@FinishLabel</Button>
                             }
                         </div>
@@ -133,20 +129,21 @@
 </div>
 
 @code {
-    /// <summary>Шаг: заголовок, подсказка и страницы книги (глава 3).</summary>
-    private sealed record StepInfo(string Title, string Hint, string Reference);
+    /// <summary>Шаг: заголовок вкладки и подсказка (номера страниц книги в тексте не пишем).</summary>
+    private sealed record StepInfo(string Title, string Hint);
 
     private static readonly Dictionary<CreationStep, StepInfo> Steps = new()
     {
-        [CreationStep.Method] = new("Способ", "Как определять характеристики и сколько сыщику лет: возрастные модификаторы применяются к броскам сразу.", "стр. 30, 45–46"),
-        [CreationStep.Characteristics] = new("Характеристики", "Восемь характеристик, возрастные модификаторы, проверки ОБР и Удача. Вторичные атрибуты считаются сами.", "стр. 28–31"),
-        [CreationStep.Occupation] = new("Род занятий", "Профессия задаёт навыки и очки профессиональных навыков.", "стр. 31, 37–39"),
-        [CreationStep.Skills] = new("Навыки", "Очки профессии — в её навыки и Средства, очки личного интереса (ИНТ × 2) — в любые, кроме Мифов Ктулху.", "стр. 34, 46"),
-        [CreationStep.Biography] = new("Биография", "Имя, хотя бы три графы из шести и одна ключевая связь.", "стр. 37, 40–43"),
-        [CreationStep.Gear] = new("Снаряжение", "Достаток — по Средствам; допишите вещи, которые сыщик носит с собой.", "стр. 44–45"),
-        [CreationStep.Summary] = new("Итог", "Так лист уйдёт в базу; после создания его можно править как обычно.", "стр. 47"),
+        [CreationStep.Method] = new("Способ", "Как определять характеристики и сколько сыщику лет: возрастные модификаторы применяются к броскам сразу."),
+        [CreationStep.Characteristics] = new("Характеристики", "Восемь характеристик, возрастные модификаторы, проверки ОБР и Удача. Вторичные атрибуты считаются сами."),
+        [CreationStep.Occupation] = new("Профессия", "Профессия задаёт навыки и очки профессиональных навыков."),
+        [CreationStep.Skills] = new("Навыки", "Очки профессии — в её навыки и Средства, очки личного интереса (ИНТ × 2) — в любые, кроме Мифов Ктулху."),
+        [CreationStep.Biography] = new("Биография", "Имя, хотя бы три графы из шести и одна ключевая связь."),
+        [CreationStep.Gear] = new("Снаряжение", "Достаток — по Средствам; допишите вещи, которые сыщик носит с собой."),
+        [CreationStep.Summary] = new("Итог", "Так лист уйдёт в базу; после создания его можно править как обычно."),
     };
 
+    private CreationContextDto? _context;
     private InvestigatorDraft _draft = new();
     private SkillCatalog? _catalog;
     private List<OccupationDto> _occupationDtos = [];
@@ -190,6 +187,8 @@
     private async Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken)
     {
         var context = await Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+        _context = context;
+        StateHasChanged();
         if (!context.CanCreate)
             return context;
 
@@ -250,9 +249,34 @@
         if (target < CreationStep.Method || target > CreationStep.Summary || !CanGoTo(Plan, target))
             return;
 
+        if (target > CurrentStep && CurrentStep == CreationStep.Skills && !await ConfirmUnspentAsync())
+            return;
+
         _draft.StepIndex = (int)target;
         _error = null;
         await SaveDraftAsync();
+    }
+
+    /// <summary>Очки, оставшиеся на шаге «Навыки», при создании сгорают — предупреждаем до перехода, а не строкой в конце списка.</summary>
+    private async Task<bool> ConfirmUnspentAsync()
+    {
+        if (_draft.Method is CreationMethod.Blitz)
+            return true;
+
+        var plan = Plan;
+        var occupation = plan.OccupationBudget - _draft.SpentOccupationPoints;
+        var personal = plan.PersonalBudget - _draft.SpentPersonalPoints;
+        if (occupation <= 0 && personal <= 0)
+            return true;
+
+        var left = string.Join(", ", new[] { occupation > 0 ? $"очков профессии: {occupation}" : null, personal > 0 ? $"личных очков: {personal}" : null }.Where(t => t is not null));
+        return await Dialogs.ConfirmAsync(new ConfirmRequest("Идти дальше с нераспределёнными очками?", $"Не вложено — {left}.")
+        {
+            ConfirmText = "Идти дальше",
+            CancelText = "Остаться на шаге",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = "Невложенные очки сгорят; вернуться на этот шаг можно до создания сыщика.",
+        });
     }
 
     private async Task RestartAsync()

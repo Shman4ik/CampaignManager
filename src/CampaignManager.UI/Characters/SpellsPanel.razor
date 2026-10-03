@@ -1,6 +1,7 @@
 @using CampaignManager.Contracts.Catalogs
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.Core.Characters
+@inject ToastService Toasts
 
 @* Заклинания листа — свой экземпляр (SheetCopies.Spell): в v1 выбранное на листе заклинание было
    экземпляром общего кэша, и правка стоимости на листе меняла справочник у всех (ошибка v1 1).
@@ -8,7 +9,7 @@
 <section data-testid="spells">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 class="cm-section-title">Заклинания</h3>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="spell-add" OnClick="() => _adding = true">Заклинание</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Добавить заклинание" data-testid="spell-add" OnClick="() => _adding = true">Добавить</Button>
     </div>
     @if (_adding)
     {
@@ -20,7 +21,7 @@
 
     @if (Sheet.Spells.Count == 0)
     {
-        <p class="text-sm italic text-primary-400">Заклинаний нет.</p>
+        <EmptyState Compact="true" Title="@Terms.Empty("заклинаний")" />
     }
     else
     {
@@ -33,9 +34,9 @@
                     <Field Label="Стоимость"><input class="cm-input" data-testid="spell-cost" @bind="spell.Cost" /></Field>
                     <Field Label="Время"><input class="cm-input" @bind="spell.CastingTime" /></Field>
                     <div class="flex gap-2">
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
+                        <Button Variant="ButtonVariant.Secondary" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
                                 OnClick="() => Toggle(spell)">Описание</Button>
-                        <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {spell.Name}")" OnClick="() => Remove(spell)" />
+                        <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {spell.Name}")" OnClick="() => Remove(spell)" />
                     </div>
                 </div>
                 @if (open)
@@ -87,9 +88,17 @@
             _open.Add(spell);
     }
 
+    /// <summary>Убирает сразу; вернуть можно из тоста 8 секунд.</summary>
     private void Remove(SheetSpell spell)
     {
+        var index = Sheet.Spells.IndexOf(spell);
         Sheet.Spells.Remove(spell);
         Context.Changed();
+        Toasts.Removed(Names.Plain(spell.Name), () =>
+        {
+            Sheet.Spells.Insert(Math.Min(Math.Max(index, 0), Sheet.Spells.Count), spell);
+            Context.Changed();
+            return Task.CompletedTask;
+        });
     }
 }

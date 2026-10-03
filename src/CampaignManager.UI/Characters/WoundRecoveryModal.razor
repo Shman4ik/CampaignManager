@@ -3,12 +3,12 @@
 @using CampaignManager.Core.Dice
 @inject IDiceRoller Dice
 
-@* Лечение вне боя (T2.3b, стр. 119): без отметки «Серьёзная рана» — отдых, 1 ПЗ в день; с отметкой — проверка ВЫН в
+@* Лечение вне боя: без отметки «Серьёзная рана» — отдых, 1 ПЗ в день; с отметкой — проверка ВЫН в
    конце недели с костями за уход врача, отдых и плохие условия, успех +1d3, чрезвычайный +2d3 и отметка снята. Считает
    только WoundRules (тот же конвейер, что у боя); окно пишет лист на месте и зовёт Context.Changed — в базу правку
    уносит автосохранение листа с If-Match, своего пути записи нет. Любой бросок можно вписать: d100 — RollInput,
    1d3/2d3 — DiceInput (пусто — бросит правило). *@
-<Modal Open="@Open" OnClose="CloseAsync" Title="Лечение вне боя" data-testid="recovery-modal">
+<Modal Open="@Open" OnClose="CloseAsync" Title="@($"Лечение вне боя — {Sheet.Personal.Name}")" data-testid="recovery-modal">
     <ChildContent>
         @{
             var status = WoundRules.Read(Sheet);
@@ -35,7 +35,7 @@
             {
                 <p class="cm-field-note">
                     При смерти: сначала первая помощь (временная стабилизация), потом Медицина — тогда «при смерти» снимается и
-                    начинается недельное лечение серьёзной раны (стр. 118–119).
+                    начинается недельное лечение серьёзной раны.
                 </p>
             }
             else if (status.MajorWound)
@@ -44,7 +44,7 @@
                 var con = Sheet.Characteristics[Characteristic.CON];
                 <p class="cm-field-note">
                     Пока стоит отметка, ПЗ сами не прибывают: в конце каждой недели — проверка ВЫН. Успех +1d3, чрезвычайный +2d3 и
-                    отметка снята, провал — неделя без выздоровления (стр. 119).
+                    отметка снята, провал — неделя без выздоровления.
                 </p>
                 <div class="flex flex-col" role="group" aria-label="Условия недели">
                     @Condition("Уход врача: его проверка Медицины пройдена (+1 кость)", _care, v => _care = v, "recovery-care")
@@ -58,7 +58,7 @@
                 @if (bonus != penalty)
                 {
                     <p class="cm-field-note -mt-2">
-                        Кости со стола: с бонусной впишите меньший из вариантов десятков, со штрафной — больший (стр. 89).
+                        Кости со стола: с бонусной впишите меньший из вариантов десятков, со штрафной — больший.
                     </p>
                 }
                 @if (_roll is { } roll && WoundRules.RecoveryDiceCount(Check.Evaluate(roll.Result, con)) is var count and > 0)
@@ -74,7 +74,7 @@
             }
             else
             {
-                <p class="cm-field-note">Без серьёзной раны сыщик восстанавливает 1 ПЗ в день (стр. 119).</p>
+                <p class="cm-field-note">Без серьёзной раны сыщик восстанавливает 1 ПЗ в день.</p>
                 <div class="flex flex-wrap items-end gap-3">
                     <Field Label="Дней отдыха" class="w-28">
                         <input type="number" inputmode="numeric" min="1" max="999" class="cm-input" data-testid="recovery-days"
@@ -93,7 +93,7 @@
         {
             @if (current.MajorWound)
             {
-                <Button Icon="fa-calendar-week" Disabled="@(_roll is null)" data-testid="recovery-week" OnClick="Week">Записать неделю</Button>
+                <Button Icon="fa-calendar-week" Disabled="@(_roll is null)" DisabledReason="Сначала бросьте или впишите проверку Выносливости" data-testid="recovery-week" OnClick="Week">Записать неделю</Button>
             }
             else if (current.HitPoints < DerivedAttributeRules.MaxHitPoints(Sheet) || current.Unconscious)
             {

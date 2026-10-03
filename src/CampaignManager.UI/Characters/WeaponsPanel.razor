@@ -2,6 +2,7 @@
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.Core.Characters
 @using CampaignManager.Core.Checks
+@inject ToastService Toasts
 
 @* Оружие листа — ОДНА разметка для таблицы и карточек (в v1 таблица и карточки выводили те же десять полей
    дважды). Строка — сетка: с lg ячейки встают колонками под общей шапкой, ниже lg — переносятся с подписью
@@ -13,7 +14,7 @@
 <section data-testid="weapons">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 class="cm-section-title">Оружие</h3>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="weapon-add" OnClick="() => _adding = true">Оружие</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Добавить оружие" data-testid="weapon-add" OnClick="() => _adding = true">Добавить</Button>
     </div>
     @if (_adding)
     {
@@ -25,12 +26,12 @@
 
     @if (Sheet.Weapons.Count == 0)
     {
-        <p class="text-sm italic text-primary-400">Оружия нет.</p>
+        <EmptyState Compact="true" Title="@Terms.Empty("оружия")" />
     }
     else
     {
         <div class="weapon-head" aria-hidden="true">
-            <span>Название</span><span>Навык</span><span>Урон</span><span>Дист.</span><span>Атаки</span><span>Патроны</span><span>Неиспр.</span><span></span>
+            <span>Название</span><span>Навык</span><span>Урон</span><span>Дальность</span><span>Атаки</span><span>Патроны</span><span>Неисправность</span><span></span>
         </div>
         @foreach (var weapon in Sheet.Weapons)
         {
@@ -64,16 +65,16 @@
                         <UnparsedMark Show="@(!damage.IsParsed && weapon.Damage.Trim().Length > 0)" What="урон — бой его не бросит" />
                     </span>
                 </label>
-                <label class="weapon-cell"><span class="weapon-label">Дист.</span><input class="cm-input" @bind="weapon.Range" /></label>
+                <label class="weapon-cell"><span class="weapon-label">Дальность</span><input class="cm-input" @bind="weapon.Range" /></label>
                 <label class="weapon-cell"><span class="weapon-label">Атаки</span><input class="cm-input" @bind="weapon.Attacks" /></label>
                 <label class="weapon-cell"><span class="weapon-label">Патроны</span><input class="cm-input" @bind="weapon.Ammo" /></label>
-                <label class="weapon-cell"><span class="weapon-label">Неиспр.</span><input class="cm-input" @bind="weapon.Malfunction" /></label>
+                <label class="weapon-cell"><span class="weapon-label">Неисправность</span><input class="cm-input" @bind="weapon.Malfunction" /></label>
                 <div class="weapon-cell weapon-actions">
                     <label class="flex items-center gap-1.5 text-xs text-primary-600">
                         <input type="checkbox" class="cm-checkbox" checked="@weapon.Impaling" @onchange="e => { weapon.Impaling = e.Value is true; Context.Changed(); }" />
-                        пронз.
+                        пронзающее
                     </label>
-                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {weapon.Name}")" OnClick="() => Remove(weapon)" />
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {weapon.Name}")" OnClick="() => Remove(weapon)" />
                 </div>
                 <label class="weapon-cell weapon-notes">
                     <span class="weapon-label">Заметки</span>
@@ -119,9 +120,17 @@
         Context.Changed();
     }
 
+    /// <summary>Убирает сразу; вернуть можно из тоста 8 секунд (решение владельца: спрашивать за столом дороже).</summary>
     private void Remove(SheetWeapon weapon)
     {
+        var index = Sheet.Weapons.IndexOf(weapon);
         Sheet.Weapons.Remove(weapon);
         Context.Changed();
+        Toasts.Removed(Names.Plain(weapon.Name), () =>
+        {
+            Sheet.Weapons.Insert(Math.Min(Math.Max(index, 0), Sheet.Weapons.Count), weapon);
+            Context.Changed();
+            return Task.CompletedTask;
+        });
     }
 }

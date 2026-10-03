@@ -10,7 +10,7 @@
    - «Труд.» и «Чрез.» — текст, а не поля; Б.К.У., Комплекция, Скорость и Уклонение — под характеристиками,
      только для чтения: их считает Core (в v1 их можно было править, и пересчёт молча затирал правку). *@
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_0.85fr_1.15fr] lg:divide-x lg:divide-primary-200">
-    <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-3 max-lg:order-3">
         <h3 class="cm-section-title border-b border-primary-200 pb-1">Анкета</h3>
         <div class="flex items-center gap-3">
             <CharacterPortrait Url="@Context.Character.PortraitUrl" ReadOnly="Context.ReadOnly" OnChanged="OnPortraitChanged" />
@@ -32,7 +32,7 @@
         }
         <div class="grid grid-cols-2 gap-2">
             <Field Label="Возраст">
-                <input type="number" inputmode="numeric" min="0" max="999" class="cm-input" @bind="Sheet.Personal.Age" @bind:after="Recalculate" />
+                <input type="number" inputmode="numeric" min="0" max="999" class="cm-input" aria-label="Возраст" @bind="Sheet.Personal.Age" @bind:after="Recalculate" />
             </Field>
             <Field Label="Пол"><input class="cm-input" @bind="Sheet.Personal.Gender" /></Field>
         </div>
@@ -40,11 +40,11 @@
         <Field Label="Место жительства"><input class="cm-input" @bind="Sheet.Personal.Residence" /></Field>
     </div>
 
-    <div class="max-w-md lg:max-w-none lg:pl-4">
+    <div class="max-w-md max-lg:order-2 lg:max-w-none lg:pl-4">
         <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Характеристики</h3>
         <table class="sheet-chars">
             <thead>
-                <tr><th></th><th>Обыч.</th><th>Труд.</th><th>Чрез.</th></tr>
+                <tr><th></th><th>Значение</th><th>½</th><th>⅕</th></tr>
             </thead>
             <tbody>
                 @foreach (var info in InvestigatorCreationRules.Characteristics)
@@ -73,13 +73,13 @@
         <h4 class="cm-section-title mt-3 border-t border-primary-200 pt-3">Производные</h4>
         @{ var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog); }
         <dl class="sheet-derived-grid" data-testid="sheet-derived">
-            <div><dt>Б.К.У.</dt><dd>@derived.DamageBonus.ToLowerInvariant()</dd></div>
-            <div><dt>Комп.</dt><dd>@derived.Build</dd></div>
-            <div><dt>Скор.</dt><dd>@derived.Move</dd></div>
-            <div><dt>Укл.</dt><dd>@derived.Dodge</dd></div>
+            <div><dt>Бонус к урону</dt><dd>@derived.DamageBonus.ToLowerInvariant()</dd></div>
+            <div><dt>Комплекция</dt><dd>@derived.Build</dd></div>
+            <div><dt>Скорость</dt><dd>@derived.Move</dd></div>
+            <div><dt>Уклонение</dt><dd>@derived.Dodge</dd></div>
         </dl>
         <p class="cm-field-note mt-1">
-            Считаются по характеристикам и возрасту (стр. 31); Уклонение — навык, правится в «Навыках».
+            Считаются по характеристикам и возрасту; Уклонение — навык, его значение — в «Навыках».
             @if (HasOverrides)
             {
                 <text>Часть значений — из книги (НПС).</text>
@@ -87,10 +87,10 @@
         </p>
     </div>
 
-    <div class="max-w-md lg:max-w-none lg:pl-4">
+    <div class="max-w-md max-lg:order-1 lg:max-w-none lg:pl-4">
         <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Состояние</h3>
         <table class="sheet-current">
-            <thead><tr><th></th><th>Текущ.</th><th>Макс.</th></tr></thead>
+            <thead><tr><th></th><th>Сейчас</th><th>Макс.</th></tr></thead>
             <tbody>
                 @foreach (var row in Rows(derived))
                 {
@@ -102,7 +102,7 @@
                             }
                             else
                             {
-                                <span class="text-xs font-medium text-primary-700">@row.Label</span>
+                                <span class="text-sm font-medium text-primary-700">@row.Label</span>
                             }
                         </td>
                         <td>
@@ -110,7 +110,7 @@
                             <div class="flex items-center gap-1">
                                 <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
                                         aria-label="@($"{row.Label}: минус один")" @onclick="() => Adjust(row, -1)">−</button>
-                                <input type="number" inputmode="numeric" class="cm-input cm-input-sm min-w-[2.75rem]"
+                                <input type="number" inputmode="numeric" class="@Css.Join("cm-input cm-input-sm min-w-[2.75rem]", row.Get() > row.Max ? "cm-input-invalid" : null)"
                                        aria-label="@($"{row.Label}: текущее")" data-testid="@($"current-{row.Key}")"
                                        value="@row.Get()" @onchange="e => Set(row, e)" />
                                 <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm cm-btn-icon shrink-0"
@@ -126,41 +126,49 @@
             </tbody>
         </table>
 
-        @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой (стр. 117). *@
+        @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой. *@
         <div class="mt-3 flex flex-wrap items-end gap-2 border-t border-primary-200 pt-3">
             <Field Label="Урон" class="w-20">
-                <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" data-testid="damage" @bind="_damage" />
+                <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" aria-label="Урон" data-testid="damage" @bind="_damage" />
             </Field>
             <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-heart-crack" data-testid="apply-damage" OnClick="ApplyDamage">Нанести</Button>
-            @if (!Context.ReadOnly)
+            @if (!Context.ReadOnly && NeedsHealing)
             {
-                @* Лечение вне боя (T2.3b): отдых по дням или недельная проверка серьёзной раны — окно под тем же корнем. *@
+                @* Лечение вне боя (T2.3b): отдых по дням или недельная проверка серьёзной раны — окно под тем же корнем.
+                   При полных ПЗ и без раны лечить нечего — кнопки нет. *@
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-kit-medical" data-testid="open-recovery"
                         OnClick="() => _recoveryOpen = true">Лечение</Button>
             }
         </div>
-        <p class="cm-field-note">
-            Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку, смерть — от @Math.Max(1, derived.MaxHitPoints) (стр. 117–118).
-        </p>
         @if (_lastHit is { InstantDeath: true })
         {
             <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="mt-2 mb-0" Icon="fa-skull">
-                Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong> (стр. 118).
+                Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong>.
             </Alert>
         }
         else if (_lastHit is { MajorWound: true })
         {
             <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-2 mb-0">
-                Урон ≥ половины максимума ПЗ — <strong>серьёзная рана</strong>: сыщик падает, нужна проверка ВЫН, иначе он теряет сознание
-                (отметка «Без сознания» ниже).@(Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка ВЫН в конце следующего." : "")
+                <ChildContent>
+                    <strong>Серьёзная рана:</strong> сыщик падает. Нужна проверка Выносливости — провал значит потерю сознания (отметка «Без сознания» ниже).@(Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка Выносливости в конце следующего." : "")
+                </ChildContent>
+                <Actions>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="check-con" OnClick='() => Context.Check("char:CON")'>Проверка Выносливости</Button>
+                </Actions>
             </Alert>
+        }
+        else
+        {
+            <p class="cm-field-note">
+                Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку, смерть — от @Math.Max(1, derived.MaxHitPoints).
+            </p>
         }
 
         @* Колонки отметок — группы, а не половинки списка: слева тело (рана решает, чем обернётся ноль ПЗ), справа
            рассудок. Встают рядом по @container — ширине блока, а не окна (знание v1). Отметки безумия здесь ставятся
            мимо SanityRules и флаг приступа не трогают — приступ ведёт панель рассудка. *@
         <div class="sheet-conditions mt-3 border-t border-primary-200 pt-2">
-            <h4 class="text-xs font-semibold text-primary-500">Состояние сыщика</h4>
+            <h4 class="text-sm font-semibold text-primary-600">Отметки</h4>
             <div class="sheet-conditions-list">
                 <div class="flex flex-col">
                     @ConditionRow("Серьёзная рана", "fa-heart-crack", Sheet.Condition.MajorWound, v => { Sheet.Condition.MajorWound = v; WoundRules.UpdateConsciousness(Sheet); })
@@ -170,8 +178,8 @@
                     @ConditionRow("Мёртв", "fa-cross", Sheet.Condition.Dead, v => Sheet.Condition.Dead = v)
                 </div>
                 <div class="flex flex-col">
-                    @ConditionRow("Врем. безумие", "fa-brain", Sheet.Condition.TemporaryInsanity, v => Sheet.Condition.TemporaryInsanity = v)
-                    @ConditionRow("Бессроч. безумие", "fa-brain", Sheet.Condition.IndefiniteInsanity, v => Sheet.Condition.IndefiniteInsanity = v)
+                    @ConditionRow("Временное безумие", "fa-brain", Sheet.Condition.TemporaryInsanity, v => Sheet.Condition.TemporaryInsanity = v)
+                    @ConditionRow("Бессрочное безумие", "fa-brain", Sheet.Condition.IndefiniteInsanity, v => Sheet.Condition.IndefiniteInsanity = v)
                 </div>
             </div>
         </div>
@@ -191,6 +199,10 @@
     [Parameter] public EventCallback<StoredFileDto?> OnPortraitChanged { get; set; }
 
     private CharacterSheet Sheet => Context.Sheet;
+
+    /// <summary>Лечить есть что: ПЗ не полные, есть серьёзная рана или сыщик без сознания / при смерти.</summary>
+    private bool NeedsHealing => Sheet.Current.HitPoints < DerivedAttributeRules.Compute(Sheet, Context.Catalog).MaxHitPoints
+        || Sheet.Condition.MajorWound || Sheet.Condition.Unconscious || Sheet.Condition.Dying;
 
     private bool HasOverrides => Sheet.Overrides is { MaxHitPoints: not null } or { MaxMagicPoints: not null } or { MaxSanity: not null }
         or { DamageBonus: not null } or { Build: not null } or { Move: not null };
@@ -229,7 +241,7 @@
             Put(row, value);
     }
 
-    /// <summary>Не ниже нуля и не выше максимума. Правка ПЗ меняет состояние: 0 ПЗ — без сознания или при смерти (стр. 118).</summary>
+    /// <summary>Не ниже нуля и не выше максимума. Правка ПЗ меняет состояние: 0 ПЗ — без сознания или при смерти.</summary>
     private void Put(CurrentRow row, int value)
     {
         row.Put(Math.Clamp(value, 0, Math.Max(0, row.Max)));

@@ -2,14 +2,14 @@
 @using CampaignManager.Core.Characters
 @inject ICharactersApi Api
 
-@* «Знакомые сыщики» (бланк, стр. 33) — рядом с биографией. Строки — соседи по столу из API (имя, профессия и
+@* «Знакомые сыщики» — рядом с биографией. Строки — соседи по столу из API (имя, профессия и
    игрок — из живых листов) плюс вписанные руками; убрать можно только вписанные. Заметка о соседе заводит
    строку в документе лишь в момент, когда её напишут, со слепком имени — иначе открытие листа меняло бы
    документ и дёргало автосохранение, а при уходе соседа заметка осталась бы без адресата (знание v1). *@
 <section data-testid="fellows">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 class="cm-section-title">Знакомые сыщики</h3>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddManual">Вписать</Button>
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddManual">Добавить знакомого</Button>
     </div>
     @if (_party is null)
     {
@@ -17,7 +17,7 @@
     }
     else if (_party.Count == 0 && Sheet.FellowInvestigators.Count == 0)
     {
-        <p class="text-sm italic text-primary-400">Соседей по столу нет — можно вписать знакомого руками.</p>
+        <EmptyState Compact="true" Title="Соседей по столу нет — знакомого можно добавить вручную." />
     }
     else
     {
@@ -26,7 +26,7 @@
             <div class="grid grid-cols-1 gap-2 border-t border-primary-200 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" @key="member.CharacterId">
                 <div>
                     <div class="font-semibold text-primary-900">@member.Name</div>
-                    <div class="text-xs text-primary-500">@string.Join(" · ", new[] { member.PlayerName, member.Occupation }.Where(p => !string.IsNullOrWhiteSpace(p)))</div>
+                    <div class="text-sm text-primary-600">@string.Join(" · ", new[] { member.PlayerName, member.Occupation }.Where(p => !string.IsNullOrWhiteSpace(p)))</div>
                 </div>
                 <input class="cm-input" placeholder="Что сыщик думает о нём" aria-label="@($"Заметка: {member.Name}")"
                        value="@(EntryFor(member.CharacterId)?.Note ?? "")" @onchange="e => SetNote(member, e)" />

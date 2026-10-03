@@ -1,7 +1,9 @@
 @using CampaignManager.Core.Characters
 @using CampaignManager.Core.Dice
+@using CampaignManager.Core.Documents
 @using CampaignManager.UI.Platform
 @inject IDiceRoller Dice
+@inject DialogService Dialogs
 
 @* Рассудок и безумие (гл. 8). Пороги, приступ, Мифы — только SanityRules и InsanityTables (Core): панель не
    считает и не правит модель во время рендера (в v1 правила; состояние — SanityRules.Status). Четыре блока
@@ -16,14 +18,14 @@
         @if (status.PermanentlyInsane)
         {
             <Alert Tone="Tone.Error" Icon="fa-skull" ShowIcon="true" Small="true">
-                Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры (стр. 154).
+                Рассудок упал до нуля — сыщик <strong>неизлечимо безумен</strong> и выбывает из игры.
             </Alert>
         }
         <div class="mb-1 flex items-baseline justify-between gap-2">
             <span class="text-sm font-semibold text-primary-700">Рассудок</span>
             <span class="text-sm text-primary-600" data-testid="sanity-value">
                 <strong class="text-secondary-700">@status.Current</strong> / @status.Max
-                <span class="text-xs text-primary-400">(99 − Мифы Ктулху @status.Mythos)</span>
+                <span class="text-sm text-primary-600">(99 − Мифы Ктулху @status.Mythos)</span>
             </span>
         </div>
         <div class="sheet-bar mb-3"><div class="@BarClass(status.Percent)" style="width: @(status.Percent)%"></div></div>
@@ -34,7 +36,7 @@
             <input type="number" inputmode="numeric" min="1" max="99" class="cm-input cm-input-sm w-16" aria-label="Сколько пунктов рассудка"
                    data-testid="sanity-amount" @bind="_amount" />
             <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Прибавить пункты рассудка" OnClick="Gain" />
-            <span class="ml-1 text-xs text-primary-400">кости:</span>
+            <span class="ml-1 text-sm text-primary-600">Потеря броском:</span>
             @foreach (var sides in LossDice)
             {
                 <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Lose(Dice.Roll(1, sides))">−1d@(sides)</Button>
@@ -43,10 +45,10 @@
 
         <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="space-y-0.5 text-sm text-primary-700">
-                <div>За игровой день: <strong>@status.LostToday</strong> <span class="text-xs text-primary-500">(порог бессрочного: @status.IndefiniteThreshold)</span></div>
-                <div>От последней причины: <strong>@status.LastLoss</strong> <span class="text-xs text-primary-500">(порог проверки ИНТ: @SanityRules.TemporaryInsanityThreshold)</span></div>
+                <div>Потеряно за игровой день: <strong>@status.LostToday</strong> <span class="text-sm text-primary-600">— от @status.IndefiniteThreshold бессрочное безумие</span></div>
+                <div>Потеряно по последней причине: <strong>@status.LastLoss</strong> <span class="text-sm text-primary-600">— от @SanityRules.TemporaryInsanityThreshold проверка Интеллекта</span></div>
             </div>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="NewDay">Новый день</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="NewDayAsync">Новый день</Button>
         </div>
 
         @if (status.NeedsIntCheck)
@@ -54,7 +56,7 @@
             @* Бросок ИНТ делает игрок; здесь — две кнопки исхода (знание v1). *@
             <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="int-check-prompt">
                 <ChildContent>
-                    Потеряно @status.LastLoss по одной причине — проверка <strong>ИНТ</strong> (стр. 153). Успех: сыщик
+                    Потеряно @status.LastLoss по одной причине — проверка <strong>ИНТ</strong>. Успех: сыщик
                     осознал увиденное и временно безумен (1d10 часов), всё начинается с приступа. Провал: разум отгородился.
                 </ChildContent>
                 <Actions>
@@ -67,7 +69,7 @@
         {
             <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="indefinite-prompt">
                 <ChildContent>
-                    Потеряно ≥⅕ Рассудка за игровой день — <strong>бессрочное безумие</strong> (стр. 154).
+                    Потеряно ≥⅕ Рассудка за игровой день — <strong>бессрочное безумие</strong>.
                     @(Sheet.Condition.IndefiniteInsanity ? "Отмечено." : "Оно, как и любое безумие, начинается с приступа.")
                 </ChildContent>
                 <Actions>
@@ -90,8 +92,8 @@
         {
             <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" data-testid="bout-due">
                 <ChildContent>
-                    Положен <strong>приступ безумия</strong>: любое безумие начинается с него (стр. 154), а в затаённом безумии
-                    его вызывает любая потеря рассудка (стр. 156).
+                    Положен <strong>приступ безумия</strong>: любое безумие начинается с него, а в затаённом безумии
+                    его вызывает любая потеря рассудка.
                 </ChildContent>
                 <Actions>
                     <Button Small="true" OnClick="() => _boutOpen = true">Бросить приступ</Button>
@@ -132,20 +134,20 @@
         @if (status is { Insane: true, PermanentlyInsane: false })
         {
             <p class="cm-field-note mt-2">
-                Затаённое безумие (стр. 156): игрок управляет сыщиком, но любая потеря рассудка, даже в 1 пункт, — новый приступ.
-                Галлюцинации распознаёт проверка на реальность — проверка Рассудка, при провале −1 рассудка (стр. 160).
+                Затаённое безумие: игрок управляет сыщиком, но любая потеря рассудка, даже в 1 пункт, — новый приступ.
+                Галлюцинации распознаёт проверка на реальность — проверка Рассудка, при провале −1 рассудка.
             </p>
         }
         <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span class="text-primary-700">Случаев безумия от Мифов:</span>
             <strong>@Sheet.Condition.MythosInsanityCount</strong>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="RecordMythos">Записать (+@SanityRules.NextMythosGain(Sheet) к Мифам)</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="RecordMythosAsync">Записать случай (+@SanityRules.NextMythosGain(Sheet) к Мифам)</Button>
             @if (Sheet.Condition.MythosInsanityCount > 0)
             {
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="UndoMythos">Откатить</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="UndoMythos">Откатить</Button>
             }
         </div>
-        <p class="cm-field-note mt-1">Первый случай даёт +5 к Мифам Ктулху, каждый следующий +1 (стр. 160–161); максимум Рассудка падает вместе с ними.</p>
+        <p class="cm-field-note mt-1">Первый случай даёт +5 к Мифам Ктулху, каждый следующий +1; максимум Рассудка падает вместе с ними. Откат возвращает Мифы и максимум, но не потерянный Рассудок.</p>
     </section>
 
     <HabituationPanel />
@@ -154,13 +156,13 @@
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Фобии и мании</h3>
             <div class="flex flex-wrap gap-2">
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-phobia" OnClick="() => OpenCondition(InsanityConditionKind.Phobia)">Фобия</Button>
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-mania" OnClick="() => OpenCondition(InsanityConditionKind.Mania)">Мания</Button>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-phobia" OnClick="() => OpenCondition(InsanityConditionKind.Phobia)">Добавить фобию</Button>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-mania" OnClick="() => OpenCondition(InsanityConditionKind.Mania)">Добавить манию</Button>
             </div>
         </div>
         @if (Sheet.InsanityConditions.Count == 0)
         {
-            <p class="text-sm italic text-primary-400">Нет записей.</p>
+            <EmptyState Compact="true" Title="@Terms.Empty("записей")" />
         }
         @foreach (var condition in Sheet.InsanityConditions.OrderByDescending(c => c.Active).ThenBy(c => c.AcquiredAt))
         {
@@ -170,9 +172,9 @@
                     <div class="@Css.Join("text-sm font-semibold text-primary-900", condition.Active ? null : "line-through")">@condition.Name</div>
                     @if (!string.IsNullOrWhiteSpace(condition.Description))
                     {
-                        <div class="text-xs text-primary-600">@condition.Description</div>
+                        <div class="text-sm text-primary-600">@condition.Description</div>
                     }
-                    <div class="text-xs text-primary-400">@LocalTime.Date(condition.AcquiredAt)@(condition.Active ? "" : " · вылечено")</div>
+                    <div class="text-sm text-primary-600">@LocalTime.Date(condition.AcquiredAt)@(condition.Active ? "" : " · вылечено")</div>
                 </div>
                 <div class="flex gap-2">
                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(condition.Active ? "fa-check" : "fa-rotate-left")"
@@ -188,9 +190,9 @@
                 @if (status.Insane)
                 {
                     <li>Пока сыщик безумен: рядом объект фобии — всё, кроме боя и бегства, со штрафной костью (не для проверок
-                        Рассудка и на реальность); объект мании — штрафная кость ко всем броскам, пока сыщик не утолит влечение (стр. 157).</li>
+                        Рассудка и на реальность); объект мании — штрафная кость ко всем броскам, пока сыщик не утолит влечение.</li>
                 }
-                <li>Лечение (стр. 165): раз в месяц игрового времени психоаналитик проходит проверку Психоанализа, при успехе сыщик —
+                <li>Лечение: раз в месяц игрового времени психоаналитик проходит проверку Психоанализа, при успехе сыщик —
                     проверку Рассудка; оба успеха снимают фобию или манию. Крах в любой из них — −1d6 рассудка.</li>
             </ul>
         }
@@ -232,7 +234,20 @@
         Context.Changed();
     }
 
-    private void NewDay() => Do(() => SanityRules.StartNewDay(Sheet));
+    /// <summary>Новый день стирает оба счётчика потерь — спрашиваем с итогом, а не молча.</summary>
+    private async Task NewDayAsync()
+    {
+        var condition = Sheet.Condition;
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest("Начать новый игровой день?",
+            $"Счётчики потерь обнулятся: за день {condition.SanityLostToday} → 0, по последней причине {condition.LastSanityLoss} → 0.")
+        {
+            ConfirmText = "Начать новый день",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = "Сам Рассудок не меняется.",
+        });
+        if (confirmed)
+            Do(() => SanityRules.StartNewDay(Sheet));
+    }
 
     private void IntSucceeded()
     {
@@ -256,7 +271,23 @@
 
     private void DismissBout() => Do(() => SanityRules.DismissBout(Sheet));
 
-    private void RecordMythos() => Do(() => SanityRules.RecordMythosInsanity(Sheet, Context.Catalog));
+    /// <summary>Случай безумия от Мифов — с предпросмотром итога той же формулой Core на копии листа.</summary>
+    private async Task RecordMythosAsync()
+    {
+        var before = SanityRules.Status(Sheet, Context.Catalog);
+        var preview = CmJson.Clone(Sheet);
+        SanityRules.RecordMythosInsanity(preview, Context.Catalog);
+        var after = SanityRules.Status(preview, Context.Catalog);
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest("Записать случай безумия от Мифов?",
+            $"Мифы Ктулху {before.Mythos} → {after.Mythos}, максимум Рассудка {before.Max} → {after.Max}, текущий Рассудок {before.Current} → {after.Current}.")
+        {
+            ConfirmText = "Записать случай",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = "Откат вернёт Мифы и максимум, но не потерянный Рассудок.",
+        });
+        if (confirmed)
+            Do(() => SanityRules.RecordMythosInsanity(Sheet, Context.Catalog));
+    }
 
     private void UndoMythos() => Do(() => SanityRules.UndoMythosInsanity(Sheet, Context.Catalog));
 

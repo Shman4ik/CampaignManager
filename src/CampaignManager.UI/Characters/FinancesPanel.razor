@@ -3,9 +3,15 @@
 @using CampaignManager.Core.Characters
 
 @* Финансы: деньги числами (в v1 — строка в трёх форматах), активы словами. Достаток и образ жизни — по
-   Средствам и эпохе кампании из таблицы II и раздела «Достаток» (FinanceRules, стр. 44–45): подсказка, не правка. *@
+   Средствам и эпохе кампании из таблицы II и раздела «Достаток»: подсказка, не правка. *@
 <section data-testid="finances">
-    <h3 class="cm-section-title mb-2">Финансы</h3>
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="cm-section-title">Финансы</h3>
+        @if (!Context.ReadOnly && IsEmpty)
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-wand-magic-sparkles" data-testid="finances-fill" OnClick="FillFromCredit">Заполнить по Средствам</Button>
+        }
+    </div>
     @{
         var credit = Sheet.Value(Context.Catalog, SkillCodes.CreditRating);
         var tier = FinanceRules.GetTier(credit, Context.Era);
@@ -18,12 +24,12 @@
         <Field Label="Карманные, $">
             <input type="number" inputmode="decimal" step="0.01" min="0" class="cm-input" @bind="Sheet.Finances.PocketMoney" />
         </Field>
-        <Field Label="Активы" class="col-span-2"><input class="cm-input" @bind="Sheet.Finances.Assets" /></Field>
+        <Field Label="Активы, $" class="col-span-2"><input class="cm-input" @bind="Sheet.Finances.Assets" /></Field>
     </div>
     <Field Label="Заметка" class="mt-2"><input class="cm-input" @bind="Sheet.Finances.Note" /></Field>
     <p class="cm-field-note mt-2">
         Средства @credit% — «@tier.Name» (@(Context.Era == Era.Modern ? "наше время" : "1920-е")): по таблице II наличные $@tier.CashText,
-        карманные $@tier.PocketMoneyText, активы @tier.AssetsText (стр. 45). Жильё: @lifestyle.Housing Транспорт: @lifestyle.Transport
+        карманные $@tier.PocketMoneyText, активы @tier.AssetsText. Жильё: @lifestyle.Housing Транспорт: @lifestyle.Transport
     </p>
 </section>
 
@@ -31,4 +37,18 @@
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
     private CharacterSheet Sheet => Context.Sheet;
+
+    private bool IsEmpty => Sheet.Finances.Cash is null && Sheet.Finances.PocketMoney is null
+        && string.IsNullOrWhiteSpace(Sheet.Finances.Assets);
+
+    /// <summary>У перенесённых листов деньги пусты; значения таблицы II по Средствам — та же формула, что у помощника.</summary>
+    private void FillFromCredit()
+    {
+        var credit = Sheet.Value(Context.Catalog, SkillCodes.CreditRating);
+        var fresh = FinanceRules.ForNewInvestigator(credit, Context.Era);
+        Sheet.Finances.Cash = fresh.Cash;
+        Sheet.Finances.PocketMoney = fresh.PocketMoney;
+        Sheet.Finances.Assets = fresh.Assets;
+        Context.Changed();
+    }
 }
