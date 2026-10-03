@@ -289,6 +289,21 @@ public sealed class CatalogPageTests : KitContext
     }
 
     [Fact]
+    public void Item_price_has_its_own_column_and_a_form_field()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Priced(Item("Фонарь", Era.Classic), 1250m), Item("Бинокль", Era.Classic)];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+        Assert.Contains("Цена", page.Find("table thead").TextContent, StringComparison.Ordinal);
+        Assert.Contains("$1 250", page.Find("table tbody").TextContent, StringComparison.Ordinal);
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        Assert.Equal("1250", page.Find("dialog input[type=number]").GetAttribute("value"));
+    }
+
+    [Fact]
     public void Thumbnails_ask_the_server_for_a_narrow_copy_of_our_own_files_only()
     {
         Assert.Equal("/api/v1/files/abc?w=480", Catalogs.ImageUrls.Thumb("/api/v1/files/abc"));
@@ -303,6 +318,12 @@ public sealed class CatalogPageTests : KitContext
         Name = name,
         Eras = eras.Length > 0 ? [.. eras] : [.. Enum.GetValues<Era>()],
     };
+
+    private static ItemDto Priced(ItemDto item, decimal price)
+    {
+        item.Price = price;
+        return item;
+    }
 
     private sealed class NoFiles : IFilesApi
     {

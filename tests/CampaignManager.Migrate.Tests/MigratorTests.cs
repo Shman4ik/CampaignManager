@@ -133,6 +133,14 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Equal("Развлечения", items.Single(i => i.Name == "Аккордеон").Type);
         Assert.Equal("item.canteen", items.Single(i => i.Name == "Фляга").Code);
 
+        // Цена из «Описания»: число — в поле, остаток — в описание; не разобранное остаётся как было
+        var ford = items.Single(i => i.Name == "«Форд» Model T");
+        Assert.Equal((1250m, (string?)null), (ford.Price, ford.Description));
+        var flask = items.Single(i => i.Name == "Фляга");
+        Assert.Equal((3.5m, "Цена — от указанной суммы. Цена за штуку."), (flask.Price, flask.Description));
+        var accordion = items.Single(i => i.Name == "Аккордеон");
+        Assert.Equal((null, "дорогой, около 40 долларов"), (accordion.Price, accordion.Description));
+
         var creature = await db.Creatures.Include(c => c.Images).SingleAsync(Token);
         Assert.Equal("creature.deep-one", creature.Code);
         Assert.Equal("в воде", Assert.Single(creature.Images).Caption); // второго объекта нет в хранилище
@@ -210,6 +218,8 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Contains(report.Sections[ReportSections.DroppedModern], l => l.Contains("Хакер", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.DroppedModern], l => l.Contains("Смартфон", StringComparison.Ordinal));
         Assert.Single(report.Sections[ReportSections.DroppedDuplicates]);
+        Assert.Contains(report.Sections[ReportSections.ItemPriceConditions], l => l.Contains("«Фляга»", StringComparison.Ordinal) || l.Contains("Флаг", StringComparison.Ordinal));
+        Assert.Contains(report.Sections[ReportSections.ItemPriceUnparsed], l => l.Contains("Аккордеон", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.Renamed], l => l.Contains("«Флаг (1 метр)» → «Фляга»", StringComparison.Ordinal));
         Assert.Single(report.Sections[ReportSections.MovedToScenario]);
         Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("запись закрыта", StringComparison.Ordinal));

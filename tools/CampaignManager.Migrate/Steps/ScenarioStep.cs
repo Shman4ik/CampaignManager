@@ -403,7 +403,8 @@ public static partial class ScenarioStep
             else if (s.ItemsByV1Name.TryGetValue(name, out var catalog))
             {
                 entity.ItemId = catalog.Id;
-                if (item.Text("Description") is { } description && description != catalog.Description)
+                if (item.Text("Description") is { } description && description != catalog.Description
+                    && description != s.ItemV1Descriptions.GetValueOrDefault(name))
                 {
                     entity.Description = description;
                 }

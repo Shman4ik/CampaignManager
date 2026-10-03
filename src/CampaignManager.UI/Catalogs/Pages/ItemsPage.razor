@@ -1,7 +1,8 @@
 @page "/items"
 @attribute [Authorize]
+@using CampaignManager.Core.Catalogs
 
-@* Предметы: Название · Тип · Описание. Колонок четыре — таблица помещается и в портрет iPad (с md).
+@* Предметы: Название · Тип · Цена · Описание. Колонок пять — таблица помещается и в портрет iPad (с md).
    Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки;
    описание раскрытие не печатает заново, а снимает обрезку с той же ячейки. *@
 <CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет" Plural="предметов"
@@ -23,11 +24,12 @@
         {
             <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" Context="item">@item.Type</DataColumn>
         }
+        <DataColumn TItem="ItemDto" Title="Цена" SortBy="i => i.Price ?? decimal.MaxValue" HeaderClass="w-[11%] whitespace-nowrap" CellClass="whitespace-nowrap" AlignEnd="true" Context="item">@PriceText.Format(item.Price)</DataColumn>
         <DataColumn TItem="ItemDto" Title="Описание" CellClass="cm-clip text-primary-600" Context="item">@item.Description</DataColumn>
     </Columns>
     <CardTemplate Context="item">
         <p class="font-medium text-primary-800">@item.Name</p>
-        <p class="cm-meta">@item.Type</p>
+        <p class="cm-meta">@item.Type@(item.Price is null ? "" : " · " + PriceText.Format(item.Price))</p>
         @if (!string.IsNullOrEmpty(item.Description))
         {
             <p class="mt-1 line-clamp-2 text-sm text-primary-600">@item.Description</p>
@@ -39,6 +41,9 @@
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="item.Name" />
             </Field>
             <Field Label="Тип" Note="Выберите из списка или впишите новый."><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
+            <Field Label="Цена" Hint="($, 1920-е)" Note="Пусто — цена не указана. Условия («за ночь», «от») — в описании.">
+                <input class="cm-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="9,50" @bind="item.Price" />
+            </Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="item.Source" /></Field>
             <datalist id="item-types">
                 @foreach (var type in _types)

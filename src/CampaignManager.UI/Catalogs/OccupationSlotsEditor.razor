@@ -58,7 +58,26 @@
                         break;
                 }
             </div>
-            <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать слот {index + 1}")" OnClick="() => RemoveAsync(index)" />
+            <div class="ms-auto flex shrink-0 items-center">
+                @* Крайним слотам лишняя стрелка не нужна, но место за ней остаётся: колонки кнопок не плывут от строки к строке. *@
+                @if (index > 0)
+                {
+                    <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-up" AriaLabel="@($"Слот {index + 1} выше")" OnClick="() => MoveAsync(index, -1)" />
+                }
+                else
+                {
+                    <span class="inline-block size-11 shrink-0" aria-hidden="true"></span>
+                }
+                @if (index < Slots.Count - 1)
+                {
+                    <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-down" AriaLabel="@($"Слот {index + 1} ниже")" OnClick="() => MoveAsync(index, 1)" />
+                }
+                else
+                {
+                    <span class="inline-block size-11 shrink-0" aria-hidden="true"></span>
+                }
+                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать слот {index + 1}")" OnClick="() => RemoveAsync(index)" />
+            </div>
         </div>
     }
     <div class="flex flex-wrap items-center gap-3">
@@ -151,6 +170,20 @@
     {
         var list = Slots.ToList();
         list.RemoveAt(index);
+        return SlotsChanged.InvokeAsync(list);
+    }
+
+    /// <summary>Порядок слотов — порядок в карточке и на листе: «выше»/«ниже» меняют соседей местами.</summary>
+    private Task MoveAsync(int index, int step)
+    {
+        var target = index + step;
+        if (target < 0 || target >= Slots.Count)
+        {
+            return Task.CompletedTask;
+        }
+
+        var list = Slots.ToList();
+        (list[index], list[target]) = (list[target], list[index]);
         return SlotsChanged.InvokeAsync(list);
     }
 

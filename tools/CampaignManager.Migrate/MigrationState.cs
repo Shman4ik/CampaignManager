@@ -57,6 +57,9 @@ public sealed class MigrationState(V1Database v1, CmDbContext db, IFileStore fil
     /// <summary>Предметы справочника по имени v1.</summary>
     public Dictionary<string, Item> ItemsByV1Name { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>«Описание» предмета в v1 до выделения цены: сценарий v1 копировал его, и копия — не своё описание сценария.</summary>
+    public Dictionary<string, string?> ItemV1Descriptions { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Тварь справочника по имени v1 и её статблок в JSON Core (для сравнения с тварью сценария).</summary>
     public Dictionary<string, (Creature Creature, string StatblockJson)> CreaturesByV1Name { get; } = new(StringComparer.Ordinal);
 

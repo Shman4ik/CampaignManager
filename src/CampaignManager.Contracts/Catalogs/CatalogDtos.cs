@@ -237,6 +237,9 @@ public sealed class ItemDto : CatalogItemDto
 
     public string? Description { get; set; }
 
+    /// <summary>Цена в долларах 1920-х; null — не указана.</summary>
+    public decimal? Price { get; set; }
+
     public Guid? ImageFileId { get; set; }
 
     /// <summary>Адрес картинки (только чтение).</summary>

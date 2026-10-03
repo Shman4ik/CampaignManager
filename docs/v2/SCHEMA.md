@@ -298,6 +298,7 @@ create table cm.items (
     type           text,
     eras           text[] not null default '{Classic,Modern}',
     description    text,
+    price          numeric(12,2),                      -- $ 1920-х; null — не указана (миграция ItemPrice)
     image_file_id  uuid references cm.files on delete set null,
     source         text,
     created_by_id  uuid references cm.users on delete set null,
