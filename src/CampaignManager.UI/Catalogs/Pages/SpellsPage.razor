@@ -7,7 +7,7 @@
    разворачиваются на месте; в раскрытии — только то, чего в колонках нет (другие названия, описание).
    При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. *@
 <CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание" Plural="заклинаний"
-             Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded"
+             Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded" State="_state" Validate="Validate"
              New="() => new SpellDto()" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" CellClass="font-medium text-primary-800" Context="s">@s.Name</DataColumn>
@@ -15,13 +15,13 @@
         {
             <DataColumn TItem="SpellDto" Title="Тип" SortBy="s => s.SpellType" HeaderClass="w-[14%]" Context="s">@s.SpellType</DataColumn>
         }
-        <DataColumn TItem="SpellDto" Title="Стоимость" HeaderClass="@(view.IsFixed("type") ? "w-[44%]" : "w-[34%]")" Context="s">@s.Cost</DataColumn>
+        <DataColumn TItem="SpellDto" Title="Стоимость" HeaderClass="@(view.IsFixed("type") ? "w-[44%]" : "w-[34%]")" Context="s">@Cost(s.Cost)</DataColumn>
         <DataColumn TItem="SpellDto" Title="Время сотворения" Context="s">@s.CastingTime</DataColumn>
     </Columns>
     <CardTemplate Context="s">
         <p class="font-medium text-primary-800">@s.Name</p>
-        <p class="cm-meta">@s.SpellType · @s.CastingTime</p>
-        <p class="mt-1 text-sm text-primary-600">@s.Cost</p>
+        <p class="cm-meta">@s.SpellType · Время: @s.CastingTime</p>
+        <p class="mt-1 text-sm text-primary-600">@Cost(s.Cost)</p>
     </CardTemplate>
 </CatalogPage>
 
@@ -32,8 +32,24 @@
     private void Loaded(IReadOnlyList<SpellDto> spells)
     {
         _types = [.. spells.Select(s => s.SpellType).Where(t => t.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
-        _filters = [new("type", Terms.AnyType, [.. _types.Select(t => new CatalogOption(t, t))], (spell, type) => spell.SpellType == type)];
+        // Составной тип («Атака/Проклятие») — несколько тегов: фильтр по тегу находит и его, иначе 28 значений не сужают список.
+        var tags = spells.SelectMany(s => Tags(s.SpellType)).Distinct(StringComparer.CurrentCultureIgnoreCase).Order().ToList();
+        _filters = [new("type", Terms.AnyType, [.. tags.Select(t => new CatalogOption(t, t))],
+            (spell, type) => Tags(spell.SpellType).Contains(type, StringComparer.CurrentCultureIgnoreCase))];
     }
+
+    private readonly CatalogFormState _state = new();
+
+    private static IReadOnlyList<string> Tags(string type) =>
+        [.. type.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
+
+    // «>=» из переноса — «≥» (правило 11); единицы стоимости переносятся данными, не интерфейсом.
+    private static string Cost(string? cost) => (cost ?? "").Replace(">=", "≥", StringComparison.Ordinal).Replace("<=", "≤", StringComparison.Ordinal);
+
+    private static IReadOnlyDictionary<string, string> Validate(SpellDto s) =>
+        string.IsNullOrWhiteSpace(s.SpellType)
+            ? new Dictionary<string, string> { ["type"] = "Нужен тип заклинания: «Призыв», «Контакт»…" }
+            : new Dictionary<string, string>();
 
     private static RenderFragment<SpellDto> Detail => s => __builder =>
     {
@@ -60,8 +76,12 @@
     private RenderFragment<SpellDto> Form => s => __builder =>
     {
         <div class="grid gap-4 sm:grid-cols-2">
-            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="s.Name" /></Field>
-            <Field Label="Тип"><input class="cm-input" list="spell-types" placeholder="Призыв, Контакт…" @bind="s.SpellType" /></Field>
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
+                <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="s.Name" />
+            </Field>
+            <Field Label="Тип" Required="true" Error="@_state.For("type")" Note="Из списка или новый.">
+                <input class="cm-input" list="spell-types" placeholder="Призыв, Контакт…" aria-invalid="@_state.Invalid("type")" @bind="s.SpellType" />
+            </Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
             <datalist id="spell-types">
                 @foreach (var type in _types)
@@ -94,7 +114,7 @@
 
         if (estimate.IsEmpty)
         {
-            return "Бой не поймёт стоимость — Хранитель впишет её при сотворении.";
+            return "В бою стоимость не посчитается сама — впишите её при сотворении.";
         }
 
         List<string> parts = [];
@@ -102,7 +122,7 @@
         if (estimate.Sanity is { } san) parts.Add($"рассудок {san}");
         if (estimate.Power is { } pow) parts.Add($"МОЩ {pow}");
         if (estimate.HitPoints is { } hp) parts.Add($"ПЗ {hp}");
-        return "Подсказка для боя: " + string.Join(", ", parts);
+        return "В бою спишется: " + string.Join(", ", parts);
     }
 
     private static string? TimeHint(string? time)
@@ -111,11 +131,11 @@
         return estimate switch
         {
             _ when string.IsNullOrWhiteSpace(time) => null,
-            { IsInstant: true } => "Подсказка для боя: мгновенно.",
-            { Rounds: { } rounds } => $"Подсказка для боя: {rounds} раунд(ов){(estimate.MentionsLongerUnits ? ", в тексте есть и минуты/часы" : "")}.",
-            { RoundsFormula: { } formula } => $"Подсказка для боя: {formula} раундов.",
+            { IsInstant: true } => "В бою: мгновенно.",
+            { Rounds: { } rounds } => $"В бою раундов: {rounds}{(estimate.MentionsLongerUnits ? ", в тексте есть и минуты/часы" : "")}.",
+            { RoundsFormula: { } formula } => $"В бою раундов: {formula}.",
             { MentionsLongerUnits: true } => "В бою не творится: минуты, часы или дни.",
-            _ => "Бой не поймёт время — Хранитель решит сам.",
+            _ => "В бою время не посчитается само — решите сами.",
         };
     }
 }

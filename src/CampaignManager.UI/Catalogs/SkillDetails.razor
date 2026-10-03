@@ -5,19 +5,30 @@
    SkillCard, SkillDetailPage, SkillInfoPopover). Своей карточки не рисует: стоит в раскрытой строке
    справочника или в окне листа. База — по правилу Core (Уклонение — ½ ЛВК, родной язык — ОБР). *@
 <div class="grid gap-3 text-sm">
-    <div class="cm-meta">
-        <span><span class="cm-meta-label">База:</span> @BaseText</span>
-        <span><span class="cm-meta-label">Категория:</span> @CatalogText.Of(Skill.Category)</span>
-        @if (Parent is not null)
-        {
-            <span><span class="cm-meta-label">Специализация навыка</span> «@Parent.Name»</span>
-        }
-        @if (Skill.IsUncommon)
-        {
-            <Badge Tone="Tone.Warning">необычный</Badge>
-        }
-        <span><span class="cm-meta-label">Эпоха:</span> @CatalogText.Of(Skill.Eras)</span>
-    </div>
+    @* В строке справочника база, категория и «необычный» уже в колонках и у названия — не повторяем (UX-0b, п. «Раскрытая
+       строка»); в справке на листе их нет, там они нужны. Эпоху — только когда в справочнике больше одной. *@
+    @if (!InRow || Parent is not null || ShowEra)
+    {
+        <div class="cm-meta">
+            @if (!InRow)
+            {
+                <span><span class="cm-meta-label">База:</span> @BaseText</span>
+                <span><span class="cm-meta-label">Категория:</span> @CatalogText.Of(Skill.Category)</span>
+            }
+            @if (Parent is not null)
+            {
+                <span><span class="cm-meta-label">Специализация навыка</span> «@Parent.Name»</span>
+            }
+            @if (!InRow && Skill.IsUncommon)
+            {
+                <Badge Tone="Tone.Warning">Необычный</Badge>
+            }
+            @if (ShowEra)
+            {
+                <span><span class="cm-meta-label">Эпоха:</span> @CatalogText.Of(Skill.Eras)</span>
+            }
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(Skill.Description))
     {
@@ -82,6 +93,12 @@
 
 @code {
     [Parameter, EditorRequired] public SkillDto Skill { get; set; } = null!;
+
+    /// <summary>Рисуется в раскрытой строке справочника: база, категория и «необычный» там уже в колонках.</summary>
+    [Parameter] public bool InRow { get; set; }
+
+    /// <summary>Показывать эпоху: только когда записи справочника из разных эпох.</summary>
+    [Parameter] public bool ShowEra { get; set; }
 
     /// <summary>Весь справочник — для родителя и специализаций.</summary>
     [Parameter] public IReadOnlyList<SkillDto> Catalog { get; set; } = [];

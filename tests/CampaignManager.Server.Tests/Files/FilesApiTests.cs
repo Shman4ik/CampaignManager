@@ -329,6 +329,47 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
         return Assert.Single(app.Storage.Keys, key => key.Contains(sha256, StringComparison.Ordinal));
     }
 
+    // UX-1 U5: ?w=480 — миниатюра плитки (оригинал ~300 КБ, 20 плиток — 6 МБ).
+    [Fact]
+    public async Task Thumbnail_is_narrower_with_its_own_etag_and_small_images_come_as_is()
+    {
+        TestDatabase.SkipIfMissing();
+        var wide = Png(1000, 800);
+        var small = Png(100, 80);
+        var wideFile = await app.Api().UploadAsync(new MemoryStream(wide), "Тварь.png", Cancellation);
+        var smallFile = await app.Api().UploadAsync(new MemoryStream(small), "Мелочь.png", Cancellation);
+        var client = app.CreateClient();
+
+        using var thumb = await client.GetAsync($"{wideFile.Url}?w=200", Cancellation);
+        var thumbBytes = await thumb.Content.ReadAsByteArrayAsync(Cancellation);
+        using var image = SixLabors.ImageSharp.Image.Load(thumbBytes);
+        Assert.Equal(200, image.Width);
+        Assert.Equal(160, image.Height);
+        Assert.Equal("image/png", thumb.Content.Headers.ContentType?.MediaType);
+        Assert.Equal($"\"{wideFile.Id:N}-w200\"", thumb.Headers.ETag?.Tag);
+
+        // Тот же ETag — 304, оригинальный ETag миниатюру не подтверждает.
+        using var again = new HttpRequestMessage(HttpMethod.Get, $"{wideFile.Url}?w=200");
+        again.Headers.IfNoneMatch.Add(thumb.Headers.ETag!);
+        using var notModified = await client.SendAsync(again, Cancellation);
+        Assert.Equal(HttpStatusCode.NotModified, notModified.StatusCode);
+
+        // Оригинал не шире просимого — он сам, с ETag оригинала; вне допустимого диапазона ширина игнорируется.
+        using var asIs = await client.GetAsync($"{smallFile.Url}?w=480", Cancellation);
+        Assert.Equal(small, await asIs.Content.ReadAsByteArrayAsync(Cancellation));
+        Assert.Equal($"\"{smallFile.Id:N}\"", asIs.Headers.ETag?.Tag);
+        using var tooWide = await client.GetAsync($"{wideFile.Url}?w=100000", Cancellation);
+        Assert.Equal(wide, await tooWide.Content.ReadAsByteArrayAsync(Cancellation));
+    }
+
+    private static byte[] Png(int width, int height)
+    {
+        using var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(width, height);
+        using var stream = new MemoryStream();
+        SixLabors.ImageSharp.ImageExtensions.SaveAsPng(image, stream);
+        return stream.ToArray();
+    }
+
     private static byte[] RandomBytes(int length)
     {
         var bytes = new byte[length];
