@@ -67,4 +67,39 @@ public sealed class SkillsPanelOrderTests : KitContext
         Assert.Equal(["Внимание"], Names(frequent.QuerySelector("[data-testid=skills-left]")!));
         Assert.Equal(["Слух"], Names(frequent.QuerySelector("[data-testid=skills-right]")!));
     }
+
+    [Fact]
+    public void Specializations_of_one_parent_from_different_categories_make_one_fold_with_unique_keys()
+    {
+        // Регрессия beta: «Наука (фармакология)» — лечение, «Наука (химия)» — знания; свёртка по категориям
+        // дала два <details> одного родителя, и Blazor бросил «More than one sibling has the same key».
+        var science = new SkillDefinition(Guid.NewGuid(), "Наука") { Code = "skill.science", Category = SkillCategory.Knowledge };
+        var fire = new SkillDefinition(Guid.NewGuid(), "Стрельба") { Code = "skill.firearms", Category = SkillCategory.CombatFirearms };
+        SkillDefinition Child(SkillDefinition parent, string name, string code, SkillCategory category, int baseValue = 1) =>
+            new(Guid.NewGuid(), $"{parent.Name} ({name})") { Code = code, ParentId = parent.Id, BaseValue = baseValue, Category = category };
+
+        var chemistry = Child(science, "химия", "skill.science.chemistry", SkillCategory.Knowledge);
+        var pharmacy = Child(science, "фармакология", "skill.science.pharmacy", SkillCategory.Healing);
+        var forensics = Child(science, "криминалистика", "skill.science.forensics", SkillCategory.InformationGathering);
+        var handgun = Child(fire, "пистолет", "skill.firearms.handgun", SkillCategory.CombatFirearms, 20);
+        var rifle = Child(fire, "винтовка", "skill.firearms.rifle", SkillCategory.CombatFirearms, 25);
+        var catalog = new SkillCatalog([science, fire, chemistry, pharmacy, forensics, handgun, rifle]);
+
+        // Часть на базе (свёрнуты), часть выше базы (видны), «Частые» берут пистолет
+        var sheet = new CharacterSheet();
+        sheet.Skills.Add(new SheetSkill { SkillId = pharmacy.Id, Value = 40 });
+        sheet.Skills.Add(new SheetSkill { SkillId = rifle.Id, Value = 25 });
+        sheet.Skills.Add(new SheetSkill { SkillId = handgun.Id, Value = 55 });
+        sheet.Skills.Add(new SheetSkill { ParentSkillId = science.Id, Name = "оккультизм", Value = 30 });
+
+        var context = new SheetContext(new CharacterDto { Sheet = sheet, CanEdit = true }, catalog, [], null!, () => { }, _ => { });
+        var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<SkillsPanel>());
+
+        var folds = cut.FindAll("details.skill-fold");
+        Assert.Equal(2, folds.Count);
+        Assert.Single(folds, f => f.QuerySelector("summary")!.TextContent.StartsWith("Наука", StringComparison.Ordinal));
+
+        var names = cut.FindAll(".skill-name-button").Select(b => b.TextContent.Trim()).ToList();
+        Assert.Equal(names.Count, names.Distinct().Count());
+    }
 }

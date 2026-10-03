@@ -138,7 +138,7 @@ public static class SheetSkillLayout
 
             var category = catalog.Find(entry.SkillId)?.Category ?? catalog.Find(entry.ParentSkillId)?.Category;
             var folded = line.Definition?.ParentId is not null && line.Value == line.BaseValue && !line.Checked;
-            lines.Add((category, line, folded));
+            lines.Add((FoldCategory(catalog, line, folded, category), line, folded));
         }
 
         foreach (var definition in catalog.Skills)
@@ -146,7 +146,9 @@ public static class SheetSkillLayout
             if (onSheet.Contains(definition.Id) || catalog.IsParent(definition.Id))
                 continue;
 
-            lines.Add((definition.Category, Line(sheet, catalog, definition), definition.ParentId is not null));
+            var line = Line(sheet, catalog, definition);
+            var folded = definition.ParentId is not null;
+            lines.Add((FoldCategory(catalog, line, folded, definition.Category), line, folded));
         }
 
         var categoryOrder = catalog.Skills.Select(s => s.Category).Distinct().ToList();
@@ -165,6 +167,14 @@ public static class SheetSkillLayout
                     .ToList()))
             .ToList();
     }
+
+    /// <summary>
+    /// Свёрнутая специализация живёт в группе родителя, а не своей: категории специализаций одного родителя
+    /// различаются («Наука (фармакология)» — лечение, «Наука (химия)» — знания), и свёртка по категориям давала
+    /// «Науку» в нескольких группах сразу — два соседних <c>&lt;details&gt;</c> с одним ключом.
+    /// </summary>
+    private static SkillCategory? FoldCategory(SkillCatalog catalog, SkillLine line, bool folded, SkillCategory? own) =>
+        folded && catalog.Find(line.ParentId) is { } parent ? parent.Category : own;
 
     /// <summary>Строка документа как строка листа.</summary>
     public static SkillLine Line(CharacterSheet sheet, SkillCatalog catalog, SheetSkill entry)
