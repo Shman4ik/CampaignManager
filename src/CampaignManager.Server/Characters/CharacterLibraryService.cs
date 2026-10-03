@@ -80,7 +80,7 @@ public sealed class CharacterLibraryService(
         await CharacterService.ValidateAsync(dbContext, request.Sheet, cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Sheet.Personal.Name) && request.Kind is not CharacterKind.Player)
         {
-            throw ApiProblemException.Invalid("У НПС и прегена должно быть имя — по нему их ищут в библиотеке.");
+            throw ApiProblemException.Invalid("У НПС и готового сыщика должно быть имя — по нему их ищут в библиотеке.");
         }
 
         var character = new Character
@@ -200,7 +200,7 @@ public sealed class CharacterLibraryService(
         await access.CanBrowseCharacterLibraryAsync(cancellationToken).Demand();
         if (kind is not (CharacterKind.Npc or CharacterKind.Pregen))
         {
-            throw ApiProblemException.Invalid("В библиотеке — НПС и прегены.");
+            throw ApiProblemException.Invalid("В библиотеке — НПС и готовые сыщики.");
         }
 
         var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();

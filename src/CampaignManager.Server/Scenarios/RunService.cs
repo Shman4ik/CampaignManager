@@ -26,8 +26,8 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
     private const string OneActiveSheet =
         "У вас уже есть активный сыщик в этой кампании — сначала смените его статус на листе (выбыл, в отставке).";
 
-    private const string AlreadyReserved = "Вы уже забронировали персонажа на эту игру — сначала снимите бронь.";
-    private const string PregenTaken = "Этого персонажа уже забронировали — выберите другого.";
+    private const string AlreadyReserved = "Вы уже записались на место в этой игре — сначала снимите запись.";
+    private const string PregenTaken = "Этого сыщика уже заняли — выберите другого.";
 
     /// <summary>
     /// Прохождения сценария в кампаниях, которые ведёт вошедший (администратору — все): только там ему отдадут сыщиков
@@ -246,7 +246,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
 
         if (run.Role is CampaignRole.Keeper)
         {
-            throw ApiProblemException.Invalid("Вы ведёте эту игру — прегенов бронируют игроки.");
+            throw ApiProblemException.Invalid("Вы ведёте эту игру — готовых сыщиков занимают игроки.");
         }
 
         var reservations = await dbContext.RunReservations.AsNoTracking()
@@ -306,7 +306,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
             {
                 "pk_run_reservations" => ApiProblemException.Conflict(PregenTaken),
                 "ix_run_reservations_run_id_user_id" => ApiProblemException.Duplicate(AlreadyReserved),
-                "pk_campaign_members" => ApiProblemException.Conflict("Вы вступили в кампанию с другой вкладки — повторите бронь."),
+                "pk_campaign_members" => ApiProblemException.Conflict("Вы вступили в кампанию с другой вкладки — повторите запись."),
                 _ => ApiProblemException.Conflict(OneActiveSheet),
             };
         }
@@ -326,7 +326,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
         await access.ForReservationAsync(runId, pregenId, cancellationToken).Demand(Operation.Delete);
         if (await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.Status == ScenarioRunStatus.Finished, cancellationToken))
         {
-            throw ApiProblemException.Conflict("Игра уже сыграна — бронь осталась в истории прохождения.");
+            throw ApiProblemException.Conflict("Игра уже сыграна — запись осталась в истории прохождения.");
         }
 
         var reservation = await dbContext.RunReservations.SingleAsync(r => r.RunId == runId && r.PregenId == pregenId, cancellationToken);
@@ -415,7 +415,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
 
     private static string CampaignName(string? requested, string scenarioName)
     {
-        var name = string.IsNullOrWhiteSpace(requested) ? $"{scenarioName} (ваншот)" : requested.Trim();
+        var name = string.IsNullOrWhiteSpace(requested) ? $"{scenarioName} (разовая игра)" : requested.Trim();
         if (name.Length > CampaignLimits.NameLength)
         {
             if (!string.IsNullOrWhiteSpace(requested))
