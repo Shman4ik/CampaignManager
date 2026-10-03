@@ -25,7 +25,7 @@ Master spell catalog (independent entity).
 вести вместе. Разметку списка держит `Components/SpellsListView.razor` (таблица +
 карточки) и `Components/SpellTableRow.razor` (строка), страница отвечает за фильтры
 и модалки. Страницу, сортировку и раскрытую строку держит общий
-`Shared/Model/CatalogListState<Spell>` (см. `docs/design-system.md`, «Каталог»).
+`Shared/Model/CatalogListState<Spell>` (см. `docs/design-system-v1.md`, «Каталог»).
 Модалка правит полную копию заклинания (`Utilities/Services/EntityCloner.Clone`), поэтому
 новое поле `Spell` в неё попадает само.
 

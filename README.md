@@ -36,7 +36,7 @@
 | `CampaignManager.ServiceDefaults/` | OpenTelemetry и health checks для v1 (в 2.0 уходит) |
 | `src/` | проекты 2.0 (появятся с задачи T1.1) |
 | `tests/` | тесты: `CampaignManager.Rules.Tests` — правила книги на коде v1 |
-| `docs/` | план 2.0 (`v2/`), гайд дизайн-системы (`design-system.md`), исходники логотипа (`assets/`) |
+| `docs/` | план 2.0 (`v2/`), дизайн-система 2.0 (`design-system.md`; v1 — `design-system-v1.md`), исходники логотипа (`assets/`) |
 | `scripts/` | вспомогательные скрипты v1 |
 
 ## Запуск
