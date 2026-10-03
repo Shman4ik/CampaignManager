@@ -176,6 +176,23 @@ public sealed class UxU1Tests : KitContext
         Assert.Contains("Тайна пастуха", cut.Markup, StringComparison.Ordinal);
     }
 
+    // «Читать полностью» — только там, где запись реально длиннее трёх строк; у короткой кнопки нет.
+    [Fact]
+    public void Short_journal_entry_has_no_read_more_button()
+    {
+        var session = new CampaignSessionDto(Guid.Parse("0199b000-0000-7000-8000-000000000305"), 1, new DateOnly(2026, 10, 2), null,
+            "Короткая запись.", null, null, null, null, ScenarioCompleted: false);
+        Services.AddSingleton(Fake.Of<ICampaignsApi>(new()
+        {
+            [nameof(ICampaignsApi.GetJournalAsync)] = _ => Task.FromResult(new CampaignJournalDto(CampaignId, "Маски", true, 2, [session], [], [])),
+        }));
+
+        var cut = Render<CampaignJournalPage>(p => p.Add(j => j.CampaignId, CampaignId));
+        cut.WaitForElement("article");
+
+        Assert.Empty(cut.FindAll("[data-testid=session-toggle]"));
+    }
+
     [Fact]
     public void Empty_journal_has_one_new_meeting_button_in_the_header_only()
     {
@@ -202,5 +219,36 @@ public sealed class UxU1Tests : KitContext
 
         Assert.Contains("вы вернётесь на неё", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Как войти", cut.Markup, StringComparison.Ordinal);
+    }
+
+    // ── /about и /legal ─────────────────────────────────────────────────────
+
+    // Страницы в общей оболочке (PageHeader, cm-page), тексты про 2.0: ни кодов приглашения, ни вики, ни «issue».
+    [Fact]
+    public void About_uses_the_page_shell_and_has_no_v1_leftovers()
+    {
+        var about = Render<AboutPage>();
+
+        AssertShellWithoutV1Leftovers(about.Markup, about);
+        Assert.Contains("ссылку-приглашение", about.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Legal_uses_the_page_shell_and_has_no_v1_leftovers()
+    {
+        var legal = Render<LegalPage>();
+
+        AssertShellWithoutV1Leftovers(legal.Markup, legal);
+        Assert.Contains("Chaosium Inc.", legal.Markup, StringComparison.Ordinal);
+    }
+
+    private static void AssertShellWithoutV1Leftovers(string text, Bunit.IRenderedComponent<Microsoft.AspNetCore.Components.IComponent> cut)
+    {
+        Assert.Single(cut.FindAll("header.cm-topbar"));
+        Assert.Single(cut.FindAll("div.cm-page"));
+        Assert.DoesNotContain("коду приглашения", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("вики", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("issue", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("NPC", text, StringComparison.Ordinal);
     }
 }

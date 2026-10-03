@@ -44,12 +44,12 @@
             var active = campaign.Status != CampaignStatus.Completed;
         }
         @* Заголовок в шапке — одна строка с многоточием: длинное название полностью — здесь, вид и эпоха — тут же. *@
-        <div class="cm-stack" data-testid="campaign-lead">
+        <div class="cm-stack mb-3" data-testid="campaign-lead">
             @if (campaign.Name.Length > LongName)
             {
                 <h2 class="cm-h4 cm-title-serif break-words" data-testid="campaign-full-name">@campaign.Name</h2>
             }
-            <p class="cm-text-muted">@CampaignLabels.Kind(campaign.Kind) · @CampaignLabels.Era(campaign.Era)</p>
+            <p class="cm-text-muted" data-testid="campaign-facts">@FactsLine(campaign)</p>
         </div>
 
         @* Хранителю без игроков — как они попадают в кампанию (сказано только здесь и на главной). *@
@@ -267,6 +267,17 @@
 
     /// <summary>Длиннее этого название не помещается в шапку на планшете и телефоне — его полностью показывает страница.</summary>
     private const int LongName = 28;
+
+    /// <summary>
+    /// Всё, что узкая шапка (телефон) обрезает, одной строкой на странице: статус, моя роль, вид и эпоха.
+    /// </summary>
+    private static string FactsLine(CampaignSummaryDto c) => string.Join(" · ", new[]
+    {
+        CampaignLabels.Status(c.Status),
+        c.MyRole is { } role ? $"вы — {CampaignLabels.Role(role)}" : null,
+        CampaignLabels.Kind(c.Kind),
+        CampaignLabels.Era(c.Era),
+    }.Where(part => part is not null));
 
     /// <summary>Активной кампании без игроков нужно приглашение: оно главное действие страницы.</summary>
     private bool NeedsPlayers => _details?.Campaign is { CanEdit: true, PlayerCount: 0, Status: not CampaignStatus.Completed };

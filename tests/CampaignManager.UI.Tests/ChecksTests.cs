@@ -305,6 +305,29 @@ public sealed class ChecksTests : KitContext
         Assert.Contains("Исход из сценария", cut.Find("[data-testid='check-details']").TextContent);
     }
 
+    // Исход из сценария — сразу под результатом, до Удачи и повтора, и знает, пройдена ли проверка.
+    [Fact]
+    public void Details_come_before_luck_and_push_and_know_whether_the_check_passed()
+    {
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, Sheet())
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}")
+            .Add(c => c.OnSheetChange, _ => { })
+            .Add(c => c.Details, passed => passed ? "<p>ИСХОД-УСПЕХ</p>" : "<p>ИСХОД-ПРОВАЛ</p>"));
+
+        Enter(cut, "first", 95);
+
+        var markup = cut.Markup;
+        Assert.Contains("ИСХОД-ПРОВАЛ", cut.Find("[data-testid='check-details']").TextContent);
+        Assert.True(markup.IndexOf("check-details", StringComparison.Ordinal) < markup.IndexOf("check-luck", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("check-details", StringComparison.Ordinal) < markup.IndexOf("check-push", StringComparison.Ordinal));
+
+        cut.Find("[data-testid='check-reset']").Click();
+        Enter(cut, "first", 10);
+        Assert.Contains("ИСХОД-УСПЕХ", cut.Find("[data-testid='check-details']").TextContent);
+    }
+
     [Fact]
     public void Modal_passes_investigator_and_details_through()
     {
