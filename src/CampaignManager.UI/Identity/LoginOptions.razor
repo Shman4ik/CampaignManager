@@ -1,0 +1,22 @@
+@using CampaignManager.Contracts.Identity
+@inject NavigationManager Navigation
+
+@* Способы входа — две кнопки сразу, пояснения мелким текстом под ними. Общие у /login и главной гостя:
+   гость с главной входит одним нажатием, без промежуточного экрана выбора. Рисуется внутри карточки. *@
+<div class="flex flex-col gap-1" data-testid="login-google">
+    <Button Icon="fa-brands fa-google" class="w-full" OnClick="() => Login(LoginMethods.Google)">Войти через Google</Button>
+    <p class="text-sm text-primary-500">Быстрее всего: в следующий раз вы войдёте автоматически.</p>
+</div>
+<div class="flex flex-col gap-1" data-testid="login-email">
+    <Button Variant="ButtonVariant.Secondary" Icon="fa-envelope" class="w-full" OnClick="() => Login(LoginMethods.Email)">Войти по почте и паролю</Button>
+    <p class="text-sm text-primary-500">Только для заранее заведённых учётных записей — их создаёт администратор.</p>
+</div>
+
+@code {
+    /// <summary>Куда вернуться после входа; сервер всё равно сверит адрес со своим хостом.</summary>
+    [Parameter] public string ReturnUrl { get; set; } = "/";
+
+    // Полная загрузка: вход — серверный адрес, клиентский роутер его не знает.
+    private void Login(string method) =>
+        Navigation.NavigateTo(IdentityRoutes.LoginUrl(method, ReturnUrl).TrimStart('/'), forceLoad: true);
+}

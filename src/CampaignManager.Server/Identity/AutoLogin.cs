@@ -30,9 +30,16 @@ public static class AutoLogin
     /// <summary>Имя без порта; в Development к нему дописан порт сервера (<see cref="AppCookies"/>).</summary>
     public const string RememberedCookie = AppCookies.LastLogin;
 
-    // Одна попытка на сессию браузера: без метки неудачный автовход — отказ, отмена или брошенная
+    // Одна попытка на несколько минут: без метки неудачный автовход — отказ, отмена или брошенная
     // страница Google — повторялся бы на каждой загрузке.
     public const string AttemptCookie = AppCookies.AutoLoginAttempt;
+
+    /// <summary>
+    /// Срок метки попытки. Не «до закрытия браузера»: Chrome с «Продолжить с того же места» хранит
+    /// сессионные куки неделями, и одна неудачная попытка выключала автовход в этом браузере насовсем —
+    /// человек снова и снова видел главную гостя с кнопкой «Войти».
+    /// </summary>
+    public static readonly TimeSpan AttemptLifetime = TimeSpan.FromMinutes(10);
 
     // sub учёток с паролем — auth0|…, у Google — google-oauth2|…, а у кук, выданных ещё прямым
     // входом через Google, — голый id Google.
@@ -55,7 +62,8 @@ public static class AutoLogin
             else if (GetRemembered(context.Request) is { Method: LoginMethods.Google }
                      && !context.Request.Cookies.ContainsKey(AppCookies.For(context).AutoLoginAttemptName))
             {
-                context.Response.Cookies.Append(AppCookies.For(context).AutoLoginAttemptName, "1", CreateCookieOptions(expires: null));
+                context.Response.Cookies.Append(AppCookies.For(context).AutoLoginAttemptName, "1",
+                    CreateCookieOptions(DateTimeOffset.UtcNow.Add(AttemptLifetime)));
 
                 var returnUrl = $"{context.Request.PathBase}{context.Request.Path}{context.Request.QueryString}";
                 await context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
