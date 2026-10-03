@@ -2,8 +2,11 @@
 # Страница входа тенанта cthulhu-dmnet: identifier first, passkey, тема, шаблон с картинкой, тексты.
 # Повторный запуск безопасен — каждый шаг приводит тенант к состоянию из файлов этой папки.
 #
-#   tools/auth0/apply.sh                         # картинка с прода (cthulhu.dmnet.dev)
-#   ART_URL=https://…/login-art.webp tools/auth0/apply.sh
+#   tools/auth0/apply.sh                         # картинка и знак с прода (cthulhu.dmnet.dev/img/auth)
+#   ASSETS=https://…/img/auth tools/auth0/apply.sh   # предпросмотр до деплоя, например raw.githubusercontent ветки
+#
+# Картинка и знак лежат в wwwroot/img/auth обоих приложений (v1 и 2.0) по одному пути — страница
+# Auth0 берёт их с домена прода, кто бы его ни обслуживал.
 #
 # Нужен auth0 CLI, вошедший с правами на промпты, брендинг и коннекшены:
 #   auth0 login --scopes "read:prompts,update:prompts,read:branding,update:branding,read:connections,update:connections"
@@ -12,7 +15,7 @@ set -euo pipefail
 export PYTHONUTF8=1  # иначе Python на Windows пишет stdout в cp1252 и падает на кириллице
 
 dir="$(cd "$(dirname "$0")" && pwd)"
-art_url="${ART_URL:-https://cthulhu.dmnet.dev/img/auth/login-art.webp}"
+assets="${ASSETS:-https://cthulhu.dmnet.dev/img/auth}"
 connection_name="Username-Password-Authentication"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -56,10 +59,10 @@ else
   api post branding/themes --data "$(cat "$dir/theme.json")" > /dev/null
 fi
 
-echo "5/6 Шаблон страницы (картинка: $art_url)"
-python - "$(native "$dir/login-page.liquid")" "$art_url" > "$tmp/template.json" <<'EOF'
+echo "5/6 Шаблон страницы (картинки: $assets)"
+python - "$(native "$dir/login-page.liquid")" "$assets" > "$tmp/template.json" <<'EOF'
 import json, sys
-template = open(sys.argv[1], encoding="utf-8").read().replace("__ART_URL__", sys.argv[2])
+template = open(sys.argv[1], encoding="utf-8").read().replace("__ASSETS__", sys.argv[2])
 print(json.dumps({"template": template}, ensure_ascii=False))
 EOF
 api put branding/templates/universal-login --data "$(cat "$tmp/template.json")" > /dev/null
