@@ -12,7 +12,8 @@
    сцена остаётся без прохождения. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
 <Modal Open="Open" OnClose="OnClose" Title="Добавить участника" Size="ModalSize.Large" MinHeight="32rem">
     <ChildContent>
-        <div class="flex flex-col gap-3">
+        @* Тело окна одной высоты на всех вкладках (#213: полоса вкладок прыгала 175 → 160 → 111px), прокрутка — только списка. *@
+        <div class="flex h-[min(34rem,68vh)] flex-col gap-3">
             <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
             @if (ActiveSource?.UsesScenario == true)
             {
@@ -37,7 +38,7 @@
                     </select>
                     @if (Context.CampaignId is not null)
                     {
-                        <p class="cm-text-muted text-sm" data-testid="picker-no-runs">У кампании нет текущей партии — сцена останется без сценария.</p>
+                        <p class="cm-text-muted text-sm" data-testid="picker-no-runs">У кампании нет текущей партии — сценарий не привяжется.</p>
                     }
                 }
             }
@@ -58,7 +59,7 @@
                 {
                     <p class="cm-text-muted">@result.Message</p>
                 }
-                <div class="max-h-[55vh] min-h-64 overflow-y-auto" data-testid="picker-list">
+                <div class="min-h-0 flex-1 overflow-y-auto" data-testid="picker-list">
                     @foreach (var option in Filter(result.Options))
                     {
                         var used = option.CharacterId is { } id && UsedCharacterIds.Contains(id);
@@ -72,15 +73,18 @@
                             </div>
                             @if (used)
                             {
-                                <Badge Tone="Tone.Neutral">уже в сцене</Badge>
+                                <Badge Tone="Tone.Neutral">уже здесь</Badge>
                             }
                             else
                             {
                                 @if (option.AllowCount)
                                 {
-                                    <input type="number" inputmode="numeric" min="1" max="99" class="cm-input w-16"
-                                           aria-label="@($"Сколько: {option.Name}")" value="@CountOf(option)"
-                                           @onchange="e => SetCount(option, e)" />
+                                    <label class="flex items-center gap-1.5 text-sm text-primary-700">
+                                        Сколько
+                                        <input type="number" inputmode="numeric" min="1" max="99" class="cm-input w-16"
+                                               aria-label="@($"Сколько: {option.Name}")" value="@CountOf(option)"
+                                               @onchange="e => SetCount(option, e)" />
+                                    </label>
                                 }
                                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Busy="@(_adding == option.Key)"
                                         OnClick="() => AddAsync(option)" data-testid="picker-add">Добавить</Button>
@@ -178,7 +182,7 @@
         {
             if (source.UsesScenario && Context.CampaignId is { } campaignId && (!_runsLoaded || _runsFor != campaignId))
             {
-                _runs = [.. await Runs.ListForCampaignAsync(campaignId)];
+                _runs = [.. await Runs.ListForCampaignAsync(campaignId, RunId)];
                 _runsFor = campaignId;
                 _runsLoaded = true;
                 _runOptions = RunOptions(_runs, RunId);

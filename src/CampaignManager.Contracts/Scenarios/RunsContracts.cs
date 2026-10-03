@@ -25,7 +25,8 @@ public static class RunsRoutes
     /// <summary><c>GET</c> — незавершённые прохождения кампании со сценарием (<see cref="ScenarioRunDto"/>): бой выбирает по ним сценарий.</summary>
     public const string CampaignRunsPattern = ApiRoutes.Prefix + "/campaigns/{campaignId:guid}/runs";
 
-    public static string CampaignRuns(Guid campaignId) => $"{ApiRoutes.Prefix}/campaigns/{campaignId}/runs";
+    public static string CampaignRuns(Guid campaignId, Guid? withRun = null) =>
+        withRun is { } run ? $"{ApiRoutes.Prefix}/campaigns/{campaignId}/runs?withRun={run}" : $"{ApiRoutes.Prefix}/campaigns/{campaignId}/runs";
 
     public static string Run(Guid runId) => $"{Runs}/{runId}";
 
@@ -66,7 +67,8 @@ public interface IRunsApi
     /// Незавершённые прохождения кампании (<see cref="ScenarioRunDto.ScenarioName"/> — какой сценарий): окно участника боя
     /// предлагает по ним сценарий. Хранителю кампании (и администратору), остальным — 403/404. Свежие — выше.
     /// </summary>
-    Task<IReadOnlyList<ScenarioRunDto>> ListForCampaignAsync(Guid campaignId, CancellationToken cancellationToken = default);
+    /// <param name="withRun">Прохождение сцены: оно в списке и завершённым (окно участника предвыбирает его, «К сценарию» ведёт в него).</param>
+    Task<IReadOnlyList<ScenarioRunDto>> ListForCampaignAsync(Guid campaignId, Guid? withRun = null, CancellationToken cancellationToken = default);
 
     /// <summary>Прохождение без копии содержимого в кампании, которую вы ведёте.</summary>
     Task<ScenarioRunDto> PlayInCampaignAsync(Guid scenarioId, PlayInCampaignRequest request, CancellationToken cancellationToken = default);

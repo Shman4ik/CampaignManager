@@ -9,14 +9,7 @@
    каждой цели, и любое число можно вписать руками. Потеря рассудка от твари — с её записью «успех/провал» и видом для
    привыкания (стр. 167). Своей карточки не рисует. *@
 <div class="flex flex-col gap-3" data-testid="effect-panel">
-    <div class="flex flex-wrap gap-2" role="group" aria-label="Что меняем">
-        @foreach (var kind in Kinds)
-        {
-            <Button Small="true" Variant="@(kind == _kind ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SelectKind(kind)">
-                @EncounterText.Of(kind)
-            </Button>
-        }
-    </div>
+    <Segmented TValue="EncounterEffectKind" Options="KindOptions" Value="_kind" ValueChanged="SelectKind" Label="Что меняем" />
 
     @if (_kind == EncounterEffectKind.SanityLoss && Creatures.Count > 0)
     {
@@ -35,25 +28,24 @@
         }
     }
 
+    @if (_kind is EncounterEffectKind.MagicPoints or EncounterEffectKind.Power)
+    {
+        <Segmented TValue="bool" Options="Directions" Value="_spend" ValueChanged="v => _spend = v" Label="Направление" />
+    }
+
     <Field Label="Цели" Group="true">
         <ParticipantSelect Participants="State.Participants" Where="TargetFilter" Multiple="true" Label="Цели эффекта"
                            Values="_targets" ValuesChanged="SetTargets" />
     </Field>
 
-    @if (_kind is EncounterEffectKind.MagicPoints or EncounterEffectKind.Power)
-    {
-        <div class="flex flex-wrap gap-2" role="group" aria-label="Направление">
-            <Button Small="true" Variant="@(_spend ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _spend = true">Трата</Button>
-            <Button Small="true" Variant="@(!_spend ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _spend = false">Прибавка</Button>
-        </div>
-    }
-
+    @* Действует только число в строке цели (#213: формула и число цели спорили). Формула — помощник: «Каждой цели»
+       бросает или вписывает её в строки, вписанное руками она не перебивает. *@
     <div class="flex flex-wrap items-end gap-2">
-        <Field Label="Формула или число" class="w-40" Error="@_formulaError">
+        <Field Label="Всем: формула или число" class="w-48" Error="@_formulaError">
             <input class="cm-input font-mono" data-testid="effect-formula" placeholder="1d6+1" value="@_formula" @onchange="SetFormula" />
         </Field>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" Disabled="@(_targets.Count == 0)" OnClick="RollAll"
-                class="mb-1">@(_targets.Count > 1 ? "Бросить каждому" : "Бросить")</Button>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" Disabled="@(_targets.Count == 0)" DisabledReason="Выберите цели" OnClick="RollAll"
+                data-testid="effect-roll">Каждой цели</Button>
     </div>
 
     @if (_targets.Count > 0)
@@ -77,7 +69,7 @@
     }
 
     <div>
-        <Button Variant="ButtonVariant.Primary" Icon="fa-eye" Disabled="@(!CanPropose)" OnClick="ProposeAsync" data-testid="effect-preview">Предпросмотр</Button>
+        <Button Variant="ButtonVariant.Primary" Icon="fa-eye" Disabled="@(!CanPropose)" DisabledReason="@ProposeBlock" OnClick="ProposeAsync" data-testid="effect-preview">Предпросмотр</Button>
     </div>
 </div>
 
@@ -90,6 +82,8 @@
         EncounterEffectKind.Damage, EncounterEffectKind.Heal, EncounterEffectKind.SanityLoss,
         EncounterEffectKind.MagicPoints, EncounterEffectKind.Power,
     ];
+
+    private const string Entered = "вписано";
 
     private EncounterEffectKind _kind = EncounterEffectKind.Damage;
     private IReadOnlySet<Guid> _targets = new HashSet<Guid>();
@@ -108,13 +102,26 @@
 
     private EncounterParticipant? Creature => _creatureId is { } id ? State.Find(id) : null;
 
-    private List<EncounterParticipant> Targets => [.. State.Participants.Where(p => _targets.Contains(p.Id))];
+    private static readonly IReadOnlyList<SegmentOption<EncounterEffectKind>> KindOptions = [.. Kinds.Select(k => new SegmentOption<EncounterEffectKind>(k, EncounterText.Of(k)))];
+
+    private static readonly IReadOnlyList<SegmentOption<bool>> Directions = [new(true, "Трата"), new(false, "Прибавка")];
+
+    /// <summary>Мёртвые — не цели: чип погибшего снимается сам (#213: цель оставалась выбранной после «Применить»).</summary>
+    private List<EncounterParticipant> Targets => [.. State.Participants.Where(p => _targets.Contains(p.Id) && !p.Dead)];
+
+    private string ProposeBlock => Targets.Count == 0 ? "Выберите цели" : "Впишите число каждой цели или нажмите «Каждой цели»";
+
+    protected override void OnParametersSet()
+    {
+        if (_targets.Any(id => State.Find(id) is null or { Dead: true }))
+            SetTargets(_targets.Where(id => State.Find(id) is { Dead: false }).ToHashSet());
+    }
 
     private bool CanPropose => Targets.Count > 0 && Targets.All(t => _amounts.ContainsKey(t.Id));
 
     /// <summary>Рассудок — только у листов; остальное — у всех.</summary>
     private Func<EncounterParticipant, bool>? TargetFilter =>
-        _kind == EncounterEffectKind.SanityLoss ? p => p.Sanity is not null : null;
+        _kind == EncounterEffectKind.SanityLoss ? p => p.Sanity is not null && !p.Dead : p => !p.Dead;
 
     private void SelectKind(EncounterEffectKind kind)
     {
@@ -146,7 +153,9 @@
         _formula = formula.Trim();
         var parsed = DiceFormula.Parse(_formula);
         _formulaError = _formula.Length > 0 && !parsed.IsValid ? "Не разобрать: кости как «1d6+2» или «1д6»." : null;
-        _amounts.Clear();
+        // Вписанное в строку цели остаётся: формула не перебивает число цели (#213).
+        foreach (var id in _amounts.Where(a => a.Value.Detail != Entered).Select(a => a.Key).ToList())
+            _amounts.Remove(id);
         FillConstant();
     }
 
@@ -190,7 +199,7 @@
     private void SetAmount(Guid targetId, ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value >= 0)
-            _amounts[targetId] = new Amount(value, "вписано");
+            _amounts[targetId] = new Amount(value, Entered);
         else
             _amounts.Remove(targetId);
     }
@@ -206,7 +215,7 @@
         {
             Kind = EncounterLogKind.Effect,
             Title = $"{EncounterText.Of(_kind)}{(creature is null ? "" : $" от вида «{creature.SourceName}»")}: {string.Join(", ", Targets.Select(t => t.Name))}",
-            Lines = _formula.Length > 0 ? [$"Формула: {_formula}"] : [],
+            Lines = _formula.Length > 0 && Targets.Any(t => _amounts[t.Id].Detail != Entered) ? [$"Формула: {_formula}"] : [],
             Effects =
             [
                 .. Targets.Select(t => new EncounterEffect

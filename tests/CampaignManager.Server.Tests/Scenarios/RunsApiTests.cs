@@ -337,7 +337,7 @@ public sealed class RunsApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         await Runs(keeper).UpdateAsync(playedRun.Id, new RunInput(ScenarioRunStatus.Finished, null, null, false), Cancellation);
         await Runs(otherKeeper).PlayInCampaignAsync(fog.Id, new PlayInCampaignRequest(elsewhere.Id), Cancellation);
 
-        var runs = await Runs(keeper).ListForCampaignAsync(campaign.Id, Cancellation);
+        var runs = await Runs(keeper).ListForCampaignAsync(campaign.Id, cancellationToken: Cancellation);
 
         // Только этой кампании и только незавершённые; у каждого — сценарий.
         Assert.Equal([fogRun.Id, masksRun.Id], runs.Select(r => r.Id).Order());
@@ -345,9 +345,14 @@ public sealed class RunsApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         Assert.All(runs, r => Assert.Equal(campaign.Id, r.CampaignId));
         Assert.Equal(fog.Id, runs.Single(r => r.Id == fogRun.Id).ScenarioId);
 
+        // Прохождение сцены — в списке и завершённым (у владельца после переноса ваншот завершён, окно не находило сценарий).
+        var withScene = await Runs(keeper).ListForCampaignAsync(campaign.Id, playedRun.Id, Cancellation);
+        Assert.Equal(ScenarioRunStatus.Finished, withScene.Single(r => r.Id == playedRun.Id).Status);
+        Assert.Equal(3, withScene.Count);
+
         // Игрок кампании видит её, но не правит; посторонний Хранитель кампании не видит.
-        await Fails(HttpStatusCode.Forbidden, () => Runs(player).ListForCampaignAsync(campaign.Id, Cancellation));
-        await Fails(HttpStatusCode.NotFound, () => Runs(otherKeeper).ListForCampaignAsync(campaign.Id, Cancellation));
-        await Fails(HttpStatusCode.NotFound, () => Runs(keeper).ListForCampaignAsync(Guid.NewGuid(), Cancellation));
+        await Fails(HttpStatusCode.Forbidden, () => Runs(player).ListForCampaignAsync(campaign.Id, cancellationToken: Cancellation));
+        await Fails(HttpStatusCode.NotFound, () => Runs(otherKeeper).ListForCampaignAsync(campaign.Id, cancellationToken: Cancellation));
+        await Fails(HttpStatusCode.NotFound, () => Runs(keeper).ListForCampaignAsync(Guid.NewGuid(), cancellationToken: Cancellation));
     }
 }

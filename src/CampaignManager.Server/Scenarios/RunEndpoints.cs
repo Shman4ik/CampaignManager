@@ -22,8 +22,8 @@ internal static class RunEndpoints
             return TypedResults.Created(RunsRoutes.Run(run.Id), run);
         }).WithName("AnnounceOneShot");
 
-        group.MapGet(RunsRoutes.CampaignRunsPattern, (Guid campaignId, RunService runs, CancellationToken ct) =>
-            runs.ListForCampaignAsync(campaignId, ct)).WithName("ListCampaignRuns");
+        group.MapGet(RunsRoutes.CampaignRunsPattern, (Guid campaignId, Guid? withRun, RunService runs, CancellationToken ct) =>
+            runs.ListForCampaignAsync(campaignId, withRun, ct)).WithName("ListCampaignRuns");
 
         group.MapPut(RunsRoutes.RunPattern, (Guid runId, RunInput input, RunService runs, CancellationToken ct) =>
             runs.UpdateAsync(runId, input, ct)).WithName("UpdateRun");

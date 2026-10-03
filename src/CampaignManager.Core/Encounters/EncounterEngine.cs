@@ -144,8 +144,9 @@ public static class EncounterEngine
             return;
 
         participant.Side = side;
-        // Роль в погоне выводится из стороны (противники преследуют) — пока погоня не началась; потом роль меняют отдельно.
-        if (state.Chase is { Phase: ChasePhase.Setup })
+        // Роль в погоне выводится из стороны (противники преследуют) — пока погоня не началась (расстановка и проверка
+        // скорости: #213, сторона менялась, а роль оставалась); посреди погони роль меняют отдельно.
+        if (state.Chase is { Phase: ChasePhase.Setup or ChasePhase.SpeedCheck })
             ChaseRules.SetRole(state, participantId, side == EncounterSide.Enemies ? ChaseRole.Pursuer : ChaseRole.Prey);
     }
 

@@ -1,0 +1,38 @@
+@typeparam TValue
+@* Сегментированный переключатель: один выбор из нескольких вариантов (защита цели, дальность, кости, сложность).
+   Выбранный сегмент — светлый с рамкой акцента и галочкой, а не тёмной заливкой главной кнопки: на экране одна главная
+   кнопка, и выбор не должен с ней спорить (находка владельца B3). Сегменты 44px, ряд переносится.
+   role="radiogroup" + role="radio"/aria-checked — выбор читается с экрана. Варианты — SegmentOption<TValue>. *@
+<div class="@Css.Join("cm-segmented", Css.ClassOf(AdditionalAttributes))" role="radiogroup" aria-label="@Label" @attributes="Attributes">
+    @foreach (var option in Options)
+    {
+        var item = option;
+        var on = EqualityComparer<TValue>.Default.Equals(item.Value, Value);
+        <button type="button" class="cm-segment" role="radio" aria-checked="@(on ? "true" : "false")" disabled="@Disabled"
+                aria-label="@item.AriaLabel" data-testid="@item.TestId" @onclick="() => ValueChanged.InvokeAsync(item.Value)">
+            @if (on)
+            {
+                <i class="fa-solid fa-check cm-segment-check" aria-hidden="true"></i>
+            }
+            <span>@item.Text</span>
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<SegmentOption<TValue>> Options { get; set; } = [];
+
+    [Parameter] public TValue? Value { get; set; }
+
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+
+    /// <summary>Имя группы для чтения с экрана («Цель защищается»), если рядом нет подписи <c>Field Group</c>.</summary>
+    [Parameter] public string? Label { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private IReadOnlyDictionary<string, object>? Attributes => Css.WithoutClass(AdditionalAttributes);
+}
