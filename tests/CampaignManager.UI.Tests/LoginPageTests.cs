@@ -37,4 +37,19 @@ public sealed class LoginPageTests : KitContext
         Assert.Empty(cut.FindAll("[data-testid='dev-login']"));
         Assert.Contains("Войти через Google", cut.Markup);
     }
+
+    // Гость входит с главной одним нажатием: способы входа на ней же, без экрана выбора /login.
+    [Fact]
+    public void Guest_home_goes_straight_to_google_sign_in()
+    {
+        AddAuthorization();
+        Services.AddSingleton<CampaignManager.Contracts.Campaigns.ICampaignsApi>(new TableFakes.Campaigns());
+        var navigation = Services.GetRequiredService<NavigationManager>();
+
+        var cut = Render<CampaignManager.UI.Campaigns.HomePage>();
+        Assert.Contains("Войти по почте и паролю", cut.Markup);
+
+        cut.Find("[data-testid='login-google'] button").Click();
+        Assert.EndsWith("account/login?method=google&returnUrl=%2F", navigation.Uri);
+    }
 }

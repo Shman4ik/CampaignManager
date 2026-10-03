@@ -18,9 +18,12 @@
   `client_id` — без неё следующий вход молча пускает под той же учёткой). Переход с чужого сайта
   (`Sec-Fetch-Site: cross-site`) — 400. Адрес возврата — только свой хост (`ReturnUrl.Normalize`:
   `//evil`, `/\evil`, `/%5Cevil` — на `/`).
-- **Автовход** (`AutoLogin`) — перенесён из v1 без изменений по смыслу: кука `.CampaignManager.LastLogin`
-  (способ и почта, год), одна попытка на сессию браузера (`.CampaignManager.AutoLogin`), только
-  Google. Срабатывает на загрузке документа (`Sec-Fetch-Dest: document`), не на API и не на
+- **Сессия** — кука `.CampaignManager.Auth` на 30 дней со скользящим продлением (`IsPersistent` у
+  входа), не сессионная: закрытый браузер вход не теряет.
+- **Автовход** (`AutoLogin`) — перенесён из v1: кука `.CampaignManager.LastLogin`
+  (способ и почта, год), одна попытка на 10 минут (`.CampaignManager.AutoLogin`, `AttemptLifetime`), только
+  Google. Метка — со сроком, а не до закрытия браузера: Chrome с «Продолжить с того же места» держит
+  сессионные куки неделями, и одна неудачная попытка выключала автовход в браузере насовсем. Срабатывает на загрузке документа (`Sec-Fetch-Dest: document`), не на API и не на
   `/account`, `/signin-oidc`, `/signout-callback-oidc`. В WebAssembly с сервера грузится только
   первая страница — ровно там он и нужен.
 - **`email_verified` обязателен**, белый список (`Authorization:AllowedEmails`/`AllowedDomains`)
@@ -105,10 +108,13 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
 ## Клиент (WebAssembly)
 
 - `Web.Client/Identity/MeAuthenticationStateProvider` — состояние из `GET /api/v1/me`, один раз на
-  загрузку; 401 — аноним (в консоли браузера это видно как ошибка 401 — так и задумано). Админ
+  загрузку; 401 — аноним (в консоли браузера это видно как ошибка 401 — так и задумано). Нет ответа
+  или 5xx (спящая база Neon, выкатка) — два повтора через 1 и 3 с, и только потом аноним: иначе
+  вошедший видел главную гостя до ручной перезагрузки. Админ
   получает обе роли, `Admin` и `Keeper`.
 - Вход и выход — `NavigateTo(…, forceLoad: true)` на серверные адреса: клиентский роутер их не знает.
-- `UI/Identity`: `/login` (выбор способа, сообщение по `authStatus`), `RedirectToLogin`, `UserMenu` —
+- `UI/Identity`: `/login` (выбор способа, сообщение по `authStatus`), `LoginOptions` — те же кнопки
+  способов входа на главной гостя (вход одним нажатием, без экрана выбора), `RedirectToLogin`, `UserMenu` —
   подвал рельса и листа «Ещё» оболочки; пункты меню по ролям — `NavMenu.VisibleTo` (см. `UI/CLAUDE.md`).
 - **Страницы — только `[Authorize(Policy = Policies.Keeper|Admin)]`, не `Roles`.** Сервер при прямой
   загрузке проверяет атрибут страницы своей политикой (роль из базы), а ролей в его куке нет:

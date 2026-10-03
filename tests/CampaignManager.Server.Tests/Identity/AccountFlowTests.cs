@@ -47,10 +47,15 @@ public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
     {
         var request = PageLoad("/scenarios", $"{AutoLogin.RememberedCookie}=google:keeper@example.test");
 
-        var query = AuthorizeQuery(await Browser().SendAsync(request, Cancellation));
+        var response = await Browser().SendAsync(request, Cancellation);
+        var query = AuthorizeQuery(response);
 
         Assert.Equal("google-oauth2", query["connection"]);
         Assert.Equal("keeper@example.test", query["login_hint"]);
+        // Метка попытки — со сроком, а не до закрытия браузера: Chrome восстанавливает сессионные куки
+        // неделями, и неудачная попытка выключала бы автовход насовсем.
+        Assert.Contains(response.Headers.GetValues("Set-Cookie"),
+            cookie => cookie.StartsWith(AutoLogin.AttemptCookie + "=1;") && cookie.Contains("expires=", StringComparison.OrdinalIgnoreCase));
 
         var again = PageLoad("/", $"{AutoLogin.RememberedCookie}=google:keeper@example.test; {AutoLogin.AttemptCookie}=1");
         Assert.Equal(HttpStatusCode.OK, (await Browser().SendAsync(again, Cancellation)).StatusCode);
