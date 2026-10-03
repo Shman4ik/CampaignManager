@@ -1,12 +1,25 @@
 @layer components {
-  /* Галерея плиток. Колонок столько, сколько влезает по 13rem: пять в альбоме iPad (1366), четыре в
-     портрете (1024), одна на телефоне — min() не даёт плитке вылезти за экран уже 13rem. dense —
-     плитки после раскрытой карточки заполняют дыру в её прежнем ряду. */
+  /* Галерея плиток ~190×260 (B1). Телефон — две колонки; портрет iPad (колонка ~704px) — четыре; альбом iPad Pro 11"
+     (колонка ~1064px) — пять, а шире — сколько влезает по 11.5rem. Плитка 248×365 давала четыре колонки и 1,1 ряда на
+     экране: найти тварь — пять прокруток. dense — плитки после раскрытой карточки заполняют дыру в её ряду. */
   .cr-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-flow: row dense;
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .cr-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .cr-grid {
+      grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    }
   }
 
   .cr-tile-button {
@@ -17,7 +30,7 @@
 
   .cr-tile-media {
     position: relative;
-    aspect-ratio: 4 / 5;
+    aspect-ratio: 1 / 1;
     background: var(--color-primary-100);
     overflow: hidden;
   }
@@ -48,15 +61,16 @@
     color: var(--color-white);
   }
 
-  /* Имя поверх картинки на затемнении — читается на любой обложке. */
+  /* Имя поверх картинки на затемнении — читается на любой обложке; градиент тянется на треть плитки, а не на
+     нижние 12%: белая подпись на светлой части обложки (Абхот) сливалась (B3). */
   .cr-tile-caption {
     position: absolute;
     inset: auto 0 0 0;
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
-    padding: 2rem 0.75rem 0.625rem;
-    background: linear-gradient(to top, rgb(0 0 0 / 0.75), transparent);
+    padding: 3.5rem 0.75rem 0.625rem;
+    background: linear-gradient(to top, rgb(0 0 0 / 0.82) 0%, rgb(0 0 0 / 0.6) 45%, transparent 100%);
     color: var(--color-white);
   }
 
@@ -68,63 +82,81 @@
   }
 
   .cr-tile-type {
-    font-size: 0.75rem;
-    opacity: 0.85;
+    font-size: 0.8125rem;
+    opacity: 0.9;
   }
 
+  /* Сводка под обложкой в две строки: «ПЗ 90 · Броня особая» и «Рассудок 1d10/1d100» — подпись и значение рядом, а не друг над
+     другом: три колонки по 58px не вмещали «Рассудок», а «1d10/1d100» рвалось посреди (плитка ~190px). */
   .cr-tile-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: 0.375rem;
-    padding: 0.5rem 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 0.75rem;
+    row-gap: 0.125rem;
+    padding: 0.375rem 0.5rem;
     text-align: center;
     font-size: 0.8125rem;
   }
 
+  .cr-tile-stats > div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3125rem;
+    min-width: 0;
+  }
+
+  .cr-tile-stats > div:nth-child(3) {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+
   .cr-tile-stats dt {
-    font-size: 0.8125rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     color: var(--color-primary-500);
   }
 
   .cr-tile-stats dd {
     font-weight: 600;
     color: var(--color-primary-800);
-    /* Переносится, а не режется: «1d10/1d100» у Азатота в портрете обрезалось до «1d10/1d…». */
     overflow-wrap: anywhere;
   }
 
-  /* Телефон: две колонки, а не одна плитка 351×490 на экран (20 плиток — 10 600px страницы). */
-  @media (max-width: 640px) {
-    .cr-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.75rem;
+  /* Уже пяти колонок (портрет — плитка ~158px, телефон ~170px) «ПЗ 90 · Броня особая» то влезает в строку, то нет — и сводки
+     у соседних плиток вставали то в две, то в три строки. Здесь всегда три строки, по одной на показатель. */
+  @media (max-width: 1023px) {
+    .cr-tile-stats > div {
+      flex-basis: 100%;
+      justify-content: center;
     }
+  }
 
+  @media (max-width: 640px) {
     .cr-tile-name {
       font-size: 0.875rem;
     }
-
-    /* Узкая плитка: ПЗ и броня в ряд, «Рассудок» («1d10/1d100») — своей строкой, иначе значения слипаются. */
-    .cr-tile-stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      row-gap: 0.25rem;
-    }
-
-    .cr-tile-stats > div:nth-child(3) {
-      grid-column: 1 / -1;
-    }
   }
 
-  /* Отступ прокрутки к раскрытой карточке — шапка (56px) и липкие фильтры (~64px). */
+  /* Отступ прокрутки к раскрытой карточке (B6). К нему добавляется scroll-padding-top страницы (шапка 56px + 8px = 64px),
+     поэтому свой отступ — только то, чего там нет: на телефоне фильтры не липнут (липнут с md) — отступа нет, карточка встаёт
+     под шапкой (при 8rem она вставала на y=192 из 651, а над ней висел кусок панели поиска); с md под шапкой ещё липкая
+     панель фильтров (~66px). */
   .cr-open {
-    scroll-margin-top: 8rem;
+    scroll-margin-top: 0;
   }
 
-  /* Картинка раскрытой карточки — 40% ширины, не больше 28rem. */
-  .cr-open-media {
-    flex: 0 0 40%;
-    max-width: 28rem;
+  @media (min-width: 768px) {
+    .cr-open {
+      scroll-margin-top: 4.25rem;
+    }
+  }
+
+  /* Картинка раскрытой карточки — 40% ширины, не больше 28rem; на телефоне — своим блоком под статблоком. */
+  @media (min-width: 768px) {
+    .cr-open-media {
+      flex: 0 0 40%;
+      max-width: 28rem;
+    }
   }
 }

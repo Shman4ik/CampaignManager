@@ -52,12 +52,20 @@
             <ul class="grid gap-1">
                 @foreach (var attack in Statblock.Attacks)
                 {
-                    @* Строка как в книге: «Когти 60% (30/12), урон 2d6 + БкУ» (стр. 278). *@
+                    @* Строка как в книге: «Когти 60% (30/12), урон 2d6 + БкУ» (стр. 278). Урона нет (его описано словами) —
+                       без «урон 0»: «Ближний бой 60% (30/12) — см. ниже» (B4). *@
                     <li>
                         <span class="font-semibold">@attack.Name</span>@(" ")
                         @if (attack.SkillValue > 0)
                         {
-                            <span class="text-primary-600">@($"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5}), урон ")<span class="cm-dice">@CatalogText.Damage(attack)</span></span>
+                            <span class="text-primary-600">@RollText(attack)@if (HasDamage(attack))
+                            {
+                                <text>, урон <span class="cm-dice">@CatalogText.Damage(attack)</span></text>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(attack.Description))
+                            {
+                                <text> — см. ниже</text>
+                            }</span>
                         }
                         else
                         {
@@ -165,9 +173,9 @@
                 yield return (Terms.Dodge, $"{s.Dodge}%", null);
             }
 
-            if (!string.IsNullOrWhiteSpace(s.SanityLoss))
+            if (SanityOf(s) is { } sanity)
             {
-                yield return (Terms.SanityLoss, s.SanityLoss, null);
+                yield return (Terms.SanityLoss, sanity, null);
             }
 
             if (s.Initiative > 0)
@@ -196,6 +204,20 @@
         if (speed.Fly is { } fly) parts.Add($"полёт {fly}");
         return string.Join(" / ", parts);
     }
+
+    /// <summary>
+    /// Потеря Рассудка для показа: «0/0» — у животных (акула, волк) это отсутствие потери, а не потеря нуля (B2), как и пусто.
+    /// <c>null</c> — нечего показывать.
+    /// </summary>
+    public static string? SanityOf(Statblock s) =>
+        string.IsNullOrWhiteSpace(s.SanityLoss) || s.SanityLoss.Replace(" ", "") is "0/0" or "0" ? null : s.SanityLoss;
+
+    private static string RollText(CreatureAttack attack) => $"{attack.SkillValue}% ({attack.SkillValue / 2}/{attack.SkillValue / 5})";
+
+    /// <summary>У атаки есть свой урон: кости, либо «равен бонусу к урону». «0» и пусто — урон описан словами (B4).</summary>
+    private static bool HasDamage(CreatureAttack attack) =>
+        attack.DamageBonusMode == CreatureDamageBonusMode.OnlyBonus
+        || (!string.IsNullOrWhiteSpace(attack.Damage) && attack.Damage.Trim() != "0");
 
     /// <summary>На плитке места для оговорки нет, но и «нет» там, где тварь регенерирует, соврало бы: «особая».</summary>
     public static string TileArmor(Statblock s) =>

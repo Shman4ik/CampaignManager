@@ -4,7 +4,11 @@
    правки: <UnsavedChangesGuard Dirty="_changed" /> перехватывает переход по ссылке, кнопку «назад» и закрытие
    вкладки (NavigationLock: внутренний переход спрашивает наше окно, внешний — браузерное). Для окна правки
    охранять нечем — окно закрывает сама страница, поэтому у компонента есть ConfirmLeaveAsync: «Отмена» и крестик
-   зовут его (@ref), а не закрывают молча. Сохранённая форма: Dirty = false, вопроса нет. *@
+   зовут его (@ref), а не закрывают молча. Сохранённая форма: Dirty = false, вопроса нет.
+
+   Своим уходом страница не вопрошает: «Сохранить» и «К бестиарию» (после ответа «Выйти») зовут Allow() перед
+   NavigateTo. Нельзя полагаться на Dirty = false: параметр обновляется только при следующем рендере, а
+   NavigateTo зовёт обработчик NavigationLock сразу — и «Сохранить» тут же спрашивало «Выйти?» (g6/E1). *@
 <NavigationLock OnBeforeInternalNavigation="BeforeNavigationAsync" ConfirmExternalNavigation="Dirty" />
 
 @code {
@@ -13,12 +17,20 @@
     /// <summary>Заголовок вопроса. Текст один на приложение; менять его страницам незачем.</summary>
     [Parameter] public string Question { get; set; } = "Есть несохранённые изменения. Выйти?";
 
+    private bool _allowed;
+
+    /// <summary>
+    /// Следующий переход — свой (сохранили, удалили, человек уже ответил «Выйти»): вопроса не будет. Вызывать
+    /// прямо перед <c>NavigateTo</c>, не дожидаясь рендера.
+    /// </summary>
+    public void Allow() => _allowed = true;
+
     /// <summary>Можно ли уходить: нет изменений — да без вопроса, иначе — ответ окна.</summary>
-    public async Task<bool> ConfirmLeaveAsync() => !Dirty || await Ask();
+    public async Task<bool> ConfirmLeaveAsync() => _allowed || !Dirty || await Ask();
 
     private async Task BeforeNavigationAsync(LocationChangingContext context)
     {
-        if (Dirty && !await Ask())
+        if (!_allowed && Dirty && !await Ask())
         {
             context.PreventNavigation();
         }
