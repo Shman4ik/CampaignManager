@@ -12,7 +12,10 @@ public static class ProfileRoutes
     /// <summary><c>PUT</c> <see cref="UpdateDisplayNameRequest"/> — сменить отображаемое имя.</summary>
     public const string DisplayName = Profile + "/name";
 
-    /// <summary><c>POST</c> <see cref="SubmitKeeperApplicationRequest"/> — подать заявку на роль Хранителя.</summary>
+    /// <summary>
+    /// <c>POST</c> <see cref="SubmitKeeperApplicationRequest"/> — подать заявку на роль Хранителя; <c>PUT</c> с тем же телом —
+    /// переписать текст заявки, пока она на рассмотрении; <c>DELETE</c> — отозвать её.
+    /// </summary>
     public const string KeeperApplication = Profile + "/keeper-application";
 
     /// <summary><c>GET</c> — все мои настройки: ключ → значение JSON.</summary>

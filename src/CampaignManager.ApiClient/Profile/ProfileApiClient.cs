@@ -28,6 +28,19 @@ public sealed class ProfileApiClient(HttpClient http) : IProfileApi
         return await ApiResponses.ReadAsync(response, Json.ProfileDto, cancellationToken);
     }
 
+    public async Task<ProfileDto> UpdateKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PutAsJsonAsync(ProfileRoutes.KeeperApplication, request, Json.SubmitKeeperApplicationRequest,
+            cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.ProfileDto, cancellationToken);
+    }
+
+    public async Task<ProfileDto> WithdrawKeeperApplicationAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await http.DeleteAsync(ProfileRoutes.KeeperApplication, cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.ProfileDto, cancellationToken);
+    }
+
     public async Task<PreferencesDto> GetPreferencesAsync(CancellationToken cancellationToken = default)
     {
         using var response = await http.GetAsync(ProfileRoutes.Preferences, cancellationToken);

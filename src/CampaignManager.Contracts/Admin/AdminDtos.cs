@@ -10,6 +10,8 @@ public sealed record AdminSummaryDto(int PendingApplications);
 
 /// <param name="IsMe">Это я — свою роль администратор может снять, только если он не последний администратор.</param>
 /// <param name="HasPendingApplication">У человека заявка на рассмотрении.</param>
+/// <param name="CampaignCount">В скольких кампаниях он участник (Хранитель или игрок).</param>
+/// <param name="CharacterCount">Листов сыщиков у него (без архивных; НПС и прегены владельца не имеют) — как «Сыщики» в его кабинете.</param>
 public sealed record AdminUserDto(
     Guid Id,
     string Email,
@@ -18,7 +20,9 @@ public sealed record AdminUserDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? LastLoginAt,
     bool IsMe,
-    bool HasPendingApplication);
+    bool HasPendingApplication,
+    int CampaignCount,
+    int CharacterCount);
 
 public sealed record ChangeRoleRequest(UserRole Role);
 

@@ -1,5 +1,6 @@
 using CampaignManager.Contracts.Admin;
 using CampaignManager.Contracts.Profile;
+using CampaignManager.Core.Characters;
 using CampaignManager.Core.Identity;
 using CampaignManager.Data;
 using CampaignManager.Server.Access;
@@ -151,7 +152,9 @@ public sealed class AdminService(
             u.CreatedAt,
             u.LastLoginAt,
             u.Id == myId,
-            dbContext.KeeperApplications.Any(a => a.UserId == u.Id && a.Status == KeeperApplicationStatus.Pending)));
+            dbContext.KeeperApplications.Any(a => a.UserId == u.Id && a.Status == KeeperApplicationStatus.Pending),
+            dbContext.CampaignMembers.Count(m => m.UserId == u.Id),
+            dbContext.Characters.Count(c => c.OwnerId == u.Id && c.Kind == CharacterKind.Player && c.Status != CharacterStatus.Archived)));
 
     private IQueryable<KeeperApplicationDto> Applications(IQueryable<Data.Identity.KeeperApplication> query) =>
         from a in query
