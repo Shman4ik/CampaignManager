@@ -37,29 +37,37 @@
                     {
                         <img src="@image" alt="" class="h-12 w-12 shrink-0 rounded-md object-cover" loading="lazy" />
                     }
+                    @{
+                        var expandable = item.Description is not null || item.Notes is not null;
+                        var open = _open.Contains(item.Id);
+                    }
                     <div class="flex min-w-48 flex-1 flex-col gap-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-semibold text-primary-900">@item.Name</span>
-                            @if (item.ItemId is null)
-                            {
-                                <Badge Tone="Tone.Neutral" Icon="fa-gem">свой реквизит</Badge>
-                            }
-                            else if (item.Type is { } type)
-                            {
-                                <Badge Tone="Tone.Stone">@type</Badge>
-                            }
-                        </div>
-                        @if (item.Description is { } description)
+                        @if (expandable)
                         {
-                            <Markdown Text="@description" class="text-sm" />
+                            <button type="button" class="flex min-h-11 items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                                    @onclick="() => Toggle(item.Id)">
+                                <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-500" aria-hidden="true"></i>
+                                @ItemTitle(item)
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="flex min-h-11 items-center gap-2">@ItemTitle(item)</div>
                         }
                         @if (item.LocationNote is { } where)
                         {
                             <span class="text-sm text-primary-600"><span class="cm-meta-label">Где:</span> @where</span>
                         }
-                        @if (item.Notes is { } notes)
+                        @if (open)
                         {
-                            <Markdown Text="@notes" class="text-sm text-primary-600" />
+                            @if (item.Description is { } description)
+                            {
+                                <Markdown Text="@description" class="text-sm" />
+                            }
+                            @if (item.Notes is { } notes)
+                            {
+                                <Markdown Text="@notes" class="text-sm text-primary-600" />
+                            }
                         }
                     </div>
                     <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
@@ -88,6 +96,7 @@
 <ScenarioItemModal Open="_formOpen" ScenarioId="Scenario.Id" Item="_editing" OnClose="() => _formOpen = false" OnSaved="SavedFormAsync" />
 
 @code {
+    private readonly HashSet<Guid> _open = [];
     private bool _picking;
     private bool _adding;
     private string? _addError;
@@ -95,6 +104,24 @@
     private string? _notes;
     private bool _formOpen;
     private ScenarioItemDto? _editing;
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+            _open.Add(id);
+    }
+
+    private RenderFragment ItemTitle(ScenarioItemDto item) => @<span class="flex flex-wrap items-center gap-2">
+        <span class="font-semibold text-primary-900">@item.Name</span>
+        @if (item.ItemId is null)
+        {
+            <Badge Tone="Tone.Neutral" Icon="fa-gem">свой реквизит</Badge>
+        }
+        else if (item.Type is { } type)
+        {
+            <Badge Tone="Tone.Stone">@type</Badge>
+        }
+    </span>;
 
     private void OpenPicker()
     {

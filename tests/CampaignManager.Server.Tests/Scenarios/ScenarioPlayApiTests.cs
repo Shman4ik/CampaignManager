@@ -178,7 +178,7 @@ public sealed class ScenarioPlayApiTests(CampaignsApp app) : IClassFixture<Campa
         var outsider = await app.AddUserAsync();
         using (var denied = await app.Http(outsider).GetAsync(address, Cancellation))
         {
-            Assert.Equal(HttpStatusCode.OK, denied.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
             var html = await denied.Content.ReadAsStringAsync(Cancellation);
             Assert.Contains("Раздатка недоступна", html, StringComparison.Ordinal);
             Assert.DoesNotContain(PlayerText, html, StringComparison.Ordinal);

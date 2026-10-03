@@ -106,6 +106,26 @@ public sealed class ScenarioExchangeApiTests(CampaignsApp app) : IClassFixture<C
         """;
 
     [Fact]
+    public async Task Import_warns_when_the_name_is_taken_and_library_shows_the_author()
+    {
+        TestDatabase.SkipIfMissing();
+        await SkillsAsync();
+        var keeper = await app.AddUserAsync(UserRole.Keeper, "Хранитель");
+        var name = Unique("Старый маяк");
+        var exchange = Exchange(keeper);
+
+        var first = await exchange.ImportAsync(Body(V1File(name, Unique("Смотритель"))), dryRun: true, cancellationToken: Cancellation);
+        Assert.DoesNotContain(first.Warnings, w => w.Contains("уже есть", StringComparison.Ordinal));
+
+        await exchange.ImportAsync(Body(V1File(name, Unique("Смотритель"))), dryRun: false, cancellationToken: Cancellation);
+        var again = await exchange.ImportAsync(Body(V1File(name.ToUpperInvariant(), Unique("Смотритель"))), dryRun: true, cancellationToken: Cancellation);
+        Assert.Contains(again.Warnings, w => w.Contains("уже есть", StringComparison.Ordinal));
+
+        var card = (await Scenarios(keeper).ListAsync(Cancellation)).Items.Single(s => s.Name == name);
+        Assert.Equal("Хранитель", card.AuthorName);
+    }
+
+    [Fact]
     public async Task V1_file_dry_run_writes_nothing_then_import_creates_everything()
     {
         TestDatabase.SkipIfMissing();

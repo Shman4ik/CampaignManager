@@ -161,6 +161,9 @@ public sealed class ScenarioSummaryDto
     /// <summary>Сценарий — переделка другого (форк): название исходного.</summary>
     public string? SourceScenarioName { get; set; }
 
+    /// <summary>Имя автора для карточки; у перенесённых без автора — пусто.</summary>
+    public string? AuthorName { get; set; }
+
     public int LocationCount { get; set; }
 
     public int HandoutCount { get; set; }

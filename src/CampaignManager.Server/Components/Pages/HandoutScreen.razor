@@ -26,7 +26,7 @@
         <div class="cm-card">
             <div class="cm-card-body">
                 <h2 class="cm-h6 mb-1">Раздатка недоступна</h2>
-                <p class="cm-text-muted">Её нет, или вы не ведёте этот сценарий и не играете в кампании, где его проходят.</p>
+                <p class="cm-text-muted">Такой раздатки нет, или она не для вас: открыть её может Хранитель сценария и игроки кампании, где его играют.</p>
             </div>
             <div class="cm-card-footer">
                 <a href="" class="cm-btn cm-btn-primary" data-enhance-nav="false"><i class="fa-solid fa-house" aria-hidden="true"></i><span>На главную</span></a>
@@ -66,9 +66,19 @@ else
         }
         catch (AccessDeniedException)
         {
-            // «Нет раздатки» и «не ваша» неразличимы — как у API. Ответ — 200 со своим текстом: статус 404 у статической
-            // страницы Razor-компонентов .NET 10 отдаёт конвейеру «не найдено» (/not-found), и объяснение терялось.
+            // «Нет раздатки» и «не ваша» неразличимы — как у API. Статус 404 ставим сами, а страницу с объяснением рисуем:
+            // NavigationManager.NotFound() в .NET 10 отдал бы конвейеру «не найдено» (/not-found), и объяснение терялось.
             _handout = null;
+            // Статус 404 ставим в последний момент (OnStarting): пока он 200, Blazor рисует страницу целиком, а выставленный
+            // заранее 404 он считает «пусть ответит конвейер» и отдаёт пустое тело.
+            if (HttpContext is { Response.HasStarted: false } http)
+            {
+                http.Response.OnStarting(() =>
+                {
+                    http.Response.StatusCode = StatusCodes.Status404NotFound;
+                    return Task.CompletedTask;
+                });
+            }
         }
     }
 }
