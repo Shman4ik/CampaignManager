@@ -57,8 +57,10 @@ public sealed class ChecksTests : KitContext
         Enter(cut, "first", 12);
 
         Assert.Equal("Чрезвычайный успех", cut.Find("[data-testid='check-level']").TextContent.Trim());
-        Assert.True(cut.Find("[data-testid='check-target']").HasAttribute("disabled"));
-        Assert.All(cut.FindAll("[data-testid^='check-difficulty-']"), b => Assert.True(b.HasAttribute("disabled")));
+        // Условия после броска заперты и убраны: итог уже называет сложность, а Удаче и повтору нужно место в окне.
+        Assert.Empty(cut.FindAll("[data-testid='check-change-target']"));
+        Assert.Empty(cut.FindAll("[data-testid='check-target']"));
+        Assert.Empty(cut.FindAll("[data-testid^='check-difficulty-']"));
     }
 
     [Fact]
@@ -220,6 +222,96 @@ public sealed class ChecksTests : KitContext
         Assert.NotNull(cut.Find("[data-testid='check-push']"));
     }
 
+    /// <summary>Окно открыто с навыком: список из 90 вариантов не нужен, он за ссылкой «Другой навык» (g2 7.1.2).</summary>
+    [Fact]
+    public void Target_list_stays_behind_another_skill_until_asked_for()
+    {
+        var cut = Panel(Sheet(), $"skill:{Spot.Id}");
+        Assert.Empty(cut.FindAll("[data-testid='check-target']"));
+        Assert.Contains("Внимание", cut.Find("[data-testid='check-subject-head']").TextContent);
+
+        cut.Find("[data-testid='check-change-target']").Click();
+
+        Assert.Contains("Внимание (60)", cut.Find("[data-testid='check-target'] option[selected]").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='check-change-target']"));
+
+        // без цели список виден сразу, и ссылки нет
+        var empty = Render<SkillCheckPanel>(p => p.Add(c => c.Sheet, Sheet()).Add(c => c.Catalog, Catalog));
+        Assert.NotNull(empty.Find("[data-testid='check-target']"));
+        Assert.Empty(empty.FindAll("[data-testid='check-change-target']"));
+    }
+
+    /// <summary>Справка — последним блоком окна, под броском и итогом (g2 7.1.3).</summary>
+    [Fact]
+    public void Help_comes_after_the_roll_and_the_result()
+    {
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, Sheet())
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}")
+            .Add(c => c.Help, _ => b => b.AddContent(0, "справка")));
+
+        var markup = cut.Markup;
+        Assert.True(markup.IndexOf("check-roll-first", StringComparison.Ordinal) < markup.IndexOf("check-help", StringComparison.Ordinal));
+
+        Enter(cut, "first", 70);
+        markup = cut.Markup;
+        Assert.True(markup.IndexOf("check-result", StringComparison.Ordinal) < markup.IndexOf("check-help", StringComparison.Ordinal));
+    }
+
+    /// <summary>Характеристике и Удаче отметку не ставят: блока про то, чего нет, нет (g2 7.1.5); номеров страниц в тексте нет.</summary>
+    [Fact]
+    public void Mark_block_is_absent_for_characteristics_and_luck_and_reasons_carry_no_page_numbers()
+    {
+        var sheet = Sheet();
+        List<CheckSheetChange> changes = [];
+        var strength = Panel(sheet, "char:STR", changes);
+        Enter(strength, "first", 10);
+        Assert.Empty(strength.FindAll("[data-testid='check-mark']"));
+
+        var luck = Panel(sheet, "luck", changes);
+        Enter(luck, "first", 10);
+        Assert.Empty(luck.FindAll("[data-testid='check-mark']"));
+
+        var bonus = Panel(sheet, $"skill:{Spot.Id}");
+        bonus.Find("[data-testid='check-dice-1']").Click();
+        Enter(bonus, "first", 10);
+        Assert.DoesNotContain("стр.", bonus.Find("[data-testid='check-mark']").TextContent);
+        Assert.Contains("бонусной костью", bonus.Find("[data-testid='check-mark']").TextContent);
+    }
+
+    /// <summary>Отметка — «Отметить: Внимание», без кавычек (правило 7).</summary>
+    [Fact]
+    public void Mark_button_names_the_skill_without_quotes()
+    {
+        var cut = Panel(Sheet(), $"skill:{Spot.Id}", []);
+        Enter(cut, "first", 10);
+
+        Assert.Equal("Отметить: Внимание", cut.Find("[data-testid='check-mark-skill']").TextContent.Trim());
+    }
+
+    /// <summary>Лист узнаёт итог: ключ цели и пройдена ли проверка (с Удачей); «Новая проверка» сбрасывает.</summary>
+    [Fact]
+    public void Resolution_reports_the_final_outcome_and_a_reset()
+    {
+        var reported = new List<CheckResolution>();
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, Sheet(luck: 40))
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, "char:INT")
+            .Add(c => c.OnSheetChange, _ => { })
+            .Add(c => c.OnResolution, r => reported.Add(r)));
+
+        Enter(cut, "first", 80); // ИНТ 50 — провал
+        Assert.Equal(new CheckResolution("char:INT", false), reported[^1]);
+
+        cut.Find("[data-testid='check-luck-Regular']").Click(); // Удача поднимает до успеха
+        Assert.Equal(new CheckResolution("char:INT", true), reported[^1]);
+
+        cut.Find("[data-testid='check-reset']").Click();
+        Assert.Null(reported[^1].Passed);
+    }
+
     [Fact]
     public void Reset_unlocks_conditions()
     {
@@ -228,7 +320,8 @@ public sealed class ChecksTests : KitContext
 
         cut.Find("[data-testid='check-reset']").Click();
 
-        Assert.False(cut.Find("[data-testid='check-target']").HasAttribute("disabled"));
+        Assert.NotNull(cut.Find("[data-testid='check-change-target']"));
+        Assert.All(cut.FindAll("[data-testid^='check-difficulty-']"), b => Assert.False(b.HasAttribute("disabled")));
         Assert.NotNull(cut.Find("[data-testid='check-roll-first']"));
     }
 
@@ -256,7 +349,7 @@ public sealed class ChecksTests : KitContext
 
         cut.Find("[data-testid='check-subject']").Change(ann.Id.ToString());
 
-        Assert.Contains("Внимание (60)", cut.Find("[data-testid='check-target'] option[selected]").TextContent);
+        Assert.Contains("60%", cut.Find("[data-testid='check-subject-head']").TextContent);
     }
 
     [Fact]
@@ -273,7 +366,7 @@ public sealed class ChecksTests : KitContext
             .Add(c => c.OnInvestigatorChanged, (Guid? id) => reported = id));
 
         Assert.Equal(bob.Id.ToString(), cut.Find("[data-testid='check-subject'] option[selected]").GetAttribute("value"));
-        Assert.Contains("Внимание (60)", cut.Find("[data-testid='check-target'] option[selected]").TextContent);
+        Assert.Contains("60%", cut.Find("[data-testid='check-subject-head']").TextContent);
 
         cut.Find("[data-testid='check-subject']").Change(ann.Id.ToString());
         Assert.Equal(ann.Id, reported);

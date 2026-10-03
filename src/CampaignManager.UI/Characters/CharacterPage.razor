@@ -25,24 +25,14 @@
    Два режима в адресе (решение владельца 2026-10-03): «Игра» по умолчанию — всё для стола на одном экране
    (PlaySheet), «Лист» (?mode=sheet) — секции для заполнения. Режим — в адресе, а не в поле: его переживает F5
    и на него можно дать ссылку. *@
-<PageHeader Title="@Title" Subtitle="@Subtitle" Game="true">
+<PageHeader Title="@Title" CompactTitle="@CompactTitle" Subtitle="@Subtitle" Game="@(_context is not null)">
     <Actions>
-        @if (_context is not null)
-        {
-            <nav class="sheet-mode" aria-label="Режим листа" data-testid="sheet-mode">
-                <a href="@($"character/{CharacterId}")" aria-current="@(SheetMode ? null : "page")" data-testid="mode-play">
-                    <i class="fa-solid fa-dice-d20" aria-hidden="true"></i><span class="max-md:sr-only">Игра</span>
-                </a>
-                <a href="@SheetModeHref(CharacterId)" aria-current="@(SheetMode ? "page" : null)" data-testid="mode-sheet">
-                    <i class="fa-solid fa-pen" aria-hidden="true"></i><span class="max-md:sr-only">Лист</span>
-                </a>
-            </nav>
-        }
         @if (_context is not null && !_context.ReadOnly)
         {
-            @* Индикатор говорит, только когда есть что сказать: правки, запись, ошибка; «Сохранено» — пару секунд после
-               записи и гаснет (решение владельца 2026-10-03: постоянное «Сохранено» ничего не сообщало и отнимало шапку).
-               Сама живая область остаётся в DOM — иначе диктор не объявит появление состояния. *@
+            @* Индикатор и «Сохранить» стоят ЛЕВЕЕ переключателя режимов: появляясь и исчезая, они сдвигают только себя, а
+               переключатель остаётся на месте. Индикатор говорит, только когда есть что сказать: правки, запись, ошибка;
+               «Сохранено» — пару секунд после записи и гаснет (решение владельца 2026-10-03). Сама живая область остаётся в
+               DOM — иначе диктор не объявит появление состояния. *@
             <span class="sheet-save-state @SaveStateClass" role="status" aria-live="polite" data-testid="autosave-status">
                 @if (ShowSaveState)
                 {
@@ -51,9 +41,27 @@
                     <span class="max-lg:sr-only">@SaveStateText</span>
                 }
             </span>
-            <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy"
-                    Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
-                    OnClick="SaveNowAsync">Сохранить</Button>
+            @* Кнопка — только пока есть несохранённое (решение оркестратора, g2 0.2): на «Игре» сохранять нечего, автосохранение
+               уносит правки само, и тёмная кнопка в покое перевешивала режим. В «Игре» — не главная, в «Листе» — главная. *@
+            @if (ShowSaveButton)
+            {
+                <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy"
+                        Variant="@(SheetMode ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                        Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
+                        OnClick="SaveNowAsync">Сохранить</Button>
+            }
+        }
+        @if (_context is not null)
+        {
+            @* Подписи — у активного сегмента и на телефоне (g2 0.6): два значка подряд ничего не называли. *@
+            <nav class="sheet-mode" aria-label="Режим листа" data-testid="sheet-mode">
+                <a href="@($"character/{CharacterId}")" aria-current="@(SheetMode ? null : "page")" data-testid="mode-play">
+                    <i class="fa-solid fa-dice-d20" aria-hidden="true"></i><span>Игра</span>
+                </a>
+                <a href="@SheetModeHref(CharacterId)" aria-current="@(SheetMode ? "page" : null)" data-testid="mode-sheet">
+                    <i class="fa-solid fa-pen" aria-hidden="true"></i><span>Лист</span>
+                </a>
+            </nav>
         }
     </Actions>
 </PageHeader>
@@ -212,7 +220,7 @@
                 <DevelopmentPhaseModal @bind-Open="_developmentOpen" />
             </CascadingValue>
 
-            <SkillCheckModal @bind-Open="_checkOpen" Title="@($"Проверка — {context.Sheet.Personal.Name}")" Sheet="@context.Sheet"
+            <SkillCheckModal Open="_checkOpen" OpenChanged="CheckOpenChanged" OnResolution="@(r => _resolution = r)" Title="@($"Проверка — {context.Sheet.Personal.Name}")" Sheet="@context.Sheet"
                              Catalog="@context.Catalog" InitialKey="@_checkKey" Help="@SkillHelp"
                              OnSheetChange="@(context.ReadOnly ? default(EventCallback<CheckSheetChange>) : EventCallback.Factory.Create<CheckSheetChange>(this, ApplyCheck))" />
         </ChildContent>
@@ -255,6 +263,13 @@
 
     private string Title => _context?.Sheet.Personal.Name is { Length: > 0 } name ? $"{KindTitle}: {name}" : "Лист сыщика";
 
+    /// <summary>
+    /// На телефоне заголовок «Лист сыщика: Элизабет М…» терял имя, а оно главное (g2 0.1): у сыщика игрока — только имя
+    /// (то, что это лист, говорит переключатель «Игра / Лист»); у НПС и готового сыщика тип нужен, там заголовок полный.
+    /// </summary>
+    private string? CompactTitle => _context is { Character.Kind: CharacterKind.Player } context
+        && context.Sheet.Personal.Name is { Length: > 0 } name ? name : null;
+
     /// <summary>Контекст листа под заголовком: кампания или библиотека и статус — в том числе «В архиве».</summary>
     private string? Subtitle => _context?.Character is { } character
         ? string.Join(" · ", new[]
@@ -270,6 +285,7 @@
     {
         StopLoop();
         _draftNotice = null;
+        _unsaved = false;
         CharacterDto character;
         try
         {
@@ -288,7 +304,7 @@
         _saver.Start(character);
         _context = new SheetContext(character, catalog, skills.Items,
             new SheetCatalogs(WeaponsApi, SpellsApi, BooksApi, CreaturesApi, ItemsApi),
-            () => InvokeAsync(StateHasChanged), OpenCheck);
+            OnSheetChanged, OpenCheck);
 
         if (character.CanEdit)
         {
@@ -319,6 +335,7 @@
         if (draft.Version == character.Version)
         {
             character.Sheet = draft.Sheet;
+            _unsaved = true;
             _draftNotice = new DraftNotice(false, draft.Sheet);
         }
         else
@@ -333,6 +350,7 @@
             return;
 
         _context.Character.Sheet = _draftNotice.Sheet;
+        _unsaved = true;
         _draftNotice = null;
     }
 
@@ -372,7 +390,21 @@
 
     private Task SaveNowAsync() => SaveAsync(manual: true);
 
-    private Task KeepDraftAsync() => _context is { ReadOnly: false } context ? _saver.KeepDraftAsync(context.Sheet) : Task.CompletedTask;
+    private Task KeepDraftAsync()
+    {
+        if (_context is not { ReadOnly: false } context)
+            return Task.CompletedTask;
+
+        _unsaved = true;
+        return _saver.KeepDraftAsync(context.Sheet);
+    }
+
+    /// <summary>Блок изменил лист: перерисовать страницу и пометить правку несохранённой (до ближайшего тика).</summary>
+    private void OnSheetChanged()
+    {
+        _unsaved = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     /// <summary>Одно уведомление на серию ошибок: тик раз в три секунды иначе завалил бы экран тостами.</summary>
     private async Task SaveAsync(bool manual)
@@ -381,6 +413,9 @@
             return;
 
         var changed = await _saver.SaveIfChangedAsync(_context.Sheet);
+        var cleared = _unsaved && _saver.State is SheetSaveState.Saved;
+        if (cleared)
+            _unsaved = false;
         switch (_saver.State)
         {
             case SheetSaveState.Conflict when changed:
@@ -403,7 +438,7 @@
                 break;
         }
 
-        if (changed || manual)
+        if (changed || manual || cleared)
             StateHasChanged();
     }
 
@@ -485,7 +520,39 @@
     private void OpenCheck(string? key)
     {
         _checkKey = key;
+        _resolution = null;
         _checkOpen = true;
+        StateHasChanged();
+    }
+
+    private CheckResolution? _resolution;
+
+    /// <summary>
+    /// Окно проверки закрыли. Если оно было открыто из тревоги Рассудка («Проверка ИНТ») и бросок сделан — исход отмечается
+    /// сам (g2 1.7): успех — безумие и положенный приступ, провал — разум отгородился. Бросок другого навыка, пока окно
+    /// стояло, ничего не отмечает.
+    /// </summary>
+    private void CheckOpenChanged(bool open)
+    {
+        _checkOpen = open;
+        if (open || _context is not { } context)
+            return;
+
+        var pending = context.IntCheckPending;
+        context.IntCheckPending = false;
+        var resolution = _resolution;
+        _resolution = null;
+        if (!pending || context.ReadOnly || resolution is not { Key: "char:INT", Passed: { } passed }
+            || !SanityRules.Status(context.Sheet, context.Catalog).NeedsIntCheck)
+        {
+            return;
+        }
+
+        SanityRules.ResolveIntCheck(context.Sheet, passed);
+        _unsaved = true;
+        Toasts.Info(passed
+            ? "Проверка ИНТ пройдена: сыщик осознал увиденное и временно безумен. Положен приступ."
+            : "Проверка ИНТ провалена: разум отгородился от увиденного.");
         StateHasChanged();
     }
 
@@ -493,7 +560,10 @@
     private void ApplyCheck(CheckSheetChange change)
     {
         if (_context is not null && CheckRules.Apply(_context.Sheet, _context.Catalog, change))
+        {
+            _unsaved = true;
             StateHasChanged();
+        }
     }
 
     /// <summary>Справка по навыку внутри окна проверки — один тап по имени ведёт сразу к броску.</summary>
@@ -520,7 +590,15 @@
 
     private int _savedFlash;
 
-    private bool ShowSaveState => _saver.State != SheetSaveState.Saved || _savedFlash > 0;
+    /// <summary>Правка есть, а тик автосохранения её ещё не записал: слепок сверяется раз в 3 с, до тика состояние «Сохранено» лжёт.</summary>
+    private bool _unsaved;
+
+    private SheetSaveState EffectiveState => _saver.State is SheetSaveState.Saved && _unsaved ? SheetSaveState.Dirty : _saver.State;
+
+    private bool ShowSaveState => EffectiveState != SheetSaveState.Saved || _savedFlash > 0;
+
+    /// <summary>«Сохранить» — только пока есть что сохранять (правка, запись, ошибка, конфликт).</summary>
+    private bool ShowSaveButton => EffectiveState != SheetSaveState.Saved;
 
     /// <summary>«Сохранено» — на пару секунд; новая запись продлевает показ (счётчик, а не флаг: старая пауза не гасит новую).</summary>
     private void FlashSaved()
@@ -539,7 +617,7 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    private string SaveStateText => _saver.State switch
+    private string SaveStateText => EffectiveState switch
     {
         SheetSaveState.Saving => "Сохранение…",
         SheetSaveState.Dirty => "Есть правки",
@@ -549,7 +627,7 @@
         _ => "Сохранено",
     };
 
-    private string SaveStateIcon => _saver.State switch
+    private string SaveStateIcon => EffectiveState switch
     {
         SheetSaveState.Saving => "fa-spinner fa-spin",
         SheetSaveState.Dirty => "fa-pen",
@@ -558,7 +636,7 @@
         _ => "fa-check",
     };
 
-    private string SaveStateClass => _saver.State switch
+    private string SaveStateClass => EffectiveState switch
     {
         SheetSaveState.Failed or SheetSaveState.Rejected => "text-error-700",
         SheetSaveState.Conflict => "text-warning-800",

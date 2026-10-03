@@ -6,14 +6,17 @@
 @* Оружие режима «Игра»: название, текст книги одной строкой (урон словами через DiceText, дальность, атаки, патроны,
    осечка) и шанс навыка справа — касание открывает проверку навыка оружия (ключ skill:{id}, как у листа). Пустой
    секции нет (правило пустых состояний); правка и добавление — в режиме «Лист». Патроны здесь — ёмкость из книги:
-   счёт выстрелов ведёт сцена боя. *@
+   счёт выстрелов ведёт сцена боя.
+   Строка параметров — по правилам 11 и 13 (g2 1.10): «50 м», «осечка 96–100»; то, что перенос v1 оставил мусором
+   («атаки 1/123456789»), не показывается — только разобранные атаки и только когда их больше одной.
+   Оружие без навыка (Булавка) не остаётся без броска (g2 1.11): проверка идёт по «Ближний бой (драка)», навык назван в строке. *@
 @if (Sheet.Weapons.Count > 0)
 {
     <section class="cm-card play-card" aria-label="Оружие" data-testid="play-weapons">
         <div class="play-card-head"><h2 class="cm-section-title">Оружие</h2></div>
         @foreach (var weapon in Sheet.Weapons)
         {
-            var skill = weapon.SkillId is { } id ? CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id) : null;
+            var skill = CheckSkill(weapon, out var fallback);
             <div class="play-row" @key="weapon.RowId" data-testid="play-weapon">
                 <div class="play-row-main">
                     <div class="play-row-name">@weapon.Name</div>
@@ -24,6 +27,10 @@
                             <span> · @part</span>
                         }
                     </div>
+                    @if (fallback && skill is not null)
+                    {
+                        <div class="play-row-note" data-testid="play-weapon-fallback">навык не указан — проверка по «@skill.Name»</div>
+                    }
                 </div>
                 @if (skill is { SkillId: { } skillId })
                 {
@@ -45,16 +52,49 @@
 
     private static string SkillKey(Guid id) => $"skill:{id}";
 
-    /// <summary>Что из книги заполнено — подписями: числа без подписи за столом не читаются.</summary>
-    private static IEnumerable<string> Details(SheetWeapon weapon)
+    /// <summary>Навык оружия; без него — «Ближний бой (драка)» (<paramref name="fallback"/>), если он есть в справочнике.</summary>
+    private CheckSubject? CheckSkill(SheetWeapon weapon, out bool fallback)
     {
-        if (weapon.Range.Trim() is { Length: > 0 } range)
+        fallback = false;
+        if (weapon.SkillId is { } id)
+            return CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id);
+
+        if (Context.Catalog.FindByCode(BrawlCode) is not { } brawl)
+            return null;
+
+        fallback = true;
+        return CheckSubjects.CatalogSkill(Sheet, Context.Catalog, brawl.Id);
+    }
+
+    private const string BrawlCode = "skill.fighting.brawl";
+
+    /// <summary>Что из книги заполнено — подписями и с единицами: числа без подписи за столом не читаются.</summary>
+    internal static IEnumerable<string> Details(SheetWeapon weapon)
+    {
+        if (weapon.Range.Trim().Length > 0 && WeaponStatsReader.RangeDisplay(weapon) is { Length: > 0 } range)
             yield return range;
-        if (WeaponStatsReader.AttacksDisplay(weapon) is { Length: > 0 } attacks)
-            yield return $"атаки {attacks}";
+        if (AttacksText(weapon) is { } attacks)
+            yield return attacks;
         if (weapon.Ammo.Trim() is { Length: > 0 } ammo)
             yield return $"патроны {ammo}";
-        if (weapon.Malfunction.Trim() is { Length: > 0 } malfunction)
-            yield return $"осечка {malfunction}";
+        if (MalfunctionText(weapon) is { } malfunction)
+            yield return malfunction;
     }
+
+    /// <summary>Атаки — только разобранные и только если их больше одной: «1» в строке ничего не говорит, «1/123456789» — мусор переноса.</summary>
+    internal static string? AttacksText(SheetWeapon weapon)
+    {
+        var attacks = WeaponStatsReader.Attacks(weapon);
+        if (!attacks.IsParsed)
+            return null;
+
+        var text = WeaponStatsReader.AttacksDisplay(attacks);
+        return text is { Length: > 0 } and not "1" ? $"атаки {text}" : null;
+    }
+
+    /// <summary>«осечка 96–100»: порог — первый бросок, на котором оружие клинит (до 100); «00» и нечисло не показываются.</summary>
+    internal static string? MalfunctionText(SheetWeapon weapon) =>
+        WeaponStatsReader.TryMalfunctionThreshold(weapon, out var threshold)
+            ? threshold >= 100 ? "осечка 100" : $"осечка {threshold}–100"
+            : null;
 }

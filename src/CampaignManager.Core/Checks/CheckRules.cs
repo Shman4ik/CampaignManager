@@ -76,13 +76,13 @@ public static class CheckRules
         if (first.Passed)
             return "Проверка пройдена — повторять нечего.";
         if (inCombat)
-            return "В бою повторных проверок не бывает: новая попытка — это действие в следующем раунде (стр. 102).";
+            return "В бою повторных проверок не бывает: новая попытка — это действие в следующем раунде.";
         if (subject.Kind is CheckSubjectKind.Luck)
-            return "Проверку Удачи повторить нельзя (стр. 83).";
+            return "Проверку Удачи повторить нельзя.";
         if (IsCombatSkill(subject))
-            return "Ближний бой и Стрельбу повторно не проверяют — следующая атака и есть вторая попытка (стр. 102).";
+            return "Ближний бой и Стрельбу повторно не проверяют — следующая атака и есть вторая попытка.";
         if (first.Level is SuccessLevel.Fumble)
-            return "Крах наступает сразу, повторной проверкой его не отменить (стр. 87).";
+            return "Крах наступает сразу, повторной проверкой его не отменить.";
         return null;
     }
 
@@ -98,11 +98,11 @@ public static class CheckRules
     public static string? LuckBlockReason(CheckSubject subject, CheckOutcome outcome, bool isPushed)
     {
         if (subject.Kind is CheckSubjectKind.Luck)
-            return "На проверку Удачи пункты Удачи не тратят (стр. 97).";
+            return "На проверку Удачи пункты Удачи не тратят.";
         if (isPushed)
-            return "На повторную проверку Удачу не тратят: либо повтор, либо Удача (стр. 97).";
+            return "На повторную проверку Удачу не тратят: либо повтор, либо Удача.";
         if (outcome.Level is SuccessLevel.Fumble)
-            return "Крах вступает в силу в любом случае — выкупить его нельзя (стр. 97).";
+            return "Крах вступает в силу в любом случае — выкупить его нельзя.";
         return null;
     }
 
@@ -134,15 +134,15 @@ public static class CheckRules
     public static string? MarkBlockReason(CheckSubject subject, int netDice, bool luckSpent)
     {
         if (subject.Kind is CheckSubjectKind.Characteristic or CheckSubjectKind.Luck)
-            return "Отметку для развития ставят только навыкам, не характеристикам и не Удаче (стр. 92).";
+            return "Отметку для развития ставят только навыкам, не характеристикам и не Удаче.";
         if (subject.Kind is CheckSubjectKind.Skill && !DevelopmentPhaseRules.CanBeChecked(subject.SkillCode))
-            return "Мифы Ктулху и Средства никогда не отмечают (стр. 92).";
+            return "Мифы Ктулху и Средства никогда не отмечают.";
         if (netDice > 0)
-            return "Проверка шла с бонусной костью — навык не отмечают (стр. 92).";
+            return "Проверка шла с бонусной костью — навык не отмечают.";
         if (luckSpent)
-            return "Успех куплен Удачей — отметки за него нет (стр. 97).";
+            return "Успех куплен Удачей — отметки за него нет.";
         if (subject.Kind is CheckSubjectKind.Manual)
-            return "Значение вписано вручную: если это был навык сыщика, отметку ставят на его листе (стр. 92).";
+            return "Значение вписано вручную: если это был навык сыщика, отметку ставят на его листе.";
         return null;
     }
 

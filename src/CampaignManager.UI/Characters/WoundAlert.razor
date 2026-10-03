@@ -1,22 +1,43 @@
+@using CampaignManager.Core.Catalogs
 @using CampaignManager.Core.Characters
 
-@* Итог одной атаки: мгновенная смерть или серьёзная рана с проверкой Выносливости. Одна разметка для «Состояния»
-   листа и полосы режима «Игра»; ничего не пишет — только показывает исход WoundRules.ApplyDamage. *@
+@* Что рана требует сейчас: итог атаки (мгновенная смерть, серьёзная рана с проверкой Выносливости) и состояние «При смерти»
+   с первой помощью. Одна разметка для «Состояния» листа и полосы режима «Игра»; ничего не пишет — только показывает исход
+   WoundRules.ApplyDamage и отметку, а кнопки открывают проверку. Тревога — одна строка (g2 1.6): абзацы о том, как
+   устроено правило, ушли — за столом читают «что делать», а не пересказ главы. *@
 @if (Hit is { InstantDeath: true })
 {
     <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="@AlertClass" Icon="fa-skull" data-testid="wound-death">
-        Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong>.
+        <span class="sheet-alert-text"><strong>Мгновенная смерть</strong> — урон не меньше максимума ПЗ.</span>
     </Alert>
 }
 else if (Hit is { MajorWound: true })
 {
     <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="@AlertClass" data-testid="wound-major">
-        <ChildContent>
-            <strong>Серьёзная рана:</strong> сыщик падает. Нужна проверка Выносливости — провал значит потерю сознания (отметка «Без сознания»).@(Context.Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка Выносливости в конце следующего." : "")
-        </ChildContent>
-        <Actions>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="check-con" OnClick='() => Context.Check("char:CON")'>Проверка Выносливости</Button>
-        </Actions>
+        <div class="sheet-alert-row">
+            <span class="sheet-alert-text"><strong>Серьёзная рана</strong> — провал проверки значит потерю сознания.</span>
+            <div class="sheet-alert-actions">
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="check-con" OnClick='() => Context.Check("char:CON")'>Проверка Выносливости</Button>
+            </div>
+        </div>
+    </Alert>
+}
+@if (Dying)
+{
+    <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="@AlertClass" Icon="fa-skull" data-testid="wound-dying">
+        <div class="sheet-alert-row">
+            <span class="sheet-alert-text"><strong>При смерти</strong> — первая помощь в этом раунде, иначе проверка Выносливости в конце следующего.</span>
+            <div class="sheet-alert-actions">
+                @if (FirstAid is { } firstAid)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-kit-medical" data-testid="check-first-aid" OnClick="() => Context.Check(firstAid)">Первая помощь</Button>
+                }
+                @if (Medicine is { } medicine)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-stethoscope" data-testid="check-medicine" OnClick="() => Context.Check(medicine)">Медицина</Button>
+                }
+            </div>
+        </div>
     </Alert>
 }
 
@@ -30,4 +51,16 @@ else if (Hit is { MajorWound: true })
 
     /// <summary>Есть что показать — хозяин прячет вместо алерта свою подсказку о порогах.</summary>
     public static bool Shows(DamageOutcome? hit) => hit is { InstantDeath: true } or { MajorWound: true };
+
+    /// <summary>
+    /// «При смерти» без стабилизации: тревога стоит, пока отметка не снята или сыщика не стабилизировали (она переживает
+    /// перезагрузку — ею же пользуется и «Лист», где итог атаки уже не виден).
+    /// </summary>
+    private bool Dying => Context.Sheet.Condition is { Dying: true, Stabilized: false, Dead: false };
+
+    private string? FirstAid => KeyOf("skill.first-aid");
+
+    private string? Medicine => KeyOf("skill.medicine");
+
+    private string? KeyOf(string code) => Context.Catalog.FindByCode(code) is { } skill ? $"skill:{skill.Id}" : null;
 }
