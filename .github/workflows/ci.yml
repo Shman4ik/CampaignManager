@@ -54,12 +54,9 @@ jobs:
         with:
           node-version: 26
 
-      # Lock-файлов нет, поэтому кэш setup-dotnet (cache: true) недоступен — ключ по csproj.
-      - uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', 'NuGet.config', 'global.json') }}
-          restore-keys: nuget-${{ runner.os }}-
+      # Кэша NuGet нет намеренно. Кэш, сохранённый прогоном PR, виден только этому же PR, а на
+      # master CI не запускается — так что попадал он лишь на повторный push (2 прогона из 12),
+      # а каждый промах дописывал в общий лимит кэша репозитория ещё 285 МБ. Restore с nuget.org — ~7 с.
 
       # NuGet Audit не глушим: уязвимый пакет при -warnaserror должен ронять PR.
       - name: Build
@@ -70,7 +67,27 @@ jobs:
       - name: Test
         run: dotnet test -c Release --no-build
 
-      # Правка .razor → одна Debug-сборка → сервер отдаёт styles.css с новым классом по новому
-      # отпечатку. Своя сборка внутри, поэтому после тестов, а не вместо них.
+  # Правка .razor → одна Debug-сборка → сервер отдаёт styles.css с новым классом по новому
+  # отпечатку. Три своих сборки сервера (~1 мин): отдельным job'ом они идут параллельно со сборкой
+  # и тестами, а не после них, и без контейнера Postgres.
+  styles-fingerprint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
       - name: Tailwind styles fingerprint
         run: pwsh tools/check-styles-fingerprint.ps1

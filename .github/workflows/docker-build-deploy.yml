@@ -29,8 +29,31 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
     steps:
       - uses: actions/checkout@v7
+
+      # Publish on the runner, not inside the image: the SDK is preinstalled here, while the
+      # in-image build re-pulled the SDK image and shuffled the layer cache on every run
+      # (see the `prebuilt` stage in Dockerfile). Versions match CI.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # Tailwind is built by an MSBuild target through npx.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      # Analyzers already ran in PR CI with -warnaserror; here they only cost time.
+      # Source generators (Razor, JSON) still run with RunAnalyzers=false.
+      - name: Publish
+        run: >-
+          dotnet publish CampaignManager.Web/CampaignManager.Web.csproj
+          -c Release -o artifacts/v1 -p:UseAppHost=false -p:RunAnalyzers=false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -52,12 +75,11 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: prebuilt
           push: true
           tags: |
             ghcr.io/shman4ik/campaign-manager:latest
             ghcr.io/shman4ik/campaign-manager:${{ env.VERSION }}
-          cache-from: type=gha,scope=v1
-          cache-to: type=gha,mode=max,scope=v1
 
       - name: Check out dmnet-gitops
         uses: actions/checkout@v7

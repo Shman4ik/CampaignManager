@@ -4,12 +4,16 @@
 #   wslc build -f src/Dockerfile -t campaign-manager-v2 .
 #
 # Выкатывается на beta-стенд воркфлоу .github/workflows/v2-beta-deploy.yml (src/CLAUDE.md,
-# «Beta-стенд»). Корневой Dockerfile — это v1, его не трогать.
+# «Beta-стенд») — но из цели `prebuilt`, см. в конце. Корневой Dockerfile — это v1, его не трогать.
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS base
+LABEL org.opencontainers.image.source="https://github.com/Shman4ik/CampaignManager" \
+      org.opencontainers.image.description="CampaignManager 2.0 (beta)"
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+ENTRYPOINT ["dotnet", "CampaignManager.Server.dll"]
 
 # Node — для Tailwind: MSBuild-таргет в CampaignManager.UI.csproj сам ставит пакеты (npm ci по
 # package-lock.json) и собирает styles.css. Версия — та же, что в CI.
@@ -45,10 +49,13 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish src/CampaignManager.Server/CampaignManager.Server.csproj \
         -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
+# Деплой публикует на раннере GitHub в artifacts/v2 и только упаковывает готовое
+# (`--target prebuilt`): SDK там уже стоит, а сборка внутри образа стоила лишнюю минуту — SDK-образ
+# тянулся заново, кэш слоёв GitHub Actions импортировался и экспортировался по ~25 с, а пакеты
+# NuGet из `--mount=type=cache` между раннерами не переживали и всё равно качались.
+FROM base AS prebuilt
+COPY artifacts/v2/ .
+
+# Цель по умолчанию — последняя стадия: локальная сборка, как и раньше, собирает всё сама.
 FROM base AS final
-LABEL org.opencontainers.image.source="https://github.com/Shman4ik/CampaignManager" \
-      org.opencontainers.image.description="CampaignManager 2.0 (beta)"
-WORKDIR /app
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "CampaignManager.Server.dll"]
