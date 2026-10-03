@@ -1,5 +1,6 @@
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.Contracts.Characters
+@using CampaignManager.Contracts.Encounters
 @using CampaignManager.Core.Campaigns
 @using CampaignManager.Core.Characters
 @using CampaignManager.UI.Platform
@@ -7,6 +8,7 @@
 @inject ICharactersApi Characters
 @inject ICatalogApi<SkillDto> Skills
 @inject KeeperScreenState Screen
+@inject IEncountersApi Encounters
 
 @* Групповая проверка ширмы с составом кампании (как в v1): Хранитель выбирает свою кампанию — значения навыков
    берутся с листов её активных сыщиков (GET /campaigns/{id}/investigators, T2.3). Без кампании — ручной режим:
@@ -16,7 +18,7 @@
     {
         <Field Label="Состав" class="sm:w-80">
             <select class="cm-input" data-testid="group-campaign" value="@(Screen.GroupCampaignId?.ToString() ?? "")" @onchange="SelectAsync">
-                <option value="">— вписать сыщиков вручную —</option>
+                <option value="">Вписать сыщиков вручную</option>
                 @foreach (var campaign in _campaigns)
                 {
                     <option value="@campaign.Id">@campaign.Name</option>
@@ -49,6 +51,16 @@
         try
         {
             _campaigns = [.. (await Campaigns.GetCampaignsAsync()).Where(c => c.CanEdit)];
+            if (Screen.GroupCampaignId is null)
+            {
+                // Кампания идущей сцены (бой или погоня) — состав по умолчанию: вписывать сыщиков вручную не приходится.
+                var running = (await Encounters.ListActiveAsync(CampaignManager.Core.Encounters.EncounterKind.Combat))
+                    .Concat(await Encounters.ListActiveAsync(CampaignManager.Core.Encounters.EncounterKind.Chase))
+                    .Select(e => e.CampaignId).OfType<Guid>().Distinct().ToList();
+                if (running.Count == 1 && _campaigns.Any(c => c.Id == running[0]))
+                    Screen.GroupCampaignId = running[0];
+            }
+
             if (Screen.GroupCampaignId is { } id)
                 await LoadAsync(id);
         }

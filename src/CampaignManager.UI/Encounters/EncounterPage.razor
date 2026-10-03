@@ -663,6 +663,7 @@
                         @foreach (var participant in order)
                         {
                             <ParticipantRow @key="participant.Id" Participant="participant" Active="@(participant.Id == state.ActiveParticipantId)" Round="state.Round"
+                                            HideOutBadge="@(state.Chase is not null && ChaseRules.StatusOf(state, participant.Id) != ChaseStatus.Running)"
                                             Writes="@state.SheetWrites.Where(w => w.ParticipantId == participant.Id).ToList()"
                                             OnSheetWrite="SheetWriteAsync">
                                 <Actions>
@@ -774,6 +775,9 @@
     /// <summary>Эффект Хранителя — свёрнут: раскрывается по касанию, чтобы не занимать колонку ради редкой правки.</summary>
     private RenderFragment EffectBlock(EncounterState state) => __builder =>
     {
+        if (state.Chase is { Phase: ChasePhase.Ended })
+            return;
+
         <section class="cm-section" data-testid="effect-section">
             <div class="cm-section-header">
                 <h2 class="cm-section-title">Эффект Хранителя</h2>

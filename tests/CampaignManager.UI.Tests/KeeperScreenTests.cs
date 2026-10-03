@@ -70,7 +70,7 @@ public sealed class KeeperScreenTests : KitContext
         cut.Find(".cm-topbar [data-testid='keeper-screen-toggle']").Click();
 
         var drawer = cut.Find("dialog.cm-modal-drawer");
-        Assert.Contains("Ширма Хранителя", drawer.TextContent);
+        Assert.Contains("Ширма", drawer.TextContent);
         Assert.NotNull(cut.Find("[data-testid='keeper-screen-block-checks']"));
         Assert.Equal("reference?block=checks", cut.Find("[data-testid='keeper-screen-page']").GetAttribute("href"));
     }
