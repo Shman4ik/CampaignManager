@@ -417,10 +417,14 @@ public sealed class KitUx0bTests : KitContext
         var blank = Render<CampaignManager.UI.Catalogs.StatblockView>(p => p.Add(v => v.Statblock, new CampaignManager.Core.Catalogs.Statblock()));
         Assert.Empty(blank.Markup.Trim());
 
-        var filled = Render<CampaignManager.UI.Catalogs.StatblockView>(p => p.Add(v => v.Statblock, new CampaignManager.Core.Catalogs.Statblock { HitPoints = 12, AttacksPerRound = 2 }));
+        var filled = Render<CampaignManager.UI.Catalogs.StatblockView>(p => p.Add(v => v.Statblock, new CampaignManager.Core.Catalogs.Statblock { HitPoints = 12, AttacksPerRound = 2, DamageBonus = "+1d4" }));
         var text = filled.Markup;
         Assert.Contains("Атаки за раунд", text, StringComparison.Ordinal);
         Assert.Contains("Бонус к урону", text, StringComparison.Ordinal);
+        // Нули «Бонус к урону: 0» и «Комплекция: 0» — не данные: без значения строк нет
+        var zeros = Render<CampaignManager.UI.Catalogs.StatblockView>(p => p.Add(v => v.Statblock, new CampaignManager.Core.Catalogs.Statblock { HitPoints = 12 }));
+        Assert.DoesNotContain("Бонус к урону", zeros.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Комплекция", zeros.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Ср. бонус", text, StringComparison.Ordinal);
         Assert.DoesNotContain("Ср. комплекция", text, StringComparison.Ordinal);
     }

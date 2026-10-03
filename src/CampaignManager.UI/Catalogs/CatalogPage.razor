@@ -37,56 +37,68 @@
         <ChildContent>
             <input class="cm-input min-w-48 flex-1" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
                    value="@_search" @oninput="OnSearch" />
-            @foreach (var filter in Filters)
+            @if (HasExtraFilters)
             {
-                var current = filter;
-                <select class="cm-input w-full sm:w-56 shrink-0" aria-label="@current.AllLabel"
-                        value="@(_filters.GetValueOrDefault(current.Key) ?? "")" @onchange="e => SetFilter(current.Key, e.Value?.ToString())">
-                    <option value="">@current.AllLabel</option>
-                    @foreach (var option in current.Options)
-                    {
-                        <option value="@option.Value">@option.Label</option>
-                    }
-                </select>
+                @* На телефоне фильтры, порядок и флажки прячутся за одной кнопкой (панель занимала 300–380px из 844); с md
+                   обёртка display: contents — поля остаются прямыми детьми строки FilterPanel. *@
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-sliders" class="md:hidden" aria-expanded="@(_filtersOpen ? "true" : "false")"
+                        OnClick="() => _filtersOpen = !_filtersOpen">@(ActiveExtra > 0 ? $"Фильтры ({ActiveExtra})" : "Фильтры")</Button>
             }
-            @if (ErasVary || _era is not null)
-            {
-                <select class="cm-input w-full sm:w-44 shrink-0" aria-label="Эпоха" value="@(_era?.ToString() ?? "")" @onchange="SetEra">
-                    <option value="">@Terms.AnyEra</option>
-                    @foreach (var era in Enum.GetValues<Era>())
-                    {
-                        <option value="@era">@CatalogText.Of(era)</option>
-                    }
-                </select>
-            }
-            @if (Sorts.Count > 1)
-            {
-                <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); _page = 1; }">
-                    @foreach (var sort in Sorts)
-                    {
-                        <option value="@sort.Key">@sort.Label</option>
-                    }
-                </select>
-            }
-            @foreach (var toggle in Toggles)
-            {
-                var current = toggle;
-                <label class="flex min-h-9 shrink-0 items-center gap-2 text-sm text-primary-700">
-                    <input type="checkbox" class="cm-checkbox" checked="@_toggles.Contains(current.Key)" @onchange="e => SetToggle(current.Key, e.Value is true)" />
-                    <span>@current.Label</span>
-                </label>
-            }
+            <div class="@(_filtersOpen ? "contents" : "hidden md:contents")">
+                @foreach (var filter in Filters)
+                {
+                    var current = filter;
+                    <select class="cm-input w-full sm:w-56 shrink-0" aria-label="@current.AllLabel"
+                            value="@(_filters.GetValueOrDefault(current.Key) ?? "")" @onchange="e => SetFilter(current.Key, e.Value?.ToString())">
+                        <option value="">@current.AllLabel</option>
+                        @foreach (var option in current.Options)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                }
+                @if (ErasVary || _era is not null)
+                {
+                    <select class="cm-input w-full sm:w-44 shrink-0" aria-label="Эпоха" value="@(_era?.ToString() ?? "")" @onchange="SetEra">
+                        <option value="">@Terms.AnyEra</option>
+                        @foreach (var era in Enum.GetValues<Era>())
+                        {
+                            <option value="@era">@CatalogText.Of(era)</option>
+                        }
+                    </select>
+                }
+                @if (Sorts.Count > 1)
+                {
+                    <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); _page = 1; }">
+                        @foreach (var sort in Sorts)
+                        {
+                            <option value="@sort.Key">@sort.Label</option>
+                        }
+                    </select>
+                }
+                @foreach (var toggle in Toggles)
+                {
+                    var current = toggle;
+                    <label class="flex min-h-9 shrink-0 items-center gap-2 text-sm text-primary-700">
+                        <input type="checkbox" class="cm-checkbox" checked="@_toggles.Contains(current.Key)" @onchange="e => SetToggle(current.Key, e.Value is true)" />
+                        <span>@current.Label</span>
+                    </label>
+                }
+            </div>
         </ChildContent>
         <Actions>
             @ToolbarActions
             @if (_canEdit)
             {
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</Button>
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-file-export" Href="@Api.Route.Export" download="">Экспорт</Button>
-                @if (Sync)
-                {
-                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate" Busy="_syncing" OnClick="SyncAsync">С правилами</Button>
-                }
+                @* Импорт, экспорт и «С правилами» — редкие действия: одно «⋯», а не ряд из трёх кнопок (на телефоне он рвался). *@
+                <RowMenu AriaLabel="@(Sync ? "Ещё: импорт, экспорт, синхронизация" : "Ещё: импорт, экспорт")">
+                    <RowMenuItem Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</RowMenuItem>
+                    <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт</RowMenuItem>
+                    @if (Sync)
+                    {
+                        <RowMenuItem Icon="fa-rotate" Disabled="_syncing" OnClick="SyncAsync">С правилами</RowMenuItem>
+                    }
+                </RowMenu>
             }
         </Actions>
     </FilterPanel>
@@ -229,6 +241,7 @@
     private string? _initialJson;
     private UnsavedChangesGuard? _guard;
     private bool _syncing;
+    private bool _filtersOpen;
     private CatalogImportReport? _syncReport;
     private Guid? _pagedTo;
     private CatalogFormState _ownState = new();
@@ -484,6 +497,14 @@
 
     private string ColumnsKey => $"{_era}|{string.Join(",", _filters.OrderBy(f => f.Key).Select(f => $"{f.Key}={f.Value}"))}";
 
+    private bool HasExtraFilters => Filters.Count > 0 || Toggles.Count > 0 || Sorts.Count > 1 || ErasVary || _era is not null;
+
+    /// <summary>Сколько из спрятанных на телефоне фильтров включено — на кнопке «Фильтры (2)».</summary>
+    private int ActiveExtra => _filters.Count + _toggles.Count + (_era is null ? 0 : 1);
+
+    // Экспорт — ссылка на API с «download»: из меню — переход, браузер скачивает и страницу не покидает.
+    private void ExportAsync() => Navigation.NavigateTo(Api.Route.Export, forceLoad: true);
+
     private int TotalPages(int count) => PageSize > 0 ? (count + PageSize - 1) / PageSize : 1;
 
     // Любой фильтр возвращает на первую страницу: иначе с пятой страницы поиск уводит в пустоту.
@@ -728,7 +749,10 @@
         _stale = false;
     }
 
-    private async Task<bool> DeleteAsync(TItem item)
+    private Task<bool> DeleteAsync(TItem item) => DeleteAsync(item, fromForm: false);
+
+    /// <summary>Из окна правки отказ — Alert над кнопками окна: тост рисуется под окном и там не виден.</summary>
+    private async Task<bool> DeleteAsync(TItem item, bool fromForm)
     {
         var confirmed = await Dialogs.ConfirmDeleteAsync(Noun, Names.Plain(item.Name), "Пропадёт из справочника.", reversible: false);
         if (!confirmed)
@@ -746,7 +770,16 @@
         }
         catch (HttpRequestException ex)
         {
-            Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
+            if (fromForm)
+            {
+                _formError = ApiErrors.Describe(ex);
+                _stale = false;
+            }
+            else
+            {
+                Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
+            }
+
             return false;
         }
     }
@@ -754,7 +787,7 @@
     /// <summary>«Удалить» из окна правки: подтверждение, удаление и закрытие окна без вопроса о правках.</summary>
     private async Task DeleteEditingAsync()
     {
-        if (_editing is { } item && await DeleteAsync(item))
+        if (_editing is { } item && await DeleteAsync(item, fromForm: true))
         {
             CloseForm();
         }

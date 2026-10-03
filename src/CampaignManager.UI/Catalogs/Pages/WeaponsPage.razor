@@ -68,13 +68,6 @@
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
 
-    private string _skillFilter = "";
-
-    /// <summary>Поиск по подстроке без учёта регистра и «ё»; выбранный навык остаётся в списке, что бы ни набрали.</summary>
-    private bool Shown(SkillDto skill, WeaponDto weapon) =>
-        skill.Id == weapon.SkillId || _skillFilter.Length == 0
-        || CatalogCodeTable.NormalizeName(skill.Name).Contains(CatalogCodeTable.NormalizeName(_skillFilter), StringComparison.Ordinal);
-
     private static bool IsCombat(SkillDto skill) => skill.Category is SkillCategory.CombatGeneral or SkillCategory.CombatFirearms;
 
     // Сортировка по урону — по числу (больше сверху в убывании), а не по тексту: «10d10 / 2 метра» шло раньше «1d10».
@@ -99,7 +92,6 @@
     // Навыки нужны только форме: грузятся при первом открытии.
     private async Task EnsureSkillsAsync()
     {
-        _skillFilter = ""; // зовётся при открытии формы: поиск прошлой записи в новой не нужен
         if (_skills.Count > 0)
         {
             return;
@@ -141,10 +133,8 @@
             {
                 <div class="sm:col-span-2"><dt class="cm-meta-label inline">Примечания: </dt><dd class="inline">@w.Notes</dd></div>
             }
-            @if (w.Source is not null)
-            {
-                <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@w.Source</dd></div>
-            }
+            <div><dt class="cm-meta-label inline">Пронзающее: </dt><dd class="inline">@(w.IsImpaling ? "да" : "нет")</dd></div>
+            <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@(string.IsNullOrWhiteSpace(w.Source) ? "—" : w.Source)</dd></div>
         </dl>
     };
 
@@ -163,20 +153,18 @@
                 </select>
             </Field>
             <Field Label="Навык" Required="true" Error="@_state.For("skill")">
-                <input class="cm-input mb-2" type="search" placeholder="Найти навык…" aria-label="Найти навык" autocomplete="off"
-                       @bind="_skillFilter" @bind:event="oninput" />
                 @* @key: навыки приходят после открытия формы, и без пересоздания селект при первой правке показывал «— выберите —» вместо навыка оружия. *@
                 <select @key="_skills.Count" class="cm-input" aria-invalid="@_state.Invalid("skill")" @bind="w.SkillId">
-                    <option value="@Guid.Empty">@(_skillFilter.Length > 0 && !_skills.Any(s => Shown(s, w)) ? "— ничего не найдено —" : "— выберите —")</option>
+                    <option value="@Guid.Empty">— выберите —</option>
                     @* Оружию нужны около десяти боевых навыков из сотни: они идут первыми, отдельной группой. *@
                     <optgroup label="Боевые">
-                        @foreach (var skill in _skills.Where(s => IsCombat(s) && Shown(s, w)))
+                        @foreach (var skill in _skills.Where(s => IsCombat(s)))
                         {
                             <option value="@skill.Id">@skill.Name</option>
                         }
                     </optgroup>
                     <optgroup label="Остальные">
-                        @foreach (var skill in _skills.Where(s => !IsCombat(s) && Shown(s, w)))
+                        @foreach (var skill in _skills.Where(s => !IsCombat(s)))
                         {
                             <option value="@skill.Id">@skill.Name</option>
                         }
@@ -215,10 +203,28 @@
     };
 
     // Подсказки разбора: что сервер запишет числами. Неразобранное сохранится текстом.
-    private static string? Hint(string? raw, Func<string, string> parsed, bool ok) =>
-        string.IsNullOrWhiteSpace(raw) ? null
-        : ok ? $"Распознано: {parsed(raw)}"
-        : "Не разобрано — сохранится текстом, в бою считать вручную.";
+    // «Распознано» — только если распознанное отличается от введённого: «15 м» → «15 м» ничего не добавляет.
+    private static string? Hint(string? raw, Func<string, string> parsed, bool ok)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        if (!ok)
+        {
+            return "Не разобрано — сохранится текстом, в бою считать вручную.";
+        }
+
+        var shown = parsed(raw);
+        return Same(raw, shown) ? null : $"Распознано: {shown}";
+    }
+
+    private static bool Same(string a, string b) =>
+        string.Equals(Squash(a), Squash(b), StringComparison.OrdinalIgnoreCase);
+
+    private static string Squash(string text) =>
+        new(text.Where(c => !char.IsWhiteSpace(c) && c is not ('$' or '+')).ToArray());
 
     private static string? DamageHint(string? raw)
     {
@@ -233,13 +239,14 @@
             return "Не разобрано — сохранится текстом, бой этот урон не бросит.";
         }
 
-        return info switch
+        var shown = info switch
         {
-            { RangeDamages: { Count: > 0 } byRange } => "Распознано: по дистанциям " + string.Join(" / ", byRange.Select(r => r.Damage.ToString())),
-            { BlastRadiusMeters: { } radius, Primary: { } blast } => $"Распознано: {blast}, радиус {radius} м",
-            { Primary: { } primary } => $"Распознано: {primary}",
+            { RangeDamages: { Count: > 0 } byRange } => "по дистанциям " + string.Join(" / ", byRange.Select(r => r.Damage.ToString())),
+            { BlastRadiusMeters: { } radius, Primary: { } blast } => $"{blast}, радиус {radius} м",
+            { Primary: { } primary } => primary.ToString(),
             _ => null,
         };
+        return shown is null || Same(raw!, shown) ? null : $"Распознано: {shown}";
     }
 
 

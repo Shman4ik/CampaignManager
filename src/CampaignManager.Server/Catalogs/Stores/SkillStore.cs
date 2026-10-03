@@ -25,6 +25,21 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
 
     public override DbSet<Skill> Set(CmDbContext db) => db.Skills;
 
+    public override async Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken)
+    {
+        var weapons = await db.Weapons.AsNoTracking().Where(w => w.SkillId == id).Select(w => w.Name).ToListAsync(cancellationToken);
+        var occupations = await db.Occupations.AsNoTracking()
+            .Where(o => o.Slots.Any(s => s.SkillId == id || s.Options.Any(x => x.SkillId == id)))
+            .Select(o => o.Name).ToListAsync(cancellationToken);
+        var children = await db.Skills.AsNoTracking().Where(s => s.ParentId == id).Select(s => s.Name).ToListAsync(cancellationToken);
+        return
+        [
+            .. weapons.Order().Select(n => $"оружие «{n}»"),
+            .. occupations.Order().Select(n => $"профессия «{n}»"),
+            .. children.Order().Select(n => $"специализация «{n}»"),
+        ];
+    }
+
     public override Skill New() => new() { Name = "" };
 
     public override Task<IReadOnlyList<SkillDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<Skill> rows, CancellationToken cancellationToken) =>

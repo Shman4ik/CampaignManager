@@ -38,7 +38,7 @@ public sealed class CatalogPageTests : KitContext
         Assert.DoesNotContain("Добавить предмет", page.Markup, StringComparison.Ordinal);
         Assert.Empty(page.FindAll("[aria-label^='Изменить:']"));
         Assert.Empty(page.FindAll("[aria-label^='Удалить:']"));
-        Assert.DoesNotContain("Импорт", page.Markup, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll("[aria-label^='Ещё: импорт']"));
     }
 
     [Fact]
@@ -51,7 +51,28 @@ public sealed class CatalogPageTests : KitContext
 
         page.WaitForAssertion(() => Assert.Contains("Добавить предмет", page.Markup, StringComparison.Ordinal));
         Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']"));
-        Assert.Contains("Импорт", page.Markup, StringComparison.Ordinal);
+        // Импорт, экспорт и «С правилами» — в одном меню «⋯», а не рядом кнопок
+        page.Find("[aria-label^='Ещё: импорт']").Click();
+        Assert.Contains("Импорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Экспорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Refused_delete_is_shown_in_the_edit_window_not_in_a_toast_under_it()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        _api.DeleteFailure = new ApiException("Предмет используется сценариями — сначала уберите ссылки.", System.Net.HttpStatusCode.Conflict, "in-use");
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        page.FindAll("dialog button").Single(b => b.TextContent.Contains("Удалить предмет", StringComparison.Ordinal)).Click();
+        await page.InvokeAsync(() => dialogs.Complete(true));
+
+        page.WaitForAssertion(() => Assert.Contains("сначала уберите ссылки", page.Find("dialog").TextContent, StringComparison.Ordinal));
+        Assert.Empty(Services.GetRequiredService<ToastService>().Messages);
     }
 
     [Fact]
@@ -369,7 +390,10 @@ public sealed class CatalogPageTests : KitContext
         public Task<ItemDto> UpdateAsync(ItemDto item, CancellationToken cancellationToken = default) =>
             Failure is not null ? throw Failure : Task.FromResult(item);
 
-        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ApiException? DeleteFailure { get; set; }
+
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+            DeleteFailure is not null ? throw DeleteFailure : Task.CompletedTask;
 
         public Task<CatalogImportReport> ImportAsync(Stream file, bool overwrite, bool dryRun, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

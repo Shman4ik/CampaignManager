@@ -68,8 +68,11 @@ public sealed class ConversionRulesTests
     }
 
     [Fact]
-    public void Occupation_tags_from_bitmask() =>
+    public void Occupation_tags_from_bitmask()
+    {
         Assert.Equal(["Academic", "Investigative", "Scholarly"], OccupationSlots.Tags(1 | 128 | 16384));
+        Assert.Equal(["Научная", "Расследовательская", "Книжная"], OccupationTags.Translate(OccupationSlots.Tags(1 | 128 | 16384)));
+    }
 
     [Fact]
     public void Statblock_from_v1_columns_keeps_attack_text_and_drops_legacy()
@@ -226,5 +229,33 @@ public sealed class ConversionRulesTests
             name => Assert.Null(ItemCodes.FromName(name)));
         // Повторы указывают на книжные записи, которые остаются
         Assert.All(OwnerDecisions.HotelDuplicates.Values, name => Assert.NotNull(ItemCodes.FromName(name)));
+    }
+
+    [Theory]
+    [InlineData("Атака/Проклятие", "Атака", "Проклятие")]
+    [InlineData("Создание предмета/Путешествие", "Создание предмета", "Путешествие")]
+    [InlineData("Ментальное/Контроль/Иллюзия", "Ментальное", "Контроль, Иллюзия")]
+    [InlineData("Связь с божеством", "Связь", "с божеством")]
+    [InlineData("Защита", "Защита", null)]
+    [InlineData("", "", null)]
+    public void Spell_type_is_the_first_of_the_compound_rest_goes_to_also(string type, string expected, string? also) =>
+        Assert.Equal((expected, also), SpellRules.SplitType(type));
+
+    [Theory]
+    [InlineData("10 магии, 1d4 рассудка", "10 ПМ, 1d4 рассудка")]
+    [InlineData("1 магия за камень", "1 ПМ за камень")]
+    [InlineData("Магия и рассудок варьируют", "ПМ и рассудок варьируют")]
+    [InlineData("3 магии за 10 мин. речи, 1d6 рассудка", "3 ПМ за 10 мин. речи, 1d6 рассудка")]
+    [InlineData("5 МОЩ, 1d6 рассудка", "5 МОЩ, 1d6 рассудка")]
+    [InlineData("l рассудка, 4 ПМ", "1 рассудка, 4 ПМ")]
+    [InlineData("1 ПМ", "1 ПМ")]
+    public void Spell_cost_uses_one_unit(string cost, string expected) => Assert.Equal(expected, SpellRules.Cost(cost));
+
+    [Fact]
+    public void Spell_also_line_goes_to_the_end_of_the_description()
+    {
+        Assert.Equal("текст\n\nТакже: Проклятие.", SpellRules.AppendAlso("текст\n", "Проклятие"));
+        Assert.Equal("Также: Проклятие.", SpellRules.AppendAlso("", "Проклятие"));
+        Assert.Equal("текст", SpellRules.AppendAlso("текст", null));
     }
 }

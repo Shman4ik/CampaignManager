@@ -199,6 +199,7 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
 
         Assert.Equal(HttpStatusCode.Conflict, inUse.StatusCode);
         Assert.Equal(ApiProblemCodes.InUse, inUse.Code);
+        Assert.Contains($"оружие «{bow.Name}»", inUse.Message, StringComparison.Ordinal); // отказ называет, что держит навык
     }
 
     [Fact]
@@ -412,6 +413,8 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(8, doctor.Slots.Count);
         Assert.All(list.Where(o => o.Code is not null), o => Assert.Equal(8, o.ProfessionalSkillCount));
         Assert.Contains(doctor.Slots, s => s is { Kind: OccupationSlotKind.Specialization, Specialization: "латынь" });
+        Assert.DoesNotContain(list.SelectMany(o => o.Slots), s => s.SkillName == "Средства"); // Средства — не слот
+        Assert.All(list.Where(o => o.Code is not null).SelectMany(o => o.Tags), tag => Assert.DoesNotMatch("^[A-Za-z]+$", tag)); // теги русские
         Assert.Equal(homebrew.Version, list.Single(o => o.Id == homebrew.Id).Version);
     }
 

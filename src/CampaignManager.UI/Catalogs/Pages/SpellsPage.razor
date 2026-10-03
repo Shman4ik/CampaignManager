@@ -8,7 +8,7 @@
    При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. *@
 <CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание" Plural="заклинаний"
              Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded" State="_state" Validate="Validate"
-             New="() => new SpellDto()" RowDetail="Detail" Form="Form">
+             New="() => new SpellDto()" OnFormOpening="OnOpening" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" CellClass="font-medium text-primary-800" Context="s">@s.Name</DataColumn>
         @if (!view.IsFixed("type"))
@@ -39,6 +39,21 @@
     }
 
     private readonly CatalogFormState _state = new();
+
+    private const string OtherType = "other";
+    private bool _otherType;
+
+    // Тип записи, которого нет в списке, — «Другой»: поле для названия появляется при выборе и у такой записи.
+    private string TypeChoice(SpellDto s) =>
+        _otherType || (s.SpellType.Length > 0 && !_types.Contains(s.SpellType, StringComparer.CurrentCultureIgnoreCase)) ? OtherType : s.SpellType;
+
+    private void OnOpening() => _otherType = false;
+
+    private void ChooseType(SpellDto s, string? value)
+    {
+        _otherType = value == OtherType;
+        s.SpellType = value is null or OtherType ? "" : value;
+    }
 
     private static IReadOnlyList<string> Tags(string type) =>
         [.. type.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
@@ -79,16 +94,22 @@
             <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="s.Name" />
             </Field>
-            <Field Label="Тип" Required="true" Error="@_state.For("type")" Note="Из списка или новый.">
-                <input class="cm-input" list="spell-types" placeholder="Призыв, Контакт…" aria-invalid="@_state.Invalid("type")" @bind="s.SpellType" />
+            <Field Label="Тип" Required="true" Error="@_state.For("type")">
+                @* Список — стрелкой и выбором (поле с datalist не показывало, что варианты есть); новый тип — «Другой…». *@
+                <select class="cm-input" aria-invalid="@_state.Invalid("type")" value="@TypeChoice(s)" @onchange="e => ChooseType(s, e.Value?.ToString())">
+                    <option value="">— выберите —</option>
+                    @foreach (var type in _types)
+                    {
+                        <option value="@type">@type</option>
+                    }
+                    <option value="@OtherType">Другой тип…</option>
+                </select>
+                @if (_otherType)
+                {
+                    <input class="cm-input mt-2" placeholder="Название типа" aria-label="Название нового типа" @bind="s.SpellType" @bind:event="oninput" />
+                }
             </Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
-            <datalist id="spell-types">
-                @foreach (var type in _types)
-                {
-                    <option value="@type"></option>
-                }
-            </datalist>
             <Field Label="Стоимость" class="sm:col-span-2" Note="@CostHint(s.Cost)">
                 <input class="cm-input" placeholder="8 ПМ, 1d6 рассудка" @bind="s.Cost" @bind:event="oninput" />
             </Field>

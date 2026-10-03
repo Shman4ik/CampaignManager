@@ -82,7 +82,7 @@ public sealed class CatalogService<TEntity, TDto>(
         var entity = await store.Query(db).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
             ?? throw AccessDeniedException.NotFound();
         store.Set(db).Remove(entity);
-        await SaveAsync(cancellationToken);
+        await SaveAsync(cancellationToken, id);
     }
 
     public async Task<CatalogFile<TDto>> ExportAsync(CancellationToken cancellationToken)
@@ -287,7 +287,7 @@ public sealed class CatalogService<TEntity, TDto>(
     }
 
     /// <summary>Сохранить и перевести нарушения базы в понятный отказ.</summary>
-    private async Task SaveAsync(CancellationToken cancellationToken)
+    private async Task SaveAsync(CancellationToken cancellationToken, Guid? entityId = null)
     {
         try
         {
@@ -296,7 +296,9 @@ public sealed class CatalogService<TEntity, TDto>(
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
         {
             logger.LogInformation(ex, "Запись справочника {Catalog} занята ссылками", store.Route.Name);
-            throw ApiProblemException.InUse($"{store.Noun} используется {store.UsedBy} — сначала уберите ссылки.");
+            var users = await UsersAsync(entityId, cancellationToken);
+            var named = users.Count == 0 ? "" : $" Это: {string.Join(", ", users.Take(5))}{(users.Count > 5 ? $" и ещё {users.Count - 5}" : "")}.";
+            throw ApiProblemException.InUse($"{store.Noun} используется {store.UsedBy} — сначала уберите ссылки.{named}");
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
@@ -304,6 +306,17 @@ public sealed class CatalogService<TEntity, TDto>(
             logger.LogInformation(ex, "Дубль в справочнике {Catalog}", store.Route.Name);
             throw ApiProblemException.Duplicate($"{store.Noun} с таким названием или кодом уже есть в справочнике.");
         }
+    }
+
+    private async Task<IReadOnlyList<string>> UsersAsync(Guid? id, CancellationToken cancellationToken)
+    {
+        if (id is not { } key)
+        {
+            return [];
+        }
+
+        db.ChangeTracker.Clear(); // упавшее удаление ещё висит в трекере
+        return await store.UsersOfAsync(db, key, cancellationToken);
     }
 
     private static string NameKey(string name) => CatalogCodeTable.NormalizeName(name);
