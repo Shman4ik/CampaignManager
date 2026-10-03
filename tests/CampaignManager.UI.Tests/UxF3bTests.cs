@@ -8,6 +8,7 @@ using CampaignManager.Contracts.Identity;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Scenarios;
 using CampaignManager.UI.Characters;
+using CampaignManager.UI.Characters.Creation;
 using CampaignManager.UI.Characters.Library;
 using CampaignManager.UI.Scenarios;
 using CampaignManager.UI.Shared;
@@ -233,6 +234,57 @@ public sealed class UxF3bTests : KitContext
 
         cut.WaitForAssertion(() => Assert.Single(saved));
         Assert.Equal(new NpcCastSaved(scenario.Id, "Дом с привидением", NpcRole.Enemy, 3), saved[0]);
+    }
+
+    // ── Быстрый НПС ─────────────────────────────────────────────────────────
+
+    private IRenderedComponent<QuickNpcModal> Quick(List<(Guid Id, string Name)>? created = null)
+    {
+        Dice.Enqueue(0, 0, 0, 0);
+        Services.AddSingleton(Fake.Of<ICatalogApi<SkillDto>>(new()
+        {
+            [nameof(ICatalogApi<SkillDto>.ListAsync)] = _ => Task.FromResult(new CatalogList<SkillDto>([], false)),
+        }));
+        Services.AddSingleton(Fake.Of<ICatalogApi<WeaponDto>>(new()
+        {
+            [nameof(ICatalogApi<WeaponDto>.ListAsync)] = _ => Task.FromResult(new CatalogList<WeaponDto>([], false)),
+        }));
+        Services.AddSingleton(Fake.Of<ICharactersApi>(new()
+        {
+            [nameof(ICharactersApi.CreateAsync)] = _ => Task.FromResult(new CharacterCreatedDto(Guid.NewGuid(), 1)),
+        }));
+        var cut = Render<QuickNpcModal>(p => p
+            .Add(c => c.Open, true)
+            .Add(c => c.OnCreatedNamed, EventCallback.Factory.Create<(Guid Id, string Name)>(this, c => created?.Add(c))));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=quick-name]")));
+        return cut;
+    }
+
+    [Fact]
+    public void Quick_npc_first_screen_has_archetype_name_level_and_weapon_and_the_rest_waits_in_details()
+    {
+        var cut = Quick();
+
+        Assert.NotEmpty(cut.FindAll("[data-testid^=archetype-]"));
+        Assert.Contains("Опытность в бою", cut.Markup, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("[data-testid=catalog-search]"));
+        Assert.Empty(cut.FindAll(".catalog-search-row"));                       // пустой запрос оружия — без списка
+        Assert.False(cut.Find("[data-testid=quick-details]").HasAttribute("open"));
+        Assert.DoesNotContain("гл. 10", cut.Markup, StringComparison.Ordinal);  // ссылок на главы книги в тексте нет
+        Assert.Single(cut.FindAll("button"), b => b.TextContent.Trim() == "Отмена"); // одна «Отмена» — в подвале
+    }
+
+    [Fact]
+    public void Quick_npc_creation_reports_the_name_so_the_library_can_stay_on_its_page()
+    {
+        var created = new List<(Guid Id, string Name)>();
+        var cut = Quick(created);
+        cut.Find("[data-testid=quick-name]").Change("  Фрэнк Мур ");
+
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Single(created));
+        Assert.Equal("Фрэнк Мур", created[0].Name);
     }
 
     // ── Страница библиотеки ─────────────────────────────────────────────────
