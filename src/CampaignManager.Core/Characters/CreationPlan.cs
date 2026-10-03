@@ -414,7 +414,7 @@ public sealed class CreationPlan
     private string? ValidateOccupation()
     {
         if (Occupation is null)
-            return "Выберите род занятий";
+            return "Выберите профессию";
 
         if (FormulaChoices.Count > 0 && (Draft.FormulaChoice is not { } choice || !FormulaChoices.Contains(choice)))
             return "Выберите характеристику в формуле очков профессии";
@@ -431,7 +431,7 @@ public sealed class CreationPlan
     private string? ValidateSkills()
     {
         if (Occupation is null)
-            return "Выберите род занятий";
+            return "Выберите профессию";
 
         if (Draft.CreditRating < CreditMin || Draft.CreditRating > CreditMax)
             return $"Средства должны быть в пределах профессии: {CreditMin}–{CreditMax}%";

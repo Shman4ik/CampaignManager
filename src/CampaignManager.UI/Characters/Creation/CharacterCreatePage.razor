@@ -12,7 +12,7 @@
    RandomDraft, открытый на «Итоге»), чистый лист; у НПС ещё быстрый НПС. Чистый лист создаётся только по кнопке:
    переход по ссылке ничего не пишет, иначе перезагрузка заводила бы двойников. Все способы собирают лист одним
    SheetBuilder (Core). Место проверяется до выбора — знание v1: иначе отказ приходил только на «Создать». *@
-<PageHeader Title="@CreationLinks.NewTitle(CreationKind)">
+<PageHeader Title="@CreationLinks.NewTitle(CreationKind)" Subtitle="@(_context is null ? null : CreationLinks.PlaceText(_context))">
     <Actions>
         <Button Small="true" Variant="ButtonVariant.Secondary" Href="@CreationLinks.Back(CreationKind, ScenarioId)">Назад</Button>
     </Actions>
@@ -21,8 +21,6 @@
 <div class="cm-page">
     <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Проверяю, куда ляжет лист…" Context="context">
         <ChildContent>
-            <CreationPlace Context="context" />
-
             @if (!context.CanCreate)
             {
                 <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист здесь не завести" data-testid="create-refused">
@@ -30,9 +28,8 @@
                     <Actions>
                         @if (context.ActiveCharacterId is { } active)
                         {
-                            <Button Small="true" Icon="fa-id-card" Href="@($"character/{active}")">Открыть активного сыщика</Button>
+                            <Button Icon="fa-id-card" Href="@($"character/{active}")">Открыть текущего сыщика</Button>
                         }
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Href="">На главную</Button>
                     </Actions>
                 </Alert>
             }
@@ -46,48 +43,48 @@
                 <div class="cm-grid-cards" data-testid="create-options">
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
-                            <h2 class="cm-section-title"><i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent-600" aria-hidden="true"></i>Помощник</h2>
+                            <h2 class="cm-card-title"><i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent-600" aria-hidden="true"></i>Пошаговый помощник</h2>
                             <p class="cm-text-muted flex-1">
-                                Пять шагов главы 3: характеристики и возраст, род занятий, навыки, биография, снаряжение. Любой бросок
+                                Семь шагов: способ, характеристики, профессия, навыки, биография, снаряжение и итог. Любой бросок
                                 можно сделать здесь или вписать с настоящих костей.
                             </p>
                             <Button Icon="fa-wand-magic-sparkles" Href="@CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId)"
-                                    data-testid="create-wizard">Открыть помощник</Button>
+                                    data-testid="create-wizard">Начать создание</Button>
                         </div>
                     </div>
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
-                            <h2 class="cm-section-title"><i class="fa-solid fa-dice mr-2 text-accent-600" aria-hidden="true"></i>Случайный сыщик</h2>
+                            <h2 class="cm-card-title"><i class="fa-solid fa-dice mr-2 text-accent-600" aria-hidden="true"></i>@(CreationKind is CharacterKind.Player ? "Случайный сыщик" : "Случайный " + CreationLinks.KindTitle(CreationKind))</h2>
                             <p class="cm-text-muted flex-1">
-                                Помощник, заполненный бросками по тем же правилам, открывается на «Итоге»: любой шаг можно открыть и
-                                переиграть до создания.
+                                Кости бросит сам помощник — по тем же правилам. Откроется итог: любой шаг можно переиграть до создания.
                             </p>
                             <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="create-random"
-                                    Href="@CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId, random: true)">Бросить</Button>
+                                    Href="@CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId, random: true)">Бросить кости и открыть итог</Button>
                         </div>
                     </div>
                     @if (CreationKind is CharacterKind.Npc)
                     {
                         <div class="cm-card">
                             <div class="cm-card-body flex h-full flex-col gap-3">
-                                <h2 class="cm-section-title"><i class="fa-solid fa-bolt mr-2 text-accent-600" aria-hidden="true"></i>Быстрый НПС</h2>
+                                <h2 class="cm-card-title"><i class="fa-solid fa-bolt mr-2 text-accent-600" aria-hidden="true"></i>Быстрый НПС</h2>
                                 <p class="cm-text-muted flex-1">
-                                    Встречный констебль за полминуты: типаж, пара чисел, боевой навык 25/40/70%, имя под эпоху (гл. 10).
+                                    Встречный констебль за полминуты: типаж, пара чисел, боевой навык 25/40/70% и имя под эпоху.
                                 </p>
                                 <Button Variant="ButtonVariant.Secondary" Icon="fa-bolt" data-testid="create-quick"
-                                        OnClick="() => _quickOpen = true">Быстрый НПС</Button>
+                                        OnClick="() => _quickOpen = true">Заполнить форму</Button>
                             </div>
                         </div>
                     }
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
-                            <h2 class="cm-section-title"><i class="fa-solid fa-file mr-2 text-accent-600" aria-hidden="true"></i>Чистый лист</h2>
-                            <Field Label="Имя" Hint="@(CreationKind is CharacterKind.Player ? "(можно позже)" : null)">
+                            <h2 class="cm-card-title"><i class="fa-solid fa-file mr-2 text-accent-600" aria-hidden="true"></i>Чистый лист</h2>
+                            <Field Label="Имя" Required="@(CreationKind is not CharacterKind.Player)">
                                 <input class="cm-input" maxlength="@CharacterLimits.NameLength" data-testid="blank-name" @bind="_blankName" />
                             </Field>
                             <p class="cm-text-muted flex-1">Пустой бланк: всё заполняете на листе сами — например, переносите бумажный лист.</p>
                             <Button Variant="ButtonVariant.Secondary" Icon="fa-file-circle-plus" Busy="_busy" data-testid="create-blank"
                                     Disabled="@(CreationKind is not CharacterKind.Player && string.IsNullOrWhiteSpace(_blankName))"
+                                    DisabledReason="Впишите имя"
                                     OnClick="() => CreateBlankAsync(context)">Создать чистый лист</Button>
                         </div>
                     </div>
@@ -104,6 +101,7 @@
 </div>
 
 @code {
+    private CreationContextDto? _context;
     private string _blankName = "";
     private string? _error;
     private bool _busy;
@@ -126,8 +124,13 @@
 
     private string LoadKey => $"{CreationKind}:{CampaignOrNull}:{ScenarioId}";
 
-    private Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken) =>
-        Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+    private async Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken)
+    {
+        var context = await Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+        _context = context;
+        StateHasChanged();
+        return context;
+    }
 
     private async Task CreateBlankAsync(CreationContextDto context)
     {

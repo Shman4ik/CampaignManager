@@ -15,28 +15,34 @@
             }
             <a class="cm-card-title min-w-0 break-words hover:underline" href="@($"character/{Character.Id}")">@Character.Name</a>
         </div>
-        <div class="flex flex-wrap gap-2">
-            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-id-card" Href="@($"character/{Character.Id}")">Открыть</Button>
-            @if (OnCast.HasDelegate && Character.Kind is CharacterKind.Npc && Character.Status is not CharacterStatus.Archived)
+        <div class="flex items-center gap-2">
+            <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-id-card" Href="@($"character/{Character.Id}")">Открыть</Button>
+            @if (HasMenu)
             {
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-scroll" data-testid="cast-to-scenario"
-                        OnClick="() => OnCast.InvokeAsync(Character)">В сценарий</Button>
-            }
-            @if (Character.CanEdit && OnArchive.HasDelegate && Character.Status is not CharacterStatus.Archived)
-            {
-                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-box-archive" Busy="Busy"
-                        OnClick="() => OnArchive.InvokeAsync(Character)">@ArchiveLabel</Button>
-            }
-            @if (Character.CanEdit && OnRestore.HasDelegate && Character.Status is CharacterStatus.Archived)
-            {
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" Busy="Busy"
-                        OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть</Button>
+                @* «Занять в сценарии» и «В архив» — в меню: опасное действие не стоит рядом с частым (правило 7). *@
+                <RowMenu AriaLabel="@($"Действия: {Character.Name}")">
+                    <ChildContent>
+                        @if (OnCast.HasDelegate && Character.Kind is CharacterKind.Npc && Character.Status is not CharacterStatus.Archived)
+                        {
+                            <RowMenuItem Icon="fa-scroll" OnClick="() => OnCast.InvokeAsync(Character)">Занять в сценарии</RowMenuItem>
+                        }
+                        @if (CanRestore)
+                        {
+                            <RowMenuItem Icon="fa-rotate-left" OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть из архива</RowMenuItem>
+                        }
+                    </ChildContent>
+                    <Danger>
+                        @if (CanArchive)
+                        {
+                            <RowMenuItem Danger="true" Icon="fa-box-archive" OnClick="() => OnArchive.InvokeAsync(Character)">@ArchiveLabel</RowMenuItem>
+                        }
+                    </Danger>
+                </RowMenu>
             }
         </div>
     </div>
     <div class="@(Framed ? "cm-card-body flex flex-1 flex-col gap-2" : "flex flex-col gap-2")">
         <div class="flex flex-wrap gap-1.5">
-            <Badge Tone="@(Character.Kind is CharacterKind.Npc ? Tone.Error : Tone.Stone)">@CreationLinks.KindTitle(Character.Kind)</Badge>
             @if (Character.Occupation is { } occupation)
             {
                 <Badge Tone="Tone.Info" class="max-w-full whitespace-normal">@occupation</Badge>
@@ -45,7 +51,10 @@
             {
                 <Badge Tone="Tone.Neutral">@Character.Age лет</Badge>
             }
-            <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">@Place</Badge>
+            @if (Place is { } place)
+            {
+                <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">@place</Badge>
+            }
             @if (Character.Status is CharacterStatus.Archived)
             {
                 <Badge Tone="Tone.Warning">Архив</Badge>
@@ -55,12 +64,12 @@
                 <Badge Tone="Tone.Success" Icon="fa-scroll" class="max-w-full whitespace-normal">@scenario</Badge>
             }
         </div>
-        @if (Character.Gender is not null || Character.Residence is not null)
+        @if (Character.Gender is { Length: > 0 } || Character.Residence is not null)
         {
             <div class="cm-meta">
-                @if (Character.Gender is { } gender)
+                @if (Character.Gender is { Length: > 0 } gender)
                 {
-                    <span>@gender</span>
+                    <span>@(char.ToUpperInvariant(gender[0]) + gender[1..])</span>
                 }
                 @if (Character.Residence is { } residence)
                 {
@@ -97,10 +106,17 @@
     /// <summary>Что показать под карточкой: роль и количество НПС в сценарии (T2.5a).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
-    private string Place => Character switch
+    private bool CanArchive => Character.CanEdit && OnArchive.HasDelegate && Character.Status is not CharacterStatus.Archived;
+
+    private bool CanRestore => Character.CanEdit && OnRestore.HasDelegate && Character.Status is CharacterStatus.Archived;
+
+    private bool HasMenu => CanArchive || CanRestore || (OnCast.HasDelegate && Character.Kind is CharacterKind.Npc && Character.Status is not CharacterStatus.Archived);
+
+    /// <summary>Где лист живёт. Библиотека — обычное место, об этом не пишем (метка без отличия — шум).</summary>
+    private string? Place => Character switch
     {
         { CampaignName: { } campaign } => $"Кампания «{campaign}»",
         { ScenarioName: { } scenario } => $"Сценарий «{scenario}»",
-        _ => "Библиотека",
+        _ => null,
     };
 }

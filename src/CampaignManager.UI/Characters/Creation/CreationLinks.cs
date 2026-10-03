@@ -1,3 +1,4 @@
+using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Core;
 using CampaignManager.Core.Characters;
@@ -56,6 +57,15 @@ public static class CreationLinks
         CharacterKind.Pregen => "Новый преген",
         _ => "Новый сыщик",
     };
+
+    /// <summary>Подзаголовок страницы создания: куда ляжет лист и эпоха — вместо цветной метки без легенды.</summary>
+    public static string PlaceText(CreationContextDto context)
+    {
+        var place = context.ScenarioName is { } scenario ? $"сценарий «{scenario}»"
+            : context.CampaignName is { } campaign ? $"кампания «{campaign}»"
+            : context.Kind is CharacterKind.Player ? "без кампании" : "библиотека НПС и готовых сыщиков";
+        return $"Куда ляжет: {place} · {EraTitle(context.Era)}";
+    }
 
     public static string EraTitle(Era era) => era is Era.Modern ? "Наше время" : "1920-е";
 

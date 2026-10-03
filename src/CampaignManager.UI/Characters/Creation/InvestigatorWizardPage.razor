@@ -20,7 +20,7 @@
    профессия, слоты, бюджеты и проверки шагов — CreationPlan (слоты собирает он, шаги только показывают), лист —
    SheetBuilder.FromDraft, тот же, что у быстрого НПС и импорта. «Случайный сыщик» (?random=1) — тот же помощник с
    SheetBuilder.RandomDraft, открытый на «Итоге» (D6.4). Любой бросок можно вписать (RollInput / DiceInput). *@
-<PageHeader Title="@Title" Subtitle="@Subtitle">
+<PageHeader Title="@Title" Subtitle="@(_context is null ? null : CreationLinks.PlaceText(_context))">
     <Actions>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="RestartAsync" data-testid="wizard-restart">Начать заново</Button>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-xmark" Href="@CreationLinks.Back(CreationKind, ScenarioId)" data-testid="wizard-cancel">Отменить создание</Button>
@@ -30,7 +30,6 @@
 <div class="cm-page">
     <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Готовлю помощник…" Context="context">
         <ChildContent>
-            <CreationPlace Context="context" />
             @if (!context.CanCreate)
             {
                 <Alert Tone="Tone.Warning" ShowIcon="true" Title="Лист здесь не завести" data-testid="create-refused">
@@ -40,7 +39,6 @@
                         {
                             <Button Small="true" Icon="fa-id-card" Href="@($"character/{active}")">Открыть активного сыщика</Button>
                         }
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Href="">На главную</Button>
                     </Actions>
                 </Alert>
             }
@@ -50,7 +48,7 @@
                 var step = CurrentStep;
                 var validation = plan.Validate(step);
 
-                <nav class="mb-3 flex gap-2 overflow-x-auto pb-1" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
+                <nav class="mb-3 flex flex-wrap gap-2" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
                     @foreach (var item in Enum.GetValues<CreationStep>())
                     {
                         var target = item;
@@ -60,7 +58,7 @@
                                 Variant="@(target == step ? ButtonVariant.OutlinePrimary : ButtonVariant.Secondary)"
                                 Icon="@(target < step ? "fa-check" : null)"
                                 Disabled="@(!reachable)" OnClick="() => GoToAsync(target)">
-                            @((int)target + 1). @Steps[target].Title
+                            @((int)target + 1)<span class="@(target == step ? null : "max-sm:sr-only")">. @Steps[target].Title</span>
                         </Button>
                     }
                 </nav>
@@ -138,13 +136,14 @@
     {
         [CreationStep.Method] = new("Способ", "Как определять характеристики и сколько сыщику лет: возрастные модификаторы применяются к броскам сразу."),
         [CreationStep.Characteristics] = new("Характеристики", "Восемь характеристик, возрастные модификаторы, проверки ОБР и Удача. Вторичные атрибуты считаются сами."),
-        [CreationStep.Occupation] = new("Род занятий", "Профессия задаёт навыки и очки профессиональных навыков."),
+        [CreationStep.Occupation] = new("Профессия", "Профессия задаёт навыки и очки профессиональных навыков."),
         [CreationStep.Skills] = new("Навыки", "Очки профессии — в её навыки и Средства, очки личного интереса (ИНТ × 2) — в любые, кроме Мифов Ктулху."),
         [CreationStep.Biography] = new("Биография", "Имя, хотя бы три графы из шести и одна ключевая связь."),
         [CreationStep.Gear] = new("Снаряжение", "Достаток — по Средствам; допишите вещи, которые сыщик носит с собой."),
         [CreationStep.Summary] = new("Итог", "Так лист уйдёт в базу; после создания его можно править как обычно."),
     };
 
+    private CreationContextDto? _context;
     private InvestigatorDraft _draft = new();
     private SkillCatalog? _catalog;
     private List<OccupationDto> _occupationDtos = [];
@@ -172,13 +171,6 @@
 
     private string Title => CreationKind is CharacterKind.Player ? "Помощник создания сыщика" : $"{CreationLinks.NewTitle(CreationKind)}: помощник";
 
-    private string Subtitle => CreationKind switch
-    {
-        CharacterKind.Npc => ScenarioId is not null ? "НПС сценария" : "НПС в библиотеке",
-        CharacterKind.Pregen => ScenarioId is not null ? "Готовый сыщик сценария" : "Готовый сыщик в библиотеке",
-        _ => "Сыщик игрока",
-    };
-
     private string FinishLabel => CreationKind switch
     {
         CharacterKind.Npc => "Создать НПС",
@@ -195,6 +187,8 @@
     private async Task<CreationContextDto> LoadAsync(CancellationToken cancellationToken)
     {
         var context = await Api.GetCreationContextAsync(CreationKind, CampaignOrNull, ScenarioId, cancellationToken);
+        _context = context;
+        StateHasChanged();
         if (!context.CanCreate)
             return context;
 
