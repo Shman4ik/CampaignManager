@@ -1,0 +1,77 @@
+@implements IDisposable
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+@inject BrowserStorage Storage
+@inject IJSRuntime JS
+
+@* Эксперимент с палитрой (Styles/palette-sepia.css): ?palette=sepia включает тёплую сепию, ?palette=default
+   возвращает обычную; выбор помнит localStorage (cm.palette), чтобы владелец ходил по приложению на своём iPad,
+   не дописывая флаг к каждому адресу. Атрибут — на <html>: окна, тосты и ширма рисуются вне .cm-shell.
+   Решение принято — удалить вместе с palette-sepia.css. *@
+@code {
+    private const string StorageKey = "cm.palette";
+    private const string QueryKey = "palette";
+    private static readonly string[] Palettes = ["sepia"];
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ApplyAsync();
+        }
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try
+        {
+            await ApplyAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        string? palette;
+        if (QueryValue(new Uri(Navigation.Uri).Query, QueryKey) is { } requested)
+        {
+            palette = Palettes.Contains(requested) ? requested : null;
+            if (palette is null)
+            {
+                await Storage.RemoveAsync(StorageKey);
+            }
+            else
+            {
+                await Storage.SetAsync(StorageKey, palette);
+            }
+        }
+        else
+        {
+            var stored = await Storage.GetAsync(StorageKey);
+            palette = stored is not null && Palettes.Contains(stored) ? stored : null;
+        }
+
+        if (palette is null)
+        {
+            await JS.InvokeVoidAsync("document.documentElement.removeAttribute", "data-palette");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-palette", palette);
+        }
+    }
+
+    private static string? QueryValue(string query, string key) =>
+        query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .Where(pair => Uri.UnescapeDataString(pair[0]) == key)
+            .Select(pair => pair.Length > 1 ? Uri.UnescapeDataString(pair[1]) : "")
+            .LastOrDefault();
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}
