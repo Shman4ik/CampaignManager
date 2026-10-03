@@ -14,8 +14,7 @@
 {
     <section class="cm-section">
         <div class="cm-section-header"><h2 class="cm-section-title">Трасса</h2></div>
-        <div class="cm-card"><div class="cm-card-body flex flex-col gap-3">
-            <p class="cm-meta">Локации — смысловые отрезки погони (стр. 131). Помехи и преграды ставятся в локацию, в которую входят.</p>
+        <div class="cm-card"><div class="cm-card-body">
             @TrackControls("Создать трассу")
         </div></div>
     </section>
@@ -25,26 +24,23 @@ else
     var chase = Chase;
     @if (chase.Phase == ChasePhase.Ended)
     {
-        <Alert Tone="Tone.Info" ShowIcon="true" Icon="fa-flag-checkered">
-            <b>Погоня окончена.</b>
-            @foreach (var (participant, runner) in Prey)
-            {
-                <span class="mr-3">@participant.Name — @Status(participant)</span>
-            }
-            <div class="mt-1 cm-meta">Итоги уже в листах (урон — через «Применить»). Сцену закрывает «Завершить» вверху.</div>
-        </Alert>
+        @Finale()
     }
 
     <section class="cm-section">
         <div class="cm-section-header">
-            <h2 class="cm-section-title">Трасса · @ChaseText.Of(chase.Phase)</h2>
+            <h2 class="cm-section-title">Трасса</h2>
+            @if (chase.Phase == ChasePhase.Active)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="@(chase.LastLocation >= ChaseRules.MaxLocations)"
+                        OnClick="() => Session.ChangeAsync(s => ChaseRules.Resize(s.Chase!, s.Chase!.LastLocation + 1))">Локация в конец</Button>
+            }
         </div>
         <div class="cm-card"><div class="cm-card-body flex flex-col gap-3">
             <ChaseTrack State="Session.State" OnEdit="number => _editing = number" />
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 cm-meta">
                 <span><i class="fa-solid fa-bolt text-warning-600" aria-hidden="true"></i> помеха</span>
                 <span><i class="fa-solid fa-road-barrier text-accent-600" aria-hidden="true"></i> преграда</span>
-                <span>Номер локации — изменить её.</span>
                 @if (chase.Phase == ChasePhase.Active)
                 {
                     <span>Самая медленная СКО: @chase.SlowestMove</span>
@@ -55,65 +51,46 @@ else
                 <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-error-200 bg-error-50 px-3 py-2" @key="prey.Id">
                     <span>
                         <i class="fa-solid fa-hand-fist text-error-700" aria-hidden="true"></i>
-                        <b>@prey.Name</b> настигнут (@string.Join(", ", pursuers.Select(p => p.Name))): можно драться и проводить манёвр — поимку объявляет Хранитель (стр. 135).
+                        <b>@prey.Name</b> настигнут (@string.Join(", ", pursuers.Select(p => p.Name))): можно драться и проводить манёвр — поимку объявляет Хранитель.
                     </span>
                     <Button Small="true" Variant="ButtonVariant.Error" Icon="fa-handcuffs" OnClick="() => CatchAsync(prey.Id, pursuers[0].Id)" data-testid="chase-catch">Пойман</Button>
                 </div>
             }
             @if (chase.Phase == ChasePhase.Setup)
             {
-                @TrackControls("Изменить трассу")
+                <details class="encounter-rolls" data-testid="chase-track-edit">
+                    <summary class="cm-meta cursor-pointer py-2">Настроить трассу</summary>
+                    <div class="pt-2">@TrackControls("Изменить трассу")</div>
+                </details>
             }
-            else if (chase.Phase == ChasePhase.Active)
-            {
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="@(chase.LastLocation >= ChaseRules.MaxLocations)"
-                            OnClick="() => Session.ChangeAsync(s => ChaseRules.Resize(s.Chase!, s.Chase!.LastLocation + 1))">Локация в конец</Button>
-                </div>
-            }
-        </div></div>
+        </div>
+        @if (chase.Phase == ChasePhase.Setup)
+        {
+            <div class="cm-card-footer cm-btn-row">
+                <Button Icon="fa-gauge-high" Disabled="@(ChaseRules.SpeedChecksRejection(Session.State) is not null)"
+                        DisabledReason="@ChaseRules.SpeedChecksRejection(Session.State)"
+                        OnClick="BeginSpeedChecksAsync" data-testid="chase-speed">Проверка скорости</Button>
+            </div>
+        }
+        </div>
     </section>
 
     @switch (chase.Phase)
     {
-        case ChasePhase.Setup:
-            <section class="cm-section">
-                <div class="cm-section-header"><h2 class="cm-section-title">Бегущие</h2></div>
-                <div class="cm-card">
-                    @if (Session.State.Participants.Count == 0)
-                    {
-                        <p class="cm-text-muted px-3 py-3">Добавьте участников кнопкой «Участник».</p>
-                    }
-                    else
-                    {
-                        <ChaseRunners Skills="_skills" />
-                    }
-                    <div class="cm-card-footer flex flex-wrap items-center gap-2">
-                        <Button Small="true" Icon="fa-gauge-high" Disabled="@(ChaseRules.SpeedChecksRejection(Session.State) is not null)"
-                                OnClick="BeginSpeedChecksAsync" data-testid="chase-speed">Проверка скорости</Button>
-                        @if (ChaseRules.SpeedChecksRejection(Session.State) is { } reason)
-                        {
-                            <span class="cm-meta">@reason</span>
-                        }
-                    </div>
-                </div>
-            </section>
-            break;
         case ChasePhase.SpeedCheck:
             <section class="cm-section">
                 <div class="cm-section-header"><h2 class="cm-section-title">Проверка скорости</h2></div>
                 <div class="cm-card">
-                    <p class="cm-meta px-3 pt-3">Убегающий быстрее самого быстрого преследователя сразу отрывается; преследователь медленнее самого медленного убегающего отстаёт (стр. 130, 145).</p>
                     <ChaseSpeedChecks />
                     @DexTies()
-                    <div class="cm-card-footer flex flex-wrap items-center gap-2">
-                        <Button Small="true" Icon="fa-flag" Disabled="@(ChaseRules.StartRejection(Session.State) is not null)" OnClick="StartAsync"
-                                data-testid="chase-start">Начать погоню</Button>
-                        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Session.ChangeAsync(ChaseRules.BackToSetup)">К трассе</Button>
-                        @if (ChaseRules.StartRejection(Session.State) is { } notReady)
-                        {
-                            <span class="cm-meta">@notReady</span>
-                        }
+                    @if (ChaseRules.StartNote(Session.State) is { } note && ChaseRules.StartRejection(Session.State) is null)
+                    {
+                        <div class="px-3 pb-3"><Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mb-0" data-testid="chase-start-note">@note</Alert></div>
+                    }
+                    <div class="cm-card-footer flex flex-wrap items-center justify-between gap-2">
+                        <Button Variant="ButtonVariant.Secondary" OnClick="() => Session.ChangeAsync(ChaseRules.BackToSetup)">К трассе</Button>
+                        <Button Icon="fa-flag" Disabled="@(ChaseRules.StartRejection(Session.State) is not null)" DisabledReason="@ChaseRules.StartRejection(Session.State)"
+                                OnClick="StartAsync" data-testid="chase-start">Начать погоню</Button>
                     </div>
                 </div>
             </section>
@@ -141,24 +118,33 @@ else
             break;
     }
 
-    @if (chase.Phase is ChasePhase.Active or ChasePhase.Ended)
+    @if (chase.Phase is ChasePhase.Setup or ChasePhase.Active)
     {
         <section class="cm-section">
             <div class="cm-section-header">
                 <h2 class="cm-section-title">Бегущие</h2>
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_runnersOpen ? "fa-chevron-up" : "fa-sliders")" OnClick="() => _runnersOpen = !_runnersOpen">
-                    @(_runnersOpen ? "Свернуть" : "Настроить")
+                    @(_runnersOpen ? "Свернуть" : "Изменить")
                 </Button>
             </div>
-            <div class="cm-card"><ChaseRunners Skills="_skills" Editable="_runnersOpen" /></div>
-        </section>
-    }
-
-    @if (chase.Phase is ChasePhase.Active)
-    {
-        <section class="cm-section">
-            <div class="cm-section-header"><h2 class="cm-section-title">Часть 5: необязательные правила</h2></div>
-            <div class="cm-card"><div class="cm-card-body"><ChaseOptions /></div></div>
+            <div class="cm-card">
+                @if (Session.State.Participants.Count == 0)
+                {
+                    <p class="cm-text-muted px-3 py-3">Добавьте участников кнопкой «Добавить».</p>
+                }
+                else if (!_runnersOpen)
+                {
+                    <p class="px-3 py-3" data-testid="chase-runners-summary">@RunnersSummary(chase)</p>
+                }
+                else
+                {
+                    <ChaseRunners Skills="_skills" />
+                    <div class="cm-card-body border-t border-primary-200">
+                        <h3 class="mb-2 font-semibold text-primary-900">Правила погони</h3>
+                        <ChaseOptions />
+                    </div>
+                }
+            </div>
         </section>
     }
 
@@ -206,6 +192,39 @@ else
             ? ChaseText.Of(status)
             : participant.IsOut ? "выбыл" : "в погоне";
 
+    /// <summary>Итог погони одной строкой: кто ушёл, кого поймали, кто отстал; кнопка «Завершить погоню» — в шапке сцены.</summary>
+    private RenderFragment Finale() => __builder =>
+    {
+        <Alert Tone="Tone.Info" ShowIcon="true" Icon="fa-flag-checkered" data-testid="chase-finale">
+            <b>Погоня окончена.</b>
+            @foreach (var group in Prey.GroupBy(x => Status(x.Participant)))
+            {
+                <div>@group.Key: @string.Join(", ", group.Select(x => x.Participant.Name)).</div>
+            }
+            <div class="cm-meta mt-1">Итоги уже в листах; урон — через «Применить».</div>
+        </Alert>
+    };
+
+    private static string Plural(int n, string one, string few, string many) =>
+        (n % 100 is >= 11 and <= 14) ? many : (n % 10) switch { 1 => one, 2 or 3 or 4 => few, _ => many };
+
+    /// <summary>«4 убегающих, 1 преследователь» — вместо четырёх полей на каждого бегущего.</summary>
+    private string RunnersSummary(ChaseState chase)
+    {
+        var runners = ChaseRules.InChase(Session.State).Where(x => !x.Runner.IsPassenger).ToList();
+        var prey = runners.Count(x => x.Runner.Role == ChaseRole.Prey);
+        var pursuers = runners.Count - prey;
+        List<string> parts = [];
+        if (prey > 0)
+            parts.Add($"{prey} {Plural(prey, "убегающий", "убегающих", "убегающих")}");
+        if (pursuers > 0)
+            parts.Add($"{pursuers} {Plural(pursuers, "преследователь", "преследователя", "преследователей")}");
+        var onWheels = runners.Count(x => x.Runner.Vehicle is not null);
+        if (onWheels > 0)
+            parts.Add($"на транспорте: {onWheels}");
+        return parts.Count == 0 ? "Никто не бежит." : string.Join(", ", parts) + ".";
+    }
+
     private Task CreateTrackAsync() => Session.ChangeAsync(state =>
     {
         var fresh = state.Chase is null;
@@ -238,18 +257,19 @@ else
 
     private RenderFragment TrackControls(string action) => __builder =>
     {
-        <div class="flex flex-wrap items-end gap-2">
-            <Field Label="Локаций" class="w-24">
+        @* Одна строка: подписи на одной линии, поля и кнопка одной высоты (cm-field-row — выравнивание по низу). *@
+        <div class="cm-field-row">
+            <Field Label="Локаций" class="w-28">
                 <input type="number" inputmode="numeric" min="@ChaseRules.MinLocations" max="@ChaseRules.MaxLocations" class="cm-input" value="@_length"
                        @onchange="e => _length = int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : _length" />
             </Field>
-            <Field Label="Отрыв убегающих" Note="обычно 2, бывает 1 (стр. 131)" class="w-40">
+            <Field Label="Отрыв убегающих" class="w-52">
                 <select class="cm-input" value="@_gap" @onchange="SetGap">
-                    <option value="2">2 локации</option>
+                    <option value="2">2 локации (обычно)</option>
                     <option value="1">1 локация</option>
                 </select>
             </Field>
-            <Button Small="true" Icon="fa-route" class="mb-1" OnClick="CreateTrackAsync" data-testid="chase-track-create">@action</Button>
+            <Button Icon="fa-route" OnClick="CreateTrackAsync" data-testid="chase-track-create">@action</Button>
         </div>
     };
 
@@ -260,7 +280,7 @@ else
             var key = (first.Id, second.Id);
             var rolls = _ties.GetValueOrDefault(key);
             <div class="flex flex-col gap-2 border-t border-primary-200 px-3 py-3" @key="key">
-                <div><b>Равная ЛВК (@first.Stats.Dex):</b> @first.Name и @second.Name — встречная проверка ЛВК, победитель ходит первым (стр. 132).</div>
+                <div><b>Равная ЛВК (@first.Stats.Dex):</b> @first.Name и @second.Name — встречная проверка ЛВК, победитель ходит первым.</div>
                 <div class="flex flex-wrap items-end gap-3">
                     <Field Label="@first.Name" Group="true">
                         <RollInput Value="first.Stats.Dex" Label="@($"ЛВК: {first.Name}")" Roll="rolls.A" RollChanged="r => _ties[key] = (r, _ties.GetValueOrDefault(key).B)" />

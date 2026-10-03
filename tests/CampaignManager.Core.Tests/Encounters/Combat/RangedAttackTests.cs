@@ -73,7 +73,7 @@ public sealed class RangedAttackTests
     [Fact]
     [Trait("page", "110")]
     public void LongRangeMiss_SummaryNamesDifficulty() =>
-        Assert.Equal("Стрелок промахивается по Культист (40, нужен трудный успех).", Resolve(Setup(40, RangeBand.Long)).Summary);
+        Assert.Equal("Стрелок промахивается. Цель: Культист (40, нужен трудный успех).", Resolve(Setup(40, RangeBand.Long)).Summary);
 
     [Theory]
     [Trait("page", "88")]

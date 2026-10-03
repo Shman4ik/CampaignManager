@@ -335,6 +335,19 @@ public static class ChaseRules
         return true;
     }
 
+    /// <summary>
+    /// Исправить ошибочно записанную проверку скорости: строка снова открыта (поправка сброшена), бросок вписывают заново.
+    /// Только пока погоня не началась.
+    /// </summary>
+    public static void ReopenSpeedCheck(EncounterState state, Guid participantId)
+    {
+        if (state.Chase is not { Phase: ChasePhase.SpeedCheck } chase || chase.Runner(participantId) is not { IsPassenger: false } runner)
+            return;
+
+        runner.SpeedChecked = false;
+        runner.SpeedModifier = 0;
+    }
+
     /// <summary>Вернуться к трассе из проверки скорости (поправки сброшены — их бросят заново).</summary>
     public static void BackToSetup(EncounterState state)
     {
@@ -380,13 +393,41 @@ public static class ChaseRules
 
     public static bool AllSpeedChecksDone(ChaseState chase) => chase.Runners.All(r => r.SpeedChecked);
 
+    /// <summary>
+    /// Кому проверка скорости ещё нужна: бегущие в погоне (не выбыли и не мертвы), не пассажиры. Мёртвого и выбывшего
+    /// строки проверки нет, поэтому и ждать его нельзя — иначе «Начать погоню» молча блокировал погибший сыщик.
+    /// </summary>
+    public static List<EncounterParticipant> AwaitingSpeedCheck(EncounterState state) =>
+    [
+        .. InChase(state).Where(x => !x.Runner.IsPassenger && !x.Runner.SpeedChecked).Select(x => x.Participant),
+    ];
+
+    /// <summary>
+    /// Предупреждение до «Начать погоню»: если по проверкам скорости погоня закончится сразу (все убегающие быстрее
+    /// самого быстрого преследователя или гнаться некому), об этом говорим заранее, а не после нажатия. null — погоня
+    /// начнётся как обычно.
+    /// </summary>
+    public static string? StartNote(EncounterState state)
+    {
+        var inChase = InChase(state).Where(x => !x.Runner.IsPassenger).ToList();
+        var prey = inChase.Where(x => x.Runner.Role == ChaseRole.Prey).ToList();
+        if (prey.Count == 0)
+            return null;
+
+        var fastestPursuer = inChase.Where(x => x.Runner.Role == ChaseRole.Pursuer)
+            .Select(x => Move(x.Participant, x.Runner)).DefaultIfEmpty(-1).Max();
+        return prey.All(x => Move(x.Participant, x.Runner) > fastestPursuer)
+            ? "Все убегающие быстрее преследователей: погоня закончится сразу, они уйдут."
+            : null;
+    }
+
     // ───────────────────── Начало погони (части 1–2) ─────────────────────
 
     /// <summary>Почему погоню нельзя начать; null — можно.</summary>
     public static string? StartRejection(EncounterState state) =>
         state.Chase is not { } chase ? "Сначала создайте трассу."
         : chase.Phase != ChasePhase.SpeedCheck ? "Сначала — проверка скорости."
-        : !AllSpeedChecksDone(chase) ? "Проверку скорости прошли не все."
+        : AwaitingSpeedCheck(state) is { Count: > 0 } awaiting ? $"Не проверен: {string.Join(", ", awaiting.Select(p => p.Name))}."
         : null;
 
     /// <summary>

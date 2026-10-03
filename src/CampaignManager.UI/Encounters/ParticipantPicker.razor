@@ -10,7 +10,7 @@
    несколько. Сцена в кампании предлагает сценарии её незавершённых прохождений (T2.6d): выбранное прохождение окно
    отдаёт странице (OnRunChosen), и она пишет его в сцену; без кампании (или если прохождений нет) — любой сценарий библиотеки,
    сцена остаётся без прохождения. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
-<Modal Open="Open" OnClose="OnClose" Title="Участник сцены" Size="ModalSize.Large">
+<Modal Open="Open" OnClose="OnClose" Title="Добавить участника" Size="ModalSize.Large" MinHeight="32rem">
     <ChildContent>
         <div class="flex flex-col gap-3">
             <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
@@ -19,7 +19,7 @@
                 @if (_runs.Count > 0)
                 {
                     <select class="cm-input" aria-label="Сценарий прохождения" data-testid="picker-run" value="@(_chosenRunId?.ToString() ?? "")" @onchange="SelectRunAsync">
-                        <option value="">— выберите сценарий прохождения —</option>
+                        <option value="">Выберите сценарий</option>
                         @foreach (var run in _runs)
                         {
                             <option value="@run.Id">@run.ScenarioName · @ScenarioText.Of(run.Status)</option>
@@ -29,7 +29,7 @@
                 else
                 {
                     <select class="cm-input" aria-label="Сценарий" data-testid="picker-scenario" value="@(_scenarioId?.ToString() ?? "")" @onchange="SelectScenarioAsync">
-                        <option value="">— выберите сценарий —</option>
+                        <option value="">Выберите сценарий</option>
                         @foreach (var scenario in _scenarios)
                         {
                             <option value="@scenario.Id">@scenario.Name</option>
@@ -37,7 +37,7 @@
                     </select>
                     @if (Context.CampaignId is not null)
                     {
-                        <p class="cm-text-muted text-sm" data-testid="picker-no-runs">В кампании нет незавершённых прохождений — сцена останется без сценария.</p>
+                        <p class="cm-text-muted text-sm" data-testid="picker-no-runs">У кампании нет текущей партии — сцена останется без сценария.</p>
                     }
                 }
             }
@@ -58,7 +58,7 @@
                 {
                     <p class="cm-text-muted">@result.Message</p>
                 }
-                <div class="max-h-[55vh] overflow-y-auto" data-testid="picker-list">
+                <div class="max-h-[55vh] min-h-64 overflow-y-auto" data-testid="picker-list">
                     @foreach (var option in Filter(result.Options))
                     {
                         var used = option.CharacterId is { } id && UsedCharacterIds.Contains(id);
@@ -170,6 +170,14 @@
                 {
                     _chosenRunId = known.Id;
                     _scenarioId = known.ScenarioId;
+                }
+                else if (_chosenRunId is null && _runs.Count == 1)
+                {
+                    // Единственная партия — выбрана сама, без лишнего касания; страница узнает о ней, как о выбранной руками.
+                    _chosenRunId = _runs[0].Id;
+                    _scenarioId = _runs[0].ScenarioId;
+                    if (_runs[0].Id != RunId)
+                        await OnRunChosen.InvokeAsync(_runs[0].Id);
                 }
             }
 

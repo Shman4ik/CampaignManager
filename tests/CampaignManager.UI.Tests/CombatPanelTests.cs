@@ -58,7 +58,7 @@ public sealed class CombatPanelTests : KitContext
 
         var pending = Assert.IsType<EncounterResolution>(session.State.Pending);
         Assert.Equal(EncounterLogKind.Attack, pending.Kind);
-        Assert.StartsWith("Харви попадает по Гуль", pending.Title, StringComparison.Ordinal);
+        Assert.StartsWith("Харви попадает. Цель: Гуль", pending.Title, StringComparison.Ordinal);
         Assert.Equal(13, ghoul.HitPoints); // меняет только «Применить»
         Assert.Equal(0, investigator.Combat.AttacksIn(session.State.Round));
     }

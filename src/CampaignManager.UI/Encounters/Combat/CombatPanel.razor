@@ -7,7 +7,7 @@
     @if (CombatRules.DyingChecksDue(State) is { Count: > 0 } dying)
     {
         <Alert Tone="Tone.Error" ShowIcon="true" Icon="fa-heart-crack" data-testid="dying-checks">
-            <strong>При смерти — проверка ВЫН в конце раунда</strong> (провал — смерть; первая помощь в этом раунде стабилизирует, стр. 118).
+            <strong>При смерти — проверка ВЫН в конце раунда</strong> (провал — смерть; первая помощь в этом раунде стабилизирует).
             <div class="mt-2 flex flex-col gap-2">
                 @foreach (var p in dying)
                 {
@@ -25,7 +25,7 @@
         <div class="overflow-x-auto px-2 pt-2">
             <Tabs Items="Items" ActiveKey="@ActiveTab" ActiveKeyChanged="TabChanged" AriaLabel="Действия боя" />
         </div>
-        <div class="cm-card-body">
+        <div class="cm-card-body min-h-72">
             @switch (ActiveTab)
             {
                 case "maneuver":
@@ -66,13 +66,14 @@
 
     private IReadOnlyList<Tabs.Item> Items =>
     [
-        new("attack", "Атака", "fa-hand-fist"),
-        new("maneuver", "Манёвр", "fa-people-pulling"),
-        new("spell", "Заклинание", "fa-wand-sparkles", State.Participants.Count(p => p.Combat.Casting is not null)),
-        new("sanity", "Рассудок", "fa-brain"),
-        new("wounds", "Раны", "fa-kit-medical", State.Participants.Count(p => p.Dying && !p.Dead)),
-        new("actions", "Прочее", "fa-ellipsis"),
-        new("dice", "Кости", "fa-dice-d20"),
+        // Без значков и короткими подписями: семь вкладок в одну строку (с значками «Кости» уезжали на вторую).
+        new("attack", "Атака"),
+        new("maneuver", "Манёвр"),
+        new("spell", "Магия", null, State.Participants.Count(p => p.Combat.Casting is not null)),
+        new("sanity", "Рассудок"),
+        new("wounds", "Раны", null, State.Participants.Count(p => p.Dying && !p.Dead)),
+        new("actions", "Прочее"),
+        new("dice", "Кости"),
     ];
 
     private async Task DyingCheckAsync(EncounterParticipant p)

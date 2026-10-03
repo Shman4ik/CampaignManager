@@ -4,6 +4,7 @@
 @using CampaignManager.Core.Characters
 @using CampaignManager.Core.Documents
 @using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
 @using CampaignManager.Core.Music
 @using CampaignManager.UI.Platform
 @implements IDisposable
@@ -18,14 +19,16 @@
 @inject NavigationManager Navigation
 @inject ToastService Toasts
 @inject DialogService Dialogs
+@inject IJSRuntime JS
 
 @* Оболочка страницы сцены — одна на бой (/combat) и погоню (/chase), T2.6a. Начать или продолжить сцену, участники со
    снимком чисел, очередь, предпросмотр результата, эффект Хранителя, журнал; своё бой и погоня кладут в ChildContent
    (T2.6b/c) и получают EncounterSession каскадом. Открытая сцена — в адресе (?id=), состояние — в базе: перезагрузка
    вкладки посреди сцены возвращает всё, включая неприменённый результат и неписанные в лист эффекты (UI/Encounters/CLAUDE.md). *@
-<PageHeader Title="@EncounterText.Of(Kind)" DocumentTitle="@DocumentTitle" Game="true">
+<PageHeader Title="@EncounterText.Of(Kind)" DocumentTitle="@DocumentTitle" Subtitle="@Subtitle" Game="true">
     <Actions>
-        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@(Kind == EncounterKind.Combat ? "Музыка боя" : "Музыка погони")" />
+        @* Одна кнопка настроения («Бой» / «Погоня»); сам плеер — слот «Плеер» шапки. *@
+        <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@EncounterText.Of(Kind)" />
     </Actions>
 </PageHeader>
 
@@ -69,6 +72,7 @@
     private bool _starting;
     private bool _applying;
     private bool _pickerOpen;
+    private bool _effectOpen;
     private string? _error;
     private string? _notice;
     private (uint Version, EncounterState State)? _draftChoice;
@@ -113,11 +117,39 @@
     /// </summary>
     [Parameter] public bool AllowsMany { get; set; }
 
+    /// <summary>Показать список идущих сцен, а не открывать единственную (<c>?list=1</c>, пункт «Все сцены»).</summary>
+    [Parameter] public bool ShowList { get; set; }
+
+    /// <summary>
+    /// Колонка действия липнет под шапкой, и в ней же результат («Применить» не уезжает за экран): бой. У погони колонка
+    /// высокая (трасса, бегущие), липнет только результат.
+    /// </summary>
+    [Parameter] public bool StickyAction { get; set; } = true;
+
     private string Route => Kind == EncounterKind.Combat ? "combat" : "chase";
 
     private string MoodTag => Kind == EncounterKind.Combat ? "бой" : "погоня";
 
     private string DocumentTitle => _session?.Encounter.CampaignName is { } campaign ? $"{EncounterText.Of(Kind)} — {campaign}" : EncounterText.Of(Kind);
+
+    /// <summary>Под заголовком: кампания и этап («Расстановка», «Раунд 2 · ходит Хелен»); статус сохранения — только если что-то не так.</summary>
+    private string? Subtitle => _session is { } session
+        ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
+        : null;
+
+    private static string StageText(EncounterState state) => state.Chase is { Phase: ChasePhase.Ended } ? ChaseText.Of(ChasePhase.Ended)
+        : state.Chase is { Phase: ChasePhase.SpeedCheck } ? ChaseText.Of(ChasePhase.SpeedCheck)
+        : state.Round == 0 ? "Расстановка"
+        : $"Раунд {state.Round}";
+
+    private static string? SaveProblem(EncounterSession session) => session.SaveState switch
+    {
+        _ when session.SheetsBusy => "пишу в листы…",
+        EncounterSaveState.Saved when session.State.SheetWrites.Count > 0 => $"в листы не дошло: {session.State.SheetWrites.Count}",
+        EncounterSaveState.Conflict => "конфликт",
+        EncounterSaveState.Failed or EncounterSaveState.Rejected => "не сохранено",
+        _ => null,
+    };
 
     private IReadOnlySet<Guid> UsedCharacterIds =>
         _session?.State.Participants.Select(p => p.SourceCharacterId).OfType<Guid>().ToHashSet() ?? [];
@@ -153,7 +185,7 @@
             _active = await Api.ListActiveAsync(Kind);
             // Несколько идущих (в кампании или всего) — выбор в «Идут сейчас», а не первая попавшаяся.
             IReadOnlyList<EncounterSummaryDto> candidates = CampaignId is { } campaignId ? [.. _active.Where(a => a.CampaignId == campaignId)] : _active;
-            var match = candidates.Count == 1 ? candidates[0] : null;
+            var match = candidates.Count == 1 && !ShowList ? candidates[0] : null;
             if (match is not null)
             {
                 await OpenAsync(match.Id);
@@ -289,13 +321,13 @@
         List<string> added = [];
         await Change(state =>
         {
-            foreach (var participant in participants)
+            // Одной записью журнала на всю пачку: «Вступили: …», а не строка на каждого.
+            foreach (var outcome in EncounterEngine.AddRange(state, participants, Now))
             {
-                var outcome = EncounterEngine.Add(state, participant, Now);
                 if (outcome.Rejection is { } reason)
                     rejected.Add(reason);
                 else
-                    added.Add(participant.Name);
+                    added.Add(outcome.Participant!.Name);
             }
         });
 
@@ -305,15 +337,18 @@
             Toasts.Warning(reason);
     }
 
-    private async Task RemoveAsync(EncounterParticipant participant)
+    /// <summary>Что скажет подтверждение «Убрать участника?» — без «нельзя отменить»: добавить можно снова.</summary>
+    private string RemoveMessage(EncounterParticipant participant)
     {
         var writes = _session?.State.SheetWrites.Count(w => w.ParticipantId == participant.Id) ?? 0;
-        var message = writes > 0
-            ? $"{participant.Name} покинет сцену. Неписанные в лист эффекты ({writes}) всё равно уйдут в лист."
-            : $"{participant.Name} покинет сцену; лист и бестиарий не меняются.";
-        if (await Dialogs.ConfirmAsync(new ConfirmRequest("Убрать участника?", message) { ConfirmText = "Убрать" }))
-            await Change(state => EncounterEngine.Remove(state, participant.Id, Now));
+        return writes > 0
+            ? $"Он покинет сцену, добавить его можно снова. Не записанные в лист эффекты ({writes}) всё равно уйдут в лист."
+            : "Он покинет сцену, добавить его можно снова. Лист и бестиарий не меняются.";
     }
+
+    private Task RemoveAsync(EncounterParticipant participant) => Change(state => EncounterEngine.Remove(state, participant.Id, Now));
+
+    private Task OpenSheetAsync(Guid sheetId) => JS.InvokeVoidAsync("open", $"character/{sheetId}", "_blank").AsTask();
 
     private Task ToggleOutAsync(EncounterParticipant participant) =>
         Change(state => EncounterEngine.Apply(state, new EncounterResolution
@@ -323,10 +358,8 @@
             Effects = [new EncounterEffect { Kind = EncounterEffectKind.Out, ParticipantId = participant.Id, Flag = !participant.IsOut }],
         }, Now));
 
-    private Task SetSideAsync(EncounterParticipant participant, ChangeEventArgs e) =>
-        Enum.TryParse<EncounterSide>(e.Value?.ToString(), out var side)
-            ? Change(state => EncounterEngine.SetSide(state, participant.Id, side))
-            : Task.CompletedTask;
+    private Task SetSideAsync(EncounterParticipant participant, EncounterSide side) =>
+        Change(state => EncounterEngine.SetSide(state, participant.Id, side));
 
     private Task ProposeAsync(EncounterResolution resolution) => Change(state => EncounterEngine.Propose(state, resolution));
 
@@ -374,7 +407,7 @@
         var message = pending > 0
             ? $"Не записано в листы: {pending}. После завершения эти эффекты в листы не попадут."
             : "Сцена закроется, журнал останется в базе. Новую можно начать сразу.";
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить: {EncounterText.Of(Kind).ToLowerInvariant()}?", message) { ConfirmText = "Завершить" }))
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить {FinishWord}?", message) { ConfirmText = $"Завершить {FinishWord}" }))
             return;
 
         await session.ChangeAsync(state => EncounterEngine.Log(state, new EncounterLogEntry { Kind = EncounterLogKind.Finished, Text = "Сцена завершена.", At = Now }));
@@ -434,6 +467,15 @@
             await _session.DiscardDraftAsync(_session.Encounter.Id);
     }
 
+    /// <summary>«Завершить бой» / «Завершить погоню» — винительный падеж, имена здесь не склоняются, только вид сцены.</summary>
+    private string FinishWord => Kind == EncounterKind.Combat ? "бой" : "погоню";
+
+    private static string RoundLabel(int round) => round == 0 ? "расстановка" : $"раунд {round}";
+
+    private string NewWord => Kind == EncounterKind.Combat ? "Новый бой" : "Новая погоня";
+
+    private string StartWord => Kind == EncounterKind.Combat ? "Начать бой" : "Начать погоню";
+
     private DateTimeOffset Now => Time.GetUtcNow();
 
     private void OnSessionChanged() => InvokeAsync(StateHasChanged);
@@ -479,7 +521,7 @@
         }
         <section class="cm-section">
             <div class="cm-card">
-                <div class="cm-card-header"><h2 class="cm-card-title">Новая сцена</h2></div>
+                <div class="cm-card-header"><h2 class="cm-card-title">@NewWord</h2></div>
                 <div class="cm-card-body flex flex-wrap items-end gap-3">
                     <Field Label="Кампания" class="w-full sm:w-80">
                         <select class="cm-input" data-testid="start-campaign" value="@(_startCampaign?.ToString() ?? "")"
@@ -491,7 +533,7 @@
                             }
                         </select>
                     </Field>
-                    <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">Начать</Button>
+                    <Button Icon="fa-play" Busy="_starting" OnClick="StartAsync" data-testid="start-encounter">@StartWord</Button>
                 </div>
             </div>
         </section>
@@ -526,8 +568,12 @@
     {
         var state = session.State;
         var active = state.Active;
-        var order = state.Round > 0 ? state.TurnOrder.Select(state.Find).OfType<EncounterParticipant>().Concat(state.Participants.Where(p => !state.TurnOrder.Contains(p.Id))).ToList()
+        var queue = state.Round > 0 ? state.TurnOrder.Select(state.Find).OfType<EncounterParticipant>().Concat(state.Participants.Where(p => !state.TurnOrder.Contains(p.Id))).ToList()
                                     : EncounterQueue.Order(state).Select(state.Find).OfType<EncounterParticipant>().ToList();
+        // Мёртвые — серыми строками в конце списка: действий у них нет, а место они не отнимают.
+        var order = queue.Where(p => !p.Dead).Concat(queue.Where(p => p.Dead)).ToList();
+        var lastEntry = state.Log.Count > 0 ? state.Log[^1] : null;
+        var pending = state.Pending;
 
         @if (session.SaveState == EncounterSaveState.Conflict)
         {
@@ -559,33 +605,44 @@
         <section class="cm-section">
             <div class="cm-card">
                 <div class="cm-card-body flex flex-wrap items-center justify-between gap-3">
-                    <div data-testid="round-status">
-                        @if (state.Round == 0)
+                    <div class="min-w-0" data-testid="round-status">
+                        <div class="font-semibold">@(state.Round == 0 ? StageText(state) : $"Раунд {state.Round} · ходит {active?.Name ?? "—"}")</div>
+                        @if (lastEntry is not null)
                         {
-                            <div class="font-semibold">Расстановка</div>
-                            <div class="cm-meta">@(StartsItself ? "Добавьте участников, настройте трассу и проверку скорости ниже." : "Добавьте участников и начните: очередь — по ЛВК (стр. 110).")</div>
-                        }
-                        else
-                        {
-                            <div class="font-semibold">Раунд @state.Round · ходит @(active?.Name ?? "—")</div>
-                            <div class="cm-meta">@(session.Encounter.CampaignName ?? "Вне кампании") · @SaveText(session)</div>
+                            <div class="cm-meta truncate" data-testid="last-entry">@EncounterDisplay.Plain(lastEntry.Text)</div>
                         }
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                        @if (state.Round == 0)
+                    <div class="cm-btn-row">
+                        @if (state.Chase is { Phase: ChasePhase.Ended })
+                        {
+                            <Button Icon="fa-flag-checkered" OnClick="FinishAsync" data-testid="finish-encounter">Завершить @FinishWord</Button>
+                        }
+                        else if (state.Round == 0)
                         {
                             @if (!StartsItself)
                             {
-                                <Button Small="true" Icon="fa-play" Disabled="@(state.Participants.Count == 0)" OnClick="NextAsync" data-testid="start-round">Начать</Button>
+                                <Button Icon="fa-play" Disabled="@(state.Participants.Count == 0)" DisabledReason="Сначала добавьте участников"
+                                        OnClick="NextAsync" data-testid="start-round">@StartWord</Button>
                             }
                         }
                         else
                         {
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
-                            <Button Small="true" Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий</Button>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-hourglass-half" Disabled="@(active is null)" OnClick="DelayAsync">Отложить ход</Button>
+                            <Button Icon="fa-forward-step" OnClick="NextAsync" data-testid="next-turn">Следующий ход</Button>
                         }
-                        @* «Завершить» — здесь, а не в шапке: на телефоне в шапке помещаются две подписанные кнопки. *@
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить</Button>
+                        @* «Завершить» — не рядом с «Следующим»: нажатие мимо закрывает сцену. Только в меню, под линейкой. *@
+                        <RowMenu AriaLabel="Действия сцены">
+                            <ChildContent>
+                                @if (AllowsMany)
+                                {
+                                    <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">Новая @FinishWord (разделились)</RowMenuItem>
+                                }
+                                <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">Все сцены</RowMenuItem>
+                            </ChildContent>
+                            <Danger>
+                                <RowMenuItem Danger="true" Icon="fa-flag-checkered" OnClick="FinishAsync">Завершить @FinishWord</RowMenuItem>
+                            </Danger>
+                        </RowMenu>
                     </div>
                 </div>
                 @if (AllowsMany)
@@ -595,43 +652,50 @@
             </div>
         </section>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
             <section class="cm-section lg:col-span-5">
-                @* «Участник» — у списка, а не в шапке: на телефоне шапка вмещает две подписанные кнопки, и там — музыка сцены. *@
+                @* «Участник» — у списка, а не в шапке: в шапке настроение и плеер. Пустая сцена — только эта кнопка. *@
                 <div class="cm-section-header">
                     <h2 class="cm-section-title">Участники</h2>
-                    <Button Small="true" Icon="fa-user-plus" OnClick="() => _pickerOpen = true" data-testid="add-participant">Участник</Button>
+                    <Button Small="true" Icon="fa-user-plus" OnClick="() => _pickerOpen = true" data-testid="add-participant">Добавить</Button>
                 </div>
-                @if (order.Count == 0)
-                {
-                    <EmptyState Icon="fa-users" Title="Пока никого" Message="Сыщики кампании, НПС и твари бестиария — кнопкой «Участник».">
-                        <Actions><Button Small="true" Icon="fa-user-plus" OnClick="() => _pickerOpen = true">Участник</Button></Actions>
-                    </EmptyState>
-                }
-                else
+                @if (order.Count > 0)
                 {
                     <div class="cm-card">
                         @foreach (var participant in order)
                         {
                             <ParticipantRow @key="participant.Id" Participant="participant" Active="@(participant.Id == state.ActiveParticipantId)" Round="state.Round"
+                                            HideOutBadge="@(state.Chase is not null && ChaseRules.StatusOf(state, participant.Id) != ChaseStatus.Running)"
                                             Writes="@state.SheetWrites.Where(w => w.ParticipantId == participant.Id).ToList()"
                                             OnSheetWrite="SheetWriteAsync">
                                 <Actions>
-                                    <select class="cm-input cm-input-sm w-36" aria-label="@($"Сторона: {participant.Name}")"
-                                            value="@participant.Side" @onchange="e => SetSideAsync(participant, e)">
-                                        @foreach (var side in Enum.GetValues<EncounterSide>())
-                                        {
-                                            <option value="@side">@EncounterText.Of(side)</option>
-                                        }
-                                    </select>
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => ToggleOutAsync(participant)">
-                                        @(participant.IsOut ? "Вернуть" : "Выбыл")
-                                    </Button>
-                                    @if (participant.SourceCharacterId is { } sheetId)
-                                    {
-                                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-id-card" Href="@($"character/{sheetId}")" target="_blank">Лист</Button>
-                                    }
-                                    <Button Small="true" Variant="ButtonVariant.OutlineError" OnClick="() => RemoveAsync(participant)">Убрать</Button>
+                                    <RowMenu AriaLabel="@($"Действия: {Names.Plain(participant.Name)}")">
+                                        <ChildContent>
+                                            @if (!participant.Dead)
+                                            {
+                                                @foreach (var side in Enum.GetValues<EncounterSide>().Where(side => side != participant.Side))
+                                                {
+                                                    var target = side;
+                                                    <RowMenuItem Icon="fa-people-arrows" OnClick="() => SetSideAsync(participant, target)">Сторона: @EncounterText.Of(side)</RowMenuItem>
+                                                }
+                                            }
+                                            @if (!participant.Dead || participant.IsOut)
+                                            {
+                                                <RowMenuItem Icon="@(participant.IsOut ? "fa-rotate-left" : "fa-person-walking-arrow-right")" OnClick="() => ToggleOutAsync(participant)">
+                                                    @(participant.IsOut ? "Вернуть в очередь" : "Выбыл из очереди")
+                                                </RowMenuItem>
+                                            }
+                                            @if (participant.SourceCharacterId is { } sheetId)
+                                            {
+                                                <RowMenuItem Icon="fa-id-card" OnClick="() => OpenSheetAsync(sheetId)">Открыть лист</RowMenuItem>
+                                            }
+                                        </ChildContent>
+                                        <Danger>
+                                            <RowMenuItem Danger="true" Icon="fa-user-minus" OnClick="() => RemoveAsync(participant)"
+                                                         ConfirmTitle="Убрать участника?" ConfirmMessage="@($"{Names.Plain(participant.Name)}: {RemoveMessage(participant)}")"
+                                                         ConfirmText="Убрать из сцены">Убрать из сцены</RowMenuItem>
+                                        </Danger>
+                                    </RowMenu>
                                 </Actions>
                                 <ChildContent>
                                     @if (RowContent is not null)
@@ -645,51 +709,89 @@
                 }
             </section>
 
-            <div class="flex flex-col gap-4 lg:col-span-7">
-                @if (state.Pending is { } pending)
-                {
-                    <section class="cm-section">
-                        <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
-                        <div class="cm-card"><div class="cm-card-body">
-                            <ResolutionPreview State="state" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
-                                @if (PendingContent is not null)
-                                {
-                                    <CascadingValue Value="session" IsFixed="true">@PendingContent(pending)</CascadingValue>
-                                }
-                            </ResolutionPreview>
-                        </div></div>
-                    </section>
-                }
-
-                <CascadingValue Value="session" IsFixed="true">@ChildContent</CascadingValue>
-
-                <section class="cm-section">
-                    <div class="cm-section-header"><h2 class="cm-section-title">Эффект Хранителя</h2></div>
-                    <div class="cm-card"><div class="cm-card-body">
-                        @if (state.Participants.Count == 0)
+            @if (order.Count > 0)
+            {
+                <div class="flex flex-col gap-4 lg:col-span-7">
+                    @if (StickyAction)
+                    {
+                        @* Колонка действия липнет под шапку: форма, результат и «Применить» всегда на виду. Пока есть
+                           результат, форма и эффект спрятаны (hidden, не снесены — введённое остаётся): «Применить»
+                           стоит там, где была кнопка действия, и страница не сдвигается. *@
+                        <StickyPane data-testid="action-pane">
+                            @if (pending is not null)
+                            {
+                                @PendingBlock(session, pending)
+                            }
+                            <div class="@(pending is not null ? "hidden" : "flex flex-col gap-4")">
+                                <CascadingValue Value="session" IsFixed="true">@ChildContent</CascadingValue>
+                                @EffectBlock(state)
+                            </div>
+                        </StickyPane>
+                    }
+                    else
+                    {
+                        @if (pending is not null)
                         {
-                            <p class="cm-text-muted">Сначала добавьте участников.</p>
+                            <StickyPane data-testid="action-pane">@PendingBlock(session, pending)</StickyPane>
                         }
-                        else
-                        {
-                            <EffectPanel State="state" OnPropose="ProposeAsync" />
-                        }
-                    </div></div>
-                </section>
-            </div>
+
+                        <CascadingValue Value="session" IsFixed="true">@ChildContent</CascadingValue>
+                        @EffectBlock(state)
+                    }
+                </div>
+            }
         </div>
 
-        <section class="cm-section">
-            <div class="cm-section-header"><h2 class="cm-section-title">Журнал</h2></div>
-            <div class="cm-card">
-                <div class="cm-card-body flex flex-wrap items-end gap-2 border-b border-primary-200">
-                    <Field Label="Заметка в журнал" class="min-w-48 flex-1">
-                        <input class="cm-input" value="@_note" @oninput="e => _note = e.Value?.ToString() ?? string.Empty" placeholder="Что произошло" />
-                    </Field>
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" Disabled="@string.IsNullOrWhiteSpace(_note)" OnClick="NoteAsync" class="mb-1">Записать</Button>
+        @if (state.Log.Count > 0)
+        {
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Журнал</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body flex flex-wrap items-end gap-2 border-b border-primary-200">
+                        <Field Label="Заметка в журнал" class="min-w-48 flex-1">
+                            <input class="cm-input" value="@_note" @oninput="e => _note = e.Value?.ToString() ?? string.Empty" placeholder="Что произошло" />
+                        </Field>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-pen" Disabled="@string.IsNullOrWhiteSpace(_note)" DisabledReason="Впишите текст" OnClick="NoteAsync">Записать</Button>
+                    </div>
+                    <EncounterLog Entries="state.Log" />
                 </div>
-                <EncounterLog Entries="state.Log" />
+            </section>
+        }
+    };
+
+    private RenderFragment PendingBlock(EncounterSession session, EncounterResolution pending) => __builder =>
+    {
+        <section class="cm-section" data-testid="pending-block">
+            <div class="cm-section-header"><h2 class="cm-section-title">Результат</h2></div>
+            <div class="cm-card"><div class="cm-card-body">
+                <ResolutionPreview State="session.State" Resolution="pending" OnApply="ApplyAsync" OnCancel="CancelAsync" Busy="_applying">
+                    @if (PendingContent is not null)
+                    {
+                        <CascadingValue Value="session" IsFixed="true">@PendingContent(pending)</CascadingValue>
+                    }
+                </ResolutionPreview>
+            </div></div>
+        </section>
+    };
+
+    /// <summary>Эффект Хранителя — свёрнут: раскрывается по касанию, чтобы не занимать колонку ради редкой правки.</summary>
+    private RenderFragment EffectBlock(EncounterState state) => __builder =>
+    {
+        if (state.Chase is { Phase: ChasePhase.Ended })
+            return;
+
+        <section class="cm-section" data-testid="effect-section">
+            <div class="cm-section-header">
+                <h2 class="cm-section-title">Эффект Хранителя</h2>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_effectOpen ? "fa-chevron-up" : "fa-chevron-down")"
+                        OnClick="() => _effectOpen = !_effectOpen" aria-expanded="@(_effectOpen ? "true" : "false")" data-testid="effect-toggle">@(_effectOpen ? "Свернуть" : "Урон, лечение, рассудок…")</Button>
             </div>
+            @if (_effectOpen)
+            {
+                <div class="cm-card"><div class="cm-card-body">
+                    <EffectPanel State="state" OnPropose="ProposeAsync" />
+                </div></div>
+            }
         </section>
     };
 
@@ -700,29 +802,32 @@
     private RenderFragment Siblings(EncounterSession session) => __builder =>
     {
         var current = session.Encounter;
-        var others = _active.Where(a => a.Id != current.Id).ToList();
+        var all = _active.Where(a => a.CampaignId == current.CampaignId).ToList();
+        var others = all.Where(a => a.Id != current.Id).ToList();
+        if (others.Count == 0)
+            return;
+
+        // Вкладки погонь: у каждой номер и состав; открытая отмечена, остальные — ссылки по ?id=.
         <div class="cm-card-body flex flex-wrap items-center gap-2 border-t border-primary-200" data-testid="encounter-siblings">
-            @if (others.Count > 0)
+            @for (var i = 0; i < all.Count; i++)
             {
-                <span class="cm-meta">Идут: @(others.Count + 1)</span>
-                @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
-                <span class="cm-btn cm-btn-sm cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
-                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                    <span>@SceneLabel(current.CampaignId, current.CampaignName, [.. session.State.Participants.Select(p => p.Name)])</span>
-                </span>
-                @foreach (var other in others)
+                var number = i + 1;
+                var item = all[i];
+                @if (item.Id == current.Id)
                 {
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={other.Id}")" data-testid="sibling">
-                        @SceneLabel(other.CampaignId, other.CampaignName, other.ParticipantNames)
+                    @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
+                    <span class="cm-btn cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
+                        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, [.. session.State.Participants.Select(p => p.Name)]) · @RoundLabel(session.State.Round)</span>
+                    </span>
+                }
+                else
+                {
+                    <Button Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={item.Id}")" data-testid="sibling">
+                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.ParticipantNames) · @RoundLabel(item.Round)
                     </Button>
                 }
             }
-            else
-            {
-                <span class="cm-meta">Разделились — ведите каждую группу своей погоней (стр. 142).</span>
-            }
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-code-branch" Busy="_starting"
-                    OnClick="() => StartInAsync(current.CampaignId)" data-testid="start-sibling">@($"Новая {EncounterText.Of(Kind).ToLowerInvariant()}")</Button>
         </div>
     };
 
@@ -733,13 +838,4 @@
         return campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
     }
 
-    private static string SaveText(EncounterSession session) => session.SaveState switch
-    {
-        _ when session.SheetsBusy => "пишу в листы…",
-        EncounterSaveState.Saving => "сохраняю…",
-        EncounterSaveState.Saved when session.State.SheetWrites.Count > 0 => $"сохранено, в листы не дошло: {session.State.SheetWrites.Count}",
-        EncounterSaveState.Saved => "сохранено",
-        EncounterSaveState.Conflict => "конфликт",
-        _ => "не сохранено",
-    };
 }

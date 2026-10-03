@@ -91,11 +91,11 @@ public sealed class EncounterComponentTests : KitContext
     public void Extra_from_scenario_pack_says_its_sheet_is_not_written()
     {
         var (_, ghoul) = Scene();
-        ghoul.Note = "статист: снимок листа, урон в лист не пишется";
+        ghoul.Note = "Статист: урон в лист не записывается";
 
         var cut = Render<ParticipantRow>(p => p.Add(c => c.Participant, ghoul));
 
-        Assert.Contains("статист", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Статист", cut.Markup, StringComparison.Ordinal);
     }
 
     [Theory]

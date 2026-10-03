@@ -6,39 +6,30 @@
    Своей карточки не рисует: стоит в карточке страницы. *@
 <div class="flex flex-col gap-3" data-testid="resolution-preview">
     <div>
-        <h3 class="font-semibold text-primary-900">@Resolution.Title</h3>
+        <h3 class="font-semibold text-primary-900">@EncounterDisplay.Plain(Resolution.Title)</h3>
         @if (Resolution.Lines.Count > 0)
         {
             <ul class="mt-1 flex flex-col gap-0.5 text-sm text-primary-700">
                 @foreach (var line in Resolution.Lines)
                 {
-                    <li>@line</li>
+                    <li>@EncounterDisplay.Plain(line)</li>
                 }
             </ul>
         }
     </div>
 
-    @if (Lines.Count > 0)
+    @if (Main.Count > 0)
     {
-        <div class="cm-table-wrap">
-            <table class="cm-table">
-                <thead>
-                    <tr><th>Кто</th><th>Что</th><th class="text-right">Было</th><th class="text-right">Станет</th><th>Чем чревато</th></tr>
-                </thead>
-                <tbody>
-                    @foreach (var line in Lines)
-                    {
-                        <tr>
-                            <td class="font-medium">@line.Name</td>
-                            <td>@line.Label</td>
-                            <td class="text-right font-mono">@line.Before</td>
-                            <td class="text-right font-mono font-bold">@line.After</td>
-                            <td class="text-sm text-primary-700">@line.Note</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        @Table(Main)
+    }
+
+    @* Счётчики («Атак за раунд», «Защит за раунд») — внутреннее: не перебивают главное (попадание, ПЗ), лежат под «Подробностями». *@
+    @if (Counters.Count > 0)
+    {
+        <details class="encounter-rolls">
+            <summary class="cm-meta cursor-pointer py-2">Подробности: счётчики (@Counters.Count)</summary>
+            @Table(Counters)
+        </details>
     }
 
     @if (SheetTargets.Count > 0)
@@ -50,7 +41,7 @@
        результат правилом Core, таблица выше пересчитывается. *@
     @ChildContent
 
-    <div class="flex flex-wrap gap-2">
+    <div class="cm-btn-row">
         <Button Variant="ButtonVariant.Primary" Icon="fa-check" OnClick="OnApply" Busy="Busy" data-testid="apply">Применить</Button>
         <Button Variant="ButtonVariant.Secondary" Icon="fa-xmark" OnClick="OnCancel" Disabled="Busy" data-testid="cancel">Отменить</Button>
     </div>
@@ -70,6 +61,33 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     private IReadOnlyList<EffectPreview> Lines => EncounterEngine.Preview(State, Resolution);
+
+    private List<EffectPreview> Main => [.. Lines.Where(l => !EncounterDisplay.IsCounter(l.Label))];
+
+    private List<EffectPreview> Counters => [.. Lines.Where(l => EncounterDisplay.IsCounter(l.Label))];
+
+    private RenderFragment Table(List<EffectPreview> lines) => __builder =>
+    {
+        <div class="cm-table-wrap">
+            <table class="cm-table">
+                <thead>
+                    <tr><th>Кто</th><th>Что</th><th class="text-right">Было</th><th class="text-right">Станет</th><th>Чем чревато</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in lines)
+                    {
+                        <tr>
+                            <td class="font-medium">@line.Name</td>
+                            <td>@line.Label</td>
+                            <td class="text-right font-mono">@line.Before</td>
+                            <td class="text-right font-mono font-bold">@line.After</td>
+                            <td class="text-sm text-primary-700">@EncounterDisplay.Plain(line.Note)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
 
     private List<string> SheetTargets =>
     [

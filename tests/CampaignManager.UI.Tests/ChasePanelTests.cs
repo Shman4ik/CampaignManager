@@ -128,7 +128,7 @@ public sealed class ChasePanelTests : KitContext
 
         Assert.Equal(5, cut.FindAll("[data-testid=ks-crashes] tbody tr").Count);
         Assert.Equal(27, cut.FindAll("[data-testid=ks-vehicles] tbody tr").Count);
-        Assert.Contains("1D3-1", cut.Find("[data-testid=ks-crashes]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("1d3", cut.Find("[data-testid=ks-crashes]").TextContent, StringComparison.Ordinal);
     }
 
     private sealed class SavingEncounters : IEncountersApi

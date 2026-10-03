@@ -37,7 +37,7 @@ public sealed class MeleeAttackTests
         Assert.False(outcome.Hit);
         Assert.Equal(SuccessLevel.Failure, outcome.Level);
         Assert.Null(outcome.Damage);
-        Assert.StartsWith("Сыщик промахивается по Культист (60 против 50)", outcome.Summary);
+        Assert.StartsWith("Сыщик промахивается. Цель: Культист (60 против 50)", outcome.Summary);
         Assert.DoesNotContain(outcome.Resolution.Effects, e => e.Kind == EncounterEffectKind.Defense);
     }
 

@@ -39,7 +39,21 @@ public static class EncounterEngine
     /// Добавить участника. Один лист — один раз (повтор — отказ с текстом); тварей одного вида — сколько угодно, они
     /// получают номера «#1», «#2» (знание v1). Посреди раунда новичок встаёт в очередь по инициативе.
     /// </summary>
-    public static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now)
+    public static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now) =>
+        Add(state, participant, now, log: true);
+
+    /// <summary>
+    /// Добавить нескольких за раз: в журнале одна запись «Вступили: …» вместо строки на каждого (восемь строк шума в
+    /// начале боя). Отказы — по одному на отклонённого, как у <see cref="Add(EncounterState, EncounterParticipant, DateTimeOffset)"/>.
+    /// </summary>
+    public static List<AddOutcome> AddRange(EncounterState state, IEnumerable<EncounterParticipant> participants, DateTimeOffset now)
+    {
+        var outcomes = participants.Select(p => Add(state, p, now, log: false)).ToList();
+        LogJoined(state, [.. outcomes.Select(o => o.Participant).OfType<EncounterParticipant>()], now);
+        return outcomes;
+    }
+
+    private static AddOutcome Add(EncounterState state, EncounterParticipant participant, DateTimeOffset now, bool log)
     {
         if (participant.SourceCharacterId is { } characterId
             && state.Participants.FirstOrDefault(p => p.SourceCharacterId == characterId) is { } present)
@@ -56,14 +70,49 @@ public static class EncounterEngine
         EncounterQueue.OnAdded(state, participant.Id);
         if (state.Chase is not null)
             ChaseRules.OnAdded(state, participant);
+        if (log)
+            LogJoined(state, [participant], now);
+
+        return new AddOutcome(participant, null);
+    }
+
+    /// <summary>
+    /// «Вступили: …» — одна запись на тех, кто вошёл подряд: за один раз или несколькими касаниями «Добавить» в одном раунде
+    /// (две минуты между добавлениями): восемь строк «вступил» в начале боя журнал только засоряли.
+    /// </summary>
+    private static void LogJoined(EncounterState state, List<EncounterParticipant> joined, DateTimeOffset now)
+    {
+        if (joined.Count == 0)
+            return;
+
+        const string Prefix = "Вступили: ";
+        var last = state.Log.Count > 0 ? state.Log[^1] : null;
+        List<string>? earlier = null;
+        if (last is { Kind: EncounterLogKind.Joined } && last.Round == state.Round && now - last.At < TimeSpan.FromMinutes(2))
+        {
+            if (last.Text.StartsWith(Prefix, StringComparison.Ordinal))
+                earlier = [.. last.Text[Prefix.Length..].TrimEnd('.').Split(", ")];
+            else if (last.ActorId is { } actorId && state.Find(actorId) is { } who && last.Text.StartsWith(who.Name, StringComparison.Ordinal))
+                earlier = [who.Name];
+        }
+
+        if (earlier is not null)
+        {
+            last!.ActorId = null;
+            last.Text = Prefix + string.Join(", ", earlier.Concat(joined.Select(p => p.Name))) + ".";
+            last.At = now;
+            return;
+        }
+
         Log(state, new EncounterLogEntry
         {
             Kind = EncounterLogKind.Joined,
-            ActorId = participant.Id,
-            Text = $"{participant.Name} вступает в сцену ({EncounterText.Of(participant.Side)}).",
+            ActorId = joined.Count == 1 ? joined[0].Id : null,
+            Text = joined.Count == 1
+                ? $"{joined[0].Name} вступает в сцену ({EncounterText.Of(joined[0].Side)})."
+                : $"{Prefix}{string.Join(", ", joined.Select(p => p.Name))}.",
             At = now,
         });
-        return new AddOutcome(participant, null);
     }
 
     /// <summary>Убрать участника: кто ходит — не меняется, если только не ходил он сам (тогда ход — следующему).</summary>
@@ -91,8 +140,13 @@ public static class EncounterEngine
 
     public static void SetSide(EncounterState state, Guid participantId, EncounterSide side)
     {
-        if (state.Find(participantId) is { } participant)
-            participant.Side = side;
+        if (state.Find(participantId) is not { } participant)
+            return;
+
+        participant.Side = side;
+        // Роль в погоне выводится из стороны (противники преследуют) — пока погоня не началась; потом роль меняют отдельно.
+        if (state.Chase is { Phase: ChasePhase.Setup })
+            ChaseRules.SetRole(state, participantId, side == EncounterSide.Enemies ? ChaseRole.Pursuer : ChaseRole.Prey);
     }
 
     /// <summary>Положить результат на предпросмотр. Прежний неприменённый выбрасывается.</summary>

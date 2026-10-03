@@ -95,7 +95,10 @@ public sealed class CampaignInvestigatorsSource(ICharactersApi characters) : IPa
     private static string Subtitle(InvestigatorDto investigator)
     {
         var occupation = investigator.Sheet.Personal.Occupation;
-        return string.Join(" · ", new[] { occupation, investigator.PlayerName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        // Состояние — в строке выбора: погибшего сыщика не добавляют вслепую (в погоне он блокировал начало).
+        var hitPoints = investigator.Sheet.Current.HitPoints;
+        var state = hitPoints <= 0 ? "ПЗ 0 · мёртв" : investigator.Sheet.Condition.MajorWound ? $"ПЗ {hitPoints} · серьёзная рана" : null;
+        return string.Join(" · ", new[] { occupation, investigator.PlayerName, state }.Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 }
 
@@ -212,7 +215,7 @@ public sealed class ScenarioCastSource(IScenariosApi scenarios, ICharactersApi c
                         {
                             var extra = EncounterParticipants.FromSheet(character.Id, CharacterKind.Npc, sheet, context.Catalog, side);
                             extra.SourceCharacterId = null;
-                            extra.Note = "статист: снимок листа, урон в лист не пишется";
+                            extra.Note = "Статист: урон в лист не записывается";
                             return extra;
                         }),
                     ];

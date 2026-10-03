@@ -1,43 +1,45 @@
+@using CampaignManager.Core.Dice
 @* Атака: ближний бой или стрельба — по выбранному оружию участника (CombatProfile: оружие листа, атаки статблока, драка).
    Правила — CombatRules.Melee/Ranged (Core), кости — таблица AttackModifiers (её же читает ширма). Любой бросок можно
    вписать в «Броски со стола»; невписанное бросит правило. Результат — на предпросмотр, меняет участников только
    «Применить» (в v1 атака тратила патрон, ход и защиту цели ещё до него, F-C02). Своей карточки не рисует. *@
 <div class="flex flex-col gap-3" data-testid="attack-panel">
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field Label="Кто атакует">
             <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто атакует" Value="ActorId" ValueChanged="SelectActor" />
         </Field>
-        <Field Label="Чем">
+        <Field Label="Цель">
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget" />
+        </Field>
+        <Field Label="Чем" class="sm:col-span-2">
             <select class="cm-input" aria-label="Оружие или атака" data-testid="attack-weapon" value="@_attackKey" @onchange="SelectAttack" disabled="@(Actor is null)">
                 @foreach (var attack in Attacks)
                 {
-                    <option value="@attack.Key">@attack.Name — @attack.Skill% (@KindText(attack))</option>
+                    <option value="@attack.Key" selected="@(Attack?.Key == attack.Key)">@attack.Name — @attack.Skill%, урон @DiceNotation.Format(attack.Damage) (@KindText(attack))</option>
                 }
             </select>
-        </Field>
-        <Field Label="Цель">
-            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget" />
         </Field>
     </div>
 
     @if (Actor is { } actor && Attack is { } chosen)
     {
-        <p class="cm-meta">
-            Урон @chosen.Damage@(chosen.DamageBonus switch { CreatureDamageBonusMode.Full or CreatureDamageBonusMode.OnlyBonus => $" + БкУ ({actor.Stats.DamageBonus})", CreatureDamageBonusMode.Half => $" + ½ БкУ ({actor.Stats.DamageBonus})", _ => "" })
-            @(chosen.Impaling ? " · проникающее" : "")
-            @if (CombatRules.AmmoLeft(actor, chosen) is { } ammo)
-            {
-                <span> · патронов @ammo из @chosen.AmmoCapacity</span>
-            }
-            @if (chosen.Malfunction is { } malfunction)
-            {
-                <span> · осечка @malfunction</span>
-            }
-            @if (chosen.BaseRangeMeters is { } range)
-            {
-                <span> · дальность @range м (большая — @(range * 2), сверхдальняя — @(range * 4))</span>
-            }
-        </p>
+        @if (chosen.IsRanged)
+        {
+            <p class="cm-meta">
+                @if (CombatRules.AmmoLeft(actor, chosen) is { } ammo)
+                {
+                    <span>патронов @ammo из @chosen.AmmoCapacity</span>
+                }
+                @if (chosen.Malfunction is { } malfunction)
+                {
+                    <span> · осечка @malfunction</span>
+                }
+                @if (chosen.BaseRangeMeters is { } range)
+                {
+                    <span> · дальность @range м (большая — @(range * 2), сверхдальняя — @(range * 4))</span>
+                }
+            </p>
+        }
         @if (!string.IsNullOrWhiteSpace(chosen.Description))
         {
             <p class="cm-meta">@chosen.Description</p>
@@ -48,22 +50,10 @@
         }
     }
 
-    @if (Attack is { IsRanged: false })
+    @if (Attack is { IsRanged: true })
     {
         <div class="flex flex-wrap gap-4">
-            <Field Label="Цель защищается" Group="true">
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.Dodge)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
-                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.FightBack)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
-                </div>
-            </Field>
-            @SurprisePicker(includeAutoHit: true)
-        </div>
-    }
-    else if (Attack is { IsRanged: true })
-    {
-        <div class="flex flex-wrap gap-4">
-            <Field Label="Дальность" Group="true" Note="Сложность, а не урезанный навык (стр. 110)">
+            <Field Label="Дальность" Group="true" Note="Сложность, а не урезанный навык">
                 <div class="flex flex-wrap gap-2">
                     <Button Small="true" Variant="@Pick(_range == RangeBand.Base)" OnClick="() => _range = RangeBand.Base">Базовая</Button>
                     <Button Small="true" Variant="@Pick(_range == RangeBand.Long)" OnClick="() => _range = RangeBand.Long">Большая</Button>
@@ -83,6 +73,32 @@
             <Field Label="Патронов" class="w-24">
                 <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" value="@_shots" @onchange="SetShots" />
             </Field>
+        </div>
+    }
+
+    @if (Ready && AttackDiceNow() is { } diceNow && (diceNow.Reasons.Count > 0 || !string.IsNullOrEmpty(RequirementText)))
+    {
+        <p class="cm-meta" data-testid="attack-dice">Кости атаки: @string.Join(", ", diceNow.Reasons)@RequirementText</p>
+    }
+
+    <details class="encounter-rolls" data-testid="attack-extra">
+        <summary><i class="fa-solid fa-sliders mr-2" aria-hidden="true"></i>Дополнительно</summary>
+        <div class="mt-2 flex flex-col gap-3">
+    @if (Attack is { IsRanged: false })
+    {
+        <div class="flex flex-wrap gap-4">
+            <Field Label="Цель защищается" Group="true">
+                <div class="flex flex-wrap gap-2">
+                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.Dodge)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
+                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.FightBack)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
+                </div>
+            </Field>
+            @SurprisePicker(includeAutoHit: true)
+        </div>
+    }
+    else if (Attack is { IsRanged: true })
+    {
+        <div class="flex flex-wrap gap-4">
             @SurprisePicker(includeAutoHit: false)
         </div>
         <div class="flex flex-wrap gap-x-4 gap-y-2 text-sm">
@@ -96,25 +112,18 @@
         </div>
     }
 
-    <div class="flex flex-wrap items-start gap-4">
-        <Field Label="Кости Хранителя" Group="true">
+    <div class="flex flex-wrap items-end gap-4">
+        <Field Label="Бонусные и штрафные кости" Group="true">
             <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
         </Field>
-        <Field Label="Броня преграды" class="w-28" Note="стр. 125">
+        <Field Label="Броня преграды" class="w-28">
             <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" value="@_coverArmor" @onchange="SetCoverArmor" />
         </Field>
-        <div class="pt-6 text-sm">@Toggle("Мимо брони (магия, яд)", _ignoresArmor, v => _ignoresArmor = v)</div>
+        <div class="self-end text-sm">@Toggle("Мимо брони (магия, яд)", _ignoresArmor, v => _ignoresArmor = v)</div>
     </div>
 
-    @if (Ready && AttackDiceNow() is { } dice)
-    {
-        <p class="cm-meta" data-testid="attack-dice">
-            Кости атаки: @(dice.Reasons.Count == 0 ? "без бонусных и штрафных" : string.Join(", ", dice.Reasons))@RequirementText
-        </p>
-    }
-
     <details class="encounter-rolls">
-        <summary>Броски со стола (необязательно)</summary>
+        <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Вписать броски с костей</summary>
         <div class="mt-2 flex flex-col gap-3">
             @if (Ready && AttackDiceNow() is { } d)
             {
@@ -156,9 +165,11 @@
             }
         </div>
     </details>
+        </div>
+    </details>
 
     <div>
-        <Button Icon="fa-hand-fist" Disabled="@(!Ready)" OnClick="ResolveAsync" data-testid="attack-resolve">Провести атаку</Button>
+        <Button Icon="fa-hand-fist" Disabled="@(!Ready)" DisabledReason="@(Target is null ? "Выберите цель" : null)" OnClick="ResolveAsync" data-testid="attack-resolve">Провести атаку</Button>
     </div>
 </div>
 
@@ -197,7 +208,7 @@
             if (Attack is not { IsRanged: true } || !Ready)
                 return "";
             var (required, impossible) = CombatRules.RangedRequirement(State, RangedSetup());
-            return impossible ? " · попадание невозможно (стр. 114)" : required > SuccessLevel.Regular ? $" · нужен {RulesText.Of(required)}" : "";
+            return impossible ? " · попадание невозможно" : required > SuccessLevel.Regular ? $" · нужен {RulesText.Of(required)}" : "";
         }
     }
 
@@ -283,19 +294,19 @@
     private static ButtonVariant Pick(bool on) => on ? ButtonVariant.Primary : ButtonVariant.Secondary;
 
     private RenderFragment SurprisePicker(bool includeAutoHit) =>
-        @<Field Label="Цель готова?" Group="true" Note="стр. 104–105">
+        @<Field Label="Цель готова" Group="true">
             <div class="flex flex-wrap gap-2">
                 <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.TargetReady)" OnClick="() => _surprise = SurpriseMode.TargetReady">Начеку</Button>
                 <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.BonusDie)" OnClick="() => _surprise = SurpriseMode.BonusDie">Врасплох</Button>
                 @if (includeAutoHit)
                 {
-                    <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.AutoHit)" OnClick="() => _surprise = SurpriseMode.AutoHit">Беззащитна</Button>
+                    <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.AutoHit)" OnClick="() => _surprise = SurpriseMode.AutoHit">Не защищается</Button>
                 }
             </div>
         </Field>;
 
     private RenderFragment Toggle(string label, bool value, Action<bool> set) =>
-        @<label class="flex min-h-9 items-center gap-2">
+        @<label class="cm-tap-row">
             <input type="checkbox" class="cm-checkbox" checked="@value" @onchange="e => set(e.Value is true)" />
             <span>@label</span>
         </label>;
