@@ -1,5 +1,6 @@
 @page "/bestiary/creatures/edit/{Id:guid?}"
 @attribute [Authorize(Policy = Policies.Keeper)]
+@using System.Text.Json
 @using CampaignManager.Contracts.Files
 @using CampaignManager.UI.Platform
 @using CampaignManager.Contracts.Identity
@@ -8,39 +9,38 @@
 @inject ICatalogApi<CreatureDto> Api
 @inject NavigationManager Navigation
 @inject ToastService Toasts
+@inject DialogService Dialogs
 
 @* Правка твари — своя страница, а не окно: статблок (гл. 14, стр. 277–280) в окно не помещается.
    Форма — по документу Statblock: характеристики «значение + кости», ПЗ, ПМ, бонус к урону к УРОНУ
    (не к попаданию), комплекция, скорости (пустое плавание — половина обычной, пустой полёт — не
    летает), атак за раунд у твари, а не у атаки, броня с оговоркой, уклонение, потеря рассудка,
-   инициатива (0 — по ЛВК). Ссылка на страницу защищена политикой Keeper; запись — сервером. *@
+   инициатива (0 — по ЛВК). Ссылка на страницу защищена политикой Keeper; запись — сервером.
+
+   UX-1 U5 (#176): панель «Отмена / Сохранить» липнет к низу (страница в 2000+ px), ошибка названия — у поля,
+   сводка «Проверьте поля: N» у кнопки и прокрутка к первому полю; уход с несохранённого спрашивает; «0» там, где
+   значения нет, — пустое поле; «Удалить» — внизу страницы (на карточке бестиария его нет). *@
 <PageHeader Title="@(Id is null ? "Новое существо" : $"Существо: {_creature?.Name}")">
     <Actions>
-        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-left" Href="@BackHref">К бестиарию</Button>
+        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-left" OnClick="LeaveAsync">К бестиарию</Button>
     </Actions>
 </PageHeader>
 
-<div class="cm-page">
+<UnsavedChangesGuard @ref="_guard" Dirty="IsDirty" />
+
+<div class="cm-page cr-edit">
     <AsyncContent TData="CreatureDto" Load="LoadAsync" Key="Id" IsEmpty="_ => false">
-        @if (_error is not null)
-        {
-            <Alert Tone="Tone.Error" ShowIcon="true">
-                <ChildContent>@_error</ChildContent>
-                <Actions>
-                    @if (_stale)
-                    {
-                        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
-                    }
-                </Actions>
-            </Alert>
-        }
         @if (_creature is { } c)
         {
             var s = c.Statblock;
+            var errors = Check(c);
             <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Основное</h2></div>
                 <div class="cm-card">
                     <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="c.Name" /></Field>
+                        <Field Label="Название" Required="true" Error="@ErrorOf(errors, "name")" class="sm:col-span-2">
+                            <input class="cm-input" aria-invalid="@(errors.ContainsKey("name") && _attempt > 0 ? "true" : null)" @bind="c.Name" />
+                        </Field>
                         <Field Label="Тип">
                             <select class="cm-input" @bind="c.Type">
                                 @foreach (var type in Enum.GetValues<CreatureType>())
@@ -50,7 +50,9 @@
                             </select>
                         </Field>
                         <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="c.Source" /></Field>
-                        <Field Label="Описание" class="sm:col-span-2 lg:col-span-4"><textarea class="cm-input" rows="4" @bind="c.Description"></textarea></Field>
+                        <Field Label="Описание" Note="Его видят и игроки — вместе с названием и картинкой; статблок им не отдаётся." class="sm:col-span-2 lg:col-span-4">
+                            <textarea class="cm-input" rows="4" @bind="c.Description"></textarea>
+                        </Field>
                     </div>
                 </div>
             </section>
@@ -59,22 +61,24 @@
                 <div class="cm-section-header"><h2 class="cm-section-title">Характеристики</h2></div>
                 <div class="cm-card">
                     <div class="cm-card-body grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-                        @foreach (var (label, stat) in Stats(s))
+                        @foreach (var (label, stat, index) in Stats(s))
                         {
                             var current = stat;
                             <Field Label="@label" Group="true">
-                                <input class="cm-input" type="number" min="0" aria-label="@($"{label}, среднее")" @bind="current.Value" />
-                                <input class="cm-input cm-dice mt-1" placeholder="3D6×5" aria-label="@($"{label}, кости")" @bind="current.Dice" />
+                                <OptionalNumber AriaLabel="@($"{label}, среднее")" @bind-Value="current.Value" />
+                                <input class="cm-input cm-dice mt-1" placeholder="@(index == 0 ? "3D6×5" : null)" aria-label="@($"{label}, кости")" @bind="current.Dice" />
                             </Field>
                         }
-                        <Field Label="ПЗ"><input class="cm-input" type="number" min="0" @bind="s.HitPoints" /></Field>
-                        <Field Label="ПМ"><input class="cm-input" type="number" min="0" @bind="s.MagicPoints" /></Field>
+                    </div>
+                    <div class="cm-card-body grid grid-cols-2 gap-4 border-t border-primary-200 sm:grid-cols-3 lg:grid-cols-6">
+                        <Field Label="ПЗ"><OptionalNumber AriaLabel="ПЗ" @bind-Value="s.HitPoints" /></Field>
+                        <Field Label="ПМ"><OptionalNumber AriaLabel="ПМ" @bind-Value="s.MagicPoints" /></Field>
                         <Field Label="Бонус к урону" Note="К урону, не к попаданию: «+1D4».">
                             <input class="cm-input cm-dice" @bind="s.DamageBonus" />
                         </Field>
                         <Field Label="Комплекция"><input class="cm-input" type="number" @bind="s.Build" /></Field>
-                        <Field Label="Уклонение" Hint="(%)"><input class="cm-input" type="number" min="0" max="100" @bind="s.Dodge" /></Field>
-                        <Field Label="Инициатива" Note="0 — по ЛВК (стр. 110)."><input class="cm-input" type="number" min="0" @bind="s.Initiative" /></Field>
+                        <Field Label="Уклонение" Hint="(%)"><OptionalNumber Max="100" AriaLabel="Уклонение, %" @bind-Value="s.Dodge" /></Field>
+                        <Field Label="Инициатива" Note="Пусто — по ЛВК."><OptionalNumber AriaLabel="Инициатива" @bind-Value="s.Initiative" /></Field>
                     </div>
                 </div>
             </section>
@@ -83,19 +87,21 @@
                 <div class="cm-section-header"><h2 class="cm-section-title">Движение, броня, рассудок</h2></div>
                 <div class="cm-card">
                     <div class="cm-card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <Field Label="Скорость"><input class="cm-input" type="number" min="0" @bind="s.Speed.Move" /></Field>
-                        <Field Label="Плавание" Note="Пусто — половина скорости (стр. 141)."><input class="cm-input" type="number" min="0" @bind="s.Speed.Swim" /></Field>
+                        <Field Label="Скорость"><OptionalNumber AriaLabel="Скорость" @bind-Value="s.Speed.Move" /></Field>
+                        <Field Label="Плавание" Note="Пусто — половина скорости."><input class="cm-input" type="number" min="0" @bind="s.Speed.Swim" /></Field>
                         <Field Label="Полёт" Note="Пусто — не летает."><input class="cm-input" type="number" min="0" @bind="s.Speed.Fly" /></Field>
                         <Field Label="Скорость словами" Hint="(если в книге так)"><input class="cm-input" placeholder="перекатывание 10" @bind="s.Speed.Note" /></Field>
-                        <Field Label="Атак за раунд" Note="У твари, не у атаки: столько же защит до численного превосходства (стр. 279).">
+                        <Field Label="Атак за раунд" Note="У твари, не у атаки.">
                             <input class="cm-input" type="number" min="0" @bind="s.AttacksPerRound" />
                         </Field>
-                        <Field Label="Атаки — оговорка"><input class="cm-input" @bind="s.AttacksPerRoundNote" /></Field>
-                        <Field Label="Броня"><input class="cm-input" type="number" min="0" @bind="s.Armor" /></Field>
-                        <Field Label="Броня — оговорка" Note="«Броня: нет» плюс оговорка — настоящая защита: «огнестрел — минимальный урон».">
-                            <input class="cm-input" @bind="s.ArmorNote" />
+                        <Field Label="Оговорка к атакам" class="sm:col-span-2 lg:col-span-3">
+                            <textarea class="cm-input" rows="2" @bind="s.AttacksPerRoundNote"></textarea>
                         </Field>
-                        <Field Label="Потеря рассудка" Note="@SanityNote(s.SanityLoss)" class="sm:col-span-2">
+                        <Field Label="Броня"><OptionalNumber AriaLabel="Броня" @bind-Value="s.Armor" /></Field>
+                        <Field Label="Оговорка к броне" Note="«Брони нет» с оговоркой — настоящая защита: «огнестрел — минимальный урон»." class="sm:col-span-2 lg:col-span-3">
+                            <textarea class="cm-input" rows="2" @bind="s.ArmorNote"></textarea>
+                        </Field>
+                        <Field Label="Потеря Рассудка" Note="@SanityNote(s.SanityLoss)" class="sm:col-span-2">
                             <input class="cm-input cm-dice" placeholder="1/1D8" @bind="s.SanityLoss" @bind:event="oninput" />
                         </Field>
                     </div>
@@ -110,28 +116,30 @@
                         {
                             var attack = s.Attacks[i];
                             var index = i;
-                            <div class="flex flex-wrap items-end gap-2 border-t border-primary-100 pt-3 first:border-t-0 first:pt-0" @key="attack">
-                                <Field Label="Атака" class="min-w-40 flex-1"><input class="cm-input" @bind="attack.Name" /></Field>
-                                <Field Label="%" class="w-20"><input class="cm-input" type="number" min="0" @bind="attack.SkillValue" /></Field>
-                                <Field Label="Урон" class="w-32" Error="@DamageError(attack)"><input class="cm-input cm-dice" @bind="attack.Damage" @bind:event="oninput" /></Field>
-                                <Field Label="БкУ" class="w-40">
-                                    <select class="cm-input" @bind="attack.DamageBonusMode">
-                                        @foreach (var mode in Enum.GetValues<CreatureDamageBonusMode>())
-                                        {
-                                            <option value="@mode">@CatalogText.Of(mode)</option>
-                                        }
-                                    </select>
-                                </Field>
-                                <Field Label="Вид" class="w-36">
-                                    <select class="cm-input" @bind="attack.Kind">
-                                        @foreach (var kind in Enum.GetValues<CreatureAttackKind>())
-                                        {
-                                            <option value="@kind">@CatalogText.Of(kind)</option>
-                                        }
-                                    </select>
-                                </Field>
-                                <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить атаку: {attack.Name}")"
-                                        OnClick="() => s.Attacks.RemoveAt(index)" />
+                            <div class="grid gap-2 border-t border-primary-100 pt-3 first:border-t-0 first:pt-0" @key="attack">
+                                <div class="cm-field-row flex flex-wrap items-end gap-2">
+                                    <Field Label="Атака" class="min-w-40 flex-1"><input class="cm-input" @bind="attack.Name" /></Field>
+                                    <Field Label="Навык" Hint="(%)" class="w-24"><input class="cm-input" type="number" min="0" @bind="attack.SkillValue" /></Field>
+                                    <Field Label="Урон" class="w-36" Note="@DamageNote(attack)"><input class="cm-input cm-dice" @bind="attack.Damage" @bind:event="oninput" /></Field>
+                                    <Field Label="Бонус к урону" class="w-44">
+                                        <select class="cm-input" @bind="attack.DamageBonusMode">
+                                            @foreach (var mode in Enum.GetValues<CreatureDamageBonusMode>())
+                                            {
+                                                <option value="@mode">@CatalogText.Of(mode)</option>
+                                            }
+                                        </select>
+                                    </Field>
+                                    <Field Label="Вид" class="w-36">
+                                        <select class="cm-input" @bind="attack.Kind">
+                                            @foreach (var kind in Enum.GetValues<CreatureAttackKind>())
+                                            {
+                                                <option value="@kind">@CatalogText.Of(kind)</option>
+                                            }
+                                        </select>
+                                    </Field>
+                                    <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать атаку: {attack.Name}")"
+                                            OnClick="() => s.Attacks.RemoveAt(index)" />
+                                </div>
                                 <textarea class="cm-input w-full" rows="2" placeholder="Описание атаки (как в бестиарии)" aria-label="@($"Описание атаки: {attack.Name}")"
                                           @bind="attack.Description"></textarea>
                             </div>
@@ -142,36 +150,40 @@
             </section>
 
             <section class="cm-section">
-                <div class="cm-section-header"><h2 class="cm-section-title">Навыки и особые умения</h2></div>
+                <div class="cm-section-header"><h2 class="cm-section-title">Навыки</h2></div>
                 <div class="cm-card">
-                    <div class="cm-card-body cm-stack">
-                        <div class="grid gap-2">
-                            @for (var i = 0; i < s.Skills.Count; i++)
-                            {
-                                var skill = s.Skills[i];
-                                var index = i;
-                                <div class="flex flex-wrap items-center gap-2" @key="skill">
-                                    <input class="cm-input min-w-40 flex-1" aria-label="Навык" placeholder="Внимание" @bind="skill.Name" />
-                                    <input class="cm-input w-24" type="number" min="0" aria-label="Значение навыка, %" @bind="skill.Value" />
-                                    <input class="cm-input min-w-32 flex-1" aria-label="Оговорка навыка" placeholder="оговорка книги" @bind="skill.Note" />
-                                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить навык: {skill.Name}")" OnClick="() => s.Skills.RemoveAt(index)" />
-                                </div>
-                            }
-                            <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Skills.Add(new CreatureSkill())">Добавить навык</Button></div>
-                        </div>
-                        <div class="grid gap-2">
-                            @for (var i = 0; i < s.SpecialAbilities.Count; i++)
-                            {
-                                var ability = s.SpecialAbilities[i];
-                                var index = i;
-                                <div class="flex flex-wrap items-start gap-2" @key="ability">
-                                    <input class="cm-input w-full sm:w-56" aria-label="Умение" placeholder="Регенерация" @bind="ability.Name" />
-                                    <textarea class="cm-input min-w-48 flex-1" rows="2" aria-label="@($"Описание: {ability.Name}")" @bind="ability.Text"></textarea>
-                                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить умение: {ability.Name}")" OnClick="() => s.SpecialAbilities.RemoveAt(index)" />
-                                </div>
-                            }
-                            <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.SpecialAbilities.Add(new SpecialAbility())">Добавить особое умение</Button></div>
-                        </div>
+                    <div class="cm-card-body grid gap-2">
+                        @for (var i = 0; i < s.Skills.Count; i++)
+                        {
+                            var skill = s.Skills[i];
+                            var index = i;
+                            <div class="flex flex-wrap items-center gap-2" @key="skill">
+                                <input class="cm-input min-w-40 flex-1" aria-label="Навык" placeholder="Внимание" @bind="skill.Name" />
+                                <input class="cm-input w-24" type="number" min="0" aria-label="Значение навыка, %" @bind="skill.Value" />
+                                <input class="cm-input min-w-32 flex-1" aria-label="Оговорка навыка" placeholder="оговорка книги" @bind="skill.Note" />
+                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать навык: {skill.Name}")" OnClick="() => s.Skills.RemoveAt(index)" />
+                            </div>
+                        }
+                        <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.Skills.Add(new CreatureSkill())">Добавить навык</Button></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cm-section">
+                <div class="cm-section-header"><h2 class="cm-section-title">Особые умения</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body grid gap-3">
+                        @for (var i = 0; i < s.SpecialAbilities.Count; i++)
+                        {
+                            var ability = s.SpecialAbilities[i];
+                            var index = i;
+                            <div class="flex flex-wrap items-start gap-2" @key="ability">
+                                <input class="cm-input w-full sm:w-56" aria-label="Умение" placeholder="Регенерация" @bind="ability.Name" />
+                                <textarea class="cm-input min-w-48 flex-1" rows="3" aria-label="@($"Описание: {ability.Name}")" @bind="ability.Text"></textarea>
+                                <Button Variant="ButtonVariant.Ghost" Icon="fa-trash-can" AriaLabel="@($"Убрать умение: {ability.Name}")" OnClick="() => s.SpecialAbilities.RemoveAt(index)" />
+                            </div>
+                        }
+                        <div><Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="() => s.SpecialAbilities.Add(new SpecialAbility())">Добавить особое умение</Button></div>
                     </div>
                 </div>
             </section>
@@ -189,8 +201,9 @@
                                 <img src="@image.Url" alt="" class="h-20 w-16 rounded-md border border-primary-200 object-cover" />
                                 <input class="cm-input min-w-40 flex-1" placeholder="Подпись" aria-label="Подпись картинки" value="@image.Caption"
                                        @onchange="e => c.Images[index] = image with { Caption = e.Value?.ToString() }" />
-                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-up" AriaLabel="Выше" Disabled="index == 0" OnClick="() => MoveUp(c, index)" />
-                                <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="Убрать картинку" OnClick="() => c.Images.RemoveAt(index)" />
+                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-up" AriaLabel="Выше" Disabled="index == 0" OnClick="() => Move(c, index, -1)" />
+                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-down" AriaLabel="Ниже" Disabled="index == c.Images.Count - 1" OnClick="() => Move(c, index, 1)" />
+                                <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="Убрать картинку" OnClick="() => c.Images.RemoveAt(index)" />
                             </div>
                         }
                         <ImagePicker OnChanged="file => AddImage(c, file)" />
@@ -198,31 +211,67 @@
                 </div>
             </section>
 
-            <div class="flex flex-wrap justify-end gap-2">
-                <Button Variant="ButtonVariant.Secondary" Href="@BackHref">Отмена</Button>
-                <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
+            @if (Id is not null)
+            {
+                @* «Удалить» — здесь, а не на раскрытой карточке бестиария (правило 7): статблок открывают за столом. *@
+                <div class="cm-danger-zone">
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="DeleteAsync">Удалить существо</Button>
+                </div>
+            }
+
+            @* Панель сохранения липнет к низу: страница в два экрана, а «Сохранить» только внизу не показывал ни ошибки, ни реакции. *@
+            <div class="cr-savebar">
+                @if (_error is not null)
+                {
+                    <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0 w-full">
+                        <ChildContent>@_error</ChildContent>
+                        <Actions>
+                            @if (_stale)
+                            {
+                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
+                            }
+                        </Actions>
+                    </Alert>
+                }
+                <div class="flex flex-wrap items-center justify-end gap-3">
+                    @if (_attempt > 0)
+                    {
+                        <FormErrors Errors="[.. errors.Values]" Attempt="_attempt" Container=".cr-edit" />
+                    }
+                    <Button Variant="ButtonVariant.Secondary" OnClick="LeaveAsync">Отмена</Button>
+                    <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
+                </div>
             </div>
         }
     </AsyncContent>
 </div>
 
 @code {
+    private static readonly System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto> CreatureJson =
+        (System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto>)CampaignManager.Contracts.ContractsJsonContext.Default.GetTypeInfo(typeof(CreatureDto))!;
+
     private CreatureDto? _creature;
+    private UnsavedChangesGuard? _guard;
+    private string? _initialJson;
     private bool _saving;
     private bool _stale;
+    private bool _leaving;
+    private int _attempt;
     private string? _error;
 
     [Parameter] public Guid? Id { get; set; }
 
-    private string BackHref => Id is { } id ? $"bestiary?open={id}" : "bestiary";
+    private bool IsDirty => !_leaving && _creature is not null && _initialJson is not null && JsonSerializer.Serialize(_creature, CreatureJson) != _initialJson;
 
     private async Task<CreatureDto> LoadAsync(CancellationToken cancellationToken)
     {
         _error = null;
         _stale = false;
+        _attempt = 0;
         if (Id is not { } id)
         {
             _creature = new CreatureDto();
+            _initialJson = JsonSerializer.Serialize(_creature, CreatureJson);
             return _creature;
         }
 
@@ -233,18 +282,28 @@
         {
             _error = "Такого существа нет — возможно, его удалили.";
         }
+        else
+        {
+            _initialJson = JsonSerializer.Serialize(_creature, CreatureJson);
+        }
 
         StateHasChanged(); // имя — в шапке, она вне AsyncContent
 
         return _creature ?? new CreatureDto();
     }
 
-    private static IEnumerable<(string Label, StatValue Stat)> Stats(Statblock s) =>
-        [("СИЛ", s.Str), ("ВЫН", s.Con), ("ТЕЛ", s.Siz), ("ЛВК", s.Dex), ("ИНТ", s.Int), ("МОЩ", s.Pow)];
+    private static IEnumerable<(string Label, StatValue Stat, int Index)> Stats(Statblock s) =>
+        [("СИЛ", s.Str, 0), ("ВЫН", s.Con, 1), ("ТЕЛ", s.Siz, 2), ("ЛВК", s.Dex, 3), ("ИНТ", s.Int, 4), ("МОЩ", s.Pow, 5)];
 
-    private static void MoveUp(CreatureDto creature, int index)
+    // Все ошибки сразу (правило 9); красными они становятся после первой попытки сохранить и гаснут по мере правки.
+    private static Dictionary<string, string> Check(CreatureDto creature) =>
+        string.IsNullOrWhiteSpace(creature.Name) ? new() { ["name"] = "Нужно название." } : [];
+
+    private string? ErrorOf(Dictionary<string, string> errors, string key) => _attempt > 0 ? errors.GetValueOrDefault(key) : null;
+
+    private static void Move(CreatureDto creature, int index, int delta)
     {
-        (creature.Images[index - 1], creature.Images[index]) = (creature.Images[index], creature.Images[index - 1]);
+        (creature.Images[index + delta], creature.Images[index]) = (creature.Images[index], creature.Images[index + delta]);
     }
 
     private static void AddImage(CreatureDto creature, StoredFileDto? file)
@@ -256,7 +315,8 @@
     }
 
     // Бой бросает только то, что понимает DiceFormula: «1д6» и «1D6+БкУ» — да, «см. описание» — нет.
-    private static string? DamageError(CreatureAttack attack) =>
+    // Это предупреждение, а не запрет: такой урон сохранится текстом.
+    private static string? DamageNote(CreatureAttack attack) =>
         attack.DamageBonusMode == CreatureDamageBonusMode.OnlyBonus || string.IsNullOrWhiteSpace(attack.Damage)
         || Core.Dice.DiceFormula.Parse(attack.Damage).IsValid
             ? null
@@ -266,12 +326,28 @@
     private static string? SanityNote(string? sanityLoss) =>
         string.IsNullOrWhiteSpace(sanityLoss)
             ? "«успех/провал»: 0/1D6."
-            : $"Предел привыкания — {SanityLossFormula.MaxLoss(sanityLoss)} (стр. 167).";
+            : $"Предел привыкания — {SanityLossFormula.MaxLoss(sanityLoss)}.";
+
+    private async Task LeaveAsync()
+    {
+        if (_guard is null || await _guard.ConfirmLeaveAsync())
+        {
+            _leaving = true; // вопрос уже задан: NavigationLock второй раз не спрашивает
+            Navigation.NavigateTo(Id is { } id ? $"bestiary?open={id}" : "bestiary");
+        }
+    }
 
     private async Task SaveAsync()
     {
         if (_creature is null)
         {
+            return;
+        }
+
+        if (Check(_creature).Count > 0)
+        {
+            _attempt++;
+            _error = null;
             return;
         }
 
@@ -281,7 +357,8 @@
         try
         {
             var saved = Id is null ? await Api.CreateAsync(_creature) : await Api.UpdateAsync(_creature);
-            Toasts.Success($"«{saved.Name}» сохранено.");
+            Toasts.Success($"Сохранено: {Names.Plain(saved.Name)}.");
+            _leaving = true;
             Navigation.NavigateTo($"bestiary?open={saved.Id}");
         }
         catch (ApiException ex)
@@ -296,6 +373,27 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_creature is not { } creature || Id is not { } id
+            || !await Dialogs.ConfirmDeleteAsync("существо", Names.Plain(creature.Name), "Пропадёт из бестиария.", reversible: false))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteAsync(id);
+            Toasts.Success($"Удалено: {Names.Plain(creature.Name)}.");
+            _leaving = true;
+            Navigation.NavigateTo("bestiary");
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
         }
     }
 

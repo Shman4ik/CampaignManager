@@ -1,0 +1,26 @@
+@* Целое поле, где 0 значит «нет»: пустое в форме, а не «0» (у Азатота СИЛ, ТЕЛ, ЛВК, ИНТ — пустые, а форма
+   показывала нули, и они выглядели значением). Пусто или не число — 0. *@
+<input class="@Css.Join("cm-input", Class)" type="number" inputmode="numeric" min="@Min" max="@Max" placeholder="@Placeholder"
+       aria-label="@AriaLabel" aria-invalid="@AriaInvalid"
+       value="@(Value == 0 ? "" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture))" @onchange="ChangedAsync" />
+
+@code {
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    [Parameter] public int? Min { get; set; } = 0;
+
+    [Parameter] public int? Max { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter] public string? AriaLabel { get; set; }
+
+    [Parameter] public string? AriaInvalid { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private Task ChangedAsync(ChangeEventArgs e) =>
+        ValueChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : 0);
+}

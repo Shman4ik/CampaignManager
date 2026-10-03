@@ -52,7 +52,14 @@ public static class FileContentEndpoint
 
         var request = http.Request.GetTypedHeaders();
         var response = http.Response;
-        var etag = new EntityTagHeaderValue($"\"{file.Id:N}\"");
+
+        // ?w=480 — уменьшенная копия картинки для плиток и миниатюр (UX-1 U5): плитка бестиария тянула оригинал в
+        // ~300 КБ, 20 плиток — 6 МБ. Свой ETag (по ширине): 304 для миниатюры не принимается за оригинал и наоборот.
+        var thumbWidth = Thumbnails.Requested(http.Request.Query["w"], file.ContentType)
+            && request.Range is null && !HttpMethods.IsHead(http.Request.Method)
+            ? int.Parse(http.Request.Query["w"]!, System.Globalization.CultureInfo.InvariantCulture)
+            : (int?)null;
+        var etag = new EntityTagHeaderValue(thumbWidth is { } tw ? $"\"{file.Id:N}-w{tw}\"" : $"\"{file.Id:N}\"");
 
         response.Headers.ETag = etag.ToString();
         response.Headers.CacheControl = CacheControl;
@@ -65,6 +72,22 @@ public static class FileContentEndpoint
         if (request.IfNoneMatch.Any(tag => tag.Equals(EntityTagHeaderValue.Any) || tag.Compare(etag, useStrongComparison: false)))
         {
             return TypedResults.StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        if (thumbWidth is { } width)
+        {
+            var thumbnail = await Thumbnails.TryCreateAsync(storage, key, file.ContentType!, width, cancellationToken);
+            if (thumbnail is not null)
+            {
+                response.ContentType = file.ContentType;
+                response.ContentLength = thumbnail.Length;
+                await response.Body.WriteAsync(thumbnail, cancellationToken);
+                return TypedResults.Empty;
+            }
+
+            // Оригинал уже не шире просимого (или не читается как картинка): отдаём его, но ETag — оригинала.
+            etag = new EntityTagHeaderValue($"\"{file.Id:N}\"");
+            response.Headers.ETag = etag.ToString();
         }
 
         var range = ParseRange(request, etag, length);
