@@ -138,25 +138,6 @@ public static class SheetSkillLayout
         return ([.. items.Take(left)], [.. items.Skip(left)]);
     }
 
-    /// <summary>
-    /// Делит список на <paramref name="parts"/> колонок подряд (режим «Игра» — три колонки навыков): первая колонка
-    /// сверху вниз, затем вторая; лишние — в первые колонки. Пустых колонок в конце не бывает.
-    /// </summary>
-    public static IReadOnlyList<IReadOnlyList<T>> SplitInto<T>(IReadOnlyList<T> items, int parts)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(parts, 1);
-        var columns = new List<IReadOnlyList<T>>();
-        var taken = 0;
-        for (var i = 0; i < parts && taken < items.Count; i++)
-        {
-            var size = (items.Count - taken + parts - i - 1) / (parts - i);
-            columns.Add([.. items.Skip(taken).Take(size)]);
-            taken += size;
-        }
-
-        return columns;
-    }
-
     public static IReadOnlyList<SkillLineGroup> Groups(CharacterSheet sheet, SkillCatalog catalog)
     {
         var lines = new List<(SkillCategory? Category, SkillLine Line, bool Folded)>();

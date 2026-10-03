@@ -285,26 +285,32 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
   `cm-btn-error` and `<Button Variant="error">` render different reds.
 - Full details and the class inventory: `docs/design-system.md`.
 
-### Target device: iPad Pro M2
+### Целевые устройства: iPad Pro 11" и iPhone (решение владельца 2026-10-03)
 
-**The primary device for this app is an iPad Pro M2 — it's what the Keeper actually runs at the table.**
-Any UI change must be checked at that viewport in the browser preview before it's called done, not only
-at desktop width:
+**Все страницы оптимизируются под устройства владельца** — их замерил он сам (whatismyviewport.com). Прежняя цель
+1366×1024 (iPad Pro 12.9") — не его устройство; записи «проверено на 1366×1024» в истории задач — история, не правило.
 
-- **Landscape 1366×1024** — the main orientation at the table. Check this one first.
-- **Portrait 1024×1366** — Tailwind's `lg:` breakpoint is exactly 1024px, so a three-column
-  `lg:col-span-*` grid switches to its widest layout right at portrait width and columns get very tight.
-  Verify nothing clips, and that no control ends up narrower than a comfortable tap target.
+| Устройство | Экран, CSS px | Вьюпорт браузера (что проверять) | Колонка страницы с рельсом |
+|---|---|---|---|
+| **iPad Pro 11" (M2), ландшафт** — главный, за столом | 1194×834, DPR 2 | **1194×696** (Chrome: панели ~137px) | ~1064px |
+| **iPad Pro 11", портрет** | 834×1194 | **834×1056** (Chrome; Telegram — 834×1094) | ~704px |
+| **iPhone** (страницы игрока) | 393×852, DPR 3 | **393×651** (Safari с нижней панелью) | ~361px, рельса нет |
 
-Practical rules that follow from it:
-- Tap targets: buttons and checkboxes need real padding — `cm-btn-sm` is the floor, not `text-xs` bare links.
+- Tailwind: портрет iPad — между `md` (768) и `lg` (1024), ландшафт — выше `lg`. Сетка `lg:*` в портрете **не**
+  включается — портрету нужна своя раскладка (`md:`), а не «столбик как на телефоне».
+- Раскладку внутри страницы лучше вести от ширины колонки (`@container`), а не окна: рельс и поля съедают её
+  по-разному. Опорные ширины — последний столбец таблицы.
+- Высота мала: в ландшафте под шапкой ~620px. Частые действия не должны уезжать за низ экрана.
+- **Тап-цели — правило владельца 2026-10-03:** кнопка, поле, отметка — **от 32px**; строка плотного списка, которая
+  целиком кнопка (навык в «Игре»), — **от 28px**. Прежнее «44px везде» отменено. Кит (`cm-btn` 44px) пока прежний:
+  страницы переходят на новый пол по мере переработки (первым — лист сыщика, `Styles/sheet.css`).
 - Never rely on `title=` tooltips to carry information: there's no hover on a touch screen.
 - Wide content (tracks, tables, timelines) scrolls inside its own `overflow-x-auto` container so the page
   body never scrolls sideways.
 - Prefer `flex-wrap` on button rows — an unwrapped row of six actions overflows in portrait.
 
-`mcp__Claude_Browser__resize_window` with `{width: 1366, height: 1024}` (and then `1024×1366`) is how to
-check this; reset with `preset: "desktop"` when done.
+Проверка — `mcp__Claude_Browser__resize_window` на `{width: 1194, height: 696}`, затем `834×1056` и (страницы игрока)
+`393×651`; в эмуляции Chromium рисует полосу прокрутки (−15px ширины), на iPad её нет. В конце — `preset: "desktop"`.
 
 ## Circuit State Persistence
 
