@@ -34,7 +34,12 @@ public static class CombatProfiles
         ];
 
         foreach (var weapon in sheet.Weapons)
+        {
+            // «Драка» строкой оружия — та же безоружная атака, второй пункт «Драка (без оружия)» рядом не нужен.
+            if (IsBrawlDuplicate(weapon, catalog))
+                continue;
             attacks.Add(FromWeapon(weapon, sheet, catalog));
+        }
 
         return new CombatProfile
         {
@@ -55,12 +60,17 @@ public static class CombatProfiles
         };
     }
 
+    private static bool IsBrawlDuplicate(SheetWeapon weapon, SkillCatalog catalog) =>
+        weapon.SkillId is { } id && catalog.CodeOf(id) == SkillCodes.Fighting + ".brawl"
+        && weapon.Name.Trim().StartsWith("Драка", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Навыки, которые напечатаны на бланке сыщика, — они есть у каждого, даже без вложенных очков.</summary>
     private static readonly string[] PrintedCombatSkills = [SkillCodes.Fighting + ".brawl", "skill.throw", SkillCodes.Firearms + ".handgun", SkillCodes.Firearms + ".rifle-shotgun"];
 
     /// <summary>Боевой навык справочника — ближний бой, стрельба, метание (категории «Сражение»), без родителей-групп.</summary>
     public static bool IsCombatSkill(SkillCatalog catalog, Guid skillId) =>
-        catalog.Find(skillId) is { Category: SkillCategory.CombatGeneral or SkillCategory.CombatFirearms } skill && !catalog.IsParent(skill.Id);
+        catalog.Find(skillId) is { Category: SkillCategory.CombatGeneral or SkillCategory.CombatFirearms } skill && !catalog.IsParent(skill.Id)
+        && catalog.CodeOf(skill.Id) != SkillCodes.Dodge;
 
     /// <summary>
     /// Боевые навыки листа для «Чем»: каждая специализация, что есть на листе, плюс напечатанные на листе книги (драка,

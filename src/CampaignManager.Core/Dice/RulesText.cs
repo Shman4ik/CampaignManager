@@ -31,7 +31,7 @@ public static class RulesText
         isBonus ? DiceWord(count, "бонусная", "бонусные") : DiceWord(count, "штрафная", "штрафные");
 
     /// <summary>
-    /// Расшифровка броска с дополнительными костями: « [кости 24, 44 — бонусная кость]». Для броска без
+    /// Расшифровка броска с дополнительными костями: « (бонусная кость: 24, 44; взято 24)». Для броска без
     /// них — пустая строка.
     /// </summary>
     public static string RollDetail(D100Roll? roll)
@@ -43,7 +43,7 @@ public static class RulesText
             ? DescribeDice(roll.BonusDice, isBonus: true)
             : DescribeDice(roll.PenaltyDice, isBonus: false);
 
-        return $" [кости {string.Join(", ", roll.Candidates)} — {kind}]";
+        return $" ({kind}: {string.Join(", ", roll.Candidates)}; взято {roll.Result})";
     }
 
     private static string DiceWord(int count, string one, string many) =>

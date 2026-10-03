@@ -79,7 +79,7 @@ public sealed class MeleeAttackTests
 
         Assert.False(outcome.Hit);
         Assert.Null(outcome.Counter);
-        Assert.Equal("Культист уклоняется от атаки Сыщик.", outcome.Summary);
+        Assert.Equal("Сыщик: промах — Культист уклонился (20 против 50).", outcome.Summary);
     }
 
     [Fact]

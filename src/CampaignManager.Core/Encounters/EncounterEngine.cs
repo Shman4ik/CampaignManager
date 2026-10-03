@@ -6,7 +6,14 @@ using CampaignManager.Core.Encounters.Chase;
 namespace CampaignManager.Core.Encounters;
 
 /// <summary>Одна строка предпросмотра: кто, что, было → станет и чем это чревато.</summary>
-public sealed record EffectPreview(Guid ParticipantId, string Name, string Label, string Before, string After, string? Note);
+public sealed record EffectPreview(Guid ParticipantId, string Name, string Label, string Before, string After, string? Note)
+{
+    /// <summary>
+    /// Служебный счётчик боя («Атак за раунд», «Защит за раунд», «Проверок очереди»): движок их ведёт, но за столом о них не
+    /// говорят — ни предпросмотр, ни журнал их не показывают (B30).
+    /// </summary>
+    public bool IsCounter => Label.EndsWith("за раунд", StringComparison.Ordinal) || Label == "Проверок очереди";
+}
 
 /// <summary>Что сделал <see cref="EncounterEngine.Apply(EncounterState, DateTimeOffset)"/>: запись журнала и записи в листы.</summary>
 public sealed record ApplyOutcome(EncounterLogEntry Entry, IReadOnlyList<SheetWrite> SheetWrites);
@@ -186,7 +193,7 @@ public static class EncounterEngine
         List<string> lines = [.. resolution.Lines];
         foreach (var effect in resolution.Effects)
         {
-            if (Describe(state, effect) is { } line)
+            if (Describe(state, effect) is { IsCounter: false } line)
                 lines.Add(line.ToLogLine());
         }
 
