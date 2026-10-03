@@ -1,25 +1,19 @@
 @using CampaignManager.Core.Checks
 
 @* Бонусные и штрафные кости одним числом от −2 до +2: одна бонусная гасит одну штрафную,
-   поэтому Хранителю нужен только итог. Кнопки квадратные — пять в ряд влезают и на телефоне. *@
+   поэтому Хранителю нужен только итог. Общий сегментированный переключатель (Shared/Segmented): выбор не красится
+   главной кнопкой. Подпись итога — сразу под сегментами, не отдельной строкой поодаль. *@
 <div>
-    <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Бонусные и штрафные кости">
-        @for (var net = -CheckRules.MaxExtraDice; net <= CheckRules.MaxExtraDice; net++)
-        {
-            var value = net;
-            var active = value == Value;
-            <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)" Disabled="@Disabled"
-                    role="radio" aria-checked="@(active ? "true" : "false")" aria-label="@CheckRules.ExtraDiceLabel(value)"
-                    class="min-w-11 justify-center" data-testid="@($"check-dice-{value}")"
-                    OnClick="() => ValueChanged.InvokeAsync(value)">
-                @(value > 0 ? $"+{value}" : value < 0 ? $"−{-value}" : "0")
-            </Button>
-        }
-    </div>
+    <Segmented TValue="int" Options="Choices" Value="Value" ValueChanged="ValueChanged" Disabled="Disabled" Label="Бонусные и штрафные кости" />
     <p class="cm-field-note mt-1">@CheckRules.ExtraDiceLabel(Value)</p>
 </div>
 
 @code {
+    private static readonly IReadOnlyList<SegmentOption<int>> Choices = Enumerable
+        .Range(-CheckRules.MaxExtraDice, CheckRules.MaxExtraDice * 2 + 1)
+        .Select(v => new SegmentOption<int>(v, v > 0 ? $"+{v}" : v < 0 ? $"−{-v}" : "0", CheckRules.ExtraDiceLabel(v), $"check-dice-{v}"))
+        .ToList();
+
     [Parameter] public int Value { get; set; }
 
     [Parameter] public EventCallback<int> ValueChanged { get; set; }
