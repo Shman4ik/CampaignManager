@@ -19,15 +19,15 @@
     return;
 }
 
-<PageHeader Title="UI-кит">
+<PageHeader Title="UI-кит" Subtitle="Подзаголовок: контекст страницы, 13px" Game="true">
     <Actions>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetDemo">Сбросить</Button>
         <Button Small="true" Icon="fa-plus" OnClick="() => _modalOpen = true">Окно</Button>
     </Actions>
 </PageHeader>
 
-@* Кнопку «Ширма» в шапку кладёт KeeperScreenHost из MainLayout (слот PageHeaderSlots.KeeperScreen) — её
-   видно здесь, если войти Хранителем. Диалог проверки и ширма вживую — /dev/checks. *@
+@* Game="true": «Ширма» и плеер в шапке (их кладут KeeperScreenHost и MusicPlayerBar из MainLayout через
+   слоты PageHeaderSlots) видны здесь, если войти Хранителем; без Game их в шапке нет. Диалог проверки и ширма вживую — /dev/checks. *@
 
 <div class="cm-page">
     <section class="cm-section">
@@ -83,13 +83,13 @@
                     <Button Variant="ButtonVariant.Ghost">Без фона</Button>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <Button Small="true" Icon="fa-plus">Добавить</Button>
-                    <Button Small="true" Variant="ButtonVariant.Secondary">Назад</Button>
-                    <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="Изменить: Кольт .45" />
-                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="Удалить: Кольт .45" />
+                    @* Small вне шапки и плотной таблицы (.cm-table-dense) — те же 44px; 36px только в .cm-topbar. *@
+                    <Button Small="true" Icon="fa-plus">Small вне шапки</Button>
+                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="Изменить: Кольт .45" />
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="Удалить: Кольт .45" />
                     <Button Icon="fa-dice-d20" AriaLabel="Бросить кости" />
                     <Button Busy="_busy" Icon="fa-floppy-disk" OnClick="SimulateBusyAsync">@(_busy ? "Сохраняю" : "Долгое действие")</Button>
-                    <Button Disabled="true">Недоступно</Button>
+                    <Button Disabled="@string.IsNullOrWhiteSpace(_name)" DisabledReason="Введите имя сыщика" Icon="fa-user-plus">Создать сыщика</Button>
                     <Button Href="dev/ping" Variant="ButtonVariant.Secondary" Icon="fa-link">Ссылка-кнопка</Button>
                 </div>
             </div>
@@ -140,7 +140,10 @@
                 <Field Label="Имя сыщика">
                     <input class="cm-input" @bind="_name" placeholder="Харви Уолтерс" />
                 </Field>
-                <Field Label="Профессия" Hint="(необязательно)">
+                <Field Label="Имя обязательное" Required="true" Error="@(string.IsNullOrWhiteSpace(_name) ? "Введите имя сыщика." : null)">
+                    <input class="cm-input" @bind="_name" @bind:event="oninput" placeholder="Очистите поле, чтобы увидеть ошибку" />
+                </Field>
+                <Field Label="Профессия">
                     <select class="cm-input" @bind="_occupation">
                         <option value="">— Выберите —</option>
                         <option>Антиквар</option>
@@ -226,10 +229,9 @@
 
         @if (FilteredWeapons.Count == 0)
         {
-            <EmptyState Icon="fa-gun" Title="Нет оружия по этим условиям." Message="Измените поиск или очистите фильтры.">
+            <EmptyState Icon="fa-gun" Title="@EmptyState.NoneByFilter("оружия")">
                 <Actions>
-                    <Button Icon="fa-plus">Добавить оружие</Button>
-                    <Button Variant="ButtonVariant.Secondary" OnClick="ResetFilter">Очистить фильтры</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="ResetFilter">Сбросить фильтры</Button>
                 </Actions>
             </EmptyState>
         }
@@ -326,19 +328,33 @@
     </section>
 
     <section class="cm-section">
+        <div class="cm-section-header"><h2 class="cm-section-title">Пустые состояния</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body cm-stack">
+                <EmptyState Compact="true" Title="@EmptyState.None("книг")" />
+                <EmptyState Compact="true" Title="@EmptyState.NoneByFilter("книг")" />
+            </div>
+        </div>
+        <EmptyState Icon="fa-book-open" Title="@EmptyState.None("книг")" />
+    </section>
+
+    <section class="cm-section">
         <div class="cm-section-header"><h2 class="cm-section-title">Диалоги, уведомления, связь</h2></div>
         <div class="cm-card">
             <div class="cm-card-body cm-stack">
                 <div class="flex flex-wrap gap-2">
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-window-maximize" OnClick="() => _modalOpen = true">Окно</Button>
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-hand" OnClick="() => _strictOpen = true">Окно без закрытия мимо</Button>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-table-columns" OnClick="() => _footerOpen = true">Окно с подвалом</Button>
                     <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="ConfirmDeleteAsync">Подтвердить удаление</Button>
+                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="ConfirmObjectAsync">Удалить с объектом</Button>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Success("Лист сохранён."))">Toast: успех</Button>
                     <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Info("Игрок присоединился к кампании."))">Toast: информация</Button>
                     <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Warning("Навык выше 99 — проверьте лист."))">Toast: внимание</Button>
-                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Error("Не удалось удалить кампанию.", "Ошибка"))">Toast: ошибка</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Error("Не удалось удалить кампанию.", "Ошибка"))">Toast: ошибка (8 с)</Button>
+                    <Button Variant="ButtonVariant.Secondary" OnClick="@(() => Toasts.Removed("Кольт .45", () => { Toasts.Success("Возвращено: Кольт .45"); return Task.CompletedTask; }))">Toast: «Отменить»</Button>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-cloud-arrow-up" OnClick="SimulateSaveAsync">Имитировать запись</Button>
@@ -369,6 +385,25 @@
     </Footer>
 </Modal>
 
+<Modal Open="_footerOpen" Title="Новая раздатка" Size="ModalSize.Medium" MinHeight="22rem" OnClose="() => _footerOpen = false">
+    <ChildContent>
+        <div class="grid gap-4">
+            <Field Label="Название" Required="true" Error="@(_footerName.Length == 0 && _footerTried ? "Введите название." : null)">
+                <input class="cm-input" @bind="_footerName" @bind:event="oninput" />
+            </Field>
+            <p class="cm-text-muted">Фокус открытия — в первое поле, а не на «Закрыть». Высота тела зарезервирована: MinHeight.</p>
+        </div>
+    </ChildContent>
+    <FooterError>
+        <Alert Tone="Tone.Error" Small="true">Сервер ответил отказом: имя занято.</Alert>
+    </FooterError>
+    <FooterHint>@(_footerName.Length == 0 ? "Введите название" : null)</FooterHint>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="() => _footerOpen = false">Отмена</Button>
+        <Button Disabled="@(_footerName.Length == 0)" OnClick="() => { _footerTried = true; _footerOpen = _footerName.Length == 0; }">Создать</Button>
+    </Footer>
+</Modal>
+
 <Modal Open="_strictOpen" Title="Проверка ВЫН умирающего" Size="ModalSize.Small" Dismissible="false" OnClose="() => _strictOpen = false">
     <ChildContent>
         <p>Касание мимо окна и Esc его не закрывают — только крестик или кнопка.</p>
@@ -380,6 +415,9 @@
 
 @code {
     private const int PageSize = 5;
+    private bool _footerOpen;
+    private bool _footerTried;
+    private string _footerName = "";
 
     private static readonly (string Name, (string Shade, string Css)[] Swatches)[] Palettes =
     [
@@ -523,6 +561,12 @@
     private async Task ConfirmDeleteAsync()
     {
         var confirmed = await Dialogs.ConfirmDeleteAsync("Удалить кампанию?", "«Маски Ньярлатотепа» и журнал встреч будут удалены.");
+        Toasts.Show(confirmed ? Tone.Success : Tone.Info, confirmed ? "Подтверждено." : "Отменено.");
+    }
+
+    private async Task ConfirmObjectAsync()
+    {
+        var confirmed = await Dialogs.ConfirmDeleteAsync("оружие", "«Кольт .45 автоматический»", "Пропадёт из справочника и со всех листов.", reversible: false);
         Toasts.Show(confirmed ? Tone.Success : Tone.Info, confirmed ? "Подтверждено." : "Отменено.");
     }
 

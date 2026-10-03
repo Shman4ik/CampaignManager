@@ -1,17 +1,24 @@
 @implements IDisposable
 @inject ToastService Toasts
 
-@* Стопка уведомлений ToastService под шапкой справа. Стоит один раз в MainLayout. *@
+@* Стопка уведомлений ToastService снизу по центру (на телефоне — над нижней панелью): шапку и кнопки
+   «Начать»/«Завершить» они не закрывают. Стоит один раз в MainLayout. *@
 <div class="cm-toasts" aria-live="polite">
     @foreach (var toast in Toasts.Messages)
     {
-        <Alert @key="toast.Id" Tone="toast.Tone" Title="@toast.Title" ShowIcon="true" OnClose="() => Toasts.Dismiss(toast.Id)">
+        <Alert @key="toast.Id" Tone="toast.Tone" Title="@toast.Title" ShowIcon="true" OnClose="() => Toasts.Dismiss(toast.Id)"
+               Actions="@(toast.Action is null ? null : ActionOf(toast))">
             @toast.Message
         </Alert>
     }
 </div>
 
 @code {
+    private RenderFragment ActionOf(ToastMessage toast) => __builder =>
+    {
+        <Button Variant="ButtonVariant.Secondary" data-testid="toast-action" OnClick="() => Toasts.RunActionAsync(toast.Id)">@toast.Action!.Label</Button>
+    };
+
     protected override void OnInitialized() => Toasts.Changed += OnChanged;
 
     private void OnChanged() => InvokeAsync(StateHasChanged);

@@ -42,7 +42,6 @@ public sealed class ComponentTests : KitContext
     {
         var cut = Render<PageHeader>(p => p
             .Add(h => h.Title, "Заклинания")
-            .Add(h => h.ShowModuleButtons, false)
             .Add(h => h.Actions, builder =>
             {
                 builder.OpenComponent<Button>(0);
@@ -155,11 +154,11 @@ public sealed class ComponentTests : KitContext
         Assert.DoesNotContain("список", cut.Markup);
     }
 
-    // Подпись рельса — одна строка 11px в 76px: не длиннее «Заклинания» (docs/design-system.md v1).
+    // Подпись рельса = заголовок страницы, одна строка 11px в рельсе 90px: не длиннее «Пользователи» (12 знаков, влезает впритык).
     [Fact]
     public void Rail_labels_fit_one_line()
     {
-        Assert.All(NavMenu.Items, item => Assert.True(item.RailLabel.Length <= "Заклинания".Length, item.RailLabel));
+        Assert.All(NavMenu.Items, item => Assert.True(item.RailLabel.Length <= "Пользователи".Length, item.RailLabel));
     }
 
     // Нижняя панель телефона: четыре пункта и «Ещё».

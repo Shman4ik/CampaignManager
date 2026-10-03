@@ -1,33 +1,73 @@
 @* Шапка страницы — 56px, липнет к верху. Есть у каждой страницы, за ней — один <div class="cm-page">.
-   Действия страницы — в Actions, всегда Small и с Icon: на телефоне шапка оставляет от кнопки значок, подпись
-   уходит в sr-only (shell.css, .cm-topbar-actions) — прятать её самим не нужно. Своих шапок в обход PageHeader не заводить:
-   у самодельной не будет кнопок модулей (ширма, плеер).
-   Шапка не знает модулей: кнопки «Ширма» и плеера модули кладут в слоты через
-   <SectionContent SectionName="@PageHeaderSlots.KeeperScreen">. В v1 PageHeader импортировал
-   Music и KeeperScreen, и UI-кит зависел от фич. *@
-<PageTitle>@(DocumentTitle ?? Title)</PageTitle>
+   Слева заголовок (называет, что открыто: «Лист сыщика: Элизабет Миллер») и подзаголовок-контекст 13px
+   (кампания, статус), справа — только действия этой страницы, не больше трёх, всегда Small и с Icon:
+   на телефоне шапка оставляет от кнопки значок, подпись уходит в sr-only (shell.css, .cm-topbar-actions).
+   «Музыка», «Журнал» как дубли меню, «Выйти» и «Войти» в шапку не выносим: навигация — рельс и меню
+   пользователя. Своих шапок в обход PageHeader не заводить — пропадёт заголовок вкладки и кнопки игры.
+
+   Игровые кнопки — «Ширма» и плеер — только при Game="true": бой, погоня, режим игры сценария, ширма,
+   страница кампании, лист сыщика. Без Game слоты не выводятся вовсе. Плеер при этом можно вызвать с
+   любой страницы, пока играет трек (слот PageHeaderSlots.MusicPlaying).
+   Шапка не знает модулей: кнопки модули кладут в слоты через
+   <SectionContent SectionName="@PageHeaderSlots.KeeperScreen">. *@
+<PageTitle>@FullTitle</PageTitle>
 
 <header class="cm-topbar">
-    <h1 class="cm-topbar-title" tabindex="-1">@Title</h1>
+    <div class="cm-topbar-heading">
+        <h1 class="cm-topbar-title" tabindex="-1">@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <p class="cm-topbar-subtitle" data-testid="page-subtitle">@Subtitle</p>
+        }
+    </div>
     <div class="cm-topbar-actions">
         @Actions
-        @if (ShowModuleButtons)
+        @if (Game)
         {
             <SectionOutlet SectionName="@PageHeaderSlots.Music" />
-            <SectionOutlet SectionName="@PageHeaderSlots.KeeperScreen" />
+            @if (ShowScreenButton)
+            {
+                <SectionOutlet SectionName="@PageHeaderSlots.KeeperScreen" />
+            }
+        }
+        else
+        {
+            <SectionOutlet SectionName="@PageHeaderSlots.MusicPlaying" />
         }
     </div>
 </header>
 
 @code {
+    /// <summary>Хвост заголовка вкладки браузера: «Главная — Campaign Manager».</summary>
+    public const string DocumentTitleSuffix = " — Campaign Manager";
+
+    /// <summary>
+    /// Что открыто: «Бой», «Сценарий: Эликсир жизни». Он же заголовок вкладки браузера и подпись пункта рельса
+    /// (поэтому у страниц-разделов не длиннее подписи рельса).
+    /// </summary>
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
-    /// <summary>Заголовок вкладки браузера, если он отличается от шапки.</summary>
+    /// <summary>Контекст под заголовком, 13px: кампания, тип, статус («архивный готовый сыщик»).</summary>
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>
+    /// Заголовок вкладки, если он должен отличаться от шапки (без суффикса). По умолчанию — <see cref="Title"/>.
+    /// « — Campaign Manager» дописывается сам.
+    /// </summary>
     [Parameter] public string? DocumentTitle { get; set; }
 
-    /// <summary>Кнопки страницы — Size Small: шапка 56px.</summary>
+    /// <summary>Кнопки этой страницы — Small с иконкой, не больше трёх: шапка 56px.</summary>
     [Parameter] public RenderFragment? Actions { get; set; }
 
-    /// <summary>Выключается только там, где кнопка модуля бессмысленна: на самой ширме.</summary>
-    [Parameter] public bool ShowModuleButtons { get; set; } = true;
+    /// <summary>
+    /// Игровая страница: показать кнопки «Ширма» и плеера. По умолчанию false — на профиле, в админке,
+    /// библиотеках, справочниках и при создании их нет.
+    /// </summary>
+    [Parameter] public bool Game { get; set; }
+
+    /// <summary>Только при <see cref="Game"/>: false на самой ширме, где кнопка «Ширма» открыла бы то же самое поверх.</summary>
+    [Parameter] public bool ShowScreenButton { get; set; } = true;
+
+    /// <summary>Заголовок вкладки браузера: «Главная — Campaign Manager», у объекта — «Тип: имя — Campaign Manager».</summary>
+    public string FullTitle => (DocumentTitle ?? Title) + DocumentTitleSuffix;
 }

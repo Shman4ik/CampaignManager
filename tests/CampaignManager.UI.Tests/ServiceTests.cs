@@ -10,7 +10,7 @@ public sealed class ServiceTests
     private readonly FakeTimeProvider _time = new();
 
     [Fact]
-    public void Error_toast_stays_until_closed_others_leave_by_themselves()
+    public void Toasts_leave_by_themselves_in_4_seconds_and_errors_in_8()
     {
         var toasts = new ToastService(_time);
         toasts.Error("Не удалось удалить.");
@@ -20,9 +20,11 @@ public sealed class ServiceTests
 
         var left = Assert.Single(toasts.Messages);
         Assert.Equal(Tone.Error, left.Tone);
+        Assert.Equal(TimeSpan.FromSeconds(4), ToastService.AutoDismissAfter);
 
-        toasts.Dismiss(left.Id);
+        _time.Advance(ToastService.LongDismissAfter - ToastService.AutoDismissAfter);
         Assert.Empty(toasts.Messages);
+        Assert.Equal(TimeSpan.FromSeconds(8), ToastService.LongDismissAfter);
     }
 
     [Fact]

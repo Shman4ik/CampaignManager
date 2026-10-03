@@ -35,6 +35,21 @@ public sealed class DialogService
     public Task<bool> ConfirmDeleteAsync(string title, string message) =>
         ConfirmAsync(new ConfirmRequest(title, message));
 
+    /// <summary>
+    /// Удаление с телом «объект + последствие + можно ли вернуть»: заголовок «Удалить оружие?», ниже жирным
+    /// имя без обрамляющих кавычек, потом последствие и «Можно вернуть.» / «Нельзя отменить.». Кнопка
+    /// называет действие: «Удалить оружие», а не «Подтвердить». <paramref name="noun"/> — существительное
+    /// в винительном падеже: «оружие», «сценарий», «трек». <paramref name="reversible"/> без значения по
+    /// умолчанию: «нельзя отменить» пишут, только если это правда.
+    /// </summary>
+    public Task<bool> ConfirmDeleteAsync(string noun, string subject, string consequence, bool reversible) =>
+        ConfirmAsync(new ConfirmRequest($"Удалить {noun}?", consequence)
+        {
+            Subject = subject,
+            ConfirmText = $"Удалить {noun}",
+            Details = reversible ? "Можно вернуть." : "Нельзя отменить.",
+        });
+
     /// <summary>Ответ из окна.</summary>
     public void Complete(bool confirmed)
     {
@@ -56,6 +71,38 @@ public sealed record ConfirmRequest(string Title, string Message)
     /// <summary>Error — необратимое (удалить, исключить); Primary — обычное подтверждение.</summary>
     public ButtonVariant ConfirmVariant { get; init; } = ButtonVariant.Error;
 
-    /// <summary>Пояснение мельче под вопросом: «Это действие нельзя отменить.»</summary>
+    /// <summary>Пояснение мельче под вопросом: «Это действие нельзя отменить.» / «Можно вернуть.»</summary>
     public string? Details { get; init; } = "Это действие нельзя отменить.";
+
+    private string? _subject;
+
+    /// <summary>
+    /// Объект действия: выводится жирной строкой над <see cref="Message"/>, без обрамляющих кавычек
+    /// («Кольт «Миротворец»» остаётся как есть, а «Кольт» превращается в Кольт). Форматирование имени
+    /// здесь минимальное; общая точка для подтверждений, тостов и ошибок API — <c>Names</c> (UX-0b).
+    /// </summary>
+    public string? Subject
+    {
+        get => _subject;
+        init => _subject = StripWrappingQuotes(value);
+    }
+
+    private static string? StripWrappingQuotes(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var text = value.Trim();
+        while (text.Length >= 2 && IsWrapping(text[0], text[^1]) && !text[1..^1].Contains(text[0]))
+        {
+            text = text[1..^1].Trim();
+        }
+
+        return text;
+    }
+
+    private static bool IsWrapping(char first, char last) =>
+        (first, last) is ('«', '»') or ('"', '"') or ('“', '”') or ('\'', '\'') or ('‘', '’');
 }

@@ -45,8 +45,9 @@ public sealed class KeeperScreenTests : KitContext
     {
         builder.OpenComponent<PageHeader>(0);
         builder.AddAttribute(1, nameof(PageHeader.Title), "Бой");
+        builder.AddAttribute(2, nameof(PageHeader.Game), true);
         builder.CloseComponent();
-        builder.OpenComponent<KeeperScreenHost>(2);
+        builder.OpenComponent<KeeperScreenHost>(3);
         builder.CloseComponent();
     });
 

@@ -3,11 +3,17 @@
    JS и подложки). Закрытый Modal ничего не рендерит: в v1 все диалоги страницы жили в дереве
    скрытыми, и id="modal-title" повторялся.
    Окно — нативный <dialog> в верхнем слое: фокус внутрь, Esc и подложку даёт браузер,
-   прокрутку страницы под ним блокирует ModalWindow.razor.js. *@
+   прокрутку страницы под ним блокирует ModalWindow.razor.js.
+   Правила окна (design-system.md, п. 3): фокус открытия — в первое поле (`autofocus` или первый
+   input/select/textarea тела), в окне без полей — на главную кнопку подвала, не на «Закрыть»;
+   размеры — Small (подтверждение, одно поле), Medium (форма, 576px), Large (форма с таблицей, 768px),
+   в одном модуле не больше двух; высота не прыгает — MinHeight по самому высокому состоянию;
+   подвал: слева «Отмена» (Secondary), справа одно главное; ошибка сервера — FooterError над кнопками. *@
 @if (Open)
 {
     <ModalWindow Title="@Title" Size="@Size" Dismissible="@Dismissible" Placement="@Placement"
-                 OnClose="OnClose" Footer="@Footer" AdditionalAttributes="@AdditionalAttributes">
+                 OnClose="OnClose" Footer="@Footer" FooterHint="@FooterHint" FooterError="@FooterError"
+                 MinHeight="@MinHeight" AdditionalAttributes="@AdditionalAttributes">
         @ChildContent
     </ModalWindow>
 }
@@ -30,8 +36,20 @@
 
     [Parameter] public ModalPlacement Placement { get; set; } = ModalPlacement.Center;
 
-    /// <summary>Кнопки: «Отмена» (Secondary) и действие справа.</summary>
+    /// <summary>Кнопки: «Отмена» (Secondary) слева и одно главное действие справа.</summary>
     [Parameter] public RenderFragment? Footer { get; set; }
+
+    /// <summary>Причина, по которой главная кнопка выключена, одной строкой над кнопками: «Введите название».</summary>
+    [Parameter] public RenderFragment? FooterHint { get; set; }
+
+    /// <summary>Ошибка сервера (<c>ApiErrors</c>) — Alert над кнопками подвала, а не в начале прокручиваемого тела.</summary>
+    [Parameter] public RenderFragment? FooterError { get; set; }
+
+    /// <summary>
+    /// Минимальная высота тела (CSS: <c>"28rem"</c>) для окна, чья высота иначе прыгает: результат броска,
+    /// смена вкладки. Берут по самому высокому состоянию; выше экрана тело не растёт — прокручивается.
+    /// </summary>
+    [Parameter] public string? MinHeight { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 

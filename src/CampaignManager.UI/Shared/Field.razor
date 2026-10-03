@@ -1,4 +1,7 @@
-@* Поле формы: подпись, контрол, подсказка, правило книги, ошибка. В v1 эта связка собиралась
+@* Поле формы: подпись, контрол, подсказка, правило книги, ошибка. Обязательное — Required: «*» у подписи
+   («(необязательно)» не пишем вовсе). Ошибка — Error: текст 13px под полем и красная рамка у контрола
+   (класс cm-field-invalid). Номер страницы книги в Note не пишем — для него BookRef. Поля в одном ряду
+   выравниваются по низу: оберни ряд в cm-field-row. В v1 эта связка собиралась
    руками — cm-field-label 197 раз в 48 файлах.
    Подпись обнимает контрол (<label>), поэтому id не нужен и касание подписи ставит фокус в поле.
    Составному контролу (группа флажков, RollInput, редактор списка) — Group="true": тогда это
@@ -24,13 +27,16 @@ else
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";
 
-    /// <summary>Приписка к подписи бледным: «(необязательно)».</summary>
+    /// <summary>Приписка к подписи: единица («%») или формат («Markdown»). «(необязательно)» не пишем.</summary>
     [Parameter] public string? Hint { get; set; }
 
-    /// <summary>Подсказка под полем — правило книги со ссылкой: «Не больше 99 (стр. 32).»</summary>
+    /// <summary>Обязательное поле: «*» после подписи.</summary>
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Подсказка под полем, 13px, одной строкой. Без номеров страниц книги (это BookRef).</summary>
     [Parameter] public string? Note { get; set; }
 
-    /// <summary>Ошибка проверки. Красит подсказку и заменяет её.</summary>
+    /// <summary>Ошибка проверки: текст под полем вместо подсказки, красная рамка у контрола.</summary>
     [Parameter] public string? Error { get; set; }
 
     /// <summary>Подпись слева от поля, а не над ним.</summary>
@@ -44,11 +50,21 @@ else
     [Parameter(CaptureUnmatchedValues = true)]
     public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
 
-    private string Classes => Css.Join("cm-field", Inline ? "cm-field-inline" : null, Css.ClassOf(AdditionalAttributes));
+    private string Classes => Css.Join(
+        "cm-field",
+        Inline ? "cm-field-inline" : null,
+        string.IsNullOrEmpty(Error) ? null : "cm-field-invalid",
+        Css.ClassOf(AdditionalAttributes));
 
     private RenderFragment LabelContent => __builder =>
     {
         <text>@Label</text>
+        if (Required)
+        {
+            <span class="cm-field-required" aria-hidden="true">*</span>
+            <span class="sr-only"> (обязательное)</span>
+        }
+
         if (!string.IsNullOrEmpty(Hint))
         {
             <span class="cm-field-hint ml-1">@Hint</span>

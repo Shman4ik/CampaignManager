@@ -89,7 +89,10 @@
     cursor: not-allowed;
   }
 
-  .cm-btn-sm {
+  /* Small — 36px, и только в шапке страницы (56px) и в плотных таблицах каталога. Везде
+     остальное `cm-btn-sm` ничем не отличается от обычной кнопки: 44px, палец на iPad. */
+  .cm-topbar .cm-btn-sm,
+  .cm-table-dense .cm-btn-sm {
     min-height: 36px;
     padding: 0.375rem 0.75rem;
     font-size: 0.875rem;
@@ -104,8 +107,26 @@
     gap: 0;
   }
 
-  .cm-btn-sm.cm-btn-icon {
+  .cm-topbar .cm-btn-sm.cm-btn-icon,
+  .cm-table-dense .cm-btn-sm.cm-btn-icon {
     width: 36px;
+    padding: 0;
+  }
+
+  /* Ряд кнопок: переносится, зазор ≥ 8px (опасная кнопка и соседняя не слипаются). */
+  .cm-btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Причина, по которой кнопка выключена (Button DisabledReason): одна строка, 13px,
+     справа от кнопки или под ней, если места нет. Подпись в title= на iPad не видна. */
+  .cm-btn-reason {
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--color-primary-600);
   }
 
   .cm-btn-primary {
@@ -287,10 +308,10 @@
     flex-shrink: 0;
   }
 
-  /* Тап-цель 36×36 вокруг мелкого контрола в плотной строке (галочка навыка):
+  /* Тап-цель 44×44 вокруг мелкого контрола в плотной строке (галочка навыка):
      <label class="cm-tap-target"><input type="checkbox" class="cm-checkbox"></label>.
      Касание ловит невидимый ::after, а в раскладке метка занимает ровно размер контрола.
-     Соседей ближе 10px быть не должно: ::after их перекроет. */
+     Соседей ближе 12px быть не должно: ::after их перекроет. */
   .cm-tap-target {
     position: relative;
     display: inline-flex;
@@ -305,9 +326,24 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: 2.75rem;
+    height: 2.75rem;
     transform: translate(-50%, -50%);
+  }
+
+  /* Чекбокс или радио с подписью: целью служит вся строка, 44px. Сам квадрат — 20px и больше. */
+  .cm-tap-row {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 44px;
+    cursor: pointer;
+  }
+
+  .cm-tap-row .cm-checkbox,
+  .cm-tap-row input[type="radio"] {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   /* Поле: подпись, контрол, подсказка, ошибка (компонент Field). */
@@ -333,20 +369,54 @@
 
   .cm-field-hint {
     font-weight: 400;
-    color: var(--color-primary-400);
+    color: var(--color-primary-600);
+  }
+
+  /* Обязательное поле — звёздочка у подписи; «(необязательно)» не пишем. */
+  .cm-field-required {
+    margin-left: 0.125rem;
+    color: var(--color-error-600);
   }
 
   /* Подсказка под полем — правило книги со ссылкой на страницу, а не украшение. */
   .cm-field-note {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     line-height: 1.35;
-    color: var(--color-primary-500);
+    color: var(--color-primary-600);
   }
 
   .cm-field-error {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     line-height: 1.35;
     color: var(--color-error-700);
+  }
+
+  /* Поле с ошибкой: красная рамка у контрола (Field Error=). Класс ставит сам Field, потому
+     что контрол — произвольный ChildContent; :has по самому тексту ошибки не нужен. */
+  .cm-field-invalid .cm-input,
+  .cm-input-invalid {
+    border-color: var(--color-error-500);
+  }
+
+  .cm-field-invalid .cm-input:focus,
+  .cm-input-invalid:focus {
+    border-color: var(--color-error-500);
+    box-shadow: 0 0 0 3px rgb(199 29 32 / 0.18), inset 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+
+  /* Ряд полей на одной линии: подписи разной длины не сдвигают контролы — выравнивание по низу,
+     контрол и кнопка рядом одной высоты 44px. */
+  .cm-field-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  .cm-field-row .cm-input:not(textarea),
+  .cm-field-row select.cm-input,
+  .cm-field-row .cm-btn {
+    min-height: 44px;
   }
 
   /* <ValidationSummary> свой class дописывает после переданных атрибутов, утилиты ему
@@ -373,8 +443,17 @@
   }
 
   .validation-message {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: var(--color-error-700);
+  }
+
+  /* ── Пустое состояние ── Compact — одна строка текста внутри секции: «Нет книг.» */
+  .cm-empty-compact {
+    margin: 0;
+    padding: 0.5rem 0;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--color-primary-600);
   }
 
   /* ── Карточка, секция ──
@@ -410,7 +489,7 @@
   .cm-card-count {
     margin-left: 0.5rem;
     padding: 0.05rem 0.45rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--color-primary-500);
     background: var(--color-primary-100);
@@ -459,7 +538,7 @@
   }
 
   .cm-section-title {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -691,7 +770,7 @@
     gap: 0.5rem;
     margin-bottom: 0.5rem;
     padding: 0.5rem 0.625rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
   }
 
   .cm-alert-title {
@@ -716,9 +795,9 @@
 
   .cm-alert-close {
     flex-shrink: 0;
-    margin: -0.5rem -0.625rem -0.5rem 0;
-    width: 36px;
-    min-height: 36px;
+    margin: -0.75rem -0.75rem -0.75rem 0;
+    width: 44px;
+    min-height: 44px;
     color: inherit;
   }
 
@@ -861,14 +940,19 @@
     color: var(--color-primary-900);
   }
 
+  /* MinHeight окна (Modal MinHeight="28rem") — по самому высокому состоянию тела: результат
+     броска и смена вкладки не прыгают окно по высоте. Выше экрана тело не растёт, прокручивается. */
   .cm-modal-body {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: min(var(--cm-modal-min-height, 0px), calc(100dvh - 14rem));
     padding: 1.25rem;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
 
+  /* Подвал: слева «Отмена» (первая secondary), справа одно главное действие. Если кнопка
+     одна («Закрыть») — справа. Ошибка сервера (FooterError) и причина выключенной главной
+     кнопки (FooterHint) — отдельными строками над кнопками, на всю ширину. */
   .cm-modal-footer {
     display: flex;
     flex-wrap: wrap;
@@ -880,22 +964,51 @@
     border-top: 1px solid var(--color-primary-200);
   }
 
+  .cm-modal-footer > button.cm-btn-secondary:first-of-type:not(:last-of-type) {
+    margin-right: auto;
+  }
+
+  .cm-modal-footer-error {
+    flex: 1 0 100%;
+  }
+
+  .cm-modal-footer-error > .cm-alert {
+    margin-bottom: 0;
+  }
+
+  .cm-modal-footer-hint {
+    flex: 1 0 100%;
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    text-align: right;
+    color: var(--color-primary-600);
+  }
+
   @keyframes cm-modal-in {
     from { opacity: 0; transform: scale(0.97); }
     to { opacity: 1; transform: scale(1); }
   }
 
-  /* ── Всплывающие уведомления (Toast) ── Это Alert в стопке над страницей. */
+  /* ── Всплывающие уведомления (Toast) ── Это Alert в стопке снизу по центру: шапку, «Начать» и
+     «Завершить» вверху экрана не закрывают. На телефоне стопка над нижней панелью. */
   .cm-toasts {
     position: fixed;
     z-index: 70;
-    right: 1rem;
-    top: calc(var(--cm-topbar-height) + 0.5rem);
+    left: 50%;
+    bottom: calc(1rem + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    width: min(24rem, calc(100vw - 2rem));
+    width: min(28rem, calc(100vw - 2rem));
     pointer-events: none;
+  }
+
+  @media (width < 48rem) {
+    .cm-toasts {
+      bottom: calc(var(--cm-tabbar-height) + env(safe-area-inset-bottom) + 0.75rem);
+    }
   }
 
   .cm-toasts > * {
