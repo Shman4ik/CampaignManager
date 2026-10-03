@@ -14,7 +14,7 @@
         <form id="run-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             @if (Mode == RunFormMode.PlayInCampaign)
             {
-                <Field Label="Кампания" Required="true" Error="@_campaignError" Note="Из тех, что вы ведёте. Сценарий не копируется.">
+                <Field Label="Кампания" Required="true" Error="@_campaignError" >
                     @if (_campaigns is null)
                     {
                         <LoadingIndicator Message="Загружаю кампании…" />
@@ -43,7 +43,7 @@
                 @if (PregenCount == 0)
                 {
                     <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" class="mb-0">
-                        У сценария нет прегенов — бронировать будет нечего. Добавьте их на вкладке «Прегены»; в ваншот можно и просто вступить.
+                        У сценария нет готовых сыщиков — записываться будет не на кого.
                     </Alert>
                 }
             }
@@ -92,9 +92,12 @@
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
-        <Button Type="submit" form="run-form" Busy="_saving" data-testid="run-save"
-                Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is not { Count: > 0 })"
-                DisabledReason="Нет кампании для игры">@SaveText</Button>
+        @* Нет кампаний — «Начать игру» невозможна в принципе: кнопки нет, причину говорит тело окна (правило 8). *@
+        @if (!(Mode == RunFormMode.PlayInCampaign && _campaigns is { Count: 0 }))
+        {
+            <Button Type="submit" form="run-form" Busy="_saving" data-testid="run-save"
+                    Disabled="@(Mode == RunFormMode.PlayInCampaign && _campaigns is null)">@SaveText</Button>
+        }
     </Footer>
 </Modal>
 

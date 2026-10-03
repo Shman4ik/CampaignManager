@@ -33,7 +33,8 @@ public static class KeeperScreenBlocks
         new(KeeperScreenBlock.Firearms, "firearms", "Стрельба", "fa-crosshairs"),
         new(KeeperScreenBlock.Sanity, "sanity", "Рассудок", "fa-brain"),
         new(KeeperScreenBlock.Chase, "chase", "Погоня", "fa-person-running"),
-        new(KeeperScreenBlock.GroupCheck, "group", "Групповая проверка", "fa-users"),
+        // «Группа», а не «Групповая проверка»: длинная подпись одна уходила на вторую строку вкладок на 1194 (владелец 2026-10-03).
+        new(KeeperScreenBlock.GroupCheck, "group", "Группа", "fa-users"),
     ];
 
     /// <summary>Раздел по имени из адреса; незнакомое имя — первый раздел, а не ошибка.</summary>
