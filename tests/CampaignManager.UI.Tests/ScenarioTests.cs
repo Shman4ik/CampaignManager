@@ -2,6 +2,11 @@ using Bunit;
 using CampaignManager.Contracts.Scenarios;
 using CampaignManager.UI.Catalogs;
 using CampaignManager.UI.Scenarios;
+using Bunit.TestDoubles;
+using CampaignManager.Contracts.Identity;
+using CampaignManager.Contracts.Files;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace CampaignManager.UI.Tests;
@@ -85,5 +90,44 @@ public sealed class ScenarioTests : KitContext
         Assert.Equal($"scenarios/{id}", ScenarioLinks.Workspace(id, ScenarioLinks.Tabs.Description));
         Assert.Equal($"scenarios/{id}?tab=npcs", ScenarioLinks.Workspace(id, ScenarioLinks.Tabs.Npcs));
         Assert.Equal($"scenarios/{id}?mode=play&location={location}", ScenarioLinks.Play(id, location));
+    }
+
+    // #165: окно «Новый сценарий» открывается адресом — страница обязана перерисоваться при его смене.
+    [Fact]
+    public void Scenarios_page_opens_and_closes_the_new_scenario_window_on_address_change()
+    {
+        AddAuthorization().SetAuthorized("Хранитель").SetPolicies(Policies.Keeper);
+        Services.AddSingleton(Fake.Of<IScenariosApi>(new()
+        {
+            [nameof(IScenariosApi.ListAsync)] = _ => Task.FromResult(new ScenarioListDto([], true)),
+        }));
+        Services.AddSingleton(Fake.Of<IScenarioExchangeApi>(new()));
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo("scenarios");
+        var cut = Render<ScenariosPage>();
+        Assert.Empty(cut.FindAll("[data-testid=scenario-form]"));
+
+        navigation.NavigateTo("scenarios/new");
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=scenario-form]")));
+
+        cut.Find("[data-testid=scenario-form] button.cm-btn-secondary").Click();
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=scenario-form]")));
+        Assert.EndsWith("/scenarios", navigation.Uri);
+    }
+
+    // Аудит U3/U5: ImagePicker Url="_fileUrl" без «@» отдавал превью буквальную строку — картинка всегда битая.
+    [Fact]
+    public void Handout_form_passes_the_picture_address_value_to_the_preview()
+    {
+        Services.AddSingleton(Fake.Of<IScenariosApi>(new()));
+        Services.AddSingleton(Fake.Of<IFilesApi>(new()));
+        var handout = new HandoutDto(Guid.NewGuid(), 1, "Письмо", "Текст", null, Guid.NewGuid(), "/api/v1/files/письмо.png");
+
+        var cut = Render<HandoutFormModal>(p => p
+            .Add(m => m.Open, true)
+            .Add(m => m.ScenarioId, Guid.NewGuid())
+            .Add(m => m.Handout, handout));
+
+        Assert.Equal("/api/v1/files/письмо.png", cut.Find("img.object-cover").GetAttribute("src"));
     }
 }

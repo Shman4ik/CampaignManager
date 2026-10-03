@@ -38,6 +38,18 @@ public sealed class PlatformApiTests(CmApp app) : IClassFixture<CmApp>
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
+    // Адреса v1: на /legal ссылаются настройки Google-клиента и Auth0 — страницы статические, гостю без входа.
+    [Theory]
+    [InlineData("/about", "Что это?")]
+    [InlineData("/legal", "Chaosium Inc.")]
+    public async Task Static_info_pages_are_open_without_sign_in(string address, string text)
+    {
+        var response = await app.CreateClient().GetAsync(address, Cancellation);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(text, await response.Content.ReadAsStringAsync(Cancellation));
+    }
+
     [Fact]
     public async Task Unknown_page_answers_404_with_app_shell()
     {

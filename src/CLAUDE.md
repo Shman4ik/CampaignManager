@@ -44,7 +44,10 @@
   «Загрузка…» (`#app-loading`), её прячет CSS, как только отрисовалась `.cm-shell`. Тест
   `App_page_is_not_prerendered` следит, чтобы пререндер не вернулся.
 - **Статически сервер рендерит только `[ExcludeFromInteractiveRouting]`-страницы** — `/Error` (страница ошибки не
-  должна зависеть от того, загрузится ли клиент) и второй экран раздатки `/scenarios/{id}/handouts/{handoutId}` (T2.5b:
+  должна зависеть от того, загрузится ли клиент), `/about` и `/legal` (адреса v1, `[AllowAnonymous]`: на `/legal`
+  ссылаются Google-клиент и Auth0, поэтому текст должен отдаваться гостю без WebAssembly; тест
+  `Static_info_pages_are_open_without_sign_in`; ссылки на них из приложения — `UI/Identity/InfoLinks`, полной
+  загрузкой: роутер WebAssembly этих адресов не знает и показал бы «не найдено») и второй экран раздатки `/scenarios/{id}/handouts/{handoutId}` (T2.5b:
   телевизор у стола без WebAssembly, [Server/Scenarios/CLAUDE.md](CampaignManager.Server/Scenarios/CLAUDE.md)). Статус 404
   такая страница не ставит: .NET 10 отдаёт его конвейеру `/not-found`, и тело заменяется. Маршрут такой
   страницы `Router` из `UI` берёт у эндпоинта, хотя сама она живёт в сборке `Server`.
