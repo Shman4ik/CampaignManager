@@ -15,7 +15,7 @@
    SheetBuilder.QuickNpc (тот же конструктор, что у помощника). Из сценария (ScenarioId) лист и связь «НПС в
    сценарии» уходят одной записью; отказ — окно остаётся открытым с текстом, иначе вышел бы двойник (знание v1).
    Окно живёт, пока открыто: страница рисует его по условию, форма каждый раз новая. *@
-<Modal Open="Open" Title="Быстрый НПС" Size="ModalSize.Large" OnClose="OnClose" data-testid="quick-npc">
+<Modal Open="Open" Title="Быстрый НПС" OnClose="OnClose" data-testid="quick-npc">
     <ChildContent>
         @if (_catalog is null)
         {
@@ -24,16 +24,11 @@
         else
         {
             <form id="quick-npc-form" class="flex flex-col gap-4" @onsubmit="CreateAsync">
-                <div class="flex flex-wrap gap-2" role="group" aria-label="Типаж">
-                    @foreach (var archetype in QuickNpcRules.Archetypes)
-                    {
-                        <Button Small="true" Icon="@archetype.Icon" data-testid="@($"archetype-{archetype.Key}")"
-                                Variant="@(_draft.ArchetypeKey == archetype.Key ? ButtonVariant.Primary : ButtonVariant.Secondary)"
-                                OnClick="() => QuickNpcRules.ApplyArchetype(_draft, archetype, _catalog)">@archetype.Label</Button>
-                    }
-                </div>
+                @* Выбор — Segmented: главная в окне одна — «Создать» (раньше три тёмные кнопки: типаж, опытность, «Создать»). *@
+                <Segmented TValue="string" Options="ArchetypeOptions" Value="_draft.ArchetypeKey" Label="Типаж"
+                           ValueChanged="key => QuickNpcRules.ApplyArchetype(_draft, QuickNpcRules.Archetypes.First(a => a.Key == key), _catalog)" />
 
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field Label="Имя" class="sm:col-span-2">
                         <div class="flex gap-2">
                             <input class="cm-input" required maxlength="@CharacterLimits.NameLength" data-testid="quick-name" @bind="_draft.Name" />
@@ -58,13 +53,8 @@
                 </div>
 
                 <Field Label="Опытность в бою" Group="true" Note="Неопытный — 25%, забияка или головорез — 40%, профессиональный убийца — 70%.">
-                    <div class="flex flex-wrap gap-2">
-                        @foreach (var (level, label) in QuickNpcRules.CombatLevels)
-                        {
-                            <Button Small="true" Variant="@(_draft.CombatLevel == level ? ButtonVariant.Primary : ButtonVariant.Secondary)"
-                                    OnClick="() => QuickNpcRules.ApplyCombatLevel(_draft, level, _catalog)">@label · @((int)level)%</Button>
-                        }
-                    </div>
+                    <Segmented TValue="QuickNpcCombatLevel" Options="LevelOptions" Value="_draft.CombatLevel" Label="Опытность в бою"
+                               ValueChanged="level => QuickNpcRules.ApplyCombatLevel(_draft, level, _catalog)" />
                 </Field>
 
                 <Field Label="Оружие" Group="true">
@@ -185,6 +175,12 @@
 </Modal>
 
 @code {
+    private static readonly IReadOnlyList<SegmentOption<string>> ArchetypeOptions =
+        [.. QuickNpcRules.Archetypes.Select(a => new SegmentOption<string>(a.Key, a.Label, TestId: $"archetype-{a.Key}"))];
+
+    private static readonly IReadOnlyList<SegmentOption<QuickNpcCombatLevel>> LevelOptions =
+        [.. QuickNpcRules.CombatLevels.Select(l => new SegmentOption<QuickNpcCombatLevel>(l.Level, $"{l.Label} · {(int)l.Level}%"))];
+
     private readonly QuickNpcDraft _draft = new();
     private SkillCatalog? _catalog;
     private IReadOnlyList<SkillDto> _pickable = [];
