@@ -5,12 +5,13 @@
 
 @* Оружие — таблица XVII (стр. 401–405). Каждая колонка книги — свой столбец, строка — одна строка:
    Название · Тип · Урон · Дист. · Атаки · Боезапас · Осечка · Цена. Ширина колонок — бюджет:
-   девяти столбцам нужно ~1130px, поэтому таблица с xl (1280), ниже — карточки (в портрет iPad не
-   влезает даже без типа). Навык уехал в раскрытие: тип его почти дублирует, а колонкой он съедал
+   со всеми столбцами нужно ~1200px, поэтому таблица с lg, а «Тип» — только с xl: на ландшафте iPad Pro 11"
+   (колонка ~1064px) без него и с переносом «Атак» таблица влезает, а тип и так в фильтре. В портрет
+   (~690px) не влезает — там карточки (замер 2026-10-03). Навык уехал в раскрытие: тип его почти дублирует, а колонкой он съедал
    214px. Раскрытая строка не повторяет колонки — только навык, разбивка дальности, ёмкость, примечания. *@
 <CatalogPage TItem="WeaponDto" Title="Оружие" Icon="fa-gun" AddLabel="Добавить оружие" Noun="оружие" Plural="оружия"
              Filters="Filters" Toggles="Toggles" ErasOf="w => w.Eras" SearchAlso="w => [w.SkillName, w.Notes]"
-             TableFrom="TableBreakpoint.Xl" State="_state" Validate="Validate" New="() => new WeaponDto { Type = WeaponType.Pistols }" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
+             TableFrom="TableBreakpoint.Lg" State="_state" Validate="Validate" New="() => new WeaponDto { Type = WeaponType.Pistols }" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[24%]" Context="w">
             <div class="flex items-center gap-3">
@@ -27,7 +28,7 @@
         </DataColumn>
         @if (!view.IsFixed("type"))
         {
-            <DataColumn TItem="WeaponDto" Title="Тип" SortBy="w => w.Type" HeaderClass="w-[12%]" Context="w">@CatalogText.Of(w.Type)</DataColumn>
+            <DataColumn TItem="WeaponDto" Title="Тип" SortBy="w => w.Type" HeaderClass="w-[12%] max-xl:hidden" CellClass="max-xl:hidden" Context="w">@CatalogText.Of(w.Type)</DataColumn>
         }
         <DataColumn TItem="WeaponDto" Title="Урон" SortBy="w => DamageKey(w)" Context="w">
             <DiceText Value="@w.Damage" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" />
@@ -35,7 +36,7 @@
         <DataColumn TItem="WeaponDto" Title="@Terms.Range" SortBy="w => w.BaseRangeM" CellClass="whitespace-nowrap" Context="w">
             @w.Range<UnparsedMark Show="Unparsed(w.Range, WeaponStatsParser.ParseRange(w.Range).IsParsed)" What="дальность" />
         </DataColumn>
-        <DataColumn TItem="WeaponDto" Title="@Terms.AttacksPerRound" HeaderClass="whitespace-normal" CellClass="whitespace-nowrap" Context="w">
+        <DataColumn TItem="WeaponDto" Title="@Terms.AttacksPerRound" HeaderClass="whitespace-normal" Context="w">
             @w.Attacks<UnparsedMark Show="Unparsed(w.Attacks, WeaponStatsParser.ParseAttacks(w.Attacks).IsParsed)" What="атаки" />
         </DataColumn>
         <DataColumn TItem="WeaponDto" Title="Боезапас" SortBy="w => w.AmmoCapacity" CellClass="whitespace-nowrap" Context="w">
@@ -132,7 +133,8 @@
     {
         @if (w.Images.FirstOrDefault() is { } cover)
         {
-            <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="@($"{size} shrink-0 rounded-xs object-cover")" loading="lazy" decoding="async" />
+            @* Фон — пока миниатюра грузится, слот не выглядит дырой. *@
+            <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="@($"{size} shrink-0 rounded-xs bg-primary-100 object-cover")" loading="lazy" decoding="async" />
         }
         else
         {
