@@ -118,6 +118,12 @@ public sealed class InvestigatorDraft
 
     public List<EquipmentItem> Equipment { get; set; } = [];
 
+    /// <summary>Оружие из справочника: уходит в лист копией (<see cref="SheetCopies.Weapon"/>).</summary>
+    public List<SheetWeapon> Weapons { get; set; } = [];
+
+    /// <summary>Черновик брошен «Случайным сыщиком»: на «Итоге» его можно бросить заново.</summary>
+    public bool IsRandom { get; set; }
+
     /// <summary>Итог характеристики: бросок минус возрастной вычет плюс экстра-класс и улучшения ОБР, в 1–99.</summary>
     public int Value(Characteristic key, AgeBand band)
     {

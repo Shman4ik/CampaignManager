@@ -127,6 +127,7 @@ public static class SheetBuilder
             Characteristics = draft.BuildCharacteristics(),
             Biography = draft.Biography with { },
             Equipment = [.. draft.Equipment.Where(e => !string.IsNullOrWhiteSpace(e.Name)).Select(e => e with { })],
+            Weapons = [.. draft.Weapons.Select(w => w with { })],
             Finances = FinanceRules.ForNewInvestigator(draft.CreditRating, draft.Era),
         };
 
@@ -445,6 +446,7 @@ public static class SheetBuilder
 
         draft.KeyConnectionSection = BiographyTables.Sections[dice.Next(0, BiographyTables.Sections.Count)].Key;
         draft.StepIndex = (int)CreationStep.Summary;
+        draft.IsRandom = true;
         return draft;
     }
 
