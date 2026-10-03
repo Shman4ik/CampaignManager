@@ -5,18 +5,22 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 
-@* Партии сценария (T2.5c; в данных — прохождения) на вкладке «Описание»: «Начать игру», «Объявить ваншот» и партии в кампаниях,
-   которые ведёт Хранитель, — анонс, запись, брони, «Играть» (режим игры с этим прохождением), правка одной формой,
-   «Завершить», «Удалить». Список — тот же GET …/runs, что у режима игры. В v1 «Использовать в кампании» копировало сценарий,
-   а анонс правился прямо на странице сценария. *@
+@* Партии сценария (T2.5c; в данных — прохождения) на вкладке «Описание»: «Начать игру», «Объявить разовую игру» (только если
+   у сценария есть готовые сыщики — иначе записываться не на кого) и партии в кампаниях, которые ведёт Хранитель, — анонс,
+   записи на места, «Играть» (режим игры с этой партией), правка одной формой, «Завершить», «Удалить». Завершённая партия —
+   свёрнутая строка (правило 17): анонс и записи по раскрытию. «Играть» — secondary: единственная primary рабочего места —
+   «Режим игры» в шапке (решение владельца 2026-10-03). Список — тот же GET …/runs, что у режима игры. *@
 <section class="cm-section" aria-labelledby="runs-title">
     <div class="cm-section-header flex-wrap gap-2">
         <h2 id="runs-title" class="cm-section-title">Партии</h2>
         <div class="cm-btn-row">
             <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="play-in-campaign"
                     OnClick="() => OpenForm(RunFormMode.PlayInCampaign, null)">Начать игру</Button>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-bullhorn" data-testid="announce-oneshot"
-                    OnClick="() => OpenForm(RunFormMode.OneShot, null)">Объявить ваншот</Button>
+            @if (Scenario.Pregens.Count > 0)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-bullhorn" data-testid="announce-oneshot"
+                        OnClick="() => OpenForm(RunFormMode.OneShot, null)">Объявить разовую игру</Button>
+            }
         </div>
     </div>
     <AsyncContent @ref="_content" Key="Scenario.Id" Load="LoadAsync" LoadingMessage="Загружаю партии…" Context="runs">
@@ -34,23 +38,42 @@
             <div class="cm-card">
                 @foreach (var run in runs)
                 {
+                    var finished = run.Status == ScenarioRunStatus.Finished;
+                    var hasDetails = !string.IsNullOrWhiteSpace(run.Announcement) || run.Reservations.Count > 0;
+                    // Завершённая партия — одна строка; анонс и записи по раскрытию (правило 17).
+                    var open = !finished || _expanded.Contains(run.Id);
                     <div class="flex flex-col gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0" data-testid="run-row" @key="run.Id">
                         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <a class="flex min-h-11 min-w-0 basis-48 flex-1 items-center break-words font-semibold text-primary-800 underline-offset-2 hover:underline"
-                               href="@($"campaigns/{run.CampaignId}")">@run.CampaignName</a>
+                            @if (finished && hasDetails)
+                            {
+                                <button type="button" class="flex min-h-11 min-w-0 basis-48 flex-1 items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                                        data-testid="run-toggle" @onclick="() => Toggle(run.Id)">
+                                    <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-500" aria-hidden="true"></i>
+                                    <span class="break-words font-semibold text-primary-800">@run.CampaignName</span>
+                                </button>
+                            }
+                            else
+                            {
+                                <a class="flex min-h-11 min-w-0 basis-48 flex-1 items-center break-words font-semibold text-primary-800 underline-offset-2 hover:underline"
+                                   href="@($"campaigns/{run.CampaignId}")">@run.CampaignName</a>
+                            }
                             @if (run.CampaignKind == CampaignKind.OneShot)
                             {
-                                <Badge Tone="Tone.Neutral">Ваншот</Badge>
+                                <Badge Tone="Tone.Neutral">Разовая игра</Badge>
                             }
                             <Badge Tone="ScenarioLabels.RunTone(run.Status)">@ScenarioLabels.RunStatus(run.Status)</Badge>
                             @if (run.SignupOpen)
                             {
                                 <Badge Tone="Tone.Success" Icon="fa-user-check">Запись открыта</Badge>
                             }
-                            @* «Играть» — одна и на виду; остальное — в «⋯». У завершённой партии играть уже нечего. *@
-                            @if (run.Status != ScenarioRunStatus.Finished)
+                            @if (finished)
                             {
-                                <Button Icon="fa-play" Href="@ScenarioLinks.Play(Scenario.Id, null, null, run.Id)" data-testid="play-run">Играть</Button>
+                                <span class="text-sm text-primary-600">@DateText(run)</span>
+                            }
+                            @* «Играть» — одна и на виду, но не главная: главная — «Режим игры» в шапке. У завершённой партии играть уже нечего. *@
+                            @if (!finished)
+                            {
+                                <Button Variant="ButtonVariant.Secondary" Icon="fa-play" Href="@ScenarioLinks.Play(Scenario.Id, null, null, run.Id)" data-testid="play-run">Играть</Button>
                             }
                             else
                             {
@@ -63,7 +86,7 @@
                                         @if (run.CanEdit)
                                         {
                                             <RowMenuItem Icon="fa-pen" OnClick="() => OpenForm(RunFormMode.Edit, run)">Изменить анонс и запись</RowMenuItem>
-                                            @if (run.Status != ScenarioRunStatus.Finished)
+                                            @if (!finished)
                                             {
                                                 <RowMenuItem Icon="fa-flag-checkered" OnClick="() => FinishAsync(run)">Завершить партию</RowMenuItem>
                                             }
@@ -78,19 +101,22 @@
                                 </RowMenu>
                             }
                         </div>
-                        <div class="cm-meta">
-                            <span>
-                                <i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@(run.ScheduledAt is { } at ? LocalTime.DateTime(at) : "Дата не назначена")
-                            </span>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(run.Announcement))
+                        @if (!finished)
+                        {
+                            <div class="cm-meta">
+                                <span>
+                                    <i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@DateText(run)
+                                </span>
+                            </div>
+                        }
+                        @if (open && !string.IsNullOrWhiteSpace(run.Announcement))
                         {
                             <Markdown Text="@run.Announcement" class="max-w-prose" />
                         }
-                        @if (run.Reservations.Count > 0)
+                        @if (open && run.Reservations.Count > 0)
                         {
                             <div>
-                                <h3 class="cm-field-label mb-1">Брони · @run.Reservations.Count</h3>
+                                <h3 class="cm-field-label mb-1">Записи · @run.Reservations.Count</h3>
                                 <ul>
                                     @foreach (var reservation in run.Reservations)
                                     {
@@ -103,10 +129,10 @@
                                             {
                                                 <Button Variant="ButtonVariant.Secondary" Icon="fa-id-card" Href="@($"character/{sheet}")">Лист</Button>
                                             }
-                                            @if (reservation.CanRelease && run.Status != ScenarioRunStatus.Finished)
+                                            @if (reservation.CanRelease && !finished)
                                             {
                                                 <Button Variant="ButtonVariant.OutlineError" Icon="fa-user-xmark" Busy="@(_busy == reservation.PregenId)"
-                                                        OnClick="() => ReleaseAsync(run, reservation)">Снять бронь</Button>
+                                                        OnClick="() => ReleaseAsync(run, reservation)">Снять запись</Button>
                                             }
                                         </li>
                                     }
@@ -125,7 +151,7 @@
 </section>
 
 <RunFormModal Open="_formOpen" Mode="_mode" Run="_editing" ScenarioId="Scenario.Id" ScenarioName="@Scenario.Name"
-              PregenCount="Scenario.Pregens.Count" OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
+              OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
 
 @code {
     private AsyncContent<IReadOnlyList<ScenarioRunDto>>? _content;
@@ -133,6 +159,15 @@
     private RunFormMode _mode;
     private ScenarioRunDto? _editing;
     private Guid? _busy;
+    private readonly HashSet<Guid> _expanded = [];
+
+    private void Toggle(Guid runId)
+    {
+        if (!_expanded.Remove(runId))
+            _expanded.Add(runId);
+    }
+
+    private static string DateText(ScenarioRunDto run) => run.ScheduledAt is { } at ? LocalTime.DateTime(at) : "Дата не назначена";
 
     [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
 
@@ -155,8 +190,8 @@
         _formOpen = false;
         Toasts.Success(mode switch
         {
-            RunFormMode.PlayInCampaign => $"Игра началась в кампании «{run.CampaignName}».",
-            RunFormMode.OneShot => $"Ваншот объявлен: кампания «{run.CampaignName}», запись открыта.",
+            RunFormMode.PlayInCampaign => $"Игра началась. Кампания: {Names.Plain(run.CampaignName)}.",
+            RunFormMode.OneShot => $"Разовая игра объявлена. Кампания: {Names.Plain(run.CampaignName)}, запись открыта.",
             _ => "Партия сохранена.",
         });
         await ReloadAsync(mode != RunFormMode.Edit);
@@ -164,9 +199,9 @@
 
     private async Task FinishAsync(ScenarioRunDto run)
     {
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Завершить партию в «{run.CampaignName}»?",
-                "Запись на прегенов закроется, брони останутся в истории. Сыгранный сценарий отметьте во встрече журнала — там подсказка о фазе развития.")
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Завершить партию?", "Запись закроется, записанные места останутся в истории.")
             {
+                Subject = run.CampaignName,
                 ConfirmText = "Завершить",
                 ConfirmVariant = ButtonVariant.Primary,
                 Details = null,
@@ -195,9 +230,9 @@
     private async Task DeleteAsync(ScenarioRunDto run)
     {
         var message = run.Reservations.Count > 0
-            ? "Брони уйдут вместе с ним; листы, которые игроки получили бронью, останутся у них в кампании. Встречи журнала потеряют ссылку."
+            ? "Записи уйдут вместе с ней; листы, которые игроки получили при записи, останутся у них в кампании. Встречи журнала потеряют ссылку."
             : "Встречи журнала потеряют ссылку на сценарий. Кампания останется.";
-        if (!await Dialogs.ConfirmDeleteAsync($"Удалить партию в «{run.CampaignName}»?", message))
+        if (!await Dialogs.ConfirmDeleteAsync("партию", run.CampaignName, message, reversible: false))
         {
             return;
         }
@@ -216,10 +251,10 @@
 
     private async Task ReleaseAsync(ScenarioRunDto run, RunReservationDto reservation)
     {
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest($"Снять бронь «{reservation.PregenName}»?",
-                "Преген снова свободен; копия листа у игрока уйдёт в архив.")
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Снять запись?", "Готовый сыщик снова свободен; копия листа у игрока уйдёт в архив.")
             {
-                ConfirmText = "Снять бронь",
+                Subject = reservation.PregenName,
+                ConfirmText = "Снять запись",
                 Details = null,
             }))
         {
@@ -230,7 +265,7 @@
         try
         {
             await Runs.ReleaseAsync(run.Id, reservation.PregenId);
-            Toasts.Success("Бронь снята.");
+            Toasts.Success("Запись снята.");
             await ReloadAsync(true);
         }
         catch (HttpRequestException ex)
@@ -243,7 +278,7 @@
         }
     }
 
-    /// <param name="scenarioToo">Перечитать и сценарий: счётчик прохождений и «забронирован» у прегенов.</param>
+    /// <param name="scenarioToo">Перечитать и сценарий: счётчик прохождений и «выбран игроком» у готовых сыщиков.</param>
     private async Task ReloadAsync(bool scenarioToo)
     {
         if (_content is not null)

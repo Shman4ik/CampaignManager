@@ -7,34 +7,42 @@
    девять полей дважды, а описание и журнал рисовались ещё и на странице просмотра). Правка — с версией корня:
    изменили на другом устройстве — текст в окне и «Перечитать», а не молчаливая перезапись. Анонса здесь нет:
    он у прохождения (T2.5c). *@
-<Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Изменить сценарий")" OnClose="CloseAsync" data-testid="scenario-form">
+<Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Изменить сценарий")" Size="ModalSize.Large" OnClose="CloseAsync" FooterHint="@(Scenario is not null && !IsChanged ? NoChanges : null)" data-testid="scenario-form">
     <ChildContent>
-        <form id="scenario-form" class="grid grid-cols-1 gap-4 sm:grid-cols-2" @onsubmit="SaveAsync">
-            <Field Label="Название" Required="true" Error="@_nameError" class="sm:col-span-2">
+        <form id="scenario-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Required="true" Error="@_nameError" Note="Так сценарий называется в списке и в шапке.">
                 <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="scenario-name" @bind="_name" @bind:event="oninput"
-                       placeholder="Например: «Безымянный туман»" autofocus />
+                       aria-invalid="@(_nameError is null ? null : "true")" placeholder="Например: «Безымянный туман»" autofocus />
             </Field>
-            <Field Label="Место действия">
-                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_setting" placeholder="Бостон, Массачусетс" />
-            </Field>
-            <Field Label="Время действия">
-                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_settingDate" placeholder="Июнь 1925 года" />
-            </Field>
-            <Field Label="Эпоха" Note="От эпохи зависят имена и цены быстрых НПС." class="sm:col-span-2">
-                <select class="cm-input sm:w-72" value="@(_era?.ToString() ?? "")" @onchange="e => _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null">
-                    <option value="">Не указана</option>
-                    @foreach (var era in Enum.GetValues<Era>())
-                    {
-                        <option value="@era">@CampaignManager.Core.Catalogs.CatalogText.Of(era)</option>
-                    }
-                </select>
-            </Field>
-            <Field Label="Кратко" Note="Показывается в списке сценариев." class="sm:col-span-2">
-                <textarea class="cm-input" rows="3" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
+            @* Место длинное («Беннингтон, штат Вермонт — национальный парк Грин-Маунтин»): ему две трети строки, а не половина. *@
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Field Label="Место действия" class="sm:col-span-2">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_setting" placeholder="Бостон, Массачусетс" />
+                </Field>
+                <Field Label="Время действия">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_settingDate" placeholder="Июнь 1925 года" />
+                </Field>
+            </div>
+            @* Эпоху спрашиваем, только если в библиотеке есть сценарии разных эпох (правило 12); иначе она остаётся как была. *@
+            @if (AskEra)
+            {
+                <Field Label="Эпоха" class="sm:w-80">
+                    <select class="cm-input" value="@(_era?.ToString() ?? "")" @onchange="e => _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null">
+                        <option value="">Не указана</option>
+                        @foreach (var era in Enum.GetValues<Era>())
+                        {
+                            <option value="@era">@CampaignManager.Core.Catalogs.CatalogText.Of(era)</option>
+                        }
+                    </select>
+                </Field>
+            }
+            @* «Кратко» — главное описание сценария (сотни знаков), поэтому поле высокое. *@
+            <Field Label="Кратко" Note="Показывается в списке сценариев.">
+                <textarea class="cm-input" rows="6" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
             </Field>
             @if (_error is not null)
             {
-                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0 sm:col-span-2" data-testid="scenario-form-error">
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="scenario-form-error">
                     <ChildContent>@_error</ChildContent>
                     <Actions>
                         @if (_stale)
@@ -44,11 +52,12 @@
                     </Actions>
                 </Alert>
             }
+            <ValidationScroll Trigger="_attempt" />
         </form>
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
-        <Button Type="submit" form="scenario-form" Busy="_saving" Disabled="@(Scenario is not null && !IsChanged)" DisabledReason="Нет изменений" data-testid="scenario-save">@(Scenario is null ? "Создать" : "Сохранить")</Button>
+        <Button Type="submit" form="scenario-form" Busy="_saving" Disabled="@(Scenario is not null && !IsChanged)" data-testid="scenario-save">@(Scenario is null ? "Создать" : "Сохранить")</Button>
     </Footer>
 </Modal>
 
@@ -63,8 +72,15 @@
     private string? _error;
     private bool _stale;
     private bool _saving;
+    private int _attempt;
+
+    // Причина выключенной «Сохранить» — строкой над кнопками (правило 8), а не прижатой к краю справа от неё.
+    private static readonly RenderFragment NoChanges = builder => builder.AddContent(0, "Нет изменений");
 
     [Parameter] public bool Open { get; set; }
+
+    /// <summary>Спрашивать эпоху: только если в библиотеке есть сценарии разных эпох (правило 12).</summary>
+    [Parameter] public bool AskEra { get; set; }
 
     /// <summary>Правка этого сценария; <c>null</c> — новый.</summary>
     [Parameter] public ScenarioDto? Scenario { get; set; }
@@ -112,7 +128,13 @@
     private async Task SaveAsync()
     {
         _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
-        if (_nameError is not null || _saving)
+        if (_nameError is not null)
+        {
+            _attempt++; // ValidationScroll вернёт фокус в первое поле с ошибкой (правило 9)
+            return;
+        }
+
+        if (_saving)
             return;
 
         _saving = true;

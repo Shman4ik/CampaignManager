@@ -19,11 +19,6 @@
         </Alert>
     }
 
-    @if (Report.NpcsReused > 0)
-    {
-        <p class="cm-field-note">НПС «из библиотеки» — лист с тем же именем уже есть: он занят в сценарии как есть, параметры из файла к нему не применяются.</p>
-    }
-
     @{ var notable = Report.Lines.Where(l => l.Outcome is ScenarioImportOutcome.Failed || l.Message is not null).ToList(); }
     @if (notable.Count > 0)
     {
@@ -57,8 +52,8 @@
     private string SummaryTitle => Report switch
     {
         { Failed: > 0 } => $"Ошибок: {Report.Failed} — ничего не записано. Исправьте файл и проверьте снова.",
-        { Imported: true } => $"Готово: «{Report.ScenarioName}» записан.",
-        _ => $"Проверка без записи: «{Report.ScenarioName}» запишется так.",
+        { Imported: true } => $"Записано. Сценарий: {Names.Plain(Report.ScenarioName)}.",
+        _ => $"Проверка без записи. Сценарий: {Names.Plain(Report.ScenarioName)}.",
     };
 
     private string Counts =>
@@ -66,7 +61,7 @@
             {
                 ("локаций", Report.Locations), ("проверок", Report.Checks), ("фактов", Report.KeyFacts), ("раздаток", Report.Handouts),
                 ("тварей", Report.Creatures), ("предметов", Report.Items), ("новых НПС", Report.NpcsCreated),
-                ("НПС из библиотеки", Report.NpcsReused), ("прегенов", Report.Pregens),
+                ("НПС из библиотеки", Report.NpcsReused), ("готовых сыщиков", Report.Pregens),
             }
             .Where(c => c.Value > 0)
             .Select(c => $"{c.Label}: {c.Value}")
@@ -108,7 +103,7 @@
         ScenarioImportPart.Creature => "Тварь",
         ScenarioImportPart.Item => "Предмет",
         ScenarioImportPart.Npc => "НПС",
-        ScenarioImportPart.Pregen => "Преген",
+        ScenarioImportPart.Pregen => "Готовый сыщик",
         _ => "Сценарий",
     };
 }

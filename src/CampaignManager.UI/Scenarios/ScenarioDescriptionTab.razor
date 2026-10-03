@@ -1,47 +1,72 @@
 @using CampaignManager.Core.Catalogs
 @using CampaignManager.UI.Platform
 
-@* «Описание» — карточка сценария: эпоха, место, время, автор, кратко и партии (ScenarioRunsSection, T2.5c).
-   Правка и удаление — в меню «⋯» шапки страницы (ScenarioFormModal), «Что внутри» убрано: вкладки уже несут счётчики. *@
+@* «Описание» — одна карточка: краткое описание сценария и справа (с lg; на портрете и телефоне — под ним) факты — время,
+   место, автор (только если не вы), «Изменён». Метки-бейджи ушли: время и место читаются как «Время действия: Июнь 1925
+   года», а не как три одинаковых пилюли. Эпоха — только если она не классическая (правило 12). «Изменить» — кнопка в
+   заголовке карточки: форму шапки открывает страница (OnEdit), потому что она же открывает её по адресу /edit.
+   Партии (ScenarioRunsSection, T2.5c) — отдельной секцией ниже. *@
 <section class="cm-section">
     <div class="cm-card">
-        <div class="cm-card-body flex flex-col gap-3">
-            <div class="flex flex-wrap gap-1.5">
-                @if (Scenario.Era is { } era)
+        <div class="cm-card-header">
+            <span class="cm-card-title">Описание</span>
+            @if (Scenario.CanEdit)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-pen" data-testid="edit-scenario" OnClick="OnEdit">Изменить</Button>
+            }
+        </div>
+        <div class="cm-card-body grid gap-5 lg:grid-cols-[minmax(0,1fr)_16rem]">
+            <div class="flex min-w-0 flex-col gap-3">
+                @if (Scenario.Summary is { } summary)
                 {
-                    <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
+                    <p class="max-w-prose whitespace-pre-line text-primary-800" data-testid="scenario-summary">@summary</p>
                 }
-                @if (Scenario.SettingDate is { } date && date != (Scenario.Era is { } e2 ? CatalogText.Of(e2) : null))
+                else
                 {
-                    <Badge Tone="Tone.Neutral" Icon="fa-calendar" class="max-w-full whitespace-normal">@date</Badge>
+                    <p class="cm-text-muted">Описания нет.</p>
+                }
+            </div>
+            <dl class="grid grid-cols-1 content-start gap-3 border-t border-primary-200 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-1 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0" data-testid="scenario-facts">
+                @if (Scenario.SettingDate is { } date)
+                {
+                    <div>
+                        <dt class="cm-meta-label">Время действия</dt>
+                        <dd class="text-primary-800">@date</dd>
+                    </div>
                 }
                 @if (Scenario.Setting is { } setting)
                 {
-                    <Badge Tone="Tone.Info" Icon="fa-location-dot" class="max-w-full whitespace-normal">@setting</Badge>
+                    <div>
+                        <dt class="cm-meta-label">Место</dt>
+                        <dd class="text-primary-800">@setting</dd>
+                    </div>
                 }
-                @if (Scenario.RunCount > 0)
+                @if (Scenario.Era is Era.Modern)
                 {
-                    <Badge Tone="Tone.Success" Icon="fa-dice">Партий: @Scenario.RunCount</Badge>
+                    <div>
+                        <dt class="cm-meta-label">Эпоха</dt>
+                        <dd class="text-primary-800">@CatalogText.Of(Era.Modern)</dd>
+                    </div>
                 }
-            </div>
-            @if (Scenario.SourceScenarioName is { } source)
-            {
-                <p class="text-sm text-primary-600">
-                    Переделка сценария <a class="underline" href="@ScenarioLinks.Workspace(Scenario.SourceScenarioId!.Value)">«@source»</a>.
-                </p>
-            }
-            @if (Scenario.Summary is { } summary)
-            {
-                <p class="max-w-prose whitespace-pre-line text-primary-800" data-testid="scenario-summary">@summary</p>
-            }
-            else
-            {
-                <p class="cm-text-muted">Описания нет@(Scenario.CanEdit ? " — его можно добавить через «⋯» → «Изменить сценарий»." : ".")</p>
-            }
-            <div class="cm-meta">
-                <span><span class="cm-meta-label">Автор:</span> @(Scenario.AuthorName ?? "—")</span>
-                <span><span class="cm-meta-label">Изменён:</span> @LocalTime.DateTime(Scenario.UpdatedAt)</span>
-            </div>
+                @if (Scenario.SourceScenarioName is { } source)
+                {
+                    <div>
+                        <dt class="cm-meta-label">Переделка сценария</dt>
+                        <dd><a class="text-primary-800 underline" href="@ScenarioLinks.Workspace(Scenario.SourceScenarioId!.Value)">@source</a></dd>
+                    </div>
+                }
+                @if (!Scenario.IsAuthor && Scenario.AuthorName is { } author)
+                {
+                    <div>
+                        <dt class="cm-meta-label">Автор</dt>
+                        <dd class="text-primary-800">@author</dd>
+                    </div>
+                }
+                <div>
+                    <dt class="cm-meta-label">Изменён</dt>
+                    <dd class="text-primary-700">@LocalTime.DateTime(Scenario.UpdatedAt)</dd>
+                </div>
+            </dl>
         </div>
     </div>
 </section>
@@ -51,6 +76,9 @@
 @code {
     [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
 
-    /// <summary>Прохождения поменялись — перечитать сценарий (счётчик, брони прегенов).</summary>
+    /// <summary>Прохождения поменялись — перечитать сценарий (счётчик, записи на места).</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>«Изменить»: страница открывает форму шапки.</summary>
+    [Parameter] public EventCallback OnEdit { get; set; }
 }

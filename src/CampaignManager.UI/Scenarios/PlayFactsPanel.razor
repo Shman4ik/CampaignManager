@@ -1,8 +1,12 @@
-@* Правая колонка режима игры: раздатки с «Показать игрокам» и ключевые факты — две вкладки, раздатки первыми (показ —
-   второе по частоте действие за столом; факты читают реже, и раскрытыми они уводили раздатки на семь экранов вниз).
-   Виды фактов свёрнуты, пока Хранитель их не раскроет («Развернуть всё»). Рисуется и колонкой (xl и шире), и в выдвижной
-   панели (уже xl — iPad в портрете: три колонки там не помещаются). Своей карточки не рисует: место — колонка или тело
-   окна. Пометка и заметка Хранителя здесь видны — это экран Хранителя; в показ они не уходят (HandoutScreenDto). *@
+@using CampaignManager.UI.Catalogs
+
+@* Правая колонка режима игры: раздатки с «Показать» и ключевые факты — две вкладки, раздатки первыми (показ — второе по
+   частоте действие за столом; факты читают реже). Раздатка — одна компактная строка: название и кнопка справа, под ней
+   начало текста и «Хранителю: …» (шесть одинаковых плит «Показать игрокам» друг под другом занимали по ~150px каждая).
+   Факты — список названий, вид — значком (решение владельца), раскрывается одна строка касанием. Рисуется и колонкой (lg и
+   шире), и в выдвижной панели (уже lg — iPad в портрете: три колонки там не помещаются). Своей карточки не рисует: место —
+   колонка или тело окна. Пометка и заметка Хранителя здесь видны — это экран Хранителя; в показ они не уходят
+   (HandoutScreenDto). *@
 <div class="flex flex-col" data-testid="play-facts">
     @if (Scenario.KeyFacts.Count > 0 && Scenario.Handouts.Count > 0)
     {
@@ -15,62 +19,51 @@
             @foreach (var handout in Scenario.Handouts)
             {
                 var current = handout;
-                <div class="flex items-start gap-3 border-t border-primary-200 py-3 first:border-t-0" @key="handout.Id" data-testid="play-handout">
-                    @if (handout.FileUrl is { } url)
-                    {
-                        <img src="@url" alt="" class="h-14 w-14 shrink-0 rounded-md border border-primary-200 object-cover" loading="lazy" />
-                    }
-                    <div class="flex min-w-0 flex-1 flex-col gap-1">
-                        <span class="text-sm font-semibold text-primary-900">@handout.Name</span>
-                        @if (handout.PlayerText is { } text)
+                <div class="flex flex-col gap-1 border-t border-primary-200 py-2 first:border-t-0" @key="handout.Id" data-testid="play-handout">
+                    <div class="flex items-center gap-2">
+                        @if (ImageUrls.Thumb(handout.FileUrl, 160) is { } url)
                         {
-                            <p class="line-clamp-2 whitespace-pre-line text-sm text-primary-700">@text</p>
+                            <img src="@url" alt="" class="h-10 w-10 shrink-0 rounded-md border border-primary-200 object-cover" loading="lazy" decoding="async" />
                         }
-                        @if (handout.KeeperNote is { } note)
-                        {
-                            <p class="text-sm text-warning-800"><i class="fa-solid fa-user-secret mr-1" aria-hidden="true"></i>Хранителю: @note</p>
-                        }
-                        <div>
-                            <Button Variant="ButtonVariant.Secondary" Icon="fa-expand" class="mt-1" data-testid="show-handout"
-                                    OnClick="() => OnShowHandout.InvokeAsync(current.Id)">Показать игрокам</Button>
-                        </div>
+                        <span class="min-w-0 flex-1 break-words text-sm font-semibold text-primary-900">@handout.Name</span>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-expand" class="min-h-9 shrink-0 px-3 py-1" data-testid="show-handout"
+                                AriaLabel="@($"Показать игрокам: {Names.Plain(handout.Name)}")" OnClick="() => OnShowHandout.InvokeAsync(current.Id)">Показать</Button>
                     </div>
+                    @if (handout.PlayerText is { } text)
+                    {
+                        <p class="line-clamp-2 whitespace-pre-line text-sm text-primary-700">@text</p>
+                    }
+                    @if (handout.KeeperNote is { } note)
+                    {
+                        <p class="text-sm text-warning-800"><i class="fa-solid fa-user-secret mr-1" aria-hidden="true"></i>Хранителю: @note</p>
+                    }
                 </div>
             }
         </div>
     }
     else if (Scenario.KeyFacts.Count > 0)
     {
-        var groups = Scenario.KeyFacts.GroupBy(f => f.Type).OrderBy(g => g.Key).ToList();
         <div class="flex flex-col" data-testid="play-key-facts">
-            <div class="mb-1 flex justify-end">
-                <Button Variant="ButtonVariant.Ghost" Icon="@(_expanded.Count == groups.Count ? "fa-compress" : "fa-expand")" data-testid="toggle-all-facts"
-                        OnClick="() => ToggleAll(groups.Select(g => g.Key))">@(_expanded.Count == groups.Count ? "Свернуть всё" : "Развернуть всё")</Button>
-            </div>
-            @foreach (var group in groups)
+            @foreach (var fact in Scenario.KeyFacts)
             {
-                var type = group.Key;
-                var open = _expanded.Contains(type);
-                <section>
-                    <button type="button" class="flex min-h-11 w-full items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
-                            @onclick="() => Toggle(type)">
-                        <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-500" aria-hidden="true"></i>
-                        <Badge Tone="ScenarioLabels.FactTone(type)" Icon="@ScenarioLabels.FactIcon(type)">@ScenarioText.Of(type)</Badge>
-                        <span class="cm-text-muted text-sm">@group.Count()</span>
+                var id = fact.Id;
+                var open = _open.Contains(id);
+                <div class="border-t border-primary-200 first:border-t-0" @key="id" data-testid="play-fact">
+                    <button type="button" class="flex min-h-11 w-full items-center gap-2 py-1 text-left" aria-expanded="@(open ? "true" : "false")"
+                            @onclick="() => Toggle(id)">
+                        <i class="fa-solid @ScenarioLabels.FactIcon(fact.Type) w-4 shrink-0 text-center text-xs text-primary-500" aria-hidden="true"></i>
+                        <span class="sr-only">@ScenarioText.Of(fact.Type):</span>
+                        <span class="min-w-0 flex-1 break-words text-sm font-semibold text-primary-900">@fact.Title</span>
+                        <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 shrink-0 text-xs text-primary-500" aria-hidden="true"></i>
                     </button>
                     @if (open)
                     {
-                        <div class="mb-2 flex flex-col">
-                            @foreach (var fact in group)
-                            {
-                                <div class="border-t border-primary-200 py-2 first:border-t-0" @key="fact.Id">
-                                    <p class="text-sm font-semibold text-primary-900">@fact.Title</p>
-                                    <Markdown Text="@fact.Content" class="mt-1 text-sm" />
-                                </div>
-                            }
+                        <div class="pb-2 pl-6">
+                            <p class="text-sm text-primary-600">@ScenarioText.Of(fact.Type)</p>
+                            <Markdown Text="@fact.Content" class="mt-1 text-sm" />
                         </div>
                     }
-                </section>
+                </div>
             }
         </div>
     }
@@ -80,13 +73,13 @@
     private const string HandoutsTab = "handouts";
     private const string FactsTab = "facts";
 
-    // Раскрытые виды фактов: по умолчанию все свёрнуты.
-    private readonly HashSet<KeyFactType> _expanded = [];
+    // Раскрытые факты: по умолчанию все свёрнуты — виден список названий.
+    private readonly HashSet<Guid> _open = [];
     private string? _tab;
 
     [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
 
-    /// <summary>«Показать игрокам»: страница ставит раздатку в адрес (?handout=).</summary>
+    /// <summary>«Показать»: страница ставит раздатку в адрес (?handout=).</summary>
     [Parameter] public EventCallback<Guid> OnShowHandout { get; set; }
 
     private string ActiveTab =>
@@ -100,18 +93,9 @@
         new(FactsTab, "Факты", "fa-key", Scenario.KeyFacts.Count),
     ];
 
-    private void Toggle(KeyFactType type)
+    private void Toggle(Guid id)
     {
-        if (!_expanded.Remove(type))
-            _expanded.Add(type);
-    }
-
-    private void ToggleAll(IEnumerable<KeyFactType> all)
-    {
-        var types = all.ToList();
-        if (_expanded.Count == types.Count)
-            _expanded.Clear();
-        else
-            _expanded.UnionWith(types);
+        if (!_open.Remove(id))
+            _open.Add(id);
     }
 }

@@ -28,19 +28,23 @@
             {
             <Button Small="true" Icon="fa-play" data-testid="enter-play" Href="@ScenarioLinks.Play(ScenarioId)">Режим игры</Button>
             }
+            @* «Изменить сценарий» — кнопкой в карточке «Описание», а не под безымянной «⋯»: это самое частое действие над шапкой. *@
             <RowMenu AriaLabel="Действия со сценарием">
                 <ChildContent>
-                    @if (_scenario.CanEdit)
-                    {
-                        <RowMenuItem Icon="fa-pen" OnClick="() => _formOpen = true">Изменить сценарий</RowMenuItem>
-                    }
                     @* Файл сценария (T2.5d) — тем же форматом, что принимает «Импорт JSON» на /scenarios. *@
                     <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт JSON</RowMenuItem>
                 </ChildContent>
                 <Danger>
                     @if (_scenario.CanDelete)
                     {
-                        <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="DeleteAsync">Удалить сценарий</RowMenuItem>
+                        @if (_scenario.RunCount > 0)
+                        {
+                            <RowMenuItem Icon="fa-trash-can" Danger="true" Disabled="true">Удалить нельзя: идёт в кампаниях (@_scenario.RunCount)</RowMenuItem>
+                        }
+                        else
+                        {
+                            <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="DeleteAsync">Удалить сценарий</RowMenuItem>
+                        }
                     }
                 </Danger>
             </RowMenu>
@@ -101,7 +105,7 @@
                         <ScenarioPregensTab Scenario="scenario" OnChanged="ReloadAsync" />
                         break;
                     default:
-                        <ScenarioDescriptionTab Scenario="scenario" OnChanged="ReloadAsync" />
+                        <ScenarioDescriptionTab Scenario="scenario" OnChanged="ReloadAsync" OnEdit="() => _formOpen = true" />
                         break;
                 }
             }
@@ -110,7 +114,7 @@
 </div>
 
 @* Окно правки — только над загруженным сценарием: без него форма сочла бы его новым. *@
-<ScenarioFormModal Open="@(_formOpen && _scenario is not null)" Scenario="_scenario" OnClose="() => _formOpen = false" OnSaved="HeaderSavedAsync" OnReload="ReloadAsync" />
+<ScenarioFormModal Open="@(_formOpen && _scenario is not null)" Scenario="_scenario" AskEra="@(_scenario?.Era != Core.Era.Classic)" OnClose="() => _formOpen = false" OnSaved="HeaderSavedAsync" OnReload="ReloadAsync" />
 
 @code {
     private AsyncContent<ScenarioDto?>? _content;
@@ -190,10 +194,8 @@
         if (_scenario is not { } scenario)
             return;
 
-        var message = scenario.RunCount > 0
-            ? "Нельзя удалить, пока сценарий идёт в кампаниях."
-            : "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС и прегены останутся в библиотеке.";
-        if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{scenario.Name}»?", message))
+        const string consequence = "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС и готовые сыщики останутся в библиотеке.";
+        if (!await Dialogs.ConfirmDeleteAsync("сценарий", scenario.Name, consequence, reversible: false))
             return;
 
         try
@@ -229,6 +231,6 @@
         new(ScenarioLinks.Tabs.Creatures, "Твари", "fa-skull"),
         new(ScenarioLinks.Tabs.Items, "Предметы", "fa-box"),
         new(ScenarioLinks.Tabs.Npcs, "НПС", "fa-masks-theater"),
-        new(ScenarioLinks.Tabs.Pregens, "Прегены", "fa-user"),
+        new(ScenarioLinks.Tabs.Pregens, "Готовые сыщики", "fa-user"),
     ];
 }

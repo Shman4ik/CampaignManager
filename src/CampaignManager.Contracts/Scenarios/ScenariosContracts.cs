@@ -164,6 +164,9 @@ public sealed class ScenarioSummaryDto
     /// <summary>Имя автора для карточки; у перенесённых без автора — пусто.</summary>
     public string? AuthorName { get; set; }
 
+    /// <summary>Автор — вошедший: его имя на карточке не повторяют (за столом это «вы»).</summary>
+    public bool IsAuthor { get; set; }
+
     public int LocationCount { get; set; }
 
     public int HandoutCount { get; set; }
@@ -215,6 +218,9 @@ public sealed class ScenarioDto
 
     /// <summary>Автор — имя профиля (почт нет); null — автор неизвестен (старые записи v1).</summary>
     public string? AuthorName { get; set; }
+
+    /// <summary>Автор — вошедший: «Автор» на странице показывают, только если это не вы.</summary>
+    public bool IsAuthor { get; set; }
 
     public Guid? SourceScenarioId { get; set; }
 
