@@ -25,30 +25,46 @@
     }
     else
     {
-        <div class="cm-card">
-            <div class="cm-card-body cm-stack" data-testid="npc-list">
-                @foreach (var npc in Scenario.Npcs)
-                {
-                    <CharacterSummaryCard @key="npc.Character.Id" Character="npc.Character" Framed="false" ArchiveLabel="Убрать" Busy="Busy"
-                                          OnArchive="CanEdit ? RemoveCallback : default">
-                        <div class="flex flex-wrap items-center gap-2" data-testid="npc-cast">
-                            <Badge Tone="ScenarioLabels.RoleTone(npc.Role)">@ScenarioText.Of(npc.Role)</Badge>
-                            @if (npc.Count > 1)
-                            {
-                                <Badge Tone="Tone.Neutral">× @npc.Count</Badge>
-                            }
-                            @if (npc.Notes is { } notes)
-                            {
-                                <span class="text-sm text-primary-600">@notes</span>
-                            }
-                            @if (CanEdit)
-                            {
-                                <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" Disabled="Busy" OnClick="() => _casting = npc">Изменить роль</Button>
-                            }
-                        </div>
-                    </CharacterSummaryCard>
-                }
-            </div>
+        @* Компактная строка: имя, занятие, роль; лист и предыстория — по ссылке (CharacterSummaryCard — для библиотеки,
+           здесь он давал 350px на НПС и повторял «занят в сценарии» на каждой строке). *@
+        <div class="cm-card" data-testid="npc-list">
+            @foreach (var npc in Scenario.Npcs)
+            {
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-primary-200 px-4 py-2 first:border-t-0" @key="npc.Character.Id"
+                     data-testid="npc-row" data-character-id="@npc.Character.Id">
+                    @if (npc.Character.PortraitUrl is { } portrait)
+                    {
+                        <img src="@portrait" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
+                    }
+                    <div class="flex min-w-48 flex-1 flex-col">
+                        <a class="flex min-h-11 items-center font-semibold text-primary-900 hover:underline" href="@($"character/{npc.Character.Id}")">@npc.Character.Name</a>
+                        @if (npc.Character.Occupation is not null || npc.Notes is not null)
+                        {
+                            <span class="-mt-2 line-clamp-2 pb-1 text-sm text-primary-600">@string.Join(" · ", new[] { npc.Character.Occupation, npc.Notes }.OfType<string>())</span>
+                        }
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2" data-testid="npc-cast">
+                        <Badge Tone="ScenarioLabels.RoleTone(npc.Role)">@ScenarioText.Of(npc.Role)</Badge>
+                        @if (npc.Count > 1)
+                        {
+                            <Badge Tone="Tone.Neutral">× @npc.Count</Badge>
+                        }
+                        @if (CanEdit)
+                        {
+                            <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" Disabled="Busy" OnClick="() => _casting = npc">Изменить роль</Button>
+                        }
+                        <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-id-card" Href="@($"character/{npc.Character.Id}")">Открыть</Button>
+                        @if (CanEdit)
+                        {
+                            <RowMenu AriaLabel="@($"Действия: {npc.Character.Name}")">
+                                <Danger>
+                                    <RowMenuItem Danger="true" Icon="fa-box-archive" Disabled="Busy" OnClick="() => RemoveAsync(npc.Character)">Убрать из сценария</RowMenuItem>
+                                </Danger>
+                            </RowMenu>
+                        }
+                    </div>
+                </div>
+            }
         </div>
     }
 </section>
@@ -87,8 +103,6 @@
     private int _count = 1;
     private ScenarioNpcDto? _casting;
     private bool _quickOpen;
-
-    private EventCallback<CharacterSummaryDto> RemoveCallback => EventCallback.Factory.Create<CharacterSummaryDto>(this, RemoveAsync);
 
     private static string? Meta(CharacterSummaryDto c) =>
         string.Join(" · ", new[] { c.Occupation, c.CampaignName is { } campaign ? $"кампания «{campaign}»" : null }.OfType<string>()) is { Length: > 0 } meta

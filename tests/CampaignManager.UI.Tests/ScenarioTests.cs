@@ -115,6 +115,28 @@ public sealed class ScenarioTests : KitContext
         Assert.EndsWith("/scenarios", navigation.Uri);
     }
 
+    // UX-2 X3 (#169): строки предметов свёрнуты — описание и заметки по касанию, «Где лежит» видно сразу.
+    [Fact]
+    public void Items_tab_keeps_description_collapsed_until_touched()
+    {
+        Services.AddSingleton(Fake.Of<IScenariosApi>(new()));
+        Services.AddSingleton(Fake.Of<CampaignManager.Contracts.Catalogs.ICatalogApi<CampaignManager.Contracts.Catalogs.ItemDto>>(new()));
+        var scenario = new ScenarioDto
+        {
+            Id = Guid.NewGuid(),
+            Name = "Дом",
+            CanEdit = false,
+            Items = [new() { Id = Guid.NewGuid(), Name = "Дневник", Description = "Кожаный переплёт, выцветшие чернила", LocationNote = "в ящике стола" }],
+        };
+
+        var cut = Render<ScenarioItemsTab>(p => p.Add(t => t.Scenario, scenario));
+        Assert.DoesNotContain("выцветшие чернила", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("в ящике стола", cut.Markup, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=item-row] button[aria-expanded]").Click();
+        Assert.Contains("выцветшие чернила", cut.Markup, StringComparison.Ordinal);
+    }
+
     // Аудит U3/U5: ImagePicker Url="_fileUrl" без «@» отдавал превью буквальную строку — картинка всегда битая.
     [Fact]
     public void Handout_form_passes_the_picture_address_value_to_the_preview()

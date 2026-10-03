@@ -28,19 +28,23 @@
                 {
                     <input class="cm-input mb-2" type="search" placeholder="Найти трек" aria-label="Найти трек" @bind="_filter" @bind:event="oninput" />
                     <div class="max-h-72 overflow-y-auto rounded-md border border-primary-200" data-testid="location-music-tracks">
-                        @foreach (var track in VisibleTracks)
+                        @foreach (var group in Groups)
                         {
-                            var id = track.Id;
-                            <label class="flex min-h-11 cursor-pointer items-center gap-3 border-t border-primary-200 px-3 py-2 first:border-t-0" @key="id">
-                                <input type="checkbox" class="h-5 w-5 shrink-0" checked="@_trackIds.Contains(id)" @onchange="() => ToggleTrack(id)" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block text-sm text-primary-900">@track.Name</span>
-                                    @if (track.Tags.Count > 0)
-                                    {
-                                        <span class="block text-sm text-primary-600">@string.Join(", ", track.Tags)</span>
-                                    }
-                                </span>
-                            </label>
+                            <div class="sticky top-0 border-t border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary-600 first:border-t-0" @key="group.Key">@group.Key</div>
+                            @foreach (var track in group)
+                            {
+                                var id = track.Id;
+                                <label class="flex min-h-11 cursor-pointer items-center gap-3 border-t border-primary-200 px-3 py-2" @key="@((group.Key, id))">
+                                    <input type="checkbox" class="h-5 w-5 shrink-0" checked="@_trackIds.Contains(id)" @onchange="() => ToggleTrack(id)" />
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block text-sm text-primary-900">@track.Name</span>
+                                        @if (track.Tags.Count > 1)
+                                        {
+                                            <span class="block text-sm text-primary-600">@string.Join(", ", track.Tags.Skip(1))</span>
+                                        }
+                                    </span>
+                                </label>
+                            }
                         }
                     </div>
                 }
@@ -84,6 +88,14 @@
                                         || t.Tags.Any(tag => tag.Contains(MusicTags.Normalize(_filter), StringComparison.Ordinal)))
         .OrderByDescending(t => _pinnedOnOpen.Contains(t.Id))
         .ThenBy(t => t.Name, StringComparer.CurrentCulture);
+
+    // Сверху — закреплённые (видны без прокрутки), дальше по первому настроению трека.
+    private IEnumerable<IGrouping<string, MusicTrackDto>> Groups => VisibleTracks
+        .GroupBy(t => _pinnedOnOpen.Contains(t.Id) ? PinnedGroup : t.Tags.Count > 0 ? t.Tags[0] : "Без настроения")
+        .OrderBy(g => g.Key == PinnedGroup ? 0 : g.Key == "Без настроения" ? 2 : 1)
+        .ThenBy(g => g.Key, StringComparer.CurrentCulture);
+
+    private const string PinnedGroup = "Закреплены";
 
     private HashSet<Guid> _pinnedOnOpen = [];
 

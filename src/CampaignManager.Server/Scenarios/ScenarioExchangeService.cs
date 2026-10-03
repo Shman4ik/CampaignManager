@@ -252,6 +252,12 @@ public sealed class ScenarioExchangeService(
             report.Warnings.Add("Поля анонса v1 (isTemplate, isPublished, scheduledDate, announcementText) пропущены: анонс теперь у прохождения.");
         }
 
+        var sameName = scenario.Name.ToLower();
+        if (await dbContext.Scenarios.AsNoTracking().AnyAsync(x => x.Name.ToLower() == sameName, cancellationToken))
+        {
+            report.Warnings.Add($"Сценарий «{scenario.Name}» в библиотеке уже есть — запишется второй с тем же названием. Чтобы их различать, допишите «(копия)» в поле «Название копии».");
+        }
+
         var lookup = await ImportLookup.LoadAsync(dbContext, file, cancellationToken);
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         dbContext.Scenarios.Add(scenario);
