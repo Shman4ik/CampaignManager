@@ -14,7 +14,7 @@ namespace CampaignManager.Migrate.Steps;
 /// таблицы (там исправлены ошибки перевода v1). Записи только современной эпохи не переносятся, у остальных
 /// эпоха — классика (решение владельца 2026-10-02). Описания книги идут из базы, не из репозитория (D5).
 /// </summary>
-public static class CatalogStep
+public static partial class CatalogStep
 {
     private static readonly List<Era> Classic = [Era.Classic];
 
@@ -175,6 +175,7 @@ public static class CatalogStep
 
     private static void Weapons(MigrationState s)
     {
+        var shortenedRanges = 0;
         foreach (var row in s.V1.Weapons)
         {
             var v1Name = row.Text("Name")!;
@@ -195,7 +196,13 @@ public static class CatalogStep
                 : s.Resolver.CatalogId(row.Str("Skill"))
                   ?? throw new InvalidOperationException($"Оружие «{v1Name}»: навык «{row.Str("Skill")}» не перенесён.");
             var damage = row.Str("Damage")?.Trim() ?? "";
-            var range = WeaponStatsParser.ParseRange(row.Str("Range"));
+            var rangeText = TextRules.Meters(row.Str("Range")?.Trim()) ?? "";
+            if (rangeText != (row.Str("Range")?.Trim() ?? ""))
+            {
+                shortenedRanges++;
+            }
+
+            var range = WeaponStatsParser.ParseRange(rangeText);
             var attacks = WeaponStatsParser.ParseAttacks(row.Str("Attacks"));
             var ammo = WeaponStatsParser.ParseAmmo(row.Str("Ammo"));
             var cost = WeaponStatsParser.ParseCost(row.Str("Cost"));
@@ -211,7 +218,7 @@ public static class CatalogStep
                 IsImpaling = row.Bool("IsImpaling"),
                 Damage = damage,
                 DamageByRange = DamageByRange(damage, range),
-                Range = row.Str("Range")?.Trim() ?? "",
+                Range = rangeText,
                 BaseRangeM = range.BaseMeters is > 0 and var meters ? meters : null,
                 Attacks = row.Str("Attacks")?.Trim() ?? "",
                 ShotsPerRound = attacks.ShotsPerRound,
@@ -235,6 +242,11 @@ public static class CatalogStep
 
         s.Report.Count("games.Weapons", s.V1.Weapons.Count, "weapons", s.Weapons.Count, "минус только современные");
         ModernEraRemoved(s, "оружие", s.V1.Weapons.Count(row => row.Bool("Is1920") && row.Bool("IsModern")));
+        if (shortenedRanges > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"оружие: дальность «N метров» → «N м» (как «100 м» и «СИЛ/5м») — {shortenedRanges}");
+        }
+
         if (s.V1.Weapons.Any(row => row.Bool("Is1920") && WeaponStatsParser.ParseCost(row.Str("Cost")).CostModern is not null))
         {
             s.Report.Add(ReportSections.Fixed, "оружие: cost_modern не заполняется (современная эпоха убрана); строка цены книги — как была");
@@ -281,14 +293,20 @@ public static class CatalogStep
                 Name = NameFor(SpellCodes.Table, code, v1Name, "заклинание", s.Report),
                 AltNames = row.Strings("AlternativeNames"),
                 SpellType = row.Text("SpellType") ?? "",
-                Cost = row.Text("Cost"),
+                Cost = TextRules.GreaterOrEqual(row.Text("Cost")),
                 CastingTime = row.Text("CastingTime"),
-                Description = row.Str("Description") ?? "",
+                Description = TextRules.GreaterOrEqual(row.Str("Description")) ?? "",
                 CreatedAt = row.Time("CreatedAt") ?? default,
                 UpdatedAt = row.Time("LastUpdated") ?? default,
             };
             s.Spells[spell.Id] = spell;
             s.Db.Spells.Add(spell);
+        }
+
+        var gte = s.V1.Spells.Count(row => (row.Text("Cost") ?? "").Contains(">=", StringComparison.Ordinal) || (row.Str("Description") ?? "").Contains(">=", StringComparison.Ordinal));
+        if (gte > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"заклинания: «>=» → «≥» в стоимости и описании — {gte}");
         }
 
         s.Report.Count("games.Spells", s.V1.Spells.Count, "spells", s.Spells.Count);
@@ -351,6 +369,8 @@ public static class CatalogStep
     private static void Items(MigrationState s)
     {
         List<string> movedTypes = [];
+        List<string> conditional = [];
+        var priced = 0;
         var movedFrom = "";
         foreach (var row in s.V1.Items)
         {
@@ -392,6 +412,23 @@ public static class CatalogStep
                 s.Report.Add(ReportSections.Warnings, $"предмет «{v1Name}»: эпоха v1 «{era}» — записан классикой");
             }
 
+            var description = row.Text("Description");
+            decimal? price = null;
+            if (ItemPriceParser.TryParse(description) is { } parsed)
+            {
+                price = parsed.Price;
+                description = parsed.Description;
+                priced++;
+                if (parsed.HasCondition)
+                {
+                    conditional.Add($"«{v1Name}»: «{row.Text("Description")}» → {PriceText.Format(parsed.Price)}, «{parsed.Description}»");
+                }
+            }
+            else if (description is not null && PriceWord().IsMatch(description))
+            {
+                s.Report.Add(ReportSections.ItemPriceUnparsed, $"«{v1Name}»: «{Shorten(description)}»");
+            }
+
             var item = new Item
             {
                 Id = row.Guid("Id")!.Value,
@@ -399,7 +436,8 @@ public static class CatalogStep
                 Name = NameFor(ItemCodes.Table, code, v1Name, "предмет", s.Report),
                 Type = type,
                 Eras = [.. Classic],
-                Description = row.Text("Description"),
+                Description = description,
+                Price = price,
                 CreatedAt = row.Time("CreatedAt") ?? default,
                 UpdatedAt = row.Time("LastUpdated") ?? default,
             };
@@ -409,6 +447,7 @@ public static class CatalogStep
             }
 
             s.ItemsByV1Name[v1Name] = item;
+            s.ItemV1Descriptions[v1Name] = row.Text("Description");
             s.Db.Items.Add(item);
         }
 
@@ -417,9 +456,29 @@ public static class CatalogStep
             s.Report.Add(ReportSections.Fixed, $"предметы: раздел {movedFrom} — {movedTypes.Count} ({string.Join(", ", movedTypes.Order(StringComparer.Ordinal))})");
         }
 
+        if (priced > 0)
+        {
+            s.Report.Add(ReportSections.Fixed, $"предметы: цена из «Описания» — в поле цены, остаток — в описание: {priced}, из них с условием (от, диапазон, «за …»/«в …») — {conditional.Count}");
+        }
+
+        foreach (var line in conditional.Order(StringComparer.Ordinal))
+        {
+            s.Report.Add(ReportSections.ItemPriceConditions, line);
+        }
+
         s.Report.Count("games.Items", s.V1.Items.Count, "items", s.ItemsByV1Name.Count,
             $"минус {OwnerDecisions.ModernItems.Count} современных, {OwnerDecisions.HotelDuplicates.Count} повтора, {s.ScenarioProps.Count} реквизита сценария");
     }
+
+    private static string Shorten(string text)
+    {
+        var line = text.ReplaceLineEndings(" ");
+        return line.Length <= 80 ? line : line[..80] + "…";
+    }
+
+    /// <summary>«доллар» в описании — похоже на цену, которую правило не разобрало (человек глянет сам).</summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"доллар|\$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex PriceWord();
 
     private static async Task CreaturesAsync(MigrationState s, CancellationToken cancellationToken)
     {

@@ -158,6 +158,65 @@ public sealed class ConversionRulesTests
         Assert.Null(CatalogStep.DamageByRange("1d10+2", WeaponStatsParser.ParseRange("15 метров")));
     }
 
+    [Theory]
+    [InlineData("9000 доллара", 9000, null)]
+    [InlineData("4000,00 долларов", 4000, null)]
+    [InlineData("1,00 доллар", 1, null)]
+    [InlineData("0,10 доллара", 0.10, null)]
+    [InlineData("от 20 000,00 доллара", 20000, "Цена — от указанной суммы.")]
+    [InlineData("20 000 долларов", 20000, null)]
+    [InlineData("0,05–0,20 доллара", 0.05, "Верхняя граница цены — $0,20.")]
+    [InlineData("15 долларов за 50 штук", 15, "Цена за 50 штук.")]
+    [InlineData("12,50 доллара в неделю", 12.5, "Цена в неделю.")]
+    [InlineData("0,75 доллара за ночь", 0.75, "Цена за ночь.")]
+    [InlineData("от 90 долларов", 90, "Цена — от указанной суммы.")]
+    public void Item_price_is_cut_out_of_description(string text, double price, string? rest)
+    {
+        var result = ItemPriceParser.TryParse(text);
+
+        Assert.NotNull(result);
+        Assert.Equal((decimal)price, result.Price);
+        Assert.Equal(rest, result.Description);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("машина")]
+    [InlineData("Стоит 9000 долларов, не продаётся")]
+    [InlineData("около 40 долларов")]
+    [InlineData("9000 рублей")]
+    public void Item_description_that_is_not_a_price_is_left(string? text) =>
+        Assert.Null(ItemPriceParser.TryParse(text));
+
+    [Theory]
+    [InlineData("20 метров", "20 м")]
+    [InlineData("3 метра", "3 м")]
+    [InlineData("10/20/50 метров", "10/20/50 м")]
+    [InlineData("СИЛ / 5 метров", "СИЛ / 5 м")]
+    [InlineData("100 м", "100 м")]
+    [InlineData("СИЛ/5м", "СИЛ/5м")]
+    [InlineData("Касание", "Касание")]
+    public void Weapon_range_meters_are_written_short_and_still_parse_the_same(string raw, string expected)
+    {
+        var text = TextRules.Meters(raw);
+
+        Assert.Equal(expected, text);
+        var before = WeaponStatsParser.ParseRange(raw);
+        var after = WeaponStatsParser.ParseRange(text);
+        Assert.Equal((before.Kind, before.BaseMeters, before.ThrowDivisor, before.IsParsed), (after.Kind, after.BaseMeters, after.ThrowDivisor, after.IsParsed));
+        Assert.Equal(before.Bands ?? [], after.Bands ?? []);
+    }
+
+    [Fact]
+    public void Greater_or_equal_sign_is_typographic_and_cost_still_parses()
+    {
+        Assert.Equal("≥1 магии с человека, 1d10 рассудка", TextRules.GreaterOrEqual(">=1 магии с человека, 1d10 рассудка"));
+        var before = SpellStatsReader.ParseCost(">=1 магии с человека, 1d10 рассудка");
+        var after = SpellStatsReader.ParseCost("≥1 магии с человека, 1d10 рассудка");
+        Assert.Equal(before, after);
+    }
+
     [Fact]
     public void Owner_decisions_are_consistent_with_code_tables()
     {

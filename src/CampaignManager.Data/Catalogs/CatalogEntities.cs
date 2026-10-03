@@ -161,6 +161,10 @@ public sealed class Item : CatalogEntry
     public string? Type { get; set; }
     public List<Era> Eras { get; set; } = [Era.Classic, Era.Modern];
     public string? Description { get; set; }
+
+    /// <summary>Цена в долларах 1920-х (как <see cref="Weapon.CostClassic"/>); null — не указана.</summary>
+    public decimal? Price { get; set; }
+
     public Guid? ImageFileId { get; set; }
 }
 
@@ -320,6 +324,7 @@ internal sealed class ItemConfiguration : IEntityTypeConfiguration<Item>
     public void Configure(EntityTypeBuilder<Item> entity)
     {
         entity.ToCatalogTable("items");
+        entity.Property(i => i.Price).HasPrecision(12, 2);
         entity.PrimitiveCollection(i => i.Eras).HasDbDefaultSql(SchemaConventions.AllEras);
         entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.ImageFileId).OnDelete(DeleteBehavior.SetNull);
     }

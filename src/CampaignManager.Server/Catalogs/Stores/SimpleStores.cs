@@ -84,6 +84,7 @@ public sealed class ItemStore : CatalogStore<Item, ItemDto>
             Type = i.Type,
             Eras = i.Eras,
             Description = i.Description,
+            Price = i.Price,
             ImageFileId = i.ImageFileId,
             ImageUrl = i.ImageFileId is { } file ? FilesRoutes.Content(file) : null,
         }).ToList());
@@ -96,7 +97,20 @@ public sealed class ItemStore : CatalogStore<Item, ItemDto>
         entity.Type = Text(dto.Type);
         entity.Eras = eras;
         entity.Description = Text(dto.Description);
+        entity.Price = Price(dto.Price);
         entity.ImageFileId = image;
+    }
+
+    private static decimal? Price(decimal? price)
+    {
+        if (price is not { } value)
+        {
+            return null;
+        }
+
+        return value is < 0 or > 9_999_999_999m
+            ? throw ApiProblemException.Invalid("Цена — от 0 до 9 999 999 999 долларов.")
+            : decimal.Round(value, 2);
     }
 
     /// <summary>Картинка из файла обмена другой базы не найдётся — в импорте её просто нет.</summary>

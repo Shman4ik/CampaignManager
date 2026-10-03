@@ -87,6 +87,8 @@ public static class ReportSections
     public const string MovedToScenario = "Перенесено из справочника в сценарий";
     public const string Renamed = "Исправлено: названия (ошибки перевода v1)";
     public const string Fixed = "Исправлено: прочее";
+    public const string ItemPriceConditions = "Предметы: цена с условием в описании (проверить глазами)";
+    public const string ItemPriceUnparsed = "Предметы: цена в описании не разобрана (описание оставлено как есть)";
     public const string Homebrew = "Самодельное: без кода";
     public const string SheetSkills = "Листы: навыки без справочника";
     public const string SheetSkillsMapped = "Листы: навыки по старым написаниям";
