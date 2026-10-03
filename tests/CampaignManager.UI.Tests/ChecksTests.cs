@@ -260,6 +260,68 @@ public sealed class ChecksTests : KitContext
     }
 
     [Fact]
+    public void Party_mode_preselects_the_initial_investigator_and_reports_changes()
+    {
+        var ann = new CheckInvestigator(Guid.NewGuid(), "Энн", Sheet(), "Аня");
+        var bob = new CheckInvestigator(Guid.NewGuid(), "Боб", Sheet(), null);
+        Guid? reported = null;
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Party, [ann, bob])
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}")
+            .Add(c => c.InitialInvestigatorId, bob.Id)
+            .Add(c => c.OnInvestigatorChanged, (Guid? id) => reported = id));
+
+        Assert.Equal(bob.Id.ToString(), cut.Find("[data-testid='check-subject'] option[selected]").GetAttribute("value"));
+        Assert.Contains("Внимание (60)", cut.Find("[data-testid='check-target'] option[selected]").TextContent);
+
+        cut.Find("[data-testid='check-subject']").Change(ann.Id.ToString());
+        Assert.Equal(ann.Id, reported);
+    }
+
+    [Fact]
+    public void Unknown_initial_investigator_is_ignored()
+    {
+        var ann = new CheckInvestigator(Guid.NewGuid(), "Энн", Sheet(), "Аня");
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Party, [ann])
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialInvestigatorId, Guid.NewGuid()));
+
+        Assert.Equal("", cut.Find("[data-testid='check-subject'] option[selected]").GetAttribute("value"));
+    }
+
+    [Fact]
+    public void Details_appear_under_the_result_only_after_the_roll()
+    {
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, Sheet())
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}")
+            .Add(c => c.Details, "<p>Исход из сценария</p>"));
+
+        Assert.Empty(cut.FindAll("[data-testid='check-details']"));
+        cut.Find("[data-testid='check-roll-first'] input").Change("70");
+        Assert.Contains("Исход из сценария", cut.Find("[data-testid='check-details']").TextContent);
+    }
+
+    [Fact]
+    public void Modal_passes_investigator_and_details_through()
+    {
+        var ann = new CheckInvestigator(Guid.NewGuid(), "Энн", Sheet(), "Аня");
+        var cut = Render<SkillCheckModal>(p => p
+            .Add(m => m.Open, true)
+            .Add(m => m.Party, [ann])
+            .Add(m => m.Catalog, Catalog)
+            .Add(m => m.InitialKey, $"skill:{Spot.Id}")
+            .Add(m => m.InitialInvestigatorId, ann.Id)
+            .Add(m => m.Details, "<p>Исход</p>"));
+
+        cut.Find("[data-testid='check-roll-first'] input").Change("70");
+        Assert.Contains("Исход", cut.Find("[data-testid='check-details']").TextContent);
+    }
+
+    [Fact]
     public void Modal_recreates_panel_on_every_open()
     {
         var cut = Render<SkillCheckModal>(p => p

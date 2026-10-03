@@ -29,6 +29,16 @@
     <FilterPanel OnReset="ResetFilters">
         <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по имени, профессии, месту…" aria-label="Поиск"
                data-testid="npc-search" @bind="_search" @bind:event="oninput" />
+        @if (_places.Count > 0)
+        {
+            <select class="cm-input w-auto min-w-48" aria-label="Где лист" data-testid="npc-place" value="@_place" @onchange="SelectPlace">
+                <option value="">Где угодно</option>
+                @foreach (var place in _places)
+                {
+                    <option value="@place">@place</option>
+                }
+            </select>
+        }
         <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
             <input type="checkbox" class="cm-checkbox" checked="@ShowArchived" data-testid="show-archived" @onchange="ToggleArchived" />
             Архив
@@ -37,7 +47,11 @@
 
     <AsyncContent @ref="_content" Key="@LoadKey" Load="LoadAsync" LoadingMessage="Загружаю библиотеку…" Context="items">
         <ChildContent>
-            @{ var found = Filter(items); }
+            @{
+                var found = Filter(items);
+                var pageCount = Math.Max(1, (found.Count + PageSize - 1) / PageSize);
+                var page = Math.Clamp(_page, 1, pageCount);
+            }
             @if (found.Count == 0)
             {
                 @* Кнопка добавления — в шапке, «Сбросить» — в строке фильтров: второй копии здесь нет. *@
@@ -47,12 +61,13 @@
             else
             {
                 <div class="cm-grid-cards" data-testid="library">
-                    @foreach (var character in found)
+                    @foreach (var character in found.Skip((page - 1) * PageSize).Take(PageSize))
                     {
                         <CharacterSummaryCard @key="character.Id" Character="character" Busy="@(_busy == character.Id)"
                                               OnArchive="ArchiveAsync" OnRestore="RestoreAsync" OnCast="c => _casting = c" />
                     }
                 </div>
+                <Pagination CurrentPage="page" PageSize="PageSize" TotalItems="found.Count" CurrentPageChanged="p => _page = p" />
             }
         </ChildContent>
     </AsyncContent>
@@ -67,6 +82,10 @@
 
 @code {
     private const string PregenTab = "pregen";
+    private const int PageSize = 24;
+    private string _place = "";
+    private int _page = 1;
+    private IReadOnlyList<string> _places = [];
     private AsyncContent<IReadOnlyList<CharacterSummaryDto>>? _content;
     private string _search = "";
     private Guid? _busy;
@@ -97,12 +116,20 @@
     {
         var items = await Api.ListAsync(Kind, ShowArchived, cancellationToken);
         _count = items.Count;
+        // «Где лист»: кампании и сценарии, которые есть в списке, — Хранитель ищет НПС своей партии, а не по имени.
+        _places = [.. items.SelectMany(c => new[] { c.CampaignName, c.ScenarioName }.Concat(c.CastIn))
+            .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!).Distinct().Order(StringComparer.CurrentCulture)];
+        if (_place.Length > 0 && !_places.Contains(_place))
+            _place = "";
         StateHasChanged();
         return items;
     }
 
     private List<CharacterSummaryDto> Filter(IReadOnlyList<CharacterSummaryDto> items)
     {
+        if (_place.Length > 0)
+            items = [.. items.Where(c => c.CampaignName == _place || c.ScenarioName == _place || c.CastIn.Contains(_place))];
+
         if (string.IsNullOrWhiteSpace(_search))
             return [.. items];
 
@@ -136,9 +163,17 @@
 
     private void ToggleArchived(ChangeEventArgs e) => Navigation.NavigateTo(Url(ActiveTab, e.Value is true), replace: true);
 
+    private void SelectPlace(ChangeEventArgs e)
+    {
+        _place = e.Value?.ToString() ?? "";
+        _page = 1;
+    }
+
     private void ResetFilters()
     {
         _search = "";
+        _place = "";
+        _page = 1;
         if (ShowArchived)
             Navigation.NavigateTo(Url(ActiveTab, false), replace: true);
     }

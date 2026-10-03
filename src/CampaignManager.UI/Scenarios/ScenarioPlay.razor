@@ -100,7 +100,30 @@ else
                  Party="@_party" Catalog="@_catalog"
                  InitialKey="@(_check is null ? null : CheckSubjects.KeyFor(_check.TargetKind, _check.SkillId, _check.Characteristic))"
                  InitialName="@(_check is null ? null : ScenarioLabels.Target(_check))"
-                 InitialDifficulty="@(_check?.Difficulty ?? Difficulty.Regular)" />
+                 InitialDifficulty="@(_check?.Difficulty ?? Difficulty.Regular)"
+                 InitialInvestigatorId="@_checkInvestigatorId" OnInvestigatorChanged="id => _checkInvestigatorId = id">
+    <Details>
+        @if (_check is not null && (_check.OnSuccess is not null || _check.OnFailure is not null))
+        {
+            <div class="flex flex-col gap-2" data-testid="check-scenario-outcomes">
+                @if (_check.OnSuccess is { } success)
+                {
+                    <div>
+                        <p class="text-sm font-semibold uppercase text-success-700">Успех</p>
+                        <Markdown Text="@success" class="text-sm" />
+                    </div>
+                }
+                @if (_check.OnFailure is { } failure)
+                {
+                    <div>
+                        <p class="text-sm font-semibold uppercase text-error-700">Провал</p>
+                        <Markdown Text="@failure" class="text-sm" />
+                    </div>
+                }
+            </div>
+        }
+    </Details>
+</SkillCheckModal>
 
 <HandoutShowcase Handout="ShownHandout" OnClose="HideHandout" />
 
@@ -116,6 +139,9 @@ else
     private SkillCatalog? _catalog;
     private string? _partyError;
     private ScenarioCheckDto? _check;
+
+    // Сыщик, которого проверяли в прошлый раз: между проверками локации его не выбирают заново.
+    private Guid? _checkInvestigatorId;
     private bool _factsOpen;
     private bool _musicOpen;
 

@@ -98,6 +98,25 @@ public sealed class ScenarioPlayTests : KitContext
     }
 
     [Fact]
+    public void Chosen_investigator_is_kept_between_checks_and_the_scenario_outcome_shows_in_the_dialog()
+    {
+        var cut = Play(HouseId);
+        cut.WaitForAssertion(() => Assert.Contains("Маски", cut.Find("[data-testid=play-run]").TextContent));
+
+        cut.Find("[data-testid=run-check]").Click();
+        var second = cut.FindAll("[data-testid=check-subject] option").Single(o => o.TextContent.Contains("Нора Флинн"));
+        cut.Find("[data-testid=check-subject]").Change(second.GetAttribute("value"));
+        cut.Find("[data-testid=check-roll-first] input").Change("70");
+        Assert.Contains("Находит дневник.", cut.Find("[data-testid=check-details]").TextContent);
+
+        cut.FindAll("[data-testid=skill-check-modal] button").Last(b => b.TextContent.Trim() == "Закрыть").Click();
+        cut.Find("[data-testid=run-check]").Click();
+
+        Assert.Equal(second.GetAttribute("value"), cut.Find("[data-testid=check-subject] option[selected]").GetAttribute("value"));
+        Assert.Empty(cut.FindAll("[data-testid=check-details]"));
+    }
+
+    [Fact]
     public void Showcase_shows_what_players_see_and_never_keeper_notes()
     {
         var cut = Play(handout: HandoutId);
