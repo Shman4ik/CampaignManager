@@ -78,11 +78,16 @@
         }
         else if (!FixedSubject)
         {
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                <Field Label="Что проверяем">
-                    <input class="cm-input" data-testid="check-target-name" placeholder="Внимание, СИЛ, Удача…"
-                           disabled="@IsLocked" @bind="_manualName" @bind:event="oninput" />
-                </Field>
+            @* Цель пришла из сценария (InitialName) — она уже названа крупной строкой выше, поле «Что проверяем» её бы повторило
+               (g4 13.10: цель называлась трижды); вписывают только значение. *@
+            <div class="@(string.IsNullOrWhiteSpace(InitialName) ? "grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "max-w-40")">
+                @if (string.IsNullOrWhiteSpace(InitialName))
+                {
+                    <Field Label="Что проверяем">
+                        <input class="cm-input" data-testid="check-target-name" placeholder="Внимание, СИЛ, Удача…"
+                               disabled="@IsLocked" @bind="_manualName" @bind:event="oninput" />
+                    </Field>
+                }
                 <Field Label="Значение">
                     <input type="number" inputmode="numeric" min="0" max="200" class="cm-input" data-testid="check-value"
                            disabled="@IsLocked" @bind="_manualValue" @bind:event="oninput" />
@@ -96,13 +101,15 @@
            повтор — то, что делают дальше, — не уходили за край окна (g2 7.1.4). *@
         @if (!IsLocked)
         {
-            <div class="flex flex-wrap gap-x-8 gap-y-3">
-                <Field Label="Сложность" Group="true">
+            <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-1">
+                    <span class="cm-field-label">Сложность</span>
                     <DifficultyPicker @bind-Value="_difficulty" SkillValue="@Subject?.Value" Disabled="@IsLocked" />
-                </Field>
-                <Field Label="Бонусные и штрафные кости" Group="true">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <span class="cm-field-label">Кости</span>
                     <ExtraDicePicker @bind-Value="_netDice" Disabled="@IsLocked" />
-                </Field>
+                </div>
             </div>
         }
         else if (_netDice != 0)
@@ -304,6 +311,8 @@
         _manualName = InitialName ?? "";
         if (InitialInvestigatorId is { } initial && IsPartyMode && Party!.Any(i => i.Id == initial))
             _investigatorId = initial;
+        else if (IsPartyMode && Party!.Count == 1)
+            _investigatorId = Party[0].Id; // единственного сыщика не выбирают: значение его навыка подставляется сразу (g4 13.12)
         _manualValue = InitialValue;
     }
 
@@ -445,22 +454,20 @@
     {
         var subject = _rolledSubject!;
         var outcome = _first!.Outcome;
-        var reason = CheckRules.LuckBlockReason(subject, outcome, isPushed: false);
+        // Невозможное не рисуется (правило 8, g4 13.11): «пункты Удачи на проверку Удачи не тратят» и «Удачей не дотянуть» —
+        // объяснение того, чего нельзя сделать, а не действие.
+        if (CheckRules.LuckBlockReason(subject, outcome, isPushed: false) is not null)
+            return;
+
+        var luck = CurrentSheet?.Current.Luck;
+        var options = CheckRules.LuckOptions(outcome, subject.Value, _difficulty, luck ?? int.MaxValue);
+        if (options.Count == 0)
+            return;
+
         <div class="mt-4" data-testid="check-luck">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">@(outcome.Passed ? "Поднять уровень Удачей" : "Потратить Удачу")</h3>
-            @if (reason is not null)
-            {
-                <p class="cm-field-note">@reason</p>
-            }
-            else
-            {
-                var luck = CurrentSheet?.Current.Luck;
-                var options = CheckRules.LuckOptions(outcome, subject.Value, _difficulty, luck ?? int.MaxValue);
-                if (options.Count == 0)
-                {
-                    <p class="cm-field-note">Удачей этот бросок до нужной сложности не дотянуть.</p>
-                }
-                else if (CanChangeSheet)
+            @{
+                if (CanChangeSheet)
                 {
                     <div class="flex flex-wrap gap-2">
                         @foreach (var option in options)
@@ -501,14 +508,13 @@
 
     private RenderFragment PushBlock() => __builder =>
     {
-        var reason = CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat);
+        // Повторить нельзя (бой, Удача, крах) — блока нет: объяснение невозможного не действие (правило 8, g4 13.11).
+        if (CheckRules.PushBlockReason(_rolledSubject!, _first!.Outcome, InCombat) is not null)
+            return;
+
         <div class="mt-4" data-testid="check-push">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">Повторная проверка</h3>
-            @if (reason is not null)
-            {
-                <p class="cm-field-note">@reason</p>
-            }
-            else if (!_pushing)
+            @if (!_pushing)
             {
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-rotate-right" data-testid="check-push-start"
                         OnClick="() => _pushing = true">Бросить повторно</Button>

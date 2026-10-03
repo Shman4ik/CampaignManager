@@ -197,7 +197,8 @@ public sealed class ChecksTests : KitContext
 
         Enter(cut, "first", 70);
 
-        Assert.Contains("Ближний бой и Стрельбу повторно не проверяют", cut.Find("[data-testid='check-push']").TextContent);
+        // повторить нельзя — блока нет совсем (правило 8: объяснение невозможного — не действие)
+        Assert.Empty(cut.FindAll("[data-testid='check-push']"));
         Assert.Empty(cut.FindAll("[data-testid='check-push-start']"));
     }
 
@@ -208,7 +209,7 @@ public sealed class ChecksTests : KitContext
 
         Enter(cut, "first", 70);
 
-        Assert.StartsWith("В бою повторных проверок не бывает", cut.Find("[data-testid='check-push'] p").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='check-push']"));
     }
 
     [Fact]
@@ -376,12 +377,50 @@ public sealed class ChecksTests : KitContext
     public void Unknown_initial_investigator_is_ignored()
     {
         var ann = new CheckInvestigator(Guid.NewGuid(), "Энн", Sheet(), "Аня");
+        var bob = new CheckInvestigator(Guid.NewGuid(), "Боб", Sheet(), null);
         var cut = Render<SkillCheckPanel>(p => p
-            .Add(c => c.Party, [ann])
+            .Add(c => c.Party, [ann, bob])
             .Add(c => c.Catalog, Catalog)
             .Add(c => c.InitialInvestigatorId, Guid.NewGuid()));
 
         Assert.Equal("", cut.Find("[data-testid='check-subject'] option[selected]").GetAttribute("value"));
+    }
+
+    /// <summary>Единственного сыщика не выбирают: значение его навыка подставляется сразу (g4 13.12).</summary>
+    [Fact]
+    public void The_only_investigator_is_preselected_and_his_value_shown()
+    {
+        var ann = new CheckInvestigator(Guid.NewGuid(), "Энн", Sheet(), "Аня");
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Party, [ann])
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}"));
+
+        Assert.Equal(ann.Id.ToString(), cut.Find("[data-testid='check-subject'] option[selected]").GetAttribute("value"));
+        Assert.Contains("60%", cut.Find("[data-testid='check-subject-head']").TextContent);
+    }
+
+    /// <summary>Цель из сценария названа крупной строкой — поля «Что проверяем» нет, вписывают только значение (g4 13.10).</summary>
+    [Fact]
+    public void Scenario_target_is_not_repeated_in_a_name_field()
+    {
+        var cut = Render<SkillCheckPanel>(p => p.Add(c => c.InitialName, "Удача"));
+
+        Assert.Empty(cut.FindAll("[data-testid='check-target-name']"));
+        Assert.NotNull(cut.Find("[data-testid='check-value']"));
+    }
+
+    /// <summary>Невозможное не рисуется: Удачу на проверку Удачи не тратят, и блока «Потратить Удачу» нет (g4 13.11).</summary>
+    [Fact]
+    public void Impossible_luck_and_push_blocks_are_not_drawn()
+    {
+        var cut = Panel(Sheet(), "luck", []);
+
+        Enter(cut, "first", 90);
+
+        Assert.Empty(cut.FindAll("[data-testid='check-luck']"));
+        Assert.Empty(cut.FindAll("[data-testid='check-push']"));
+        Assert.DoesNotContain("стр.", cut.Markup);
     }
 
     [Fact]
