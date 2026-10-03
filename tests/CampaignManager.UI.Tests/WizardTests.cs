@@ -1,5 +1,8 @@
 using Bunit;
 using CampaignManager.Contracts.Catalogs;
+using CampaignManager.Contracts.Characters;
+using CampaignManager.Core.Documents;
+using CampaignManager.UI.Shared;
 using CampaignManager.Core;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
@@ -35,6 +38,7 @@ public sealed class WizardTests : KitContext
         foreach (var key in Enum.GetValues<Characteristic>())
             draft.SetCharacteristic(key, 60);
         draft.SetLuckRolls([50]);
+        draft.EducationChecks.Add(new EducationCheck(90, 60, 4));
         return draft;
     }
 
@@ -141,6 +145,7 @@ public sealed class WizardTests : KitContext
         // 1d100 = 90 (единицы 0, десятки 9) больше ОБР 60, прибавка 1d10 = 4.
         Dice.Enqueue(0, 9, 4);
         var draft = Filled();
+        draft.EducationChecks.Clear();
         var cut = Render<WizardCharacteristicsStep>(p => p.Add(c => c.Plan, PlanOf(draft)));
 
         cut.Find("[data-testid=edu-check-roll]").Click();
@@ -325,5 +330,101 @@ public sealed class WizardTests : KitContext
 
         cut.Find("button[aria-label^='Убрать оружие']").Click();
         Assert.Empty(draft.Weapons);
+    }
+
+    // ── Страница помощника ───────────────────────────────────────────────────
+
+    private const string DraftKey = "cm.investigator-draft:Player:library";
+
+    private void SetUpPage(InvestigatorDraft? stored = null, OccupationDefinition? occupation = null)
+    {
+        var skills = Catalog.Skills.Select(s => new SkillDto
+        {
+            Id = s.Id, Name = s.Name, ParentId = s.ParentId, BaseValue = s.BaseValue, Code = s.Code, Category = s.Category,
+        }).ToList();
+        var occupations = occupation is null
+            ? []
+            : new List<OccupationDto>
+            {
+                new()
+                {
+                    Id = occupation.Id, Name = occupation.Name, SkillPointsFormula = occupation.Formula,
+                    CreditRatingMin = occupation.CreditRatingMin, CreditRatingMax = occupation.CreditRatingMax,
+                    Slots = [.. occupation.Slots.Select(sl => new OccupationSlotDto { Kind = sl.Kind, SkillId = sl.SkillId })],
+                },
+            };
+        Services.AddSingleton(Fake.Of<ICharactersApi>(new()
+        {
+            [nameof(ICharactersApi.GetCreationContextAsync)] = _ => Task.FromResult(new CreationContextDto { Kind = CharacterKind.Player, CanCreate = true, CampaignName = "Тест" }),
+        }));
+        Services.AddSingleton(Fake.Of<ICatalogApi<SkillDto>>(new()
+        {
+            [nameof(ICatalogApi<SkillDto>.ListAsync)] = _ => Task.FromResult(new CatalogList<SkillDto>(skills, false)),
+        }));
+        Services.AddSingleton(Fake.Of<ICatalogApi<OccupationDto>>(new()
+        {
+            [nameof(ICatalogApi<OccupationDto>.ListAsync)] = _ => Task.FromResult(new CatalogList<OccupationDto>(occupations, false)),
+        }));
+        if (stored is not null)
+            JSInterop.Setup<string?>("localStorage.getItem", DraftKey).SetResult(CmJson.Serialize(stored));
+    }
+
+    [Fact]
+    public async Task Exit_with_a_started_draft_says_it_was_saved_and_without_one_is_silent()
+    {
+        SetUpPage();
+        var toasts = Services.GetRequiredService<ToastService>();
+        var cut = Render<InvestigatorWizardPage>();
+        await cut.WaitForStateAsync(() => cut.FindAll("[data-testid=wizard-cancel]").Count > 0);
+
+        cut.Find("[data-testid=wizard-cancel]").Click();
+        Assert.Empty(toasts.Messages);
+
+        cut.Find("[data-testid=investigator-name]").Input("Артур");
+        cut.Find("[data-testid=wizard-cancel]").Click();
+
+        Assert.Equal("Черновик сохранён — продолжить можно с главной.", Assert.Single(toasts.Messages).Message);
+    }
+
+    [Fact]
+    public async Task Unspent_points_ask_before_leaving_the_skills_step_and_the_main_answer_is_to_go_back()
+    {
+        var occupation = Scholar();
+        var draft = Filled();
+        draft.Personal.Name = "Артур";
+        CreationPlan.SelectOccupation(draft, occupation);
+        draft.StepIndex = (int)CreationStep.Skills;
+        SetUpPage(draft, occupation);
+
+        var cut = Render<InvestigatorWizardPage>();
+        await cut.WaitForStateAsync(() => cut.FindAll("[data-testid=wizard-next]").Count > 0);
+        Assert.Contains("Не вложено очков:", cut.Find("[data-testid=wizard-hint]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=wizard-next]").Click();
+        cut.WaitForAssertion(() => Assert.Contains("Осталось", cut.Find("[data-testid=unspent-text]").TextContent, StringComparison.Ordinal));
+
+        cut.Find("[data-testid=unspent-stay]").Click();
+        Assert.Empty(cut.FindAll("[data-testid=unspent-text]"));
+        Assert.NotNull(cut.Find("[data-testid=wizard-step-3]").GetAttribute("aria-current"));
+
+        cut.Find("[data-testid=wizard-next]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=unspent-go]"));
+        cut.Find("[data-testid=unspent-go]").Click();
+        await cut.WaitForStateAsync(() => cut.FindAll("[data-testid=wizard-Biography]").Count > 0);
+        Assert.Empty(cut.FindAll("[data-testid=unspent-text]"));
+    }
+
+    [Fact]
+    public async Task Stepper_names_only_the_current_step_and_the_footer_has_no_back_on_the_first_step()
+    {
+        SetUpPage();
+        var cut = Render<InvestigatorWizardPage>();
+        await cut.WaitForStateAsync(() => cut.FindAll("[data-testid=wizard-steps]").Count > 0);
+
+        Assert.Empty(cut.FindAll("[data-testid=wizard-back]"));
+        var current = cut.Find("[data-testid=wizard-steps] [aria-current=step]");
+        Assert.Contains("Способ", current.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Характеристики", cut.Find("[data-testid=wizard-steps]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Впишите имя сыщика", cut.Find("[data-testid=wizard-validation]").TextContent, StringComparison.Ordinal);
     }
 }
