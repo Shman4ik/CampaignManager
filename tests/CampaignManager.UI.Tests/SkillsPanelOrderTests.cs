@@ -98,6 +98,9 @@ public sealed class SkillsPanelOrderTests : KitContext
         var folds = cut.FindAll("details.skill-fold");
         Assert.Equal(2, folds.Count);
         Assert.Single(folds, f => f.QuerySelector("summary")!.TextContent.StartsWith("Наука", StringComparison.Ordinal));
+        // Свёртка стоит в алфавите на месте родителя, а не отдельным блоком кнопок после списка.
+        Assert.All(folds, f => Assert.NotNull(f.Closest("[data-testid=skills-others]")));
+        Assert.Empty(cut.FindAll("[data-testid=skills-folds]"));
 
         var names = cut.FindAll(".skill-name-button").Select(b => b.TextContent.Trim()).ToList();
         Assert.Equal(names.Count, names.Distinct().Count());

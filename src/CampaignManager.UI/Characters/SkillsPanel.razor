@@ -3,7 +3,8 @@
 
 @* Навыки по группам бланка (раскладка — Core/SheetSkillLayout). Строки размечены @key: без него Blazor
    переиспользует поле соседнего навыка, когда список перетасовывается (навык уехал из свёрнутых), и
-   показывает чужое значение (знание v1). Порядок — «Частые», затем алфавит (Core/SheetSkillLayout.Sections); две колонки — явное деление списка пополам, не CSS columns. *@
+   показывает чужое значение (знание v1). Порядок — «Частые», затем алфавит (Core/SheetSkillLayout.Sections); две колонки — явное деление списка пополам, не CSS columns.
+   Свёрнутые специализации на базе стоят в алфавите строкой на месте родителя. *@
 <div class="mb-3 flex flex-wrap items-center gap-2">
     <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск навыка…" aria-label="Поиск навыка"
            data-testid="skill-search" @bind="_search" @bind:event="oninput" />
@@ -88,26 +89,11 @@ else
             @Halves(sections.Frequent)
         </section>
     }
-    @if (sections.Others.Count > 0)
+    @if (sections.Others.Count > 0 || sections.Folds.Count > 0)
     {
         <section class="skill-group" data-testid="skills-others">
             <h3 class="skill-block-title">@(sections.Frequent.Count > 0 ? "Остальные по алфавиту" : "По алфавиту")</h3>
-            @Halves(sections.Others)
-        </section>
-    }
-    @if (sections.Folds.Count > 0)
-    {
-        <section class="skill-group" data-testid="skills-folds">
-            @foreach (var fold in sections.Folds)
-            {
-                <details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)">
-                    <summary>@fold.ParentName: показать ещё @fold.Lines.Count</summary>
-                    @foreach (var line in fold.Lines)
-                    {
-                        @Row(line)
-                    }
-                </details>
-            }
+            @Halves(Alphabetic(sections))
         </section>
     }
 }
@@ -116,8 +102,34 @@ else
     private RenderFragment Row(SkillLine line) => @<SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
                                                            OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />;
 
-    /// <summary>Список ровно пополам: первая половина — левая колонка сверху вниз, вторая — правая (с 1024px); уже — одна колонка в том же порядке.</summary>
-    private RenderFragment Halves(IReadOnlyList<SkillLine> lines)
+    /// <summary>
+    /// Свёрнутые специализации — строкой на месте родителя в алфавите («Наука» между «Механикой» и «Оккультизмом»),
+    /// а не стеной кнопок «Наука: показать ещё 13» после всего списка: так их ищут глазами там же, где остальные навыки.
+    /// </summary>
+    private static IReadOnlyList<object> Alphabetic(SkillSections sections) =>
+        [.. sections.Others.Cast<object>().Concat(sections.Folds)
+            .OrderBy(item => SheetSkillLayout.AlphabeticKey(item is SpecializationFold fold ? fold.ParentName : ((SkillLine)item).Name), StringComparer.Ordinal)];
+
+    private RenderFragment Item(object item) => item switch
+    {
+        SpecializationFold fold => Fold(fold),
+        SkillLine line => Row(line),
+        _ => _ => { },
+    };
+
+    private RenderFragment Fold(SpecializationFold fold) =>
+        @<details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)" data-testid="skill-fold">
+            <summary><i class="fa-solid fa-chevron-right skill-fold-icon" aria-hidden="true"></i><span><span class="skill-fold-name">@fold.ParentName</span><span class="skill-fold-count">специализаций: @fold.Lines.Count</span></span></summary>
+            @foreach (var line in fold.Lines)
+            {
+                @Row(line)
+            }
+        </details>;
+
+    /// <summary>Список ровно пополам: первая половина — левая колонка сверху вниз, вторая — правая (с 768px); уже — одна колонка в том же порядке.</summary>
+    private RenderFragment Halves(IReadOnlyList<SkillLine> lines) => Halves(lines.Cast<object>().ToList());
+
+    private RenderFragment Halves(IReadOnlyList<object> lines)
     {
         var (left, right) = SheetSkillLayout.SplitInHalf(lines);
         return @<div class="skill-halves">
@@ -125,7 +137,7 @@ else
                 <div class="skill-labels" aria-hidden="true"><span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span></div>
                 @foreach (var line in left)
                 {
-                    @Row(line)
+                    @Item(line)
                 }
             </div>
             @if (right.Count > 0)
@@ -134,7 +146,7 @@ else
                     <div class="skill-labels skill-labels-second" aria-hidden="true"><span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span></div>
                     @foreach (var line in right)
                     {
-                        @Row(line)
+                        @Item(line)
                     }
                 </div>
             }
