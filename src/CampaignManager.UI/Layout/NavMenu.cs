@@ -18,8 +18,8 @@ public static class NavMenu
         new("", "fa-house", "Главная", NavGroup.Main, NavAudience.Everyone, OnPhoneBar: true),
         new("campaigns", "fa-map", "Кампании", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
         new("combat", "fa-hand-fist", "Бой", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
-        new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
-        new("scenarios", "fa-masks-theater", "Сценарии", NavGroup.Main, NavAudience.Keeper),
+        new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.Keeper),
+        new("scenarios", "fa-masks-theater", "Сценарии", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
         new("npcs", "fa-user-secret", "НПС", NavGroup.Main, NavAudience.Keeper),
         new("music", "fa-music", "Фонотека", NavGroup.Main, NavAudience.Keeper),
 
@@ -64,7 +64,9 @@ public static class NavMenu
 /// <param name="Href">Адрес относительно корня, без ведущего «/»: так его понимает NavLink.</param>
 /// <param name="ShortLabel">Подпись в рельсе, если <paramref name="Label"/> не влезает одной строкой в рельс (90px)
 /// (не длиннее «Заклинания»).</param>
-/// <param name="OnPhoneBar">На нижней панели телефона; остальное — в листе «Ещё». Влезает четыре пункта.</param>
+/// <param name="OnPhoneBar">На нижней панели телефона; остальное — в листе «Ещё». Влезает четыре пункта. Хранителю на
+/// телефоне — подготовка: «Главная», «Кампании», «Сценарии» и «Бой»; «Погоня» уходит в «Ещё» (за столом её открывают
+/// из режима игры сценария).</param>
 public sealed record NavItem(
     string Href,
     string Icon,

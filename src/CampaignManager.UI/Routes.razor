@@ -3,19 +3,16 @@
    берёт у эндпоинта.
    Страница под [Authorize]: без сессии — на /login, с сессией без прав — «Нет доступа». Права
    страниц — только политиками (Policies.Keeper/Admin), см. Identity/CLAUDE.md. *@
+@using CampaignManager.Core.Identity
+@using CampaignManager.UI.Pages
 <Router AppAssembly="typeof(Routes).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
             <NotAuthorized>
                 @if (context.User.Identity?.IsAuthenticated == true)
                 {
-                    <PageHeader Title="Нет доступа" />
-                    <div class="cm-page">
-                        <EmptyState Icon="fa-lock" Title="Эта страница открыта только Хранителям или администратору."
-                                    Message="Если вам нужен доступ, подайте заявку в личном кабинете.">
-                            <Actions><Button Href="" Icon="fa-house">На главную</Button></Actions>
-                        </EmptyState>
-                    </div>
+                    <NoAccess AdminOnly="@RequiresAdmin(routeData)"
+                              IsKeeperOrAdmin="@(context.User.IsInRole(nameof(UserRole.Keeper)) || context.User.IsInRole(nameof(UserRole.Admin)))" />
                 }
                 else
                 {
@@ -29,3 +26,10 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    /// <summary>Страница закрыта политикой администратора — по атрибуту страницы, как её проверяет и сервер.</summary>
+    private static bool RequiresAdmin(RouteData routeData) =>
+        routeData.PageType.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>().Any(a => a.Policy == Policies.Admin);
+}

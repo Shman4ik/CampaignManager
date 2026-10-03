@@ -6,24 +6,21 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 
-@* Файлы-«сироты» — строки cm.files, на которые ничто не ссылается (старше суток). Сначала отчёт, удаление —
+@* Неиспользуемые файлы («сироты» в коде и API) — строки cm.files, на которые ничто не ссылается (старше суток). Сначала отчёт, удаление —
    отдельной кнопкой и только того, что в отчёте: сервер повторяет условие в самом DELETE, и файл, на
    который сослались после отчёта, уйдёт в «пропущено». Перенесено с /dev/files (T1.5). API — модуль
    файлов (Server/Files/CLAUDE.md, «Сироты»). *@
-<PageHeader Title="Файлы" />
+<PageHeader Title="Файлы" Subtitle="Загрузки, на которые ничто не ссылается" />
 
 <div class="cm-page">
     <section class="cm-section" aria-labelledby="orphans-title">
-        <div class="cm-section-header"><h2 id="orphans-title" class="cm-section-title">Сироты</h2></div>
         <div class="cm-card">
-            <div class="cm-card-body">
-                <p class="cm-text-muted mb-3">
-                    Картинки и треки старше суток, на которые не ссылаются ни лист, ни сценарий, ни справочник, ни фонотека.
-                    Обычно это загрузки из форм, которые так и не сохранили, и замены старых картинок.
-                </p>
-                <div class="flex flex-wrap gap-2">
-                    <Button Variant="ButtonVariant.Secondary" Icon="fa-magnifying-glass" Busy="_busy" OnClick="LoadAsync">
-                        @(_report is null ? "Найти сирот" : "Искать заново")
+            <SectionHeader Title="Неиспользуемые файлы" />
+            <div class="cm-card-body cm-stack">
+                @* Сначала действие, потом пояснение: первым на экране была абзац-справка. *@
+                <div class="cm-btn-row">
+                    <Button Icon="fa-magnifying-glass" Busy="_busy" OnClick="LoadAsync">
+                        @(_report is null ? "Найти неиспользуемые" : "Искать заново")
                     </Button>
                     @if (_report is { Files.Count: > 0 } report)
                     {
@@ -35,13 +32,13 @@
 
                 @if (_error is not null)
                 {
-                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0 mt-3">@_error</Alert>
+                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
                 }
 
                 @if (_deleted is { } deleted)
                 {
-                    <Alert Tone="Tone.Success" Small="true" class="mb-0 mt-3">
-                        Удалено: @deleted.Deleted.Count. Пропущено (уже не сироты): @deleted.Skipped.Count.
+                    <Alert Tone="Tone.Success" Small="true" class="mb-0">
+                        Удалено: @deleted.Deleted.Count. Пропущено (уже используются): @deleted.Skipped.Count.
                         @if (deleted.ObjectsNotDeleted.Count > 0)
                         {
                             <span>Хранилище не удалило объекты: @string.Join(", ", deleted.ObjectsNotDeleted).</span>
@@ -51,14 +48,19 @@
 
                 @if (_report is { Files.Count: 0 })
                 {
-                    <p class="mt-3 text-primary-500">Сирот нет.</p>
+                    <Alert Tone="Tone.Success" Small="true" ShowIcon="true" class="mb-0">Неиспользуемых файлов нет.</Alert>
                 }
+
+                <p class="text-sm text-primary-600">
+                    Картинки и треки старше суток, на которые не ссылаются ни лист, ни сценарий, ни справочник, ни фонотека.
+                    Обычно это загрузки из форм, которые так и не сохранили, и замены старых картинок.
+                </p>
             </div>
 
             @if (_report is { Files.Count: > 0 } orphans)
             {
                 <div class="border-t border-primary-200">
-                    <DataTable Items="orphans.Files" RowKey="f => f.Id" AriaLabel="Сироты">
+                    <DataTable Items="orphans.Files" RowKey="f => f.Id" AriaLabel="Неиспользуемые файлы">
                         <Columns>
                             <DataColumn TItem="StoredFileDto" Title="Файл" SortBy="f => f.OriginalName ?? f.ExternalUrl">
                                 <span class="break-all">@(context.OriginalName ?? context.ExternalUrl)</span>
@@ -101,7 +103,7 @@
     private async Task DeleteAsync()
     {
         if (_report is not { Files.Count: > 0 } report
-            || !await Dialogs.ConfirmDeleteAsync("Удалить сирот?", $"Файлов: {report.Files.Count}, {FormatSize(report.TotalBytes)}. Строки и объекты в хранилище."))
+            || !await Dialogs.ConfirmDeleteAsync("Удалить неиспользуемые файлы?", $"Файлов: {report.Files.Count}, {FormatSize(report.TotalBytes)}. Строки и объекты в хранилище."))
         {
             return;
         }

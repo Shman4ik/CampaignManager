@@ -11,12 +11,13 @@
 @* Кампания и её участники. В v1 этого адреса не было, хотя на него вели ссылки из сценария и помощника
    создания (AUDIT, «Битая ссылка»). Здесь — имя в кампании (псевдоним), выход игрока, исключение
    игрока Хранителем. Кнопки — по флагам из API; права решает сервер. *@
-<PageHeader Title="@(_details?.Campaign.Name ?? "Кампания")" Game="true">
+<PageHeader Title="@(_details?.Campaign.Name ?? "Кампания")" Subtitle="@Subtitle" Game="true"
+            DocumentTitle="@(_details is null ? "Кампания" : $"Кампания: {_details.Campaign.Name}")">
     <Actions>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
+        <Button Small="true" Icon="fa-pen-nib" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
         @if (_details?.Campaign.CanEdit == true)
         {
-            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="() => _formOpen = true">Изменить</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => _formOpen = true">Изменить</Button>
         }
     </Actions>
 </PageHeader>
@@ -34,47 +35,22 @@
         @{
             var details = loaded!;
             var campaign = details.Campaign;
+            var active = campaign.Status != CampaignStatus.Completed;
         }
-        <section class="cm-section">
-            <div class="cm-card">
-                <div class="cm-card-body">
-                    <div class="mb-3 flex flex-wrap items-center gap-1.5">
-                        <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
-                        <Badge Tone="Tone.Neutral">@CampaignLabels.Kind(campaign.Kind)</Badge>
-                        <Badge Tone="Tone.Stone">@CampaignLabels.Era(campaign.Era)</Badge>
-                        @if (campaign.MyRole is { } role)
-                        {
-                            <Badge Tone="Tone.Info">Вы: @CampaignLabels.Role(role)</Badge>
-                        }
-                    </div>
-                    <div class="cm-meta">
-                        <span><span class="cm-meta-label">Создана:</span> @LocalTime.Date(campaign.CreatedAt)</span>
-                        <span><span class="cm-meta-label">Игроков:</span> @campaign.PlayerCount</span>
-                    </div>
-                </div>
-                @if (campaign.CanDelete || details.CanLeave)
-                {
-                    <div class="cm-card-footer">
-                        @if (details.CanLeave)
-                        {
-                            <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-right-from-bracket"
-                                    OnClick="() => RemoveAsync(details.Members.First(m => m.IsMe))">Выйти из кампании</Button>
-                        }
-                        @if (campaign.CanDelete)
-                        {
-                            <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="DeleteAsync">Удалить кампанию</Button>
-                        }
-                    </div>
-                }
-            </div>
-        </section>
+        @* Хранителю без игроков — как они попадают в кампанию (сказано только здесь и на главной). *@
+        @if (campaign.CanEdit && campaign.PlayerCount == 0 && active)
+        {
+            <Alert Tone="Tone.Info" ShowIcon="true" Title="Игроков пока нет">
+                Кампания видна всем вошедшим на главной в блоке «Можно вступить» — игрок вступает сам и появляется здесь.
+            </Alert>
+        }
 
-        <section class="cm-section" aria-labelledby="members-title">
-            <div class="cm-section-header"><h2 id="members-title" class="cm-section-title">Участники (@details.Members.Count)</h2></div>
+        <section class="cm-section" aria-label="Участники">
             <div class="cm-card">
+                <SectionHeader Title="Участники" Count="details.Members.Count" />
                 @foreach (var member in details.Members)
                 {
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="member.UserId">
+                    <div class="flex items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="member.UserId">
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-primary-800">@CampaignLabels.Person(member.Name)</span>
@@ -88,29 +64,66 @@
                                 }
                             </div>
                             <div class="text-sm text-primary-500">
-                                @(member.Alias is null ? "Имя из профиля" : "Имя в этой кампании") · с @LocalTime.Date(member.JoinedAt)
+                                В кампании с @LocalTime.Date(member.JoinedAt)@(member.Alias is null ? "" : " · имя задано для этой кампании")
                             </div>
                         </div>
-                        <div class="flex flex-wrap gap-2">
-                            @if (member.CanRename)
-                            {
-                                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-signature" OnClick="() => StartRename(member)">Имя в кампании</Button>
-                            }
-                            @if (member.CanRemove && !member.IsMe)
-                            {
-                                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-user-minus" OnClick="() => RemoveAsync(member)">Исключить</Button>
-                            }
-                        </div>
+                        @{
+                            var canRemove = member.CanRemove && !member.IsMe && active;
+                        }
+                        @if (member.CanRename || canRemove)
+                        {
+                            <RowMenu AriaLabel="@($"Действия: {CampaignLabels.Person(member.Name)}")">
+                                <ChildContent>
+                                    @if (member.CanRename)
+                                    {
+                                        <RowMenuItem Icon="fa-signature" OnClick="() => StartRename(member)">Имя в кампании</RowMenuItem>
+                                    }
+                                </ChildContent>
+                                <Danger>
+                                    @if (canRemove)
+                                    {
+                                        <RowMenuItem Icon="fa-user-minus" Danger="true" OnClick="() => RemoveAsync(member)">Исключить</RowMenuItem>
+                                    }
+                                </Danger>
+                            </RowMenu>
+                        }
                     </div>
                 }
             </div>
         </section>
+
+        <p class="cm-text-muted">Создана @LocalTime.Date(campaign.CreatedAt)</p>
+
+        @* Редкое и необратимое — внизу, а не первым на экране (правило 7). *@
+        @if (campaign.CanDelete || details.CanLeave)
+        {
+            <section class="cm-section mt-6" aria-label="Опасная зона">
+                <div class="cm-card">
+                    <SectionHeader Title="Опасная зона" />
+                    @if (details.CanLeave)
+                    {
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            <p class="min-w-0 flex-1 basis-64 text-sm text-primary-700">Журнал станет вам недоступен, лист останется у вас без кампании.</p>
+                            <Button Variant="ButtonVariant.OutlineError" Icon="fa-right-from-bracket"
+                                    OnClick="() => RemoveAsync(details.Members.First(m => m.IsMe))">Выйти из кампании</Button>
+                        </div>
+                    }
+                    @if (campaign.CanDelete)
+                    {
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            <p class="min-w-0 flex-1 basis-64 text-sm text-primary-700">Удалится вместе с журналом встреч и прохождениями.</p>
+                            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="DeleteAsync">Удалить кампанию</Button>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
         </ChildContent>
     </AsyncContent>
 </div>
 
 <CampaignFormModal Open="_formOpen" Campaign="_details?.Campaign" OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
-<MemberNameModal Open="_renaming is not null"
+<MemberNameModal Open="_renaming is not null" ForSelf="@(_renaming?.IsMe ?? true)"
                  Title="@(_renaming?.IsMe == true ? "Ваше имя в кампании" : $"Имя в кампании: {CampaignLabels.Person(_renaming?.Name)}")"
                  Value="@_renaming?.Alias" ProfileName="@(_renaming?.Alias is null ? _renaming?.Name : null)"
                  Busy="_busy" Error="@_renameError" OnSave="RenameAsync" OnClose="() => _renaming = null" />
@@ -124,6 +137,17 @@
     private CampaignMemberDto? _renaming;
     private string? _renameError;
     private bool _busy;
+
+    /// <summary>Статус, вид, эпоха и моя роль — одной серой строкой под названием, а не четырьмя бейджами.</summary>
+    private string? Subtitle => _details?.Campaign is { } c
+        ? string.Join(" · ", new[]
+        {
+            CampaignLabels.Status(c.Status),
+            CampaignLabels.Kind(c.Kind),
+            CampaignLabels.Era(c.Era),
+            c.MyRole is { } role ? $"вы — {CampaignLabels.Role(role)}" : null,
+        }.Where(part => part is not null))
+        : null;
 
     /// <summary>404 — кампании нет или я в ней не состою (сервер их не различает): пустое место, а не ошибка.</summary>
     private async Task<CampaignDetailsDto?> LoadAsync(CancellationToken cancellationToken)
@@ -190,10 +214,11 @@
                 ConfirmText = "Выйти",
                 Details = "Вернуться можно, вступив снова с главной.",
             }
-            : new ConfirmRequest($"Исключить {CampaignLabels.Person(member.Name)}?",
-                "Игрок потеряет доступ к журналу. Его лист останется у него — без кампании.")
+            : new ConfirmRequest("Исключить игрока?", "Он потеряет доступ к журналу. Его лист останется у него — без кампании.")
             {
+                Subject = CampaignLabels.Person(member.Name),
                 ConfirmText = "Исключить",
+                Details = "Можно вернуть: игрок вступит снова с главной.",
             });
         if (!confirmed)
         {
@@ -228,7 +253,11 @@
 
         var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
             "Удалить кампанию?",
-            $"«{campaign.Name}» удалится вместе с журналом встреч и прохождениями. Листы игроков останутся у них, НПС кампании вернутся в библиотеку."));
+            "Удалится вместе с журналом встреч и прохождениями. Листы игроков останутся у них, НПС кампании вернутся в библиотеку.")
+        {
+            Subject = campaign.Name,
+            ConfirmText = "Удалить кампанию",
+        });
         if (!confirmed)
         {
             return;

@@ -11,26 +11,20 @@
 
 @* Главная. Гостю кампаний не показывает вовсе (v1 отдавал анониму названия и почты Хранителей) и
    в API не ходит; вошедшему — один GET /api/v1/home: открытые ваншоты, свои кампании (Хранителю — с
-   игроками, листами и НПС), доступные для вступления. Почт нет нигде: люди — по имени в кампании. *@
+   игроками, листами и НПС), доступные для вступления. Почт нет нигде: люди — по имени в кампании.
+   Порядок — по важности за столом: свои кампании (там «Открыть лист»), затем открытая запись на ваншоты и «Можно
+   вступить». Завершённые кампании — строки в одной карточке под активными. Все блоки на одной сетке (1 колонка,
+   с lg — 2). *@
 <PageHeader Title="Главная" />
 
 <div class="cm-page">
     <AuthorizeView>
         <Authorized>
             <AsyncContent @ref="_home" Load="Api.GetHomeAsync" LoadingMessage="Загружаю кампании…" Context="home">
-                @if (home.OneShots.Count > 0)
-                {
-                    <section class="cm-section" aria-labelledby="home-oneshots">
-                        <div class="cm-section-header"><h2 id="home-oneshots" class="cm-section-title">Ваншоты — открыта запись</h2></div>
-                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                            @foreach (var run in home.OneShots)
-                            {
-                                <OneShotCard Run="run" OnChanged="ReloadAsync" @key="run.RunId" />
-                            }
-                        </div>
-                    </section>
+                @{
+                    var current = home.Mine.Where(c => !HomeCampaignCard.IsCompleted(c)).ToList();
+                    var finished = home.Mine.Where(HomeCampaignCard.IsCompleted).ToList();
                 }
-
                 <section class="cm-section" aria-labelledby="home-mine">
                     <div class="cm-section-header">
                         <h2 id="home-mine" class="cm-section-title">Ваши кампании</h2>
@@ -41,35 +35,62 @@
                     @if (home.Mine.Count == 0)
                     {
                         <EmptyState Icon="fa-map" Title="Вы пока ни в одной кампании."
-                                    Message="@(home.Available.Count > 0 ? "Вступите в кампанию ниже — Хранитель увидит вас среди игроков." : "Когда Хранитель заведёт кампанию, она появится здесь.")" />
+                                    Message="@(home.Available.Count > 0 || home.OneShots.Count > 0 ? "Вступите в кампанию ниже — Хранитель увидит вас среди игроков." : "Когда Хранитель заведёт кампанию, она появится здесь.")" />
                     }
                     else
                     {
-                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                            @foreach (var campaign in home.Mine)
-                            {
-                                <HomeCampaignCard Campaign="campaign" @key="campaign.Id" />
-                            }
-                        </div>
+                        @if (current.Count > 0)
+                        {
+                            <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                @foreach (var campaign in current)
+                                {
+                                    <HomeCampaignCard Campaign="campaign" @key="campaign.Id" />
+                                }
+                            </div>
+                        }
+
+                        @if (finished.Count > 0)
+                        {
+                            <h3 class="@Css.Join("mb-2 text-sm font-semibold text-primary-800", current.Count > 0 ? "mt-4" : null)">Завершённые (@finished.Count)</h3>
+                            <div class="cm-card">
+                                @foreach (var campaign in finished)
+                                {
+                                    <HomeCampaignCard Campaign="campaign" @key="campaign.Id" />
+                                }
+                            </div>
+                        }
                     }
                 </section>
+
+                @if (home.OneShots.Count > 0)
+                {
+                    <section class="cm-section" aria-labelledby="home-oneshots">
+                        <div class="cm-section-header"><h2 id="home-oneshots" class="cm-section-title">Ваншоты — открыта запись</h2></div>
+                        <div class="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+                            @foreach (var run in home.OneShots)
+                            {
+                                <OneShotCard Run="run" StartCollapsed="true" OnChanged="ReloadAsync" @key="run.RunId" />
+                            }
+                        </div>
+                    </section>
+                }
 
                 @if (home.Available.Count > 0)
                 {
                     <section class="cm-section" aria-labelledby="home-available">
                         <div class="cm-section-header"><h2 id="home-available" class="cm-section-title">Можно вступить</h2></div>
-                        <div class="cm-card">
+                        <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
                             @foreach (var campaign in home.Available)
                             {
-                                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0" @key="campaign.Id">
-                                    <div class="min-w-0 flex-1">
+                                <div class="cm-card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" @key="campaign.Id">
+                                    <div class="min-w-0 flex-1 basis-48">
                                         <div class="font-semibold text-primary-800">@campaign.Name</div>
                                         <div class="cm-meta">
                                             @if (campaign.KeeperName is { } keeperName)
                                             {
                                                 <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
                                             }
-                                            <span>с @LocalTime.Date(campaign.CreatedAt)</span>
+                                            <span>создана @LocalTime.Date(campaign.CreatedAt)</span>
                                             @if (campaign.Kind == CampaignKind.OneShot)
                                             {
                                                 <Badge Tone="Tone.Neutral">Ваншот</Badge>
@@ -94,11 +115,13 @@
             <section class="cm-section">
                 <div class="cm-card">
                     <div class="cm-card-body flex flex-col items-start gap-3">
-                        <h2 class="cm-h4 cm-title-serif">Зов Ктулху: кампании, сыщики, сценарии</h2>
+                        <h2 class="cm-h4 cm-title-serif">Campaign Manager</h2>
                         <p class="cm-text-muted max-w-prose">
-                            Войдите, чтобы увидеть свои кампании, вести лист сыщика и записаться на ваншот.
+                            Рабочее место для игр по «Зову Ктулху» (7-я редакция): кампании, листы сыщиков, сценарии и журнал встреч.
+                            Войти можно через Google или по почте и паролю — такие учётные записи заводит администратор.
                         </p>
                         <Button Href="login" Icon="fa-right-to-bracket">Войти</Button>
+                        <InfoLinks />
                     </div>
                 </div>
             </section>

@@ -1,12 +1,30 @@
 @page "/not-found"
+@inject NavigationManager Navigation
 
+@* Один заголовок (в шапке) и пояснение без карточки-заглушки ради одной кнопки. Адрес показан: опечатку видно сразу.
+   Серверный 404 приходит через /not-found (адрес потерян) — тогда строки с адресом нет. *@
 <PageHeader Title="Страница не найдена" />
 
 <div class="cm-page">
-    <EmptyState Icon="fa-map-signs" Title="По этому адресу ничего нет"
-                Message="Возможно, ссылка устарела или раздел ещё не перенесён в 2.0.">
-        <Actions>
+    <div class="cm-stack">
+        <p class="text-primary-700">Возможно, ссылка устарела.</p>
+        @if (Address is { } address)
+        {
+            <p class="text-sm text-primary-500" data-testid="missing-address">Адрес: <span class="break-all font-mono">@address</span></p>
+        }
+        <div class="cm-btn-row">
             <Button Href="" Icon="fa-house">На главную</Button>
-        </Actions>
-    </EmptyState>
+        </div>
+    </div>
 </div>
+
+@code {
+    private string? Address
+    {
+        get
+        {
+            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+            return path is "/" or "/not-found" ? null : path;
+        }
+    }
+}

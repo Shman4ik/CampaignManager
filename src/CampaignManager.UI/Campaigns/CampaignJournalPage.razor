@@ -12,7 +12,7 @@
    Нет кампании и нет доступа сервер не различает (404) — страница тоже. *@
 <PageHeader Title="@(_journal is null ? "Журнал встреч" : $"Журнал: {_journal.CampaignName}")">
     <Actions>
-        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Href="@($"campaigns/{CampaignId}")">Кампания</Button>
+        <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-arrow-left" Href="@($"campaigns/{CampaignId}")">Кампания</Button>
         @if (_journal?.CanEdit == true)
         {
             <Button Small="true" Icon="fa-plus" OnClick="() => OpenEditor(null)">Новая встреча</Button>
@@ -34,29 +34,23 @@
             }
             @if (journal.Sessions.Count == 0)
             {
-                <EmptyState Icon="fa-book-open" Title="Записей пока нет."
-                            Message="@(journal.CanEdit ? "После встречи запишите, что произошло: хронику увидят игроки, заметки — только вы." : "Хранитель ещё не вёл журнал этой кампании.")">
-                    <Actions>
-                        @if (journal.CanEdit)
-                        {
-                            <Button Icon="fa-plus" OnClick="() => OpenEditor(null)">Новая встреча</Button>
-                        }
-                    </Actions>
-                </EmptyState>
+                @* Кнопка «Новая встреча» одна — в шапке; здесь только строка, без копии кнопки. *@
+                <EmptyState Compact="true"
+                            Title="@(journal.CanEdit ? "Записей пока нет. После встречи запишите хронику: игроки увидят её, заметки останутся только у вас." : "Хранитель ещё не вёл журнал этой кампании.")" />
             }
             else
             {
-                <section class="cm-section" aria-labelledby="journal-title">
-                    <div class="cm-section-header">
-                        <h2 id="journal-title" class="cm-section-title">Встречи (@journal.Sessions.Count)</h2>
-                    </div>
+                <section class="cm-section" aria-label="Встречи">
                     <div class="cm-card">
+                        <SectionHeader Title="Встречи" Count="journal.Sessions.Count" />
                         @foreach (var session in journal.Sessions)
                         {
                             var isLatest = session.Id == journal.Sessions[0].Id;
+                            var open = _open.Contains(session.Id);
+                            var hasMore = !string.IsNullOrWhiteSpace(session.Summary) || !string.IsNullOrWhiteSpace(session.KeeperNotes);
                             <article class="flex flex-col gap-3 border-t border-primary-200 px-4 py-4 first:border-t-0" @key="session.Id"
                                      aria-labelledby="@($"session-{session.Id}")">
-                                <div class="flex flex-wrap items-start gap-x-4 gap-y-2">
+                                <div class="flex items-start gap-x-4 gap-y-2">
                                     <div class="min-w-0 flex-1">
                                         <div id="@($"session-{session.Id}")" class="cm-meta">
                                             <span class="font-semibold text-primary-700">Встреча №@session.Number</span>
@@ -71,10 +65,14 @@
                                     </div>
                                     @if (journal.CanEdit)
                                     {
-                                        <div class="flex shrink-0 flex-wrap gap-2">
-                                            <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="() => OpenEditor(session)">Изменить</Button>
-                                            <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="() => DeleteAsync(session)">Удалить</Button>
-                                        </div>
+                                        <RowMenu AriaLabel="@($"Действия: встреча №{session.Number}")">
+                                            <ChildContent>
+                                                <RowMenuItem Icon="fa-pen" OnClick="() => OpenEditor(session)">Изменить</RowMenuItem>
+                                            </ChildContent>
+                                            <Danger>
+                                                <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(session)">Удалить</RowMenuItem>
+                                            </Danger>
+                                        </RowMenu>
                                     }
                                 </div>
 
@@ -101,15 +99,28 @@
                                     </div>
                                 }
 
-                                <Markdown Text="@session.Summary" />
+                                @* Запись свёрнута до трёх строк, «Читать полностью» раскрывает хронику и заметки: три встречи
+                                   не должны быть тремя экранами прокрутки. Заголовки внутри хроники мельче заголовка встречи. *@
+                                <Markdown Text="@session.Summary" class="@Css.Join(MarkdownHeadings, open ? null : "line-clamp-3")" />
 
-                                @if (!string.IsNullOrWhiteSpace(session.KeeperNotes))
+                                @if (open && !string.IsNullOrWhiteSpace(session.KeeperNotes))
                                 {
                                     <div class="border-l-4 border-secondary-300 bg-secondary-50 py-2 pr-3 pl-3">
-                                        <div class="mb-1 text-xs font-bold tracking-wide text-secondary-700 uppercase">
+                                        <div class="mb-1 text-sm font-semibold text-secondary-700">
                                             <i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>Заметки Хранителя
                                         </div>
-                                        <Markdown Text="@session.KeeperNotes" />
+                                        <Markdown Text="@session.KeeperNotes" class="@MarkdownHeadings" />
+                                    </div>
+                                }
+
+                                @if (hasMore)
+                                {
+                                    <div>
+                                        <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm" aria-expanded="@(open ? "true" : "false")"
+                                                data-testid="session-toggle" @onclick="() => Toggle(session.Id)">
+                                            <i class="fa-solid @(open ? "fa-chevron-up" : "fa-chevron-down")" aria-hidden="true"></i>
+                                            <span>@(open ? "Свернуть" : "Читать полностью")</span>
+                                        </button>
                                     </div>
                                 }
 
@@ -118,14 +129,14 @@
                                 @if (session.ScenarioCompleted && isLatest)
                                 {
                                     <Alert Tone="Tone.Info" Small="true" Icon="fa-graduation-cap" class="mb-0"
-                                           Title="Фаза развития сыщиков (стр. 92)">
+                                           Title="Фаза развития сыщиков">
                                         <p>
                                             Откройте лист сыщика и проведите фазу развития: проверки отмеченных навыков,
-                                            Рассудок за навыки от 90%, самолечение, Средства.
+                                            Рассудок за навыки от 90%, самолечение, Средства. <BookRef Page="92" />
                                         </p>
                                         @if (journal.Investigators.Count > 0)
                                         {
-                                            <div class="mt-2 flex flex-wrap gap-2">
+                                            <div class="cm-btn-row mt-2">
                                                 @foreach (var investigator in journal.Investigators)
                                                 {
                                                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user"
@@ -161,6 +172,19 @@
     private CampaignJournalDto? _journal;
     private bool _editorOpen;
     private CampaignSessionDto? _editing;
+    private readonly HashSet<Guid> _open = [];
+
+    /// <summary>Markdown-заголовки хроники мельче заголовка встречи и без книжной гарнитуры: иначе «Что было» спорит с названием.</summary>
+    private const string MarkdownHeadings =
+        "[&_h1]:font-sans [&_h1]:text-base [&_h1]:font-semibold [&_h2]:font-sans [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-sans [&_h3]:text-sm [&_h3]:font-semibold";
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+        {
+            _open.Add(id);
+        }
+    }
 
     private static string InvestigatorLabel(JournalInvestigator investigator) =>
         investigator.PlayerName is { } player ? $"{investigator.Name} ({player})" : investigator.Name;
@@ -196,8 +220,8 @@
 
     private async Task DeleteAsync(CampaignSessionDto session)
     {
-        var title = string.IsNullOrWhiteSpace(session.Title) ? $"№{session.Number}" : $"№{session.Number} «{session.Title}»";
-        if (!await Dialogs.ConfirmDeleteAsync("Удалить запись журнала?", $"Встреча {title} удалится вместе с хроникой и заметками."))
+        var title = string.IsNullOrWhiteSpace(session.Title) ? $"Встреча №{session.Number}" : $"Встреча №{session.Number}: {session.Title}";
+        if (!await Dialogs.ConfirmDeleteAsync("запись журнала", title, "Удалится вместе с хроникой и заметками.", reversible: false))
         {
             return;
         }

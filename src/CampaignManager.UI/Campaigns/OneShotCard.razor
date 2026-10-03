@@ -8,10 +8,10 @@
 @* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и прегены — кто какого занял.
    Бронь (T2.5c): «Забронировать» у свободного прегена, пока у меня нет брони в этой игре и я её не веду (CanReserve);
    у своего — «Лист» (копия прегена у меня в кампании) и «Снять бронь»; ведущий снимает любую (CanRelease). Флаги — с
-   сервера, решает он же. Длинный анонс прокручивается внутри карточки, а не растягивает главную. *@
+   сервера, решает он же. Анонс сжат до трёх строк («Подробнее»), прегены — за кнопкой «Выбрать сыщика» (StartCollapsed). *@
 <article class="cm-card flex flex-col" aria-labelledby="@($"run-{Run.RunId}")">
     <div class="cm-card-header">
-        <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48 truncate">@Run.ScenarioName</h3>
+        <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48">@Run.ScenarioName</h3>
         @if (Run.IsMine)
         {
             <Badge Tone="Tone.Info" Icon="fa-book-skull">Вы ведёте</Badge>
@@ -19,7 +19,7 @@
     </div>
     <div class="cm-card-body cm-stack flex-1">
         <div>
-            <div class="cm-meta mb-2">
+            <div class="cm-meta">
                 @if (Run.ScheduledAt is { } when)
                 {
                     <span><i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@LocalTime.DateTime(when)</span>
@@ -32,17 +32,32 @@
                 {
                     <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
                 }
+                <span>Свободно @Run.Pregens.Count(p => !p.IsReserved) из @Run.Pregens.Count</span>
             </div>
             @if (!string.IsNullOrWhiteSpace(Run.Announcement))
             {
-                <Markdown Text="@Run.Announcement" class="max-h-60 overflow-y-auto" />
+                @* Анонс сжат до трёх строк: вложенной прокрутки нет (на тач-экране она ловила жест страницы). *@
+                <div class="mt-2">
+                    <Markdown Text="@Run.Announcement" class="@(_announcementOpen ? null : "line-clamp-3")" />
+                    <button type="button" class="cm-btn cm-btn-ghost cm-btn-sm mt-1" aria-expanded="@(_announcementOpen ? "true" : "false")"
+                            data-testid="announcement-toggle" @onclick="() => _announcementOpen = !_announcementOpen">
+                        @(_announcementOpen ? "Свернуть описание" : "Подробнее")
+                    </button>
+                </div>
             }
         </div>
 
+        @if (_collapsed)
+        {
+            <div>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-users" data-testid="pregens-open"
+                        OnClick="() => _collapsed = false">Выбрать сыщика</Button>
+            </div>
+        }
+        else
+        {
         <div>
-            <h4 class="cm-section-title mb-1">
-                Персонажи · свободно @Run.Pregens.Count(p => !p.IsReserved) из @Run.Pregens.Count
-            </h4>
+            <h4 class="mb-1 text-sm font-semibold text-primary-800">Готовые сыщики</h4>
             @if (Run.Pregens.Count == 0)
             {
                 <p class="cm-text-muted">Хранитель ещё не добавил прегенов.</p>
@@ -95,16 +110,24 @@
                 </ul>
             }
         </div>
+        }
     </div>
 </article>
 
 @code {
     private Guid? _busy;
+    private bool _collapsed;
+    private bool _announcementOpen;
 
     [Parameter, EditorRequired] public HomeOneShotDto Run { get; set; } = null!;
 
     /// <summary>Бронь взята или снята — главной перечитать себя (ваншот появится среди моих кампаний).</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>На главной карточка сложена до строки с кнопкой «Выбрать сыщика»: объявление не вытесняет «Открыть лист».</summary>
+    [Parameter] public bool StartCollapsed { get; set; }
+
+    protected override void OnInitialized() => _collapsed = StartCollapsed;
 
     private async Task ReserveAsync(HomePregenDto pregen)
     {
