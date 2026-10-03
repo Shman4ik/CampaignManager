@@ -8,7 +8,7 @@
    документ и дёргало автосохранение, а при уходе соседа заметка осталась бы без адресата (знание v1). *@
 <section data-testid="fellows">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="cm-section-title">Знакомые сыщики</h3>
+        <h3 class="cm-card-title">Знакомые сыщики</h3>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddManual">Добавить знакомого</Button>
     </div>
     @if (_party is null)
@@ -21,15 +21,33 @@
     }
     else
     {
+        @* Поле заметки — по касанию имени (g2 6.2): три одинаковых пустых поля подряд были стеной. У знакомого с заметкой она
+           видна текстом под именем. *@
         @foreach (var member in _party)
         {
-            <div class="grid grid-cols-1 gap-2 border-t border-primary-200 py-2 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" @key="member.CharacterId">
-                <div>
-                    <div class="font-semibold text-primary-900">@member.Name</div>
-                    <div class="text-sm text-primary-600">@string.Join(" · ", new[] { member.PlayerName, member.Occupation }.Where(p => !string.IsNullOrWhiteSpace(p)))</div>
-                </div>
-                <input class="cm-input" placeholder="Что сыщик думает о нём" aria-label="@($"Заметка: {member.Name}")"
-                       value="@(EntryFor(member.CharacterId)?.Note ?? "")" @onchange="e => SetNote(member, e)" />
+            var note = EntryFor(member.CharacterId)?.Note ?? "";
+            var open = _open == member.CharacterId;
+            <div class="border-t border-primary-200 first:border-t-0" @key="member.CharacterId" data-testid="fellow-row">
+                <button type="button" class="flex min-h-8 w-full items-start justify-between gap-2 py-1 text-left" aria-expanded="@(open ? "true" : "false")"
+                        aria-label="@($"Заметка о знакомом: {member.Name}")" data-testid="fellow-toggle" @onclick="() => Toggle(member.CharacterId)">
+                    <span class="min-w-0">
+                        <span class="font-semibold text-primary-900">@member.Name</span>
+                        @if (Meta(member) is { Length: > 0 } meta)
+                        {
+                            <span class="ml-1 text-sm text-primary-600">· @meta</span>
+                        }
+                        @if (!open && note.Length > 0)
+                        {
+                            <span class="block text-sm text-primary-700">@note</span>
+                        }
+                    </span>
+                    <i class="@Css.Join("fa-solid mt-1.5 shrink-0 text-xs text-primary-500", open ? "fa-chevron-up" : "fa-pen")" aria-hidden="true"></i>
+                </button>
+                @if (open)
+                {
+                    <input class="cm-input mb-2" @ref="_noteInput" placeholder="Что сыщик думает о нём" aria-label="@($"Заметка: {member.Name}")"
+                           value="@note" @onchange="e => SetNote(member, e)" />
+                }
             </div>
         }
         @foreach (var entry in Manual)
@@ -47,6 +65,28 @@
 
 @code {
     private IReadOnlyList<PartyMemberDto>? _party;
+    private Guid? _open;
+
+    private static string Meta(PartyMemberDto member) =>
+        string.Join(" · ", new[] { member.PlayerName, member.Occupation }.Where(p => !string.IsNullOrWhiteSpace(p)));
+    private ElementReference _noteInput;
+    private bool _focusNote;
+
+    /// <summary>Касание имени открывает заметку (одну за раз) и ставит в неё курсор; повторное — закрывает.</summary>
+    private void Toggle(Guid id)
+    {
+        _open = _open == id ? null : id;
+        _focusNote = _open is not null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusNote)
+            return;
+
+        _focusNote = false;
+        await _noteInput.FocusAsync();
+    }
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 

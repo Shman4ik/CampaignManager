@@ -17,11 +17,18 @@
         <span class="skill-remove" aria-hidden="true"></span>
     }
     <span class="skill-name">
-        <button type="button" class="skill-name-button" data-testid="@($"skill-open-{Line.Name}")" @onclick="OnOpen">@Line.Name</button>
-        <span class="skill-base">(@Line.BaseValue)</span>
+        @* Название и база — одной строкой без переноса между ними: «(20)» не уезжает на вторую строку одна (g2 3.3). *@
+        <span class="skill-name-line">
+            <button type="button" class="skill-name-button" data-testid="@($"skill-open-{Line.Name}")" @onclick="OnOpen">@Line.Name</button>
+            <span class="skill-base">(@Line.BaseValue)</span>
+        </span>
         @if (Line.SpecializationBonus > 0)
         {
-            <Badge Tone="Tone.Success">+@Line.SpecializationBonus от смежных</Badge>
+            @* «смежных» объясняет касание, а не title=: наведения на iPad нет. *@
+            <TouchPopover AriaLabel="@($"+{Line.SpecializationBonus} от смежных: что это")">
+                <Trigger><Badge Tone="Tone.Success">+@Line.SpecializationBonus от смежных</Badge></Trigger>
+                <Panel>Смежная специализация этого навыка развита выше порога — к базе добавлено +@Line.SpecializationBonus.</Panel>
+            </TouchPopover>
         }
     </span>
     @if (Line.CanBeChecked)
@@ -34,7 +41,7 @@
     else
     {
         @* Мифам и Средствам место под галочку не положено. *@
-        <span class="w-[1.125rem]" aria-hidden="true"></span>
+        <span class="w-5" aria-hidden="true"></span>
     }
     <input type="number" inputmode="numeric" min="0" max="999" class="cm-input cm-input-sm skill-value"
            aria-label="@($"{Line.Name}: значение")" data-testid="@($"skill-value-{Line.Name}")"

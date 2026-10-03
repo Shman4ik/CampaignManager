@@ -25,19 +25,20 @@ public static class BiographyFields
 
     public static IReadOnlyList<BiographyField> Short { get; } =
     [
-        new("appearance", "Описание", "Худощавый, немного заросший, неплохо одевается…", b => b.Appearance, (b, v) => b.Appearance = v),
-        new("traits", "Черты характера", "Любит рептилий, осторожный, вежливый…", b => b.Traits, (b, v) => b.Traits = v) { SupportsSelfHealing = true },
-        new("ideals", "Идеалы и принципы", "Поиск истины, защита невинных…", b => b.IdealsAndPrinciples, (b, v) => b.IdealsAndPrinciples = v) { SupportsSelfHealing = true },
-        new("people", "Значимые люди", "Гвен — подруга по клубу египтологов…", b => b.SignificantPeople, (b, v) => b.SignificantPeople = v) { SupportsSelfHealing = true },
-        new("places", "Важные места", "Рабочий кабинет в Аркхеме, книжная лавка…", b => b.ImportantPlaces, (b, v) => b.ImportantPlaces = v) { SupportsSelfHealing = true },
-        new("possessions", "Ценное имущество", "Осколок метеора, найденный во Франции…", b => b.ValuablePossessions, (b, v) => b.ValuablePossessions = v) { SupportsSelfHealing = true },
-        new("supernatural", "Встречи со сверхъестественным", "Встреча с крысиной тварью…", b => b.SupernaturalEncounters, (b, v) => b.SupernaturalEncounters = v),
-        new("injuries", "Травмы и шрамы", "Рана от пули на левом плече…", b => b.Injuries, (b, v) => b.Injuries = v),
+        new("appearance", "Описание", "Худощавый, заросший…", b => b.Appearance, (b, v) => b.Appearance = v),
+        new("traits", "Черты характера", "Любит рептилий, осторожный…", b => b.Traits, (b, v) => b.Traits = v) { SupportsSelfHealing = true },
+        new("ideals", "Идеалы и принципы", "Поиск истины…", b => b.IdealsAndPrinciples, (b, v) => b.IdealsAndPrinciples = v) { SupportsSelfHealing = true },
+        new("people", "Значимые люди", "Гвен — подруга по клубу…", b => b.SignificantPeople, (b, v) => b.SignificantPeople = v) { SupportsSelfHealing = true },
+        new("places", "Важные места", "Кабинет в Аркхеме…", b => b.ImportantPlaces, (b, v) => b.ImportantPlaces = v) { SupportsSelfHealing = true },
+        new("possessions", "Ценное имущество", "Осколок метеора…", b => b.ValuablePossessions, (b, v) => b.ValuablePossessions = v) { SupportsSelfHealing = true },
+        new("supernatural", "Встречи со сверхъестественным", "Крысиная тварь…", b => b.SupernaturalEncounters, (b, v) => b.SupernaturalEncounters = v),
+        new("injuries", "Травмы и шрамы", "Пуля в левом плече…", b => b.Injuries, (b, v) => b.Injuries = v),
     ];
 
+    /// <summary>«Заметки» — первыми: их пишут по ходу игры чаще, чем предысторию (g2 6.1). Оба поля понимают Markdown.</summary>
     public static IReadOnlyList<BiographyField> Long { get; } =
     [
-        new("backstory", "Предыстория", "История жизни до начала приключений. Можно Markdown.", b => b.Backstory, (b, v) => b.Backstory = v) { IsLong = true },
-        new("notes", "Заметки", "Заметки по ходу игры. Можно Markdown: заголовки, списки, *курсив*.", b => b.Notes, (b, v) => b.Notes = v) { IsLong = true },
+        new("notes", "Заметки", "Заметки по ходу игры", b => b.Notes, (b, v) => b.Notes = v) { IsLong = true },
+        new("backstory", "Предыстория", "История жизни до приключений", b => b.Backstory, (b, v) => b.Backstory = v) { IsLong = true },
     ];
 }

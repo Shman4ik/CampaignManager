@@ -7,7 +7,7 @@
 <Modal Open="@Open" OnClose="CloseAsync" Title="@(_kind == InsanityConditionKind.Phobia ? "Новая фобия" : "Новая мания")">
     <ChildContent>
         <div class="flex flex-col gap-3">
-            @* Segmented, а не тёмная кнопка: главная в окне одна — «Записать». *@
+            @* Segmented, а не тёмная кнопка: главная в окне одна — «Записать». Номеров таблиц в подписях нет (g2 5.5). *@
             <Segmented TValue="InsanityConditionKind" Options="KindOptions" Value="_kind" ValueChanged="SelectKind" Label="Фобия или мания" />
             <div class="flex flex-wrap items-end gap-3">
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="condition-roll"
@@ -16,16 +16,13 @@
                     <input type="number" inputmode="numeric" min="1" max="100" class="cm-input" data-testid="condition-roll-value"
                            value="@_roll" @onchange="SetRoll" />
                 </Field>
-                <Field Label="Или строка таблицы" class="min-w-56 flex-1">
-                    <select class="cm-input" value="@(_roll?.ToString(CultureInfo.InvariantCulture) ?? "")" @onchange="SetRoll">
-                        <option value="">—</option>
-                        @foreach (var entry in InsanityTables.Conditions(_kind))
-                        {
-                            <option value="@entry.Number">@entry.Number. @entry.Name</option>
-                        }
-                    </select>
-                </Field>
             </div>
+            @* Строка из книги — поиском по названию или номеру, а не слепой прокруткой списка из ста строк (g2 7.4.4). *@
+            <Field Label="Или найти по названию" Group="true">
+                <CatalogSearch @key="_searchKey" TItem="InsanityTables.ConditionEntry" Load="LoadEntries" Name="EntryLabel"
+                               Placeholder="@(_kind == InsanityConditionKind.Phobia ? "Название фобии или номер…" : "Название мании или номер…")"
+                               OnSelect="e => Fill(e.Number)" />
+            </Field>
             <Field Label="Название"><input class="cm-input" data-testid="condition-name" @bind="_name" @bind:event="oninput" /></Field>
             <Field Label="Описание" Hint="— и при каких обстоятельствах появилась">
                 <textarea class="cm-input" rows="2" @bind="_description" @bind:event="oninput"></textarea>
@@ -40,7 +37,14 @@
 
 @code {
     private IReadOnlyList<SegmentOption<InsanityConditionKind>> KindOptions =>
-        [.. Kinds.Select(k => new SegmentOption<InsanityConditionKind>(k, $"{(k == InsanityConditionKind.Phobia ? "Фобия" : "Мания")} · табл. {InsanityTables.TableNumeral(k)}"))];
+        [.. Kinds.Select(k => new SegmentOption<InsanityConditionKind>(k, k == InsanityConditionKind.Phobia ? "Фобия" : "Мания"))];
+
+    private int _searchKey;
+
+    private static string EntryLabel(InsanityTables.ConditionEntry entry) => $"{entry.Number}. {entry.Name}";
+
+    private Task<IReadOnlyList<InsanityTables.ConditionEntry>> LoadEntries() =>
+        Task.FromResult<IReadOnlyList<InsanityTables.ConditionEntry>>([.. InsanityTables.Conditions(_kind)]);
 
     private static readonly InsanityConditionKind[] Kinds = [InsanityConditionKind.Phobia, InsanityConditionKind.Mania];
 
@@ -98,6 +102,7 @@
         _roll = roll;
         _name = entry.Name;
         _description = entry.Description;
+        _searchKey++;
     }
 
     private Task CloseAsync() => OpenChanged.InvokeAsync(false);

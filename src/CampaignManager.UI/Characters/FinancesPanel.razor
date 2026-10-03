@@ -6,7 +6,7 @@
    Средствам и эпохе кампании из таблицы II и раздела «Достаток»: подсказка, не правка. *@
 <section data-testid="finances">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="cm-section-title">Финансы</h3>
+        <h3 class="cm-card-title">Финансы</h3>
         @if (!Context.ReadOnly && IsEmpty)
         {
             <Button Variant="ButtonVariant.Secondary" Icon="fa-wand-magic-sparkles" data-testid="finances-fill" OnClick="FillFromCredit">Заполнить по Средствам</Button>
@@ -27,9 +27,19 @@
         <Field Label="Активы, $" class="col-span-2"><input class="cm-input" @bind="Sheet.Finances.Assets" /></Field>
     </div>
     <Field Label="Заметка" class="mt-2"><input class="cm-input" @bind="Sheet.Finances.Note" /></Field>
-    <p class="cm-field-note mt-2">
-        Средства @credit% — «@tier.Name» (@(Context.Era == Era.Modern ? "наше время" : "1920-е")): по таблице II наличные $@tier.CashText,
-        карманные $@tier.PocketMoneyText, активы @tier.AssetsText. Жильё: @lifestyle.Housing Транспорт: @lifestyle.Transport
+    @* Одна строка (g2 4.7): итог по Средствам — только пока поля пусты (то, что вставит «Заполнить по Средствам»); жильё и транспорт —
+       по касанию. Ни эпохи, ни «таблицы II» на листе: это кухня правил. *@
+    <p class="cm-field-note mt-2 flex flex-wrap items-center gap-x-3">
+        <span data-testid="finances-hint">
+            Средства @credit% — @tier.Name@if (IsEmpty)
+            {
+                <text>: наличные $@tier.CashText, карманные $@tier.PocketMoneyText, активы @tier.AssetsText</text>
+            }
+        </span>
+        <TouchPopover AriaLabel="Образ жизни: жильё и транспорт" TriggerClass="sheet-link">
+            <Trigger><i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>Образ жизни</Trigger>
+            <Panel><strong>Жильё:</strong> @lifestyle.Housing <strong>Транспорт:</strong> @lifestyle.Transport</Panel>
+        </TouchPopover>
     </p>
 </section>
 
