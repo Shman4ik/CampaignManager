@@ -287,12 +287,14 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 (`cthulhu.dmnet.dev`) и его выкатка не затронуты.
 
 - **Выкатка.** Push в `master`, задевший `src/**`, `Directory.*.props`, `global.json`, `NuGet.config` или сам
-  воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-beta-deploy.yml` собирает
-  `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и коммитит тег в приватный
+  воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-beta-deploy.yml` делает
+  `dotnet publish` прямо на раннере (в `artifacts/v2`, без анализаторов — их уже прогнал CI), упаковывает
+  его стадией `prebuilt` из `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и коммитит тег в приватный
   `Shman4ik/dmnet-gitops`, `workloads/campaign-manager-beta/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`,
   тот же, что у v1). Argo CD (Application `campaign-manager-beta`, namespace `campaign-manager-beta`)
   катит его за ~90 с. Старые версии пакета чистятся, последние 10 остаются.
-- **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .`. Внутри — только
+- **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .` (цель по
+  умолчанию, `final`, публикует сама внутри образа; `prebuilt` — для деплоя, ей нужен готовый `artifacts/v2`). Внутри — только
   `src/`; Node скопирован в SDK-стадию ради Tailwind (MSBuild-таргет `UI` сам делает `npm ci`).
   Рантайм — `aspnet:10.0-noble-chiseled-extra`, порт 8080, без shell. Проверка локально:
   `wslc run --rm -p 58080:8080 --env-file <файл> campaign-manager-v2` и `curl localhost:58080/health`.

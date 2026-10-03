@@ -3,6 +3,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+ENTRYPOINT ["dotnet", "CampaignManager.Web.dll"]
 
 # Install Node.js for Tailwind CSS compilation via multi-stage copy
 FROM node:26-slim AS node
@@ -29,9 +31,13 @@ WORKDIR "/src/CampaignManager.Web"
 RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish "./CampaignManager.Web.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# This stage is used in production
+# Production deploys publish on the GitHub runner into artifacts/v1 and only package the result
+# (`--target prebuilt`, see .github/workflows/docker-build-deploy.yml): building inside the image
+# re-pulled the SDK image every time, spent ~45 s importing/exporting the GitHub Actions layer
+# cache, and still re-downloaded NuGet packages, since cache mounts don't survive between runners.
+FROM base AS prebuilt
+COPY artifacts/v1/ .
+
+# Default target (the last stage): a local `docker build` still builds everything itself.
 FROM base AS final
-WORKDIR /app
 COPY --from=build /app/publish .
-ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "CampaignManager.Web.dll"]
