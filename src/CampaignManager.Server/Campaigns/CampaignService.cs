@@ -22,7 +22,11 @@ public sealed class CampaignService(
     CurrentUser currentUser,
     ILogger<CampaignService> logger)
 {
-    /// <summary>Кампании, где я участник; администратору — все (он правит и чужие). Новые сверху.</summary>
+    /// <summary>
+    /// Кампании, где я участник; администратору — все (он правит и чужие). Живая игра — первой: активные, на паузе,
+    /// планируемые, завершённые; внутри — новые сверху (игроку с тремя завершёнными кампаниями активная лежала на втором
+    /// экране прокрутки, C1).
+    /// </summary>
     public async Task<IReadOnlyList<CampaignSummaryDto>> ListAsync(CancellationToken cancellationToken)
     {
         var user = await RequireUserAsync(cancellationToken);
@@ -30,7 +34,10 @@ public sealed class CampaignService(
             ? dbContext.Campaigns
             : dbContext.Campaigns.Where(c => c.Members.Any(m => m.UserId == user.Id));
 
-        var rows = await Summaries(campaigns.OrderByDescending(c => c.CreatedAt), user.Id).ToListAsync(cancellationToken);
+        var ordered = campaigns
+            .OrderBy(c => c.Status == CampaignStatus.Active ? 0 : c.Status == CampaignStatus.OnHold ? 1 : c.Status == CampaignStatus.Planning ? 2 : 3)
+            .ThenByDescending(c => c.CreatedAt);
+        var rows = await Summaries(ordered, user.Id).ToListAsync(cancellationToken);
         return [.. rows.Select(row => ToDto(row, user))];
     }
 
@@ -102,10 +109,10 @@ public sealed class CampaignService(
         // Сортировка «дата, затем номер» — в памяти, как в журнале: EF не сортирует по полям record-проекции.
         var lastSession = (await dbContext.CampaignSessions
                 .Where(cs => cs.CampaignId == campaignId)
-                .Select(cs => new { cs.Id, cs.Number, cs.SessionDate, cs.Title })
+                .Select(cs => new { cs.Id, cs.Number, cs.SessionDate, cs.Title, cs.Summary })
                 .ToListAsync(cancellationToken))
             .OrderByDescending(cs => cs.SessionDate).ThenByDescending(cs => cs.Number)
-            .Select(cs => new CampaignLastSessionDto(cs.Id, cs.Number, cs.SessionDate, cs.Title))
+            .Select(cs => new CampaignLastSessionDto(cs.Id, cs.Number, cs.SessionDate, cs.Title, Excerpt(cs.Summary)))
             .FirstOrDefault();
 
         return new CampaignDetailsDto(
@@ -115,6 +122,36 @@ public sealed class CampaignService(
             [.. sheets.Where(ch => ch.Kind == CharacterKind.Npc).Select(ch => Sheet(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status))],
             runs,
             lastSession);
+    }
+
+    /// <summary>Максимум знаков в <see cref="CampaignLastSessionDto.Excerpt"/>.</summary>
+    public const int ExcerptLength = 160;
+
+    /// <summary>
+    /// Первая содержательная строка хроники без разметки Markdown: решётки заголовков, маркеры списка и цитаты, звёздочки
+    /// и подчёркивания выделения; длиннее <see cref="ExcerptLength"/> — обрезается по слову с многоточием.
+    /// </summary>
+    public static string? Excerpt(string? summary)
+    {
+        foreach (var raw in (summary ?? "").Split('\n'))
+        {
+            var line = raw.Trim().TrimStart('#', '>', '-', '*', '+', ' ', '\t').Replace("**", "", StringComparison.Ordinal)
+                .Replace("__", "", StringComparison.Ordinal).Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            if (line.Length <= ExcerptLength)
+            {
+                return line;
+            }
+
+            var cut = line.LastIndexOf(' ', ExcerptLength);
+            return line[..(cut > ExcerptLength / 2 ? cut : ExcerptLength)].TrimEnd(',', ';', ':', ' ') + "…";
+        }
+
+        return null;
     }
 
     /// <summary>

@@ -5,24 +5,30 @@
 @inject ICampaignsApi Api
 
 @* Одна форма на создание и правку кампании (в v1 — две одинаковые модалки в CampaignsPage).
-   Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
+   Создание: «Название» и «Вид» — статус новой кампании всегда «Планирование». Правка: «Название» и «Статус»; вид у существующей
+   кампании только читается (смена кампании в ваншот необратима по смыслу: прохождения, запись) — M2. Эпоху форма не спрашивает
+   вовсе (п. 12): новая кампания — классика, у существующей остаётся её эпоха. Обязательное «Название» — со «*», ошибка — под
+   полем и «Проверьте поля: 1» у кнопки (п. 9). Ошибка сервера остаётся в окне, окно не закрывается; пока идёт запрос, кнопки выключены. *@
 <Modal Open="Open" Title="@(Campaign is null ? "Новая кампания" : "Изменить кампанию")" Size="ModalSize.Small" OnClose="CloseAsync">
     <ChildContent>
         <form id="campaign-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
-            <Field Label="Название" Error="@_nameError">
+            <Field Label="Название" Required="true" Error="@_nameError">
                 <input class="cm-input" maxlength="@CampaignLimits.NameLength" @bind="_name" @bind:event="oninput" @bind:after="ClearNameError"
-                       placeholder="Например: «Маски Ньярлатхотепа»" />
+                       placeholder="Например: Маски Ньярлатхотепа" />
             </Field>
-            @* Подсказка про ваншот — только когда он выбран; у существующей кампании, которую делают ваншотом, — предупреждение. *@
-            <Field Label="Вид" Note="@(_kind == CampaignKind.OneShot ? "Одна игра на готовых сыщиках." : null)">
-                <select class="cm-input" @bind="_kind">
-                    @foreach (var kind in Enum.GetValues<CampaignKind>())
-                    {
-                        <option value="@kind">@CampaignLabels.Kind(kind)</option>
-                    }
-                </select>
-            </Field>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            @if (Campaign is null)
+            {
+                <Field Label="Вид" Note="@(_kind == CampaignKind.OneShot ? "Одна игра на готовых сыщиках." : null)">
+                    <select class="cm-input" @bind="_kind">
+                        @foreach (var kind in Enum.GetValues<CampaignKind>())
+                        {
+                            <option value="@kind">@CampaignLabels.Kind(kind)</option>
+                        }
+                    </select>
+                </Field>
+            }
+            else
+            {
                 <Field Label="Статус">
                     <select class="cm-input" @bind="_status">
                         @foreach (var status in Enum.GetValues<CampaignStatus>())
@@ -31,20 +37,7 @@
                         }
                     </select>
                 </Field>
-                <Field Label="Эпоха">
-                    <select class="cm-input" @bind="_era">
-                        @foreach (var era in Enum.GetValues<Era>())
-                        {
-                            <option value="@era">@CampaignLabels.Era(era)</option>
-                        }
-                    </select>
-                </Field>
-            </div>
-            @if (Campaign is not null && Campaign.Kind != _kind)
-            {
-                <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" class="mb-0">
-                    Вид изменится: «@CampaignLabels.Kind(Campaign.Kind)» → «@CampaignLabels.Kind(_kind)».
-                </Alert>
+                <p class="text-sm text-primary-600" data-testid="campaign-kind"><span class="cm-meta-label">Вид:</span> @CampaignLabels.Kind(Campaign.Kind)</p>
             }
             @if (_error is not null)
             {
@@ -52,9 +45,12 @@
             }
         </form>
     </ChildContent>
+    <FooterHint>
+        <FormErrors Errors="@(_nameError is null ? [] : [_nameError])" Attempt="_attempt" />
+    </FooterHint>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
-        <Button Type="submit" form="campaign-form" Busy="_saving">@(Campaign is null ? "Создать" : "Сохранить")</Button>
+        <Button Type="submit" form="campaign-form" Busy="_saving">@(Campaign is null ? "Создать кампанию" : "Сохранить")</Button>
     </Footer>
 </Modal>
 
@@ -73,7 +69,7 @@
     private string _name = "";
     private CampaignKind _kind;
     private CampaignStatus _status;
-    private Era _era;
+    private int _attempt;
     private string? _nameError;
     private string? _error;
     private bool _saving;
@@ -86,7 +82,6 @@
             _name = Campaign?.Name ?? "";
             _kind = Campaign?.Kind ?? CampaignKind.Campaign;
             _status = Campaign?.Status ?? CampaignStatus.Planning;
-            _era = Campaign?.Era ?? Era.Classic;
             _nameError = null;
             _error = null;
         }
@@ -96,9 +91,10 @@
 
     private async Task SaveAsync()
     {
-        _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        _nameError = string.IsNullOrWhiteSpace(_name) ? "Введите название." : null;
         if (_nameError is not null)
         {
+            _attempt++;
             return;
         }
 
@@ -106,7 +102,8 @@
         _error = null;
         try
         {
-            var input = new CampaignInput(_name.Trim(), _kind, _status, _era);
+            // Вид и эпоха правкой не меняются; новая кампания — «Планирование» и классика.
+            var input = new CampaignInput(_name.Trim(), Campaign?.Kind ?? _kind, Campaign is null ? CampaignStatus.Planning : _status, Campaign?.Era ?? Era.Classic);
             var saved = Campaign is null
                 ? await Api.CreateCampaignAsync(input)
                 : await Api.UpdateCampaignAsync(Campaign.Id, input);

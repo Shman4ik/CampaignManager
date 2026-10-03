@@ -1,8 +1,10 @@
 @implements IDisposable
 @inject NavigationManager Navigation
 
-@* Нижняя панель телефона (уже md): пункты с OnPhoneBar и «Ещё» — лист со всем списком NavMenu,
-   тем же, что в рельсе. Лист — обычный Modal снизу, своих оверлеев нет. *@
+@* Нижняя панель телефона (уже md): пункты с OnPhoneBar и «Ещё» — лист с остальным списком NavMenu, тем же, что в
+   рельсе. Пункты, что уже на панели, в листе не повторяются. Порядок листа — по частоте за столом: остальное основное,
+   справочники, «Система» (администратору), «О проекте» и учётная запись последней (решение оркестратора, g1/S7 и g6/Sh1:
+   справочники игрока были за блоком аккаунта и начинались на y=481 из 651). Лист — обычный Modal снизу, своих оверлеев нет. *@
 <nav class="cm-tabbar" aria-label="Разделы">
     @foreach (var item in Items.Where(i => i.OnPhoneBar))
     {
@@ -23,8 +25,7 @@
 </nav>
 
 <Modal Open="_moreOpen" Title="Ещё" Placement="ModalPlacement.Sheet" OnClose="() => _moreOpen = false">
-    @Account
-    @foreach (var group in Items.GroupBy(i => i.Group))
+    @foreach (var group in Items.Where(i => !i.OnPhoneBar).GroupBy(i => i.Group))
     {
         <div class="cm-sheet-section">@NavMenu.Title(group.Key)</div>
         @foreach (var item in group)
@@ -40,6 +41,7 @@
         }
     }
     @Footer
+    @Account
 </Modal>
 
 @code {
@@ -49,10 +51,10 @@
 
     [Parameter] public IReadOnlyDictionary<string, int>? Badges { get; set; }
 
-    /// <summary>Учётная запись — первой в листе: «Выйти» и кабинет не прячутся под семью справочниками.</summary>
+    /// <summary>Учётная запись — последней в листе: справочники и «Система» важнее за столом, чем «Выйти» и кабинет.</summary>
     [Parameter] public RenderFragment? Account { get; set; }
 
-    /// <summary>Хвост листа: «О проекте».</summary>
+    /// <summary>«О проекте» — перед учётной записью.</summary>
     [Parameter] public RenderFragment? Footer { get; set; }
 
     private int BadgeTotal => Badges?.Values.Where(v => v > 0).Sum() ?? 0;

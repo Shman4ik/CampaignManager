@@ -12,11 +12,13 @@
 @* Кампания и её участники. В v1 этого адреса не было, хотя на него вели ссылки из сценария и помощника
    создания (AUDIT, «Битая ссылка»). Здесь — имя в кампании (псевдоним), выход игрока, исключение
    игрока Хранителем. Кнопки — по флагам из API; права решает сервер. *@
-<PageHeader Title="@(_details?.Campaign.Name ?? "Кампания")" Subtitle="@Subtitle" Game="true"
+@* Название в шапке переносится до двух строк (WrapTitle), а не обрезается и не повторяется вторым заголовком в теле (P4). *@
+<PageHeader Title="@(_details?.Campaign.Name ?? "Кампания")" Subtitle="@Subtitle" Game="true" WrapTitle="true"
             DocumentTitle="@(_details is null ? "Кампания" : $"Кампания: {_details.Campaign.Name}")">
     <Actions>
-        @* Пустой кампании нужно одно: позвать игроков — это главное действие, журнал пока вторичен. *@
-        <Button Small="true" Variant="@(NeedsPlayers ? ButtonVariant.Secondary : ButtonVariant.Primary)" Icon="fa-pen-nib" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
+        @* Главное действие одно: пустой кампании — позвать игроков («Пригласить»), идущей игре — «Играть» в строке прохождения;
+           журнал — главное, когда ни того ни другого нет. Это чтение: значок книги, перо — только у «Новая встреча». *@
+        <Button Small="true" Variant="@(JournalIsMain ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-book-open" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
         @if (_details is { Campaign: { CanEdit: true, Status: not CampaignStatus.Completed } })
         {
             <Button Small="true" Variant="@(NeedsPlayers ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-user-plus" OnClick="() => _inviting = true">Пригласить</Button>
@@ -43,27 +45,40 @@
             var campaign = details.Campaign;
             var active = campaign.Status != CampaignStatus.Completed;
         }
-        @* Заголовок в шапке — одна строка с многоточием: длинное название полностью — здесь, вид и эпоха — тут же.
-           Статус и роль уже в подзаголовке шапки — здесь их не повторяем. *@
-        <div class="cm-stack mb-3" data-testid="campaign-lead">
-            @if (campaign.Name.Length > LongName)
-            {
-                <h2 class="cm-h4 cm-title-serif break-words" data-testid="campaign-full-name">@campaign.Name</h2>
-            }
-            <p class="cm-text-muted" data-testid="campaign-facts">@FactsLine(campaign)</p>
-        </div>
+        @* Название, статус и роль — в шапке; ни строки «Вид · Эпоха» (эпоху по п. 12 не показываем), ни пересказа приглашения
+           Alert-ом (кнопка «Пригласить» в шапке и так главная) тут нет — P4, P6. *@
 
-        @* Хранителю без игроков — как они попадают в кампанию (сказано только здесь и на главной). *@
-        @if (campaign.CanEdit && campaign.PlayerCount == 0 && active)
+        @* Игроку страница — это «что было в прошлый раз»: карточка последней встречи над списком, а не строка мелким серым внизу
+           (P7, решение оркестратора, вариант A). *@
+        @if (!campaign.CanEdit && details.LastSession is { } lastForPlayer)
         {
-            <Alert Tone="Tone.Info" ShowIcon="true">
-                «Пригласить» даёт ссылку на вступление. Игрок может и сам вступить с главной, из блока «Можно вступить».
-            </Alert>
+            <section class="cm-section max-w-3xl" aria-labelledby="last-session-title" data-testid="last-session">
+                <div class="cm-section-header"><h2 id="last-session-title" class="cm-section-title">Последняя встреча</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body flex flex-col gap-2">
+                        <div class="cm-meta">
+                            <span class="font-semibold text-primary-700">Встреча №@lastForPlayer.Number</span>
+                            <span>@LocalTime.Date(lastForPlayer.SessionDate)</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(lastForPlayer.Title))
+                        {
+                            <h3 class="cm-title-serif text-lg">@lastForPlayer.Title</h3>
+                        }
+                        @if (lastForPlayer.Excerpt is { } excerpt)
+                        {
+                            <p class="max-w-prose text-primary-700">@excerpt</p>
+                        }
+                        <div>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"campaigns/{CampaignId}/journal")">Читать журнал</Button>
+                        </div>
+                    </div>
+                </div>
+            </section>
         }
 
-        @* Ландшафт: участники слева, прохождения и НПС — колонкой справа (2:1). Во всю колонку строка участника
+        @* Ландшафт: участники слева, прохождения и НПС — колонкой справа (3:2: в 1:3 «Добавить НПС» не влезало в строку заголовка, P5). Во всю колонку строка участника
            держала «⋯» в ~1000px от имени, а короткие секции пустовали. Игроку правой колонки нет — список по содержимому. *@
-        <div class="@(campaign.CanEdit ? "grid items-start gap-x-7 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "max-w-3xl")">
+        <div class="@(campaign.CanEdit ? "grid items-start gap-x-7 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "max-w-3xl")">
             <div class="min-w-0">
                 <section class="cm-section" aria-label="Участники">
                     <div class="cm-card">
@@ -82,9 +97,6 @@
                                         {
                                             <Badge Tone="Tone.Neutral">Вы</Badge>
                                         }
-                                    </div>
-                                    <div class="text-sm text-primary-500">
-                                        В кампании с @LocalTime.Date(member.JoinedAt)@(member.Alias is null ? "" : " · имя задано для этой кампании")
                                     </div>
                                     @* Сыщики игрока: Хранителю — все листы, игроку — его активный. У Хранителя листов нет. *@
                                     @if (member.Role == CampaignRole.Player)
@@ -142,15 +154,13 @@
                                     <Actions>
                                         @if (active)
                                         {
-                                            <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button>
+                                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button>
                                         }
                                     </Actions>
                                 </SectionHeader>
                                 @if (details.Runs.Count == 0 && active)
                                 {
-                                    <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">
-                                        Игр по сценариям пока нет. Начать можно из сценария — «Играть в кампании».
-                                    </p>
+                                    <p class="cm-empty-compact border-t border-primary-200 px-4 py-3 first:border-t-0">Нет прохождений.</p>
                                 }
                                 @foreach (var run in details.Runs)
                                 {
@@ -170,9 +180,15 @@
                                                 }
                                             </div>
                                         </div>
-                                        @if (run.Status != ScenarioRunStatus.Finished)
+                                        @* «Играть» тёмной — только у идущего прохождения; у запланированного и объявленного — «Начать» вторичной
+                                           (P2: три тёмные кнопки на экране, включая «Играть» у запланированного). *@
+                                        @if (run.Status == ScenarioRunStatus.Running)
                                         {
                                             <Button Small="true" Icon="fa-play" Href="@ScenarioLinks.Play(run.ScenarioId, runId: run.RunId)">Играть</Button>
+                                        }
+                                        else if (run.Status != ScenarioRunStatus.Finished)
+                                        {
+                                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-play" Href="@ScenarioLinks.Play(run.ScenarioId, runId: run.RunId)">Начать</Button>
                                         }
                                     </div>
                                 }
@@ -189,13 +205,13 @@
                                 <Actions>
                                     @if (active)
                                     {
-                                        <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">Добавить НПС</Button>
+                                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">Добавить НПС</Button>
                                     }
                                 </Actions>
                             </SectionHeader>
                             @if (details.Npcs.Count == 0)
                             {
-                                <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">НПС кампании пока нет.</p>
+                                <p class="cm-empty-compact border-t border-primary-200 px-4 py-3 first:border-t-0">Нет НПС.</p>
                             }
                             else
                             {
@@ -213,13 +229,13 @@
             }
         </div>
 
-        <p class="cm-text-muted">
-            Создана @LocalTime.Date(campaign.CreatedAt)
-            @if (details.LastSession is { } last)
-            {
-                <span> · <a href="@($"campaigns/{CampaignId}/journal")" class="inline-flex min-h-11 items-center underline hover:no-underline">Последняя встреча №@last.Number@(string.IsNullOrWhiteSpace(last.Title) ? "" : $" «{last.Title}»"), @LocalTime.Date(last.SessionDate)</a></span>
-            }
-        </p>
+        @* Хранителю — одна строка внизу со ссылкой на последнюю встречу; игроку то же сказано карточкой над списком. *@
+        @if (campaign.CanEdit && details.LastSession is { } last)
+        {
+            <p class="cm-text-muted">
+                <a href="@($"campaigns/{CampaignId}/journal")" class="inline-flex min-h-8 items-center underline hover:no-underline">Последняя встреча №@last.Number@(string.IsNullOrWhiteSpace(last.Title) ? "" : $": {last.Title}"), @LocalTime.Date(last.SessionDate)</a>
+            </p>
+        }
 
         @* Редкое и необратимое — внизу, а не первым на экране (правило 7). *@
         @* Выйти из завершённой кампании не предлагаем: журнал — архив, который игрок потерял бы. *@
@@ -228,7 +244,7 @@
         }
         @if (campaign.CanDelete || canLeave)
         {
-            <section class="cm-section mt-6 max-w-2xl" aria-label="Опасная зона">
+            <section class="cm-section mt-6" aria-label="Опасная зона">
                 <div class="cm-card">
                     <SectionHeader Title="Опасная зона" />
                     @if (canLeave)
@@ -253,7 +269,7 @@
     </AsyncContent>
 </div>
 
-<InviteModal Open="_inviting" CampaignName="@_details?.Campaign.Name" Link="@InviteLink" OnClose="() => _inviting = false" />
+<InviteModal Open="_inviting" Link="@InviteLink" OnClose="() => _inviting = false" />
 <CampaignFormModal Open="_formOpen" Campaign="_details?.Campaign" OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
 <MemberNameModal Open="_renaming is not null" ForSelf="@(_renaming?.IsMe ?? true)"
                  Title="@(_renaming?.IsMe == true ? "Ваше имя в кампании" : $"Имя в кампании: {CampaignLabels.Person(_renaming?.Name)}")"
@@ -274,25 +290,23 @@
     private string? _renameError;
     private bool _busy;
 
-    /// <summary>Длиннее этого название не помещается в шапку на планшете и телефоне — его полностью показывает страница.</summary>
-    private const int LongName = 28;
-
-    /// <summary>
-    /// Всё, что узкая шапка (телефон) обрезает, одной строкой на странице: статус, моя роль, вид и эпоха.
-    /// </summary>
-    private static string FactsLine(CampaignSummaryDto c) => $"{CampaignLabels.Kind(c.Kind)} · {CampaignLabels.Era(c.Era)}";
-
     /// <summary>Активной кампании без игроков нужно приглашение: оно главное действие страницы.</summary>
     private bool NeedsPlayers => _details?.Campaign is { CanEdit: true, PlayerCount: 0, Status: not CampaignStatus.Completed };
 
+    /// <summary>Идёт игра: главное действие — «Играть» в строке прохождения, журнал в шапке уступает.</summary>
+    private bool HasRunningRun => _details?.Runs.Any(r => r.Status == ScenarioRunStatus.Running) == true;
+
+    private bool JournalIsMain => !NeedsPlayers && !HasRunningRun;
+
     /// <summary>
-    /// Статус и моя роль — то, что в шапке нельзя терять, поэтому подзаголовок короткий и помещается рядом с кнопками даже на
-    /// телефоне; вид и эпоха — на странице, под названием.
+    /// Статус, вид (только «Ваншот»: кампания — норма, её словом не помечают) и моя роль. Подзаголовок короткий и помещается
+    /// рядом с кнопками даже на телефоне; эпоху (п. 12) не показываем.
     /// </summary>
     private string? Subtitle => _details?.Campaign is { } c
         ? string.Join(" · ", new[]
         {
             CampaignLabels.Status(c.Status),
+            c.Kind == CampaignKind.OneShot ? CampaignLabels.Kind(c.Kind) : null,
             c.MyRole is { } role ? $"вы — {CampaignLabels.Role(role)}" : null,
         }.Where(part => part is not null))
         : null;
@@ -314,10 +328,10 @@
         return _details;
     }
 
-    private async Task SavedAsync(CampaignSummaryDto _)
+    private async Task SavedAsync(CampaignSummaryDto saved)
     {
         _formOpen = false;
-        Toasts.Success("Сохранено.");
+        Toasts.Success("Кампания сохранена:", subject: saved.Name);
         await ReloadAsync();
     }
 
@@ -378,12 +392,12 @@
             await Api.RemoveMemberAsync(CampaignId, member.UserId);
             if (self)
             {
-                Toasts.Success("Вы вышли из кампании.");
+                Toasts.Success("Вы вышли из кампании:", subject: _details?.Campaign.Name);
                 Navigation.NavigateTo("");
                 return;
             }
 
-            Toasts.Success("Игрок исключён.");
+            Toasts.Success("Игрок исключён:", subject: CampaignLabels.Person(member.Name));
             await ReloadAsync();
         }
         catch (HttpRequestException ex)
@@ -414,7 +428,7 @@
         try
         {
             await Api.DeleteCampaignAsync(campaign.Id);
-            Toasts.Success($"Кампания «{campaign.Name}» удалена.");
+            Toasts.Success("Кампания удалена:", subject: campaign.Name);
             Navigation.NavigateTo("campaigns");
         }
         catch (HttpRequestException ex)

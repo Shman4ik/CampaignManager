@@ -12,8 +12,11 @@
    - недописанное живёт в черновике localStorage (ключ — кампания и встреча) и переживает закрытую
      вкладку, перезагрузку и выход в соседнее приложение; в v1 это держал [PersistentState] circuit;
    - касание мимо окна и Esc его не закрывают (Dismissible="false"), а «Отмена» с правками спрашивает;
-   - ошибка сервера остаётся в окне, черновик стирается только после успешной записи. *@
-<Modal Open="Open" Title="@(Session is null ? "Новая встреча" : $"Изменить встречу №{Session.Number}")"
+   - ошибка сервера остаётся в окне, черновик стирается только после успешной записи.
+   Раскладка (J5): главное — «Заголовок» и «Хроника» — сверху на первой вкладке «Запись», дата, номер, прохождение и флажок под
+   ними в одну-две строки; заметки Хранителя — вторая вкладка. Окно Large (768px, с Small у подтверждений — два размера модуля):
+   на Medium дата, номер и прохождение не встают в строку, и окно выше 85% экрана. *@
+<Modal Open="Open" Title="@(Session is null ? "Новая встреча" : $"Изменить встречу №{Session.Number}")" Size="ModalSize.Large" MinHeight="@TabsMinHeight"
        Dismissible="false" OnClose="CloseAsync">
     <ChildContent>
         @if (_form is { } form)
@@ -30,58 +33,66 @@
                     </Alert>
                 }
 
-                @* Поля по содержимому: дата — 12rem, номер — 7rem; в сетке на три колонки дата тянулась на 480px, а подсказка номера
-                   шла в три строки. *@
-                <div class="flex flex-wrap gap-4">
-                    <Field Label="Дата встречи" class="w-48">
-                        <input type="date" class="cm-input" @bind="form.SessionDate" @bind:after="Changed" />
+                <Tabs Items="_tabs" ActiveKey="@_tab" ActiveKeyChanged="key => _tab = key" AriaLabel="Разделы записи" />
+
+                @* Обе вкладки остаются в разметке (скрыта неактивная): набранное и фокус не пропадают при переключении. *@
+                <div class="@Css.Join("flex flex-col gap-4", _tab == NotesTab ? "hidden" : null)">
+                    <Field Label="Заголовок">
+                        <input class="cm-input" maxlength="@CampaignLimits.SessionTitleLength" placeholder="Например: Дом на Френч-Хилл"
+                               @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
                     </Field>
-                    <Field Label="Номер" class="w-28">
-                        <input type="number" class="cm-input" min="@CampaignLimits.MinSessionNumber" max="@CampaignLimits.MaxSessionNumber"
-                               @bind="form.Number" @bind:after="Changed" />
+
+                    <Field Label="Хроника" Hint="Markdown" Note="Видна игрокам.">
+                        <textarea class="cm-input min-h-40" rows="6" placeholder="Что произошло на встрече"
+                                  @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
                     </Field>
+
+                    @* Поля по содержимому: дата — 12rem, номер — 6rem, прохождение берёт остаток; флажок — в той же строке. *@
+                    <div class="cm-field-row flex flex-wrap gap-x-4 gap-y-3">
+                        <Field Label="Дата встречи" class="w-44">
+                            <input type="date" class="cm-input" @bind="form.SessionDate" @bind:after="Changed" />
+                        </Field>
+                        <Field Label="Номер" class="w-24">
+                            <input type="number" class="cm-input" min="@CampaignLimits.MinSessionNumber" max="@CampaignLimits.MaxSessionNumber"
+                                   @bind="form.Number" @bind:after="Changed" />
+                        </Field>
+                        @if (Runs.Count > 0 || form.RunId is not null)
+                        {
+                            <Field Label="Прохождение" class="min-w-48 flex-1">
+                                <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed">
+                                    <option value="">— без сценария —</option>
+                                    @foreach (var run in Runs)
+                                    {
+                                        <option value="@run.RunId">@RunLabel(run)</option>
+                                    }
+                                    @if (form.RunId is { } linked && Runs.All(r => r.RunId != linked))
+                                    {
+                                        @* Привязано, но в списке нет: без этой строки select молча показал бы «без сценария». *@
+                                        <option value="@linked">@(Session?.ScenarioName ?? "Прохождение недоступно")</option>
+                                    }
+                                </select>
+                            </Field>
+                        }
+                    </div>
+
+                    @if (Runs.Count > 0 || form.RunId is not null)
+                    {
+                        <label class="cm-tap-row">
+                            <input type="checkbox" class="cm-checkbox shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
+                            <span>
+                                <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
+                                <span class="cm-field-note block">Журнал покажет ссылки на листы для фазы развития.</span>
+                            </span>
+                        </label>
+                    }
                 </div>
 
-                <Field Label="Заголовок">
-                    <input class="cm-input" maxlength="@CampaignLimits.SessionTitleLength" placeholder="Например: «Дом на Френч-Хилл»"
-                           @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
-                </Field>
-
-                @if (Runs.Count > 0 || form.RunId is not null)
-                {
-                    <Field Label="Прохождение">
-                        <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed" >
-                            <option value="">— без сценария —</option>
-                            @foreach (var run in Runs)
-                            {
-                                <option value="@run.RunId">@RunLabel(run)</option>
-                            }
-                            @if (form.RunId is { } linked && Runs.All(r => r.RunId != linked))
-                            {
-                                @* Привязано, но в списке нет: без этой строки select молча показал бы «без сценария». *@
-                                <option value="@linked">@(Session?.ScenarioName ?? "Прохождение недоступно")</option>
-                            }
-                        </select>
+                <div class="@(_tab == NotesTab ? null : "hidden")">
+                    <Field Label="Заметки Хранителя" Hint="Markdown" Note="Видны только вам.">
+                        <textarea class="cm-input min-h-40" rows="8" placeholder="Тайны, зацепки, что готовить к следующей встрече"
+                                  @bind="form.KeeperNotes" @bind:event="oninput" @bind:after="Changed"></textarea>
                     </Field>
-
-                    <label class="flex min-h-11 cursor-pointer items-start gap-3 py-1">
-                        <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
-                        <span>
-                            <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
-                            <span class="cm-field-note block">Время фазы развития сыщиков: журнал покажет ссылки на их листы. <BookRef Page="92" /></span>
-                        </span>
-                    </label>
-                }
-
-                <Field Label="Хроника" Note="Видна игрокам. Оформление: **жирный**, *курсив*, «# Заголовок», «- пункт списка».">
-                    <textarea class="cm-input min-h-40" rows="7" placeholder="Что произошло на встрече"
-                              @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
-                </Field>
-
-                <Field Label="Заметки Хранителя" Note="Видны только вам; оформление то же.">
-                    <textarea class="cm-input min-h-40" rows="7" placeholder="Тайны, зацепки, что готовить к следующей встрече"
-                              @bind="form.KeeperNotes" @bind:event="oninput" @bind:after="Changed"></textarea>
-                </Field>
+                </div>
 
                 @if (_error is not null)
                 {
@@ -114,6 +125,19 @@
 
     [Parameter] public EventCallback<CampaignSessionDto> OnSaved { get; set; }
 
+    private const string EntryTab = "entry";
+    private const string NotesTab = "notes";
+
+    /// <summary>Высота тела по самой высокой вкладке («Запись» с прохождением и флажком), замеренная на 1194×696, — вкладки не прыгают.</summary>
+    private const string TabsMinHeight = "27rem";
+
+    private static readonly IReadOnlyList<Tabs.Item> _tabs =
+    [
+        new(EntryTab, "Запись", "fa-pen-nib"),
+        new(NotesTab, "Заметки Хранителя", "fa-lock"),
+    ];
+
+    private string _tab = EntryTab;
     private bool _wasOpen;
     private SessionForm? _form;
     private CampaignSessionInput? _original;
@@ -141,6 +165,7 @@
         _original = _form.ToInput();
         _restored = false;
         _error = null;
+        _tab = EntryTab;
 
         if (await ReadDraftAsync() is { } draft && draft != _original)
         {
@@ -260,10 +285,11 @@
             return;
         }
 
-        if (Dirty && !await Dialogs.ConfirmAsync(new ConfirmRequest("Отбросить запись?", "Набранный текст не сохранён и пропадёт.")
+        // Один вопрос на всё приложение (п. 7): «Есть несохранённые изменения. Выйти?» — а не «Отбросить запись?» (J7).
+        if (Dirty && !await Dialogs.ConfirmAsync(new ConfirmRequest("Есть несохранённые изменения. Выйти?", "Набранный текст пропадёт.")
             {
-                ConfirmText = "Отбросить",
-                CancelText = "Вернуться к записи",
+                ConfirmText = "Выйти без сохранения",
+                CancelText = "Остаться",
                 Details = null,
             }))
         {

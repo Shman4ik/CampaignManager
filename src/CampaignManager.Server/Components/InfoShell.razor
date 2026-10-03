@@ -1,0 +1,42 @@
+@using Microsoft.AspNetCore.Components.Authorization
+
+@* Каркас статических страниц /about и /legal. Их рендерит сервер без WebAssembly (текст обязан быть в HTML без JS: его читает бот Google
+   и Auth0), поэтому общая оболочка с меню пользователя сюда не годится. Зато поля те же, что у остальных страниц: колонка
+   `cm-main` отступает на ширину рельса, в рельсе — знак (решение оркестратора, L1, вариант B: «те же поля, что у cm-page»),
+   а «← На главную» стоит слева в шапке. Вошедшему она ведёт на главную, гостю — на /login (главная для него — страница Auth0,
+   отдельной витрины с кнопкой «Войти» нет). *@
+<PageTitle>@Title — Campaign Manager</PageTitle>
+
+<nav class="cm-rail" aria-label="Разделы">
+    <div class="cm-rail-logo">
+        <a href="@Home" aria-label="Campaign Manager"><img src="_content/CampaignManager.UI/logo-mark.svg" alt="" width="34" height="34" /></a>
+    </div>
+</nav>
+
+<div class="cm-main cm-main-info">
+    <header class="cm-topbar">
+        <a href="@Home" class="cm-btn cm-btn-ghost cm-btn-sm shrink-0" data-testid="info-home">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>На главную</span>
+        </a>
+        <div class="cm-topbar-heading">
+            <h1 class="cm-topbar-title">@Title</h1>
+        </div>
+    </header>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private string Home { get; set; } = "/login";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var signedIn = AuthenticationState is not null && (await AuthenticationState).User.Identity?.IsAuthenticated == true;
+        Home = signedIn ? "/" : "/login";
+    }
+}

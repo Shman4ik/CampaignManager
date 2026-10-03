@@ -13,13 +13,16 @@
 @* Кампании, где я участник (администратору — все: он правит и чужие). В v1 страница была только для
    Хранителя; здесь игрок видит свои кампании с журналом, а кнопки правки приходят флагами из API.
    Вступление — на главной, в «Можно вступить».
-   Карточка: одна главная кнопка «Открыть», «Журнал» и меню «⋯» (изменить и — внизу, красным — удалить): «Удалить»
-   не стоит на виду у каждой карточки. Поиск и статус нужны, когда кампаний много (FilterThreshold) — три
+   Порядок задаёт сервер: активные, на паузе, планируемые, завершённые (живая игра — первой, C1).
+   Карточка: «Открыть», «Журнал» и меню «⋯» (изменить и — внизу, красным — удалить): «Удалить» не стоит на виду у каждой
+   карточки. В карточке только то, что нужно за столом: «Вы» (игроку — Хранитель) и «Игроков»; вид «Ваншот» — бейджем;
+   эпоху (п. 12) и дату создания не показываем (C2). Поиск и статус нужны, когда кампаний много (FilterThreshold) — три
    карточки помещаются на экране и без липкой панели. *@
 <PageHeader Title="Кампании">
     <Actions>
         <AuthorizeView Policy="@Policies.Keeper">
-            <Button Small="true" Icon="fa-plus" OnClick="() => OpenForm(null)">Новая кампания</Button>
+            @* Вторичная, как «Новая кампания» на главной: одно действие — один вид (H8). *@
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="() => OpenForm(null)">Новая кампания</Button>
         </AuthorizeView>
     </Actions>
 </PageHeader>
@@ -67,9 +70,14 @@
                     <article class="cm-card flex flex-col" @key="campaign.Id" aria-labelledby="@($"campaign-{campaign.Id}")">
                         @* «⋯» — в шапке у названия: в подвале рядом с «Открыть» и «Журналом» ему не хватало 5px, и он уходил отдельной строкой. *@
                         <div class="cm-card-header items-start gap-2">
-                            <div class="flex min-w-0 flex-1 flex-col items-start gap-1">
-                                <a id="@($"campaign-{campaign.Id}")" href="@($"campaigns/{campaign.Id}")" class="cm-card-title inline-flex min-h-11 items-center hover:underline">@campaign.Name</a>
+                            @* Название сверху (до двух строк), бейджи под ним — без min-h-11: шапки соседних карточек одной высоты (C3). *@
+                            <div class="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+                                <a id="@($"campaign-{campaign.Id}")" href="@($"campaigns/{campaign.Id}")" class="cm-card-title line-clamp-2 min-h-8 hover:underline">@campaign.Name</a>
                                 <div class="flex flex-wrap items-center gap-1.5">
+                                    @if (campaign.Kind == CampaignKind.OneShot)
+                                    {
+                                        <Badge Tone="Tone.Neutral">@CampaignLabels.Kind(campaign.Kind)</Badge>
+                                    }
                                     <Badge Tone="CampaignLabels.StatusTone(campaign.Status)">@CampaignLabels.Status(campaign.Status)</Badge>
                                 </div>
                             </div>
@@ -96,28 +104,24 @@
                         <div class="cm-card-body flex-1">
                             @* Одна таблица «подпись — значение»: строки не переносятся по-разному у разных карточек. *@
                             <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-                                @if (campaign.MyRole is { } role)
+                                @if (campaign.MyRole == CampaignRole.Keeper)
                                 {
                                     <dt class="cm-meta-label">Вы</dt>
-                                    <dd>@CampaignLabels.Role(role)</dd>
+                                    <dd>@CampaignLabels.Role(CampaignRole.Keeper)</dd>
                                 }
-                                @if (campaign.MyRole != CampaignRole.Keeper && campaign.KeeperName is { } keeperName)
+                                else if (campaign.KeeperName is { } keeperName)
                                 {
                                     <dt class="cm-meta-label">Хранитель</dt>
                                     <dd>@keeperName</dd>
                                 }
                                 <dt class="cm-meta-label">Игроков</dt>
                                 <dd>@campaign.PlayerCount</dd>
-                                <dt class="cm-meta-label">Вид</dt>
-                                <dd>@CampaignLabels.Kind(campaign.Kind) · @CampaignLabels.Era(campaign.Era)</dd>
-                                <dt class="cm-meta-label">Создана</dt>
-                                <dd>@LocalTime.Date(campaign.CreatedAt)</dd>
                             </dl>
                         </div>
                         <div class="cm-card-footer">
-                            @* Не primary: главная на экране — «Новая кампания» в шапке, три тёмные «Открыть» спорили с ней. *@
+                            @* Не primary: три тёмные «Открыть» спорили бы друг с другом. *@
                             <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-right" Href="@($"campaigns/{campaign.Id}")">Открыть</Button>
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen-nib" Href="@($"campaigns/{campaign.Id}/journal")">Журнал</Button>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-book-open" Href="@($"campaigns/{campaign.Id}/journal")">Журнал</Button>
                         </div>
                     </article>
                 }
@@ -163,12 +167,12 @@
         _formOpen = false;
         if (created)
         {
-            Toasts.Success($"Кампания «{campaign.Name}» создана.");
+            Toasts.Success("Кампания создана:", subject: campaign.Name);
             Navigation.NavigateTo($"campaigns/{campaign.Id}");
             return;
         }
 
-        Toasts.Success("Сохранено.");
+        Toasts.Success("Кампания сохранена:", subject: campaign.Name);
         await ReloadAsync();
     }
 
@@ -189,7 +193,7 @@
         try
         {
             await Api.DeleteCampaignAsync(campaign.Id);
-            Toasts.Success($"Кампания «{campaign.Name}» удалена.");
+            Toasts.Success("Кампания удалена:", subject: campaign.Name);
             await ReloadAsync();
         }
         catch (HttpRequestException ex)

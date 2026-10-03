@@ -15,13 +15,14 @@ public static class NavMenu
 {
     public static IReadOnlyList<NavItem> Items { get; } =
     [
-        new("", "fa-house", "Главная", NavGroup.Main, NavAudience.Everyone, OnPhoneBar: true),
+        new("", "fa-house", "Главная", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
         new("campaigns", "fa-map", "Кампании", NavGroup.Main, NavAudience.SignedIn, OnPhoneBar: true),
         new("combat", "fa-hand-fist", "Бой", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
         new("chase", "fa-person-running", "Погоня", NavGroup.Main, NavAudience.Keeper),
         new("scenarios", "fa-masks-theater", "Сценарии", NavGroup.Main, NavAudience.Keeper, OnPhoneBar: true),
         new("npcs", "fa-user-secret", "НПС", NavGroup.Main, NavAudience.Keeper),
         new("music", "fa-music", "Фонотека", NavGroup.Main, NavAudience.Keeper),
+        new("reference", "fa-book-bookmark", "Ширма", NavGroup.Main, NavAudience.Keeper),
 
         new("weapons", "fa-gun", "Оружие", NavGroup.Reference, NavAudience.SignedIn),
         new("bestiary", "fa-skull", "Бестиарий", NavGroup.Reference, NavAudience.SignedIn),
@@ -36,7 +37,7 @@ public static class NavMenu
         new("admin/files", "fa-folder-open", "Файлы", NavGroup.System, NavAudience.Admin),
     ];
 
-    /// <summary>Подписи групп в листе «Ещё»; в рельсе группы разделяет линейка.</summary>
+    /// <summary>Подписи групп в листе «Ещё» и имя группы для чтения с экрана; в рельсе группы разделяет линейка без текста.</summary>
     public static string Title(NavGroup group) => group switch
     {
         NavGroup.Reference => "Справочники",
@@ -46,7 +47,8 @@ public static class NavMenu
 
     /// <summary>
     /// Пункты, которые видит пользователь (принципал из <c>/api/v1/me</c>). Меню только не показывает
-    /// лишнего — защищает сервер. Администратор несёт и роль Хранителя, поэтому видит всё.
+    /// лишнего — защищает сервер. Администратор несёт и роль Хранителя, поэтому видит всё. Гостю меню пусто: «Главная» —
+    /// страница под входом, а «Войти» уже есть в подвале рельса и листа.
     /// </summary>
     public static IReadOnlyList<NavItem> VisibleTo(ClaimsPrincipal user) =>
         Items.Where(item => CanSee(item.Audience, user)).ToList();

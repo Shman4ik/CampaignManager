@@ -31,16 +31,20 @@ public sealed class UxU1Tests : KitContext
         Assert.InRange(bar.Count, 1, 4);
     }
 
+    // Группы рельса разделены линейкой без подписи (подпись 10px нарушала п. 2); имя группы — для диктора (S1, S2).
     [Fact]
-    public void Rail_titles_every_group_except_the_first()
+    public void Rail_groups_are_separated_by_a_rule_and_named_for_screen_readers_only()
     {
         var cut = Render<NavRail>(p => p.Add(r => r.Items, NavMenu.Items));
 
-        Assert.Equal(["Справочники", "Система"], cut.FindAll(".cm-rail-group-title").Select(t => t.TextContent.Trim()));
+        Assert.Empty(cut.FindAll(".cm-rail-group-title"));
+        Assert.Equal(["Основное", "Справочники", "Система"], cut.FindAll(".cm-rail-group").Select(g => g.GetAttribute("aria-label")));
     }
 
+    // Решение оркестратора (g1/S7, g6/Sh1): лист «Ещё» не повторяет пункты панели; сначала остальное и справочники, «Система»,
+    // «О проекте», а учётная запись — последней (справочники игрока начинались на y=481 из 651).
     [Fact]
-    public void More_sheet_starts_with_the_account()
+    public void More_sheet_ends_with_the_account_and_does_not_repeat_the_phone_bar()
     {
         var cut = Render<BottomNav>(p => p
             .Add(b => b.Items, NavMenu.Items)
@@ -50,8 +54,14 @@ public sealed class UxU1Tests : KitContext
         cut.Find("button[aria-haspopup='dialog']").Click();
 
         var markup = cut.Markup;
-        Assert.True(markup.IndexOf("АККАУНТ", StringComparison.Ordinal) < markup.IndexOf("Основное", StringComparison.Ordinal));
-        Assert.True(markup.IndexOf("ПОДВАЛ", StringComparison.Ordinal) > markup.IndexOf("Система", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("Справочники", StringComparison.Ordinal) < markup.IndexOf("Система", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("Система", StringComparison.Ordinal) < markup.IndexOf("ПОДВАЛ", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("ПОДВАЛ", StringComparison.Ordinal) < markup.IndexOf("АККАУНТ", StringComparison.Ordinal));
+
+        var sheet = cut.Find("dialog");
+        var barLabels = NavMenu.Items.Where(i => i.OnPhoneBar).Select(i => i.Label).ToList();
+        Assert.All(barLabels, label => Assert.DoesNotContain(sheet.QuerySelectorAll(".cm-sheet-item").Select(a => a.TextContent.Trim()), t => t == label));
+        Assert.Contains("Фонотека", sheet.TextContent, StringComparison.Ordinal);
     }
 
     // ── «Нет доступа» и 404 ─────────────────────────────────────────────────
@@ -89,7 +99,8 @@ public sealed class UxU1Tests : KitContext
 
         var cut = Render<NotFound>();
 
-        Assert.Contains("/zzz/missing", cut.Find("[data-testid=missing-address]").TextContent);
+        Assert.Contains("/zzz/missing", cut.Find("[data-testid=empty-state]").TextContent);
+        Assert.Contains("Такой страницы нет", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("2.0", cut.Markup, StringComparison.Ordinal);
     }
 
@@ -120,11 +131,12 @@ public sealed class UxU1Tests : KitContext
     }
 
     [Fact]
-    public void Keeper_card_without_players_says_how_they_join_and_has_no_zero_sections()
+    public void Keeper_card_without_players_says_so_in_one_line_and_has_no_zero_sections()
     {
         var cut = Render<HomeCampaignCard>(p => p.Add(c => c.Campaign, Mine(CampaignStatus.Active, CampaignRole.Keeper)));
 
-        Assert.Contains("игрок вступает сам", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Игроков пока нет.", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("вступает сам", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Игроки (0)", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("НПС кампании (0)", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("fa-plus", cut.Find(".cm-card-footer").InnerHtml, StringComparison.Ordinal);

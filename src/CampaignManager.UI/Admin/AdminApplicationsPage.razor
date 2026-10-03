@@ -8,6 +8,7 @@
 @inject IAdminApi Api
 @inject AdminBadges Badges
 @inject ToastService Toasts
+@inject DialogService Dialogs
 @inject NavigationManager Navigation
 @inject TimeProvider Time
 
@@ -83,6 +84,14 @@
                                         OnClick="() => ApproveAsync(application)">@(application.UserRole is UserRole.Player ? "Назначить Хранителем" : "Одобрить")</Button>
                                 <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-xmark" Disabled="@(_busy == application.Id)"
                                         OnClick="() => StartReject(application)">Отклонить</Button>
+                            </div>
+                        }
+                        else if (application.Status is KeeperApplicationStatus.Approved && application.UserRole is UserRole.Player)
+                        {
+                            @* Одобрена, а человек всё ещё игрок (след ошибки v1 на перенесённых данных): действие здесь же, а не поиск в «Пользователях» (A4). *@
+                            <div class="flex flex-wrap gap-2">
+                                <Button Small="true" Variant="ButtonVariant.Success" Icon="fa-check" Busy="@(_busy == application.Id)"
+                                        data-testid="assign-keeper" OnClick="() => AssignKeeperAsync(application)">Назначить Хранителем</Button>
                             </div>
                         }
                     </div>
@@ -171,13 +180,53 @@
         try
         {
             var approved = await Api.ApproveAsync(application.Id);
-            Toasts.Success(approved.UserRole is UserRole.Admin
-                ? $"Заявка одобрена. {approved.UserName} уже администратор — роль не менялась."
-                : $"Заявка одобрена: {approved.UserName} теперь Хранитель.");
+            if (approved.UserRole is UserRole.Admin)
+            {
+                Toasts.Success("Заявка одобрена. Уже администратор — роль не менялась:", subject: approved.UserName);
+            }
+            else
+            {
+                Toasts.Success("Заявка одобрена, теперь Хранитель:", subject: approved.UserName);
+            }
         }
         catch (HttpRequestException ex)
         {
             Toasts.Error(ApiErrors.Describe(ex), "Не удалось одобрить");
+        }
+        finally
+        {
+            _busy = null;
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>Роль у человека с одобренной заявкой так и осталась «Игрок»: назначаем Хранителем тем же вызовом, что на странице пользователей, и с тем же вопросом.</summary>
+    private async Task AssignKeeperAsync(KeeperApplicationDto application)
+    {
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
+            "Назначить Хранителем?",
+            $"Роль сменится с «{RoleLabels.Role(application.UserRole)}» на «{RoleLabels.Role(UserRole.Keeper)}». {RoleLabels.RoleDescription(UserRole.Keeper)}")
+        {
+            Subject = application.UserName,
+            ConfirmText = "Сменить роль",
+            ConfirmVariant = ButtonVariant.Primary,
+            Details = null,
+        });
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _busy = application.Id;
+        try
+        {
+            await Api.ChangeRoleAsync(application.UserId, UserRole.Keeper);
+            Toasts.Success("Назначен Хранителем:", subject: application.UserName);
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex), "Роль не изменена");
         }
         finally
         {

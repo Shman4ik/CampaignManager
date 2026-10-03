@@ -27,7 +27,9 @@
 </PageHeader>
 
 <div class="cm-page">
-    <FilterPanel OnReset="ResetFilters">
+    @* «Сбросить фильтры» активна, только когда есть что сбрасывать (A2). Липкость панели — решение FilterPanel (владелец F6a): для
+       списка в десятки строк она не нужна, и фильтр уйдёт вместе с прокруткой, когда её снимут в самом компоненте. *@
+    <FilterPanel OnReset="ResetFilters" CanReset="@(!string.IsNullOrWhiteSpace(_search) || _role is not null)">
         <input type="search" class="cm-input min-w-48 flex-1" placeholder="Имя или почта…" aria-label="Поиск по имени или почте"
                @bind="_search" @bind:event="oninput" @bind:after="ResetPage" />
         <select class="cm-input w-full shrink-0 sm:w-56" aria-label="Роль" @bind="_role" @bind:after="ResetPage">
@@ -56,7 +58,7 @@
             <DataTable Items="shown" RowKey="u => u.Id" TableFrom="TableBreakpoint.Lg" AriaLabel="Пользователи" EmptyText="Нет пользователей по этим условиям."
                        Page="_page" PageSize="PageSize">
                 <Columns>
-                    <DataColumn TItem="AdminUserDto" Title="Пользователь" SortBy="u => u.DisplayName" DefaultSort="true">
+                    <DataColumn TItem="AdminUserDto" Title="Пользователь" SortBy="u => u.DisplayName" DefaultSort="false">
                         <div class="font-semibold text-primary-800">@context.DisplayName</div>
                         <div class="text-sm text-primary-500">@context.Email</div>
                         @if (context.IsMe || context.HasPendingApplication)
@@ -113,8 +115,8 @@
     // Отменённая смена роли: select уже показывает выбранное, разметка — нет. Новый ключ пересоздаёт его.
     private int _selectGeneration;
 
-    /// <summary>Перенесённые из v1 входили в 1.0, а в 2.0 дата входа заполняется только входом: «не входил» читалось как «мёртвая учётка».</summary>
-    private const string NeverSignedIn = "не входил в 2.0";
+    /// <summary>Перенесённые из v1 входили до переключения, а дата входа заполняется только новым входом: «не входил» без пояснения читалось бы как «мёртвая учётка» — поэтому прочерк, а не слово (п. 11: «2.0» в интерфейсе нет).</summary>
+    private const string NeverSignedIn = "—";
 
     /// <summary>Ссылка из заявки: показать одного пользователя (<c>?user=id</c>; почту в адрес не кладём).</summary>
     [SupplyParameterFromQuery(Name = "user")] public Guid? UserFilter { get; set; }
@@ -216,7 +218,7 @@
         {
             var updated = await Api.ChangeRoleAsync(user.Id, role);
             _users[_users.FindIndex(u => u.Id == user.Id)] = updated;
-            Toasts.Success($"{updated.DisplayName} — {RoleLabels.Role(updated.Role).ToLowerInvariant()}.");
+            Toasts.Success($"Роль изменена: {RoleLabels.Role(updated.Role).ToLowerInvariant()},", subject: updated.DisplayName);
             if (updated.IsMe)
             {
                 // Снял с себя администратора — меню должно спрятать админку сразу.
