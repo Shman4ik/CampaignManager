@@ -86,10 +86,16 @@ public static partial class ScenarioStep
                         : ScenarioRunStatus.Planned,
                     ScheduledAt = ScheduledAt(row.Str("ScheduledDate"), s.Options.KeeperTimeZone),
                     Announcement = row.Text("AnnouncementText"),
-                    SignupOpen = row.Bool("IsPublished"),
+                    // У завершённого прохождения запись закрыта (решение владельца 2026-10-03, #192), как после «Завершить»
+                    SignupOpen = row.Bool("IsPublished") && campaign.Status != CampaignStatus.Completed,
                     CreatedAt = scenario.CreatedAt,
                     UpdatedAt = scenario.UpdatedAt,
                 };
+                if (row.Bool("IsPublished") && run.Status == ScenarioRunStatus.Finished)
+                {
+                    s.Report.Add(ReportSections.Fixed, $"прохождение «{name}»: завершено, а в v1 опубликовано → запись закрыта (signup_open = false)");
+                }
+
                 if (run.ScheduledAt is { } at)
                 {
                     s.Report.Add(ReportSections.Fixed,

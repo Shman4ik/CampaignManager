@@ -393,7 +393,7 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
                     r.Status,
                     r.ScheduledAt,
                     r.Announcement,
-                    AccessPolicy.SignupOpenNow(r.SignupOpen, r.ScheduledAt),
+                    AccessPolicy.SignupOpenNow(r.SignupOpen, r.ScheduledAt, r.Status),
                     [
                         .. reservations.Where(rr => rr.RunId == r.Id).Select(rr => new RunReservationDto(
                             rr.PregenId,

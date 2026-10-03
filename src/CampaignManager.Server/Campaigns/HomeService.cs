@@ -138,7 +138,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
     {
         var me = user.Id;
         var runs = await dbContext.ScenarioRuns
-            .Where(r => r.SignupOpen)
+            .Where(r => r.SignupOpen && r.Status != ScenarioRunStatus.Finished)
             .OrderBy(r => r.ScheduledAt == null)
             .ThenBy(r => r.ScheduledAt)
             .ThenBy(r => r.CreatedAt)
@@ -149,6 +149,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                 r.ScenarioId,
                 ScenarioName = dbContext.Scenarios.Where(s => s.Id == r.ScenarioId).Select(s => s.Name).First(),
                 r.ScheduledAt,
+                r.Status,
                 r.Announcement,
                 Keeper = dbContext.CampaignMembers.Where(m => m.CampaignId == r.CampaignId && m.Role == CampaignRole.Keeper)
                     .Select(m => new
@@ -223,7 +224,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                         }),
                     ],
                     // Ведущий не бронирует прегенов своей игры; одна бронь на игрока (UNIQUE (run_id, user_id)).
-                    CanReserve: !leads && !mineInRun && AccessPolicy.SignupOpenNow(true, r.ScheduledAt));
+                    CanReserve: !leads && !mineInRun && AccessPolicy.SignupOpenNow(true, r.ScheduledAt, r.Status));
             }),
         ];
     }

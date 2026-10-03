@@ -84,6 +84,8 @@ public sealed partial class CatalogCodesTests
     [InlineData("item.", "Шприц из твёрдой резины", "Стрихнинка", "item.hard-rubber-syringe")]
     [InlineData("item.", "Глобус на подставке", "Трюбка на подставке", "item.globe-on-stand")]
     [InlineData("weapon.", "Винтовка калибра .30-06 со скользящим затвором", "Рычажная винтовка калибра .30-06", "weapon.30-06-bolt-action-rifle")]
+    [InlineData("weapon.", "Динамитная шашка", "Динамитная шашка*", "weapon.dynamite-stick")] // звёздочка сноски книги (#177)
+    [InlineData("weapon.", "Ручная граната", "Ручная граната*", "weapon.hand-grenade")]
     public void Renamed_entry_keeps_code_and_old_spelling(string prefix, string name, string oldName, string code)
     {
         var table = TableOf(prefix);

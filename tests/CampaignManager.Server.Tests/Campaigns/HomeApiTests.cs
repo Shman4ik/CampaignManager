@@ -1,6 +1,7 @@
 using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Identity;
+using CampaignManager.Server.Access;
 using Xunit;
 
 namespace CampaignManager.Server.Tests.Campaigns;
@@ -115,5 +116,27 @@ public sealed class HomeApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
 
         var dto = Assert.Single((await app.Api(keeper).GetHomeAsync(Cancellation)).OneShots, o => o.RunId == run.Id);
         Assert.Equal(moscow, dto.ScheduledAt);
+    }
+
+    // #192: у перенесённой сыгранной игры флаг записи мог остаться открытым — на главной её быть не должно,
+    // и кнопки брони у неё нет, что бы ни говорил флаг.
+    [Fact]
+    public async Task Finished_run_with_open_signup_flag_is_not_listed_among_one_shots()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper, "Хранитель");
+        var stranger = await app.AddUserAsync();
+        var oneShot = await app.AddCampaignAsync(keeper, CampaignStatus.Completed, CampaignKind.OneShot);
+        var played = await app.AddRunAsync(oneShot.Id, "Безымянный Туман", signupOpen: true, status: ScenarioRunStatus.Finished,
+            scheduledAt: DateTimeOffset.UtcNow.AddDays(5));
+        var open = await app.AddRunAsync((await app.AddCampaignAsync(keeper, CampaignStatus.Planning, CampaignKind.OneShot)).Id,
+            "Эликсир жизни", signupOpen: true, status: ScenarioRunStatus.Announced);
+
+        var oneShots = (await app.Api(stranger).GetHomeAsync(Cancellation)).OneShots;
+
+        Assert.DoesNotContain(oneShots, o => o.RunId == played.Id);
+        Assert.True(Assert.Single(oneShots, o => o.RunId == open.Id).CanReserve);
+        Assert.False(AccessPolicy.SignupOpenNow(true, null, ScenarioRunStatus.Finished));
+        Assert.True(AccessPolicy.SignupOpenNow(true, null, ScenarioRunStatus.Announced));
     }
 }

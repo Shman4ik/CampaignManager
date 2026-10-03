@@ -6,6 +6,12 @@
 Знание перенесено из `CLAUDE.md` фич v1 Weapons, Items, Spells, Books, Skills, Bestiary и раздела `/occupations`
 в Characters; обходы v1 (кэш и его копии, `EntityCloner`, circuit, ручные сбросы) — нет.
 
+## Бестиарий игроку (#175)
+
+Игроку сервер статблок не отдаёт ([Server/Catalogs](../../CampaignManager.Server/Catalogs/CLAUDE.md)): `BestiaryPage` при
+`view.CanEdit = false` не рисует ни строку ПЗ/брони/рассудка на плитке, ни `StatblockView` в раскрытой карточке — остаются
+картинки и «Описание». Пустой статблок за «нулевую» тварь не принимать: смотреть на `CanEdit`.
+
 ## Где что
 
 | Файл | Что |

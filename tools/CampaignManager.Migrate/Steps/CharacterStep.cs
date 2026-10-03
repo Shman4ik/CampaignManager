@@ -35,6 +35,33 @@ public static class CharacterStep
         return sheet.Current;
     }
 
+    /// <summary>
+    /// Текущие ПЗ, ПМ, Рассудок и Удача выше максимума по формуле Core опускаются до максимума (решение владельца
+    /// 2026-10-03, #168: v1 не пересчитывал максимум Рассудка по «Мифам Ктулху», а 2.0 считает — 55/50 в листе).
+    /// Возвращает описания исправлений («Рассудок 55 → 50»), пусто — править было нечего.
+    /// </summary>
+    public static List<string> ClampCurrentToMax(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var derived = DerivedAttributeRules.Compute(sheet, catalog);
+        var cur = sheet.Current;
+        var changes = new List<string>();
+
+        void Clamp(string what, int value, int max, Action<int> set)
+        {
+            if (value > max)
+            {
+                changes.Add($"{what} {value} → {max}");
+                set(max);
+            }
+        }
+
+        Clamp("ПЗ", cur.HitPoints, derived.MaxHitPoints, v => cur.HitPoints = v);
+        Clamp("ПМ", cur.MagicPoints, derived.MaxMagicPoints, v => cur.MagicPoints = v);
+        Clamp("Рассудок", cur.Sanity, derived.MaxSanity, v => cur.Sanity = v);
+        Clamp("Удача", cur.Luck, derived.MaxLuck, v => cur.Luck = v);
+        return changes;
+    }
+
     public static void Run(MigrationState s)
     {
         var converter = new SheetConverter(
@@ -103,6 +130,12 @@ public static class CharacterStep
                 s.Report.Add(ReportSections.Fixed,
                     $"тестовый лист «{sheet.Personal.Name}» ({character.Kind}): текущие ПЗ, ПМ, Рассудок и Удача были нулями → "
                     + $"{c.HitPoints}/{c.MagicPoints}/{c.Sanity}/{c.Luck} — максимумы v1 в пределах формулы (решение владельца, по id листа)");
+            }
+
+            if (ClampCurrentToMax(sheet, s.SkillCatalog) is { Count: > 0 } clamped)
+            {
+                s.Report.Add(ReportSections.CurrentAboveMax,
+                    $"лист «{sheet.Personal.Name}» ({character.Kind}): {string.Join(", ", clamped)}");
             }
 
             character.Sheet = CmJson.Write(sheet);

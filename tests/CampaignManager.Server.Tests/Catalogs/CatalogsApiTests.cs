@@ -280,6 +280,60 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Contains(report.Warnings, w => w.Contains("«Давка»", StringComparison.Ordinal));
     }
 
+    // #175: игрок видит название, картинки и «Описание», но не статблок — ни в списке, ни в файле экспорта;
+    // у Хранителя статблок на месте. Отсекает сервер, а не интерфейс.
+    [Fact]
+    public async Task Player_gets_creatures_without_statblock_keeper_with_it()
+    {
+        TestDatabase.SkipIfMissing();
+        var name = Unique("Azathoth");
+        var created = await app.Creatures().CreateAsync(new CreatureDto
+        {
+            Name = name,
+            Type = CreatureType.MythicMonsters,
+            Description = "Слепой идиот-бог.",
+            Statblock = new Statblock
+            {
+                Str = new StatValue { Value = 85 },
+                HitPoints = 15,
+                SanityLoss = "1D10/1D100",
+                Attacks = [new CreatureAttack { Name = "Claws", SkillValue = 45, Damage = "1D6", DamageBonusMode = CreatureDamageBonusMode.Full }],
+            },
+        }, Cancellation);
+
+        var asPlayer = await app.Creatures(app.Player).ListAsync(Cancellation);
+        var asKeeper = await app.Creatures().ListAsync(Cancellation);
+
+        Assert.All(asPlayer.Items, c => Assert.Equal(new Statblock().HitPoints, c.Statblock.HitPoints));
+        Assert.All(asPlayer.Items, c => Assert.Empty(c.Statblock.Attacks));
+        var seen = asPlayer.Items.Single(c => c.Id == created.Id);
+        Assert.Equal((name, "Слепой идиот-бог."), (seen.Name, seen.Description));
+        var full = asKeeper.Items.Single(c => c.Id == created.Id);
+        Assert.Equal(15, full.Statblock.HitPoints);
+        Assert.Single(full.Statblock.Attacks);
+
+        // Файл экспорта — тот же путь: игрок не получит статблок и им
+        var export = await app.CreateClient(app.Player).GetStringAsync(CatalogsRoutes.Creatures.Export, Cancellation);
+        Assert.Contains(name, export, StringComparison.Ordinal);
+        Assert.DoesNotContain("Claws", export, StringComparison.Ordinal);
+        Assert.DoesNotContain("1D10/1D100", export, StringComparison.Ordinal);
+        // Ответ Хранителю полный, а ETag у ролей разный: кэш игрока Хранителю не достанется
+        Assert.Contains("Claws", await app.CreateClient(app.Keeper).GetStringAsync(CatalogsRoutes.Creatures.Export, Cancellation), StringComparison.Ordinal);
+    }
+
+    // #194: неверное значение enum в теле — 400 с понятным текстом, а не 500 (читает тело вручную — тот же обработчик)
+    [Fact]
+    public async Task Invalid_enum_in_catalog_body_is_400_with_text()
+    {
+        TestDatabase.SkipIfMissing();
+
+        using var response = await app.CreateClient().PostAsync(CatalogsRoutes.Creatures.Base,
+            new StringContent("""{"name":"Тварь","type":"Нет такого","statblock":{}}""", Encoding.UTF8, "application/json"), Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Не читается как JSON", await response.Content.ReadAsStringAsync(Cancellation), StringComparison.Ordinal);
+    }
+
     // ── Обмен JSON ──
 
     [Fact]

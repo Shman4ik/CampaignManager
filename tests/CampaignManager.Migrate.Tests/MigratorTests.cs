@@ -147,7 +147,7 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         var copy = await db.Scenarios.SingleAsync(s => s.Id == V1Fixture.Copy, Token);
         Assert.Equal(V1Fixture.Template, copy.SourceScenarioId);
         var run = await db.ScenarioRuns.SingleAsync(Token);
-        Assert.Equal((V1Fixture.Copy, ScenarioRunStatus.Finished, true), (run.ScenarioId, run.Status, run.SignupOpen));
+        Assert.Equal((V1Fixture.Copy, ScenarioRunStatus.Finished, false), (run.ScenarioId, run.Status, run.SignupOpen)); // v1: опубликовано, но игра сыграна (#192)
         Assert.Equal(new DateTimeOffset(2026, 4, 13, 17, 0, 0, TimeSpan.Zero), run.ScheduledAt); // 19:00 в Праге, летнее +2
 
         var template = await db.Scenarios
@@ -212,6 +212,7 @@ public sealed class MigratorTests(MigrationDatabase database) : IClassFixture<Mi
         Assert.Single(report.Sections[ReportSections.DroppedDuplicates]);
         Assert.Contains(report.Sections[ReportSections.Renamed], l => l.Contains("«Флаг (1 метр)» → «Фляга»", StringComparison.Ordinal));
         Assert.Single(report.Sections[ReportSections.MovedToScenario]);
+        Assert.Contains(report.Sections[ReportSections.Fixed], l => l.Contains("запись закрыта", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.Files], l => l.Contains("missing.jpg", StringComparison.Ordinal));
         Assert.Contains(report.Sections[ReportSections.Warnings], l => l.Contains("Хиромантия", StringComparison.Ordinal));
         Assert.DoesNotContain("@example.test", report.ToMarkdown(DateTimeOffset.UnixEpoch), StringComparison.Ordinal);

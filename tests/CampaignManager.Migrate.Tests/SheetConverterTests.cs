@@ -128,6 +128,29 @@ public sealed class SheetConverterTests
         Assert.Same(sheet.Current, current);
     }
 
+    /// <summary>#168: текущее выше максимума по формуле опускается до максимума, остальное не трогается.</summary>
+    [Fact]
+    public void Current_values_above_formula_maximum_are_lowered_to_it()
+    {
+        var (sheet, _) = Convert("player-milie-mare");
+        var formula = DerivedAttributeRules.Compute(sheet, TestCatalog.Skills);
+        sheet.Current.HitPoints = formula.MaxHitPoints + 3;
+        sheet.Current.MagicPoints = formula.MaxMagicPoints;
+        sheet.Current.Sanity = formula.MaxSanity + 5;
+        sheet.Current.Luck = 40;
+
+        var changes = Steps.CharacterStep.ClampCurrentToMax(sheet, TestCatalog.Skills);
+
+        Assert.Equal(formula.MaxHitPoints, sheet.Current.HitPoints);
+        Assert.Equal(formula.MaxSanity, sheet.Current.Sanity);
+        Assert.Equal(formula.MaxMagicPoints, sheet.Current.MagicPoints);
+        Assert.Equal(40, sheet.Current.Luck);
+        Assert.Equal(
+            [$"ПЗ {formula.MaxHitPoints + 3} → {formula.MaxHitPoints}", $"Рассудок {formula.MaxSanity + 5} → {formula.MaxSanity}"],
+            changes);
+        Assert.Empty(Steps.CharacterStep.ClampCurrentToMax(sheet, TestCatalog.Skills));
+    }
+
     [Fact]
     public void Npc_from_book_keeps_printed_values_in_overrides_and_loses_import_checkmarks()
     {

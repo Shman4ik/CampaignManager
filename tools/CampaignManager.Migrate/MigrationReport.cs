@@ -93,6 +93,7 @@ public static class ReportSections
     public const string SheetSkillsBelowBase = "Листы: навыки ниже базы (0 = «не заполнено») — без строки, значение — база справочника";
     public const string Overrides = "Листы: значения книги у НПС (overrides)";
     public const string FormulaWins = "Листы: вычисляемое по формуле, а не как в v1 (решение владельца)";
+    public const string CurrentAboveMax = "Листы: текущее значение выше максимума по формуле опущено до максимума (решение владельца, #168)";
     public const string DroppedBiography = "Листы: отброшен текст граф «Фобии» и «Магические предметы» (решение владельца)";
     public const string SameNames = "Листы: одноимённые (не сливались)";
     public const string Files = "Файлы";

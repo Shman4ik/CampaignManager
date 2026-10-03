@@ -198,6 +198,9 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 (`Contracts/Platform/ApiProblemCodes`); клиент, которому он нужен, читает ответ через `ApiResponses` с `withCode: true` и
 получает `ApiException` (наследник `HttpRequestException`). Своих исключений-отказов модулям не заводить (так было у
 кампаний — `CampaignRejectedException`, сведён сюда в T2.9). Отказ по правам — `AccessDeniedException` (Access), не он.
+Ошибка чтения тела запроса (неверное значение enum, не тот тип, битый JSON) — тоже 400 `invalid` с текстом «поле «era»…»:
+`ApiProblemExceptionHandler` ловит `BadHttpRequestException` и `JsonException`, а `PlatformModule` включает
+`RouteHandlerOptions.ThrowOnBadRequest` во всех окружениях (по умолчанию его бросает только Development — там было 500, #194).
 Перехватчики `SaveChanges` модулей — `ISaveChangesInterceptor` в DI, `AddCmData` их подключает.
 
 Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` (и beta-стенд на ней) смотрит

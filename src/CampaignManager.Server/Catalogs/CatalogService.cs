@@ -36,6 +36,11 @@ public sealed class CatalogService<TEntity, TDto>(
         var rights = await access.ForCatalogAsync(cancellationToken).Demand(Operation.Read);
         var rows = await store.Query(db).AsNoTracking().OrderBy(e => e.Name).ToListAsync(cancellationToken);
         var items = await store.ToDtosAsync(db, rows, cancellationToken);
+        if (!rights.CanEdit)
+        {
+            items = [.. items.Select(store.ForReader)];
+        }
+
         return (new CatalogList<TDto>(items, rights.CanEdit), ETagOf(rows, rights.CanEdit));
     }
 

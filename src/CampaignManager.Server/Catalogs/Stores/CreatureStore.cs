@@ -51,6 +51,17 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
                 .Select(i => new CreatureImageDto(i.FileId, FilesRoutes.Content(i.FileId), i.Caption)).ToList(),
         }).ToList());
 
+    /// <summary>
+    /// Игрок видит название, картинки и «Описание», но не статблок: характеристики, ПЗ, броня, атаки и особые умения —
+    /// спойлер за столом (решение владельца 2026-10-03, #175). Отсекается здесь, а не в UI: список и файл экспорта
+    /// игроку уходят без статблока вовсе.
+    /// </summary>
+    public override CreatureDto ForReader(CreatureDto dto)
+    {
+        dto.Statblock = new Statblock();
+        return dto;
+    }
+
     public override async Task ApplyAsync(CmDbContext db, CreatureDto dto, Creature entity, CatalogWrite write, CancellationToken cancellationToken)
     {
         if (!Enum.IsDefined(dto.Type))
