@@ -1,0 +1,35 @@
+@* Заголовок карточки: жирный (cm-card-title) слева, счётчик и действие справа (правила 4–6). Нулевой счётчик не
+   рисуется («Игроки (0)» — шум), а заголовок без действия и без чего показать не рисуется вовсе: нулевая секция
+   не занимает места, пока в ней нечему быть. Кнопка добавления — одна и живёт здесь, пустого состояния с копией
+   кнопки нет. Это не cm-section-title (капс-серый над карточкой) — тот пишется один раз над самой карточкой. *@
+@if (Visible)
+{
+    <div class="@Css.Join("cm-card-header", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">
+        <h3 class="cm-card-title">
+            @Title
+            @if (Count is > 0)
+            {
+                <span class="cm-card-count">@Count</span>
+            }
+        </h3>
+        @if (Actions is not null)
+        {
+            <div class="flex flex-wrap items-center justify-end gap-2">@Actions</div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Сколько внутри. 0 — счётчика нет, а без Actions нет и заголовка; null — неизвестно, заголовок есть.</summary>
+    [Parameter] public int? Count { get; set; }
+
+    /// <summary>Действие секции — «Добавить локацию». Не Small вне шапки страницы: в карточке кнопка 44px.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool Visible => Count is not 0 || Actions is not null;
+}

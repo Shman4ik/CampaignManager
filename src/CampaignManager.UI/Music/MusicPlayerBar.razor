@@ -26,71 +26,42 @@
 
 @if (Player.IsPanelOpen)
 {
-    <section class="cm-music-bar" aria-label="Плеер" data-testid="music-bar">
-        <div class="cm-music-row">
-            <i class="@Css.Join("fa-solid fa-music cm-music-glyph", Player.IsPlaying ? "cm-music-glyph-live" : null)" aria-hidden="true"></i>
+    <section class="@Css.Join("cm-music-bar", _expanded ? null : "cm-music-bar-strip")" aria-label="@Terms.Player" data-testid="music-bar">
+        <PlayerStrip @bind-Expanded="_expanded" />
 
-            <div class="cm-music-title">
-                @if (Player.Current is { } track)
-                {
-                    <span class="cm-music-name" data-testid="music-current">@track.Name</span>
-                    @if (!string.IsNullOrWhiteSpace(Player.PoolLabel) && Player.PoolLabel != track.Name)
-                    {
-                        <span class="cm-music-pool">@Player.PoolLabel</span>
-                    }
-                }
-                else
-                {
-                    <span class="cm-music-pool">Музыка не играет</span>
-                }
-            </div>
+        @if (_expanded)
+        {
+            @if (Player.Current is not null)
+            {
+                @* Разметка неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
+                   C# эти элементы после первой отрисовки не патчит. Не привязывать к ним @bind и value с меняющимся
+                   значением — ползунок начнёт вырываться из-под пальца. *@
+                <div class="cm-music-seek">
+                    <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
+                    <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0" aria-label="Позиция в треке" disabled />
+                    <span class="cm-music-time" id="cm-music-duration">--:--</span>
+                </div>
+            }
 
-            <div class="cm-music-controls">
-                @* cm-music-start — кнопка может начать звук: модуль «расчехляет» аудио ещё на pointerdown,
-                   внутри настоящего жеста (иначе iPad откажет в play()). *@
-                <Button Small="true" Variant="ButtonVariant.Secondary" class="cm-music-start" Disabled="Player.Current is null"
-                        Icon="@(Player.IsPlaying ? "fa-pause" : "fa-play")" AriaLabel="@(Player.IsPlaying ? "Пауза" : "Продолжить")"
-                        data-testid="music-toggle-pause" OnClick="Player.TogglePause" />
-                <Button Small="true" Variant="ButtonVariant.Secondary" class="cm-music-start" Disabled="!Player.CanRoll"
-                        Icon="fa-shuffle" AriaLabel="Другой трек из того же настроения" OnClick="() => Player.Roll()" />
-                <Button Small="true" Variant="ButtonVariant.OutlineError" Disabled="Player.Current is null"
-                        Icon="fa-stop" AriaLabel="Остановить" OnClick="Player.Stop" />
+            <div class="cm-music-row">
                 <div class="cm-music-volume">
-                    <Button Small="true" Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
+                    <Button Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
                             AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
                     <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
                 </div>
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_moodsOpen ? "fa-chevron-down" : "fa-chevron-up")"
-                        AriaLabel="@(_moodsOpen ? "Скрыть настроения" : "Показать настроения")" OnClick="() => _moodsOpen = !_moodsOpen" />
-                <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="Скрыть панель плеера" OnClick="Player.ClosePanel" />
             </div>
-        </div>
 
-        @if (Player.Current is not null)
-        {
-            @* Разметка неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
-               C# эти элементы после первой отрисовки не патчит. Не привязывать к ним @bind и value с меняющимся
-               значением — ползунок начнёт вырываться из-под пальца. *@
-            <div class="cm-music-seek">
-                <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
-                <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0" aria-label="Позиция в треке" disabled />
-                <span class="cm-music-time" id="cm-music-duration">--:--</span>
-            </div>
-        }
-
-        @if (_moodsOpen || Player.Current is null)
-        {
             <div class="cm-music-row cm-music-moods">
                 <span class="cm-music-pool">Настроение:</span>
                 @foreach (var tag in Player.PinnedTags)
                 {
                     var current = tag;
                     var count = Player.Resolve(MusicPool.Of([current])).Count;
-                    <Button Small="true" class="cm-music-start" Disabled="count == 0"
+                    <Button class="cm-music-start" Disabled="count == 0"
                             Variant="@(IsCurrentPool(current) ? ButtonVariant.Primary : ButtonVariant.Secondary)"
                             OnClick="() => Player.PlayTag(current)">@current</Button>
                 }
-                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-sliders" Href="music">Фонотека</Button>
+                <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-sliders" Href="music">@Terms.Library</Button>
             </div>
         }
 
@@ -130,7 +101,9 @@
 
     private IJSObjectReference? _module;
     private DotNetObjectReference<MusicPlayerBar>? _self;
-    private bool _moodsOpen;
+    // Панель — полоса ≤ 48px; громкость, позиция и настроения — в развёрнутой части.
+    private bool _expanded;
+    private bool _wasOpen;
     private bool _hasLibrary;
 
     // Что уже отправлено в браузер: отличить «сменился трек» от «подвинули громкость».
@@ -142,6 +115,7 @@
     protected override async Task OnInitializedAsync()
     {
         Player.Changed += OnPlayerChanged;
+        _wasOpen = Player.IsPanelOpen;
         _hasLibrary = Player.Library.Count > 0;
 
         if (await Storage.GetAsync(VolumeKey) is { } saved && saved.Split(':') is [var volume, var muted]
@@ -259,6 +233,13 @@
     private void OnPlayerChanged()
     {
         _hasLibrary = Player.Library.Count > 0;
+        // Открыли панель, а ничего не играет — сразу настроения: выбрать трек за одно касание, как раньше.
+        if (Player.IsPanelOpen && !_wasOpen && Player.Current is null)
+        {
+            _expanded = true;
+        }
+
+        _wasOpen = Player.IsPanelOpen;
         InvokeAsync(StateHasChanged);
     }
 
@@ -273,7 +254,7 @@
     [JSInvokable]
     public void NotifyNeedsGesture()
     {
-        _moodsOpen = true;
+        _expanded = true;
         Player.SetNeedsGesture(true);
     }
 

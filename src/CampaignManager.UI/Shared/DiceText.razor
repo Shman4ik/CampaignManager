@@ -1,0 +1,20 @@
+@using CampaignManager.Core.Dice
+@* Кости на экране — единственная точка вывода (правило 13): 1d6 + 2, 3d6 × 5, строчная d, пробелы вокруг
+   операторов. Формула хранится как её ввели, форматируется здесь; остальной текст строки (например
+   «+ бонус к урону») не трогается. Не разрывается переносом внутри броска. *@
+<span class="@Css.Join("cm-dice whitespace-nowrap", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">@Formatted</span>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+
+    /// <summary>Пусто — тире словаря, а не пустая ячейка.</summary>
+    [Parameter] public string Empty { get; set; } = CampaignManager.Core.Terms.None;
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string Formatted => string.IsNullOrWhiteSpace(Value) ? Empty : DiceNotation.Format(Value.Trim());
+
+    /// <summary>Тот же текст без разметки — для подписей, тостов и журнала.</summary>
+    public static string Format(string? value) => DiceNotation.Format(value);
+}

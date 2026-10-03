@@ -1,0 +1,33 @@
+@inject DialogService Dialogs
+
+@* Уход с несохранённой формы — один вопрос «Есть несохранённые изменения. Выйти?» (правило 7). Для страницы
+   правки: <UnsavedChangesGuard Dirty="_changed" /> перехватывает переход по ссылке, кнопку «назад» и закрытие
+   вкладки (NavigationLock: внутренний переход спрашивает наше окно, внешний — браузерное). Для окна правки
+   охранять нечем — окно закрывает сама страница, поэтому у компонента есть ConfirmLeaveAsync: «Отмена» и крестик
+   зовут его (@ref), а не закрывают молча. Сохранённая форма: Dirty = false, вопроса нет. *@
+<NavigationLock OnBeforeInternalNavigation="BeforeNavigationAsync" ConfirmExternalNavigation="Dirty" />
+
+@code {
+    [Parameter] public bool Dirty { get; set; }
+
+    /// <summary>Заголовок вопроса. Текст один на приложение; менять его страницам незачем.</summary>
+    [Parameter] public string Question { get; set; } = "Есть несохранённые изменения. Выйти?";
+
+    /// <summary>Можно ли уходить: нет изменений — да без вопроса, иначе — ответ окна.</summary>
+    public async Task<bool> ConfirmLeaveAsync() => !Dirty || await Ask();
+
+    private async Task BeforeNavigationAsync(LocationChangingContext context)
+    {
+        if (Dirty && !await Ask())
+        {
+            context.PreventNavigation();
+        }
+    }
+
+    private Task<bool> Ask() => Dialogs.ConfirmAsync(new ConfirmRequest(Question, "Изменения не сохранены и пропадут.")
+    {
+        ConfirmText = "Выйти без сохранения",
+        CancelText = "Остаться",
+        Details = null,
+    });
+}

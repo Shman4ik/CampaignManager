@@ -1,0 +1,256 @@
+/*
+  Новые компоненты кита UX-0b: всплывающая подсказка (BookRef, Abbr), меню «⋯» (RowMenu), выбор файла
+  (FilePicker), сводка ошибок формы (FormErrors), липкая колонка (StickyPane), полоса страниц (Pagination).
+  Отдельным файлом, чтобы не пересекаться с components.css, который правит UX-0a. Размеры текста ≥ 13px (правило 2),
+  цели касания ≥ 44px (правило 1; у встроенного в строку значка — зона касания через ::after).
+*/
+@layer components {
+  /* ── Подсказка по касанию (TouchPopover → BookRef, Abbr) ── */
+  .cm-pop {
+    position: relative;
+    display: inline-block;
+  }
+
+  .cm-pop-trigger {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.125rem;
+    font: inherit;
+    color: var(--color-accent-700);
+    background: none;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+  }
+
+  /* Зона касания ≥ 44px у значка, который стоит в строке и не должен раздувать её высоту. */
+  .cm-pop-trigger::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 2.75rem);
+    height: 2.75rem;
+    transform: translate(-50%, -50%);
+  }
+
+  .cm-pop-trigger:hover {
+    color: var(--color-accent-800);
+  }
+
+  .cm-bookref {
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .cm-abbr abbr {
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+
+  .cm-pop-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+
+  .cm-pop-panel {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 41;
+    display: block;
+    width: max-content;
+    min-width: 10rem;
+    max-width: min(20rem, calc(100vw - 2rem));
+    margin-top: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--color-primary-700);
+    text-align: left;
+    white-space: normal;
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  }
+
+  /* ── Меню «⋯» (RowMenu) ── */
+  .cm-menu {
+    display: inline-block;
+  }
+
+  .cm-menu-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    min-width: 13rem;
+    max-width: calc(100vw - 1rem);
+    padding: 0.25rem;
+    /* Пока модуль не поставил панель у кнопки, её не видно — иначе она мигнёт в углу экрана. */
+    visibility: hidden;
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+  }
+
+  .cm-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-primary-800);
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+  }
+
+  .cm-menu-item i {
+    width: 1rem;
+    text-align: center;
+    color: var(--color-primary-500);
+  }
+
+  .cm-menu-item:hover:not(:disabled),
+  .cm-menu-item:focus-visible {
+    background: var(--color-primary-50);
+  }
+
+  .cm-menu-item:disabled {
+    color: var(--color-primary-400);
+    cursor: not-allowed;
+  }
+
+  .cm-menu-item-danger,
+  .cm-menu-item-danger i {
+    color: var(--color-error-600);
+  }
+
+  .cm-menu-item-danger:hover:not(:disabled),
+  .cm-menu-item-danger:focus-visible {
+    background: var(--color-error-50);
+  }
+
+  .cm-menu-sep {
+    margin: 0.25rem 0.5rem;
+    border-top: 1px solid var(--color-primary-200);
+  }
+
+  /* ── Выбор файла (FilePicker) ── */
+  .cm-file-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .cm-file-picker label {
+    cursor: pointer;
+  }
+
+  .cm-file-picker label:has(input:focus-visible) {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+  }
+
+  .cm-file-picker .cm-file-picker-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .cm-file-picker-name {
+    min-width: 0;
+    font-size: 0.8125rem;
+    color: var(--color-primary-600);
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Сводка ошибок формы (FormErrors) ── */
+  .cm-form-errors {
+    font-size: 0.8125rem;
+    color: var(--color-error-700);
+  }
+
+  .cm-form-errors-count {
+    font-weight: 600;
+  }
+
+  .cm-form-errors-list {
+    margin: 0.25rem 0 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+  }
+
+  /* ── Липкая колонка действия (StickyPane) ──
+     top-14 — шапка 56px. С lg (1024): в портрете iPad сцена уже в две колонки; уже — колонки друг под другом,
+     и липнуть нечему. Выше экрана — прокрутка внутри, а не страницы. */
+  @media (min-width: 64rem) {
+    .cm-sticky-pane {
+      position: sticky;
+      top: 3.5rem;
+      max-height: calc(100dvh - 4.5rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
+
+  /* ── Липкие вкладки (Tabs Sticky): под шапкой, с фоном, чтобы содержимое не просвечивало ── */
+  .cm-tabs-sticky {
+    position: sticky;
+    top: 3.5rem;
+    z-index: 10;
+    padding-top: 0.25rem;
+    background: var(--color-page);
+  }
+
+  /* ── Полоса страниц (Pagination): под карточкой списка, вне её ── */
+  .cm-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-top: 1rem;
+  }
+
+  .cm-pagination-count {
+    font-size: 0.8125rem;
+    color: var(--color-primary-600);
+  }
+
+  /* ── Пустое состояние одной строкой (правило 4): «Нет книг.» / «Нет книг по этим условиям.» + сброс ── */
+  .cm-empty-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 0.75rem 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--color-primary-600);
+  }
+
+  /* ── «Опасная зона» в конце окна правки: удаление отделено линейкой, не рядом с «Сохранить» ── */
+  .cm-danger-zone {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-primary-200);
+  }
+}

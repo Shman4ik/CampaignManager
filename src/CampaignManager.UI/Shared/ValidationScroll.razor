@@ -1,0 +1,38 @@
+@inject IJSRuntime JS
+
+@* Прокрутка к первой ошибке формы (правило 9): после неудачного «Сохранить» страница или тело окна доезжает до
+   первого поля с красной рамкой (cm-input-invalid) или aria-invalid="true" и ставит в него фокус — иначе ошибка
+   остаётся там, где её не видно (в v1 поле «Название» краснело выше экрана, а кнопка молчала). Ставится внутрь
+   формы (окна или страницы); срабатывает, когда Trigger вырос, — страница увеличивает счётчик при каждой неудачной
+   попытке. Сам ничего не рисует. *@
+<span @ref="_marker" hidden data-validation-scroll></span>
+
+@code {
+    private ElementReference _marker;
+    private int _handled;
+
+    /// <summary>Счётчик неудачных попыток сохранения: вырос — прокрутить к первой ошибке.</summary>
+    [Parameter] public int Trigger { get; set; }
+
+    /// <summary>Где искать, если нужен не весь родитель метки: CSS-селектор контейнера.</summary>
+    [Parameter] public string? Container { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Trigger <= _handled)
+        {
+            return;
+        }
+
+        _handled = Trigger;
+        try
+        {
+            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/ValidationScroll.razor.js");
+            await module.InvokeVoidAsync("scrollToFirstInvalid", _marker, Container);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

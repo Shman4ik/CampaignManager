@@ -1,0 +1,70 @@
+@inject MusicPlayer Player
+
+@* Полоса плеера — то, что видно всегда, пока панель открыта: ≤ 48px, две главные кнопки с подписью и «⋯» (правила 7,
+   14, 16; U4 п.10). Играет — «Пауза» и «Другой трек», остальное («Остановить», «Скрыть плеер») в «⋯»; ничего не
+   играет — «Настроения» и «Скрыть», неактивных кнопок в покое нет («Другой трек» без пула не рисуется). Громкость,
+   позиция и настроения — в развёрнутой части панели (MusicPlayerBar). После «Остановить» панель сворачивается сюда.
+   Класс cm-music-start у кнопок, которые могут начать звук: модуль «расчехляет» аудио на pointerdown внутри жеста
+   (иначе iPad откажет в play()). *@
+<div class="cm-music-strip">
+    <i class="@Css.Join("fa-solid fa-music cm-music-glyph", Player.IsPlaying ? "cm-music-glyph-live" : null)" aria-hidden="true"></i>
+
+    <div class="cm-music-title">
+        @if (Player.Current is { } track)
+        {
+            <span class="cm-music-name" data-testid="music-current">@track.Name</span>
+            @if (!string.IsNullOrWhiteSpace(Player.PoolLabel) && Player.PoolLabel != track.Name)
+            {
+                <span class="cm-music-pool">@Player.PoolLabel</span>
+            }
+        }
+        else
+        {
+            <span class="cm-music-pool">Музыка не играет</span>
+        }
+    </div>
+
+    <div class="cm-music-controls">
+        @if (Player.Current is not null)
+        {
+            <Button Variant="ButtonVariant.Secondary" class="cm-music-start" Icon="@(Player.IsPlaying ? "fa-pause" : "fa-play")"
+                    data-testid="music-toggle-pause" OnClick="Player.TogglePause">@(Player.IsPlaying ? "Пауза" : "Продолжить")</Button>
+            @if (Player.CanRoll)
+            {
+                <Button Variant="ButtonVariant.Secondary" class="cm-music-start" Icon="fa-shuffle" OnClick="() => Player.Roll()">Другой трек</Button>
+            }
+
+            <RowMenu AriaLabel="Ещё: плеер">
+                <ChildContent>
+                    <RowMenuItem Icon="@(Expanded ? "fa-chevron-down" : "fa-sliders")" OnClick="ToggleExpandedAsync">@(Expanded ? "Свернуть плеер" : "Громкость и настроения")</RowMenuItem>
+                    <RowMenuItem Icon="fa-xmark" OnClick="Player.ClosePanel">Скрыть плеер</RowMenuItem>
+                </ChildContent>
+                <Danger>
+                    <RowMenuItem Danger="true" Icon="fa-stop" OnClick="StopAsync">Остановить</RowMenuItem>
+                </Danger>
+            </RowMenu>
+        }
+        else
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="@(Expanded ? "fa-chevron-down" : "fa-chevron-up")"
+                    aria-expanded="@(Expanded ? "true" : "false")" OnClick="ToggleExpandedAsync">Настроения</Button>
+            <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" OnClick="Player.ClosePanel">Скрыть</Button>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>Развёрнута ли панель под полосой (громкость, позиция, настроения).</summary>
+    [Parameter] public bool Expanded { get; set; }
+
+    [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
+
+    private Task ToggleExpandedAsync() => ExpandedChanged.InvokeAsync(!Expanded);
+
+    // «Остановить» сворачивает панель до полосы: в покое от плеера остаётся одна строка.
+    private async Task StopAsync()
+    {
+        Player.Stop();
+        await ExpandedChanged.InvokeAsync(false);
+    }
+}
