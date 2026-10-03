@@ -33,7 +33,7 @@
                переключатель остаётся на месте. Индикатор говорит, только когда есть что сказать: правки, запись, ошибка;
                «Сохранено» — пару секунд после записи и гаснет (решение владельца 2026-10-03). Сама живая область остаётся в
                DOM — иначе диктор не объявит появление состояния. *@
-            <span class="sheet-save-state @SaveStateClass" role="status" aria-live="polite" data-testid="autosave-status">
+            <span class="@Css.Join("sheet-save-state", SaveStateClass, Routine ? "max-md:hidden" : null)" role="status" aria-live="polite" data-testid="autosave-status">
                 @if (ShowSaveState)
                 {
                     <i class="fa-solid @SaveStateIcon" aria-hidden="true"></i>
@@ -45,7 +45,9 @@
                уносит правки само, и тёмная кнопка в покое перевешивала режим. В «Игре» — не главная, в «Листе» — главная. *@
             @if (ShowSaveButton)
             {
-                <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy"
+                @* На телефоне в обычных правках (до тика) кнопка и индикатор прячутся: имя сыщика важнее трёх секунд «Есть правки»,
+                   а запишет автосохранение; ошибка и конфликт остаются видны. *@
+                <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy" class="@(Routine ? "max-md:hidden" : null)"
                         Variant="@(SheetMode ? ButtonVariant.Primary : ButtonVariant.Secondary)"
                         Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
                         OnClick="SaveNowAsync">Сохранить</Button>
@@ -599,6 +601,9 @@
 
     /// <summary>«Сохранить» — только пока есть что сохранять (правка, запись, ошибка, конфликт).</summary>
     private bool ShowSaveButton => EffectiveState != SheetSaveState.Saved;
+
+    /// <summary>Обычный ход дела (правка, запись, «Сохранено»), а не ошибка или конфликт.</summary>
+    private bool Routine => EffectiveState is SheetSaveState.Saved or SheetSaveState.Dirty or SheetSaveState.Saving;
 
     /// <summary>«Сохранено» — на пару секунд; новая запись продлевает показ (счётчик, а не флаг: старая пауза не гасит новую).</summary>
     private void FlashSaved()
