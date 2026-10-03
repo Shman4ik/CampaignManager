@@ -158,6 +158,7 @@ public sealed class CatalogService<TEntity, TDto>(
             {
                 var isNew = target is null;
                 var entity = target ?? store.New();
+                var before = isNew ? null : CatalogChanges.Snapshot((await store.ToDtosAsync(db, [entity], cancellationToken))[0]);
                 var oldKey = NameKey(entity.Name);
                 if (isNew)
                 {
@@ -186,9 +187,17 @@ public sealed class CatalogService<TEntity, TDto>(
                     byCode[entity.Code] = entity;
                 }
 
+                List<string> notes = [];
+                if (before is not null)
+                {
+                    var changed = CatalogChanges.Diff(before, CatalogChanges.Snapshot((await store.ToDtosAsync(db, [entity], cancellationToken))[0]));
+                    notes.Add(changed.Count > 0 ? $"изменено: {string.Join(", ", changed)}" : "без изменений");
+                }
+
+                notes.AddRange(write.Warnings);
                 lines.Add(new CatalogImportLine(entity.Name,
                     isNew ? CatalogImportOutcome.Created : CatalogImportOutcome.Updated,
-                    write.Warnings.Count > 0 ? string.Join(" ", write.Warnings) : null));
+                    notes.Count > 0 ? string.Join(". ", notes) : null));
                 warnings.AddRange(write.Warnings.Select(w => $"{entity.Name}: {w}"));
             }
             catch (ApiProblemException problem)

@@ -68,6 +68,13 @@
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
 
+    private string _skillFilter = "";
+
+    /// <summary>Поиск по подстроке без учёта регистра и «ё»; выбранный навык остаётся в списке, что бы ни набрали.</summary>
+    private bool Shown(SkillDto skill, WeaponDto weapon) =>
+        skill.Id == weapon.SkillId || _skillFilter.Length == 0
+        || CatalogCodeTable.NormalizeName(skill.Name).Contains(CatalogCodeTable.NormalizeName(_skillFilter), StringComparison.Ordinal);
+
     private static bool IsCombat(SkillDto skill) => skill.Category is SkillCategory.CombatGeneral or SkillCategory.CombatFirearms;
 
     // Сортировка по урону — по числу (больше сверху в убывании), а не по тексту: «10d10 / 2 метра» шло раньше «1d10».
@@ -92,6 +99,7 @@
     // Навыки нужны только форме: грузятся при первом открытии.
     private async Task EnsureSkillsAsync()
     {
+        _skillFilter = ""; // зовётся при открытии формы: поиск прошлой записи в новой не нужен
         if (_skills.Count > 0)
         {
             return;
@@ -155,17 +163,20 @@
                 </select>
             </Field>
             <Field Label="Навык" Required="true" Error="@_state.For("skill")">
-                <select class="cm-input" aria-invalid="@_state.Invalid("skill")" @bind="w.SkillId">
-                    <option value="@Guid.Empty">— выберите —</option>
+                <input class="cm-input mb-2" type="search" placeholder="Найти навык…" aria-label="Найти навык" autocomplete="off"
+                       @bind="_skillFilter" @bind:event="oninput" />
+                @* @key: навыки приходят после открытия формы, и без пересоздания селект при первой правке показывал «— выберите —» вместо навыка оружия. *@
+                <select @key="_skills.Count" class="cm-input" aria-invalid="@_state.Invalid("skill")" @bind="w.SkillId">
+                    <option value="@Guid.Empty">@(_skillFilter.Length > 0 && !_skills.Any(s => Shown(s, w)) ? "— ничего не найдено —" : "— выберите —")</option>
                     @* Оружию нужны около десяти боевых навыков из сотни: они идут первыми, отдельной группой. *@
                     <optgroup label="Боевые">
-                        @foreach (var skill in _skills.Where(IsCombat))
+                        @foreach (var skill in _skills.Where(s => IsCombat(s) && Shown(s, w)))
                         {
                             <option value="@skill.Id">@skill.Name</option>
                         }
                     </optgroup>
                     <optgroup label="Остальные">
-                        @foreach (var skill in _skills.Where(s => !IsCombat(s)))
+                        @foreach (var skill in _skills.Where(s => !IsCombat(s) && Shown(s, w)))
                         {
                             <option value="@skill.Id">@skill.Name</option>
                         }

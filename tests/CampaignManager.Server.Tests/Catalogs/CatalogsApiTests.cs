@@ -416,6 +416,25 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
     }
 
     [Fact]
+    public async Task Sync_report_says_what_the_seed_changed()
+    {
+        TestDatabase.SkipIfMissing();
+
+        await app.Occupations().SyncAsync(dryRun: false, Cancellation);
+        var doctor = (await app.Occupations().ListAsync(Cancellation)).Items.Single(o => o.Code == "occupation.doctor-of-medicine");
+        var edited = doctor.CreditRatingMax;
+        doctor.CreditRatingMax = edited - 1;
+        await app.Occupations().UpdateAsync(doctor, Cancellation);
+
+        var report = await app.Occupations().SyncAsync(dryRun: false, Cancellation);
+
+        var line = report.Lines.Single(l => l.Name == doctor.Name);
+        Assert.Equal("изменено: Средства: до", line.Message);
+        Assert.Contains(report.Lines, l => l is { Message: "без изменений" });
+        Assert.Equal(edited, (await app.Occupations().ListAsync(Cancellation)).Items.Single(o => o.Id == doctor.Id).CreditRatingMax);
+    }
+
+    [Fact]
     public async Task Occupation_slot_must_match_its_kind()
     {
         TestDatabase.SkipIfMissing();

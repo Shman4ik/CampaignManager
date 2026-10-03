@@ -238,6 +238,7 @@
                     {
                         <FormErrors Errors="[.. errors.Values]" Attempt="_attempt" Container=".cr-edit" />
                     }
+                    <Button Variant="ButtonVariant.Ghost" Icon="fa-eye" OnClick="() => _preview = true">Как будет в бестиарии</Button>
                     <Button Variant="ButtonVariant.Secondary" OnClick="LeaveAsync">Отмена</Button>
                     <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
                 </div>
@@ -246,7 +247,29 @@
     </AsyncContent>
 </div>
 
+@* Предпросмотр — тот же StatblockView, что на раскрытой карточке бестиария, по несохранённому статблоку формы. *@
+<Modal Open="_preview" Title="@(_creature?.Name is { Length: > 0 } name ? name : "Новое существо")" Size="ModalSize.Large" OnClose="() => _preview = false">
+    <ChildContent>
+        @if (_creature is { } previewed)
+        {
+            @if (StatblockView.IsBlank(previewed.Statblock))
+            {
+                <p class="cm-text-muted">Статблок пока пуст — заполните характеристики.</p>
+            }
+            else
+            {
+                <StatblockView Statblock="previewed.Statblock" />
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <Button OnClick="() => _preview = false">Закрыть</Button>
+    </Footer>
+</Modal>
+
 @code {
+    private bool _preview;
+
     private static readonly System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto> CreatureJson =
         (System.Text.Json.Serialization.Metadata.JsonTypeInfo<CreatureDto>)CampaignManager.Contracts.ContractsJsonContext.Default.GetTypeInfo(typeof(CreatureDto))!;
 
