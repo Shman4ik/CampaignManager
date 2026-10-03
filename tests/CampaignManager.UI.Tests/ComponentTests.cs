@@ -112,6 +112,20 @@ public sealed class ComponentTests : KitContext
     }
 
     [Fact]
+    public void String_list_editor_offers_add_only_when_there_is_something_to_add()
+    {
+        var cut = Render<StringListEditor>(p => p.Add(e => e.Values, ["Мать"]));
+
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Добавить", StringComparison.Ordinal));
+
+        cut.FindAll("input")[^1].Input("Мискатоник");
+
+        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Добавить", StringComparison.Ordinal));
+        // Строка — поле, растущее по содержимому: длинная фраза не прячется за краем однострочного input.
+        Assert.Single(cut.FindAll("textarea.cm-input"));
+    }
+
+    [Fact]
     public void String_list_editor_removes_by_row()
     {
         IReadOnlyList<string>? changed = null;

@@ -41,6 +41,12 @@ public abstract class CatalogStore<TEntity, TDto>
     public virtual Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>([]);
 
+    /// <summary>Держатели не дают удалить запись (внешний ключ): навык у оружия и профессий. У оружия в листах — нет.</summary>
+    public virtual bool UsersBlockDelete => true;
+
+    /// <summary>Что останется у держателей, если запись всё же удалить: «В листах останется название».</summary>
+    public virtual string? UsersNote => null;
+
     public abstract DbSet<TEntity> Set(CmDbContext db);
 
     /// <summary>Запрос с детьми (слоты, заклинания книги, картинки) — для чтения и правки.</summary>

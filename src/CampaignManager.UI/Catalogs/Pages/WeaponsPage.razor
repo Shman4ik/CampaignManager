@@ -4,18 +4,19 @@
 @inject ICatalogApi<SkillDto> SkillsApi
 
 @* Оружие — таблица XVII (стр. 401–405). Каждая колонка книги — свой столбец, строка — одна строка:
-   Название · Тип · Урон · Дист. · Атаки · Боезапас · Осечка · Цена. Ширина колонок — бюджет:
-   со всеми столбцами нужно ~1200px, поэтому таблица с lg, а «Тип» — только с xl: на ландшафте iPad Pro 11"
-   (колонка ~1064px) без него и с переносом «Атак» таблица влезает, а тип и так в фильтре. В портрет
-   (~690px) не влезает — там карточки (замер 2026-10-03). Навык уехал в раскрытие: тип его почти дублирует, а колонкой он съедал
-   214px. Раскрытая строка не повторяет колонки — только навык, разбивка дальности, ёмкость, примечания. *@
+   Название · Тип · Урон · Дальность · Атаки · Боезапас · Осечка · Цена. Ширина колонок — бюджет: со всеми столбцами
+   нужно ~1200px, поэтому таблица с lg, а «Тип» — столбцом только с xl; на ландшафте iPad Pro 11" (колонка ~1064px) он
+   строкой под названием, как в карточке. Миниатюра 40×27: на текст остаётся 260px, а не 134 (W1). В портрет
+   (~690px) таблица не влезает — там карточки: «Урон · Дальность» первой строкой, остальное мельче (W8). Навык уехал
+   в раскрытие: тип его почти дублирует. Показ значений — `WeaponText`: «Нет», «метр», «Только 1» приведены к
+   словарю (W3); форма правки показывает записанное. Раскрытая строка не повторяет колонки и подпись карточки. *@
 <CatalogPage TItem="WeaponDto" Title="Оружие" Icon="fa-gun" AddLabel="Добавить оружие" Noun="оружие" Plural="оружия"
              Filters="Filters" Toggles="Toggles" ErasOf="w => w.Eras" SearchAlso="w => [w.SkillName, w.Notes]"
-             TableFrom="TableBreakpoint.Lg" State="_state" Validate="Validate" New="() => new WeaponDto { Type = WeaponType.Pistols }" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
+             TableFrom="TableBreakpoint.Lg" State="_state" Validate="Validate" New="NewWeapon" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
     <Columns Context="view">
-        <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[20%]" Context="w">
+        <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[34%]" Context="w">
             <div class="flex items-center gap-3">
-                @Cover(w, "h-10 w-15")
+                @Cover(w, "h-[27px] w-10")
                 <div class="min-w-0">
                     <span class="font-medium text-primary-800">@w.Name</span>
                     @if (view.ShowEra)
@@ -23,6 +24,11 @@
                         <EraBadges Values="w.Eras" />
                     }
                     <WeaponMarks Weapon="w" />
+                    @if (!view.IsFixed("type"))
+                    {
+                        @* Столбец «Тип» есть только с xl; ниже тип — здесь, иначе он нигде не виден до раскрытия. *@
+                        <p class="cm-meta xl:hidden">@CatalogText.Of(w.Type)</p>
+                    }
                 </div>
             </div>
         </DataColumn>
@@ -30,41 +36,63 @@
         {
             <DataColumn TItem="WeaponDto" Title="Тип" SortBy="w => w.Type" HeaderClass="w-[12%] max-xl:hidden" CellClass="max-xl:hidden" Context="w">@CatalogText.Of(w.Type)</DataColumn>
         }
-        <DataColumn TItem="WeaponDto" Title="Урон" SortBy="w => DamageKey(w)" Context="w">
-            <DiceText Value="@w.Damage" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" />
+        <DataColumn TItem="WeaponDto" Title="Урон" SortBy="w => DamageKey(w)" HeaderClass="w-[8%]" Context="w">
+            <DiceText Value="@WeaponText.Damage(w.Damage)" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" />
         </DataColumn>
         <DataColumn TItem="WeaponDto" Title="@Terms.Range" SortBy="w => w.BaseRangeM" HeaderClass="w-[8%]" CellClass="whitespace-nowrap" Context="w">
-            @w.Range<UnparsedMark Show="Unparsed(w.Range, WeaponStatsParser.ParseRange(w.Range).IsParsed)" What="дальность" />
+            @Show(WeaponText.Range(w.Range))<UnparsedMark Show="Unparsed(w.Range, WeaponStatsParser.ParseRange(w.Range).IsParsed)" What="дальность" />
         </DataColumn>
-        <DataColumn TItem="WeaponDto" Title="@Terms.AttacksPerRound" HeaderClass="w-[16%] whitespace-normal" Context="w">
-            @w.Attacks<UnparsedMark Show="Unparsed(w.Attacks, WeaponStatsParser.ParseAttacks(w.Attacks).IsParsed)" What="атаки" />
+        <DataColumn TItem="WeaponDto" Title="@Terms.AttacksPerRound" HeaderClass="w-[14%] whitespace-normal" Context="w">
+            @Show(WeaponText.Attacks(w.Attacks))<UnparsedMark Show="Unparsed(w.Attacks, WeaponStatsParser.ParseAttacks(w.Attacks).IsParsed)" What="атаки" />
         </DataColumn>
         <DataColumn TItem="WeaponDto" Title="Боезапас" SortBy="w => w.AmmoCapacity" HeaderClass="w-[9%]" CellClass="whitespace-nowrap" Context="w">
-            @w.Ammo<UnparsedMark Show="Unparsed(w.Ammo, WeaponStatsParser.ParseAmmo(w.Ammo).IsParsed)" What="боезапас" />
+            @Show(WeaponText.Ammo(w.Ammo))<UnparsedMark Show="Unparsed(w.Ammo, WeaponStatsParser.ParseAmmo(w.Ammo).IsParsed)" What="боезапас" />
         </DataColumn>
-        <DataColumn TItem="WeaponDto" Title="Осечка" SortBy="w => w.Malfunction" HeaderClass="w-[7%]" AlignEnd="true" Context="w">@Malfunction(w)</DataColumn>
+        <DataColumn TItem="WeaponDto" Title="Осечка" SortBy="w => w.Malfunction" HeaderClass="w-[6%]" AlignEnd="true" Context="w">@Malfunction(w)</DataColumn>
         <DataColumn TItem="WeaponDto" Title="Цена" SortBy="w => w.CostClassic ?? int.MaxValue" HeaderClass="w-[11%] whitespace-nowrap" CellClass="whitespace-nowrap" Context="w">
-            @w.Cost<UnparsedMark Show="Unparsed(w.Cost, WeaponStatsParser.ParseCost(w.Cost).IsParsed)" What="стоимость" />
+            @Show(WeaponText.Cost(w.Cost))<UnparsedMark Show="Unparsed(w.Cost, WeaponStatsParser.ParseCost(w.Cost).IsParsed)" What="стоимость" />
         </DataColumn>
     </Columns>
     <CardTemplate Context="w">
         <div class="flex items-center gap-3">
-            @Cover(w, "h-16 w-24")
+            @Cover(w, "h-12 w-[4.5rem]")
             <div class="min-w-0">
                 <p class="font-medium text-primary-800">@w.Name<WeaponMarks Weapon="w" /></p>
                 <p class="cm-meta">@CatalogText.Of(w.Type) · @w.SkillName</p>
             </div>
         </div>
-        <dl class="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm sm:grid-cols-3">
-            <div><dt class="inline cm-text-muted">Урон </dt><dd class="inline"><DiceText Value="@w.Damage" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" /></dd></div>
-            <div><dt class="inline cm-text-muted me-1">@Terms.Range</dt><dd class="inline">@w.Range</dd></div>
-            <div><dt class="inline cm-text-muted me-1">@Terms.AttacksPerRound</dt><dd class="inline">@w.Attacks</dd></div>
-            <div><dt class="inline cm-text-muted">Боезапас </dt><dd class="inline">@w.Ammo</dd></div>
-            <div><dt class="inline cm-text-muted">Осечка </dt><dd class="inline">@Malfunction(w)</dd></div>
-            <div><dt class="inline cm-text-muted">Цена </dt><dd class="inline">@w.Cost</dd></div>
-        </dl>
+        @* Игроку нужно «чем бьёт»: урон и дальность — первой строкой, остальное мельче; пустое метку не рисует (W8). *@
+        <p class="mt-1.5 flex flex-wrap gap-x-4 text-sm font-medium text-primary-800">
+            <span class="whitespace-nowrap"><span class="cm-text-muted me-1 font-normal">Урон</span><DiceText Value="@WeaponText.Damage(w.Damage)" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" /></span>
+            @if (WeaponText.Range(w.Range) is { } range)
+            {
+                <span class="whitespace-nowrap"><span class="cm-text-muted me-1 font-normal">@Terms.Range</span>@range</span>
+            }
+        </p>
+        <p class="mt-0.5 flex flex-wrap gap-x-4 text-[0.8125rem] text-primary-600">
+            @if (WeaponText.Attacks(w.Attacks) is { } attacks)
+            {
+                <span class="whitespace-nowrap">@Terms.AttacksPerRound @attacks</span>
+            }
+            @if (WeaponText.Ammo(w.Ammo) is { } ammo)
+            {
+                <span class="whitespace-nowrap">Боезапас @ammo</span>
+            }
+            @if (w.Malfunction is not null)
+            {
+                <span class="whitespace-nowrap">Осечка @Malfunction(w)</span>
+            }
+            @if (WeaponText.Cost(w.Cost) is { } cost)
+            {
+                <span class="whitespace-nowrap">Цена @cost</span>
+            }
+        </p>
     </CardTemplate>
 </CatalogPage>
+
+<CatalogPickerModal TItem="SkillDto" Open="_pickingSkill" Title="Навык оружия" Load="_ => Task.FromResult(_skills)" Key="s => s.Id" Name="s => s.Name"
+                    Meta="s => CatalogText.Of(s.Category)" Placeholder="Поиск навыка…" Empty="Навыков нет." ConfirmText="Выбрать" ConfirmIcon="fa-check"
+                    OnPick="PickSkillAsync" OnClose="() => _pickingSkill = false" />
 
 @code {
     private static readonly IReadOnlyList<CatalogFilter<WeaponDto>> Filters =
@@ -78,8 +106,63 @@
 
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
+    private bool _pickingSkill;
+    private WeaponDto? _pickingFor;
 
-    private static bool IsCombat(SkillDto skill) => skill.Category is SkillCategory.CombatGeneral or SkillCategory.CombatFirearms;
+    // Тип оружия почти определяет навык (пулемёты — «Стрельба (пулемёт)»): при выборе типа навык подставляется сам, а
+    // выбор из сотни — только для другого навыка (W5). Имена — как в справочнике навыков.
+    private static string? DefaultSkillName(WeaponType type) => type switch
+    {
+        WeaponType.Melee => "Ближний бой (драка)",
+        WeaponType.Pistols => "Стрельба (пистолет)",
+        WeaponType.Rifles or WeaponType.Shotguns or WeaponType.AssaultRifles => "Стрельба (винтовка/дробовик)",
+        WeaponType.SubmachineGuns => "Стрельба (пистолет-пулемёт)",
+        WeaponType.MachineGuns => "Стрельба (пулемёт)",
+        WeaponType.ExplosivesAndHeavyWeapons => "Метание",
+        _ => null,
+    };
+
+    private Guid DefaultSkillId(WeaponType type) =>
+        DefaultSkillName(type) is { } name ? _skills.FirstOrDefault(s => s.Name == name)?.Id ?? Guid.Empty : Guid.Empty;
+
+    private WeaponDto NewWeapon() => new() { Type = WeaponType.Pistols, SkillId = DefaultSkillId(WeaponType.Pistols) };
+
+    private void ChangeType(WeaponDto w, string? value)
+    {
+        if (!Enum.TryParse<WeaponType>(value, out var type))
+        {
+            return;
+        }
+
+        // Навык, который человек выбрал руками, не затираем: меняем только пустой и тот, что был подставлен по прежнему типу.
+        var replaceable = w.SkillId == Guid.Empty || w.SkillId == DefaultSkillId(w.Type);
+        w.Type = type;
+        if (replaceable && DefaultSkillId(type) is var skill && skill != Guid.Empty)
+        {
+            w.SkillId = skill;
+        }
+    }
+
+    private void OpenSkillPicker(WeaponDto w)
+    {
+        _pickingFor = w;
+        _pickingSkill = true;
+    }
+
+    private Task PickSkillAsync(SkillDto skill)
+    {
+        if (_pickingFor is not null)
+        {
+            _pickingFor.SkillId = skill.Id;
+        }
+
+        _pickingSkill = false;
+        return Task.CompletedTask;
+    }
+
+    private string SkillName(WeaponDto w) => _skills.FirstOrDefault(s => s.Id == w.SkillId)?.Name ?? w.SkillName ?? "— выберите —";
+
+    private static RenderFragment Show(string? value) => __builder => __builder.AddContent(0, value ?? Terms.None);
 
     // Сортировка по урону — по числу (больше сверху в убывании), а не по тексту: «10d10 / 2 метра» шло раньше «1d10».
     private static int DamageKey(WeaponDto w) => DamageFormulaParser.Parse(w.Damage).GetDefaultDamage()?.Max ?? -1;
@@ -94,7 +177,7 @@
 
         if (string.IsNullOrWhiteSpace(w.Damage))
         {
-            errors["damage"] = "Нужен урон — как в книге: «1d6 + БкУ».";
+            errors["damage"] = "Нужен урон, например «1d6 + бонус к урону».";
         }
 
         return errors;
@@ -123,7 +206,7 @@
     // «00» книги = 100: в строке показываем как в книге.
     private static string Malfunction(WeaponDto w) => w.Malfunction switch
     {
-        null => "—",
+        null => Terms.None,
         100 => "00",
         { } value => value.ToString(System.Globalization.CultureInfo.CurrentCulture),
     };
@@ -145,22 +228,24 @@
     };
 
     // Картинки слева (галерея бестиария: большая и миниатюры по касанию), сведения справа; на узком экране — под ней.
+    // Только то, чего нет в строке: «Источник» без значения, «Пронзающее: да» (у 56 из 69 — шум; «нет» — отличие),
+    // навык на карточке (он в её подписи) и варианты магазина, равные «Боезапасу», не пишутся (W2).
     private static RenderFragment<WeaponDto> Detail => w => __builder =>
     {
         <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
         @if (w.Images.Count > 0)
         {
-            <div class="w-full max-w-sm">
+            <div class="w-full max-w-56">
                 <CatalogImageGallery @key="w.Id" Images="w.Images" Alt="@w.Name" />
             </div>
         }
         <dl class="grid min-w-0 flex-1 basis-80 content-start gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-            <div><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? "—")</dd></div>
+            <div class="max-lg:hidden"><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? Terms.None)</dd></div>
             @if (w.DamageByRange is { Count: > 0 } byRange)
             {
                 <div><dt class="cm-meta-label inline">Урон по дистанциям: </dt><dd class="inline cm-dice">@string.Join(" / ", byRange.Select(r => $"{r.Range} {r.Damage}"))</dd></div>
             }
-            @if (w.AmmoCapacityOptions is { Count: > 1 } options)
+            @if (w.AmmoCapacityOptions is { Count: > 1 } options && Squash(string.Join("/", options)) != Squash(w.Ammo ?? ""))
             {
                 <div><dt class="cm-meta-label inline">Варианты магазина: </dt><dd class="inline">@string.Join(" / ", options)</dd></div>
             }
@@ -168,8 +253,14 @@
             {
                 <div class="sm:col-span-2"><dt class="cm-meta-label inline">Примечания: </dt><dd class="inline">@w.Notes</dd></div>
             }
-            <div><dt class="cm-meta-label inline">Пронзающее: </dt><dd class="inline">@(w.IsImpaling ? "да" : "нет")</dd></div>
-            <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@(string.IsNullOrWhiteSpace(w.Source) ? "—" : w.Source)</dd></div>
+            @if (!w.IsImpaling)
+            {
+                <div><dt class="cm-meta-label inline">Пронзающее: </dt><dd class="inline">нет</dd></div>
+            }
+            @if (!string.IsNullOrWhiteSpace(w.Source))
+            {
+                <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@w.Source</dd></div>
+            }
         </dl>
         </div>
     };
@@ -181,7 +272,7 @@
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="w.Name" />
             </Field>
             <Field Label="Тип">
-                <select class="cm-input" @bind="w.Type">
+                <select class="cm-input" value="@w.Type" @onchange="e => ChangeType(w, e.Value?.ToString())">
                     @foreach (var type in Enum.GetValues<WeaponType>())
                     {
                         <option value="@type">@CatalogText.Of(type)</option>
@@ -189,26 +280,15 @@
                 </select>
             </Field>
             <Field Label="Навык" Required="true" Error="@_state.For("skill")">
-                @* @key: навыки приходят после открытия формы, и без пересоздания селект при первой правке показывал «— выберите —» вместо навыка оружия. *@
-                <select @key="_skills.Count" class="cm-input" aria-invalid="@_state.Invalid("skill")" @bind="w.SkillId">
-                    <option value="@Guid.Empty">— выберите —</option>
-                    @* Оружию нужны около десяти боевых навыков из сотни: они идут первыми, отдельной группой. *@
-                    <optgroup label="Боевые">
-                        @foreach (var skill in _skills.Where(s => IsCombat(s)))
-                        {
-                            <option value="@skill.Id">@skill.Name</option>
-                        }
-                    </optgroup>
-                    <optgroup label="Остальные">
-                        @foreach (var skill in _skills.Where(s => !IsCombat(s)))
-                        {
-                            <option value="@skill.Id">@skill.Name</option>
-                        }
-                    </optgroup>
-                </select>
+                @* Навык подставляется по типу; другой — выбор в окне с поиском (в списке сотня навыков, без поиска не найти). *@
+                <button type="button" class="cm-input flex items-center justify-between gap-2 text-left" aria-invalid="@_state.Invalid("skill")"
+                        aria-label="@($"Навык: {SkillName(w)}. Выбрать другой")" @onclick="() => OpenSkillPicker(w)">
+                    <span class="truncate">@SkillName(w)</span>
+                    <i class="fa-solid fa-magnifying-glass shrink-0 text-primary-500" aria-hidden="true"></i>
+                </button>
             </Field>
             <Field Label="Урон" Required="true" Note="@DamageHint(w.Damage)" Error="@_state.For("damage")">
-                <input class="cm-input cm-dice" placeholder="1d6 + БкУ" aria-invalid="@_state.Invalid("damage")" @bind="w.Damage" @bind:event="oninput" />
+                <input class="cm-input cm-dice" placeholder="1d6 + 1" aria-invalid="@_state.Invalid("damage")" @bind="w.Damage" @bind:event="oninput" />
             </Field>
             <Field Label="Дальность" Note="@Hint(w.Range, r => WeaponStatsReader.RangeDisplay(WeaponStatsParser.ParseRange(r)), WeaponStatsParser.ParseRange(w.Range).IsParsed)">
                 <input class="cm-input" placeholder="15 м" @bind="w.Range" @bind:event="oninput" />
@@ -219,7 +299,7 @@
             <Field Label="Боезапас" Note="@Hint(w.Ammo, AmmoHint, WeaponStatsParser.ParseAmmo(w.Ammo).IsParsed)">
                 <input class="cm-input" placeholder="6" @bind="w.Ammo" @bind:event="oninput" />
             </Field>
-            <Field Label="Осечка" Hint="(1–100)" Note="«00» книги — это 100.">
+            <Field Label="Осечка" Hint="(1–100)" Note="@(w.Malfunction == 100 ? "«00» книги — это 100." : null)">
                 <input class="cm-input" type="number" min="1" max="100" @bind="w.Malfunction" />
             </Field>
             <Field Label="Цена" Note="@Hint(w.Cost, c => CostHint(c, _state.ErasVary), WeaponStatsParser.ParseCost(w.Cost).IsParsed)">
@@ -234,7 +314,7 @@
                 </div>
             </Field>
             <Field Label="Примечания" class="sm:col-span-2"><textarea class="cm-input" rows="2" @bind="w.Notes"></textarea></Field>
-            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="w.Source" /></Field>
+            <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="w.Source" /></Field>
             <Field Label="Иллюстрации" Group="true" class="sm:col-span-2">
                 <CatalogImagesEditor Images="w.Images" Hint="Первая картинка — обложка в строке справочника." ThumbClass="h-16 w-24" />
             </Field>
@@ -250,6 +330,12 @@
             return null;
         }
 
+        // Боезапас из одних цифр («6», «20/30/32») подсказка пересказывает: «6 патронов».
+        if (ok && raw.All(c => char.IsAsciiDigit(c) || c is '/' or ' '))
+        {
+            return null;
+        }
+
         if (!ok)
         {
             return "Не разобрано — сохранится текстом, в бою считать вручную.";
@@ -259,11 +345,13 @@
         return Same(raw, shown) ? null : $"Распознано: {shown}";
     }
 
+    // «Распознано» нужно, когда сервер понял иначе, чем написано: «1 (2) или непр. огонь» и «1 (2) · непр. огонь» —
+    // одно и то же, подсказка о нём только шумит (W6). Сравнение по буквам и цифрам, без «или» и знаков.
     private static bool Same(string a, string b) =>
         string.Equals(Squash(a), Squash(b), StringComparison.OrdinalIgnoreCase);
 
     private static string Squash(string text) =>
-        new(text.Where(c => !char.IsWhiteSpace(c) && c is not ('$' or '+')).ToArray());
+        new(text.Replace(" или ", " ", StringComparison.OrdinalIgnoreCase).Where(char.IsLetterOrDigit).ToArray());
 
     private static string? DamageHint(string? raw)
     {

@@ -7,6 +7,7 @@
    (Load), поиск — без регистра, «ё» и лишних пробелов; выбранная строка подсвечена, под списком — свои поля
    страницы (ChildContent: количество, где, заметки). Запись делает страница в OnPick: ошибка (Error) остаётся
    в окне, окно не закрывается; пока идёт запись (Busy), кнопки выключены. Окно декларативное: Open. *@
+@* Список без полей под ним (навык оружия, заклинание книги) — повыше: 28vh из 696px показывали три записи. *@
 @* У верхнего края: после выбора строки поля «Сколько/Где» растут вниз, окно не прыгает. *@
 <Modal Open="Open" Title="@Title" OnClose="CloseAsync" class="cm-modal-top" data-testid="catalog-picker">
     <ChildContent>
@@ -30,7 +31,7 @@
                 }
                 else
                 {
-                    <div class="max-h-[28vh] overflow-y-auto rounded-md border border-primary-200" role="listbox" aria-label="@Title">
+                    <div class="@Css.Join(ChildContent is null ? "max-h-[46vh]" : "max-h-[28vh]", "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
                         @foreach (var item in found)
                         {
                             var selected = _selected is not null && Equals(Key(_selected), Key(item));
@@ -70,7 +71,7 @@
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="Busy">Отмена</Button>
-        <Button Icon="fa-plus" Busy="Busy" Disabled="@(_selected is null)" data-testid="picker-confirm" OnClick="PickAsync">@ConfirmText</Button>
+        <Button Icon="@ConfirmIcon" Busy="Busy" Disabled="@(_selected is null)" data-testid="picker-confirm" OnClick="PickAsync">@ConfirmText</Button>
     </Footer>
 </Modal>
 
@@ -105,6 +106,9 @@
     [Parameter] public string Empty { get; set; } = "Список пуст.";
 
     [Parameter] public string ConfirmText { get; set; } = "Добавить";
+
+    /// <summary>Иконка главной кнопки: «+» у добавления, галочка у выбора (навык оружия, связь заклинания).</summary>
+    [Parameter] public string ConfirmIcon { get; set; } = "fa-plus";
 
     /// <summary>Поля под выбранной записью (количество, где, заметки).</summary>
     [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }

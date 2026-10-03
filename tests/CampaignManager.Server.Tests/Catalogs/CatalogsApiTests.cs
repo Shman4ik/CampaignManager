@@ -1,12 +1,15 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core;
 using CampaignManager.Core.Admin;
 using CampaignManager.Core.Catalogs;
+using CampaignManager.Core.Characters;
+using CampaignManager.Data.Characters;
 using CampaignManager.Data.Files;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -234,6 +237,40 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(HttpStatusCode.Conflict, inUse.StatusCode);
         Assert.Equal(ApiProblemCodes.InUse, inUse.Code);
         Assert.Contains($"оружие «{bow.Name}»", inUse.Message, StringComparison.Ordinal); // отказ называет, что держит навык
+    }
+
+    // Подтверждение удаления говорит, кто держит запись, до вопроса, а не отказом после него (X13, W10).
+    [Fact]
+    public async Task Usage_names_what_blocks_a_skill_and_which_sheets_hold_a_weapon()
+    {
+        TestDatabase.SkipIfMissing();
+        var skill = await app.SkillsApi().CreateAsync(new SkillDto { Name = Unique("Стрельба из пращи"), Category = SkillCategory.CombatFirearms }, Cancellation);
+        var sling = Weapon(Unique("Праща"));
+        sling.SkillId = skill.Id;
+        sling = await app.Weapons().CreateAsync(sling, Cancellation);
+
+        var skillUsage = await app.SkillsApi().UsageAsync(skill.Id, Cancellation);
+        Assert.Equal(1, skillUsage.Count);
+        Assert.True(skillUsage.Blocks);
+        Assert.Contains(sling.Name, skillUsage.Examples[0], StringComparison.Ordinal);
+        Assert.Equal(0, (await app.Weapons().UsageAsync(sling.Id, Cancellation)).Count);
+
+        // Оружие лежит в листе ссылкой внутри документа, а не внешним ключом: удалить можно, но Хранитель узнаёт, где оно было.
+        await using (var db = app.Database.CreateContext())
+        {
+            var sheet = JsonDocument.Parse($$"""{"personal":{"name":"Артур Нельсон"},"weapons":[{"catalogWeaponId":"{{sling.Id}}"}]}""");
+            db.Characters.Add(new Character { Kind = CharacterKind.Npc, Status = CharacterStatus.Active, Sheet = sheet, SheetVersion = 1 });
+            await db.SaveChangesAsync(Cancellation);
+        }
+
+        var weaponUsage = await app.Weapons().UsageAsync(sling.Id, Cancellation);
+        Assert.Equal(1, weaponUsage.Count);
+        Assert.False(weaponUsage.Blocks);
+        Assert.Equal("лист сыщика Артур Нельсон", weaponUsage.Examples[0]);
+        Assert.NotNull(weaponUsage.Note);
+        await app.Weapons().DeleteAsync(sling.Id, Cancellation);
+
+        await Assert.ThrowsAsync<ApiException>(() => app.SkillsApi(app.Player).UsageAsync(skill.Id, Cancellation));
     }
 
     [Fact]

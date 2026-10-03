@@ -7,18 +7,26 @@
     {
         var index = i;
         var value = Values[index];
+        @* Поле растёт по содержимому (field-sizing): фраза в 60+ знаков («вы случайно выронили что-то при обыске…»)
+           не прячется за краем однострочного input. «Убрать» — нейтральный крестик, а не красная корзина: правка —
+           черновик формы, «Отмена» вернёт всё, а красный цвет у десяти строк подряд кричит об опасности (X10). *@
         <div class="list-row" @key="index">
-            <input class="cm-input" value="@value" aria-label="@($"{ItemLabel} {index + 1}")"
-                   @onchange="e => ReplaceAsync(index, e.Value?.ToString())" />
-            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {value}")"
+            <textarea class="cm-input" rows="1" aria-label="@($"{ItemLabel} {index + 1}")" value="@value"
+                      @onchange="e => ReplaceAsync(index, e.Value?.ToString())"></textarea>
+            <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="@($"Удалить: {value}")"
                     OnClick="() => RemoveAsync(index)" />
         </div>
     }
 
+    @* «Добавить» появляется, когда есть что добавлять: серая кнопка рядом с пустым полем ничего не говорила (X11);
+       Enter добавляет и без неё. *@
     <div class="@Css.Join("list-row", Values.Count > 0 ? "mt-2" : null)">
         <input class="cm-input" placeholder="@Placeholder" aria-label="@($"Новый: {ItemLabel}")" @bind="_draft"
                @bind:event="oninput" @onkeydown="OnKeyDownAsync" />
-        <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_draft)" OnClick="AddAsync">Добавить</Button>
+        @if (!string.IsNullOrWhiteSpace(_draft))
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddAsync">Добавить</Button>
+        }
     </div>
 </div>
 
@@ -59,7 +67,7 @@
 
     private Task ReplaceAsync(int index, string? value)
     {
-        var trimmed = value?.Trim();
+        var trimmed = value?.ReplaceLineEndings(" ").Trim();
         var list = Values.ToList();
         if (string.IsNullOrEmpty(trimmed))
         {

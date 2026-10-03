@@ -33,9 +33,11 @@
 </PageHeader>
 
 <div class="cm-page">
-    <FilterPanel OnReset="ResetFilters" CanReset="HasFilters">
+    @* Липнет только у раскладки без своего скроллпорта (галерея, карточки профессий): таблица прокручивается сама. *@
+    <FilterPanel OnReset="ResetFilters" CanReset="HasFilters" Sticky="Body is not null">
         <ChildContent>
-            <input class="cm-input min-w-48 flex-1" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
+            @* min-w-32 на телефоне: поиск, «Фильтры» и «⋯» помещаются в одну строку (393px − поля). *@
+            <input class="cm-input min-w-32 flex-1 md:min-w-48" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
                    value="@_search" @oninput="OnSearch" />
             @if (HasExtraFilters)
             {
@@ -69,7 +71,7 @@
                 }
                 @if (Sorts.Count > 1)
                 {
-                    <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); _page = 1; }">
+                    <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); SetPage(1); }">
                         @foreach (var sort in Sorts)
                         {
                             <option value="@sort.Key">@sort.Label</option>
@@ -91,12 +93,12 @@
             @if (_canEdit)
             {
                 @* Импорт, экспорт и «С правилами» — редкие действия: одно «⋯», а не ряд из трёх кнопок (на телефоне он рвался). *@
-                <RowMenu AriaLabel="@(Sync ? "Ещё: импорт, экспорт, синхронизация" : "Ещё: импорт, экспорт")">
+                <RowMenu AriaLabel="@(Sync ? "Ещё: импорт, экспорт, сверка с книгой правил" : "Ещё: импорт, экспорт")">
                     <RowMenuItem Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</RowMenuItem>
                     <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт</RowMenuItem>
                     @if (Sync)
                     {
-                        <RowMenuItem Icon="fa-rotate" Disabled="_syncing" OnClick="SyncAsync">С правилами</RowMenuItem>
+                        <RowMenuItem Icon="fa-rotate" Disabled="_syncing" OnClick="SyncAsync">Сверить с книгой правил</RowMenuItem>
                     }
                 </RowMenu>
             }
@@ -208,7 +210,7 @@
 <CatalogImportModal TItem="TItem" Open="_importOpen" Title="@($"Импорт: {Title.ToLowerInvariant()}")"
                     OnClose="() => _importOpen = false" OnImported="ReloadAsync" />
 
-<Modal Open="_syncReport is not null" Title="Синхронизация с правилами" OnClose="() => _syncReport = null">
+<Modal Open="_syncReport is not null" Title="Сверка с книгой правил" OnClose="() => _syncReport = null">
     <ChildContent>
         @if (_syncReport is not null)
         {
@@ -343,47 +345,98 @@
 
     private string? _editingName;
 
-    // ?q= — поиск из ссылки (заклинание книги ведёт на справочник заклинаний).
+    // Адрес хранит то, что человек видит: ?q= (поиск; заклинание книги ведёт на справочник заклинаний с ним),
+    // ?page= (страница) и ?open= (раскрытая запись) — F5 и «назад» возвращают туда же, а не на первую страницу (X4).
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
-        var query = new Uri(Navigation.Uri).Query;
-        foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var pair = part.Split('=', 2);
-            if (pair is ["q", var value])
-            {
-                _search = Uri.UnescapeDataString(value.Replace('+', ' ')).Trim();
-            }
-        }
+        ReadQuery();
     }
 
-    // ?open= меняют и переход по ссылке, и «назад»: страница перерисовывается по смене адреса, а не по своим кликам.
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+    // Адрес меняют и переход по ссылке, и «назад»: страница перерисовывается по смене адреса, а не по своим кликам.
+    // Свои записи в адрес (WriteUrl) приходят сюда тоже, и в WebAssembly — позже, чем человек успел ввести ещё
+    // букву: прочитанный из них поиск откатил бы набранное. Поэтому свои адреса помнятся и не читаются.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_written.Remove(e.Location))
+        {
+            if (_written.Count == 0)
+            {
+                _intended = null;
+            }
+        }
+        else
+        {
+            _written.Clear();
+            _intended = null;
+            ReadQuery();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 
-    /// <summary>Раскрытая запись: из адреса (<c>?open=</c>), иначе — переданная страницей.</summary>
-    private Guid? OpenId => OpenFromQuery() ?? Open;
+    private readonly HashSet<string> _written = [];
+    private string? _intended;
+    private Guid? _open;
 
-    private Guid? OpenFromQuery()
+    /// <summary>Раскрытая запись: из адреса (<c>?open=</c>), иначе — переданная страницей.</summary>
+    private Guid? OpenId => _open ?? Open;
+
+    private void ReadQuery()
     {
+        var search = "";
+        var page = 1;
+        Guid? open = null;
         foreach (var part in new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (part.Split('=', 2) is ["open", var value] && Guid.TryParse(Uri.UnescapeDataString(value), out var id))
+            switch (part.Split('=', 2))
             {
-                return id;
+                case ["q", var value]:
+                    search = Uri.UnescapeDataString(value.Replace('+', ' ')).Trim();
+                    break;
+                case ["page", var value] when int.TryParse(value, out var number) && number > 1:
+                    page = number;
+                    break;
+                case ["open", var value] when Guid.TryParse(Uri.UnescapeDataString(value), out var id):
+                    open = id;
+                    break;
             }
         }
 
-        return null;
+        _search = search;
+        _page = page;
+        if (open != _open)
+        {
+            _open = open;
+            _pagedTo = null; // запись по новой ссылке — на свою страницу
+        }
+    }
+
+    private void WriteUrl()
+    {
+        var uri = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["q"] = _search.Length > 0 ? _search : null,
+            ["page"] = _page > 1 ? _page : null,
+            ["open"] = _open,
+        });
+        if (uri == (_intended ?? Navigation.Uri))
+        {
+            return;
+        }
+
+        _intended = uri;
+        _written.Add(uri);
+        Navigation.NavigateTo(uri, replace: true);
     }
 
     private Task SetOpenKey(object? key)
     {
-        var open = key is Guid id ? (Guid?)id : null;
-        _pagedTo = open;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("open", open), replace: true);
+        _open = key is Guid id ? id : null;
+        _pagedTo = _open;
+        WriteUrl();
         return Task.CompletedTask;
     }
 
@@ -417,6 +470,8 @@
             _pagedTo = open;
         }
 
+        // Страница из ссылки (?page=) могла устареть: записей стало меньше — последняя, а не пустота.
+        _page = Math.Clamp(_page, 1, Math.Max(1, TotalPages(filtered.Count)));
         var page = PageSize > 0 ? filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList() : filtered;
         return new CatalogView<TItem>
         {
@@ -511,7 +566,7 @@
     private void OnSearch(ChangeEventArgs e)
     {
         _search = e.Value?.ToString()?.Trim() ?? "";
-        _page = 1;
+        SetPage(1);
     }
 
     private void SetFilter(string key, string? value)
@@ -525,7 +580,7 @@
             _filters[key] = value;
         }
 
-        _page = 1;
+        SetPage(1);
     }
 
     private void SetToggle(string key, bool on)
@@ -539,13 +594,13 @@
             _toggles.Remove(key);
         }
 
-        _page = 1;
+        SetPage(1);
     }
 
     private void SetEra(ChangeEventArgs e)
     {
         _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null;
-        _page = 1;
+        SetPage(1);
     }
 
     private void ResetFilters()
@@ -554,10 +609,14 @@
         _filters.Clear();
         _toggles.Clear();
         _era = null;
-        _page = 1;
+        SetPage(1);
     }
 
-    private void SetPage(int page) => _page = page;
+    private void SetPage(int page)
+    {
+        _page = page;
+        WriteUrl();
+    }
 
     private Task ToggleOpenAsync(TItem item)
     {
@@ -581,32 +640,46 @@
         </div>
     };
 
+    // Раскрыть можно всю карточку, а не отдельную строку «Подробнее» под ней (X7): название и сведения — кнопка, шеврон
+    // справа; иконка «Изменить» стоит рядом и раскрытия не вызывает. Не раскрываемая запись — просто карточка.
     private RenderFragment<TItem> Card => item => __builder =>
     {
+        var expandable = RowDetail is not null && (CanExpand?.Invoke(item) ?? true);
+        var open = OpenId == item.Id;
         <div class="flex items-start gap-3">
-            <div class="min-w-0 flex-1">
-                @CardTemplate!(item)
-                @if (ErasOf is not null && ErasVary && _era is null)
-                {
-                    <EraBadges Values="ErasOf(item)" />
-                }
-            </div>
+            @if (expandable)
+            {
+                <button type="button" class="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left" aria-expanded="@(open ? "true" : "false")"
+                        @onclick="() => ToggleOpenAsync(item)">
+                    <span class="block min-w-0 flex-1">
+                        @CardTemplate!(item)
+                        @if (ErasOf is not null && ErasVary && _era is null)
+                        {
+                            <EraBadges Values="ErasOf(item)" />
+                        }
+                    </span>
+                    <i class="@($"fa-solid {(open ? "fa-chevron-up" : "fa-chevron-down")} mt-1 shrink-0 text-primary-500")" aria-hidden="true"></i>
+                </button>
+            }
+            else
+            {
+                <div class="min-w-0 flex-1">
+                    @CardTemplate!(item)
+                    @if (ErasOf is not null && ErasVary && _era is null)
+                    {
+                        <EraBadges Values="ErasOf(item)" />
+                    }
+                </div>
+            }
             @if (_canEdit)
             {
                 <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(item.Name)}")"
                         OnClick="() => EditAsync(item)" />
             }
         </div>
-        @if (RowDetail is not null && (CanExpand?.Invoke(item) ?? true))
+        @if (expandable && open)
         {
-            var open = OpenId == item.Id;
-            @* px-0 — на общей левой линии карточки; зону касания добирает высота, а не боковые поля. *@
-            <Button Variant="ButtonVariant.Ghost" class="mt-1 px-0" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
-                    aria-expanded="@(open ? "true" : "false")" OnClick="() => ToggleOpenAsync(item)">@(open ? "Свернуть" : "Подробнее")</Button>
-            @if (open)
-            {
-                <div class="mt-2 rounded-md bg-primary-50 p-3">@RowDetail(item)</div>
-            }
+            <div class="mt-2 rounded-md bg-primary-50 p-3">@RowDetail!(item)</div>
         }
     };
 
@@ -755,7 +828,42 @@
     /// <summary>Из окна правки отказ — Alert над кнопками окна: тост рисуется под окном и там не виден.</summary>
     private async Task<bool> DeleteAsync(TItem item, bool fromForm)
     {
-        var confirmed = await Dialogs.ConfirmDeleteAsync(Noun, Names.Plain(item.Name), "Пропадёт из справочника.", reversible: false);
+        // Кто держит запись, говорим до вопроса: навык у профессий не удалить — вопрос об этом лишний; оружие в листах
+        // удалить можно, но Хранитель должен знать, что там останется (X13, W10).
+        var consequence = "Пропадёт из справочника.";
+        try
+        {
+            var usage = await Api.UsageAsync(item.Id);
+            if (usage.Count > 0)
+            {
+                var shown = usage.Examples.Take(3).ToList(); // три имени и «ещё N»: вопрос не должен быть абзацем
+                var more = usage.Count > shown.Count ? $" и ещё {usage.Count - shown.Count}" : "";
+                var holders = $"Используется: {string.Join(", ", shown)}{more}.";
+                if (usage.Blocks)
+                {
+                    var refusal = $"Нельзя удалить. {holders} Сначала уберите ссылки.";
+                    if (fromForm)
+                    {
+                        _formError = refusal;
+                        _stale = false;
+                    }
+                    else
+                    {
+                        Toasts.Error(refusal, "Не удалось удалить");
+                    }
+
+                    return false;
+                }
+
+                consequence = $"Пропадёт из справочника. {holders}{(usage.Note is null ? "" : " " + usage.Note)}";
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Без сведений — обычное подтверждение; сервер всё равно откажет, если запись занята.
+        }
+
+        var confirmed = await Dialogs.ConfirmDeleteAsync(Noun, Names.Plain(item.Name), consequence, reversible: false);
         if (!confirmed)
         {
             return false;
@@ -796,13 +904,14 @@
 
     private async Task SyncAsync()
     {
+        // Без «сида» и «кода» (O3). Кнопка красная, а значит фокус — на «Отмене»: подтверждение стирает ручные правки
+        // книжных записей, и Enter после случайного касания не должен их стирать.
         var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
-            "Синхронизировать с правилами?",
-            "Книжные записи обновятся по сиду книги (по коду), недостающие добавятся. Самодельные записи не изменятся.")
+            "Сверить с книгой правил?",
+            "Записи из книги правил обновятся, недостающие добавятся. Ваши записи не изменятся.")
         {
-            ConfirmText = "Синхронизировать",
-            ConfirmVariant = ButtonVariant.Primary,
-            Details = "Правки книжных записей, сделанные вручную, перезапишутся.",
+            ConfirmText = "Сверить",
+            Details = "Ваши правки книжных записей пропадут. Нельзя отменить.",
         });
         if (!confirmed)
         {
@@ -817,7 +926,7 @@
         }
         catch (HttpRequestException ex)
         {
-            Toasts.Error(ApiErrors.Describe(ex), "Синхронизация не удалась");
+            Toasts.Error(ApiErrors.Describe(ex), "Сверка не удалась");
         }
         finally
         {

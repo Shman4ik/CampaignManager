@@ -1,5 +1,7 @@
 @typeparam TItem
 @attribute [CascadingTypeParameter(nameof(TItem))]
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 @* Таблица справочника или списка: колонки — DataColumn, сортировка по заголовку, раскрытие строки.
    Своей карточки не рисует — стоит в cm-card страницы (одна карточка, никогда две).
@@ -10,14 +12,14 @@
 
 @if (CardTemplate is not null)
 {
-    <div class="@CardsClass">
-        @* Узкий экран (портрет, телефон): заголовков с кнопками сортировки нет — порядок задаёт этот выбор. *@
-        @if (SortableColumns.Count > 0)
+    <div @ref="_cards" class="@Css.Join(CardsClass, "scroll-mt-16")">
+        @* Узкий экран (портрет, телефон): заголовков с кнопками сортировки нет — порядок задаёт этот выбор: одной
+           строкой, без подписи (её несёт aria-label) и только когда есть что упорядочивать (одна запись — не из чего). *@
+        @if (SortableColumns.Count > 0 && _total > 1)
         {
             <div class="cm-sortbar">
                 <label class="cm-sortbar-field">
-                    <span>Сортировка</span>
-                    <select class="cm-input" value="@SortSelectValue" @onchange="SortSelectedAsync">
+                    <select class="cm-input" aria-label="Сортировка" value="@SortSelectValue" @onchange="SortSelectedAsync">
                         @foreach (var column in SortableColumns)
                         {
                             <option value="@ColumnId(column)">@column.Title</option>
@@ -35,18 +37,19 @@
         }
         @foreach (var item in _items)
         {
-            <div @key="KeyOf(item)" class="border-t border-primary-200 px-4 py-3 first:border-t-0">@CardTemplate(item)</div>
+            var cardKey = KeyOf(item);
+            <div @key="cardKey" class="border-t border-primary-200 px-4 py-3 first:border-t-0" data-open="@(_expanded.Contains(cardKey) ? "true" : null)">@CardTemplate(item)</div>
         }
     </div>
 }
 
 @* cm-table-dense — кнопки строки 36px (Small), а не 44: так строка таблицы плотная, как и задумано в ките. *@
-<div class="@Css.Join("cm-table-wrap cm-table-dense", CardTemplate is not null ? TableClass : null, Scroll ? "cm-table-scroll" : null,
-                Scroll && RowDetail is not null ? "cm-table-scroll-detail" : null)">
+<div @ref="_wrap" class="@Css.Join("cm-table-wrap cm-table-dense", CardTemplate is not null ? TableClass : null, Scroll ? "cm-table-scroll" : null,
+                Scroll && HasToggle ? "cm-table-scroll-detail" : null)">
     <table class="cm-table" aria-label="@AriaLabel">
         <thead>
             <tr>
-                @if (RowDetail is not null)
+                @if (HasToggle)
                 {
                     <th class="w-px"><span class="sr-only">Подробности</span></th>
                 }
@@ -80,7 +83,7 @@
                 var expanded = expandable && _expanded.Contains(key);
                 <tr @key="key" class="@Css.Join(expanded ? "cm-row-expanded" : null, Clickable(expandable) ? "cursor-pointer" : null)"
                     @onclick="() => RowClickedAsync(item, key, expandable)">
-                    @if (RowDetail is not null)
+                    @if (HasToggle)
                     {
                         <td class="cm-td-toggle" @onclick:stopPropagation="true">
                             @if (expandable)
@@ -113,6 +116,14 @@
     private List<TItem> _items = [];
     private DataColumn<TItem>? _sortColumn;
     private bool _descending;
+    private ElementReference _wrap;
+    private ElementReference _cards;
+    private IJSObjectReference? _module;
+    private int _total;
+    private bool _hasToggle;
+    private string? _arrangement;
+    private string? _shownArrangement;
+    private object? _revealedKey;
 
     [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = [];
 
@@ -200,7 +211,7 @@
         _ => "hidden md:block",
     };
 
-    private int ColumnCount => _columns.Count + (RowDetail is null ? 0 : 1);
+    private int ColumnCount => _columns.Count + (HasToggle ? 1 : 0);
 
     internal void AddColumn(DataColumn<TItem> column)
     {
@@ -224,8 +235,17 @@
 
     private bool Controlled => OpenKeyChanged.HasDelegate;
 
+    /// <summary>
+    /// Колонка шеврона есть, только когда на странице есть что раскрывать: у предметов раскрывается одна строка из 257,
+    /// и пустая колонка слева от названия отнимала 96px у каждой остальной (X9). Считается по строкам страницы: на
+    /// той единственной, где есть раскрываемая, колонка появится, на остальных — нет.
+    /// </summary>
+    private bool HasToggle => _hasToggle;
+
     protected override void OnParametersSet()
     {
+        _total = Items is ICollection<TItem> all ? all.Count : Items.Count();
+
         if (Controlled)
         {
             _expanded.Clear();
@@ -243,6 +263,58 @@
         _items = Arrange();
     }
 
+    // После отрисовки: список сменился (страница, фильтр, поиск, порядок) — прокрутить таблицу к началу; раскрыли
+    // строку, которой не видно (ссылка ?open= на запись с четвёртой страницы), — показать её. Без этого человек
+    // листает на «2» и видит строки 6–10, а запись по ссылке лежит под нижним краем (X2, X3).
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var open = _expanded.Count > 0 && OpenKey is not null && !Equals(OpenKey, _revealedKey);
+        if (OpenKey is null)
+        {
+            _revealedKey = null;
+        }
+
+        var arranged = _arrangement != _shownArrangement;
+        _shownArrangement = _arrangement;
+        if (!open && !arranged)
+        {
+            return;
+        }
+
+        if (open)
+        {
+            _revealedKey = OpenKey;
+        }
+
+        if (!open && firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/DataTable.razor.js");
+            await _module.InvokeVoidAsync(open ? "revealOpen" : "scrollToStart", _wrap, CardTemplate is null ? null : (object)_cards);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+
     private void Refresh()
     {
         _items = Arrange();
@@ -252,6 +324,7 @@
     private List<TItem> Arrange()
     {
         IEnumerable<TItem> items = Items;
+        _arrangement = $"{Page}|{_sortColumn?.Title}|{_descending}|{Sort?.Key}|{Sort?.Descending}|{_total}|{(Items.FirstOrDefault() is { } first ? KeyOf(first) : null)}";
         if (!ExternalSort && _sortColumn?.SortBy is { } sortBy)
         {
             items = _descending
@@ -259,9 +332,11 @@
                 : items.OrderBy(sortBy, Comparer<object?>.Default);
         }
 
-        return PageSize > 0
+        var page = PageSize > 0
             ? items.Skip((Math.Max(1, Page) - 1) * PageSize).Take(PageSize).ToList()
             : items.ToList();
+        _hasToggle = RowDetail is not null && (CanExpand is null || page.Any(Expandable));
+        return page;
     }
 
     private object KeyOf(TItem item) => RowKey?.Invoke(item) ?? item!;

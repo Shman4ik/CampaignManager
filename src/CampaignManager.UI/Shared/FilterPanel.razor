@@ -1,19 +1,27 @@
-@* Фильтр страницы-списка — одна строка с переносом в карточке, с md липнет под шапку (top-14 — её
-   56px). Без шапки «Фильтры», без сворачивания, «Сбросить фильтры» — одна кнопка в конце строки, неактивна, пока
-   фильтров нет (CanReset; правило 4 — единственный случай неактивной кнопки без причины рядом: причина очевидна).
+@* Фильтр страницы-списка — одна строка с переносом в карточке. Без шапки «Фильтры», без сворачивания, «Сбросить
+   фильтры» — одна кнопка в конце строки, неактивна, пока фильтров нет (CanReset; правило 4 — единственный случай
+   неактивной кнопки без причины рядом: причина очевидна). На телефоне неактивной кнопки нет вовсе (отдельная серая
+   строка отнимала 60px из 651), а действующая — значок без подписи в той же строке, что поиск.
+   Не липнет: у таблицы справочника свой скроллпорт, а у страницы-списка с прокруткой страницы фильтр после
+   пролистывания только закрывал бы строки (решения A2 и 76). Липнет по Sticky — галерея и карточки профессий.
    Подписей над полями нет: смысл несут placeholder, aria-label и первый пункт селекта («Любой тип»).
    Поля — прямые дети строки, ширину задаёт страница: поиск — min-w-48 flex-1, селект —
    w-full sm:w-56 shrink-0. Блок, которому нужна своя строка, — w-full order-last.
    Порядок страницы-списка: FilterPanel → LoadingIndicator/EmptyState → список → Pagination. *@
-<div class="cm-card z-10 mb-4 md:sticky md:top-14">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+<div class="@Css.Join("cm-card z-10 mb-3", Sticky ? "md:sticky md:top-14" : null)">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
         @ChildContent
         @if (OnReset.HasDelegate || Actions is not null)
         {
             <div class="ms-auto flex max-w-full shrink-0 flex-wrap justify-end gap-2">
                 @if (OnReset.HasDelegate)
                 {
-                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-rotate-left" Disabled="!CanReset" OnClick="OnReset">@CampaignManager.Core.Terms.ResetFilters</Button>
+                    @* С lg — кнопка с подписью; ниже — значок (портрет: подпись выталкивала кнопку на вторую строку панели);
+                       на телефоне, пока фильтров нет, не рисуется вовсе. *@
+                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-rotate-left" Disabled="!CanReset" class="max-lg:hidden"
+                            OnClick="OnReset">@CampaignManager.Core.Terms.ResetFilters</Button>
+                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-rotate-left" Disabled="!CanReset" class="@(CanReset ? "lg:hidden" : "max-md:hidden lg:hidden")"
+                            AriaLabel="@CampaignManager.Core.Terms.ResetFilters" OnClick="OnReset" />
                 }
                 @Actions
             </div>
@@ -30,4 +38,7 @@
 
     /// <summary>Есть что сбрасывать. Страница, не знающая этого, оставляет кнопку активной.</summary>
     [Parameter] public bool CanReset { get; set; } = true;
+
+    /// <summary>Панель липнет под шапку (с <c>md</c>): нужна странице, которая прокручивается целиком.</summary>
+    [Parameter] public bool Sticky { get; set; }
 }

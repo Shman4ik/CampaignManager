@@ -270,6 +270,16 @@ public sealed class CreatureDto : CatalogItemDto
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
 public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 
+/// <summary>
+/// Кто держит запись справочника: <see cref="Count"/> держателей, имена первых — <see cref="Examples"/> («профессия
+/// Врач», «лист сыщика Артур Нельсон»). <see cref="Blocks"/> — держатель не даёт удалить запись (навык у оружия и
+/// профессий); иначе удаление возможно, а <see cref="Note"/> говорит, что останется («в листах останется название»).
+/// </summary>
+public sealed record CatalogUsage(int Count, IReadOnlyList<string> Examples, bool Blocks, string? Note = null)
+{
+    public static CatalogUsage None { get; } = new(0, [], false);
+}
+
 /// <summary>Справочник целиком и права текущего пользователя на него (одни на все записи).</summary>
 public sealed record CatalogList<T>(IReadOnlyList<T> Items, bool CanEdit)
     where T : CatalogItemDto;

@@ -319,7 +319,7 @@ public sealed class CatalogPageTests : KitContext
 
         page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
         Assert.Contains("Цена", page.Find("table thead").TextContent, StringComparison.Ordinal);
-        Assert.Contains("$1 250", page.Find("table tbody").TextContent, StringComparison.Ordinal);
+        Assert.Contains("$1250", page.Find("table tbody").TextContent, StringComparison.Ordinal);
         page.Find("table [aria-label='Изменить: Фонарь']").Click();
         Assert.Equal("1250", page.Find("dialog input[type=number]").GetAttribute("value"));
     }
@@ -331,6 +331,135 @@ public sealed class CatalogPageTests : KitContext
         Assert.Equal("/api/v1/files/abc?w=160", Catalogs.ImageUrls.Thumb("/api/v1/files/abc", 160));
         Assert.Equal("https://example.test/a.png", Catalogs.ImageUrls.Thumb("https://example.test/a.png"));
         Assert.Null(Catalogs.ImageUrls.Thumb(null));
+    }
+
+    // ── Адрес, раскрытие карточкой, колонка шеврона, порядок (F6a) ──
+
+    [Fact]
+    public void Search_and_page_live_in_the_address_and_come_back_from_it()
+    {
+        _api.Items = [.. Enumerable.Range(1, 60).Select(i => Item($"Ящик {i:00}"))];
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.Contains("1–25 из 60", page.Markup, StringComparison.Ordinal));
+
+        page.FindAll("nav.cm-pagination button").Single(b => b.TextContent.Trim() == "2").Click();
+        Assert.Contains("page=2", navigation.Uri, StringComparison.Ordinal);
+        Assert.Contains("26–50 из 60", page.Markup, StringComparison.Ordinal);
+
+        // Поиск возвращает на первую страницу и сам попадает в адрес; сброс убирает оба.
+        page.Find("input[type=search]").Input("ящик 5");
+        Assert.Contains("q=", navigation.Uri, StringComparison.Ordinal);
+        Assert.DoesNotContain("page=", navigation.Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Page_and_search_are_read_from_the_address_on_reload()
+    {
+        _api.Items = [.. Enumerable.Range(1, 60).Select(i => Item($"Ящик {i:00}"))];
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?q=%D1%8F%D1%89%D0%B8%D0%BA%201&page=2");
+
+        var page = Render<ItemsPage>();
+
+        // «ящик 1» — Ящик 10…19: десять записей, одна страница; ?page=2 за её пределами — не пустота, а последняя страница.
+        page.WaitForAssertion(() => Assert.Equal(10, page.FindAll("tbody tr").Count));
+        Assert.Equal("ящик 1", page.Find("input[type=search]").GetAttribute("value"));
+    }
+
+    [Fact]
+    public void Page_from_the_address_is_clamped_when_the_catalog_got_shorter()
+    {
+        _api.Items = [.. Enumerable.Range(1, 30).Select(i => Item($"Ящик {i:00}"))];
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?page=9");
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("26–30 из 30", page.Markup, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Whole_card_expands_and_there_is_no_separate_more_button()
+    {
+        _api.Items = [Described("Лампа")];
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("button.text-left[aria-expanded]")));
+
+        Assert.DoesNotContain("Подробнее", page.Find("div.md\\:hidden").TextContent, StringComparison.Ordinal);
+        page.Find("button.text-left[aria-expanded]").Click();
+
+        Assert.Contains("open=", navigation.Uri, StringComparison.Ordinal);
+        page.WaitForAssertion(() => Assert.Equal("true", page.Find("button.text-left[aria-expanded]").GetAttribute("aria-expanded")));
+    }
+
+    [Fact]
+    public void Chevron_column_is_absent_when_the_page_has_nothing_to_expand()
+    {
+        _api.Items = [Item("Фонарь"), Item("Бинокль")];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+        Assert.Empty(page.FindAll("td.cm-td-toggle"));
+        Assert.Empty(page.FindAll("table thead th.w-px"));
+    }
+
+    [Fact]
+    public void Sort_bar_is_not_drawn_for_a_single_record()
+    {
+        _api.Items = [Item("Фонарь")];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+        Assert.Empty(page.FindAll(".cm-sortbar"));
+    }
+
+    [Fact]
+    public void Sort_bar_has_no_caption_only_an_accessible_name()
+    {
+        _api.Items = [Item("Фонарь"), Item("Бинокль")];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".cm-sortbar")));
+        Assert.DoesNotContain("Сортировка", page.Find(".cm-sortbar").TextContent, StringComparison.Ordinal);
+        Assert.Equal("Сортировка", page.Find(".cm-sortbar select").GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void Delete_names_what_holds_the_record_before_asking()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        _api.Usage = new CatalogUsage(7, ["лист сыщика Артур Нельсон", "лист сыщика Элен Райт"], false, "В листах останется название.");
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        page.FindAll("dialog button").Single(b => b.TextContent.Contains("Удалить предмет", StringComparison.Ordinal)).Click();
+
+        page.WaitForAssertion(() => Assert.NotNull(dialogs.Current));
+        Assert.Contains("Используется: лист сыщика Артур Нельсон, лист сыщика Элен Райт и ещё 5.", dialogs.Current!.Message, StringComparison.Ordinal);
+        Assert.Contains("В листах останется название.", dialogs.Current.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Blocked_delete_is_refused_in_the_window_without_a_question()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        _api.Usage = new CatalogUsage(1, ["профессия Врач"], true);
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        page.FindAll("dialog button").Single(b => b.TextContent.Contains("Удалить предмет", StringComparison.Ordinal)).Click();
+
+        page.WaitForAssertion(() => Assert.Contains("Используется: профессия Врач.", page.Find("dialog").TextContent, StringComparison.Ordinal));
+        Assert.Null(dialogs.Current);
     }
 
     private static ItemDto Item(string name, params Era[] eras) => new()
@@ -391,6 +520,10 @@ public sealed class CatalogPageTests : KitContext
             Failure is not null ? throw Failure : Task.FromResult(item);
 
         public ApiException? DeleteFailure { get; set; }
+
+        public CatalogUsage Usage { get; set; } = CatalogUsage.None;
+
+        public Task<CatalogUsage> UsageAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(Usage);
 
         public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
             DeleteFailure is not null ? throw DeleteFailure : Task.CompletedTask;
