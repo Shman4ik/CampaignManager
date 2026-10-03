@@ -1,7 +1,13 @@
+@using CampaignManager.Contracts.Catalogs
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@inject ICatalogApi<WeaponDto> WeaponsApi
 
-@* Шаг «Снаряжение»: деньги по таблице II для Средств и эпохи (FinanceRules), образ жизни, вещи. *@
+@* Шаг «Снаряжение»: деньги по таблице II для Средств и эпохи (FinanceRules), оружие из справочника, вещи.
+   Достаток — четыре плитки и одна строка («Среднего класса»); образ жизни, транспорт и пояснение к долларам — в «ⓘ».
+   Оружие — как в «Быстром НПС»: поиск по справочнику (CatalogSearch), на лист уходит копия (SheetCopies.Weapon);
+   сыщик со Стрельбой 25% без оружия иначе добавлял бы его уже на листе. Введённое уходит в черновик на каждое нажатие. *@
 <div class="cm-stack">
     <section>
         <h3 class="cm-section-title mb-2">Достаток</h3>
@@ -9,27 +15,64 @@
             @foreach (var (label, value) in Money)
             {
                 <div class="rounded-md border border-primary-200 bg-primary-50 px-3 py-2" @key="label">
-                    <dt class="text-xs text-primary-500">@label</dt>
+                    <dt class="text-[0.8125rem] text-primary-700">@label</dt>
                     <dd class="text-lg font-semibold text-primary-800">@value</dd>
                 </div>
             }
         </dl>
-        <p class="text-primary-700"><strong>@Tier.Name.</strong> @Lifestyle.Housing</p>
-        <p class="text-primary-700">@Lifestyle.Transport</p>
-        <p class="cm-field-note mt-2">
-            Доллары США, столбец «@(Draft.Era is Era.Modern ? "наше время" : "1920-е")». Карманные деньги — ниже этой суммы траты за день не
-            считают. За вещи своего достатка платить не нужно — они уже есть.
+        <p class="flex items-center gap-1 text-primary-800">
+            <strong>@Tier.Name</strong>
+            <TouchPopover AriaLabel="Подробнее о достатке">
+                <Trigger><i class="fa-solid fa-circle-info" aria-hidden="true"></i></Trigger>
+                <Panel>
+                    @Lifestyle.Housing @Lifestyle.Transport
+                    Доллары США, столбец «@(Draft.Era is Era.Modern ? "наше время" : "1920-е")». Карманные деньги — ниже этой суммы траты за день не считают.
+                    За вещи своего достатка платить не нужно — они уже есть.
+                </Panel>
+            </TouchPopover>
         </p>
+    </section>
+
+    <section data-testid="gear-weapons">
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 class="cm-section-title">Оружие</h3>
+            @if (!_pickWeapon)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-gun" data-testid="add-weapon" OnClick="() => _pickWeapon = true">Добавить оружие</Button>
+            }
+        </div>
+        @if (_pickWeapon)
+        {
+            <div class="mb-2">
+                <CatalogSearch TItem="WeaponDto" Load="LoadWeapons" Name="w => w.Name" Meta="w => Terms.Normalize(DiceNotation.Format(w.Damage))"
+                               Placeholder="Найти оружие…" OnSelect="SelectWeaponAsync" OnCancel="() => _pickWeapon = false" />
+            </div>
+        }
+        @if (Draft.Weapons.Count == 0)
+        {
+            <p class="cm-field-note">@Terms.Empty("оружия")</p>
+        }
+        @for (var i = 0; i < Draft.Weapons.Count; i++)
+        {
+            var index = i;
+            var weapon = Draft.Weapons[index];
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-primary-200 py-2 first:border-t-0" @key="index">
+                <span class="font-semibold text-primary-800">@weapon.Name</span>
+                <DiceText Value="@weapon.Damage" class="text-[0.8125rem] text-primary-700" />
+                <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" class="ml-auto" AriaLabel="@($"Убрать оружие: {weapon.Name}")"
+                        OnClick="() => SetAsync(() => Draft.Weapons.RemoveAt(index))" />
+            </div>
+        }
     </section>
 
     <section>
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Имущество и снаряжение</h3>
-            <Button Small="true" Icon="fa-plus" data-testid="add-equipment" OnClick="AddAsync">Предмет</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-equipment" OnClick="AddAsync">@Terms.AddItem</Button>
         </div>
         @if (Draft.Equipment.Count == 0)
         {
-            <p class="text-primary-700">Часто в начале записывать нечего — всё интересное найдётся в игре.</p>
+            <p class="cm-field-note">@Terms.Empty("предметов")</p>
         }
         @for (var i = 0; i < Draft.Equipment.Count; i++)
         {
@@ -37,9 +80,9 @@
             var item = Draft.Equipment[index];
             <div class="flex flex-wrap items-center gap-2 border-t border-primary-200 py-2 first:border-t-0" @key="index">
                 <input class="cm-input min-w-40 flex-1" placeholder="Название" aria-label="Название предмета" value="@item.Name"
-                       @onchange="e => SetAsync(() => item.Name = e.Value?.ToString() ?? string.Empty)" />
+                       @oninput="e => SetAsync(() => item.Name = e.Value?.ToString() ?? string.Empty)" />
                 <input class="cm-input min-w-48 flex-[2]" placeholder="Описание" aria-label="Описание предмета" value="@item.Description"
-                       @onchange="e => SetAsync(() => item.Description = e.Value?.ToString() ?? string.Empty)" />
+                       @oninput="e => SetAsync(() => item.Description = e.Value?.ToString() ?? string.Empty)" />
                 <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {item.Name}")"
                         OnClick="() => SetAsync(() => Draft.Equipment.RemoveAt(index))" />
             </div>
@@ -48,6 +91,8 @@
 </div>
 
 @code {
+    private bool _pickWeapon;
+
     [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
 
     [Parameter] public EventCallback OnChanged { get; set; }
@@ -65,6 +110,15 @@
         ("Активы", Tier.Assets is null ? Tier.AssetsText : $"${Tier.AssetsText}"),
         ("Карманные", $"${Tier.PocketMoneyText}"),
     ];
+
+    private async Task<IReadOnlyList<WeaponDto>> LoadWeapons() =>
+        [.. (await WeaponsApi.ListAsync()).Items.Where(w => w.Eras.Contains(Draft.Era)).OrderBy(w => w.Name, StringComparer.CurrentCulture)];
+
+    private Task SelectWeaponAsync(WeaponDto weapon)
+    {
+        _pickWeapon = false;
+        return SetAsync(() => Draft.Weapons.Add(SheetCopies.Weapon(WeaponCatalogs.Data(weapon))));
+    }
 
     private Task SetAsync(Action change)
     {

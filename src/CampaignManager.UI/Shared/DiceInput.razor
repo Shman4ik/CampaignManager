@@ -6,11 +6,18 @@
    сумма; правило из Core получает его через EnteredDiceRoller.Total и не считает ничего второй раз. *@
 <span class="roll">
     <input type="number" inputmode="numeric" min="@Count" max="@(Count * Sides)" step="1"
-           class="cm-input roll-input" placeholder="@($"{Count}d{Sides}")"
+           class="cm-input roll-input" placeholder="@(Placeholder ?? $"{Count}d{Sides}")"
            aria-label="@($"{Label}: выпало на {Count}d{Sides}")" aria-invalid="@(_invalid ? "true" : null)"
-           disabled="@Disabled" value="@(Value?.ToString(CultureInfo.InvariantCulture))" @onchange="OnEnteredAsync" />
-    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" Disabled="@Disabled"
-            AriaLabel="@($"{Label}: бросить {Count}d{Sides}")" OnClick="RollAsync" />
+           disabled="@Disabled" value="@(Value?.ToString(CultureInfo.InvariantCulture))" @oninput="OnTypedAsync" @onchange="OnEnteredAsync" />
+    @if (RollText is null)
+    {
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" Disabled="@Disabled"
+                AriaLabel="@($"{Label}: бросить {Count}d{Sides}")" OnClick="RollAsync" />
+    }
+    else
+    {
+        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" Disabled="@Disabled" OnClick="RollAsync">@RollText</Button>
+    }
 </span>
 @if (_invalid)
 {
@@ -33,10 +40,33 @@
 
     [Parameter] public bool Disabled { get; set; }
 
+    /// <summary>Подсказка в пустом поле; по умолчанию — сама кость («3d6»). «сумма» — где вписывают итог костей.</summary>
+    [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Подпись кнопки броска («Бросить»): без неё кнопка — один кубик, годный для строки таблицы, но не для отдельного поля.</summary>
+    [Parameter] public string? RollText { get; set; }
+
     private Task RollAsync()
     {
         _invalid = false;
         return ValueChanged.InvokeAsync(Dice.Roll(Count, Sides));
+    }
+
+    /// <summary>
+    /// Годное число уходит в значение сразу при наборе, а не при потере фокуса: на iPad касание соседней кнопки («Далее»)
+    /// фокус с поля не снимает — со значением по change оно пропадало бы. Негодное при наборе пропускается без ошибки
+    /// («1» на пути к «13»); ошибку показывает уход из поля.
+    /// </summary>
+    private Task OnTypedAsync(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var typed)
+            && typed >= Count && typed <= Count * Sides && typed != Value)
+        {
+            _invalid = false;
+            return ValueChanged.InvokeAsync(typed);
+        }
+
+        return Task.CompletedTask;
     }
 
     private Task OnEnteredAsync(ChangeEventArgs e)

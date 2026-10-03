@@ -1,19 +1,28 @@
 @using CampaignManager.Core.Characters
+@using CampaignManager.Core
 
-@* Шаг «Способ»: способ определения характеристик, возраст, необязательные правила. Эпоха —
-   у кампании или сценария (строка над помощником): от неё столбец таблицы II и имена. *@
+@* Шаг «Способ»: имя, способ определения характеристик, возраст, необязательные правила. Имя спрашивается здесь, а не
+   на пятом шаге (находка g3, п. 42): оно же уходит в подзаголовок шапки. «Случайный сыщик» — ссылка рядом с именем.
+   Эпоха — у кампании или сценария (подзаголовок помощника): от неё столбец таблицы II и имена. *@
 <div class="cm-stack">
+    <section class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <Field Label="Имя" Required="true" class="w-full max-w-md">
+            <input class="cm-input" maxlength="200" data-testid="investigator-name" value="@Draft.Personal.Name"
+                   @oninput="e => SetAsync(() => Draft.Personal.Name = Text(e))" />
+        </Field>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="create-random" OnClick="OnRandom">@CreationLinks.RandomTitle(Kind)</Button>
+    </section>
+
     <section>
         <h3 class="cm-section-title mb-2">Способ определения характеристик</h3>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             @foreach (var option in Methods)
             {
                 var selected = Draft.Method == option.Method;
-                <button type="button" data-testid="@($"method-{option.Method}")" aria-pressed="@(selected ? "true" : "false")"
-                        class="@($"flex flex-col gap-1 rounded-md border p-3 text-left {(selected ? "border-accent-600 bg-accent-50 ring-1 ring-accent-600" : "border-primary-200 bg-white")}")"
+                <button type="button" class="wizard-tile" data-testid="@($"method-{option.Method}")" aria-pressed="@(selected ? "true" : "false")"
                         @onclick="() => SelectAsync(option.Method)">
                     <span class="font-semibold text-primary-800">@option.Title</span>
-                    <span class="text-sm text-primary-600">@option.Description</span>
+                    <span class="text-[0.8125rem] text-primary-700">@option.Description</span>
                 </button>
             }
         </div>
@@ -23,12 +32,12 @@
         <h3 class="cm-section-title mb-2">Возраст</h3>
         <div class="flex flex-wrap items-start gap-4">
             <Field Label="Лет" class="w-28" Note="15–90">
-                <input type="number" class="cm-input" data-testid="wizard-age" min="@InvestigatorCreationRules.MinAge"
-                       max="@InvestigatorCreationRules.MaxAge" value="@Draft.Age" @onchange="SetAgeAsync" />
+                <NumberInput Value="Draft.Age" ValueChanged="SetAgeAsync" Min="InvestigatorCreationRules.MinAge"
+                             Max="InvestigatorCreationRules.MaxAge" data-testid="wizard-age" />
             </Field>
             <div class="min-w-60 flex-1">
                 <p class="text-primary-800"><strong>@Band.Name</strong> (@Band.Range лет)</p>
-                <ul class="mt-1 list-disc pl-5 text-sm text-primary-600">
+                <ul class="mt-1 list-disc pl-5 text-[0.8125rem] text-primary-700">
                     @foreach (var line in AgeEffects)
                     {
                         <li>@line</li>
@@ -43,43 +52,40 @@
     </section>
 
     <section>
-        <h3 class="cm-section-title mb-2">Необязательные правила</h3>
-        <label class="mb-2 flex min-h-11 items-start gap-2">
-            <input type="checkbox" class="cm-checkbox mt-1" checked="@(Draft.SkillCap is not null)" @onchange="ToggleCapAsync" />
-            <span>
-                Лимит начальных значений навыков — @InvestigatorCreationRules.OptionalSkillCap%.
-                <span class="cm-field-note block">Ни один навык при создании не поднимется выше.</span>
-            </span>
+        <h3 class="cm-section-title mb-1">Необязательные правила</h3>
+        <label class="cm-tap-row">
+            <input type="checkbox" class="cm-checkbox" checked="@(Draft.SkillCap is not null)" @onchange="ToggleCapAsync" />
+            <span>Предел навыка при создании: @InvestigatorCreationRules.OptionalSkillCap%</span>
         </label>
-        <label class="flex min-h-11 items-start gap-2">
-            <input type="checkbox" class="cm-checkbox mt-1" checked="@Draft.ExtraClass" data-testid="extra-class" @onchange="ToggleExtraAsync" />
-            <span>
-                Сыщик экстра-класса — вариант 6.
-                <span class="cm-field-note block">1d10 − 1 пунктов (0–9) разложите по характеристикам.</span>
-            </span>
+        <label class="cm-tap-row">
+            <input type="checkbox" class="cm-checkbox" checked="@Draft.ExtraClass" data-testid="extra-class" @onchange="ToggleExtraAsync" />
+            <span>Сыщик экстра-класса: до 9 пунктов сверху</span>
         </label>
     </section>
 </div>
 
 @code {
-    // Номеров страниц книги в помощнике нет (правило 10): плитка — название и одна фраза.
+    // Номеров страниц книги в помощнике нет (правило 10): плитка — название и одна короткая фраза; формулы бросков стоят
+    // у каждой строки следующего шага и здесь не повторяются.
     private sealed record MethodOption(CreationMethod Method, string Title, string Description);
 
     private static readonly IReadOnlyList<MethodOption> Methods =
     [
-        new(CreationMethod.Standard, "Стандартный",
-            "Каждая характеристика бросается своей формулой: 3d6 × 5 для СИЛ, ВЫН, ЛВК, НАР и МОЩ, (2d6 + 6) × 5 для ИНТ, ТЕЛ и ОБР."),
-        new(CreationMethod.AssignRolls, "Разложить броски",
-            "Пять бросков 3d6 и три 2d6 + 6, умноженные на 5, раскладываете по характеристикам как захотите."),
+        new(CreationMethod.Standard, "Стандартный", "Бросок по формулам"),
+        new(CreationMethod.AssignRolls, "Разложить броски", "Восемь бросков, раскладываете сами"),
         new(CreationMethod.PointBuy, "Покупка характеристик",
-            $"{InvestigatorCreationRules.PointBuyBudget} пунктов между восемью характеристиками, каждой от {InvestigatorCreationRules.PointBuyMin} до {InvestigatorCreationRules.PointBuyMax}."),
-        new(CreationMethod.Blitz, "Блиц",
-            "Готовые наборы: 80, 70, 60, 60, 50, 50, 50, 40 для характеристик и 70/60/60/50/50/50/40/40/40 для навыков профессии и Средств."),
+            $"{InvestigatorCreationRules.PointBuyBudget} пунктов, каждая {InvestigatorCreationRules.PointBuyMin}–{InvestigatorCreationRules.PointBuyMax}"),
+        new(CreationMethod.Blitz, "Готовый набор", "Значения готовы, бросать не нужно"),
     ];
 
     [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
 
+    [Parameter] public CharacterKind Kind { get; set; } = CharacterKind.Player;
+
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>«Случайный сыщик» — бросить черновик целиком (страница спрашивает, если введено что-то своё).</summary>
+    [Parameter] public EventCallback OnRandom { get; set; }
 
     private InvestigatorDraft Draft => Plan.Draft;
 
@@ -109,30 +115,22 @@
         }
     }
 
-    private Task SelectAsync(CreationMethod method)
+    private static string Text(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+
+    private Task SetAsync(Action change)
     {
-        Draft.SetMethod(method);
+        change();
         return OnChanged.InvokeAsync();
     }
 
-    private Task SetAgeAsync(ChangeEventArgs e)
-    {
-        if (!int.TryParse(e.Value?.ToString(), out var age))
-            return Task.CompletedTask;
+    private Task SelectAsync(CreationMethod method) => SetAsync(() => Draft.SetMethod(method));
 
-        Draft.SetAge(age);
-        return OnChanged.InvokeAsync();
-    }
+    /// <summary>Возраст вне 15–90 при наборе пропускается (набирают «3», потом «35»); поле само вернётся к прежнему при выходе из него.</summary>
+    private Task SetAgeAsync(int age) =>
+        age is >= InvestigatorCreationRules.MinAge and <= InvestigatorCreationRules.MaxAge ? SetAsync(() => Draft.SetAge(age)) : Task.CompletedTask;
 
-    private Task ToggleCapAsync(ChangeEventArgs e)
-    {
-        Draft.SkillCap = e.Value is true ? InvestigatorCreationRules.OptionalSkillCap : null;
-        return OnChanged.InvokeAsync();
-    }
+    private Task ToggleCapAsync(ChangeEventArgs e) =>
+        SetAsync(() => Draft.SkillCap = e.Value is true ? InvestigatorCreationRules.OptionalSkillCap : null);
 
-    private Task ToggleExtraAsync(ChangeEventArgs e)
-    {
-        Draft.SetExtraClass(e.Value is true);
-        return OnChanged.InvokeAsync();
-    }
+    private Task ToggleExtraAsync(ChangeEventArgs e) => SetAsync(() => Draft.SetExtraClass(e.Value is true));
 }

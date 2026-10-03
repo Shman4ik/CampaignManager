@@ -11,14 +11,18 @@
 @* «Новый лист» (T2.4): куда он ляжет и три способа — помощник главы 3, случайный сыщик (тот же помощник с
    RandomDraft, открытый на «Итоге»), чистый лист; у НПС ещё быстрый НПС. Чистый лист создаётся только по кнопке:
    переход по ссылке ничего не пишет, иначе перезагрузка заводила бы двойников. Все способы собирают лист одним
-   SheetBuilder (Core). Место проверяется до выбора — знание v1: иначе отказ приходил только на «Создать». *@
-<PageHeader Title="@CreationLinks.NewTitle(CreationKind)" Subtitle="@(_context is null ? null : CreationLinks.PlaceText(_context))">
+   SheetBuilder (Core). Место проверяется до выбора — знание v1: иначе отказ приходил только на «Создать».
+   Игрок сюда не выбирает способ (решение 58 ревью g3): адрес сыщика сразу ведёт в помощник, «Случайный сыщик» — ссылка на
+   его первом шаге, «Пустой лист» — адрес с ?blank=1 (кнопка на главной) и одна карточка с именем. *@
+<PageHeader Title="@(IsBlankOnly ? "Пустой лист" : CreationLinks.NewTitle(CreationKind))" Subtitle="@(_context is null ? null : CreationLinks.PlaceText(_context))">
     <Actions>
         <Button Small="true" Variant="ButtonVariant.Secondary" Href="@CreationLinks.Back(CreationKind, ScenarioId)">Назад</Button>
     </Actions>
 </PageHeader>
 
 <div class="cm-page">
+    @if (!_redirecting)
+    {
     <AsyncContent Key="@LoadKey" Load="LoadAsync" LoadingMessage="Проверяю, куда ляжет лист…" Context="context">
         <ChildContent>
             @if (!context.CanCreate)
@@ -41,7 +45,9 @@
                 }
 
                 @* У НПС способов четыре: в три колонки cm-grid-cards четвёртая падала одна во второй ряд — поэтому 2 × 2. *@
-                <div class="@(CreationKind is CharacterKind.Npc ? "grid gap-3 md:grid-cols-2" : "cm-grid-cards")" data-testid="create-options">
+                <div class="@(IsBlankOnly ? "max-w-xl" : CreationKind is CharacterKind.Npc ? "grid gap-3 md:grid-cols-2" : "cm-grid-cards")" data-testid="create-options">
+                    @if (!IsBlankOnly)
+                    {
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
                             <h2 class="cm-card-title"><i class="fa-solid fa-wand-magic-sparkles mr-2 text-accent-600" aria-hidden="true"></i>Пошаговый помощник</h2>
@@ -55,7 +61,7 @@
                     </div>
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
-                            <h2 class="cm-card-title"><i class="fa-solid fa-dice mr-2 text-accent-600" aria-hidden="true"></i>@(CreationKind is CharacterKind.Player ? "Случайный сыщик" : "Случайный " + CreationLinks.KindTitle(CreationKind))</h2>
+                            <h2 class="cm-card-title"><i class="fa-solid fa-dice mr-2 text-accent-600" aria-hidden="true"></i>@CreationLinks.RandomTitle(CreationKind)</h2>
                             <p class="cm-text-muted flex-1">
                                 Кости бросит сам помощник — по тем же правилам. Откроется итог: любой шаг можно переиграть до создания.
                             </p>
@@ -76,10 +82,11 @@
                             </div>
                         </div>
                     }
+                    }
                     <div class="cm-card">
                         <div class="cm-card-body flex h-full flex-col gap-3">
                             <h2 class="cm-card-title"><i class="fa-solid fa-file mr-2 text-accent-600" aria-hidden="true"></i>Чистый лист</h2>
-                            <Field Label="Имя" Required="@(CreationKind is not CharacterKind.Player)" Hint="@(CreationKind is CharacterKind.Player ? "(можно позже)" : null)">
+                            <Field Label="Имя" Required="@(CreationKind is not CharacterKind.Player)">
                                 <input class="cm-input" maxlength="@CharacterLimits.NameLength" data-testid="blank-name" @bind="_blankName" />
                             </Field>
                             <p class="cm-text-muted flex-1">Пустой бланк: всё заполняете на листе сами — например, переносите бумажный лист.</p>
@@ -99,6 +106,7 @@
             }
         </ChildContent>
     </AsyncContent>
+    }
 </div>
 
 @code {
@@ -117,6 +125,22 @@
     [SupplyParameterFromQuery(Name = "campaignId")] public Guid? QueryCampaignId { get; set; }
 
     [SupplyParameterFromQuery(Name = "scenarioId")] public Guid? ScenarioId { get; set; }
+
+    /// <summary>«Пустой лист» игрока: без этого адрес сыщика ведёт сразу в помощник.</summary>
+    [SupplyParameterFromQuery(Name = "blank")] public string? Blank { get; set; }
+
+    private bool _redirecting;
+
+    private bool IsBlankOnly => CreationKind is CharacterKind.Player;
+
+    protected override void OnParametersSet()
+    {
+        if (CreationKind is CharacterKind.Player && Blank is not ("1" or "true"))
+        {
+            _redirecting = true;
+            Navigation.NavigateTo(CreationLinks.Wizard(CreationKind, CampaignOrNull, ScenarioId), replace: true);
+        }
+    }
 
     private CharacterKind CreationKind => CampaignId is not null ? CharacterKind.Player : CreationLinks.KindFromRoute(Kind);
 
