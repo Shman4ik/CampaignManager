@@ -4,23 +4,24 @@
    проверки. «Вложенная локация» (в раскрытой строке) заводит локацию сразу внутри этой. Порядок — среди соседей («Порядок» → «Выше»/«Ниже»).
    Удаление уносит вложенные локации и их проверки — диалог говорит об этом. *@
 <section class="cm-section">
-    <div class="cm-section-header flex-wrap gap-2">
-        <h2 class="cm-section-title">Локации</h2>
-        @if (CanEdit)
-        {
-            <div class="flex flex-wrap gap-2">
-                @if (Scenario.Locations.Count > 1)
-                {
-                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
-                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
-                }
-                <Button Small="true" Icon="fa-plus" data-testid="add-location" OnClick="() => Open(null, null)">Локация</Button>
-            </div>
-        }
-    </div>
+    @* Заголовка «Локации» над вкладкой «Локации» нет (правило 5): в строке действий вкладки — порядок и добавление. *@
+    @if (CanEdit)
+    {
+        <div class="cm-btn-row mb-3 justify-end">
+            @if (Scenario.Locations.Count > 1)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-down-up-across-line"
+                        OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+            }
+            @if (!Reordering)
+            {
+                <Button Icon="fa-plus" data-testid="add-location" OnClick="() => Open(null, null)">Добавить локацию</Button>
+            }
+        </div>
+    }
     @if (Scenario.Locations.Count == 0)
     {
-        <EmptyState Icon="fa-location-dot" Title="Локаций пока нет." Message="Локации — места, где сыщики ищут улики: у каждой описание и проверки." />
+        <EmptyState Compact="true" Title="Нет локаций." />
     }
     else
     {
@@ -33,14 +34,14 @@
                 <div class="@Css.Join("border-t border-primary-200 py-3 pr-4 first:border-t-0", Indent(depth))" @key="location.Id"
                      data-testid="location-row">
                     <div class="flex flex-wrap items-start justify-between gap-2">
-                        <button type="button" class="flex min-h-9 min-w-0 flex-1 items-start gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                        <button type="button" class="flex min-h-11 min-w-0 flex-1 items-start gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
                                 @onclick="() => Toggle(location.Id)">
                             <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") mt-1 w-3 text-xs text-primary-400" aria-hidden="true"></i>
                             <span class="flex min-w-0 flex-col">
                                 <span class="font-semibold text-primary-900">
                                     @if (depth > 0)
                                     {
-                                        <i class="fa-solid fa-turn-up mr-1 rotate-90 text-xs text-primary-400" aria-hidden="true"></i>
+                                        <i class="fa-solid fa-angle-right mr-1 text-xs text-accent-600" aria-hidden="true"></i>
                                     }
                                     @location.Name
                                 </span>
@@ -51,18 +52,22 @@
                             </span>
                         </button>
                         <div class="flex flex-wrap items-center gap-2">
+                            @if (Scenario.Locations.Count(l => l.ParentId == location.Id) is > 0 and var inner)
+                            {
+                                <Badge Icon="fa-location-dot">@ScenarioLabels.Plural(inner, "вложенная", "вложенные", "вложенных")</Badge>
+                            }
                             @if (location.Checks.Count > 0)
                             {
-                                <Badge Tone="Tone.Info" Icon="fa-dice-d20">@location.Checks.Count</Badge>
+                                <Badge Tone="Tone.Info" Icon="fa-dice-d20">@ScenarioLabels.ChecksCount(location.Checks.Count)</Badge>
                             }
                             @if (location.MusicTags.Count > 0 || location.TrackIds.Count > 0)
                             {
-                                <Badge Icon="fa-music">@(location.MusicTags.Count + location.TrackIds.Count)</Badge>
+                                <Badge Icon="fa-music">музыка</Badge>
                             }
                             <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < siblings.Count - 1"
                                             OnUp="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, -1)"
                                             OnDown="() => MoveAsync(ScenarioPart.Locations, siblings, location.Id, 1)"
-                                            OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)" />
+                                            OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)" MenuLabel="@("Действия: " + location.Name)" />
                         </div>
                     </div>
                     @if (open)
@@ -89,6 +94,7 @@
                             }
                             @if (location.Checks.Count > 0)
                             {
+                                <p class="cm-section-title -mb-1">Исходы проверок</p>
                                 <ul class="flex flex-col gap-1 text-sm">
                                     @foreach (var check in location.Checks)
                                     {
@@ -96,31 +102,35 @@
                                             <span class="font-semibold text-primary-800">@ScenarioLabels.Target(check)</span>
                                             @if (ScenarioLabels.Difficulty(check) is { } difficulty)
                                             {
-                                                <span class="text-warning-700"> · @difficulty</span>
+                                                <span class="text-warning-800"> · @difficulty</span>
                                             }
                                             @if (check.OnSuccess is { } success)
                                             {
-                                                <span class="text-primary-600"> — @success</span>
+                                                <span class="text-primary-700"> — Успех: @success</span>
+                                            }
+                                            @if (check.OnFailure is { } failure)
+                                            {
+                                                <span class="text-primary-700"> — Провал: @failure</span>
                                             }
                                         </li>
                                     }
                                 </ul>
                             }
-                            <div class="flex flex-wrap gap-2">
+                            <div class="cm-btn-row">
                                 @if (location.Checks.Count > 0)
                                 {
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice-d20"
-                                            Href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Checks)">Проверки</Button>
+                                    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice-d20"
+                                            Href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Checks)">К проверкам</Button>
                                 }
                                 @if (CanEdit)
                                 {
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy" data-testid="add-nested"
-                                            OnClick="() => Open(null, location.Id)">Вложенная локация</Button>
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-music" Disabled="Busy" data-testid="location-music-open"
-                                            OnClick="() => _music = location">Музыка</Button>
+                                    <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy" data-testid="add-nested"
+                                            OnClick="() => Open(null, location.Id)">Добавить вложенную локацию</Button>
+                                    <Button Variant="ButtonVariant.Secondary" Icon="fa-sliders" Disabled="Busy" data-testid="location-music-open"
+                                            OnClick="() => _music = location">Настроить музыку</Button>
                                 }
-                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-play"
-                                        Href="@ScenarioLinks.Play(Scenario.Id, location.Id)">В режиме игры</Button>
+                                <Button Variant="ButtonVariant.Secondary" Icon="fa-play"
+                                        Href="@ScenarioLinks.Play(Scenario.Id, location.Id)">Открыть в режиме игры</Button>
                             </div>
                         </div>
                     }

@@ -5,24 +5,25 @@
 @* «Предметы» — из справочника (ссылкой) или свой реквизит сценария (решение владельца: реквизит «Среди древних
    деревьев» перенесён так, а не в справочник). *@
 <section class="cm-section">
-    <div class="cm-section-header flex-wrap gap-2">
-        <h2 class="cm-section-title">Предметы</h2>
-        @if (CanEdit)
-        {
-            <div class="flex flex-wrap gap-2">
-                @if (Scenario.Items.Count > 1)
-                {
-                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
-                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
-                }
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-gem" data-testid="add-prop" OnClick="() => OpenForm(null)">Свой реквизит</Button>
-                <Button Small="true" Icon="fa-plus" data-testid="add-item" OnClick="OpenPicker">Из справочника</Button>
-            </div>
-        }
-    </div>
+    @* Заголовка секции над одноимённой вкладкой нет (правило 5): в строке действий вкладки — порядок и добавление. *@
+    @if (CanEdit)
+    {
+        <div class="cm-btn-row mb-3 justify-end">
+            @if (Scenario.Items.Count > 1)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-down-up-across-line"
+                        OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+            }
+            @if (!Reordering)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-gem" data-testid="add-prop" OnClick="() => OpenForm(null)">Добавить свой реквизит</Button>
+                <Button Icon="fa-plus" data-testid="add-item" OnClick="OpenPicker">Добавить из справочника</Button>
+            }
+        </div>
+    }
     @if (Scenario.Items.Count == 0)
     {
-        <EmptyState Icon="fa-box" Title="Предметов пока нет." Message="Предмет из справочника или свой реквизит — идол, ключ, дневник." />
+        <EmptyState Compact="true" Title="Нет предметов." />
     }
     else
     {
@@ -41,7 +42,7 @@
                             <span class="font-semibold text-primary-900">@item.Name</span>
                             @if (item.ItemId is null)
                             {
-                                <Badge Tone="Tone.Warning" Icon="fa-gem">реквизит</Badge>
+                                <Badge Tone="Tone.Neutral" Icon="fa-gem">свой реквизит</Badge>
                             }
                             else if (item.Type is { } type)
                             {
@@ -64,7 +65,7 @@
                     <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                     OnUp="() => MoveAsync(ScenarioPart.Items, ids, item.Id, -1)"
                                     OnDown="() => MoveAsync(ScenarioPart.Items, ids, item.Id, 1)"
-                                    OnEdit="() => OpenForm(item)" OnDelete="() => RemoveAsync(item)" DeleteLabel="Убрать" />
+                                    OnEdit="() => OpenForm(item)" OnDelete="() => RemoveAsync(item)" DeleteLabel="Убрать" MenuLabel="@("Действия: " + item.Name)" />
                 </div>
             }
         </div>
@@ -75,7 +76,7 @@
                     Meta="i => i.Type" Also="i => [i.Type]" Empty="Справочник предметов пуст."
                     Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
     <div class="grid grid-cols-1 gap-3">
-        <Field Label="Где">
+        <Field Label="Где лежит">
             <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_where" placeholder="в ящике стола" />
         </Field>
         <Field Label="Заметки">

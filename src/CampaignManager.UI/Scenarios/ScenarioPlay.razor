@@ -12,71 +12,88 @@
 @inject ICatalogApi<SkillDto> Skills
 @inject NavigationManager Navigation
 
-@* Режим игры (T2.5b): локации слева, открытая локация (или обзор) в центре, факты и раздатки справа. Всё, что открыто, —
-   в адресе (?mode=play&location=&handout=&run=, ScenarioLinks.Play), переходы — с replace: перезагрузка возвращает тот же
-   экран, «Назад» ведёт со сценария. Колонки — прямые дети .cm-play (Styles/scenario.css): каждая прокручивается сама,
-   а место панели плеера внизу колонки .cm-main остаётся само. Уже xl (iPad в портрете) факты уходят в выдвижную панель,
-   уже md (телефон) локации — в выпадающий список.
-   Проверка локации — общий диалог Checks по сыщикам кампании выбранного прохождения (листы только читаются: Удачу и
-   отметку игрок ставит у себя); без прохождения — вручную. Раздатка игрокам — HandoutShowcase, второй экран — статическая
-   страница сервера. *@
+@* Режим игры (T2.5b, UX-1): локации слева, открытая локация (или обзор) в центре, раздатки и факты справа. Всё, что
+   открыто, — в адресе (?mode=play&location=&handout=&run=, ScenarioLinks.Play), переходы — с replace: перезагрузка
+   возвращает тот же экран, «Назад» ведёт со сценария. Колонки — прямые дети .cm-play (Styles/scenario.css): каждая
+   прокручивается сама, а место панели плеера внизу колонки .cm-main остаётся само. Уже xl (iPad в портрете) правая
+   колонка уходит в выдвижную панель, уже md (телефон) локации — в выпадающий список.
+   Проверка локации — общий диалог Checks по сыщикам кампании выбранной партии (листы только читаются: Удачу и отметку
+   игрок ставит у себя); без партии — вручную. Проверки стоят над описанием локации: самое частое действие за столом.
+   Раздатка игрокам — HandoutShowcase, второй экран — статическая страница сервера. *@
 
-<aside class="cm-play-side hidden w-64 border-r border-primary-200 md:flex" aria-label="Локации" data-testid="play-locations">
-    <p class="cm-section-title px-4 pb-1 pt-3">Локации</p>
-    <nav class="flex flex-col gap-0.5 p-2">
-        <button type="button" class="@NavClass(null, 0)" aria-current="@(Location is null ? "true" : null)" @onclick="() => GoLocation(null)">
-            <i class="fa-solid fa-book-open w-4 text-xs" aria-hidden="true"></i><span class="min-w-0 flex-1 truncate">Обзор</span>
-        </button>
-        @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
-        {
-            var id = location.Id;
-            <button type="button" class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "true" : null)" @key="id"
-                    data-testid="play-location" @onclick="() => GoLocation(id)">
-                <i class="fa-solid @(depth == 0 ? "fa-location-dot" : "fa-angle-right") w-4 text-xs text-accent-500" aria-hidden="true"></i>
-                <span class="min-w-0 flex-1 truncate">@location.Name</span>
-                @if (HasMusic(location))
-                {
-                    @* Только метка «здесь есть музыка»: подписи и title= на iPad не прочесть. *@
-                    <i class="fa-solid fa-music text-[10px] text-primary-400" aria-hidden="true"></i>
-                }
-            </button>
-        }
-    </nav>
-</aside>
-
-<div class="cm-play-center" data-testid="play-center">
-    <div class="flex flex-col gap-5 p-4 sm:p-6">
-        <div class="flex flex-wrap items-center gap-2">
-            <select class="cm-input w-full md:hidden" aria-label="Локация" data-testid="play-location-select" @onchange="SelectLocation">
-                <option value="" selected="@(Location is null)">Обзор</option>
-                @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
-                {
-                    <option value="@location.Id" selected="@(Location?.Id == location.Id)">@(new string('·', depth * 2)) @location.Name</option>
-                }
-            </select>
-            @RunPicker
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-key" class="ml-auto xl:hidden" data-testid="open-facts"
-                    OnClick="() => _factsOpen = true">Факты и раздатки</Button>
-        </div>
-
-        @if (Location is null)
-        {
-            @Overview
-        }
-        else
-        {
-            @LocationView(Location)
-        }
+@if (IsEmpty)
+{
+    @* Пустой сценарий играть нечем: одна строка вместо трёх колонок (в шапке рабочего места «Режим игры» для него не предлагается). *@
+    <div class="cm-play-center" data-testid="play-empty">
+        <p class="cm-text-muted flex flex-wrap items-center gap-x-3 p-6">
+            <span>В сценарии нет ни локаций, ни раздаток, ни фактов — играть пока нечем.</span>
+            <a class="cm-back-link" href="@ScenarioLinks.Workspace(Scenario.Id)">Открыть рабочее место</a>
+        </p>
     </div>
-</div>
+}
+else
+{
+    <aside class="cm-play-side hidden w-64 border-r border-primary-200 md:flex" aria-label="Локации" data-testid="play-locations">
+        <p class="cm-section-title px-4 pb-1 pt-3">Локации</p>
+        <nav class="flex flex-col gap-0.5 p-2">
+            <button type="button" class="@NavClass(null, 0)" aria-current="@(Location is null ? "true" : null)" @onclick="() => GoLocation(null)">
+                <i class="fa-solid fa-book-open w-4 text-xs" aria-hidden="true"></i><span class="min-w-0 flex-1">Обзор</span>
+            </button>
+            @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
+            {
+                var id = location.Id;
+                <button type="button" class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "true" : null)" @key="id"
+                        data-testid="play-location" @onclick="() => GoLocation(id)">
+                    <i class="fa-solid @(depth == 0 ? "fa-location-dot text-accent-600" : "fa-angle-right text-primary-500") w-4 text-xs" aria-hidden="true"></i>
+                    @* Название целиком, с переносом: на планшете наведения нет, а обрезанное «День 2. Утёс Юджина Кле…» не прочесть. *@
+                    <span class="@(depth == 0 ? "font-medium" : null) min-w-0 flex-1 break-words">@location.Name</span>
+                    @if (_visited.Contains(id) && Location?.Id != id)
+                    {
+                        <i class="fa-solid fa-check text-xs text-success-700" aria-hidden="true"></i><span class="sr-only">уже были</span>
+                    }
+                    @if (HasMusic(location))
+                    {
+                        <i class="fa-solid fa-music text-xs text-primary-500" aria-hidden="true"></i><span class="sr-only">есть музыка</span>
+                    }
+                </button>
+            }
+        </nav>
+    </aside>
 
-<aside class="cm-play-side hidden w-80 border-l border-primary-200 p-4 xl:flex" aria-label="Факты и раздатки">
-    <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
-</aside>
+    <div class="cm-play-center" data-testid="play-center">
+        <div class="flex flex-col gap-4 p-4 sm:p-6">
+            <div class="flex flex-wrap items-center gap-2">
+                <select class="cm-input w-full md:hidden" aria-label="Локация" data-testid="play-location-select" @onchange="SelectLocation">
+                    <option value="" selected="@(Location is null)">Обзор</option>
+                    @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
+                    {
+                        <option value="@location.Id" selected="@(Location?.Id == location.Id)">@(new string('·', depth * 2)) @location.Name</option>
+                    }
+                </select>
+                @RunPicker
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-key" class="ml-auto xl:hidden" data-testid="open-facts"
+                        OnClick="() => _factsOpen = true">Раздатки и факты</Button>
+            </div>
 
-<Modal Open="_factsOpen" OnClose="() => _factsOpen = false" Title="Факты и раздатки" Placement="ModalPlacement.Drawer" data-testid="facts-drawer">
-    <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
-</Modal>
+            @if (Location is null)
+            {
+                @Overview
+            }
+            else
+            {
+                @LocationView(Location)
+            }
+        </div>
+    </div>
+
+    <aside class="cm-play-side hidden w-96 border-l border-primary-200 p-4 xl:flex" aria-label="Раздатки и факты">
+        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+    </aside>
+
+    <Modal Open="_factsOpen" OnClose="() => _factsOpen = false" Title="Раздатки и факты" Placement="ModalPlacement.Drawer" data-testid="facts-drawer">
+        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+    </Modal>
+}
 
 <SkillCheckModal Open="@(_check is not null)" OpenChanged="CheckOpenChanged"
                  Title="@(_check is null ? "Проверка" : $"Проверка: {ScenarioLabels.Target(_check)}")"
@@ -91,6 +108,7 @@
 
 @code {
     private readonly HashSet<Guid> _openChecks = [];
+    private readonly HashSet<Guid> _visited = [];
     private IReadOnlyList<ScenarioRunDto>? _runs;
     private string? _runsError;
     private Guid? _partyCampaignId;
@@ -109,11 +127,13 @@
     /// <summary>Раздатка, показанная игрокам (<c>?handout=</c>).</summary>
     [Parameter] public Guid? HandoutId { get; set; }
 
-    /// <summary>Выбранное прохождение (<c>?run=</c>); нет — первое незавершённое.</summary>
+    /// <summary>Выбранная партия (<c>?run=</c>); нет — первая незавершённая.</summary>
     [Parameter] public Guid? RunId { get; set; }
 
     /// <summary>Сценарий изменился (музыка локации) — страница перечитывает его.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool IsEmpty => Scenario.Locations.Count + Scenario.Handouts.Count + Scenario.KeyFacts.Count == 0;
 
     private ScenarioLocationDto? Location => LocationId is { } id ? Scenario.Locations.FirstOrDefault(l => l.Id == id) : null;
 
@@ -129,6 +149,9 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (LocationId is { } opened)
+            _visited.Add(opened);
+
         if (_runs is null && _runsError is null)
         {
             try
@@ -144,7 +167,7 @@
         await LoadPartyAsync(ActiveRun?.CampaignId);
     }
 
-    /// <summary>Сыщики кампании прохождения с листами (только чтение) и справочник навыков — для диалога проверки.</summary>
+    /// <summary>Сыщики кампании партии с листами (только чтение) и справочник навыков — для диалога проверки.</summary>
     private async Task LoadPartyAsync(Guid? campaignId)
     {
         if (campaignId == _partyCampaignId && (_party is not null || _partyError is not null || campaignId is null))
@@ -176,13 +199,14 @@
         }
         else if (_runs is { Count: 0 })
         {
-            <p class="cm-text-muted text-sm" data-testid="play-no-runs">
-                <i class="fa-solid fa-users-slash mr-1" aria-hidden="true"></i>Сценарий не проходят в ваших кампаниях — проверки вручную.
+            <p class="cm-text-muted flex flex-wrap items-center gap-x-3 text-sm" data-testid="play-no-runs">
+                <span>Нет партии — проверки вручную.</span>
+                <a class="cm-back-link" href="@ScenarioLinks.Workspace(Scenario.Id)">Начать игру</a>
             </p>
         }
         else if (_runs is not null)
         {
-            <select class="cm-input w-full sm:w-80" aria-label="Прохождение: чьи сыщики в проверках" data-testid="play-run" @onchange="SelectRun">
+            <select class="cm-input w-full sm:w-80" aria-label="Партия: чьи сыщики в проверках" data-testid="play-run" @onchange="SelectRun">
                 @foreach (var run in _runs)
                 {
                     <option value="@run.Id" selected="@(ActiveRun?.Id == run.Id)">@RunLabel(run)</option>
@@ -190,10 +214,10 @@
             </select>
             @if (ActiveRun is { Status: not ScenarioRunStatus.Finished, CanEdit: true } combatRun)
             {
-                @* Бой с этим прохождением (T2.6d): сцена стартует сразу в кампании прохождения, окно участника предложит его сценарий. *@
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-hand-fist" data-testid="play-combat"
+                @* Бой с этой партией (T2.6d): сцена стартует сразу в кампании партии, окно участника предложит её сценарий. *@
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-hand-fist" data-testid="play-combat"
                         OnClick="() => Navigation.NavigateTo(ScenarioLinks.Combat(combatRun))">Бой</Button>
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-person-running" data-testid="play-chase"
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-person-running" data-testid="play-chase"
                         OnClick="() => Navigation.NavigateTo(ScenarioLinks.Chase(combatRun))">Погоня</Button>
             }
             @if (_partyError is not null)
@@ -207,10 +231,11 @@
         }
     };
 
+    // Обзор — не стена текста: название сценария уже в шапке, поэтому здесь краткое описание, метки и «Текст сценария»
+    // по раскрытию (длинный Markdown первым экраном уводил всё остальное вниз).
     private RenderFragment Overview => __builder =>
     {
         <section class="flex flex-col gap-3" data-testid="play-overview">
-            <h2 class="cm-title-serif text-2xl text-primary-900">@Scenario.Name</h2>
             @if (Scenario.Setting is not null || Scenario.Era is not null || Scenario.SettingDate is not null)
             {
                 <div class="flex flex-wrap gap-1.5">
@@ -222,7 +247,7 @@
                     {
                         <Badge Icon="fa-calendar">@date</Badge>
                     }
-                    @if (Scenario.Era is { } era)
+                    @if (Scenario.Era is { } era && Scenario.SettingDate != CatalogText.Of(era))
                     {
                         <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
                     }
@@ -230,15 +255,18 @@
             }
             @if (Scenario.Summary is { } summary)
             {
-                <p class="whitespace-pre-line text-primary-700">@summary</p>
+                <p class="whitespace-pre-line text-primary-800">@summary</p>
+            }
+            @if (Scenario.Locations.Count > 0)
+            {
+                <p class="cm-text-muted text-sm">Выберите локацию слева.</p>
             }
             @if (Scenario.BodyMd is { } body)
             {
-                <Markdown Text="@body" class="border-t border-primary-200 pt-4" />
-            }
-            else if (Scenario.Locations.Count > 0)
-            {
-                <p class="cm-text-muted text-sm">Выберите локацию слева.</p>
+                <details class="border-t border-primary-200 pt-2" data-testid="play-body">
+                    <summary class="cm-tap-row cursor-pointer font-semibold text-primary-800">Текст сценария</summary>
+                    <Markdown Text="@body" class="pt-2" />
+                </details>
             }
         </section>
     };
@@ -248,75 +276,78 @@
         var pool = MusicPool.Of(location.MusicTags, location.TrackIds);
         var children = Scenario.Locations.Where(l => l.ParentId == location.Id).ToList();
         <section class="flex flex-col gap-4" data-testid="play-location-detail">
-            <div>
-                @if (location.ParentId is not null)
+            <div class="flex items-start gap-2">
+                <div class="min-w-0 flex-1">
+                    @if (location.ParentId is not null)
+                    {
+                        <p class="cm-text-muted text-sm">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
+                    }
+                    <h2 class="cm-title-serif text-2xl text-primary-900">@location.Name</h2>
+                    @if (location.Address is { } address)
+                    {
+                        <p class="cm-text-muted text-sm"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
+                    }
+                </div>
+                @* Настройка музыки — редкая правка, не игровое действие: в «⋯», а на виду — «Играть». *@
+                @if (Scenario.CanEdit)
                 {
-                    <p class="cm-text-muted text-xs">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
-                }
-                <h2 class="cm-title-serif text-2xl text-primary-900">@location.Name</h2>
-                @if (location.Address is { } address)
-                {
-                    <p class="cm-text-muted text-sm"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
+                    <RowMenu AriaLabel="Действия локации">
+                        <RowMenuItem Icon="fa-sliders" OnClick="() => _musicOpen = true">@(pool.IsEmpty ? "Настроить музыку" : "Изменить музыку")</RowMenuItem>
+                    </RowMenu>
                 }
             </div>
 
             @* Музыка — выше описания: атмосферу включают до того, как начинают зачитывать сцену (v1). *@
-            @if (!pool.IsEmpty || Scenario.CanEdit)
+            @if (!pool.IsEmpty)
             {
                 <div class="flex flex-wrap items-center gap-2">
                     <MusicPoolButton Pool="pool" Label="@location.Name" />
                     @if (location.MusicTags.Count > 0)
                     {
-                        <span class="cm-text-muted text-xs">@string.Join(", ", location.MusicTags)</span>
-                    }
-                    @if (Scenario.CanEdit)
-                    {
-                        <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-sliders" data-testid="edit-location-music"
-                                OnClick="() => _musicOpen = true">@(pool.IsEmpty ? "Настроить музыку" : "Изменить музыку")</Button>
+                        <span class="cm-text-muted text-sm">@string.Join(", ", location.MusicTags)</span>
                     }
                 </div>
             }
 
-            <Markdown Text="@location.Description" />
-
+            @* Проверки — над описанием: самое частое действие за столом, а длинное описание уводило их за край экрана. *@
             @if (location.Checks.Count > 0)
             {
                 <div>
-                    <h3 class="cm-section-title mb-2"><i class="fa-solid fa-dice-d20 mr-1 text-accent-500" aria-hidden="true"></i>Проверки</h3>
+                    <h3 class="cm-section-title mb-1"><i class="fa-solid fa-dice-d20 mr-1 text-accent-600" aria-hidden="true"></i>Проверки</h3>
                     <div class="cm-card" data-testid="play-checks">
                         @foreach (var check in location.Checks)
                         {
                             var current = check;
-                            var open = _openChecks.Contains(check.Id);
-                            <div class="border-t border-primary-200 px-3 py-2 first:border-t-0" @key="check.Id" data-testid="play-check">
+                            var open = IsCheckOpen(check, location);
+                            <div class="border-t border-primary-200 px-3 first:border-t-0" @key="check.Id" data-testid="play-check">
                                 @* «Проверить» — рядом со строкой, а не внутри: кнопка в кнопке — невалидная разметка (v1). *@
                                 <div class="flex items-center gap-2">
                                     <button type="button" class="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-2 text-left"
-                                            aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleCheck(current.Id)">
-                                        <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-400" aria-hidden="true"></i>
+                                            aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleCheck(current)">
+                                        <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-500" aria-hidden="true"></i>
                                         <span class="font-semibold text-primary-900">@ScenarioLabels.Target(check)</span>
                                         @if (ScenarioLabels.Difficulty(check) is { } difficulty)
                                         {
                                             <Badge Tone="@(check.Difficulty == Difficulty.Extreme ? Tone.Error : Tone.Warning)">@difficulty</Badge>
                                         }
                                     </button>
-                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice-d20" data-testid="run-check"
+                                    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice-d20" data-testid="run-check"
                                             OnClick="() => _check = current">Проверить</Button>
                                 </div>
                                 @if (open)
                                 {
-                                    <div class="flex flex-col gap-2 pb-2 pl-5 pt-1">
+                                    <div class="flex flex-col gap-2 pb-3 pl-5">
                                         @if (check.OnSuccess is { } success)
                                         {
                                             <div>
-                                                <p class="text-xs font-semibold uppercase text-success-700">Успех</p>
+                                                <p class="text-sm font-semibold uppercase text-success-700">Успех</p>
                                                 <Markdown Text="@success" class="text-sm" />
                                             </div>
                                         }
                                         @if (check.OnFailure is { } failure)
                                         {
                                             <div>
-                                                <p class="text-xs font-semibold uppercase text-error-700">Провал</p>
+                                                <p class="text-sm font-semibold uppercase text-error-700">Провал</p>
                                                 <Markdown Text="@failure" class="text-sm" />
                                             </div>
                                         }
@@ -332,15 +363,17 @@
                 </div>
             }
 
+            <Markdown Text="@location.Description" />
+
             @if (children.Count > 0)
             {
                 <div>
                     <h3 class="cm-section-title mb-2">Вложенные локации</h3>
-                    <div class="flex flex-wrap gap-2">
+                    <div class="cm-btn-row">
                         @foreach (var child in children)
                         {
                             var id = child.Id;
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-angle-right" OnClick="() => GoLocation(id)">@child.Name</Button>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-angle-right" OnClick="() => GoLocation(id)">@child.Name</Button>
                         }
                     </div>
                 </div>
@@ -349,7 +382,7 @@
     };
 
     private string NavClass(Guid? id, int depth) => Css.Join(
-        "flex min-h-10 w-full items-center gap-2 rounded-md py-2 pr-2 text-left text-sm",
+        "flex min-h-11 w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm",
         depth switch { 0 => "pl-3", 1 => "pl-7", 2 => "pl-11", _ => "pl-15" },
         (id is null ? Location is null : Location?.Id == id)
             ? "bg-accent-100 font-semibold text-accent-800"
@@ -360,7 +393,7 @@
     private static string RunLabel(ScenarioRunDto run)
     {
         var label = $"{run.CampaignName} · {ScenarioText.Of(run.Status)}";
-        // Время прохождения — в поясе браузера (решение владельца): WebAssembly берёт TimeZoneInfo.Local у браузера.
+        // Время партии — в поясе браузера (решение владельца): WebAssembly берёт TimeZoneInfo.Local у браузера.
         return run.ScheduledAt is { } at ? $"{label} · {at.ToLocalTime().ToString("d MMMM, HH:mm", CultureInfo.CurrentCulture)}" : label;
     }
 
@@ -370,13 +403,17 @@
             _check = null;
     }
 
-    private void ToggleCheck(Guid id)
+    // Исходы раскрыты сразу у единственной проверки локации (её и играют): _openChecks хранит отступление от умолчания.
+    private bool IsCheckOpen(ScenarioCheckDto check, ScenarioLocationDto location) =>
+        _openChecks.Contains(check.Id) != (location.Checks.Count == 1);
+
+    private void ToggleCheck(ScenarioCheckDto check)
     {
-        if (!_openChecks.Remove(id))
-            _openChecks.Add(id);
+        if (!_openChecks.Remove(check.Id))
+            _openChecks.Add(check.Id);
     }
 
-    /// <summary>Другая локация — показ раздатки закрывается (v1, <c>GoTo</c>); прохождение остаётся.</summary>
+    /// <summary>Другая локация — показ раздатки закрывается (v1, <c>GoTo</c>); партия остаётся.</summary>
     private void GoLocation(Guid? locationId) =>
         Navigation.NavigateTo(ScenarioLinks.Play(Scenario.Id, locationId, null, RunId), replace: true);
 

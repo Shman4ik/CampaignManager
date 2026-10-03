@@ -1,26 +1,27 @@
 @inherits ScenarioTabBase
 
-@* «Раздатки» — строки одной карточки: миниатюра, название (пометка Хранителя), начало текста для игроков, пометка
-   Хранителю отдельной плашкой. «Показать» — режим игры с открытым показом (ScenarioLinks.Play(…, handoutId)); оттуда же
+@* «Раздатки» — строки одной карточки: миниатюра (только у раздатки с картинкой), название (пометка Хранителя), начало текста для игроков, пометка
+   Хранителю отдельной плашкой. «Показать игрокам» — режим игры с открытым показом (ScenarioLinks.Play(…, handoutId)); оттуда же
    второй экран /scenarios/{id}/handouts/{handoutId}. *@
 <section class="cm-section">
-    <div class="cm-section-header flex-wrap gap-2">
-        <h2 class="cm-section-title">Раздатки</h2>
-        @if (CanEdit)
-        {
-            <div class="flex flex-wrap gap-2">
-                @if (Scenario.Handouts.Count > 1)
-                {
-                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
-                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
-                }
-                <Button Small="true" Icon="fa-plus" data-testid="add-handout" OnClick="() => Open(null)">Раздатка</Button>
-            </div>
-        }
-    </div>
+    @* Заголовка секции над одноимённой вкладкой нет (правило 5): в строке действий вкладки — порядок и добавление. *@
+    @if (CanEdit)
+    {
+        <div class="cm-btn-row mb-3 justify-end">
+            @if (Scenario.Handouts.Count > 1)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-down-up-across-line"
+                        OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+            }
+            @if (!Reordering)
+            {
+                <Button Icon="fa-plus" data-testid="add-handout" OnClick="() => Open(null)">Добавить раздатку</Button>
+            }
+        </div>
+    }
     @if (Scenario.Handouts.Count == 0)
     {
-        <EmptyState Icon="fa-file-image" Title="Раздаток пока нет." Message="Письма, вырезки, карты — то, что сыщики получают на руки." />
+        <EmptyState Compact="true" Title="Нет раздаток." />
     }
     else
     {
@@ -33,12 +34,6 @@
                     @if (handout.FileUrl is { } url)
                     {
                         <img src="@url" alt="" class="h-16 w-16 shrink-0 rounded-md border border-primary-200 object-cover" loading="lazy" />
-                    }
-                    else
-                    {
-                        <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border border-primary-200 bg-primary-50 text-primary-400">
-                            <i class="fa-solid fa-file-lines text-xl" aria-hidden="true"></i>
-                        </span>
                     }
                     <div class="flex min-w-48 flex-1 flex-col gap-1">
                         <span class="font-semibold text-primary-900">@handout.Name</span>
@@ -53,13 +48,13 @@
                     </div>
                     @if (!Reordering)
                     {
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-expand" data-testid="handout-show"
-                                Href="@ScenarioLinks.Play(Scenario.Id, null, handout.Id)">Показать</Button>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-expand" data-testid="handout-show"
+                                Href="@ScenarioLinks.Play(Scenario.Id, null, handout.Id)">Показать игрокам</Button>
                     }
                     <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                     OnUp="() => MoveAsync(ScenarioPart.Handouts, ids, handout.Id, -1)"
                                     OnDown="() => MoveAsync(ScenarioPart.Handouts, ids, handout.Id, 1)"
-                                    OnEdit="() => Open(handout)" OnDelete="() => RemoveAsync(handout)" />
+                                    OnEdit="() => Open(handout)" OnDelete="() => RemoveAsync(handout)" MenuLabel="@("Действия: " + handout.Name)" />
                 </div>
             }
         </div>

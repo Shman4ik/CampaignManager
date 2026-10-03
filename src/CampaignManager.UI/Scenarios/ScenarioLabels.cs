@@ -23,6 +23,16 @@ public static class ScenarioLabels
     public static string? Difficulty(ScenarioCheckDto check) =>
         check.Difficulty is Core.Difficulty.Regular ? null : CheckRules.DifficultyLabel(check.Difficulty);
 
+    /// <summary>«1 проверка», «2 проверки», «5 проверок» — склонение числа без библиотеки.</summary>
+    public static string Plural(int count, string one, string few, string many)
+    {
+        var tail = count % 100;
+        var word = tail is >= 11 and <= 14 ? many : (count % 10) switch { 1 => one, >= 2 and <= 4 => few, _ => many };
+        return $"{count} {word}";
+    }
+
+    public static string ChecksCount(int count) => Plural(count, "проверка", "проверки", "проверок");
+
     public static Tone RoleTone(NpcRole role) => role switch
     {
         NpcRole.Enemy => Tone.Error,

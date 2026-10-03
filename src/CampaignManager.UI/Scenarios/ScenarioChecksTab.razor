@@ -1,25 +1,27 @@
 @inherits ScenarioTabBase
+@using CampaignManager.Core.Checks
 
 @* «Проверки» — все проверки сценария, сгруппированные по локациям (путь «Дом › Подвал»). Проверка живёт в локации:
    новая — с выбором локации; «+» у группы — сразу в эту локацию. Порядок — внутри локации. *@
 <section class="cm-section">
-    <div class="cm-section-header flex-wrap gap-2">
-        <h2 class="cm-section-title">Проверки</h2>
-        @if (CanEdit && Scenario.Locations.Count > 0)
-        {
-            <div class="flex flex-wrap gap-2">
-                @if (Groups.Any(g => g.Location.Checks.Count > 1))
-                {
-                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
-                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
-                }
-                <Button Small="true" Icon="fa-plus" data-testid="add-check" OnClick="() => Open(null, null)">Проверка</Button>
-            </div>
-        }
-    </div>
+    @* Заголовка «Проверки» над вкладкой «Проверки» нет (правило 5): в строке действий вкладки — порядок и добавление. *@
+    @if (CanEdit && Scenario.Locations.Count > 0)
+    {
+        <div class="cm-btn-row mb-3 justify-end">
+            @if (Groups.Any(g => g.Location.Checks.Count > 1))
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-down-up-across-line"
+                        OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+            }
+            @if (!Reordering)
+            {
+                <Button Icon="fa-plus" data-testid="add-check" OnClick="() => Open(null, null)">Добавить проверку</Button>
+            }
+        </div>
+    }
     @if (Scenario.Locations.Count == 0)
     {
-        <EmptyState Icon="fa-dice-d20" Title="Проверки живут в локациях." Message="Сначала заведите локацию на вкладке «Локации».">
+        <EmptyState Icon="fa-dice-d20" Title="Проверки живут в локациях." Message="Сначала добавьте локацию на вкладке «Локации».">
             <Actions>
                 <Button Variant="ButtonVariant.Secondary" Icon="fa-location-dot" Href="@ScenarioLinks.Workspace(Scenario.Id, ScenarioLinks.Tabs.Locations)">К локациям</Button>
             </Actions>
@@ -27,7 +29,7 @@
     }
     else if (!Groups.Any())
     {
-        <EmptyState Icon="fa-dice-d20" Title="Проверок пока нет." Message="Проверка — что узнают сыщики при успехе и при провале навыка в локации." />
+        <EmptyState Compact="true" Title="Нет проверок." />
     }
     else
     {
@@ -40,8 +42,8 @@
                         <span class="cm-card-title"><i class="fa-solid fa-location-dot mr-1 text-accent-600" aria-hidden="true"></i>@group.Path</span>
                         @if (CanEdit && !Reordering)
                         {
-                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy"
-                                    OnClick="() => Open(null, group.Location.Id)">Сюда</Button>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy"
+                                    OnClick="() => Open(null, group.Location.Id)">Добавить проверку</Button>
                         }
                     </div>
                     @foreach (var check in group.Location.Checks)
@@ -52,14 +54,16 @@
                             <div class="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="font-semibold text-primary-900">@ScenarioLabels.Target(check)</span>
+                                    @* Вид и сложность — всегда: «Удача» без пометки неотличима от навыка. *@
                                     @if (check.TargetKind is CheckTarget.Characteristic)
                                     {
-                                        <Badge Tone="Tone.Stone">@ScenarioText.Of(check.TargetKind)</Badge>
+                                        <Badge Tone="Tone.Stone">характеристика</Badge>
                                     }
-                                    @if (ScenarioLabels.Difficulty(check) is { } difficulty)
+                                    else if (check.TargetKind is CheckTarget.Luck)
                                     {
-                                        <Badge Tone="Tone.Warning">@difficulty</Badge>
+                                        <Badge Tone="Tone.Stone">бросок Удачи</Badge>
                                     }
+                                    <Badge Tone="@(check.Difficulty == Difficulty.Regular ? Tone.Neutral : Tone.Warning)">@CheckRules.DifficultyLabel(check.Difficulty)</Badge>
                                 </div>
                                 @if (check.OnSuccess is { } success)
                                 {
@@ -73,7 +77,7 @@
                             <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                             OnUp="() => MoveAsync(ScenarioPart.Checks, ids, check.Id, -1)"
                                             OnDown="() => MoveAsync(ScenarioPart.Checks, ids, check.Id, 1)"
-                                            OnEdit="() => Open(check, null)" OnDelete="() => RemoveAsync(check)" />
+                                            OnEdit="() => Open(check, null)" OnDelete="() => RemoveAsync(check)" MenuLabel="@("Действия: " + ScenarioLabels.Target(check))" />
                         </div>
                     }
                 </div>

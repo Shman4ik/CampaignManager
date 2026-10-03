@@ -12,38 +12,32 @@
 
 @* Библиотека сценариев — общая для Хранителей (в v1 «Шаблоны сценариев»; сценарии кампаний в 2.0 стали
    прохождениями, T2.5c). /scenarios/new — та же страница с открытой формой нового сценария: адрес v1 сохранён.
-   Кнопки — по флагам из API (удалить — автор или администратор). «Импорт JSON» (T2.5d) — в панели фильтров, как у
-   справочников: в шапке на телефоне помещаются две кнопки. *@
+   Создание — в шапке («Новый сценарий», «Импорт JSON»); поиск — только когда сценариев больше шести (до тех пор
+   пять карточек видны целиком). Карточка открывается касанием; «Удалить» — в «⋯» карточки, по флагу из API. *@
 <PageHeader Title="Сценарии">
     <Actions>
         @if (_list?.CanCreate == true)
         {
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-file-import" data-testid="scenario-import-open-dialog"
+                    OnClick="() => _importOpen = true">Импорт JSON</Button>
             <Button Small="true" Icon="fa-plus" Href="@ScenarioLinks.New" data-testid="new-scenario">Новый сценарий</Button>
         }
     </Actions>
 </PageHeader>
 
 <div class="cm-page">
-    <FilterPanel OnReset="() => _search = string.Empty">
-        <ChildContent>
+    @if (_list is { Items.Count: > SearchFrom })
+    {
+        <FilterPanel OnReset="() => _search = string.Empty" CanReset="@(_search.Length > 0)">
             <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию, месту, описанию…" aria-label="Поиск"
                    data-testid="scenario-search" @bind="_search" @bind:event="oninput" />
-        </ChildContent>
-        <Actions>
-            @if (_list?.CanCreate == true)
-            {
-                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-import" data-testid="scenario-import-open-dialog"
-                        OnClick="() => _importOpen = true">Импорт JSON</Button>
-            }
-        </Actions>
-    </FilterPanel>
+        </FilterPanel>
+    }
 
-    <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
+<AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
                   IsEmpty="l => l.Items.Count == 0">
         <Empty>
-            <EmptyState Icon="fa-masks-theater" Title="Сценариев пока нет." Message="Заведите первый — он будет доступен всем Хранителям.">
-                <Actions><Button Icon="fa-plus" Href="@ScenarioLinks.New">Новый сценарий</Button></Actions>
-            </EmptyState>
+            <EmptyState Icon="fa-masks-theater" Title="Сценариев пока нет." Message="Заведите первый кнопкой «Новый сценарий» — он будет доступен всем Хранителям." />
         </Empty>
         <ChildContent>
             @{ var found = Filter(list.Items); }
@@ -63,15 +57,24 @@
                     {
                         <article class="cm-card flex flex-col" @key="scenario.Id" data-testid="scenario-card">
                             <div class="cm-card-header">
-                                <a class="cm-card-title min-w-0 break-words hover:underline" href="@ScenarioLinks.Workspace(scenario.Id)">@scenario.Name</a>
+                                <a class="cm-card-title flex min-h-11 min-w-0 flex-1 items-center break-words hover:underline"
+                                   href="@ScenarioLinks.Workspace(scenario.Id)">@scenario.Name</a>
+                                @if (scenario.CanDelete)
+                                {
+                                    <RowMenu AriaLabel="@($"Действия: {scenario.Name}")">
+                                        <Danger>
+                                            <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="() => DeleteAsync(scenario)">Удалить сценарий</RowMenuItem>
+                                        </Danger>
+                                    </RowMenu>
+                                }
                             </div>
-                            <div class="cm-card-body flex flex-1 flex-col gap-2">
+                            <a class="cm-card-body flex flex-1 flex-col gap-2 no-underline" href="@ScenarioLinks.Workspace(scenario.Id)" tabindex="-1">
                                 <div class="flex flex-wrap gap-1.5">
                                     @if (scenario.Era is { } era)
                                     {
                                         <Badge Tone="Tone.Stone">@CatalogText.Of(era)</Badge>
                                     }
-                                    @if (scenario.SettingDate is { } date)
+                                    @if (scenario.SettingDate is { } date && date != (scenario.Era is { } e2 ? CatalogText.Of(e2) : null))
                                     {
                                         <Badge Tone="Tone.Neutral">@date</Badge>
                                     }
@@ -84,30 +87,29 @@
                                         <Badge Tone="Tone.Warning" Icon="fa-code-branch" class="max-w-full whitespace-normal">Переделка «@source»</Badge>
                                     }
                                 </div>
-                                <p class="line-clamp-3 text-sm text-primary-600">@(scenario.Summary ?? "Описания нет.")</p>
+                                <p class="line-clamp-3 text-sm text-primary-700">@(scenario.Summary ?? "Описания нет.")</p>
                                 <div class="cm-meta mt-auto">
-                                    <span><span class="cm-meta-label">Локаций:</span> @scenario.LocationCount</span>
-                                    <span><span class="cm-meta-label">НПС:</span> @scenario.NpcCount</span>
-                                    <span><span class="cm-meta-label">Раздаток:</span> @scenario.HandoutCount</span>
-                                    @if (scenario.PregenCount > 0)
+                                    @if (scenario.LocationCount + scenario.NpcCount + scenario.HandoutCount + scenario.PregenCount == 0)
                                     {
-                                        <span><span class="cm-meta-label">Прегенов:</span> @scenario.PregenCount</span>
+                                        <span>Пусто</span>
+                                    }
+                                    else
+                                    {
+                                        <span><span class="cm-meta-label">Локаций:</span> @scenario.LocationCount</span>
+                                        <span><span class="cm-meta-label">НПС:</span> @scenario.NpcCount</span>
+                                        <span><span class="cm-meta-label">Раздаток:</span> @scenario.HandoutCount</span>
+                                        @if (scenario.PregenCount > 0)
+                                        {
+                                            <span><span class="cm-meta-label">Прегенов:</span> @scenario.PregenCount</span>
+                                        }
                                     }
                                     @if (scenario.RunCount > 0)
                                     {
-                                        <span><span class="cm-meta-label">Прохождений:</span> @scenario.RunCount</span>
+                                        <span><span class="cm-meta-label">Партий:</span> @scenario.RunCount</span>
                                     }
                                 </div>
                                 <div class="cm-field-note">Изменён @LocalTime.Date(scenario.UpdatedAt)</div>
-                            </div>
-                            <div class="cm-card-footer flex-wrap gap-2">
-                                <Button Small="true" Icon="fa-book-open" Href="@ScenarioLinks.Workspace(scenario.Id)">Открыть</Button>
-                                @if (scenario.CanDelete)
-                                {
-                                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" Busy="@(_busy == scenario.Id)"
-                                            OnClick="() => DeleteAsync(scenario)">Удалить</Button>
-                                }
-                            </div>
+                            </a>
                         </article>
                     }
                 </div>
@@ -124,8 +126,10 @@
     private AsyncContent<ScenarioListDto>? _content;
     private ScenarioListDto? _list;
     private string _search = "";
-    private Guid? _busy;
     private bool _importOpen;
+
+    /// <summary>Поиск появляется, когда сценариев больше этого числа.</summary>
+    private const int SearchFrom = 6;
 
     // Окно «Новый сценарий» открыто адресом, поэтому странице нужна подписка на его смену: переход /scenarios ↔
     // /scenarios/new сам её не перерисовывает (#165 — кнопка меняла адрес, окно не открывалось, «Отмена» не закрывала).
@@ -169,7 +173,6 @@
         if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{scenario.Name}»?", message))
             return;
 
-        _busy = scenario.Id;
         try
         {
             await Api.DeleteAsync(scenario.Id);
@@ -180,10 +183,6 @@
         catch (HttpRequestException ex)
         {
             Toasts.Error(ApiErrors.Describe(ex));
-        }
-        finally
-        {
-            _busy = null;
         }
     }
 }
