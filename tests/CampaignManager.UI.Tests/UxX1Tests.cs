@@ -121,9 +121,10 @@ public sealed class UxX1Tests : KitContext
         Assert.Contains("Добавить НПС", keeper.Markup, StringComparison.Ordinal);
     }
 
-    // В шапке длинное название обрезается, поэтому страница показывает его целиком и строку статуса, роли, вида и эпохи.
+    // В шапке длинное название обрезается, поэтому страница показывает его целиком и строку вида и эпохи; статус и роль —
+    // только в подзаголовке шапки, второй раз их не повторяем.
     [Fact]
-    public void Long_campaign_name_is_shown_in_full_under_the_header_with_status_and_role()
+    public void Long_campaign_name_is_shown_in_full_under_the_header_with_kind_and_era()
     {
         var details = Details(keeper: true);
         var longName = "Очень длинное название кампании для проверки переноса строки в шапке";
@@ -134,8 +135,8 @@ public sealed class UxX1Tests : KitContext
 
         Assert.Equal(longName, cut.Find("[data-testid=campaign-full-name]").TextContent);
         var facts = cut.Find("[data-testid=campaign-facts]").TextContent;
-        Assert.Contains("Активна", facts, StringComparison.Ordinal);
-        Assert.Contains("вы — Хранитель", facts, StringComparison.Ordinal);
+        Assert.Contains("Кампания", facts, StringComparison.Ordinal);
+        Assert.DoesNotContain("вы — Хранитель", facts, StringComparison.Ordinal);
     }
 
     [Fact]
