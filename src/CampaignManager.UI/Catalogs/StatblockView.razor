@@ -3,8 +3,16 @@
 @* Статблок твари как в книге (гл. 14, стр. 277–280). Короткие числа (СИЛ…МОЩ, ПЗ, ПМ) — сеткой,
    число колонок считает ширина (auto-fill); строки с оговорками (бонус к урону, скорость, атаки за
    раунд, броня, уклонение, потеря рассудка) — каждая во всю ширину: длинные оговорки рвали
-   двухколоночную сетку. Своей карточки не рисует. *@
+   двухколоночную сетку. Своей карточки не рисует.
+
+   Пустой статблок (игроку сервер его не отдаёт — решение владельца 2026-10-03: игроку название, картинка, описание)
+   не рисуется вовсе: ни «Характеристик» с нулями, ни «Броня: нет», ни «Ср. комплекция: 0». Секция без содержимого
+   тоже не рисуется (правило 4). Подписи — из словаря Terms. *@
+@if (!IsBlank(Statblock))
+{
 <div class="grid gap-4 text-sm">
+    @if (ShortStats.Any())
+    {
     <section>
         <h3 class="cm-section-title mb-1">Характеристики</h3>
         <dl class="grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2">
@@ -21,6 +29,7 @@
             }
         </dl>
     </section>
+    }
 
     <dl class="grid gap-0.5">
         @foreach (var (label, value) in Lines)
@@ -80,9 +89,20 @@
         </section>
     }
 </div>
+}
 
 @code {
     [Parameter, EditorRequired] public Statblock Statblock { get; set; } = null!;
+
+    /// <summary>
+    /// Статблок без единого значения — так выглядит то, что игроку не отдали (или тварь, которую ещё не заполнили).
+    /// Показывать нечего: нули и «нет» ввели бы в заблуждение.
+    /// </summary>
+    public static bool IsBlank(Statblock s) =>
+        s.Str.Value <= 0 && s.Con.Value <= 0 && s.Siz.Value <= 0 && s.Dex.Value <= 0 && s.Int.Value <= 0 && s.Pow.Value <= 0
+        && s.HitPoints <= 0 && s.MagicPoints <= 0 && s.Armor <= 0 && string.IsNullOrWhiteSpace(s.ArmorNote)
+        && s.Dodge <= 0 && s.Initiative <= 0 && string.IsNullOrWhiteSpace(s.SanityLoss) && (string.IsNullOrWhiteSpace(s.DamageBonus) || s.DamageBonus == "0") && s.Build <= 0
+        && s.Attacks.Count == 0 && s.SpecialAbilities.Count == 0 && s.Skills.Count == 0 && Speed(s.Speed) is null;
 
     private IEnumerable<(string Label, int Value, string? Dice)> ShortStats
     {
@@ -95,7 +115,11 @@
                 yield return (label, stat.Value, stat.Dice);
             }
 
-            yield return ("ПЗ", s.HitPoints, null);
+            if (s.HitPoints > 0)
+            {
+                yield return ("ПЗ", s.HitPoints, null);
+            }
+
             if (s.MagicPoints > 0)
             {
                 yield return ("ПМ", s.MagicPoints, null);
@@ -108,23 +132,23 @@
         get
         {
             var s = Statblock;
-            yield return ("Ср. бонус к урону", string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus);
-            yield return ("Ср. комплекция", s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture));
+            yield return (Terms.DamageBonusTitle, string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus);
+            yield return (Terms.Build, s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture));
             if (Speed(s.Speed) is { } speed)
             {
-                yield return ("Скорость", speed);
+                yield return (Terms.Speed, speed);
             }
 
-            yield return ("Атак за раунд", s.AttacksPerRoundNote is { Length: > 0 } note ? $"{s.AttacksPerRound} ({note})" : $"{s.AttacksPerRound}");
+            yield return (Terms.AttacksPerRound, s.AttacksPerRoundNote is { Length: > 0 } note ? $"{s.AttacksPerRound} ({note})" : $"{s.AttacksPerRound}");
             yield return ("Броня", ArmorText(s));
             if (s.Dodge > 0)
             {
-                yield return ("Уклонение", $"{s.Dodge}%");
+                yield return (Terms.Dodge, $"{s.Dodge}%");
             }
 
             if (!string.IsNullOrWhiteSpace(s.SanityLoss))
             {
-                yield return ("Потеря рассудка", s.SanityLoss);
+                yield return (Terms.SanityLoss, s.SanityLoss);
             }
 
             if (s.Initiative > 0)
@@ -156,7 +180,7 @@
 
     /// <summary>
     /// «Броня: нет» у книги часто идёт с оговоркой, которая и есть настоящая защита («огнестрел наносит
-    /// минимальный урон», «регенерирует»), поэтому ноль без оговорки — «нет», с оговоркой — она сама.
+    /// минимальный урон», «регенерирует»), поэтому ноль без оговорки — «—», с оговоркой — она сама.
     /// </summary>
     public static string ArmorText(Statblock s) =>
         (s.Armor, s.ArmorNote) switch
@@ -164,10 +188,10 @@
             ( > 0, { Length: > 0 } note) => $"{s.Armor} — {note}",
             ( > 0, _) => $"{s.Armor}",
             (_, { Length: > 0 } note) => note,
-            _ => "нет",
+            _ => Terms.None,
         };
 
     /// <summary>На плитке места для оговорки нет, но и «нет» там, где тварь регенерирует, соврало бы: «особая».</summary>
     public static string TileArmor(Statblock s) =>
-        s.Armor > 0 ? $"{s.Armor}" : string.IsNullOrWhiteSpace(s.ArmorNote) ? "нет" : "особая";
+        s.Armor > 0 ? $"{s.Armor}" : string.IsNullOrWhiteSpace(s.ArmorNote) ? Terms.None : "особая";
 }

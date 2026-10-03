@@ -1,3 +1,4 @@
+@implements IDisposable
 @inject MusicPlayer Player
 
 @* Полоса плеера — то, что видно всегда, пока панель открыта: ≤ 48px, две главные кнопки с подписью и «⋯» (правила 7,
@@ -58,6 +59,13 @@
     [Parameter] public bool Expanded { get; set; }
 
     [Parameter] public EventCallback<bool> ExpandedChanged { get; set; }
+
+    // Параметры у полосы не меняются, когда трек сменился, — родитель её не перерисует: следит за плеером сама.
+    protected override void OnInitialized() => Player.Changed += OnPlayerChanged;
+
+    private void OnPlayerChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Player.Changed -= OnPlayerChanged;
 
     private Task ToggleExpandedAsync() => ExpandedChanged.InvokeAsync(!Expanded);
 
