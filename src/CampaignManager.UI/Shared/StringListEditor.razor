@@ -1,8 +1,32 @@
 @* Список строк: связи сыщика, ключевые факты, теги. Каждая правка отдаёт новый список
    (@bind-Values) — документ листа или сценария получает новый экземпляр, а не правку на месте,
    которую не заметил бы ни трекер EF, ни сравнение черновика. Пустые строки не добавляются.
-   Своей карточки не рисует; подпись — Field Group="true" вокруг. *@
+   Своей карточки не рисует; подпись — Field Group="true" вокруг.
+
+   Chips — для коротких слов (теги профессии): значения чипами с «×», поле для нового — в той же строке, Enter
+   добавляет (O6: три строки полей по 44px с кнопкой «Добавить» ради трёх слов). Чип — вся кнопка «убрать», 32px. *@
 <div class="@Css.Join("min-w-0", Css.ClassOf(AdditionalAttributes))" @attributes="Css.WithoutClass(AdditionalAttributes)">
+@if (Chips)
+{
+    <div class="list-chips">
+        @for (var i = 0; i < Values.Count; i++)
+        {
+            var index = i;
+            var value = Values[index];
+            <button type="button" class="list-chip" aria-label="@($"Убрать: {value}")" @onclick="() => RemoveAsync(index)" @key="index">
+                <span>@value</span><i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+        }
+        <input class="cm-input list-chips-input" placeholder="@Placeholder" aria-label="@($"Новый: {ItemLabel}")" @bind="_draft"
+               @bind:event="oninput" @onkeydown="OnKeyDownAsync" />
+        @if (!string.IsNullOrWhiteSpace(_draft))
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddAsync">Добавить</Button>
+        }
+    </div>
+}
+else
+{
     @for (var i = 0; i < Values.Count; i++)
     {
         var index = i;
@@ -28,6 +52,7 @@
             <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddAsync">Добавить</Button>
         }
     </div>
+}
 </div>
 
 @code {
@@ -38,6 +63,9 @@
     [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
 
     [Parameter] public string? Placeholder { get; set; }
+
+    /// <summary>Короткие значения (теги) — чипами с «×» и полем в той же строке, а не рядом полей.</summary>
+    [Parameter] public bool Chips { get; set; }
 
     /// <summary>Как назвать строку для экранного диктора: «Связь», «Факт».</summary>
     [Parameter] public string ItemLabel { get; set; } = "Строка";

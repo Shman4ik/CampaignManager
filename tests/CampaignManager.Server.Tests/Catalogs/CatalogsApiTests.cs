@@ -236,7 +236,7 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
 
         Assert.Equal(HttpStatusCode.Conflict, inUse.StatusCode);
         Assert.Equal(ApiProblemCodes.InUse, inUse.Code);
-        Assert.Contains($"оружие «{bow.Name}»", inUse.Message, StringComparison.Ordinal); // отказ называет, что держит навык
+        Assert.Contains($"оружие {bow.Name}", inUse.Message, StringComparison.Ordinal); // отказ называет, что держит навык
     }
 
     // Подтверждение удаления говорит, кто держит запись, до вопроса, а не отказом после него (X13, W10).

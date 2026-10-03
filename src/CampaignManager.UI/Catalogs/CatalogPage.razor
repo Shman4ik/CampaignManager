@@ -50,7 +50,7 @@
                 @foreach (var filter in Filters)
                 {
                     var current = filter;
-                    <select class="cm-input w-full sm:w-56 shrink-0" aria-label="@current.AllLabel"
+                    <select class="cm-input w-full sm:w-52 shrink-0" aria-label="@current.AllLabel"
                             value="@(_filters.GetValueOrDefault(current.Key) ?? "")" @onchange="e => SetFilter(current.Key, e.Value?.ToString())">
                         <option value="">@current.AllLabel</option>
                         @foreach (var option in current.Options)
@@ -71,7 +71,7 @@
                 }
                 @if (Sorts.Count > 1)
                 {
-                    <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); SetPage(1); }">
+                    <select class="cm-input w-full sm:w-48 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); SetPage(1); }">
                         @foreach (var sort in Sorts)
                         {
                             <option value="@sort.Key">@sort.Label</option>
@@ -187,7 +187,13 @@
             <FormErrors Errors="_state.Messages" Attempt="_state.Attempt" />
         </FooterHint>
         <FooterError>
-            @if (_formError is not null)
+            @if (_formUsage is not null && _editing is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0">
+                    Нельзя удалить. <CatalogUsageText Usage="_formUsage" Query="@_editing.Name" /> Сначала уберите ссылки.
+                </Alert>
+            }
+            else if (_formError is not null)
             {
                 <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0">
                     <ChildContent>@_formError</ChildContent>
@@ -238,6 +244,7 @@
     private bool _isNew;
     private bool _saving;
     private string? _formError;
+    private CatalogUsage? _formUsage; // отказ в удалении: держатели рисуются с жирными именами и ссылкой «ещё N» (S5)
     private bool _stale;
     private bool _importOpen;
     private string? _initialJson;
@@ -268,7 +275,8 @@
     /// <summary>«оружия», «книг» — для пустого состояния: «Нет книг.» / «Нет книг по этим условиям.»</summary>
     [Parameter] public string Plural { get; set; } = "записей";
 
-    [Parameter] public string SearchPlaceholder { get; set; } = "Поиск по названию";
+    /// <summary>«Поиск», а не «Поиск по названию»: ищет и по другим названиям, а на телефоне (поле 128px) подсказка обрезалась до «Поиск по на».</summary>
+    [Parameter] public string SearchPlaceholder { get; set; } = "Поиск";
 
     /// <summary>Что ещё искать, кроме названия: другие названия, автор.</summary>
     [Parameter] public Func<TItem, IEnumerable<string?>>? SearchAlso { get; set; }
@@ -699,6 +707,7 @@
         _initialJson = Serialize(_editing);
         _state.Reset();
         _formError = null;
+        _formUsage = null;
         _stale = false;
     }
 
@@ -717,6 +726,7 @@
         _editingName = item.Name;
         _state.Reset();
         _formError = null;
+        _formUsage = null;
         _stale = false;
     }
 
@@ -738,6 +748,7 @@
         _editing = null;
         _state.Reset();
         _formError = null;
+        _formUsage = null;
         _stale = false;
     }
 
@@ -774,11 +785,13 @@
             _state.Attempted = true;
             _state.Attempt++;
             _formError = null;
+        _formUsage = null;
             return;
         }
 
         _saving = true;
         _formError = null;
+        _formUsage = null;
         _stale = false;
         try
         {
@@ -844,7 +857,8 @@
                     var refusal = $"Нельзя удалить. {holders} Сначала уберите ссылки.";
                     if (fromForm)
                     {
-                        _formError = refusal;
+                        _formUsage = usage;
+                        _formError = null;
                         _stale = false;
                     }
                     else

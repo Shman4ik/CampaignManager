@@ -35,7 +35,7 @@ public abstract class CatalogStore<TEntity, TDto>
     public virtual string UsedBy => "другими записями";
 
     /// <summary>
-    /// Кто именно держит запись («оружие «Кольт»», «профессия «Врач»»): имена до пяти штук, чтобы отказ при удалении
+    /// Кто именно держит запись («оружие Кольт», «профессия Врач» — имена без кавычек: страница выводит их жирным): имена до пяти штук, чтобы отказ при удалении
     /// говорил, что убрать. У справочников, где это не посчитано, пусто — остаётся общее «используется …».
     /// </summary>
     public virtual Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken) =>

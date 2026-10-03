@@ -4,12 +4,14 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-@* Бестиарий — вид «галерея» того же справочника. Плитка — обложка 4:5, имя поверх, под ней ПЗ /
-   броня / потеря рассудка; 13rem на колонку — пять в альбоме iPad, четыре в портрете; 20 тварей на
-   странице — ровно четыре ряда в обеих ориентациях. Касание плитки раскрывает полный статблок во всю
+@* Бестиарий — вид «галерея» того же справочника. Плитка ~190×260 (B1): обложка 10:11, имя поверх, под ней ПЗ /
+   броня / потеря рассудка; пять колонок в альбоме iPad Pro 11", четыре в портрете, две на телефоне; 20 тварей на
+   странице — четыре ряда в альбоме и пять в портрете. Касание плитки раскрывает полный статблок во всю
    ширину сетки (dense подтягивает следующие плитки в дыру), раскрытая тварь одна и держится в адресе
    (?open=). После раскрытия страница прокручивает к карточке; отступ под липкие шапку и фильтры даёт
    scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается.
+   Раскрытая тварь: шапка — шеврон-название, тип и одна иконка «Изменить» (B7: «Свернуть» дублировал шеврон); на
+   телефоне у Хранителя статблок идёт раньше картинки (B5), игроку — картинки: больше показать нечего.
    Игроку (CanEdit = false) сервер статблок не отдаёт вовсе (#175): плитка без ПЗ/брони/рассудка, раскрытая
    карточка — картинки и «Описание». *@
 <CatalogPage TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо" Plural="существ"
@@ -34,18 +36,20 @@
                                 </button>
                                 <Badge Tone="Tone.Info">@CatalogText.Of(creature.Type)</Badge>
                             </div>
-                            <div class="flex shrink-0 flex-wrap gap-1.5">
-                                @if (view.CanEdit)
-                                {
-                                    <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" OnClick="() => view.Edit(creature)">Изменить</Button>
-                                }
-                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-compress" OnClick="() => view.ToggleOpen(creature)">Свернуть</Button>
-                            </div>
+                            @if (view.CanEdit)
+                            {
+                                @* Одна иконка, как в таблицах справочников; «Свернуть» не нужен — шеврон слева делает то же (B7). *@
+                                <div class="cm-compact shrink-0">
+                                    <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(creature.Name)}")"
+                                            OnClick="() => view.Edit(creature)" />
+                                </div>
+                            }
                         </div>
-                        <div class="cm-card-body gap-6 md:flex md:items-start">
+                        <div class="cm-card-body flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
                             @if (creature.Images.Count > 0)
                             {
-                                <div class="cr-open-media mb-4 md:mb-0">
+                                @* На телефоне Хранителю первым нужен статблок, а не картинка на весь экран (B5). *@
+                                <div class="@("cr-open-media" + (view.CanEdit ? " order-last md:order-none" : ""))">
                                     <CatalogImageGallery Images="creature.Images" Alt="@creature.Name" />
                                 </div>
                             }
@@ -94,7 +98,7 @@
                                 <dl class="cr-tile-stats">
                                     <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
                                     <div><dt>Броня</dt><dd>@StatblockView.TileArmor(creature.Statblock)</dd></div>
-                                    <div><dt>Рассудок</dt><dd>@(string.IsNullOrWhiteSpace(creature.Statblock.SanityLoss) ? "—" : creature.Statblock.SanityLoss)</dd></div>
+                                    <div><dt>Рассудок</dt><dd>@(StatblockView.SanityOf(creature.Statblock) ?? "—")</dd></div>
                                 </dl>
                             }
                         </button>
