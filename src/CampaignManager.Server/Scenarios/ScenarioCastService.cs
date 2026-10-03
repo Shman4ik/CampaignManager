@@ -34,7 +34,7 @@ public sealed class ScenarioCastService(CmDbContext dbContext, AccessPolicy acce
         var kind = await dbContext.Characters.Where(c => c.Id == characterId).Select(c => c.Kind).SingleAsync(cancellationToken);
         if (kind is not CharacterKind.Npc)
         {
-            throw ApiProblemException.Invalid("В состав сценария занимают НПС; прегены у сценария свои.");
+            throw ApiProblemException.Invalid("В состав сценария занимают НПС; готовые сыщики у сценария свои.");
         }
 
         var row = await dbContext.ScenarioNpcs.SingleOrDefaultAsync(n => n.ScenarioId == scenarioId && n.CharacterId == characterId,
@@ -75,7 +75,7 @@ public sealed class ScenarioCastService(CmDbContext dbContext, AccessPolicy acce
         var source = await dbContext.Characters.AsNoTracking().SingleAsync(c => c.Id == pregenId, cancellationToken);
         if (source.Kind is not CharacterKind.Pregen || source.ScenarioId is not null)
         {
-            throw ApiProblemException.Invalid("Копировать в сценарий можно прегена из библиотеки.");
+            throw ApiProblemException.Invalid("Копировать в сценарий можно готового сыщика из библиотеки.");
         }
 
         var copy = new Character
@@ -108,7 +108,7 @@ public sealed class ScenarioCastService(CmDbContext dbContext, AccessPolicy acce
 
         if ((await ScenarioService.ReservedPregensAsync(dbContext, scenarioId, cancellationToken)).Contains(characterId))
         {
-            throw ApiProblemException.Conflict("Прегена забронировал игрок — сначала снимите бронь.");
+            throw ApiProblemException.Conflict("Готового сыщика занял игрок — сначала снимите запись.");
         }
 
         pregen.ScenarioId = null;

@@ -662,7 +662,7 @@ public sealed class ScenarioExchangeService(
             {
                 if (string.IsNullOrWhiteSpace(source.Name))
                 {
-                    throw ApiProblemException.Invalid("У прегена нет имени.");
+                    throw ApiProblemException.Invalid("У готового сыщика нет имени.");
                 }
 
                 var (_, own) = await NewSheetAsync(source, CharacterKind.Pregen, scenario.Id, user, lookup, cancellationToken);

@@ -40,7 +40,7 @@ public sealed record PlayInCampaignRequest(Guid CampaignId, DateTimeOffset? Sche
 
 /// <summary>
 /// «Объявить ваншот»: новая кампания вида <see cref="CampaignKind.OneShot"/>, вошедший — её Хранитель, прохождение с открытой
-/// записью. <see cref="CampaignName"/> пусто — «Сценарий (ваншот)»; <see cref="Era"/> пусто — эпоха сценария.
+/// записью. <see cref="CampaignName"/> пусто — «Сценарий (разовая игра)»; <see cref="Era"/> пусто — эпоха сценария.
 /// </summary>
 public sealed record AnnounceOneShotRequest(string? CampaignName, DateTimeOffset? ScheduledAt, string? Announcement, Era? Era = null);
 

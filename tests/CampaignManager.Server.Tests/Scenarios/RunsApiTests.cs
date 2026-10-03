@@ -54,7 +54,7 @@ public sealed class RunsApiTests(CampaignsApp app) : IClassFixture<CampaignsApp>
         var table = await OneShotAsync();
 
         Assert.Equal(CampaignKind.OneShot, table.Run.CampaignKind);
-        Assert.Equal("Эликсир жизни (ваншот)", table.Run.CampaignName);
+        Assert.Equal("Эликсир жизни (разовая игра)", table.Run.CampaignName);
         Assert.Equal(ScenarioRunStatus.Announced, table.Run.Status);
         Assert.True(table.Run.SignupOpen);
         Assert.Equal("Приходите в субботу", table.Run.Announcement);
