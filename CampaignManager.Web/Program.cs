@@ -159,6 +159,8 @@ builder.Services.AddAuthentication(options =>
             if (!string.IsNullOrWhiteSpace(loginHint))
                 context.ProtocolMessage.LoginHint = loginHint;
 
+            // Страница входа Auth0 — по-русски, какой бы язык ни стоял в браузере.
+            context.ProtocolMessage.UiLocales = "ru";
             return Task.CompletedTask;
         };
 

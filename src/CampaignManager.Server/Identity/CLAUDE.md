@@ -12,8 +12,11 @@
   на `/login?returnUrl=…`; нет прав — всегда **403** (страница сама рисует «Нет доступа»).
 - **Вход веба** — OIDC code flow, как в v1: `ResponseMode = Query` (код GET-ом: Lax-куки корреляции
   и nonce на кросс-сайтовый `form_post` не уедут), `MapInboundClaims = false`, userinfo не спрашиваем.
-  `/account/login?method=google|email&returnUrl=…` ведёт мимо страницы Auth0 к Google или к форме
-  пароля (`connection`, `login_hint` ставит `OnRedirectToIdentityProvider`); `prompt` не шлём.
+  `/account/login?returnUrl=…` всегда ведёт на страницу Auth0 (`ui_locales=ru`): Google, passkey и
+  почту с паролем предлагает она сама, приложение её не обходит — `connection` ставит только автовход.
+  `login_hint` — почта прошлого входа, если это была учётка с паролем/passkey (почта Google в поле
+  повела бы к паролю). Оба параметра кладёт `OnRedirectToIdentityProvider`; `prompt` не шлём.
+  Страница входа (шаблон с картинкой, тема, passkey) настраивается в тенанте — `tools/auth0/`.
 - **Выход** — `/account/logout`: своя кука, кука прошлого входа и сессия Auth0 (`/oidc/logout` с
   `client_id` — без неё следующий вход молча пускает под той же учёткой). Переход с чужого сайта
   (`Sec-Fetch-Site: cross-site`) — 400. Адрес возврата — только свой хост (`ReturnUrl.Normalize`:
@@ -113,8 +116,8 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
   вошедший видел главную гостя до ручной перезагрузки. Админ
   получает обе роли, `Admin` и `Keeper`.
 - Вход и выход — `NavigateTo(…, forceLoad: true)` на серверные адреса: клиентский роутер их не знает.
-- `UI/Identity`: `/login` (выбор способа, сообщение по `authStatus`), `LoginOptions` — те же кнопки
-  способов входа на главной гостя (вход одним нажатием, без экрана выбора), `RedirectToLogin`, `UserMenu` —
+- `UI/Identity`: `/login` (сообщение по `authStatus`, тестовый вход), `LoginOptions` — кнопка «Войти»
+  (на `/login` и на главной гостя: вход одним нажатием, сразу на страницу Auth0), `RedirectToLogin`, `UserMenu` —
   подвал рельса и листа «Ещё» оболочки; пункты меню по ролям — `NavMenu.VisibleTo` (см. `UI/CLAUDE.md`).
 - **Страницы — только `[Authorize(Policy = Policies.Keeper|Admin)]`, не `Roles`.** Сервер при прямой
   загрузке проверяет атрибут страницы своей политикой (роль из базы), а ролей в его куке нет:

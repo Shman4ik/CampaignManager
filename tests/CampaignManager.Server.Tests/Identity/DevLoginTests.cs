@@ -98,7 +98,7 @@ public sealed class DevLoginTests(DevLoginApp app) : IClassFixture<DevLoginApp>
         var devLogin = await browser.GetAsync(IdentityRoutes.DevLoginUrl("keeper", "/"), Cancellation);
         Assert.Equal(HttpStatusCode.NotFound, devLogin.StatusCode);
 
-        var login = await browser.GetAsync(IdentityRoutes.LoginUrl(LoginMethods.Google, "/"), Cancellation);
+        var login = await browser.GetAsync(IdentityRoutes.LoginUrl("/"), Cancellation);
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         Assert.StartsWith($"https://{CmApp.Auth0Domain}/authorize", login.Headers.Location?.ToString());
     }
@@ -122,7 +122,7 @@ public sealed class DevLoginTests(DevLoginApp app) : IClassFixture<DevLoginApp>
         await using var server = new EnvironmentApp("Development", withAuth0: false);
         var browser = server.Browser();
 
-        var login = await browser.GetAsync(IdentityRoutes.LoginUrl(LoginMethods.Google, "/"), Cancellation);
+        var login = await browser.GetAsync(IdentityRoutes.LoginUrl("/"), Cancellation);
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         Assert.Equal("/login?authStatus=unavailable", login.Headers.Location?.ToString());
 

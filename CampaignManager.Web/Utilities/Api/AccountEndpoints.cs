@@ -34,15 +34,13 @@ public static class AccountEndpoints
             .AllowAnonymous();
     }
 
-    /// <summary>Параметр Auth0 /authorize, который ведёт мимо его страницы прямо к выбранному способу входа.</summary>
+    /// <summary>Параметр Auth0 /authorize, который ведёт мимо его страницы прямо в коннекшен — только у автовхода.</summary>
     internal const string ConnectionParameter = "connection";
 
     /// <summary>
     /// Initiates Auth0 (OpenID Connect) login flow
     /// </summary>
     /// <param name="returnUrl">URL to redirect to after successful authentication (default: "/")</param>
-    /// <param name="method">Login method: 'google' goes straight to Google, 'email' to the password form;
-    /// without it Auth0 shows its page with every method</param>
     /// <param name="httpContext">HTTP context for the current request</param>
     /// <returns>
     /// <list type="bullet">
@@ -51,12 +49,12 @@ public static class AccountEndpoints
     /// </returns>
     /// <response code="302">Redirects to Auth0 authentication page</response>
     /// <remarks>
+    /// Always the Auth0 page: it offers Google, passkeys and email with password by itself.
     /// No 'prompt' is sent: with a live Auth0 session the user comes straight back. Switching accounts
     /// needs no forced login page, because logout ends the Auth0 session as well.
     /// </remarks>
     private static async Task<ChallengeHttpResult> HandleLogin(
         string? returnUrl,
-        string? method,
         HttpContext httpContext)
     {
         // Clear existing cookies
@@ -64,17 +62,19 @@ public static class AccountEndpoints
 
         // Using TypedResults.Challenge marks this as an API endpoint for .NET 10
         return TypedResults.Challenge(
-            CreateChallenge(httpContext, returnUrl, AutoLogin.ParseMethod(method)),
+            CreateChallenge(httpContext, returnUrl, connectionMethod: null),
             [OpenIdConnectDefaults.AuthenticationScheme]);
     }
 
     /// <summary>
-    /// Свойства входа через Auth0 — общие у кнопок входа и у автовхода (<see cref="AutoLogin" />).
+    /// Свойства входа через Auth0 — общие у кнопки входа и у автовхода (<see cref="AutoLogin" />).
+    /// Коннекшен (<paramref name="connectionMethod" />) задаёт только автовход: он ведёт мимо страницы
+    /// Auth0 прямо в Google.
     /// </summary>
     internal static OpenIdConnectChallengeProperties CreateChallenge(
         HttpContext httpContext,
         string? returnUrl,
-        LoginMethod? method)
+        LoginMethod? connectionMethod)
     {
         var properties = new OpenIdConnectChallengeProperties
         {
@@ -84,13 +84,14 @@ public static class AccountEndpoints
 
         // Параметры, а не Items: в state они не нужны, в запрос к Auth0 их ставит
         // OnRedirectToIdentityProvider в Program.cs.
-        if (method is { } selected)
+        if (connectionMethod is { } selected)
             properties.SetParameter(ConnectionParameter, AutoLogin.GetConnectionName(selected));
 
-        // Почта прошлого входа: Google по ней сразу берёт нужный аккаунт, без списка аккаунтов,
-        // а форма пароля подставляет её в поле. Другому способу входа она ни к чему.
+        // Почта прошлого входа: в автовходе Google по ней сразу берёт нужный аккаунт. На странице Auth0
+        // она встаёт в поле почты — это нужно учётке с паролем или passkey, а почта Google там только
+        // сбила бы с толку: «Продолжить» с ней ведёт к паролю, которого у такой учётки нет.
         if (AutoLogin.GetRemembered(httpContext.Request) is { } remembered
-            && (method is null || method == remembered.Method))
+            && remembered.Method == (connectionMethod ?? LoginMethod.Email))
             properties.SetParameter(OpenIdConnectParameterNames.LoginHint, remembered.Email);
 
         return properties;

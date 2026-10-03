@@ -11,7 +11,10 @@ public enum LoginMethod
     /// <summary><c>google-oauth2</c>.</summary>
     Google,
 
-    /// <summary><c>Username-Password-Authentication</c> — почта и пароль, учётки заводит администратор.</summary>
+    /// <summary>
+    ///     <c>Username-Password-Authentication</c> — почта с паролем или passkey (он живёт в той же
+    ///     учётке), учётки заводит администратор.
+    /// </summary>
     Email
 }
 
@@ -94,7 +97,7 @@ public static class AutoLogin
     public static void Forget(HttpContext context) =>
         context.Response.Cookies.Delete(RememberedCookie, CreateCookieOptions(expires: null));
 
-    /// <summary><c>google</c> / <c>email</c> — так способ пишется в куке и в адресе входа.</summary>
+    /// <summary><c>google</c> / <c>email</c> — так способ пишется в куке прошлого входа.</summary>
     public static LoginMethod? ParseMethod(string? value) => value?.Trim().ToLowerInvariant() switch
     {
         "google" => LoginMethod.Google,
