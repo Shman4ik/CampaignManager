@@ -35,6 +35,17 @@ public sealed record SpecializationFold(Guid ParentId, string ParentName, IReadO
 public sealed record SkillLineGroup(string Title, IReadOnlyList<SkillLine> Lines, IReadOnlyList<SpecializationFold> Folds);
 
 /// <summary>
+/// Навыки листа в порядке «Частые → остальные по алфавиту» (решение владельца 2026-10-03, вариант A):
+/// <see cref="Frequent"/> — всегда один набор в порядке <see cref="SheetSkillLayout.FrequentCodes"/>;
+/// <see cref="Others"/> — остальные строки одним списком; <see cref="Folds"/> — специализации на базе, свёрнутые
+/// под родителем (кроме «Частых»).
+/// </summary>
+public sealed record SkillSections(
+    IReadOnlyList<SkillLine> Frequent,
+    IReadOnlyList<SkillLine> Others,
+    IReadOnlyList<SpecializationFold> Folds);
+
+/// <summary>
 /// Раскладка навыков листа по группам бланка и правки строк. Одна на лист, диалог проверки и фазу развития:
 /// в v1 строка навыка была размечена трижды, группы зеркалили словарь имён, а навык из справочника получал
 /// значение 0 вместо базы (AUDIT, «Персонажи и НПС → Ошибки», 4).
@@ -47,6 +58,66 @@ public sealed record SkillLineGroup(string Title, IReadOnlyList<SkillLine> Lines
 public static class SheetSkillLayout
 {
     public const string OwnSkillsTitle = "Свои навыки";
+
+    /// <summary>
+    /// Блок «Частые» на листе: коды справочника в порядке показа (решение владельца 2026-10-03). Единственное
+    /// место набора; по имени навыки не ищутся.
+    /// </summary>
+    public static IReadOnlyList<string> FrequentCodes { get; } =
+    [
+        "skill.spot-hidden",
+        "skill.listen",
+        "skill.library-use",
+        "skill.psychology",
+        "skill.stealth",
+        SkillCodes.Dodge,
+        "skill.fighting.brawl",
+        "skill.firearms.handgun",
+        "skill.first-aid",
+        SkillCodes.Persuade,
+        SkillCodes.Charm,
+        SkillCodes.FastTalk,
+        SkillCodes.Intimidate,
+    ];
+
+    /// <summary>
+    /// «Частые» сверху, остальное — одним списком по алфавиту без групп. Навык «Частых» без строки в листе берётся
+    /// из справочника на базе, как остальные; дублей между блоками нет.
+    /// </summary>
+    public static SkillSections Sections(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var groups = Groups(sheet, catalog);
+        var visible = groups.SelectMany(g => g.Lines).ToList();
+        var all = visible.Concat(groups.SelectMany(g => g.Folds).SelectMany(f => f.Lines)).ToList();
+
+        var frequent = new List<SkillLine>();
+        foreach (var code in FrequentCodes)
+        {
+            var line = all.FirstOrDefault(l => l.Definition?.Code == code);
+            if (line is not null)
+                frequent.Add(line);
+        }
+
+        var taken = frequent.Select(l => l.Key).ToHashSet(StringComparer.Ordinal);
+        var others = visible.Where(l => !taken.Contains(l.Key)).OrderBy(l => AlphabeticKey(l.Name), StringComparer.Ordinal).ToList();
+        var folds = groups.SelectMany(g => g.Folds)
+            .Select(f => f with { Lines = [.. f.Lines.Where(l => !taken.Contains(l.Key))] })
+            .Where(f => f.Lines.Count > 0)
+            .OrderBy(f => AlphabeticKey(f.ParentName), StringComparer.Ordinal)
+            .ToList();
+
+        return new SkillSections(frequent, others, folds);
+    }
+
+    /// <summary>Ключ русской сортировки: регистр не важен, «ё» = «е» (ординально «ё» ушла бы за «я»).</summary>
+    public static string AlphabeticKey(string name) => name.ToLowerInvariant().Replace('ё', 'е');
+
+    /// <summary>Делит список ровно пополам: нечётное число — лишний в левой (первой) половине.</summary>
+    public static (IReadOnlyList<T> Left, IReadOnlyList<T> Right) SplitInHalf<T>(IReadOnlyList<T> items)
+    {
+        var left = (items.Count + 1) / 2;
+        return ([.. items.Take(left)], [.. items.Skip(left)]);
+    }
 
     public static IReadOnlyList<SkillLineGroup> Groups(CharacterSheet sheet, SkillCatalog catalog)
     {

@@ -3,7 +3,7 @@
 
 @* Навыки по группам бланка (раскладка — Core/SheetSkillLayout). Строки размечены @key: без него Blazor
    переиспользует поле соседнего навыка, когда список перетасовывается (навык уехал из свёрнутых), и
-   показывает чужое значение (знание v1). Колонки — CSS columns (masonry): каждая группа рисуется один раз. *@
+   показывает чужое значение (знание v1). Порядок — «Частые», затем алфавит (Core/SheetSkillLayout.Sections); две колонки — явное деление списка пополам, не CSS columns. *@
 <div class="mb-3 flex flex-wrap items-center gap-2">
     <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск навыка…" aria-label="Поиск навыка"
            data-testid="skill-search" @bind="_search" @bind:event="oninput" />
@@ -74,43 +74,73 @@ else if (_adding == Adding.Own)
     </div>
 }
 
-@{ var groups = Filtered(); }
-@if (groups.Count == 0)
+@{ var sections = Filtered(); }
+@if (sections.Frequent.Count == 0 && sections.Others.Count == 0 && sections.Folds.Count == 0)
 {
     <p class="py-6 text-center text-sm text-primary-500">Навыки не найдены.</p>
 }
 else
 {
-    <div class="skill-columns">
-        @foreach (var group in groups)
-        {
-            <section class="skill-group" @key="group.Title">
-                <h3 class="skill-group-title">
-                    <span>@group.Title</span>
-                    <span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span>
-                </h3>
-                @foreach (var line in group.Lines)
-                {
-                    <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
-                              OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />
-                }
-                @foreach (var fold in group.Folds)
-                {
-                    <details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)">
-                        <summary>@fold.ParentName: показать ещё @fold.Lines.Count</summary>
-                        @foreach (var line in fold.Lines)
-                        {
-                            <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
-                                      OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />
-                        }
-                    </details>
-                }
-            </section>
-        }
-    </div>
+    @if (sections.Frequent.Count > 0)
+    {
+        <section class="skill-group" data-testid="skills-frequent">
+            <h3 class="skill-block-title">Частые</h3>
+            @Halves(sections.Frequent)
+        </section>
+    }
+    @if (sections.Others.Count > 0)
+    {
+        <section class="skill-group" data-testid="skills-others">
+            <h3 class="skill-block-title">@(sections.Frequent.Count > 0 ? "Остальные по алфавиту" : "По алфавиту")</h3>
+            @Halves(sections.Others)
+        </section>
+    }
+    @if (sections.Folds.Count > 0)
+    {
+        <section class="skill-group" data-testid="skills-folds">
+            @foreach (var fold in sections.Folds)
+            {
+                <details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)">
+                    <summary>@fold.ParentName: показать ещё @fold.Lines.Count</summary>
+                    @foreach (var line in fold.Lines)
+                    {
+                        @Row(line)
+                    }
+                </details>
+            }
+        </section>
+    }
 }
 
 @code {
+    private RenderFragment Row(SkillLine line) => @<SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"
+                                                           OnRemove="() => Remove(line)" OnOpen="() => Open(line)" />;
+
+    /// <summary>Список ровно пополам: первая половина — левая колонка сверху вниз, вторая — правая (с 1024px); уже — одна колонка в том же порядке.</summary>
+    private RenderFragment Halves(IReadOnlyList<SkillLine> lines)
+    {
+        var (left, right) = SheetSkillLayout.SplitInHalf(lines);
+        return @<div class="skill-halves">
+            <div class="skill-half" data-testid="skills-left">
+                <div class="skill-labels" aria-hidden="true"><span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span></div>
+                @foreach (var line in left)
+                {
+                    @Row(line)
+                }
+            </div>
+            @if (right.Count > 0)
+            {
+                <div class="skill-half" data-testid="skills-right">
+                    <div class="skill-labels skill-labels-second" aria-hidden="true"><span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span></div>
+                    @foreach (var line in right)
+                    {
+                        @Row(line)
+                    }
+                </div>
+            }
+        </div>;
+    }
+
     private enum Adding { None, Specialization, Own }
 
     private string _search = "";
@@ -136,25 +166,19 @@ else
         return open >= 0 && close > open ? name[(open + 1)..close].Trim() : "";
     }
 
-    private List<SkillLineGroup> Filtered()
+    private SkillSections Filtered()
     {
-        var groups = SheetSkillLayout.Groups(Context.Sheet, Context.Catalog);
+        var sections = SheetSkillLayout.Sections(Context.Sheet, Context.Catalog);
         var query = CatalogCodeTable.NormalizeName(_search);
         if (query.Length == 0)
-            return [.. groups];
+            return sections;
 
         bool Matches(SkillLine line) => CatalogCodeTable.NormalizeName(line.Name).Contains(query, StringComparison.Ordinal);
 
-        return
-        [
-            .. groups
-                .Select(g => g with
-                {
-                    Lines = [.. g.Lines.Where(Matches)],
-                    Folds = [.. g.Folds.Select(f => f with { Lines = [.. f.Lines.Where(Matches)] }).Where(f => f.Lines.Count > 0)],
-                })
-                .Where(g => g.Lines.Count > 0 || g.Folds.Count > 0),
-        ];
+        return new SkillSections(
+            [.. sections.Frequent.Where(Matches)],
+            [.. sections.Others.Where(Matches)],
+            [.. sections.Folds.Select(f => f with { Lines = [.. f.Lines.Where(Matches)] }).Where(f => f.Lines.Count > 0)]);
     }
 
     private void SetValue(SkillLine line, int value)

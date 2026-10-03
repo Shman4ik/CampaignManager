@@ -153,4 +153,69 @@ public sealed class SheetSkillLayoutTests
         Assert.Equal(10, damage.Dice.Single().Sides);
         Assert.Equal(2, damage.FlatModifier);
     }
+
+    [Fact]
+    public void Frequent_block_follows_the_owner_order_by_code_and_missing_skills_come_from_the_catalog()
+    {
+        var sheet = NewSheet(50, Skill("Внимание", 60));
+
+        var frequent = SheetSkillLayout.Sections(sheet, Catalog).Frequent;
+
+        // В тестовом справочнике есть не все тринадцать — порядок тот, что в FrequentCodes
+        Assert.Equal(
+            ["Внимание", "Слух", "Психология", "Уклонение", "Ближний бой (драка)", "Стрельба (пистолет)", "Убеждение", "Обаяние", "Красноречие", "Запугивание"],
+            frequent.Select(l => l.Name));
+        Assert.Equal(60, frequent[0].Value);
+        // Слуха на листе нет — база справочника, строки документа тоже нет
+        Assert.Null(frequent[1].Entry);
+        Assert.Equal(20, frequent[1].Value);
+        Assert.Equal(13, SheetSkillLayout.FrequentCodes.Count);
+    }
+
+    [Fact]
+    public void Frequent_specializations_are_not_folded_and_do_not_repeat_in_the_rest()
+    {
+        var sheet = NewSheet(50);
+
+        var sections = SheetSkillLayout.Sections(sheet, Catalog);
+        var everything = sections.Frequent.Concat(sections.Others).Concat(sections.Folds.SelectMany(f => f.Lines)).Select(l => l.Key).ToList();
+
+        Assert.Contains(sections.Frequent, l => l.Name == "Стрельба (пистолет)");
+        Assert.DoesNotContain(sections.Folds.SelectMany(f => f.Lines), l => l.Name == "Стрельба (пистолет)");
+        Assert.Equal(everything.Count, everything.Distinct().Count());
+        Assert.DoesNotContain(sections.Others, l => sections.Frequent.Any(f => f.Key == l.Key));
+    }
+
+    [Fact]
+    public void The_rest_is_alphabetical_in_one_list_with_yo_equal_to_ye()
+    {
+        var sheet = NewSheet(50,
+            new SheetSkill { Name = "Ёлки", Value = 10 },
+            new SheetSkill { Name = "Ежи", Value = 10 },
+            new SheetSkill { Name = "Ербуль", Value = 10 },
+            new SheetSkill { Name = "Яма", Value = 10 });
+
+        var names = SheetSkillLayout.Sections(sheet, Catalog).Others.Select(l => l.Name).ToList();
+
+        // «Ёлки» = «Елки»: между «Ежи» и «Ербуль», а не после «Ямы»
+        Assert.True(names.IndexOf("Ежи") < names.IndexOf("Ёлки"));
+        Assert.True(names.IndexOf("Ёлки") < names.IndexOf("Ербуль"));
+        Assert.True(names.IndexOf("Ербуль") < names.IndexOf("Яма"));
+        Assert.Equal(names.OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), names);
+        Assert.Equal(-1, string.CompareOrdinal(SheetSkillLayout.AlphabeticKey("Ёж"), SheetSkillLayout.AlphabeticKey("Жук")));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0)]
+    [InlineData(1, 1, 0)]
+    [InlineData(4, 2, 2)]
+    [InlineData(7, 4, 3)]
+    public void Split_in_half_puts_the_extra_item_to_the_left(int count, int left, int right)
+    {
+        var (l, r) = SheetSkillLayout.SplitInHalf(Enumerable.Range(0, count).ToList());
+
+        Assert.Equal(left, l.Count);
+        Assert.Equal(right, r.Count);
+        Assert.Equal(Enumerable.Range(0, count), l.Concat(r));
+    }
 }
