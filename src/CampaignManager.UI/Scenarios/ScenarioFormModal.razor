@@ -48,7 +48,7 @@
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
-        <Button Type="submit" form="scenario-form" Busy="_saving" data-testid="scenario-save">@(Scenario is null ? "Создать" : "Сохранить")</Button>
+        <Button Type="submit" form="scenario-form" Busy="_saving" Disabled="@(Scenario is not null && !IsChanged)" DisabledReason="Нет изменений" data-testid="scenario-save">@(Scenario is null ? "Создать" : "Сохранить")</Button>
     </Footer>
 </Modal>
 
@@ -99,6 +99,15 @@
     }
 
     private uint _staleVersion;
+
+    /// <summary>Правка что-то изменила: «Сохранить» без изменений не нужна.</summary>
+    private bool IsChanged =>
+        Scenario is null
+        || _name.Trim() != Scenario.Name
+        || (_summary ?? "") != (Scenario.Summary ?? "")
+        || (_setting ?? "") != (Scenario.Setting ?? "")
+        || (_settingDate ?? "") != (Scenario.SettingDate ?? "")
+        || _era != Scenario.Era;
 
     private async Task SaveAsync()
     {

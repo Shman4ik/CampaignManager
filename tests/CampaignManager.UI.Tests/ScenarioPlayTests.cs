@@ -153,6 +153,15 @@ public sealed class ScenarioPlayTests : KitContext
     }
 
     [Fact]
+    public void Empty_scenario_shows_one_line_instead_of_three_columns()
+    {
+        var cut = Render<ScenarioPlay>(p => p.Add(c => c.Scenario, new ScenarioDto { Id = ScenarioId, Name = "Пустой", CanEdit = true }));
+
+        Assert.NotNull(cut.Find("[data-testid=play-empty]"));
+        Assert.Empty(cut.FindAll("[data-testid=play-locations]"));
+    }
+
+    [Fact]
     public void Overview_keeps_the_scenario_text_collapsed()
     {
         var scenario = Scenario();

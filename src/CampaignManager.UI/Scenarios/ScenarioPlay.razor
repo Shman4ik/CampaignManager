@@ -21,66 +21,79 @@
    игрок ставит у себя); без партии — вручную. Проверки стоят над описанием локации: самое частое действие за столом.
    Раздатка игрокам — HandoutShowcase, второй экран — статическая страница сервера. *@
 
-<aside class="cm-play-side hidden w-64 border-r border-primary-200 md:flex" aria-label="Локации" data-testid="play-locations">
-    <p class="cm-section-title px-4 pb-1 pt-3">Локации</p>
-    <nav class="flex flex-col gap-0.5 p-2">
-        <button type="button" class="@NavClass(null, 0)" aria-current="@(Location is null ? "true" : null)" @onclick="() => GoLocation(null)">
-            <i class="fa-solid fa-book-open w-4 text-xs" aria-hidden="true"></i><span class="min-w-0 flex-1">Обзор</span>
-        </button>
-        @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
-        {
-            var id = location.Id;
-            <button type="button" class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "true" : null)" @key="id"
-                    data-testid="play-location" @onclick="() => GoLocation(id)">
-                <i class="fa-solid @(depth == 0 ? "fa-location-dot text-accent-600" : "fa-angle-right text-primary-500") w-4 text-xs" aria-hidden="true"></i>
-                @* Название целиком, с переносом: на планшете наведения нет, а обрезанное «День 2. Утёс Юджина Кле…» не прочесть. *@
-                <span class="@(depth == 0 ? "font-medium" : null) min-w-0 flex-1 break-words">@location.Name</span>
-                @if (_visited.Contains(id) && Location?.Id != id)
-                {
-                    <i class="fa-solid fa-check text-xs text-success-700" aria-hidden="true"></i><span class="sr-only">уже были</span>
-                }
-                @if (HasMusic(location))
-                {
-                    <i class="fa-solid fa-music text-xs text-primary-500" aria-hidden="true"></i><span class="sr-only">есть музыка</span>
-                }
-            </button>
-        }
-    </nav>
-</aside>
-
-<div class="cm-play-center" data-testid="play-center">
-    <div class="flex flex-col gap-4 p-4 sm:p-6">
-        <div class="flex flex-wrap items-center gap-2">
-            <select class="cm-input w-full md:hidden" aria-label="Локация" data-testid="play-location-select" @onchange="SelectLocation">
-                <option value="" selected="@(Location is null)">Обзор</option>
-                @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
-                {
-                    <option value="@location.Id" selected="@(Location?.Id == location.Id)">@(new string('·', depth * 2)) @location.Name</option>
-                }
-            </select>
-            @RunPicker
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-key" class="ml-auto xl:hidden" data-testid="open-facts"
-                    OnClick="() => _factsOpen = true">Раздатки и факты</Button>
-        </div>
-
-        @if (Location is null)
-        {
-            @Overview
-        }
-        else
-        {
-            @LocationView(Location)
-        }
+@if (IsEmpty)
+{
+    @* Пустой сценарий играть нечем: одна строка вместо трёх колонок (в шапке рабочего места «Режим игры» для него не предлагается). *@
+    <div class="cm-play-center" data-testid="play-empty">
+        <p class="cm-text-muted flex flex-wrap items-center gap-x-3 p-6">
+            <span>В сценарии нет ни локаций, ни раздаток, ни фактов — играть пока нечем.</span>
+            <a class="cm-back-link" href="@ScenarioLinks.Workspace(Scenario.Id)">Открыть рабочее место</a>
+        </p>
     </div>
-</div>
+}
+else
+{
+    <aside class="cm-play-side hidden w-64 border-r border-primary-200 md:flex" aria-label="Локации" data-testid="play-locations">
+        <p class="cm-section-title px-4 pb-1 pt-3">Локации</p>
+        <nav class="flex flex-col gap-0.5 p-2">
+            <button type="button" class="@NavClass(null, 0)" aria-current="@(Location is null ? "true" : null)" @onclick="() => GoLocation(null)">
+                <i class="fa-solid fa-book-open w-4 text-xs" aria-hidden="true"></i><span class="min-w-0 flex-1">Обзор</span>
+            </button>
+            @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
+            {
+                var id = location.Id;
+                <button type="button" class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "true" : null)" @key="id"
+                        data-testid="play-location" @onclick="() => GoLocation(id)">
+                    <i class="fa-solid @(depth == 0 ? "fa-location-dot text-accent-600" : "fa-angle-right text-primary-500") w-4 text-xs" aria-hidden="true"></i>
+                    @* Название целиком, с переносом: на планшете наведения нет, а обрезанное «День 2. Утёс Юджина Кле…» не прочесть. *@
+                    <span class="@(depth == 0 ? "font-medium" : null) min-w-0 flex-1 break-words">@location.Name</span>
+                    @if (_visited.Contains(id) && Location?.Id != id)
+                    {
+                        <i class="fa-solid fa-check text-xs text-success-700" aria-hidden="true"></i><span class="sr-only">уже были</span>
+                    }
+                    @if (HasMusic(location))
+                    {
+                        <i class="fa-solid fa-music text-xs text-primary-500" aria-hidden="true"></i><span class="sr-only">есть музыка</span>
+                    }
+                </button>
+            }
+        </nav>
+    </aside>
 
-<aside class="cm-play-side hidden w-96 border-l border-primary-200 p-4 xl:flex" aria-label="Раздатки и факты">
-    <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
-</aside>
+    <div class="cm-play-center" data-testid="play-center">
+        <div class="flex flex-col gap-4 p-4 sm:p-6">
+            <div class="flex flex-wrap items-center gap-2">
+                <select class="cm-input w-full md:hidden" aria-label="Локация" data-testid="play-location-select" @onchange="SelectLocation">
+                    <option value="" selected="@(Location is null)">Обзор</option>
+                    @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
+                    {
+                        <option value="@location.Id" selected="@(Location?.Id == location.Id)">@(new string('·', depth * 2)) @location.Name</option>
+                    }
+                </select>
+                @RunPicker
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-key" class="ml-auto xl:hidden" data-testid="open-facts"
+                        OnClick="() => _factsOpen = true">Раздатки и факты</Button>
+            </div>
 
-<Modal Open="_factsOpen" OnClose="() => _factsOpen = false" Title="Раздатки и факты" Placement="ModalPlacement.Drawer" data-testid="facts-drawer">
-    <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
-</Modal>
+            @if (Location is null)
+            {
+                @Overview
+            }
+            else
+            {
+                @LocationView(Location)
+            }
+        </div>
+    </div>
+
+    <aside class="cm-play-side hidden w-96 border-l border-primary-200 p-4 xl:flex" aria-label="Раздатки и факты">
+        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+    </aside>
+
+    <Modal Open="_factsOpen" OnClose="() => _factsOpen = false" Title="Раздатки и факты" Placement="ModalPlacement.Drawer" data-testid="facts-drawer">
+        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+    </Modal>
+}
 
 <SkillCheckModal Open="@(_check is not null)" OpenChanged="CheckOpenChanged"
                  Title="@(_check is null ? "Проверка" : $"Проверка: {ScenarioLabels.Target(_check)}")"
@@ -119,6 +132,8 @@
 
     /// <summary>Сценарий изменился (музыка локации) — страница перечитывает его.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool IsEmpty => Scenario.Locations.Count + Scenario.Handouts.Count + Scenario.KeyFacts.Count == 0;
 
     private ScenarioLocationDto? Location => LocationId is { } id ? Scenario.Locations.FirstOrDefault(l => l.Id == id) : null;
 
