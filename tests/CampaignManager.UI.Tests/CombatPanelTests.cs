@@ -102,6 +102,9 @@ public sealed class CombatPanelTests : KitContext
         public Task<IReadOnlyList<EncounterSummaryDto>> ListActiveAsync(EncounterKind? kind, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EncounterSummaryDto>>([]);
 
+        public Task<IReadOnlyList<EncounterSummaryDto>> ListFinishedAsync(EncounterKind? kind, int take, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<EncounterSummaryDto>>([]);
+
         public Task<EncounterDto> StartAsync(StartEncounterRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<EncounterDto> GetAsync(Guid encounterId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

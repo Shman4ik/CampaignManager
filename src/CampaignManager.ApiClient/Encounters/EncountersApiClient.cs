@@ -21,6 +21,12 @@ public sealed class EncountersApiClient(HttpClient http) : IEncountersApi
         return await ApiResponses.ReadAsync(response, Json.IReadOnlyListEncounterSummaryDto, cancellationToken, withCode: true);
     }
 
+    public async Task<IReadOnlyList<EncounterSummaryDto>> ListFinishedAsync(EncounterKind? kind, int take, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(EncountersRoutes.FinishedList(kind, take), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.IReadOnlyListEncounterSummaryDto, cancellationToken, withCode: true);
+    }
+
     public async Task<EncounterDto> StartAsync(StartEncounterRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await http.PostAsJsonAsync(EncountersRoutes.Encounters, request, Json.StartEncounterRequest, cancellationToken);

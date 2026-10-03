@@ -25,7 +25,20 @@ namespace CampaignManager.Server.Encounters;
 public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access, CurrentUser currentUser, ILogger<EncounterService> logger)
 {
     /// <summary>Активные сцены вошедшего — продолжить начатое. Сцены чужих Хранителей не видны и администратору.</summary>
-    public async Task<IReadOnlyList<EncounterSummaryDto>> ListActiveAsync(EncounterKind? kind, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<EncounterSummaryDto>> ListActiveAsync(EncounterKind? kind, CancellationToken cancellationToken) =>
+        ListAsync(kind, EncounterStatus.Active, int.MaxValue, cancellationToken);
+
+    /// <summary>
+    /// Недавно завершённые сцены вошедшего, свежие первыми: журнал после игры (завершённую не пишут, но читают). Не больше
+    /// <see cref="MaxFinishedTake"/>.
+    /// </summary>
+    public Task<IReadOnlyList<EncounterSummaryDto>> ListFinishedAsync(EncounterKind? kind, int take, CancellationToken cancellationToken) =>
+        ListAsync(kind, EncounterStatus.Finished, Math.Clamp(take, 1, MaxFinishedTake), cancellationToken);
+
+    /// <summary>Сколько завершённых сцен отдаёт один запрос (состояние каждой читается, чтобы назвать участников).</summary>
+    public const int MaxFinishedTake = 30;
+
+    private async Task<IReadOnlyList<EncounterSummaryDto>> ListAsync(EncounterKind? kind, EncounterStatus status, int take, CancellationToken cancellationToken)
     {
         if (await currentUser.GetAsync(cancellationToken) is not { IsKeeper: true } user)
         {
@@ -33,8 +46,9 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
         }
 
         var rows = await dbContext.Encounters.AsNoTracking()
-            .Where(e => e.KeeperId == user.Id && e.Status == EncounterStatus.Active && (kind == null || e.Kind == kind))
+            .Where(e => e.KeeperId == user.Id && e.Status == status && (kind == null || e.Kind == kind))
             .OrderByDescending(e => e.UpdatedAt)
+            .Take(take)
             .Select(e => new
             {
                 e.Id,
@@ -53,7 +67,7 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
             {
                 var state = CmJson.ReadEncounterState(r.State, r.StateVersion);
                 return new EncounterSummaryDto(r.Id, r.Kind, r.CampaignId, r.CampaignName, state.Round, state.Participants.Count, r.UpdatedAt,
-                    [.. state.Participants.Select(p => p.Name)], state.Chase?.Name, state.Chase is { Phase: ChasePhase.Ended });
+                    [.. state.Participants.Select(p => p.Name)], state.Chase?.Name, status == EncounterStatus.Finished || state.Chase is { Phase: ChasePhase.Ended });
             }),
         ];
     }
