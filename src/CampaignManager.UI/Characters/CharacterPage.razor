@@ -21,9 +21,23 @@
 @* Лист сыщика (T2.3). Документ правят блоки секций прямо в объекте листа (каскадный SheetContext); в базу
    правку уносит автосохранение (SheetAutoSave: слепок раз в 3 с, If-Match, черновик в localStorage).
    Правила — только Core: блоки зовут SanityRules, MythosBookRules, DevelopmentPhaseRules и т. д.
-   Вычисляемое (максимумы, БкУ, Комплекция, Скорость, Уклонение) — только для чтения. *@
+   Вычисляемое (максимумы, БкУ, Комплекция, Скорость, Уклонение) — только для чтения.
+   Два режима в адресе (решение владельца 2026-10-03): «Игра» по умолчанию — всё для стола на одном экране
+   (PlaySheet), «Лист» (?mode=sheet) — секции для заполнения. Режим — в адресе, а не в поле: его переживает F5
+   и на него можно дать ссылку. *@
 <PageHeader Title="@Title" Subtitle="@Subtitle" Game="true">
     <Actions>
+        @if (_context is not null)
+        {
+            <nav class="sheet-mode" aria-label="Режим листа" data-testid="sheet-mode">
+                <a href="@($"character/{CharacterId}")" aria-current="@(SheetMode ? null : "page")" data-testid="mode-play">
+                    <i class="fa-solid fa-dice-d20" aria-hidden="true"></i><span class="max-md:sr-only">Игра</span>
+                </a>
+                <a href="@SheetModeHref(CharacterId)" aria-current="@(SheetMode ? "page" : null)" data-testid="mode-sheet">
+                    <i class="fa-solid fa-pen" aria-hidden="true"></i><span class="max-md:sr-only">Лист</span>
+                </a>
+            </nav>
+        }
         @if (_context is not null && !_context.ReadOnly)
         {
             <span class="sheet-save-state @SaveStateClass" role="status" aria-live="polite" data-testid="autosave-status">
@@ -48,16 +62,19 @@
         </Empty>
         <ChildContent>
             @{ var context = loaded!; }
-            <nav class="sheet-nav" aria-label="Разделы листа">
-                @foreach (var section in SheetSections.All)
-                {
-                    <a class="sheet-nav-link" href="@($"character/{CharacterId}#{SheetSections.Anchor(section)}")"
-                       data-testid="@($"nav-{section.Id}")">
-                        <i class="fa-solid @section.Icon" aria-hidden="true"></i>
-                        <span>@section.Title</span>
-                    </a>
-                }
-            </nav>
+            @if (SheetMode)
+            {
+                <nav class="sheet-nav" aria-label="Разделы листа">
+                    @foreach (var section in SheetSections.All)
+                    {
+                        <a class="sheet-nav-link" href="@($"{SheetModeHref(CharacterId)}#{SheetSections.Anchor(section)}")"
+                           data-testid="@($"nav-{section.Id}")">
+                            <i class="fa-solid @section.Icon" aria-hidden="true"></i>
+                            <span>@section.Title</span>
+                        </a>
+                    }
+                </nav>
+            }
 
             @if (_saver.State == SheetSaveState.Conflict)
             {
@@ -122,60 +139,67 @@
             <CascadingValue Value="context">
                 @* change всплывает от любого поля листа: черновик пишется сразу, а не на тике автосохранения. *@
                 <div class="sheet" @onchange="KeepDraftAsync">
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Personal" Expanded="IsOpen(SheetSections.Personal)" OnToggle="() => Toggle(SheetSections.Personal)">
-                        <Actions>
-                            @if (context.ReadOnly)
-                            {
-                                <Badge Tone="CampaignLabels.CharacterStatusTone(context.Character.Status)">@CampaignLabels.CharacterStatus(context.Character.Status)</Badge>
-                            }
-                            else
-                            {
-                                <label class="flex items-center gap-2 text-sm text-primary-600">
-                                <span class="hidden sm:inline">Статус</span>
-                                <select class="cm-input cm-input-sm w-auto" aria-label="Статус листа" data-testid="sheet-status"
-                                        value="@context.Character.Status" @onchange="SetStatusAsync">
-                                    @foreach (var status in Enum.GetValues<CharacterStatus>())
-                                    {
-                                        <option value="@status">@CampaignLabels.CharacterStatus(status)</option>
-                                    }
-                                </select>
-                                </label>
-                            }
-                        </Actions>
-                        <ChildContent>
-                            <PersonalPanel OnPortraitChanged="SetPortraitAsync" />
-                        </ChildContent>
-                    </SheetSection>
+                    @if (!SheetMode)
+                    {
+                        <PlaySheet />
+                    }
+                    else
+                    {
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Personal" Expanded="IsOpen(SheetSections.Personal)" OnToggle="() => Toggle(SheetSections.Personal)">
+                            <Actions>
+                                @if (context.ReadOnly)
+                                {
+                                    <Badge Tone="CampaignLabels.CharacterStatusTone(context.Character.Status)">@CampaignLabels.CharacterStatus(context.Character.Status)</Badge>
+                                }
+                                else
+                                {
+                                    <label class="flex items-center gap-2 text-sm text-primary-600">
+                                    <span class="hidden sm:inline">Статус</span>
+                                    <select class="cm-input cm-input-sm w-auto" aria-label="Статус листа" data-testid="sheet-status"
+                                            value="@context.Character.Status" @onchange="SetStatusAsync">
+                                        @foreach (var status in Enum.GetValues<CharacterStatus>())
+                                        {
+                                            <option value="@status">@CampaignLabels.CharacterStatus(status)</option>
+                                        }
+                                    </select>
+                                    </label>
+                                }
+                            </Actions>
+                            <ChildContent>
+                                <PersonalPanel OnPortraitChanged="SetPortraitAsync" />
+                            </ChildContent>
+                        </SheetSection>
 
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Skills" Expanded="IsOpen(SheetSections.Skills)" OnToggle="() => Toggle(SheetSections.Skills)">
-                        <Actions>
-                            @if (!context.ReadOnly)
-                            {
-                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="open-development" OnClick="() => _developmentOpen = true">Фаза развития</Button>
-                            }
-                        </Actions>
-                        <ChildContent><SkillsPanel /></ChildContent>
-                    </SheetSection>
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Skills" Expanded="IsOpen(SheetSections.Skills)" OnToggle="() => Toggle(SheetSections.Skills)">
+                            <Actions>
+                                @if (!context.ReadOnly)
+                                {
+                                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="open-development" OnClick="() => _developmentOpen = true">Фаза развития</Button>
+                                }
+                            </Actions>
+                            <ChildContent><SkillsPanel /></ChildContent>
+                        </SheetSection>
 
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Combat" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Combat)" OnToggle="() => Toggle(SheetSections.Combat)">
-                        <WeaponsPanel />
-                        <SpellsPanel />
-                    </SheetSection>
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Combat" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Combat)" OnToggle="() => Toggle(SheetSections.Combat)">
+                            <WeaponsPanel />
+                            <SpellsPanel />
+                        </SheetSection>
 
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Equipment" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Equipment)" OnToggle="() => Toggle(SheetSections.Equipment)">
-                        <EquipmentPanel />
-                        <FinancesPanel />
-                    </SheetSection>
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Equipment" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Equipment)" OnToggle="() => Toggle(SheetSections.Equipment)">
+                            <EquipmentPanel />
+                            <FinancesPanel />
+                        </SheetSection>
 
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Sanity" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Sanity)" OnToggle="() => Toggle(SheetSections.Sanity)">
-                        <SanityPanel />
-                        <MythosBooksPanel />
-                    </SheetSection>
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Sanity" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Sanity)" OnToggle="() => Toggle(SheetSections.Sanity)">
+                            <SanityPanel />
+                            <MythosBooksPanel />
+                        </SheetSection>
 
-                    <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Biography" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Biography)" OnToggle="() => Toggle(SheetSections.Biography)">
-                        <BiographyPanel />
-                        <FellowInvestigatorsPanel />
-                    </SheetSection>
+                        <SheetSection ReadOnly="context.ReadOnly" Info="SheetSections.Biography" BodyClass="cm-stack" Expanded="IsOpen(SheetSections.Biography)" OnToggle="() => Toggle(SheetSections.Biography)">
+                            <BiographyPanel />
+                            <FellowInvestigatorsPanel />
+                        </SheetSection>
+                    }
                 </div>
 
                 <DevelopmentPhaseModal @bind-Open="_developmentOpen" />
@@ -204,6 +228,16 @@
     private bool _failureShown;
 
     [Parameter] public Guid CharacterId { get; set; }
+
+    /// <summary>Режим из адреса: <c>sheet</c> — секции для заполнения; всё остальное — «Игра».</summary>
+    [SupplyParameterFromQuery(Name = "mode")] public string? Mode { get; set; }
+
+    private const string SheetModeValue = "sheet";
+
+    private bool SheetMode => string.Equals(Mode, SheetModeValue, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Адрес листа в режиме «Лист» — для ссылок, которым нужен именно он (чистый лист после создания).</summary>
+    public static string SheetModeHref(Guid characterId) => $"character/{characterId}?mode={SheetModeValue}";
 
     private string KindTitle => _context?.Character.Kind switch
     {

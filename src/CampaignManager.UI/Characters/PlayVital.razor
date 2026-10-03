@@ -1,0 +1,68 @@
+@* Плитка запаса режима «Игра»: подпись с подсказкой, «текущее / максимум», шаг ±1 сдвоенной кнопкой и своё действие
+   (урон у ПЗ, потеря у Рассудка). Своей карточки нет — плитки делят карточку полосы состояния, соседей разделяет
+   линейка. Узкая плитка уводит действие строкой под число (play.css, @container). Цвет полосы — StatBar.FillClass,
+   одна копия с «Состоянием» листа и участниками сцены. *@
+<div class="play-vital" data-k="@Key" data-testid="@($"play-{Key}")">
+    <div class="play-vital-in">
+        <div class="play-vital-label">
+            @if (Label is not null)
+            {
+                @Label
+            }
+            else
+            {
+                <span>@Title</span>
+            }
+            @if (!string.IsNullOrEmpty(Note))
+            {
+                <small>@Note</small>
+            }
+        </div>
+        <div class="play-vital-value">
+            <span class="@(Low ? "text-error-700" : null)" data-testid="@($"play-{Key}-value")">@Value</span><small>/ @Max</small>
+        </div>
+        <div class="play-pill play-vital-step">
+            <button type="button" aria-label="@($"{Title}: минус один")" data-testid="@($"play-{Key}-minus")" @onclick="() => OnStep.InvokeAsync(-1)">
+                <i class="fa-solid fa-minus" aria-hidden="true"></i>
+            </button>
+            <button type="button" aria-label="@($"{Title}: плюс один")" data-testid="@($"play-{Key}-plus")" @onclick="() => OnStep.InvokeAsync(1)">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            </button>
+        </div>
+        @if (Extra is not null)
+        {
+            <div class="play-vital-extra">@Extra</div>
+        }
+        <div class="play-vital-bar" role="meter" aria-label="@Title" aria-valuemin="0" aria-valuemax="@Max" aria-valuenow="@Value">
+            <div class="@StatBar.FillClass(Kind, Percent)" style="width: @(Percent)%"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Короткий ключ: <c>hp</c>, <c>mp</c>, <c>san</c>, <c>luck</c> — и тест-id, и порог раскладки в play.css.</summary>
+    [Parameter, EditorRequired] public string Key { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Своя подпись вместо <see cref="Title"/> — у Удачи это кнопка проверки.</summary>
+    [Parameter] public RenderFragment? Label { get; set; }
+
+    [Parameter] public string? Note { get; set; }
+
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public int Max { get; set; }
+
+    [Parameter] public StatKind Kind { get; set; }
+
+    /// <summary>Шаг: −1 или +1; прижать к пределам и применить следствия — дело хозяина.</summary>
+    [Parameter] public EventCallback<int> OnStep { get; set; }
+
+    [Parameter] public RenderFragment? Extra { get; set; }
+
+    private int Percent => StatBar.Percent(Value, Max);
+
+    /// <summary>ПЗ и Рассудок на четверти и ниже — число красным, как густо-красная полоса.</summary>
+    private bool Low => Kind is StatKind.HitPoints or StatKind.Sanity && Percent <= 25;
+}

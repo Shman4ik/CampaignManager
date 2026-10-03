@@ -51,35 +51,8 @@
             <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="NewDayAsync">Новый день</Button>
         </div>
 
-        @if (status.NeedsIntCheck)
-        {
-            @* Бросок ИНТ делает игрок; здесь — две кнопки исхода (знание v1). *@
-            <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="int-check-prompt">
-                <ChildContent>
-                    Потеряно @status.LastLoss по одной причине — проверка <strong>ИНТ</strong>. Успех: сыщик
-                    осознал увиденное и временно безумен (1d10 часов), всё начинается с приступа. Провал: разум отгородился.
-                </ChildContent>
-                <Actions>
-                    <Button Small="true" data-testid="int-success" OnClick="IntSucceeded">Успех ИНТ: безумие</Button>
-                    <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="int-failure" OnClick="IntFailed">Провал ИНТ: в своём уме</Button>
-                </Actions>
-            </Alert>
-        }
-        @if (status.IndefiniteLoss)
-        {
-            <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="mt-3 mb-0" data-testid="indefinite-prompt">
-                <ChildContent>
-                    Потеряно ≥⅕ Рассудка за игровой день — <strong>бессрочное безумие</strong>.
-                    @(Sheet.Condition.IndefiniteInsanity ? "Отмечено." : "Оно, как и любое безумие, начинается с приступа.")
-                </ChildContent>
-                <Actions>
-                    @if (!Sheet.Condition.IndefiniteInsanity)
-                    {
-                        <Button Small="true" data-testid="indefinite-mark" OnClick="MarkIndefinite">Отметить и бросить приступ</Button>
-                    }
-                </Actions>
-            </Alert>
-        }
+        @* Проверка ИНТ, бессрочное и положенный приступ — одной разметкой с полосой режима «Игра». *@
+        <SanityPrompts OnBout="() => _boutOpen = true" />
     </section>
 
     <section data-testid="insanity-state">
@@ -88,19 +61,6 @@
             <Button Small="true" Variant="@(status.BoutDue ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-dice-d20"
                     data-testid="open-insanity-bout" OnClick="() => _boutOpen = true">Приступ безумия</Button>
         </div>
-        @if (status.BoutDue)
-        {
-            <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" data-testid="bout-due">
-                <ChildContent>
-                    Положен <strong>приступ безумия</strong>: любое безумие начинается с него, а в затаённом безумии
-                    его вызывает любая потеря рассудка.
-                </ChildContent>
-                <Actions>
-                    <Button Small="true" OnClick="() => _boutOpen = true">Бросить приступ</Button>
-                    <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="bout-dismiss" OnClick="DismissBout">Разыграли без броска</Button>
-                </Actions>
-            </Alert>
-        }
         <div class="grid grid-cols-2 gap-x-3">
             <label class="@Css.Join("sheet-condition", Sheet.Condition.TemporaryInsanity ? "sheet-condition-on" : null)">
                 <input type="checkbox" class="cm-checkbox" checked="@Sheet.Condition.TemporaryInsanity" @onchange="e => SetTemporary(e.Value is true)" />
@@ -249,27 +209,9 @@
             Do(() => SanityRules.StartNewDay(Sheet));
     }
 
-    private void IntSucceeded()
-    {
-        SanityRules.ResolveIntCheck(Sheet, succeeded: true);
-        _boutOpen = true;
-        Context.Changed();
-    }
-
-    private void IntFailed() => Do(() => SanityRules.ResolveIntCheck(Sheet, succeeded: false));
-
-    private void MarkIndefinite()
-    {
-        SanityRules.SetIndefiniteInsanity(Sheet, true);
-        _boutOpen = true;
-        Context.Changed();
-    }
-
     private void SetTemporary(bool value) => Do(() => SanityRules.SetTemporaryInsanity(Sheet, value));
 
     private void SetIndefinite(bool value) => Do(() => SanityRules.SetIndefiniteInsanity(Sheet, value));
-
-    private void DismissBout() => Do(() => SanityRules.DismissBout(Sheet));
 
     /// <summary>Случай безумия от Мифов — с предпросмотром итога той же формулой Core на копии листа.</summary>
     private async Task RecordMythosAsync()

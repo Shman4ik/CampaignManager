@@ -205,6 +205,44 @@ public sealed class SheetSkillLayoutTests
         Assert.Equal(-1, string.CompareOrdinal(SheetSkillLayout.AlphabeticKey("Ёж"), SheetSkillLayout.AlphabeticKey("Жук")));
     }
 
+    [Fact]
+    public void Play_mode_shows_every_unfolded_skill_alphabetically_and_search_also_sees_folded_ones()
+    {
+        var sheet = NewSheet(50,
+            Skill("Слух", 45),
+            Skill("Стрельба (пистолет)", 60),
+            new SheetSkill { Name = "Гадание на картах", Value = 30 });
+
+        var visible = SheetSkillLayout.Visible(sheet, Catalog);
+
+        // Навык на базе без строки листа — виден (база справочника), развитая специализация — тоже
+        Assert.Contains(visible, l => l.Name == "Психология" && l.Value == 10 && l.Entry is null);
+        Assert.Contains(visible, l => l.Name == "Стрельба (пистолет)" && l.Value == 60);
+        Assert.Contains(visible, l => l.Name == "Гадание на картах");
+        // Специализация на базе свёрнута, как на листе, а родитель строкой не бывает
+        Assert.DoesNotContain(visible, l => l.Name is "Стрельба (винтовка)" or Firearms);
+        Assert.Equal(visible.Select(l => l.Name).OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), visible.Select(l => l.Name));
+
+        var all = SheetSkillLayout.All(sheet, Catalog);
+        Assert.Contains(all, l => l.Name == "Стрельба (винтовка)"); // свёрнутую специализацию находит поиск
+        Assert.Equal(all.Count, all.Select(l => l.Key).Distinct().Count());
+        Assert.Equal(all.Select(l => l.Name).OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), all.Select(l => l.Name));
+    }
+
+    [Theory]
+    [InlineData(0, new int[0])]
+    [InlineData(2, new[] { 1, 1 })]
+    [InlineData(7, new[] { 3, 2, 2 })]
+    [InlineData(8, new[] { 3, 3, 2 })]
+    [InlineData(9, new[] { 3, 3, 3 })]
+    public void Split_into_three_columns_keeps_order_and_puts_extra_items_first(int count, int[] sizes)
+    {
+        var columns = SheetSkillLayout.SplitInto(Enumerable.Range(0, count).ToList(), 3);
+
+        Assert.Equal(sizes, columns.Select(c => c.Count));
+        Assert.Equal(Enumerable.Range(0, count), columns.SelectMany(c => c));
+    }
+
     [Theory]
     [InlineData(0, 0, 0)]
     [InlineData(1, 1, 0)]

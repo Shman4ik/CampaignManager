@@ -109,6 +109,25 @@ public static class SheetSkillLayout
         return new SkillSections(frequent, others, folds);
     }
 
+    /// <summary>
+    /// Навыки режима «Игра» (решение владельца 2026-10-03): все, что лист показывает развёрнутыми, — «Частые» и
+    /// остальные, одним списком по алфавиту. Специализации на базе свёрнуты, как на листе (их десятки, экран бы не
+    /// вместил); их находит поиск по <see cref="All"/>.
+    /// </summary>
+    public static IReadOnlyList<SkillLine> Visible(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var sections = Sections(sheet, catalog);
+        return [.. sections.Frequent.Concat(sections.Others).OrderBy(l => AlphabeticKey(l.Name), StringComparer.Ordinal)];
+    }
+
+    /// <summary>Все строки листа — «Частые», остальные и свёрнутые специализации — одним списком по алфавиту, без дублей.</summary>
+    public static IReadOnlyList<SkillLine> All(CharacterSheet sheet, SkillCatalog catalog)
+    {
+        var sections = Sections(sheet, catalog);
+        return [.. sections.Frequent.Concat(sections.Others).Concat(sections.Folds.SelectMany(f => f.Lines))
+            .OrderBy(l => AlphabeticKey(l.Name), StringComparer.Ordinal)];
+    }
+
     /// <summary>Ключ русской сортировки: регистр не важен, «ё» = «е» (ординально «ё» ушла бы за «я»).</summary>
     public static string AlphabeticKey(string name) => name.ToLowerInvariant().Replace('ё', 'е');
 
@@ -117,6 +136,25 @@ public static class SheetSkillLayout
     {
         var left = (items.Count + 1) / 2;
         return ([.. items.Take(left)], [.. items.Skip(left)]);
+    }
+
+    /// <summary>
+    /// Делит список на <paramref name="parts"/> колонок подряд (режим «Игра» — три колонки навыков): первая колонка
+    /// сверху вниз, затем вторая; лишние — в первые колонки. Пустых колонок в конце не бывает.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<T>> SplitInto<T>(IReadOnlyList<T> items, int parts)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(parts, 1);
+        var columns = new List<IReadOnlyList<T>>();
+        var taken = 0;
+        for (var i = 0; i < parts && taken < items.Count; i++)
+        {
+            var size = (items.Count - taken + parts - i - 1) / (parts - i);
+            columns.Add([.. items.Skip(taken).Take(size)]);
+            taken += size;
+        }
+
+        return columns;
     }
 
     public static IReadOnlyList<SkillLineGroup> Groups(CharacterSheet sheet, SkillCatalog catalog)

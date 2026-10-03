@@ -1,0 +1,49 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+
+@* Заклинания и «При себе» режима «Игра» — только чтение: название и цена заклинания, вещи списком, деньги. Пустая
+   секция не рисуется (правило пустых состояний); правка — в режиме «Лист». Обе — одной колонкой (play-side-stack):
+   в портрете она встаёт рядом с оружием, а не третьим рядом под ним. *@
+<div class="play-side-stack">
+    @if (Sheet.Spells.Count > 0)
+    {
+        <section class="cm-card play-card" aria-label="Заклинания" data-testid="play-spells">
+            <div class="play-card-head"><h2 class="cm-section-title">Заклинания</h2></div>
+            @foreach (var spell in Sheet.Spells)
+            {
+                <div class="play-row">
+                    <div class="play-row-name min-w-0 flex-1">@spell.Name</div>
+                    @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                    {
+                        <div class="play-row-meta text-right">@spell.Cost</div>
+                    }
+                </div>
+            }
+        </section>
+    }
+    @if (Sheet.Equipment.Count > 0 || Sheet.Finances.Cash is not null)
+    {
+        <section class="cm-card play-card" aria-label="При себе" data-testid="play-gear">
+            <div class="play-card-head"><h2 class="cm-section-title">При себе</h2></div>
+            @if (Sheet.Equipment.Count > 0)
+            {
+                <ul class="play-tags">
+                    @foreach (var item in Sheet.Equipment)
+                    {
+                        <li class="play-tag">@item.Name</li>
+                    }
+                </ul>
+            }
+            @if (Sheet.Finances.Cash is { } cash)
+            {
+                <p class="play-money">Наличные <strong>@Terms.Dollars(cash)</strong></p>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+}

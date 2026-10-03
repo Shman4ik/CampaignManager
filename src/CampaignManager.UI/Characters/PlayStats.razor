@@ -1,0 +1,62 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Характеристики режима «Игра» одной строкой: восемь значений с половиной и пятой частью, затем производные. Касание
+   характеристики или Уклонения — проверка (тот же ключ, что у листа: char:STR, skill:{id}). Производные — только
+   DerivedAttributeRules, подписи словами (правило листа: «Б.К.У.» и «Комп.» не пишем). Своей правки здесь нет —
+   значения правятся в режиме «Лист». *@
+@{
+    var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog);
+    var dodge = Context.Catalog.FindByCode(SkillCodes.Dodge);
+}
+<section class="cm-card play-stats" aria-label="Характеристики" data-testid="play-stats">
+    @foreach (var info in InvestigatorCreationRules.Characteristics)
+    {
+        var value = Sheet.Characteristics[info.Key];
+        <button type="button" class="play-stat" aria-label="@($"Проверка: {info.Name}, {value}")" data-testid="@($"play-char-{info.Key}")"
+                @onclick="() => Context.Check(CheckKey(info.Key))">
+            <span class="play-stat-key">@info.Abbreviation</span>
+            <span class="play-stat-value">@value</span>
+            <span class="play-stat-parts">@CharacteristicMath.Half(value) · @CharacteristicMath.Fifth(value)</span>
+        </button>
+    }
+    <div class="play-stat play-stat-derived" data-testid="play-damage-bonus">
+        <span class="play-stat-label">Бонус к урону</span>
+        <span class="play-stat-value">@derived.DamageBonus.ToLowerInvariant()</span>
+    </div>
+    <div class="play-stat play-stat-derived">
+        <span class="play-stat-label">Комплекция</span>
+        <span class="play-stat-value">@derived.Build</span>
+    </div>
+    <div class="play-stat play-stat-derived">
+        <span class="play-stat-label">Скорость</span>
+        <span class="play-stat-value">@derived.Move</span>
+    </div>
+    @if (dodge is not null)
+    {
+        <button type="button" class="play-stat play-stat-derived" aria-label="@($"Проверка: Уклонение, {derived.Dodge}")" data-testid="play-dodge"
+                @onclick="() => Context.Check(SkillKey(dodge.Id))">
+            <span class="play-stat-label">Уклонение</span>
+            <span class="play-stat-value">@derived.Dodge</span>
+            <span class="play-stat-parts">@CharacteristicMath.Half(derived.Dodge) · @CharacteristicMath.Fifth(derived.Dodge)</span>
+        </button>
+    }
+    else
+    {
+        <div class="play-stat play-stat-derived">
+            <span class="play-stat-label">Уклонение</span>
+            <span class="play-stat-value">@derived.Dodge</span>
+        </div>
+    }
+</section>
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private static string CheckKey(Characteristic key) => $"char:{key}";
+
+    private static string SkillKey(Guid id) => $"skill:{id}";
+}

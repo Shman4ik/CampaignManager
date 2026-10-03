@@ -1,0 +1,60 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+
+@* Оружие режима «Игра»: название, текст книги одной строкой (урон словами через DiceText, дальность, атаки, патроны,
+   осечка) и шанс навыка справа — касание открывает проверку навыка оружия (ключ skill:{id}, как у листа). Пустой
+   секции нет (правило пустых состояний); правка и добавление — в режиме «Лист». Патроны здесь — ёмкость из книги:
+   счёт выстрелов ведёт сцена боя. *@
+@if (Sheet.Weapons.Count > 0)
+{
+    <section class="cm-card play-card" aria-label="Оружие" data-testid="play-weapons">
+        <div class="play-card-head"><h2 class="cm-section-title">Оружие</h2></div>
+        @foreach (var weapon in Sheet.Weapons)
+        {
+            var skill = weapon.SkillId is { } id ? CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id) : null;
+            <div class="play-row" @key="weapon.RowId" data-testid="play-weapon">
+                <div class="play-row-main">
+                    <div class="play-row-name">@weapon.Name</div>
+                    <div class="play-row-meta">
+                        <DiceText Value="@weapon.Damage" />
+                        @foreach (var part in Details(weapon))
+                        {
+                            <span> · @part</span>
+                        }
+                    </div>
+                </div>
+                @if (skill is { SkillId: { } skillId })
+                {
+                    <button type="button" class="play-roll" aria-label="@($"Проверка: {skill.Name}, {skill.Value}")" data-testid="play-weapon-check"
+                            @onclick="() => Context.Check(SkillKey(skillId))">
+                        <span class="play-roll-value">@skill.Value</span>
+                        <span class="play-roll-parts">@CharacteristicMath.Half(skill.Value) · @CharacteristicMath.Fifth(skill.Value)</span>
+                    </button>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private static string SkillKey(Guid id) => $"skill:{id}";
+
+    /// <summary>Что из книги заполнено — подписями: числа без подписи за столом не читаются.</summary>
+    private static IEnumerable<string> Details(SheetWeapon weapon)
+    {
+        if (weapon.Range.Trim() is { Length: > 0 } range)
+            yield return range;
+        if (WeaponStatsReader.AttacksDisplay(weapon) is { Length: > 0 } attacks)
+            yield return $"атаки {attacks}";
+        if (weapon.Ammo.Trim() is { Length: > 0 } ammo)
+            yield return $"патроны {ammo}";
+        if (weapon.Malfunction.Trim() is { Length: > 0 } malfunction)
+            yield return $"осечка {malfunction}";
+    }
+}

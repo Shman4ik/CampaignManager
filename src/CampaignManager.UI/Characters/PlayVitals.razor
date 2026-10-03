@@ -1,0 +1,180 @@
+@using CampaignManager.Core.Characters
+
+@* Полоса состояния режима «Игра» (макет владельца 2026-10-03): ПЗ · ПМ · Рассудок · Удача одной карточкой. Шаг ±1 —
+   правка числа, как в «Состоянии» листа; урон — одна атака через WoundRules.ApplyDamage; потеря Рассудка — одна
+   причина через SanityRules.ApplyLoss, только вписанным числом (кнопки костей владелец убрал: кости бросают за
+   столом; бросок в приложении остался в «Рассудке» листа). Ниже — отметки тела
+   переключателями и безумие только состоянием: переключает его блок «Рассудок» (#157). Подсказки исхода (рана,
+   проверка ИНТ, приступ) — те же компоненты, что у листа. Только для чтения — всё под fieldset disabled. *@
+@{
+    var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog);
+    var sanity = SanityRules.Status(Sheet, Context.Catalog);
+}
+<section class="cm-card play-vitals" aria-label="Состояние" data-testid="play-vitals">
+    <fieldset class="play-fieldset" disabled="@Context.ReadOnly">
+        <div class="play-vital-grid">
+            <PlayVital Key="hp" Title="ПЗ" Kind="StatKind.HitPoints" Value="Sheet.Current.HitPoints" Max="derived.MaxHitPoints"
+                       Note="@($"серьёзная от {WoundRules.MajorWoundThreshold(derived.MaxHitPoints)} · смерть от {Math.Max(1, derived.MaxHitPoints)}")"
+                       OnStep="d => SetHitPoints(Sheet.Current.HitPoints + d, derived.MaxHitPoints)">
+                <Extra>
+                    @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой. *@
+                    <div class="play-pill">
+                        <input type="number" inputmode="numeric" min="1" aria-label="Урон одной атаки" data-testid="play-damage" @bind="_damage" />
+                        <button type="button" class="play-pill-danger" data-testid="play-apply-damage" @onclick="ApplyDamage">
+                            <i class="fa-solid fa-heart-crack" aria-hidden="true"></i>Урон
+                        </button>
+                    </div>
+                </Extra>
+            </PlayVital>
+            <PlayVital Key="mp" Title="ПМ" Kind="StatKind.MagicPoints" Value="Sheet.Current.MagicPoints" Max="derived.MaxMagicPoints"
+                       OnStep="d => Set(v => Sheet.Current.MagicPoints = v, Sheet.Current.MagicPoints + d, derived.MaxMagicPoints)" />
+            <PlayVital Key="san" Title="Рассудок" Kind="StatKind.Sanity" Value="Sheet.Current.Sanity" Max="derived.MaxSanity"
+                       Note="@($"за день −{sanity.LostToday} из {sanity.IndefiniteThreshold}")"
+                       OnStep="d => Set(v => Sheet.Current.Sanity = v, Sheet.Current.Sanity + d, derived.MaxSanity)">
+                <Extra>
+                    <div class="play-pill">
+                        <input type="number" inputmode="numeric" min="1" aria-label="Потеря Рассудка по одной причине" data-testid="play-sanity-amount" @bind="_sanityLoss" />
+                        <button type="button" class="play-pill-stone" data-testid="play-sanity-lose" @onclick="LoseSanity">Потеря</button>
+                    </div>
+                </Extra>
+            </PlayVital>
+            <PlayVital Key="luck" Title="Удача" Kind="StatKind.Luck" Value="Sheet.Current.Luck" Max="derived.MaxLuck"
+                       OnStep="d => Set(v => Sheet.Current.Luck = v, Sheet.Current.Luck + d, derived.MaxLuck)">
+                <Label>
+                    <button type="button" class="play-vital-check" aria-label="Проверка Удачи" data-testid="play-luck-check" @onclick='() => Context.Check("luck")'>
+                        Удача<i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+                    </button>
+                </Label>
+            </PlayVital>
+        </div>
+
+        <div class="play-flags">
+            <div class="play-flag-group" role="group" aria-label="Отметки">
+                @foreach (var flag in ConditionFlags.Body)
+                {
+                    var on = flag.Get(Sheet.Condition);
+                    <button type="button" class="@Css.Join("play-flag", on ? "play-flag-on" : null, FlagTone(flag.Key, on))"
+                            aria-pressed="@(on ? "true" : "false")" data-testid="@($"play-flag-{flag.Key}")" @onclick="() => Toggle(flag, !on)">
+                        @if (on)
+                        {
+                            <i class="fa-solid @flag.Icon" aria-hidden="true"></i>
+                        }
+                        @flag.Label
+                    </button>
+                }
+            </div>
+            @if (MindStates(sanity).Count > 0)
+            {
+                @* Безумие — состояние, а не переключатель: его ставят и снимают в «Рассудке» листа (#157). *@
+                <div class="play-flag-group" aria-label="Разум" data-testid="play-mind">
+                    @foreach (var (text, strong) in MindStates(sanity))
+                    {
+                        <span class="@Css.Join("play-flag play-flag-mind", strong ? "play-flag-on" : null)">
+                            <i class="fa-solid fa-brain" aria-hidden="true"></i>@text
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="play-vitals-alerts">
+            <WoundAlert Hit="_lastHit" AlertClass="mb-0" />
+            <SanityPrompts OnBout="() => _boutOpen = true" AlertClass="mb-0" />
+        </div>
+    </fieldset>
+</section>
+
+<InsanityBoutModal @bind-Open="_boutOpen" OnAcquire="AcquireFromBout" />
+<InsanityConditionModal @bind-Open="_conditionOpen" Kind="_conditionKind" />
+
+@code {
+    private int _damage = 1;
+    private int _sanityLoss = 1;
+    private DamageOutcome? _lastHit;
+    private bool _boutOpen;
+    private bool _conditionOpen;
+    private InsanityConditionKind _conditionKind;
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    /// <summary>Шаг ПМ, Рассудка, Удачи — правка числа в пределах 0…максимум, без счётчиков потерь (как в «Состоянии» листа).</summary>
+    private void Set(Action<int> put, int value, int max)
+    {
+        put(Math.Clamp(value, 0, Math.Max(0, max)));
+        Context.Changed();
+    }
+
+    /// <summary>Правка ПЗ меняет состояние: 0 ПЗ — без сознания или при смерти (как «Состояние» листа).</summary>
+    private void SetHitPoints(int value, int max)
+    {
+        Sheet.Current.HitPoints = Math.Clamp(value, 0, Math.Max(0, max));
+        if (Sheet.Current.HitPoints > 0)
+            _lastHit = null;
+        WoundRules.UpdateConsciousness(Sheet);
+        Context.Changed();
+    }
+
+    private void ApplyDamage()
+    {
+        if (_damage <= 0)
+            return;
+
+        _lastHit = WoundRules.ApplyDamage(Sheet, _damage);
+        Context.Changed();
+    }
+
+    /// <summary>Одна причина — одна потеря: пороги ИНТ и дня считает SanityRules.ApplyLoss.</summary>
+    private void LoseSanity()
+    {
+        if (_sanityLoss <= 0)
+            return;
+
+        SanityRules.ApplyLoss(Sheet, Context.Catalog, _sanityLoss);
+        Context.Changed();
+    }
+
+    private void Toggle(ConditionFlag flag, bool on)
+    {
+        flag.Set(Sheet, on);
+        Context.Changed();
+    }
+
+    /// <summary>Классы — целыми литералами: Tailwind и сборщик CSS собранное имя не увидят.</summary>
+    private static string? FlagTone(string key, bool on) => !on ? null : key switch
+    {
+        "dying" => "play-flag-dying",
+        "dead" => "play-flag-dead",
+        "stabilized" => "play-flag-ok",
+        _ => null,
+    };
+
+    /// <summary>Безумие и действующие фобии и мании — подписи для строки «Разум»; strong — само безумие.</summary>
+    private List<(string Text, bool Strong)> MindStates(SanityStatus sanity)
+    {
+        var states = new List<(string, bool)>();
+        if (sanity.PermanentlyInsane)
+            states.Add(("Неизлечимо безумен", true));
+        else
+        {
+            if (Sheet.Condition.TemporaryInsanity)
+                states.Add(("Временное безумие", true));
+            if (Sheet.Condition.IndefiniteInsanity)
+                states.Add(("Бессрочное безумие", true));
+        }
+
+        foreach (var condition in Sheet.InsanityConditions.Where(c => c.Active))
+            states.Add(($"{(condition.Kind == InsanityConditionKind.Phobia ? "Фобия" : "Мания")}: {condition.Name}", false));
+
+        return states;
+    }
+
+    /// <summary>Строки 9–10 приступа ведут сразу к таблице фобий или маний.</summary>
+    private void AcquireFromBout(InsanityConditionKind kind)
+    {
+        _boutOpen = false;
+        _conditionKind = kind;
+        _conditionOpen = true;
+    }
+}

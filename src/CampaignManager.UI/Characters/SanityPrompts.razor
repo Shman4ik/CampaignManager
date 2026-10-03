@@ -1,0 +1,83 @@
+@using CampaignManager.Core.Characters
+
+@* Что рассудок требует сделать сейчас: проверка ИНТ после потери от 5 по одной причине, бессрочное безумие за день,
+   положенный приступ. Одна разметка для блока «Рассудок» листа и полосы режима «Игра»; считает только SanityRules
+   (Status, ResolveIntCheck, SetIndefiniteInsanity, DismissBout). Приступ бросает окно хозяина — OnBout. *@
+@{ var status = SanityRules.Status(Context.Sheet, Context.Catalog); }
+@if (status.NeedsIntCheck)
+{
+    @* Бросок ИНТ делает игрок; здесь — две кнопки исхода (знание v1). *@
+    <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="@AlertClass" data-testid="int-check-prompt">
+        <ChildContent>
+            Потеряно @status.LastLoss по одной причине — проверка <strong>ИНТ</strong>. Успех: сыщик
+            осознал увиденное и временно безумен (1d10 часов), всё начинается с приступа. Провал: разум отгородился.
+        </ChildContent>
+        <Actions>
+            <Button Small="true" data-testid="int-success" OnClick="IntSucceededAsync">Успех ИНТ: безумие</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="int-failure" OnClick="IntFailed">Провал ИНТ: в своём уме</Button>
+        </Actions>
+    </Alert>
+}
+@if (status.IndefiniteLoss)
+{
+    <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="@AlertClass" data-testid="indefinite-prompt">
+        <ChildContent>
+            Потеряно ≥⅕ Рассудка за игровой день — <strong>бессрочное безумие</strong>.
+            @(Context.Sheet.Condition.IndefiniteInsanity ? "Отмечено." : "Оно, как и любое безумие, начинается с приступа.")
+        </ChildContent>
+        <Actions>
+            @if (!Context.Sheet.Condition.IndefiniteInsanity)
+            {
+                <Button Small="true" data-testid="indefinite-mark" OnClick="MarkIndefiniteAsync">Отметить и бросить приступ</Button>
+            }
+        </Actions>
+    </Alert>
+}
+@if (status.BoutDue)
+{
+    <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="@AlertClass" data-testid="bout-due">
+        <ChildContent>
+            Положен <strong>приступ безумия</strong>: любое безумие начинается с него, а в затаённом безумии
+            его вызывает любая потеря рассудка.
+        </ChildContent>
+        <Actions>
+            <Button Small="true" OnClick="() => OnBout.InvokeAsync()">Бросить приступ</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="bout-dismiss" OnClick="DismissBout">Разыграли без броска</Button>
+        </Actions>
+    </Alert>
+}
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    /// <summary>Открыть окно приступа хозяина.</summary>
+    [Parameter] public EventCallback OnBout { get; set; }
+
+    [Parameter] public string AlertClass { get; set; } = "mt-3 mb-0";
+
+    private async Task IntSucceededAsync()
+    {
+        SanityRules.ResolveIntCheck(Context.Sheet, succeeded: true);
+        Context.Changed();
+        await OnBout.InvokeAsync();
+    }
+
+    private void IntFailed()
+    {
+        SanityRules.ResolveIntCheck(Context.Sheet, succeeded: false);
+        Context.Changed();
+    }
+
+    private async Task MarkIndefiniteAsync()
+    {
+        SanityRules.SetIndefiniteInsanity(Context.Sheet, true);
+        Context.Changed();
+        await OnBout.InvokeAsync();
+    }
+
+    private void DismissBout()
+    {
+        SanityRules.DismissBout(Context.Sheet);
+        Context.Changed();
+    }
+}

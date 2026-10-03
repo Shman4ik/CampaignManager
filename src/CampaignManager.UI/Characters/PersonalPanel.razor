@@ -141,22 +141,9 @@
                         OnClick="() => _recoveryOpen = true">Лечение</Button>
             }
         </div>
-        @if (_lastHit is { InstantDeath: true })
+        @if (WoundAlert.Shows(_lastHit))
         {
-            <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="mt-2 mb-0" Icon="fa-skull">
-                Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong>.
-            </Alert>
-        }
-        else if (_lastHit is { MajorWound: true })
-        {
-            <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mt-2 mb-0">
-                <ChildContent>
-                    <strong>Серьёзная рана:</strong> сыщик падает. Нужна проверка Выносливости — провал значит потерю сознания (отметка «Без сознания» ниже).@(Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка Выносливости в конце следующего." : "")
-                </ChildContent>
-                <Actions>
-                    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="check-con" OnClick='() => Context.Check("char:CON")'>Проверка Выносливости</Button>
-                </Actions>
-            </Alert>
+            <WoundAlert Hit="_lastHit" />
         }
         else
         {
@@ -169,12 +156,11 @@
            (решение владельца, #157): там они идут через SanityRules и ведут приступ; второго места нет. *@
         <div class="sheet-conditions mt-3 border-t border-primary-200 pt-2">
             <h4 class="text-sm font-semibold text-primary-600">Отметки</h4>
-        <div class="sheet-conditions-list">
-                @ConditionRow("Серьёзная рана", "fa-heart-crack", Sheet.Condition.MajorWound, v => { Sheet.Condition.MajorWound = v; WoundRules.UpdateConsciousness(Sheet); })
-                @ConditionRow("Без сознания", "fa-moon", Sheet.Condition.Unconscious, v => Sheet.Condition.Unconscious = v)
-                @ConditionRow("При смерти", "fa-skull", Sheet.Condition.Dying, v => { Sheet.Condition.Dying = v; if (!v) Sheet.Condition.Stabilized = false; })
-                @ConditionRow("Стабилизирован", "fa-kit-medical", Sheet.Condition.Stabilized, v => Sheet.Condition.Stabilized = v)
-                    @ConditionRow("Мёртв", "fa-cross", Sheet.Condition.Dead, v => Sheet.Condition.Dead = v)
+            <div class="sheet-conditions-list">
+                @foreach (var flag in ConditionFlags.Body)
+                {
+                    @ConditionRow(flag.Label, flag.Icon, flag.Get(Sheet.Condition), on => flag.Set(Sheet, on))
+                }
             </div>
         </div>
         <WoundRecoveryModal @bind-Open="_recoveryOpen" />

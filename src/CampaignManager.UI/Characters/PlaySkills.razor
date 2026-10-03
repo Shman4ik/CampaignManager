@@ -1,0 +1,69 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+
+@* Навыки режима «Игра» — все, что лист показывает развёрнутыми (решение владельца 2026-10-03,
+   SheetSkillLayout.Visible), по алфавиту в три колонки подряд (явное деление, как у листа, а не CSS columns).
+   Развитые — жирным, на базе — приглушены. Специализации на базе свёрнуты, как на листе; их находит поиск (All).
+   Строка целиком — кнопка проверки (SkillCheckModal, тот же ключ строки, что у листа); отметку развития ставит
+   окно проверки, здесь она только видна. *@
+<section class="cm-card play-skills" aria-label="Навыки" data-testid="play-skills">
+    <div class="play-card-head">
+        <h2 class="cm-section-title">Навыки</h2>
+        <input type="search" class="cm-input play-search" placeholder="Найти навык" aria-label="Найти навык"
+               data-testid="play-skill-search" @bind="_search" @bind:event="oninput" />
+    </div>
+    @{ var lines = Lines(); }
+    @if (lines.Count == 0)
+    {
+        <div class="play-card-empty">
+            <EmptyState Compact="true" Title="@(_search.Length > 0 ? Terms.EmptyFiltered("навыков") : Terms.Empty("навыков"))" />
+        </div>
+    }
+    else
+    {
+        <div class="play-skill-cols">
+            @foreach (var column in SheetSkillLayout.SplitInto(lines, Columns))
+            {
+                <div class="play-skill-col">
+                    @foreach (var line in column)
+                    {
+                        <button type="button" @key="line.Key" class="@Css.Join("play-skill", line.Value > line.BaseValue ? null : "play-skill-base")"
+                                aria-label="@($"Проверка: {line.Name}, {line.Value}{(line.Checked ? ", отмечен для развития" : "")}")"
+                                data-testid="@($"play-skill-{line.Name}")" @onclick="() => Context.Check(line.Key)">
+                            <span class="play-skill-tick" aria-hidden="true">
+                                @if (line.Checked)
+                                {
+                                    <i class="fa-solid fa-check"></i>
+                                }
+                            </span>
+                            <span class="play-skill-name">@line.Name</span>
+                            <span class="play-skill-value">@line.Value</span>
+                            <span class="play-skill-part">@CharacteristicMath.Half(line.Value)</span>
+                            <span class="play-skill-part">@CharacteristicMath.Fifth(line.Value)</span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    /// <summary>Колонок три; уже 720px play.css ставит их друг под другом — порядок тот же, алфавит не рвётся.</summary>
+    private const int Columns = 3;
+
+    private string _search = "";
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private IReadOnlyList<SkillLine> Lines()
+    {
+        var query = CatalogCodeTable.NormalizeName(_search);
+        if (query.Length == 0)
+            return SheetSkillLayout.Visible(Context.Sheet, Context.Catalog);
+
+        return [.. SheetSkillLayout.All(Context.Sheet, Context.Catalog)
+            .Where(l => CatalogCodeTable.NormalizeName(l.Name).Contains(query, StringComparison.Ordinal))];
+    }
+}
