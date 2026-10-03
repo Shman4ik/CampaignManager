@@ -31,6 +31,9 @@ public static class IdentityModule
     /// <summary>Пространство имён custom claims в access token (Auth0 Action, см. CLAUDE.md модуля).</summary>
     public const string ClaimsNamespace = "https://cthulhu.dmnet.dev/";
 
+    /// <summary><c>ui_locales</c> страницы входа Auth0: русский, в тенанте он первый из включённых.</summary>
+    public const string UiLocales = "ru";
+
     public static WebApplicationBuilder AddIdentityModule(this WebApplicationBuilder builder)
     {
         var configuration = builder.Configuration;
@@ -207,6 +210,8 @@ public static class IdentityModule
                 context.ProtocolMessage.LoginHint = loginHint;
             }
 
+            // Страница входа Auth0 — по-русски, какой бы язык ни стоял в браузере.
+            context.ProtocolMessage.UiLocales = UiLocales;
             return Task.CompletedTask;
         };
 

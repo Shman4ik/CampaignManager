@@ -20,25 +20,34 @@ public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
         BaseAddress = new Uri("https://localhost"),
     });
 
-    // method=google ведёт мимо страницы Auth0 прямо к Google; код возвращается GET-ом (Lax-куки).
+    // Вход — всегда страница Auth0 со всеми способами (Google, passkey, почта), по-русски;
+    // код возвращается GET-ом (Lax-куки).
     [Fact]
-    public async Task Login_with_method_goes_straight_to_connection()
+    public async Task Login_shows_auth0_page_with_every_method()
     {
-        var response = await Browser().GetAsync(IdentityRoutes.LoginUrl(LoginMethods.Google, "/scenarios"), Cancellation);
+        var response = await Browser().GetAsync(IdentityRoutes.LoginUrl("/scenarios"), Cancellation);
 
         var query = AuthorizeQuery(response);
-        Assert.Equal("google-oauth2", query["connection"]);
+        Assert.Null(query["connection"]);
+        Assert.Equal("ru", query["ui_locales"]);
         Assert.NotEqual("form_post", query["response_mode"]);
         Assert.Equal(CmApp.Auth0ClientId, query["client_id"]);
         Assert.Null(query["prompt"]);
     }
 
-    [Fact]
-    public async Task Login_without_method_shows_auth0_page_with_every_method()
+    // Прошлый вход по почте (пароль или passkey) подставляет адрес в поле Auth0, а почта Google — нет:
+    // «Продолжить» с ней повело бы к паролю, которого у такой учётки нет.
+    [Theory]
+    [InlineData("email:a@example.test", "a@example.test")]
+    [InlineData("google:keeper@example.test", null)]
+    public async Task Login_prefills_only_remembered_email_account(string remembered, string? loginHint)
     {
-        var response = await Browser().GetAsync(IdentityRoutes.Login, Cancellation);
+        var request = new HttpRequestMessage(HttpMethod.Get, IdentityRoutes.Login);
+        request.Headers.Add("Cookie", $"{AutoLogin.RememberedCookie}={remembered}");
 
-        Assert.Null(AuthorizeQuery(response)["connection"]);
+        var response = await Browser().SendAsync(request, Cancellation);
+
+        Assert.Equal(loginHint, AuthorizeQuery(response)["login_hint"]);
     }
 
     // Браузер, входивший через Google, входит сам — с подсказкой аккаунта, один раз за сессию браузера.

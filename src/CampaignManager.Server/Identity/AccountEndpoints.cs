@@ -11,7 +11,7 @@ namespace CampaignManager.Server.Identity;
 /// <summary>Вход, выход и <c>GET /api/v1/me</c>.</summary>
 public static class AccountEndpoints
 {
-    /// <summary>Параметр Auth0 <c>/authorize</c>: ведёт мимо его страницы прямо к выбранному способу входа.</summary>
+    /// <summary>Параметр Auth0 <c>/authorize</c>: ведёт мимо его страницы прямо в коннекшен — только у автовхода.</summary>
     internal const string ConnectionParameter = "connection";
 
     public static IEndpointRouteBuilder MapIdentityApi(this IEndpointRouteBuilder app)
@@ -41,11 +41,12 @@ public static class AccountEndpoints
             : TypedResults.Unauthorized();
 
     /// <summary>
-    /// Вход через Auth0. <c>prompt</c> не шлём: при живой сессии Auth0 человек сразу возвращается,
-    /// а сменить учётку позволяет выход — он гасит и сессию Auth0.
+    /// Вход через Auth0 — всегда его страница: Google, passkey и почту с паролем предлагает она сама.
+    /// <c>prompt</c> не шлём: при живой сессии Auth0 человек сразу возвращается, а сменить учётку
+    /// позволяет выход — он гасит и сессию Auth0.
     /// </summary>
     private static async Task<Results<ChallengeHttpResult, RedirectHttpResult>> LoginAsync(
-        string? returnUrl, string? method, HttpContext httpContext, IAuthenticationSchemeProvider schemes)
+        string? returnUrl, HttpContext httpContext, IAuthenticationSchemeProvider schemes)
     {
         // Development без настроек Auth0: схемы OIDC нет, доступен только тестовый вход.
         if (await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme) is null)
@@ -55,12 +56,15 @@ public static class AccountEndpoints
 
         await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         return TypedResults.Challenge(
-            CreateChallenge(httpContext, returnUrl, AutoLogin.ParseMethod(method)),
+            CreateChallenge(httpContext, returnUrl, connectionMethod: null),
             [OpenIdConnectDefaults.AuthenticationScheme]);
     }
 
-    /// <summary>Свойства входа — общие у кнопок входа и автовхода (<see cref="AutoLogin"/>).</summary>
-    internal static OpenIdConnectChallengeProperties CreateChallenge(HttpContext httpContext, string? returnUrl, string? method)
+    /// <summary>
+    /// Свойства входа — общие у кнопки входа и автовхода (<see cref="AutoLogin"/>). Коннекшен
+    /// (<paramref name="connectionMethod"/>) задаёт только автовход: он ведёт мимо страницы Auth0 прямо в Google.
+    /// </summary>
+    internal static OpenIdConnectChallengeProperties CreateChallenge(HttpContext httpContext, string? returnUrl, string? connectionMethod)
     {
         var properties = new OpenIdConnectChallengeProperties
         {
@@ -70,15 +74,16 @@ public static class AccountEndpoints
 
         // Параметры, а не Items: в state они не нужны, в запрос к Auth0 их ставит
         // OnRedirectToIdentityProvider (IdentityModule).
-        if (method is not null)
+        if (connectionMethod is not null)
         {
-            properties.SetParameter(ConnectionParameter, AutoLogin.GetConnectionName(method));
+            properties.SetParameter(ConnectionParameter, AutoLogin.GetConnectionName(connectionMethod));
         }
 
-        // Почта прошлого входа: Google сразу берёт нужный аккаунт, форма пароля подставляет её в поле.
-        // Другому способу входа она ни к чему.
+        // Почта прошлого входа: в автовходе Google по ней сразу берёт нужный аккаунт. На странице Auth0
+        // она встаёт в поле почты — это нужно учётке с паролем или passkey, а почта Google там только
+        // сбила бы с толку: «Продолжить» с ней ведёт к паролю, которого у такой учётки нет.
         if (AutoLogin.GetRemembered(httpContext.Request) is { } remembered
-            && (method is null || method == remembered.Method))
+            && remembered.Method == (connectionMethod ?? LoginMethods.Email))
         {
             properties.SetParameter(OpenIdConnectParameterNames.LoginHint, remembered.Email);
         }

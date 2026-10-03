@@ -9,6 +9,7 @@
 #   auth0 login --scopes "read:prompts,update:prompts,read:branding,update:branding,read:connections,update:connections"
 # На Windows без HOME CLI не находит свой конфиг (см. корневой CLAUDE.md, «Authentication»).
 set -euo pipefail
+export PYTHONUTF8=1  # иначе Python на Windows пишет stdout в cp1252 и падает на кириллице
 
 dir="$(cd "$(dirname "$0")" && pwd)"
 art_url="${ART_URL:-https://cthulhu.dmnet.dev/img/auth/login-art.webp}"
