@@ -1,4 +1,10 @@
 @using CampaignManager.Core.Dice
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.UI.Catalogs
+@using CampaignManager.UI.Characters
+@using Microsoft.Extensions.DependencyInjection
+@inject ToastService Toasts
+@inject IServiceProvider Services
 @* Атака: ближний бой или стрельба — по выбранному оружию участника (CombatProfile: оружие листа, атаки статблока, драка).
    Правила — CombatRules.Melee/Ranged (Core), кости — таблица AttackModifiers (её же читает ширма). Любой бросок можно
    вписать в «Броски со стола»; невписанное бросит правило. Результат — на предпросмотр, меняет участников только
@@ -12,11 +18,23 @@
             <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget" />
         </Field>
         <Field Label="Чем" class="sm:col-span-2">
-            <select class="cm-input" aria-label="Оружие или атака" data-testid="attack-weapon" value="@_attackKey" @onchange="SelectAttack" disabled="@(Actor is null)">
+            @* Сверху — оружие и атаки участника; ниже — его боевые навыки без оружия (выбор ведёт к оружию этого навыка из
+               справочника: урон всегда из справочника); последним — «Подобрать оружие…» (всё оружие, импровизированное). *@
+            <select @key="_selectVersion" class="cm-input" aria-label="Оружие или атака" data-testid="attack-weapon" @onchange="SelectAttack" disabled="@(Actor is null)">
                 @foreach (var attack in Attacks)
                 {
                     <option value="@attack.Key" selected="@(Attack?.Key == attack.Key)">@attack.Name — @attack.Skill%, урон @DiceNotation.Format(attack.Damage) (@KindText(attack))</option>
                 }
+                @if (SkillOptions.Count > 0)
+                {
+                    <optgroup label="Навыком — выбрать оружие">
+                        @foreach (var skill in SkillOptions)
+                        {
+                            <option value="@(SkillPrefix + skill.SkillId.ToString("N"))">@skill.Name — @skill.Value%: оружие…</option>
+                        }
+                    </optgroup>
+                }
+                <option value="@PickAll">Подобрать оружие…</option>
             </select>
         </Field>
     </div>
@@ -54,21 +72,10 @@
     {
         <div class="flex flex-wrap gap-4">
             <Field Label="Дальность" Group="true" Note="Сложность, а не урезанный навык">
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="@Pick(_range == RangeBand.Base)" OnClick="() => _range = RangeBand.Base">Базовая</Button>
-                    <Button Small="true" Variant="@Pick(_range == RangeBand.Long)" OnClick="() => _range = RangeBand.Long">Большая</Button>
-                    <Button Small="true" Variant="@Pick(_range == RangeBand.Extreme)" OnClick="() => _range = RangeBand.Extreme">Сверхдальняя</Button>
-                </div>
+                <Segmented TValue="RangeBand" Options="Ranges" Value="_range" ValueChanged="v => _range = v" Label="Дальность" />
             </Field>
             <Field Label="Режим" Group="true">
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="@Pick(_mode == FiringMode.Single)" OnClick="() => SetMode(FiringMode.Single)">Выстрел</Button>
-                    <Button Small="true" Variant="@Pick(_mode == FiringMode.PistolBurst)" OnClick="() => SetMode(FiringMode.PistolBurst)">Серия</Button>
-                    @if (Attack.Automatic)
-                    {
-                        <Button Small="true" Variant="@Pick(_mode == FiringMode.Volley)" OnClick="() => SetMode(FiringMode.Volley)">Очередь</Button>
-                    }
-                </div>
+                <Segmented TValue="FiringMode" Options="@(Attack.Automatic ? ModesAuto : Modes)" Value="_mode" ValueChanged="SetMode" Label="Режим" />
             </Field>
             <Field Label="Патронов" class="w-24">
                 <input type="number" inputmode="numeric" min="1" class="cm-input" value="@_shots" @onchange="SetShots" />
@@ -81,17 +88,31 @@
         <p class="cm-meta" data-testid="attack-dice">Кости атаки: @string.Join(", ", diceNow.Reasons)@RequirementText</p>
     }
 
-    <details class="encounter-rolls" data-testid="attack-extra">
+    @if (_picking)
+{
+    <CatalogPickerModal TItem="WeaponDto" Open="true" Title="@PickTitle" Load="LoadWeapons" Key="w => w.Id" Name="w => w.Name"
+                        Meta="WeaponMeta" Placeholder="Найти оружие…" Empty="Нет оружия этого навыка в справочнике."
+                        ConfirmText="@(Actor is { } who && CombatProfiles.PickedWeaponGoesToSheet(who) ? "В лист и выбрать" : "Выбрать")"
+                        Busy="_pickBusy" Error="@_pickError" OnPick="PickAsync" OnClose="ClosePicker">
+        @if (_pickSkillId is null)
+        {
+            <label class="cm-tap-row">
+                <input type="checkbox" class="cm-checkbox" checked="@_improvised" @onchange="e => _improvised = e.Value is true" />
+                <span>Импровизированное: похожее оружие из таблицы, бьют Дракой</span>
+            </label>
+        }
+        <p class="cm-field-note">@PickWhere</p>
+    </CatalogPickerModal>
+}
+
+<details class="encounter-rolls" data-testid="attack-extra">
         <summary><i class="fa-solid fa-sliders mr-2" aria-hidden="true"></i>Дополнительно</summary>
         <div class="mt-2 flex flex-col gap-3">
     @if (Attack is { IsRanged: false })
     {
         <div class="flex flex-wrap gap-4">
             <Field Label="Цель защищается" Group="true">
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.Dodge)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
-                    <Button Small="true" Variant="@Pick(_reaction == DefenseReaction.FightBack)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
-                </div>
+                <Segmented TValue="DefenseReaction" Options="Reactions" Value="_reaction" ValueChanged="v => _reaction = v" Label="Цель защищается" />
             </Field>
             @SurprisePicker(includeAutoHit: true)
         </div>
@@ -112,14 +133,14 @@
         </div>
     }
 
-    <div class="flex flex-wrap items-end gap-4">
-        <Field Label="Бонусные и штрафные кости" Group="true">
-            <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
-        </Field>
+    <Field Label="Бонусные и штрафные кости" Group="true">
+        <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
+    </Field>
+    <div class="cm-field-row flex flex-wrap items-end gap-4">
         <Field Label="Броня преграды" class="w-28">
             <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_coverArmor" @onchange="SetCoverArmor" />
         </Field>
-        <div class="self-end text-sm">@Toggle("Мимо брони (магия, яд)", _ignoresArmor, v => _ignoresArmor = v)</div>
+        <div class="text-sm">@Toggle("Мимо брони (магия, яд)", _ignoresArmor, v => _ignoresArmor = v)</div>
     </div>
 
     <details class="encounter-rolls">
@@ -223,11 +244,100 @@
             _targetId = State.Participants.FirstOrDefault(p => p.Side != actor.Side && p.Id != actor.Id && !p.Dead)?.Id;
     }
 
+    private const string SkillPrefix = "skill:";
+    private const string PickAll = "pick";
+    private int _selectVersion;
+    private bool _picking, _pickBusy, _improvised;
+    private Guid? _pickSkillId;
+    private string? _pickError;
+
+    /// <summary>Боевые навыки участника без драки (она уже атака) — правило Core.</summary>
+    private IReadOnlyList<CombatSkill> SkillOptions => Actor is { } actor ? CombatProfiles.CombatSkillsOf(actor.Profile, Session.Catalog) : [];
+
+    private string PickTitle => _pickSkillId is { } id && Session.Catalog.Find(id) is { } skill ? $"Оружие: {skill.Name}" : "Подобрать оружие";
+
+    private string PickWhere => Actor is { } actor && CombatProfiles.PickedWeaponGoesToSheet(actor)
+        ? $"Оружие ляжет в лист {actor.Name} и останется после боя; убрать — в листе."
+        : "Оружие будет только в этой сцене.";
+
+    private static string WeaponMeta(WeaponDto w) => $"{w.SkillName} · урон {DiceNotation.Format(w.Damage)}";
+
+    private async Task<IReadOnlyList<WeaponDto>> LoadWeapons(CancellationToken cancellationToken)
+    {
+        var api = Services.GetRequiredService<ICatalogApi<WeaponDto>>();
+        var list = await api.ListAsync(cancellationToken);
+        return [.. list.Items.Where(w => _pickSkillId is not { } id || w.SkillId == id).OrderBy(w => w.Name, StringComparer.CurrentCulture)];
+    }
+
     private void SelectAttack(ChangeEventArgs e)
     {
-        _attackKey = e.Value?.ToString();
+        var value = e.Value?.ToString();
+        if (value == PickAll || value?.StartsWith(SkillPrefix, StringComparison.Ordinal) == true)
+        {
+            // Выбор навыка или «Подобрать…» — не атака: открыть окно, список вернуть на текущее оружие.
+            _pickSkillId = value == PickAll ? null : Guid.ParseExact(value![SkillPrefix.Length..], "N");
+            _improvised = false;
+            _pickError = null;
+            _picking = true;
+            _selectVersion++;
+            return;
+        }
+
+        _attackKey = value;
         _attackRoll = null;
         _mode = FiringMode.Single;
+    }
+
+    private void ClosePicker()
+    {
+        _picking = false;
+        _selectVersion++;
+    }
+
+    /// <summary>
+    /// Подобранное оружие: сыщику — в лист, в снаряжение (решение владельца 2026-10-03; «Отменить» в тосте убирает), НПС
+    /// и твари — только в снимок сцены. Числа — из справочника; выбранное сразу стоит в «Чем».
+    /// </summary>
+    private async Task PickAsync(WeaponDto picked)
+    {
+        if (Actor is not { } actor)
+            return;
+
+        var weapon = SheetCopies.Weapon(WeaponCatalogs.Data(picked));
+        if (_improvised && Session.Catalog.FindByCode(SkillCodes.Fighting + ".brawl") is { } brawl)
+            weapon.SkillId = brawl.Id;
+
+        var actorId = actor.Id;
+        if (CombatProfiles.PickedWeaponGoesToSheet(actor))
+        {
+            _pickBusy = true;
+            var error = await Session.EditSheetAsync(actorId, sheet => sheet.Weapons.Add(weapon));
+            _pickBusy = false;
+            if (error is not null)
+            {
+                _pickError = error;
+                return;
+            }
+
+            Toasts.Undo($"В листе {actor.Name}: {weapon.Name}", async () =>
+            {
+                if (await Session.EditSheetAsync(actorId, sheet => sheet.Weapons.RemoveAll(w => w.RowId == weapon.RowId)) is { } undoError)
+                    Toasts.Error(undoError);
+            });
+        }
+        else
+        {
+            await Session.ChangeAsync(state =>
+            {
+                if (state.Find(actorId) is { } participant)
+                    CombatProfiles.AddPicked(participant, weapon, Session.Catalog);
+            });
+        }
+
+        _attackKey = weapon.RowId.ToString("N", System.Globalization.CultureInfo.InvariantCulture);
+        _attackRoll = null;
+        _mode = FiringMode.Single;
+        ClosePicker();
     }
 
     private void SelectTarget(Guid? id)
@@ -291,18 +401,16 @@
 
     private static string KindText(CombatAttack attack) => attack.Kind == CombatAttackKind.Ranged ? "стрельба" : "ближний бой";
 
-    private static ButtonVariant Pick(bool on) => on ? ButtonVariant.Primary : ButtonVariant.Secondary;
+    private static readonly IReadOnlyList<SegmentOption<RangeBand>> Ranges = [new(RangeBand.Base, "Базовая"), new(RangeBand.Long, "Большая"), new(RangeBand.Extreme, "Сверхдальняя")];
+    private static readonly IReadOnlyList<SegmentOption<FiringMode>> Modes = [new(FiringMode.Single, "Выстрел"), new(FiringMode.PistolBurst, "Серия")];
+    private static readonly IReadOnlyList<SegmentOption<FiringMode>> ModesAuto = [.. Modes, new(FiringMode.Volley, "Очередь")];
+    private static readonly IReadOnlyList<SegmentOption<DefenseReaction>> Reactions = [new(DefenseReaction.Dodge, "Уклонение"), new(DefenseReaction.FightBack, "Контратака")];
+    private static readonly IReadOnlyList<SegmentOption<SurpriseMode>> Surprises = [new(SurpriseMode.TargetReady, "Начеку"), new(SurpriseMode.BonusDie, "Врасплох")];
+    private static readonly IReadOnlyList<SegmentOption<SurpriseMode>> SurprisesMelee = [.. Surprises, new(SurpriseMode.AutoHit, "Не защищается")];
 
     private RenderFragment SurprisePicker(bool includeAutoHit) =>
         @<Field Label="Цель готова" Group="true">
-            <div class="flex flex-wrap gap-2">
-                <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.TargetReady)" OnClick="() => _surprise = SurpriseMode.TargetReady">Начеку</Button>
-                <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.BonusDie)" OnClick="() => _surprise = SurpriseMode.BonusDie">Врасплох</Button>
-                @if (includeAutoHit)
-                {
-                    <Button Small="true" Variant="@Pick(_surprise == SurpriseMode.AutoHit)" OnClick="() => _surprise = SurpriseMode.AutoHit">Не защищается</Button>
-                }
-            </div>
+            <Segmented TValue="SurpriseMode" Options="@(includeAutoHit ? SurprisesMelee : Surprises)" Value="_surprise" ValueChanged="v => _surprise = v" Label="Цель готова" />
         </Field>;
 
     private RenderFragment Toggle(string label, bool value, Action<bool> set) =>

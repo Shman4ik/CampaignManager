@@ -37,7 +37,8 @@ public sealed class ParticipantPickerTests : KitContext
         }));
         Services.AddSingleton(Fake.Of<IRunsApi>(new()
         {
-            [nameof(IRunsApi.ListForCampaignAsync)] = _ => Task.FromResult(_runs),
+            [nameof(IRunsApi.ListForCampaignAsync)] = args => Task.FromResult<IReadOnlyList<ScenarioRunDto>>(
+                [.. _runs.Where(r => r.Status != ScenarioRunStatus.Finished || (args?[1] is Guid withRun && withRun == r.Id))]),
         }));
     }
 
@@ -84,6 +85,22 @@ public sealed class ParticipantPickerTests : KitContext
         Assert.Equal(MasksScenario, _loadedScenarios[^1]);
 
         cut.Find("[data-testid=picker-run]").Change(MasksRun.ToString());
+        Assert.Null(chosen);
+    }
+
+    [Fact]
+    public void Finished_run_of_the_scene_is_listed_and_preselected()
+    {
+        // У владельца прохождение ваншота после переноса завершено: окно спрашивало «Выберите сценарий».
+        _runs = [Run(FogRun, FogScenario, "Туман") with { Status = ScenarioRunStatus.Finished }, Run(MasksRun, MasksScenario, "Маски")];
+        Guid? chosen = null;
+
+        var cut = Open(CampaignId, FogRun, id => chosen = id);
+
+        var select = cut.Find("[data-testid=picker-run]");
+        Assert.Equal(FogRun.ToString(), select.GetAttribute("value"));
+        Assert.Contains(select.QuerySelectorAll("option"), o => o.TextContent.Contains("Туман · завершено", StringComparison.Ordinal));
+        Assert.Equal(FogScenario, _loadedScenarios[^1]);
         Assert.Null(chosen);
     }
 

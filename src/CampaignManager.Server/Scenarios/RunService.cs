@@ -65,15 +65,17 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
     /// <summary>
     /// Незавершённые прохождения кампании со сценарием — для боя (T2.6d): окно участника предлагает сценарии этих
     /// прохождений. Права те же, что у <see cref="ListAsync"/>: Хранитель (сценарии видит Хранитель) и правка кампании.
+    /// <paramref name="withRun"/> — прохождение сцены: оно в списке, даже завершённое (перенос завершил прохождения ваншотов, и
+    /// окно участника не находило сценарий сцены).
     /// </summary>
-    public async Task<IReadOnlyList<ScenarioRunDto>> ListForCampaignAsync(Guid campaignId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ScenarioRunDto>> ListForCampaignAsync(Guid campaignId, Guid? withRun, CancellationToken cancellationToken)
     {
         await access.CanBrowseScenariosAsync(cancellationToken).Demand();
         await access.ForCampaignAsync(campaignId, cancellationToken).Demand(Operation.Edit);
         var user = await RequireUserAsync(cancellationToken);
 
         var order = await dbContext.ScenarioRuns.AsNoTracking()
-            .Where(r => r.CampaignId == campaignId && r.Status != ScenarioRunStatus.Finished)
+            .Where(r => r.CampaignId == campaignId && (r.Status != ScenarioRunStatus.Finished || r.Id == withRun))
             .Select(r => new { r.Id, r.ScheduledAt, r.CreatedAt })
             .ToListAsync(cancellationToken);
         var ids = order.OrderByDescending(r => r.ScheduledAt ?? r.CreatedAt).Select(r => r.Id).ToList();

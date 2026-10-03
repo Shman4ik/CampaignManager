@@ -163,6 +163,27 @@ public sealed class EncounterSession(IEncountersApi api, EncounterSheetSync shee
         }
     }
 
+    /// <summary>
+    /// Правка листа участника из сцены (подобранное оружие сыщику — в снаряжение; «Отменить» — убрать) и снимок из
+    /// записанного листа. Null — записано, иначе текст ошибки.
+    /// </summary>
+    public async Task<string?> EditSheetAsync(Guid participantId, Action<CharacterSheet> edit)
+    {
+        if (State.Find(participantId)?.SourceCharacterId is not { } characterId)
+            return "У участника нет листа.";
+
+        var (sheet, error) = await sheets.EditAsync(characterId, edit);
+        if (sheet is null)
+            return error ?? "Не удалось записать в лист.";
+
+        await ChangeAsync(state =>
+        {
+            if (state.Find(participantId) is { } participant)
+                EncounterParticipants.Refresh(participant, sheet, Catalog);
+        });
+        return null;
+    }
+
     /// <summary>Числа участников из их листов (при открытии сцены): лист мог поправить игрок.</summary>
     public async Task RefreshFromSheetsAsync()
     {
