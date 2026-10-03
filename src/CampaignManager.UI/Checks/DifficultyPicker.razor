@@ -2,19 +2,10 @@
 @using CampaignManager.Core.Checks
 @using CampaignManager.Core.Dice
 
-@* Три уровня сложности кнопками, а не выпадающим списком: за столом это один тап. Рядом с
-   каждым — сколько нужно выбросить, если значение уже известно (Check.Target, Core). *@
-<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Сложность проверки">
-    @foreach (var difficulty in CheckRules.Difficulties)
-    {
-        var active = difficulty == Value;
-        <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)" Disabled="@Disabled"
-                role="radio" aria-checked="@(active ? "true" : "false")" data-testid="@($"check-difficulty-{difficulty}")"
-                OnClick="() => ValueChanged.InvokeAsync(difficulty)">
-            @CheckRules.DifficultyLabel(difficulty)@TargetSuffix(difficulty)
-        </Button>
-    }
-</div>
+@* Три уровня сложности сегментами, а не выпадающим списком: за столом это один тап. Рядом с
+   каждым — сколько нужно выбросить, если значение уже известно (Check.Target, Core). Выбранный — светлый с галочкой
+   (Segmented), а не тёмная главная кнопка: в окне проверки и в форме проверки главная — «Добавить»/«Бросить». *@
+<Segmented TValue="Difficulty" Options="Options" Value="Value" ValueChanged="ValueChanged" Disabled="Disabled" Label="Сложность проверки" />
 
 @code {
     [Parameter] public Difficulty Value { get; set; }
@@ -25,6 +16,9 @@
     [Parameter] public int? SkillValue { get; set; }
 
     [Parameter] public bool Disabled { get; set; }
+
+    private IReadOnlyList<SegmentOption<Difficulty>> Options =>
+        [.. CheckRules.Difficulties.Select(d => new SegmentOption<Difficulty>(d, CheckRules.DifficultyLabel(d) + TargetSuffix(d), TestId: $"check-difficulty-{d}"))];
 
     private string TargetSuffix(Difficulty difficulty) =>
         SkillValue is { } value ? $" ≤ {Check.Target(value, difficulty)}" : "";

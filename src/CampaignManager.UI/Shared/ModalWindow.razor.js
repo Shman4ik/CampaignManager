@@ -75,16 +75,35 @@ export function show(dialog, dotnet, dismissible) {
 // showModal() ставит фокус на первый фокусируемый элемент — а это «Закрыть» в шапке. По правилам окна
 // фокус идёт в первое поле тела; в окне без полей — на главную кнопку подвала. Явный autofocus
 // (подтверждение удаления ставит его на «Отмену») побеждает.
+// Скрытый input type=file (за кнопкой «Выбрать файл») — не поле: фокус в нём невидим.
+const FIELD =
+    ".cm-modal-body :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea, [contenteditable=true]):not(:disabled):not([readonly])";
+
 function focusFirst(dialog) {
+    const field = dialog.querySelector("[autofocus]:not(:disabled)") ?? dialog.querySelector(FIELD);
     const target =
-        dialog.querySelector("[autofocus]:not(:disabled)") ??
-        dialog.querySelector(
-            ".cm-modal-body :is(input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea, [contenteditable=true]):not(:disabled):not([readonly])"
-        ) ??
+        field ??
         dialog.querySelector(".cm-modal-footer .cm-btn:is(.cm-btn-primary, .cm-btn-error):not(:disabled)") ??
         dialog.querySelector(".cm-modal-footer .cm-btn:not(:disabled)");
 
     if (target instanceof HTMLElement) {
         target.focus({ preventScroll: true });
+    }
+
+    // Тело, которое догружается (список сценариев, справочник навыков), рисует поля позже showModal(): фокус ушёл на
+    // кнопку подвала. Ждём первое поле до 2 с и переводим фокус в него, если человек сам ничего не трогал.
+    if (field === null) {
+        const fallback = document.activeElement;
+        const observer = new MutationObserver(() => {
+            const late = dialog.querySelector(FIELD);
+            if (late instanceof HTMLElement) {
+                observer.disconnect();
+                if (document.activeElement === fallback || document.activeElement === document.body) {
+                    late.focus({ preventScroll: true });
+                }
+            }
+        });
+        observer.observe(dialog, { childList: true, subtree: true });
+        setTimeout(() => observer.disconnect(), 2000);
     }
 }
