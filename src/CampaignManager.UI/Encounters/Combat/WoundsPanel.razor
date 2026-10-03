@@ -1,6 +1,7 @@
 @* Раны и лечение по схеме ширмы (стр. 119): первая помощь (умирающему — стабилизация), Медицина (умирающему — только после
-   первой помощи), проверка ВЫН стабилизированного раз в час, недельное лечение серьёзной раны и отдых. Проверки ВЫН
-   умирающих в конце раунда — плашкой над вкладками (CombatPanel). Правила — CombatRules (Core), раны — WoundRules, общий с
+   первой помощи), проверка ВЫН стабилизированного раз в час. Недельное лечение и отдых — действие между играми, не боя: оно
+   в окне лечения листа (WoundRecoveryModal), здесь его нет (B26). Проверки ВЫН умирающих в конце раунда — плашкой над
+   вкладками (CombatPanel). Правила — CombatRules (Core), раны — WoundRules, общий с
    листом; в v1 всё это жило в razor и правило участников мимо «Применить». Своей карточки не рисует. *@
 <div class="flex flex-col gap-4" data-testid="wounds-panel">
     <section class="flex flex-col gap-3">
@@ -12,14 +13,9 @@
         <Field Label="Кого лечим" Group="true">
             @if (State.Participants.Where(Wounded).ToList() is { Count: > 0 } wounded)
             {
-                <div class="flex flex-wrap gap-2" data-testid="wounded-list">
-                    @foreach (var w in wounded)
-                    {
-                        <Button Small="true" Variant="@(w.Id == _patientId ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SelectPatient(w.Id)">
-                            @w.Name · ПЗ @w.HitPoints/@w.MaxHitPoints@(w.Dying ? " · при смерти" : "")
-                        </Button>
-                    }
-                </div>
+                @* Выбранный пациент — светлый сегмент с галочкой, а не тёмная плита: ниже «Оказать первую помощь» одна главная (B24). *@
+                <Segmented TValue="Guid" Options="PatientOptions(wounded)"
+                           Value="@(_patientId ?? Guid.Empty)" ValueChanged="v => SelectPatient(v)" Label="Кого лечим" data-testid="wounded-list" />
             }
             else
             {
@@ -55,7 +51,7 @@
                     {
                         <p class="cm-meta">@noMedicine</p>
                     }
-                    <div><Button Small="true" Icon="fa-stethoscope" Disabled="@(CombatRules.MedicineBlockReason(patient) is not null)" OnClick="MedicineAsync" data-testid="medicine">Медицина</Button></div>
+                    <div><Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-stethoscope" Disabled="@(CombatRules.MedicineBlockReason(patient) is not null)" OnClick="MedicineAsync" data-testid="medicine">Медицина</Button></div>
                 </div>
             </div>
         }
@@ -76,56 +72,21 @@
             }
         </section>
     }
-
-    <section class="flex flex-col gap-3 border-t border-primary-200 pt-3">
-        <h3 class="cm-card-title">Выздоровление</h3>
-        <Field Label="Кто">
-            <ParticipantSelect Participants="State.Participants" Where="p => !p.Dead && !p.Dying && p.HitPoints < p.MaxHitPoints" Label="Кто выздоравливает" Value="_recoveryId" ValueChanged="v => _recoveryId = v" />
-        </Field>
-        @if (_recoveryId is { } rid && State.Find(rid) is { } r)
-        {
-            @if (r.MajorWound)
-            {
-                <p class="cm-meta">Серьёзная рана: проверка ВЫН в конце каждой недели — успех 1d3, чрезвычайный 2d3 и отметка снята.</p>
-                <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                    <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" checked="@_care" @onchange="e => _care = e.Value is true" /> Уход врача (проверка Медицины пройдена)</label>
-                    <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" checked="@_rested" @onchange="e => _rested = e.Value is true" /> Отдых, покой</label>
-                    <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" checked="@_poor" @onchange="e => _poor = e.Value is true" /> Плохие условия</label>
-                </div>
-                <div class="flex flex-wrap items-end gap-3">
-                    <Field Label="@($"ВЫН {r.Stats.Con}")" Group="true">
-                        <RollInput Label="Лечение раны" Value="r.Stats.Con" BonusDice="@WoundRules.RecoveryDice(_care, _rested, _poor).Bonus"
-                                   PenaltyDice="@WoundRules.RecoveryDice(_care, _rested, _poor).Penalty" Roll="_recoveryRoll" RollChanged="x => _recoveryRoll = x" />
-                    </Field>
-                    <Field Label="Выпало на 1d3/2d3"><EnteredNumber Label="Лечение" Value="_recoveryHeal" ValueChanged="v => _recoveryHeal = v" /></Field>
-                    <Button Small="true" Icon="fa-calendar-week" OnClick="() => WeekAsync(r)" class="mb-1">Неделя лечения</Button>
-                </div>
-            }
-            else
-            {
-                <div class="flex flex-wrap items-end gap-3">
-                    <Field Label="Дней отдыха" class="w-28" Note="1 ПЗ в день">
-                        <input type="number" inputmode="numeric" min="1" class="cm-input" value="@_days" @onchange="e => _days = int.TryParse(e.Value?.ToString(), out var d) && d > 0 ? d : 1" />
-                    </Field>
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-bed" OnClick="() => RestAsync(r)" class="mb-1">Отдых</Button>
-                </div>
-            }
-        }
-    </section>
 </div>
 
 @code {
     private Guid? _patientId;
-    private Guid? _recoveryId;
-    private D100Roll? _firstAidRoll, _medicineRoll, _recoveryRoll;
-    private int? _heal, _recoveryHeal;
-    private bool _notSameDay, _care, _rested, _poor;
-    private int _days = 1;
+    private D100Roll? _firstAidRoll, _medicineRoll;
+    private int? _heal;
+    private bool _notSameDay;
     private readonly Dictionary<Guid, D100Roll?> _hourly = [];
 
     private EncounterParticipant? Patient => _patientId is { } id ? State.Find(id) : null;
 
     private List<EncounterParticipant> Stabilized => [.. State.Participants.Where(p => p is { Dying: true, Stabilized: true, Dead: false })];
+
+    private static IReadOnlyList<SegmentOption<Guid>> PatientOptions(IEnumerable<EncounterParticipant> wounded) =>
+        [.. wounded.Select(w => new SegmentOption<Guid>(w.Id, $"{w.Name} · ПЗ {w.HitPoints}/{w.MaxHitPoints}{(w.Dying ? " · при смерти" : "")}"))];
 
     private static bool Wounded(EncounterParticipant p) => !p.Dead && (p.HitPoints < p.MaxHitPoints || p.Unconscious || p.Dying);
 
@@ -143,9 +104,6 @@
         }
         if (Patient is null or { Dead: true })
             _patientId = State.Participants.Where(Wounded).OrderByDescending(p => p.Dying).FirstOrDefault()?.Id;
-        // «Кто выздоравливает» — тоже не пустое, пока в сцене есть кому: первый раненый не при смерти.
-        if (_recoveryId is null || State.Find(_recoveryId.Value) is not { Dead: false, Dying: false } current || current.HitPoints >= current.MaxHitPoints)
-            _recoveryId = State.Participants.FirstOrDefault(p => !p.Dead && !p.Dying && p.HitPoints < p.MaxHitPoints)?.Id;
     }
 
     private bool _healerAuto = true;
@@ -156,7 +114,7 @@
         SelectActor(id);
     }
 
-    private void SelectPatient(Guid? id)
+    private void SelectPatient(Guid id)
     {
         _patientId = id;
         _firstAidRoll = _medicineRoll = null;
@@ -182,16 +140,4 @@
         await ProposeAsync(CombatRules.DyingCheck(State, p.Id, _hourly.GetValueOrDefault(p.Id), Dice));
         _hourly.Remove(p.Id);
     }
-
-    private async Task WeekAsync(EncounterParticipant p)
-    {
-        await ProposeAsync(CombatRules.WeeklyRecovery(State, new RecoverySetup
-        {
-            ParticipantId = p.Id, MedicalCare = _care, Rested = _rested, PoorConditions = _poor, Roll = _recoveryRoll, HealRoll = _recoveryHeal,
-        }, Dice));
-        _recoveryRoll = null;
-        _recoveryHeal = null;
-    }
-
-    private Task RestAsync(EncounterParticipant p) => ProposeAsync(CombatRules.NaturalRecovery(State, p.Id, _days));
 }

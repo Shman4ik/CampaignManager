@@ -12,10 +12,11 @@
 <div class="flex flex-col gap-3" data-testid="attack-panel">
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field Label="Кто атакует">
-            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто атакует" Value="ActorId" ValueChanged="SelectActor" />
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто атакует" Value="ActorId" ValueChanged="SelectActor" Grouped="true" />
         </Field>
         <Field Label="Цель">
-            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget" />
+            <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель" Value="_targetId" ValueChanged="SelectTarget"
+                               Grouped="true" Perspective="Actor" />
         </Field>
         <Field Label="Чем" class="sm:col-span-2">
             @* Сверху — оружие и атаки участника; ниже — его боевые навыки без оружия (выбор ведёт к оружию этого навыка из
@@ -23,14 +24,14 @@
             <select @key="_selectVersion" class="cm-input" aria-label="Оружие или атака" data-testid="attack-weapon" @onchange="SelectAttack" disabled="@(Actor is null)">
                 @foreach (var attack in Attacks)
                 {
-                    <option value="@attack.Key" selected="@(Attack?.Key == attack.Key)">@attack.Name — @attack.Skill%, урон @DiceNotation.Format(attack.Damage) (@KindText(attack))</option>
+                    <option value="@attack.Key" selected="@(Attack?.Key == attack.Key)">@attack.Name — @attack.Skill%, урон @DiceText.Format(attack.Damage) (@KindText(attack))</option>
                 }
                 @if (SkillOptions.Count > 0)
                 {
-                    <optgroup label="Навыком — выбрать оружие">
+                    <optgroup label="Другое оружие — по навыку">
                         @foreach (var skill in SkillOptions)
                         {
-                            <option value="@(SkillPrefix + skill.SkillId.ToString("N"))">@skill.Name — @skill.Value%: оружие…</option>
+                            <option value="@(SkillPrefix + skill.SkillId.ToString("N"))">@skill.Name — @skill.Value%</option>
                         }
                     </optgroup>
                 }
@@ -88,20 +89,35 @@
         <p class="cm-meta" data-testid="attack-dice">Кости атаки: @string.Join(", ", diceNow.Reasons)@RequirementText</p>
     }
 
+    @* Главная кнопка — над «Дополнительно»: раскрытое «Дополнительно» занимало 1100px, и кнопка самого частого действия боя
+       уезжала на 480px прокрутки (B20). *@
+    <div>
+        <Button Icon="fa-hand-fist" Disabled="@(!Ready)" DisabledReason="@(Target is null ? "Выберите цель" : null)" OnClick="ResolveAsync" data-testid="attack-resolve">Провести атаку</Button>
+    </div>
+
     @if (_picking)
 {
     <CatalogPickerModal TItem="WeaponDto" Open="true" Title="@PickTitle" Load="LoadWeapons" Key="w => w.Id" Name="w => w.Name"
-                        Meta="WeaponMeta" Placeholder="Найти оружие…" Empty="Нет оружия этого навыка в справочнике."
+                        Meta="WeaponMeta" Also="WeaponAlso" Placeholder="Найти оружие…" Empty="Нет оружия этого навыка в справочнике."
+                        ListClass="max-h-[min(22rem,46dvh)]" SelectReason="Выберите оружие" Filter="InWeaponGroup"
                         ConfirmText="@(Actor is { } who && CombatProfiles.PickedWeaponGoesToSheet(who) ? "В лист и выбрать" : "Выбрать")"
                         Busy="_pickBusy" Error="@_pickError" OnPick="PickAsync" OnClose="ClosePicker">
-        @if (_pickSkillId is null)
-        {
-            <label class="cm-tap-row">
-                <input type="checkbox" class="cm-checkbox" checked="@_improvised" @onchange="e => _improvised = e.Value is true" />
-                <span>Импровизированное: похожее оружие из таблицы, бьют Дракой</span>
-            </label>
-        }
-        <p class="cm-field-note">@PickWhere</p>
+        <ChildContent>
+            @if (_pickSkillId is null)
+            {
+                <label class="cm-tap-row">
+                    <input type="checkbox" class="cm-checkbox" checked="@_improvised" @onchange="e => _improvised = e.Value is true" />
+                    <span>Импровизированное: похожее оружие из таблицы, бьют Дракой</span>
+                </label>
+            }
+            <p class="cm-field-note">@PickWhere</p>
+        </ChildContent>
+        <FilterContent>
+            @if (_pickSkillId is null)
+            {
+                <Segmented TValue="WeaponGroup" Options="WeaponGroups" Value="_weaponGroup" ValueChanged="v => _weaponGroup = v" Label="Тип оружия" />
+            }
+        </FilterContent>
     </CatalogPickerModal>
 }
 
@@ -189,9 +205,6 @@
         </div>
     </details>
 
-    <div>
-        <Button Icon="fa-hand-fist" Disabled="@(!Ready)" DisabledReason="@(Target is null ? "Выберите цель" : null)" OnClick="ResolveAsync" data-testid="attack-resolve">Провести атаку</Button>
-    </div>
 </div>
 
 @code {
@@ -260,7 +273,28 @@
         ? $"Оружие ляжет в лист {actor.Name} и останется после боя; убрать — в листе."
         : "Оружие будет только в этой сцене.";
 
-    private static string WeaponMeta(WeaponDto w) => $"{w.SkillName} · урон {DiceNotation.Format(w.Damage)}";
+    private static string WeaponMeta(WeaponDto w) => $"{CatalogText.Of(w.Type)} · {w.SkillName} · урон {DiceText.Format(w.Damage)}";
+
+    private static IEnumerable<string?> WeaponAlso(WeaponDto w) => [w.SkillName, CatalogText.Of(w.Type)];
+
+    /// <summary>Тип оружия для отбора в окне подбора: холодное, огнестрельное, тяжёлое и прочее.</summary>
+    private enum WeaponGroup { Any, Melee, Firearm, Other }
+
+    private static readonly IReadOnlyList<SegmentOption<WeaponGroup>> WeaponGroups =
+    [
+        new(WeaponGroup.Any, "Любое"), new(WeaponGroup.Melee, "Холодное"), new(WeaponGroup.Firearm, "Огнестрельное"), new(WeaponGroup.Other, "Тяжёлое и прочее"),
+    ];
+
+    private WeaponGroup _weaponGroup;
+
+    private bool InWeaponGroup(WeaponDto w) => _weaponGroup switch
+    {
+        WeaponGroup.Melee => w.Type == WeaponType.Melee,
+        WeaponGroup.Firearm => w.Type is WeaponType.Pistols or WeaponType.Rifles or WeaponType.Shotguns or WeaponType.AssaultRifles
+            or WeaponType.SubmachineGuns or WeaponType.MachineGuns,
+        WeaponGroup.Other => w.Type is WeaponType.ExplosivesAndHeavyWeapons or WeaponType.Other,
+        _ => true,
+    };
 
     private async Task<IReadOnlyList<WeaponDto>> LoadWeapons(CancellationToken cancellationToken)
     {
@@ -277,6 +311,7 @@
             // Выбор навыка или «Подобрать…» — не атака: открыть окно, список вернуть на текущее оружие.
             _pickSkillId = value == PickAll ? null : Guid.ParseExact(value![SkillPrefix.Length..], "N");
             _improvised = false;
+            _weaponGroup = WeaponGroup.Any;
             _pickError = null;
             _picking = true;
             _selectVersion++;

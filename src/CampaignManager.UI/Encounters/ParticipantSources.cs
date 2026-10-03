@@ -4,6 +4,7 @@ using CampaignManager.Contracts.Scenarios;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Encounters;
+using CampaignManager.UI.Shared;
 
 namespace CampaignManager.UI.Encounters;
 
@@ -28,6 +29,9 @@ public sealed record ParticipantOption(
 {
     /// <summary>Сколько предложить сразу: количество из состава сценария.</summary>
     public int DefaultCount { get; init; } = 1;
+
+    /// <summary>Тип для отбора кнопками над списком (бестиарий: «Монстры Мифов», «Животные»); null — отбора нет.</summary>
+    public string? Category { get; init; }
 }
 
 /// <summary>Строки источника; <see cref="Message"/> — почему пусто (нет кампании), чтобы не гадать.</summary>
@@ -155,12 +159,16 @@ public sealed class BestiarySource(ICatalogApi<CreatureDto> creatures) : IPartic
                 .Select(c => new ParticipantOption(
                     $"creature:{c.Id}",
                     c.Name,
-                    $"{CatalogText.Of(c.Type)} · ПЗ {c.Statblock.HitPoints}" + (string.IsNullOrWhiteSpace(c.Statblock.SanityLoss) ? "" : $" · рассудок {c.Statblock.SanityLoss}"),
+                    // Тип — кнопками над списком, в строке его не повторяем.
+                    $"ПЗ {c.Statblock.HitPoints}" + (string.IsNullOrWhiteSpace(c.Statblock.SanityLoss) ? "" : $" · рассудок {DiceText.Format(c.Statblock.SanityLoss)}"),
                     ParticipantKind.Creature,
                     CharacterId: null,
                     AllowCount: true,
                     (count, _) => Task.FromResult<IReadOnlyList<EncounterParticipant>>(
-                        [.. Enumerable.Range(0, Math.Max(1, count)).Select(_ => EncounterParticipants.FromStatblock(c.Id, c.Name, c.Statblock))]))),
+                        [.. Enumerable.Range(0, Math.Max(1, count)).Select(_ => EncounterParticipants.FromStatblock(c.Id, c.Name, c.Statblock))]))
+                {
+                    Category = CatalogText.Of(c.Type),
+                }),
         ], list.Items.Count == 0 ? "Бестиарий пуст." : null);
     }
 }

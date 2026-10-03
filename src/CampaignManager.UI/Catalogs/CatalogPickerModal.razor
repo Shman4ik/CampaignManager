@@ -14,6 +14,7 @@
         <div class="flex flex-col gap-3">
             <input type="search" class="cm-input" placeholder="@Placeholder" aria-label="@Placeholder" data-testid="picker-search"
                    @bind="_query" @bind:event="oninput" />
+            @FilterContent
             @if (_items is null && _error is null)
             {
                 <LoadingIndicator Message="Загружаю…" />
@@ -31,7 +32,7 @@
                 }
                 else
                 {
-                    <div class="@Css.Join(ChildContent is null ? "max-h-[46vh]" : "max-h-[28vh]", "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
+                    <div class="@Css.Join(ListClass ?? (ChildContent is null ? "max-h-[46vh]" : "max-h-[28vh]"), "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
                         @foreach (var item in found)
                         {
                             var selected = _selected is not null && Equals(Key(_selected), Key(item));
@@ -71,7 +72,7 @@
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="Busy">Отмена</Button>
-        <Button Icon="@ConfirmIcon" Busy="Busy" Disabled="@(_selected is null)" data-testid="picker-confirm" OnClick="PickAsync">@ConfirmText</Button>
+        <Button Icon="@ConfirmIcon" Busy="Busy" Disabled="@(_selected is null)" DisabledReason="@(_selected is null ? SelectReason : null)" data-testid="picker-confirm" OnClick="PickAsync">@ConfirmText</Button>
     </Footer>
 </Modal>
 
@@ -109,6 +110,21 @@
 
     /// <summary>Иконка главной кнопки: «+» у добавления, галочка у выбора (навык оружия, связь заклинания).</summary>
     [Parameter] public string ConfirmIcon { get; set; } = "fa-plus";
+
+    /// <summary>
+    /// Высота списка (класс Tailwind). Не задана — по умолчанию: без полей под списком 46vh, с полями 28vh. Окно, которому нужно
+    /// иначе (подбор оружия: типы, список и заметка в одной высоте экрана), задаёт сам.
+    /// </summary>
+    [Parameter] public string? ListClass { get; set; }
+
+    /// <summary>Что сказать, пока ничего не выбрано, рядом с неактивным «Выбрать» (правило 8).</summary>
+    [Parameter] public string SelectReason { get; set; } = "Выберите запись";
+
+    /// <summary>Отбор поверх поиска — например по типу (кнопки в <see cref="FilterContent"/> меняют то, что он пропускает).</summary>
+    [Parameter] public Func<TItem, bool>? Filter { get; set; }
+
+    /// <summary>Кнопки отбора — между поиском и списком.</summary>
+    [Parameter] public RenderFragment? FilterContent { get; set; }
 
     /// <summary>Поля под выбранной записью (количество, где, заметки).</summary>
     [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }
@@ -149,6 +165,7 @@
         bool Matches(string? text) => text is not null && CatalogCodeTable.NormalizeName(text).Contains(query, StringComparison.Ordinal);
 
         var all = (_items ?? [])
+            .Where(i => Filter is null || Filter(i))
             .Where(i => query.Length == 0 || Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false))
             .ToList();
         _more = Math.Max(0, all.Count - Limit);

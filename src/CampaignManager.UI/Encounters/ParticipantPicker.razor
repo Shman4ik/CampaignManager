@@ -3,6 +3,7 @@
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Scenarios
 @inject IRunsApi Runs
+@inject BrowserStorage Storage
 
 @* Добавить участника — единственный список на бой и погоню (знание v1): источники вкладками (сыщики кампании, состав
    сценария, НПС, бестиарий — IParticipantSource), поиск без регистра, «уже в сцене» у листа, который уже стоит (один
@@ -12,8 +13,9 @@
    сцена остаётся без прохождения. Сами участники уходят странице (OnPicked): добавляет их ядро (EncounterEngine.Add). *@
 <Modal Open="Open" OnClose="OnClose" Title="Добавить участника" Size="ModalSize.Large">
     <ChildContent>
-        @* Тело окна одной высоты на всех вкладках (#213: полоса вкладок прыгала 175 → 160 → 111px), прокрутка — только списка. *@
-        <div class="flex h-[min(34rem,68vh)] flex-col gap-3">
+        @* Тело окна одной высоты на всех вкладках (#213: полоса вкладок прыгала 175 → 160 → 111px), прокрутка — только списка:
+           высота считана под окно (экран минус рамка, шапка и подвал), поэтому у самого окна своей прокрутки нет (B6). *@
+        <div class="flex h-[min(34rem,calc(100dvh-16rem))] flex-col gap-3">
             <Tabs Items="@TabItems" ActiveKey="@_tab" ActiveKeyChanged="SelectTabAsync" AriaLabel="Откуда участник" />
             @if (ActiveSource?.UsesScenario == true)
             {
@@ -23,7 +25,7 @@
                         <option value="">Выберите сценарий</option>
                         @foreach (var run in _runOptions)
                         {
-                            <option value="@run.Id">@run.ScenarioName · @ScenarioText.Of(run.Status)</option>
+                            <option value="@run.Id">@RunLabel(run)</option>
                         }
                     </select>
                 }
@@ -33,7 +35,7 @@
                         <option value="">Выберите сценарий</option>
                         @foreach (var scenario in _scenarios)
                         {
-                            <option value="@scenario.Id">@scenario.Name</option>
+                            <option value="@scenario.Id">@ScenarioLabel(scenario)</option>
                         }
                     </select>
                     @if (Context.CampaignId is not null)
@@ -42,8 +44,21 @@
                     }
                 }
             }
-            <input class="cm-input" type="search" placeholder="Поиск по имени" aria-label="Поиск участника" data-testid="picker-search"
-                   value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <input class="cm-input min-w-48 flex-1" type="search" placeholder="Поиск по имени" aria-label="Поиск участника" data-testid="picker-search"
+                       value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+                @if (ChoosesSide)
+                {
+                    @* Сторона новых участников: НПС и твари не добавляются «нейтральными» с ручной правкой в каждой строке (B9).
+                       Последний выбор запоминается по вкладке. *@
+                    <Segmented TValue="EncounterSide" Options="SideOptions" Value="SideOf(_tab)" ValueChanged="SetSideAsync" Label="Сторона новых участников" data-testid="picker-side" />
+                }
+            </div>
+            @if (Categories.Count > 1)
+            {
+                @* Бестиарий — восемьдесят семь существ: отбор по типу, как фильтр справочника (B10). *@
+                <Segmented TValue="string" Options="CategoryOptions" Value="_category" ValueChanged="v => _category = v" Label="Тип существа" data-testid="picker-category" />
+            }
 
             @if (_loading)
             {
@@ -59,8 +74,13 @@
                 {
                     <p class="cm-text-muted">@result.Message</p>
                 }
+                var shown = Filter(result.Options).ToList();
+                @if (shown.Count == 0 && result.Message is null)
+                {
+                    <EmptyState Compact="true" Title="@EmptyState.NoneByFilter("участников")" />
+                }
                 <div class="min-h-0 flex-1 overflow-y-auto" data-testid="picker-list">
-                    @foreach (var option in Filter(result.Options))
+                    @foreach (var option in shown)
                     {
                         var used = option.CharacterId is { } id && UsedCharacterIds.Contains(id);
                         <div class="flex flex-wrap items-center gap-2 border-t border-primary-200 py-2 first:border-t-0" @key="option.Key">
@@ -73,7 +93,8 @@
                             </div>
                             @if (used)
                             {
-                                <Badge Tone="Tone.Neutral">уже здесь</Badge>
+                                @* Та же кнопка той же высоты, только неактивная: строки ниже не прыгают на 2px (B12). *@
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-check" Disabled="true">Добавлен</Button>
                             }
                             else
                             {
@@ -96,7 +117,7 @@
         </div>
     </ChildContent>
     <Footer>
-        <Button Variant="ButtonVariant.Secondary" OnClick="OnClose">Готово</Button>
+        <Button OnClick="OnClose">Готово</Button>
     </Footer>
 </Modal>
 
@@ -116,6 +137,9 @@
     private Guid? _runsFor;
     private bool _runsLoaded;
     private Guid? _chosenRunId;
+    private string _category = "";
+    private readonly Dictionary<string, EncounterSide> _sides = [];
+    private bool _sidesLoaded;
 
     [Parameter] public bool Open { get; set; }
 
@@ -158,15 +182,59 @@
             }
         }
 
+        if (!_sidesLoaded)
+            await LoadSidesAsync();
         if (_tab.Length == 0)
             _tab = Context.CampaignId is null && Sources.Count > 1 ? Sources[1].Key : Sources[0].Key;
         if (!_results.ContainsKey(_tab))
             await LoadAsync();
     }
 
+    private const string SideKey = "cm.encounter-picker-sides";
+
+    private static readonly IReadOnlyList<SegmentOption<EncounterSide>> SideOptions =
+    [
+        new(EncounterSide.Investigators, "Свои"), new(EncounterSide.Enemies, "Противники"), new(EncounterSide.Neutral, "Нейтральные"),
+    ];
+
+    /// <summary>Сторону выбирают у НПС библиотеки и тварей бестиария; состав сценария берёт её из роли, сыщики — свои.</summary>
+    private bool ChoosesSide => _tab is "npcs" or "bestiary";
+
+    private EncounterSide SideOf(string tab) => _sides.TryGetValue(tab, out var side) ? side : tab == "bestiary" ? EncounterSide.Enemies : EncounterSide.Neutral;
+
+    private async Task SetSideAsync(EncounterSide side)
+    {
+        _sides[_tab] = side;
+        await Storage.SetAsync(SideKey, string.Join(';', _sides.Select(s => $"{s.Key}={s.Value}")));
+    }
+
+    private async Task LoadSidesAsync()
+    {
+        _sidesLoaded = true;
+        if (await Storage.GetAsync(SideKey) is not { Length: > 0 } saved)
+            return;
+
+        foreach (var pair in saved.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=');
+            if (parts.Length == 2 && Enum.TryParse<EncounterSide>(parts[1], out var side) && Enum.IsDefined(side))
+                _sides[parts[0]] = side;
+        }
+    }
+
+    /// <summary>Типы существ вкладки (кнопки над списком); меньше двух — отбирать не из чего.</summary>
+    private IReadOnlyList<string> Categories => _results.TryGetValue(_tab, out var result)
+        ? [.. result.Options.Select(o => o.Category).Where(c => !string.IsNullOrEmpty(c)).Cast<string>().Distinct()]
+        : [];
+
+    private IReadOnlyList<SegmentOption<string>> CategoryOptions => [new("", Terms.AnyType), .. Categories.Select(c => new SegmentOption<string>(c, c))];
+
     private async Task SelectTabAsync(string key)
     {
         _tab = key;
+        // Поиск и тип относятся к вкладке: введённое на «Бестиарии» не оставляет пустой белый список на «НПС» (B7).
+        _search = "";
+        _category = "";
         if (!_results.ContainsKey(key))
             await LoadAsync();
     }
@@ -246,10 +314,34 @@
             await OnRunChosen.InvokeAsync(run.Id);
     }
 
-    private IEnumerable<ParticipantOption> Filter(IEnumerable<ParticipantOption> options) =>
-        string.IsNullOrWhiteSpace(_search)
-            ? options
-            : options.Where(o => Normalize(o.Name).Contains(Normalize(_search), StringComparison.Ordinal));
+    private IEnumerable<ParticipantOption> Filter(IEnumerable<ParticipantOption> options)
+    {
+        var found = string.IsNullOrEmpty(_category) ? options : options.Where(o => o.Category == _category);
+        return string.IsNullOrWhiteSpace(_search)
+            ? found
+            : found.Where(o => Normalize(o.Name).Contains(Normalize(_search), StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Два сценария с одним названием («Эликсир жизни») в списке неразличимы: у повторов — автор и дата правки.
+    /// </summary>
+    private string ScenarioLabel(ScenarioSummaryDto scenario)
+    {
+        if (_scenarios.Count(s => s.Name == scenario.Name) < 2)
+            return scenario.Name;
+
+        var author = string.IsNullOrWhiteSpace(scenario.AuthorName) ? null : scenario.AuthorName;
+        return string.Join(" · ", new[] { scenario.Name, author, LocalTime.ShortDate(scenario.UpdatedAt) }.Where(t => t is not null));
+    }
+
+    /// <summary>Прохождение: сценарий и где он сейчас (идёт, завершён); у тёзок — ещё дата партии.</summary>
+    private string RunLabel(ScenarioRunDto run)
+    {
+        var parts = new List<string?> { run.ScenarioName, ScenarioText.Of(run.Status) };
+        if (_runOptions.Count(r => r.ScenarioName == run.ScenarioName) > 1 && run.ScheduledAt is { } at)
+            parts.Add(LocalTime.ShortDate(at));
+        return string.Join(" · ", parts.Where(t => t is not null));
+    }
 
     private static string Normalize(string text) => text.Trim().ToLowerInvariant().Replace('ё', 'е');
 
@@ -268,6 +360,14 @@
         try
         {
             var participants = await option.CreateAsync(CountOf(option), CancellationToken.None);
+            if (ChoosesSide)
+            {
+                // Сторону берёт выбор рядом с «Добавить»; сыщик с листом остаётся со своими (CreateAsync и так их так отдаёт).
+                var side = SideOf(_tab);
+                foreach (var participant in participants.Where(p => p.Kind != ParticipantKind.Investigator))
+                    participant.Side = side;
+            }
+
             await OnPicked.InvokeAsync(participants);
         }
         catch (HttpRequestException error)
