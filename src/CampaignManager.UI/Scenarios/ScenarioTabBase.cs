@@ -32,14 +32,15 @@ public abstract class ScenarioTabBase : ComponentBase
     protected bool CanEdit => Scenario.CanEdit;
 
     /// <summary>
-    /// Удалить строку после подтверждения; отказ — тостом. <paramref name="confirmText"/> «Убрать» — связь, а не запись
-    /// (НПС, тварь, предмет остаются в библиотеке и справочниках): тогда без «действие нельзя отменить».
+    /// Удалить строку после подтверждения; отказ — тостом. Вопрос называет действие («Удалить локацию?»), имя объекта
+    /// идёт жирной строкой без кавычек (<paramref name="subject"/>, правило 7). <paramref name="confirmText"/> «Убрать» —
+    /// связь, а не запись (НПС, тварь, предмет остаются в библиотеке и справочниках): тогда без «действие нельзя отменить».
     /// </summary>
-    protected async Task DeleteAsync(string title, string message, Func<Task> delete, string done, string confirmText = "Удалить")
+    protected async Task DeleteAsync(string title, string subject, string message, Func<Task> delete, string done, string confirmText = "Удалить")
     {
         var request = confirmText == "Удалить"
-            ? new ConfirmRequest(title, message)
-            : new ConfirmRequest(title, message) { ConfirmText = confirmText, Details = null };
+            ? new ConfirmRequest(title, message) { Subject = subject }
+            : new ConfirmRequest(title, message) { Subject = subject, ConfirmText = confirmText, Details = null };
         if (!await Dialogs.ConfirmAsync(request))
             return;
 
@@ -62,7 +63,8 @@ public abstract class ScenarioTabBase : ComponentBase
         return RunAsync(() => Api.ReorderAsync(Scenario.Id, new ReorderRequest(part, order)), null);
     }
 
-    protected async Task RunAsync(Func<Task> action, string? done)
+    /// <summary>Записать и показать тост; <paramref name="subject"/> — имя объекта жирным в конце («Добавлено в сценарий: <b>Лампа</b>»).</summary>
+    protected async Task RunAsync(Func<Task> action, string? done, string? subject = null)
     {
         if (Busy)
             return;
@@ -72,7 +74,7 @@ public abstract class ScenarioTabBase : ComponentBase
         {
             await action();
             if (done is not null)
-                Toasts.Success(done);
+                Toasts.Success(done, subject: subject);
             await OnChanged.InvokeAsync();
         }
         catch (HttpRequestException ex)
@@ -86,9 +88,9 @@ public abstract class ScenarioTabBase : ComponentBase
     }
 
     /// <summary>Модалка записала строку: закрыть её делает вкладка, перечитать — страница.</summary>
-    protected Task SavedAsync(string done)
+    protected Task SavedAsync(string done, string? subject = null)
     {
-        Toasts.Success(done);
+        Toasts.Success(done, subject: subject);
         return OnChanged.InvokeAsync();
     }
 }

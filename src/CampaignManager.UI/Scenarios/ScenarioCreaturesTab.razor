@@ -6,7 +6,9 @@
 @* «Твари» — ссылки на бестиарий с количеством, местом и заметками. Касание раскрывает заметки (Markdown — их пишут
    с разметкой) и итоговый статблок (своя версия
    сценария поверх бестиария) — тот, что прочтёт бой (T2.6). Выбор — общий CatalogPickerModal: в v1 модалки тварей и
-   предметов были почти копиями, а поле «Количество» никуда не сохранялось. *@
+   предметов были почти копиями, а поле «Количество» никуда не сохранялось. В свёрнутой строке — только то, что различает
+   (тип, имя в бестиарии, «Где»): метка «статблок изменён» была у обеих тварей, «ПЗ 75» голым бейджем ничего не говорило —
+   ПЗ и пометка «своя карточка» в раскрытии (ревью g4, 10.1). *@
 <section class="cm-section">
     @* Заголовка секции над одноимённой вкладкой нет (правило 5): в строке действий вкладки — порядок и добавление. *@
     @if (CanEdit)
@@ -19,7 +21,7 @@
             }
             @if (!Reordering)
             {
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-creature" OnClick="OpenPicker">Добавить из бестиария</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-creature" OnClick="OpenPicker">Добавить тварь</Button>
             }
         </div>
     }
@@ -35,11 +37,11 @@
             {
                 var index = ids.IndexOf(creature.Id);
                 var open = _open.Contains(creature.Id);
-                <div class="border-t border-primary-200 px-4 py-3 first:border-t-0" @key="creature.Id" data-testid="creature-row">
+                <div class="border-t border-primary-200 px-4 py-2 first:border-t-0" @key="creature.Id" data-testid="creature-row">
                     <div class="flex flex-wrap items-start justify-between gap-2">
                         <button type="button" class="flex min-h-11 min-w-0 flex-1 items-start gap-3 text-left" aria-expanded="@(open ? "true" : "false")"
                                 @onclick="() => Toggle(creature.Id)">
-                            @if (creature.ImageUrl is { } image)
+                            @if (ImageUrls.Thumb(creature.ImageUrl, 160) is { } image)
                             {
                                 <img src="@image" alt="" class="h-12 w-12 shrink-0 rounded-md object-cover" loading="lazy" />
                             }
@@ -48,7 +50,7 @@
                                     @creature.Name
                                     @if (creature.Count > 1)
                                     {
-                                        <span class="text-primary-500"> × @creature.Count</span>
+                                        <span class="text-primary-600"> × @creature.Count</span>
                                     }
                                 </span>
                                 <span class="flex flex-wrap gap-1.5">
@@ -60,11 +62,6 @@
                                     {
                                         <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">в бестиарии: @catalog</Badge>
                                     }
-                                    @if (creature.HasOwnStatblock)
-                                    {
-                                        <Badge Tone="Tone.Neutral" Icon="fa-code-branch">статблок изменён для сценария</Badge>
-                                    }
-                                    <Badge Tone="Tone.Info">ПЗ @creature.Statblock.HitPoints</Badge>
                                 </span>
                                 @if (creature.LocationNote is { } where)
                                 {
@@ -75,14 +72,18 @@
                         <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                         OnUp="() => MoveAsync(ScenarioPart.Creatures, ids, creature.Id, -1)"
                                         OnDown="() => MoveAsync(ScenarioPart.Creatures, ids, creature.Id, 1)"
-                                        OnEdit="() => _editing = creature" OnDelete="() => RemoveAsync(creature)" DeleteLabel="Убрать" MenuLabel="@("Действия: " + creature.Name)" />
+                                        OnEdit="() => _editing = creature" OnDelete="() => RemoveAsync(creature)" DeleteLabel="Убрать" Name="@creature.Name" />
                     </div>
                     @if (open)
                     {
-                        <div class="mt-3 flex flex-col gap-3 border-t border-primary-100 pt-3">
+                        <div class="mt-1 mb-2 flex flex-col gap-3 border-t border-primary-100 pt-3">
                             @if (creature.Notes is { } notes)
                             {
-                                <Markdown Text="@notes" class="text-sm" />
+                                <Markdown Text="@notes" class="max-w-prose text-sm" />
+                            }
+                            @if (creature.HasOwnStatblock)
+                            {
+                                <p class="text-sm text-primary-600"><i class="fa-solid fa-code-branch mr-1 text-primary-400" aria-hidden="true"></i>Карточка изменена для сценария.</p>
                             }
                             <StatblockView Statblock="creature.Statblock" />
                         </div>
@@ -93,20 +94,23 @@
     }
 </section>
 
-<CatalogPickerModal TItem="CreatureDto" Open="_picking" Title="Тварь из бестиария" Load="LoadCreaturesAsync" Key="c => c.Id" Name="c => c.Name"
-                    Meta="@(c => $"{CatalogText.Of(c.Type)} · ПЗ {c.Statblock.HitPoints}")" Empty="Бестиарий пуст."
-                    Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
-        <Field Label="Сколько">
-            <input class="cm-input" type="number" min="1" max="@ScenarioLimits.MaxCount" data-testid="pick-count" @bind="_count" />
-        </Field>
-        <Field Label="Где">
-            <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_where" placeholder="в склепе под церковью" />
-        </Field>
-        <Field Label="Заметки" class="sm:col-span-2">
-            <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
-        </Field>
-    </div>
+<CatalogPickerModal TItem="CreatureDto" Open="_picking" Title="Добавить тварь" Load="LoadCreaturesAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="@(c => $"{CatalogText.Of(c.Type)} · ПЗ {c.Statblock.HitPoints}")" Placeholder="Найти в бестиарии…" Empty="Бестиарий пуст."
+                    FieldsAlways="true" SelectReason="Выберите тварь" Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
+    <ChildContent Context="_">
+        @* Три поля в одной строке: окно не растёт после выбора твари и не прячет их под сгиб (заметки длинные — в «Изменить»). *@
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[5rem_1fr_1fr]">
+            <Field Label="Сколько">
+                <input class="cm-input" type="number" min="1" max="@ScenarioLimits.MaxCount" data-testid="pick-count" @bind="_count" />
+            </Field>
+            <Field Label="Где">
+                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_where" placeholder="в склепе под церковью" />
+            </Field>
+            <Field Label="Заметки">
+                <input class="cm-input" maxlength="@ScenarioLimits.TextLength" @bind="_notes" />
+            </Field>
+        </div>
+    </ChildContent>
 </CatalogPickerModal>
 
 <ScenarioCreatureModal Open="_editing is not null" ScenarioId="Scenario.Id" Creature="_editing" OnClose="() => _editing = null" OnSaved="EditedAsync" />
@@ -144,7 +148,7 @@
         {
             await Api.AddCreatureAsync(Scenario.Id, new ScenarioCreatureInput(creature.Id, null, _count, _where, _notes));
             _picking = false;
-            await SavedAsync($"«{creature.Name}» в сценарии.");
+            await SavedAsync("Добавлено в сценарий:", creature.Name);
         }
         catch (HttpRequestException ex)
         {
@@ -163,6 +167,6 @@
     }
 
     private Task RemoveAsync(ScenarioCreatureDto creature) =>
-        DeleteAsync($"Убрать «{creature.Name}» из сценария?", "В бестиарии тварь останется.",
+        DeleteAsync("Убрать тварь из сценария?", creature.Name, "В бестиарии тварь останется.",
             () => Api.DeleteCreatureAsync(Scenario.Id, creature.Id), "Тварь убрана.", "Убрать");
 }

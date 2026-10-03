@@ -5,18 +5,17 @@
 @using CampaignManager.UI.Platform
 @inject ICharactersApi CharactersApi
 
-@* «НПС» — состав: связи с листами библиотеки, роль и количество — у появления (CharacterSummaryCard в одной карточке,
-   строками через линейку — карточка в карточке читалась мусором, знание v1). «Убрать» удаляет связь, не лист.
-   Добавить: «Из библиотеки» (выбор), «Быстрый» (лист и связь одной записью), «Новый» — помощник или чистый лист
-   с возвратом сюда. *@
+@* «НПС» — состав: связи с листами библиотеки, роль и количество — у появления; строки одной карточки через линейку.
+   «Убрать» удаляет связь, не лист. Способ добавить один — «Добавить НПС» (решение владельца по ревью g4, 11.1): окно с поиском
+   по библиотеке (роль и «Сколько» там с самого начала), под списком — «Создать нового» (помощник или чистый лист с возвратом
+   сюда) и «Быстрый НПС» (лист и связь одной записью). Роль — нейтральный бейдж со значком рядом с именем; заметка — целиком,
+   `max-w-prose`: раньше две строки с многоточием, а читать её надо за столом (11.2). *@
 <section class="cm-section">
-    @* Заголовка «Состав НПС» над вкладкой «НПС» нет (правило 5): в строке действий вкладки — три способа добавить. *@
+    @* Заголовка «Состав НПС» над вкладкой «НПС» нет (правило 5): в строке действий вкладки — одно «Добавить НПС». *@
     @if (CanEdit)
     {
         <div class="cm-btn-row mb-3 justify-end">
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-user-plus" Href="@CreationLinks.Create(CharacterKind.Npc, null, Scenario.Id)">Создать НПС</Button>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-bolt" data-testid="quick-npc" OnClick="() => _quickOpen = true">Быстрый НПС</Button>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-link" data-testid="add-npc" OnClick="OpenPicker">Добавить из библиотеки</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-npc" OnClick="OpenPicker">Добавить НПС</Button>
         </div>
     }
     @if (Scenario.Npcs.Count == 0)
@@ -25,52 +24,59 @@
     }
     else
     {
-        @* Компактная строка: имя, занятие, роль; лист и предыстория — по ссылке (CharacterSummaryCard — для библиотеки,
+        @* Компактная строка: имя, роль, занятие и заметка; лист и предыстория — по ссылке (CharacterSummaryCard — для библиотеки,
            здесь он давал 350px на НПС и повторял «занят в сценарии» на каждой строке). *@
         <div class="cm-card" data-testid="npc-list">
             @foreach (var npc in Scenario.Npcs)
             {
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-primary-200 px-4 py-2 first:border-t-0" @key="npc.Character.Id"
+                <div class="flex items-start gap-3 border-t border-primary-200 px-4 py-2 first:border-t-0" @key="npc.Character.Id"
                      data-testid="npc-row" data-character-id="@npc.Character.Id">
-                    @if (npc.Character.PortraitUrl is { } portrait)
+                    @if (ImageUrls.Thumb(npc.Character.PortraitUrl, 160) is { } portrait)
                     {
-                        <img src="@portrait" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
+                        <img src="@portrait" alt="" class="mt-1 h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
                     }
-                    <div class="flex min-w-48 flex-1 flex-col">
-                        <a class="flex min-h-11 items-center font-semibold text-primary-900 hover:underline" href="@($"character/{npc.Character.Id}")">@npc.Character.Name</a>
+                    <div class="flex min-w-0 flex-1 flex-col">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="npc-cast">
+                            @* «Открыть» — само имя (ссылка), роль меняют из «⋯»: две крупные кнопки на каждой из восемнадцати строк тяжелее текста. *@
+                            <a class="flex min-h-9 items-center font-semibold text-primary-900 hover:underline" href="@($"character/{npc.Character.Id}")">@npc.Character.Name</a>
+                            <Badge Tone="Tone.Neutral" Icon="@ScenarioLabels.RoleIcon(npc.Role)">@ScenarioText.Of(npc.Role)</Badge>
+                            @if (npc.Count > 1)
+                            {
+                                <Badge Tone="Tone.Neutral">× @npc.Count</Badge>
+                            }
+                        </div>
                         @if (npc.Character.Occupation is not null || npc.Notes is not null)
                         {
-                            <span class="-mt-2 line-clamp-2 pb-1 text-sm text-primary-600">@string.Join(" · ", new[] { npc.Character.Occupation, npc.Notes }.OfType<string>())</span>
+                            <span class="max-w-prose pb-1 text-sm text-primary-600">@string.Join(" · ", new[] { npc.Character.Occupation, npc.Notes }.OfType<string>())</span>
                         }
                     </div>
-                    <div class="flex flex-wrap items-center gap-2" data-testid="npc-cast">
-                        <Badge Tone="ScenarioLabels.RoleTone(npc.Role)">@ScenarioText.Of(npc.Role)</Badge>
-                        @if (npc.Count > 1)
-                        {
-                            <Badge Tone="Tone.Neutral">× @npc.Count</Badge>
-                        }
-                        @* «Открыть» — само имя (ссылка слева), роль меняют из «⋯»: две крупные кнопки на каждой из восемнадцати строк тяжелее текста. *@
-                        @if (CanEdit)
-                        {
-                            <RowMenu AriaLabel="@($"Действия: {npc.Character.Name}")">
-                                <ChildContent>
-                                    <RowMenuItem Icon="fa-pen" Disabled="Busy" OnClick="() => _casting = npc">Изменить роль</RowMenuItem>
-                                </ChildContent>
-                                <Danger>
-                                    <RowMenuItem Danger="true" Icon="fa-box-archive" Disabled="Busy" OnClick="() => RemoveAsync(npc.Character)">Убрать из сценария</RowMenuItem>
-                                </Danger>
-                            </RowMenu>
-                        }
-                    </div>
+                    @if (CanEdit)
+                    {
+                        <RowMenu AriaLabel="@($"Действия: {npc.Character.Name}")">
+                            <ChildContent>
+                                <RowMenuItem Icon="fa-pen" Disabled="Busy" OnClick="() => _casting = npc">Изменить роль</RowMenuItem>
+                            </ChildContent>
+                            <Danger>
+                                <RowMenuItem Danger="true" Icon="fa-box-archive" Disabled="Busy" OnClick="() => RemoveAsync(npc.Character)">Убрать из сценария</RowMenuItem>
+                            </Danger>
+                        </RowMenu>
+                    }
                 </div>
             }
         </div>
     }
 </section>
 
-<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="НПС из библиотеки" Load="LoadNpcsAsync" Key="c => c.Id" Name="c => c.Name"
-                    Meta="Meta" Also="c => [c.Occupation, c.CampaignName]" Empty="В библиотеке нет свободных НПС — заведите нового."
+<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="Добавить НПС" Load="LoadNpcsAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="Meta" Also="c => [c.Occupation, c.CampaignName]" Empty="В библиотеке нет свободных НПС." FieldsAlways="true"
+                    SelectReason="Выберите НПС" ConfirmText="Добавить НПС"
                     Busy="_adding" Error="@_addError" OnPick="CastAsync" OnClose="() => _picking = false">
+    <Extra>
+        <span>Нет в списке?</span>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-user-plus" class="min-h-9" Href="@CreationLinks.Create(CharacterKind.Npc, null, Scenario.Id)">Создать нового</Button>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-bolt" class="min-h-9" data-testid="quick-npc" OnClick="OpenQuick">Быстрый НПС</Button>
+    </Extra>
+    <ChildContent Context="_">
     <div class="grid grid-cols-2 gap-3 sm:w-96">
         <Field Label="Роль">
             <select class="cm-input" data-testid="pick-role" @bind="_role">
@@ -84,6 +90,7 @@
             <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" @bind="_count" />
         </Field>
     </div>
+    </ChildContent>
 </CatalogPickerModal>
 
 <CastNpcDialog Open="_casting is not null" Character="_casting?.Character" ScenarioId="Scenario.Id" Role="_casting?.Role ?? NpcRole.Neutral"
@@ -104,7 +111,7 @@
     private bool _quickOpen;
 
     private static string? Meta(CharacterSummaryDto c) =>
-        string.Join(" · ", new[] { c.Occupation, c.CampaignName is { } campaign ? $"кампания «{campaign}»" : null }.OfType<string>()) is { Length: > 0 } meta
+        string.Join(" · ", new[] { c.Occupation, c.CampaignName is { } campaign ? $"кампания: {campaign}" : null }.OfType<string>()) is { Length: > 0 } meta
             ? meta
             : null;
 
@@ -120,6 +127,13 @@
         return [.. (await CharactersApi.ListAsync(CharacterKind.Npc, archived: false, cancellationToken)).Where(c => !cast.Contains(c.Id))];
     }
 
+    /// <summary>«Быстрый НПС» из окна выбора: окно выбора закрывается, открывается быстрое создание.</summary>
+    private void OpenQuick()
+    {
+        _picking = false;
+        _quickOpen = true;
+    }
+
     private async Task CastAsync(CharacterSummaryDto npc)
     {
         _adding = true;
@@ -128,7 +142,7 @@
         {
             await Api.CastNpcAsync(Scenario.Id, npc.Id, new NpcCastInput(_role, Math.Clamp(_count, 1, CharacterLimits.MaxCastCount)));
             _picking = false;
-            await SavedAsync($"«{npc.Name}» в составе.");
+            await SavedAsync("Добавлен в состав:", npc.Name);
         }
         catch (HttpRequestException ex)
         {
@@ -153,6 +167,6 @@
     }
 
     private Task RemoveAsync(CharacterSummaryDto npc) =>
-        DeleteAsync($"Убрать «{npc.Name}» из сценария?", "Лист останется в библиотеке НПС — его можно занять снова.",
+        DeleteAsync("Убрать НПС из сценария?", npc.Name, "Лист останется в библиотеке НПС — его можно занять снова.",
             () => Api.RemoveNpcAsync(Scenario.Id, npc.Id), "НПС убран из состава.", "Убрать");
 }

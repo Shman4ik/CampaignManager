@@ -1,12 +1,14 @@
 @* Кнопки строки части сценария — одни на локации, проверки, факты, раздатки, тварей и предметы. В обычном виде —
-   «Изменить» и «Удалить», в режиме порядка («Порядок» в шапке вкладки) — «Выше» и «Ниже»: четыре подписанные кнопки
-   в строке на портрете iPad не помещались, а голые стрелки без подписи на касание ничего не объясняют. Перетаскивания
-   нет — на iPad его не поймать пальцем в длинном списке. *@
+   «Изменить» значком-карандашом 32px (решение владельца по ревью g4, 6.1/7.2: двадцать подписанных кнопок на 44px подряд
+   съедали экран и сжимали название; `aria-label` называет строку) и «⋯» с «Удалить» (и пунктами строки — MenuItems);
+   в режиме порядка («Порядок» в шапке вкладки) — «Выше» и «Ниже»: четыре подписанные кнопки в строке на портрете iPad
+   не помещались, а голые стрелки без подписи на касание ничего не объясняют. Перетаскивания нет — на iPad его не
+   поймать пальцем в длинном списке. *@
 @if (!CanEdit)
 {
     return;
 }
-<div class="flex shrink-0 flex-wrap gap-2">
+<div class="flex shrink-0 flex-wrap items-center gap-2">
     @if (Reordering)
     {
         <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-up" Disabled="@(!CanUp || Busy)" OnClick="OnUp">Выше</Button>
@@ -14,10 +16,10 @@
     }
     else
     {
-        @Extra
-        <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" Disabled="Busy" OnClick="OnEdit">Изменить</Button>
+        <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" class="min-h-8 w-8" AriaLabel="@EditLabel" Disabled="Busy" OnClick="OnEdit" data-testid="part-edit" />
         @* «Удалить» — в «⋯» под линейкой: рядом с частым «Изменить» двадцать красных кнопок подряд (правило 7). *@
-        <RowMenu AriaLabel="@MenuLabel">
+        <RowMenu AriaLabel="@MenuLabelText">
+            <ChildContent>@MenuItems</ChildContent>
             <Danger>
                 <RowMenuItem Icon="fa-trash-can" Danger="true" Disabled="Busy" OnClick="OnDelete">@DeleteLabel</RowMenuItem>
             </Danger>
@@ -38,11 +40,15 @@
 
     [Parameter] public string DeleteLabel { get; set; } = "Удалить";
 
-    /// <summary>Имя меню «⋯» для чтеца: «Действия: Библиотека».</summary>
-    [Parameter] public string MenuLabel { get; set; } = "Действия строки";
+    /// <summary>Что за строка: «Библиотека» — из него имена кнопок для чтеца («Изменить: Библиотека», «Действия: Библиотека»).</summary>
+    [Parameter] public string? Name { get; set; }
 
-    /// <summary>Своя кнопка перед «Изменить» (проверка — «В локацию»).</summary>
-    [Parameter] public RenderFragment? Extra { get; set; }
+    /// <summary>Свои пункты «⋯» выше «Удалить» («Изменить музыку» у локации).</summary>
+    [Parameter] public RenderFragment? MenuItems { get; set; }
+
+    private string EditLabel => Name is { Length: > 0 } ? $"Изменить: {Name}" : "Изменить";
+
+    private string MenuLabelText => Name is { Length: > 0 } ? $"Действия: {Name}" : "Действия строки";
 
     [Parameter] public EventCallback OnUp { get; set; }
 

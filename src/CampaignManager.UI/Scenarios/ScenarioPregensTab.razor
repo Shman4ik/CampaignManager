@@ -4,20 +4,20 @@
 @using CampaignManager.UI.Platform
 @inject ICharactersApi CharactersApi
 
-@* «Прегены» — листы сценария для ваншотов. Из библиотеки преген приходит копией (заготовка остаётся для других
-   сценариев); бронь (T2.5c) копирует уже прегена сценария игроку. «Убрать» уводит прегена в архив библиотеки;
-   забронированного в незавершённой партии убрать нельзя — сначала снимают бронь. *@
+@* «Готовые сыщики» — листы сценария для разовых игр. Из библиотеки готовый сыщик приходит копией (заготовка остаётся для
+   других сценариев); запись на место (T2.5c) копирует уже готового сыщика сценария игроку. «Убрать» уводит его в архив
+   библиотеки; записанного в незавершённой партии убрать нельзя — сначала снимают запись. Способ добавить один —
+   «Добавить готового сыщика» (окно с поиском по библиотеке, в нём «Создать нового»), решение владельца по ревью g4, 12.3. *@
 <section class="cm-section">
     @if (CanEdit)
     {
         <div class="cm-btn-row mb-3 justify-end">
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-user-plus" Href="@CreationLinks.Create(CharacterKind.Pregen, null, Scenario.Id)">Создать прегена</Button>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-copy" data-testid="add-pregen" OnClick="OpenPicker">Добавить из библиотеки</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-pregen" OnClick="OpenPicker">Добавить готового сыщика</Button>
         </div>
     }
     @if (Scenario.Pregens.Count == 0)
     {
-        <EmptyState Compact="true" Title="Нет прегенов. Готовых сыщиков для ваншота игроки бронируют с главной." />
+        <EmptyState Compact="true" Title="Нет готовых сыщиков." />
     }
     else
     {
@@ -25,11 +25,11 @@
             <div class="cm-card-body cm-stack" data-testid="pregen-list">
                 @foreach (var pregen in Scenario.Pregens)
                 {
-                    <CharacterSummaryCard @key="pregen.Character.Id" Character="pregen.Character" Framed="false" ArchiveLabel="Убрать" Busy="Busy"
+                    <CharacterSummaryCard @key="pregen.Character.Id" Character="pregen.Character" Framed="false" ShowPlace="false" ArchiveLabel="Убрать" Busy="Busy"
                                           OnArchive="CanEdit && !pregen.IsReserved ? RemoveCallback : default">
                         @if (pregen.IsReserved)
                         {
-                            <div><Badge Tone="Tone.Warning" Icon="fa-lock">Забронирован игроком</Badge></div>
+                            <div><Badge Tone="Tone.Warning" Icon="fa-lock">Выбран игроком</Badge></div>
                         }
                     </CharacterSummaryCard>
                 }
@@ -38,9 +38,14 @@
     }
 </section>
 
-<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="Преген из библиотеки" Load="LoadPregensAsync" Key="c => c.Id" Name="c => c.Name"
-                    Meta="c => c.Occupation" Also="c => [c.Occupation]" Empty="В библиотеке нет прегенов-заготовок." ConfirmText="Копировать в сценарий"
-                    Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false" />
+<CatalogPickerModal TItem="CharacterSummaryDto" Open="_picking" Title="Добавить готового сыщика" Load="LoadPregensAsync" Key="c => c.Id" Name="c => c.Name"
+                    Meta="c => c.Occupation" Also="c => [c.Occupation]" Empty="В библиотеке нет готовых сыщиков-заготовок." ConfirmText="Скопировать в сценарий"
+                    SelectReason="Выберите готового сыщика" Busy="_adding" Error="@_addError" OnPick="AddAsync" OnClose="() => _picking = false">
+    <Extra>
+        <span>Нет в списке?</span>
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-user-plus" class="min-h-9" Href="@CreationLinks.Create(CharacterKind.Pregen, null, Scenario.Id)">Создать нового</Button>
+    </Extra>
+</CatalogPickerModal>
 
 @code {
     private bool _picking;
@@ -55,7 +60,7 @@
         _picking = true;
     }
 
-    /// <summary>Заготовки — прегены библиотеки без сценария; прегены других сценариев копируются через их сценарий.</summary>
+    /// <summary>Заготовки — готовые сыщики библиотеки без сценария; готовые сыщики других сценариев копируются через их сценарий.</summary>
     private async Task<IReadOnlyList<CharacterSummaryDto>> LoadPregensAsync(CancellationToken cancellationToken) =>
         [.. (await CharactersApi.ListAsync(CharacterKind.Pregen, archived: false, cancellationToken)).Where(c => c.ScenarioId is null)];
 
@@ -67,7 +72,7 @@
         {
             await Api.AddPregenAsync(Scenario.Id, pregen.Id);
             _picking = false;
-            await SavedAsync($"Копия «{pregen.Name}» в сценарии.");
+            await SavedAsync("Копия добавлена в сценарий:", pregen.Name);
         }
         catch (HttpRequestException ex)
         {
@@ -80,6 +85,6 @@
     }
 
     private Task RemoveAsync(CharacterSummaryDto pregen) =>
-        DeleteAsync($"Убрать «{pregen.Name}» из сценария?", "Преген уйдёт в архив библиотеки — оттуда его можно вернуть.",
-            () => Api.RemovePregenAsync(Scenario.Id, pregen.Id), "Преген убран в архив.", "Убрать");
+        DeleteAsync("Убрать готового сыщика из сценария?", pregen.Name, "Он уйдёт в архив библиотеки — оттуда его можно вернуть.",
+            () => Api.RemovePregenAsync(Scenario.Id, pregen.Id), "Готовый сыщик убран в архив.", "Убрать");
 }

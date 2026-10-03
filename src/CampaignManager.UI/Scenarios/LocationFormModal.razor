@@ -1,56 +1,62 @@
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Api
 
-@* Локация: название, адрес, родитель, описание для Хранителя в Markdown с предпросмотром. Пишет одну строку —
+@* Локация: название, родитель, адрес, описание для Хранителя в Markdown с предпросмотром. Пишет одну строку —
    музыку локации (T2.5b) и её проверки эта форма не трогает, поэтому правило v1 «новое поле обязано попасть в
    глубокое копирование» больше не нужно: копии нет. Родителем нельзя выбрать саму локацию и её потомков (сервер
-   тоже не даст). Ошибка — в окне, окно не закрывается. *@
-<Modal Open="Open" Title="@(Location is null ? "Новая локация" : "Изменить локацию")" OnClose="CloseAsync"
-       data-testid="location-form">
+   тоже не даст). Окно длинного текста — исключение из правила окон (docs/design-system.md, п. 3): Large на высоту
+   экрана (cm-modal-fill), «Описание» тянется на остаток высоты, прокрутка одна — у поля (Medium с rows=12 давал
+   две: окна и поля). «Предпросмотр» — в строке подписи поля. Ошибка сервера — над кнопками подвала. *@
+<Modal Open="Open" Title="@(Location is null ? "Новая локация" : "Изменить локацию")" Size="ModalSize.Large" OnClose="CloseAsync"
+       class="cm-modal-fill" data-testid="location-form">
     <ChildContent>
-        <form id="location-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
+        <form id="location-form" class="flex min-h-0 flex-1 flex-col gap-4" @onsubmit="SaveAsync">
+            <Field Label="Название" Required="true" Error="@_nameError">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="location-name" @bind="_name" @bind:event="oninput"
+                       aria-invalid="@(_nameError is null ? null : "true")" autofocus />
+            </Field>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field Label="Название" Required="true" Error="@_nameError">
-                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="location-name" @bind="_name" @bind:event="oninput" />
-                </Field>
                 <Field Label="Внутри локации">
-                <select class="cm-input" data-testid="location-parent" value="@(_parentId?.ToString() ?? "")"
-                        @onchange="e => _parentId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
-                    <option value="">— верхний уровень —</option>
-                    @foreach (var (parent, depth) in Parents())
-                    {
-                        <option value="@parent.Id">@(new string(' ', depth * 3))@parent.Name</option>
-                    }
-                </select>
+                    <select class="cm-input" data-testid="location-parent" value="@(_parentId?.ToString() ?? "")"
+                            @onchange="e => _parentId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null">
+                        <option value="">— верхний уровень —</option>
+                        @foreach (var (parent, depth) in Parents())
+                        {
+                            <option value="@parent.Id">@(new string(' ', depth * 3))@parent.Name</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Где находится">
+                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_address" />
                 </Field>
             </div>
-            <Field Label="Где находится">
-                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_address" />
-            </Field>
-            <Field Label="Описание" Hint="Markdown, только для Хранителя" Group="true">
-                <div class="mb-2 flex flex-wrap gap-2">
-                    <Button Variant="ButtonVariant.Secondary" Icon="@(_preview ? "fa-pen" : "fa-eye")" OnClick="() => _preview = !_preview">
-                        @(_preview ? "Редактор" : "Предпросмотр")
-                    </Button>
+            <div class="flex min-h-0 flex-1 flex-col gap-1">
+                <div class="flex items-center justify-between gap-2">
+                    <label for="location-description" class="cm-field-label">Описание<span class="cm-field-hint ml-1">Markdown, только для Хранителя</span></label>
+                    <Button Variant="ButtonVariant.Secondary" Small="true" Icon="@(_preview ? "fa-pen" : "fa-eye")" class="min-h-8"
+                            OnClick="() => _preview = !_preview">@(_preview ? "Редактор" : "Предпросмотр")</Button>
                 </div>
                 @if (_preview)
                 {
-                    <div class="max-h-[50vh] min-h-40 overflow-y-auto rounded-md border border-primary-200 p-3">
+                    <div class="min-h-40 flex-1 overflow-y-auto rounded-md border border-primary-200 p-3">
                         <Markdown Text="@_description" />
                     </div>
                 }
                 else
                 {
-                    <textarea class="cm-input font-mono text-sm" rows="12" maxlength="@ScenarioLimits.TextLength" data-testid="location-description"
-                              aria-label="Описание локации" @bind="_description"></textarea>
+                    <textarea id="location-description" class="cm-input min-h-40 flex-1 resize-none font-mono text-sm" maxlength="@ScenarioLimits.TextLength"
+                              data-testid="location-description" @bind="_description"></textarea>
                 }
-            </Field>
-            @if (_error is not null)
-            {
-                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="location-error">@_error</Alert>
-            }
+            </div>
+            <ValidationScroll Trigger="_attempt" />
         </form>
     </ChildContent>
+    <FooterError>
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="location-error">@_error</Alert>
+        }
+    </FooterError>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
         <Button Type="submit" form="location-form" Busy="_saving" data-testid="location-save">@(Location is null ? "Добавить" : "Сохранить")</Button>
@@ -67,6 +73,7 @@
     private string? _nameError;
     private string? _error;
     private bool _saving;
+    private int _attempt;
 
     [Parameter] public bool Open { get; set; }
 
@@ -122,6 +129,8 @@
     private async Task SaveAsync()
     {
         _nameError = string.IsNullOrWhiteSpace(_name) ? "Название обязательно." : null;
+        if (_nameError is not null)
+            _attempt++; // ValidationScroll вернёт фокус в поле с ошибкой (правило 9)
         if (_nameError is not null || _saving)
             return;
 

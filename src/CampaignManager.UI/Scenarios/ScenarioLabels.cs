@@ -10,11 +10,11 @@ namespace CampaignManager.UI.Scenarios;
 /// <summary>Подписи сценария в разметке: что проверяют, тон роли НПС. Сами слова — <see cref="ScenarioText"/> (Core).</summary>
 public static class ScenarioLabels
 {
-    /// <summary>«Библиотеки», «СИЛ», «Удача» — то, что проверяют.</summary>
+    /// <summary>«Библиотека», «Сила», «Удача» — то, что проверяют (у характеристики — полное имя, не «СИЛ»: ревью g4, 7.3).</summary>
     public static string Target(ScenarioCheckDto check) => check.TargetKind switch
     {
         CheckTarget.Skill => check.SkillName ?? "навык удалён",
-        CheckTarget.Characteristic when check.Characteristic is { } c => InvestigatorCreationRules.Info(c).Abbreviation,
+        CheckTarget.Characteristic when check.Characteristic is { } c => InvestigatorCreationRules.Info(c).Name,
         CheckTarget.Luck => "Удача",
         _ => ScenarioText.Of(check.TargetKind),
     };
@@ -33,11 +33,15 @@ public static class ScenarioLabels
 
     public static string ChecksCount(int count) => Plural(count, "проверка", "проверки", "проверок");
 
-    public static Tone RoleTone(NpcRole role) => role switch
+    /// <summary>
+    /// Значок роли. Метка роли нейтральная: красный — только ошибка и опасность (правило 17), а не «НПС враг»; различает
+    /// значок и слово (решение владельца по ревью g4, 11.3).
+    /// </summary>
+    public static string RoleIcon(NpcRole role) => role switch
     {
-        NpcRole.Enemy => Tone.Error,
-        NpcRole.Ally => Tone.Success,
-        _ => Tone.Neutral,
+        NpcRole.Enemy => "fa-skull",
+        NpcRole.Ally => "fa-handshake",
+        _ => "fa-user",
     };
 
     /// <summary>«Объявлено» — состояние прохождения меткой (слово — <see cref="ScenarioText.Of(Core.Campaigns.ScenarioRunStatus)"/>).</summary>

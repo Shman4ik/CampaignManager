@@ -17,18 +17,22 @@
                     </select>
                 </Field>
                 <Field Label="Заголовок" Error="@_titleError">
-                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="fact-title" @bind="_title" @bind:event="oninput" />
+                    <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="fact-title" @bind="_title" @bind:event="oninput"
+                           aria-invalid="@(_titleError is null ? null : "true")" autofocus />
                 </Field>
             </div>
-            <Field Label="Содержание" Hint="(Markdown)">
+            <Field Label="Содержание" Hint="Markdown">
                 <textarea class="cm-input" rows="8" maxlength="@ScenarioLimits.TextLength" data-testid="fact-content" @bind="_content"></textarea>
             </Field>
-            @if (_error is not null)
-            {
-                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
-            }
+            <ValidationScroll Trigger="_attempt" />
         </form>
     </ChildContent>
+    <FooterError>
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+        }
+    </FooterError>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
         <Button Type="submit" form="fact-form" Busy="_saving" data-testid="fact-save">@(Fact is null ? "Добавить" : "Сохранить")</Button>
@@ -43,6 +47,7 @@
     private string? _titleError;
     private string? _error;
     private bool _saving;
+    private int _attempt;
 
     [Parameter] public bool Open { get; set; }
 
@@ -71,6 +76,8 @@
     private async Task SaveAsync()
     {
         _titleError = string.IsNullOrWhiteSpace(_title) ? "Заголовок обязателен." : null;
+        if (_titleError is not null)
+            _attempt++; // ValidationScroll вернёт фокус в поле с ошибкой (правило 9)
         if (_titleError is not null || _saving)
             return;
 
