@@ -38,15 +38,14 @@ public sealed class LoginPageTests : KitContext
         Assert.NotEmpty(cut.FindAll("[data-testid='login'] button"));
     }
 
-    // Гость входит с главной одним нажатием: сразу на страницу Auth0, без экрана /login.
+    // /login — экран ошибок входа и запасной путь (петля входа, см. RedirectToLogin): одна кнопка, сразу на страницу Auth0.
     [Fact]
-    public void Guest_home_goes_straight_to_auth0_sign_in()
+    public void Login_button_goes_straight_to_auth0_sign_in()
     {
         AddAuthorization();
-        Services.AddSingleton<CampaignManager.Contracts.Campaigns.ICampaignsApi>(new TableFakes.Campaigns());
         var navigation = Services.GetRequiredService<NavigationManager>();
 
-        var cut = Render<CampaignManager.UI.Campaigns.HomePage>();
+        var cut = Render<LoginPage>();
         Assert.Contains("passkey", cut.Markup);
 
         cut.Find("[data-testid='login'] button").Click();

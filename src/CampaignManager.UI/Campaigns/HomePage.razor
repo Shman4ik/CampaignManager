@@ -1,4 +1,5 @@
 @page "/"
+@attribute [Authorize]
 @using System.Security.Claims
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.Contracts.Identity
@@ -9,8 +10,8 @@
 @inject NavigationManager Navigation
 @inject UiEnvironment Environment
 
-@* Главная. Гостю кампаний не показывает вовсе (v1 отдавал анониму названия и почты Хранителей) и
-   в API не ходит; вошедшему — один GET /api/v1/home: открытые ваншоты, свои кампании (Хранителю — с
+@* Главная — только для вошедших: гостя сервер сразу уводит на страницу входа Auth0 (своей витрины с «Войти» нет,
+   v1 к тому же отдавал анониму названия и почты Хранителей). Один GET /api/v1/home: открытые ваншоты, свои кампании (Хранителю — с
    игроками, листами и НПС), доступные для вступления. Почт нет нигде: люди — по имени в кампании.
    Порядок — по важности за столом: свои кампании (там «Открыть лист»), затем открытая запись на ваншоты и «Можно
    вступить». Завершённые кампании — строки в одной карточке под активными. Все блоки на одной сетке (1 колонка,
@@ -115,23 +116,6 @@
                              Busy="_busy" Error="@_joinError" OnSave="JoinAsync" OnClose="() => _joining = null" />
             <CampaignFormModal Open="_creating" OnClose="() => _creating = false" OnSaved="CreatedAsync" />
         </Authorized>
-        <NotAuthorized>
-            <section class="cm-section">
-                <div class="cm-card">
-                    @* Вход — прямо здесь: кнопка сразу ведёт на страницу Auth0, без экрана /login. *@
-                    <div class="cm-card-body flex flex-col gap-4">
-                        <h2 class="cm-h4 cm-title-serif">Campaign Manager</h2>
-                        <p class="cm-text-muted max-w-prose">
-                            Рабочее место для игр по «Зову Ктулху» (7-я редакция): кампании, листы сыщиков, сценарии и журнал встреч.
-                        </p>
-                        <div class="flex max-w-sm flex-col gap-3">
-                            <LoginOptions />
-                        </div>
-                        <InfoLinks />
-                    </div>
-                </div>
-            </section>
-        </NotAuthorized>
     </AuthorizeView>
 
     @if (Environment.IsDevelopment)

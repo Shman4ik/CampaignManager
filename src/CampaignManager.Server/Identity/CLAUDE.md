@@ -9,7 +9,8 @@
 - **Две схемы под одной политикой.** Схема по умолчанию `CampaignManager` — policy scheme: запрос
   с `Authorization: Bearer …` уходит в JWT (мобильное приложение), всё остальное — в куку
   `.CampaignManager.Auth` (веб). Challenge той же схемы: API получает **401**, страница — редирект
-  на `/login?returnUrl=…`; нет прав — всегда **403** (страница сама рисует «Нет доступа»).
+  на `/account/login?returnUrl=…` и оттуда сразу на страницу Auth0 (своей витрины гостя с «Войти» нет, главная — тоже
+  `[Authorize]`; открыты только `/about`, `/legal`, `/login`, `/dev/*`, ошибки); нет прав — всегда **403** (страница сама рисует «Нет доступа»).
 - **Вход веба** — OIDC code flow, как в v1: `ResponseMode = Query` (код GET-ом: Lax-куки корреляции
   и nonce на кросс-сайтовый `form_post` не уедут), `MapInboundClaims = false`, userinfo не спрашиваем.
   `/account/login?returnUrl=…` всегда ведёт на страницу Auth0 (`ui_locales=ru`): Google, passkey и
@@ -116,8 +117,9 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
   вошедший видел главную гостя до ручной перезагрузки. Админ
   получает обе роли, `Admin` и `Keeper`.
 - Вход и выход — `NavigateTo(…, forceLoad: true)` на серверные адреса: клиентский роутер их не знает.
-- `UI/Identity`: `/login` (сообщение по `authStatus`, тестовый вход), `LoginOptions` — кнопка «Войти»
-  (на `/login` и на главной гостя: вход одним нажатием, сразу на страницу Auth0), `RedirectToLogin`, `UserMenu` —
+- `UI/Identity`: `/login` — экран ошибок входа (`authStatus`), тестовый вход и запасной путь с кнопкой «Войти»
+  (`LoginOptions`); `RedirectToLogin` — клиентский переход на `[Authorize]` без сессии сразу уводит в Auth0, а повторный
+  в течение минуты (сессия Auth0 жива, а `/me` отвечает «не вошёл» — петля) — на `/login`; `UserMenu` —
   подвал рельса и листа «Ещё» оболочки; пункты меню по ролям — `NavMenu.VisibleTo` (см. `UI/CLAUDE.md`).
 - **Страницы — только `[Authorize(Policy = Policies.Keeper|Admin)]`, не `Roles`.** Сервер при прямой
   загрузке проверяет атрибут страницы своей политикой (роль из базы), а ролей в его куке нет:

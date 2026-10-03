@@ -1,14 +1,33 @@
 @using CampaignManager.Contracts.Identity
+@using CampaignManager.UI.Platform
 @inject NavigationManager Navigation
+@inject BrowserStorage Storage
 
-@* Клиентский переход на страницу под [Authorize] без сессии. Прямую загрузку такой страницы
-   сервер сам уводит на /login (или сразу в автовход). *@
+@* Клиентский переход на страницу под [Authorize] без сессии (сессия кончилась, вышли в соседней вкладке) — сразу
+   на страницу входа Auth0, как и прямую загрузку: её сервер уводит туда сам (LoginPath — /account/login). Своего
+   экрана с кнопкой «Войти» нет.
+   Защита от петли: сессия Auth0 жива, а /me всё равно отвечает «не вошёл» (сервер без базы) — Auth0 вернул бы
+   человека сразу, и страница снова ушла бы на вход. Поэтому повторный уход в течение минуты ведёт не в Auth0, а на
+   /login — там кнопка «Войти» и ничего не происходит само. *@
 @code {
-    protected override void OnInitialized()
+    private const string LastRedirectKey = "cm.login-redirect";
+    private static readonly TimeSpan LoopWindow = TimeSpan.FromMinutes(1);
+
+    protected override async Task OnInitializedAsync()
     {
         var returnUrl = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
-        Navigation.NavigateTo(
-            $"{IdentityRoutes.LoginPage.TrimStart('/')}?{IdentityRoutes.ReturnUrlParameter}={Uri.EscapeDataString(returnUrl)}",
-            replace: true);
+        var now = DateTimeOffset.UtcNow;
+
+        if (long.TryParse(await Storage.GetAsync(LastRedirectKey), out var last)
+            && now - DateTimeOffset.FromUnixTimeSeconds(last) < LoopWindow)
+        {
+            Navigation.NavigateTo(
+                $"{IdentityRoutes.LoginPage.TrimStart('/')}?{IdentityRoutes.ReturnUrlParameter}={Uri.EscapeDataString(returnUrl)}",
+                replace: true);
+            return;
+        }
+
+        await Storage.SetAsync(LastRedirectKey, now.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Navigation.NavigateTo(IdentityRoutes.LoginUrl(returnUrl).TrimStart('/'), forceLoad: true, replace: true);
     }
 }
