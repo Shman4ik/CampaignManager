@@ -258,4 +258,32 @@ public sealed class CampaignsApiTests(CampaignsApp app) : IClassFixture<Campaign
         await ApiAssert.FailsWith(HttpStatusCode.Unauthorized, () => app.Api(null).GetHomeAsync(Cancellation));
         await ApiAssert.FailsWith(HttpStatusCode.Unauthorized, () => app.Api(null).GetCampaignsAsync(Cancellation));
     }
+
+    // #194: неверное значение enum (и любая ошибка чтения тела) — 400 с понятным текстом, а не 500; общим обработчиком,
+    // поэтому и создание, и правка, и журнал.
+    [Theory]
+    [InlineData("POST", "", """{"name":"Маски","kind":"Campaign","status":"Planning","era":"Bogus"}""", "era")]
+    [InlineData("PUT", "{id}", """{"name":"Маски","kind":"Campaign","status":"НеТакой","era":"Classic"}""", "status")]
+    [InlineData("POST", "", "{not json", null)]
+    public async Task Broken_body_is_400_with_text_not_500(string method, string path, string body, string? field)
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var campaign = await app.AddCampaignAsync(keeper);
+        var url = Contracts.Campaigns.CampaignsRoutes.Campaigns + (path.Length == 0 ? "" : "/" + campaign.Id);
+
+        using var request = new HttpRequestMessage(new HttpMethod(method), url)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+        };
+        using var response = await app.Http(keeper).SendAsync(request, Cancellation);
+        var text = await response.Content.ReadAsStringAsync(Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var problem = System.Text.Json.JsonDocument.Parse(text);
+        var detail = problem.RootElement.GetProperty("detail").GetString()!;
+        Assert.Equal("invalid", problem.RootElement.GetProperty("code").GetString());
+        Assert.Contains(field is null ? "корректный JSON" : $"«{field}»", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.", text, StringComparison.Ordinal);
+    }
 }

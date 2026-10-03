@@ -3,6 +3,7 @@ using CampaignManager.Contracts.Platform;
 using CampaignManager.Data;
 using CampaignManager.Server.Components;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Routing;
 
 namespace CampaignManager.Server.Platform;
 
@@ -25,6 +26,10 @@ public static class PlatformModule
         services.ConfigureHttpJsonOptions(options =>
             options.SerializerOptions.TypeInfoResolverChain.Insert(0, ContractsJsonContext.Default));
         services.AddProblemDetails();
+        // Ошибка чтения тела (неверный enum, не тот тип, битый JSON) — исключение для ApiProblemExceptionHandler во всех
+        // окружениях: по умолчанию его бросает только Development (там 500), а в остальных фреймворк молча пишет голый
+        // 400 без нашего текста и кода (#194).
+        services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true);
         services.AddExceptionHandler<ApiProblemExceptionHandler>();
         services.AddHealthChecks();
         services.AddOpenApi();

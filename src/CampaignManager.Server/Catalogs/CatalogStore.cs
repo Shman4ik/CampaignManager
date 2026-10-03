@@ -46,6 +46,12 @@ public abstract class CatalogStore<TEntity, TDto>
     public abstract Task<IReadOnlyList<TDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<TEntity> rows, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Запись для читателя без права правки (игрока): здесь убирается то, что игроку знать нельзя. Пока так только
+    /// у бестиария — статблок (<see cref="CreatureStore"/>); у остальных справочников всё открыто.
+    /// </summary>
+    public virtual TDto ForReader(TDto dto) => dto;
+
+    /// <summary>
     /// Проверить DTO и перенести его в строку. Сначала все проверки (<see cref="ApiProblemException.Invalid"/>),
     /// потом изменения: импорт продолжает со следующей записи, и наполовину изменённая строка ему не нужна.
     /// Общие поля (имя, источник) переносит сервис.

@@ -149,13 +149,16 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
     {
         var now = DateTimeOffset.UtcNow;
         return await currentUser.GetAsync(cancellationToken) is not null
-               && await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.SignupOpen && (r.ScheduledAt == null || r.ScheduledAt > now),
+               && await dbContext.ScenarioRuns.AnyAsync(r => r.Id == runId && r.SignupOpen && r.Status != ScenarioRunStatus.Finished && (r.ScheduledAt == null || r.ScheduledAt > now),
                    cancellationToken);
     }
 
-    /// <summary>Запись по прохождению открыта сейчас: флаг в базе и назначенное время ещё не прошло (решение владельца 2026-10-02).</summary>
-    public static bool SignupOpenNow(bool signupOpen, DateTimeOffset? scheduledAt) =>
-        signupOpen && (scheduledAt is null || scheduledAt > DateTimeOffset.UtcNow);
+    /// <summary>
+    /// Запись по прохождению открыта сейчас: флаг в базе, игра не завершена и назначенное время ещё не прошло
+    /// (решения владельца 2026-10-02 и 2026-10-03, #192 — у завершённой игры запись закрыта, даже если флаг остался).
+    /// </summary>
+    public static bool SignupOpenNow(bool signupOpen, DateTimeOffset? scheduledAt, ScenarioRunStatus status) =>
+        signupOpen && status is not ScenarioRunStatus.Finished && (scheduledAt is null || scheduledAt > DateTimeOffset.UtcNow);
 
     /// <summary>
     /// Бронь прегена: видят участники кампании, снимают (<see cref="Access.CanDelete"/>) сам игрок или

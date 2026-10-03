@@ -38,7 +38,7 @@ public static class WeaponCodes
         new("weapon.mace-spray", "Газовый баллончик"),
         new("weapon.burning-torch", "Горящий факел"),
         new("weapon.blasting-cap", "Детонатор"),
-        new("weapon.dynamite-stick", "Динамитная шашка*"),
+        new("weapon.dynamite-stick", "Динамитная шашка", ["Динамитная шашка*"]), // звёздочка — сноска книги, в названии ей не место
         new("weapon.10-gauge-shotgun-2b", "Дробовик 10-го калибра (2C)"),
         new("weapon.12-gauge-shotgun-2b-sawed-off", "Дробовик 12-го калибра (2C обрез)"),
         new("weapon.12-gauge-shotgun-2b", "Дробовик 12-го калибра (2C)"),
@@ -74,7 +74,7 @@ public static class WeaponCodes
         new("weapon.38-or-9mm-revolver", "Револьвер 38-го калибра (9 мм)"),
         new("weapon.41-revolver", "Револьвер 41-го калибра"),
         new("weapon.45-revolver", "Револьвер 45-го калибра"),
-        new("weapon.hand-grenade", "Ручная граната*"),
+        new("weapon.hand-grenade", "Ручная граната", ["Ручная граната*"]), // то же
         new("weapon.30-06-bolt-action-rifle", "Винтовка калибра .30-06 со скользящим затвором", ["Рычажная винтовка калибра .30-06"]), // ошибка перевода v1 исправлена: в книге .30-06 — со скользящим затвором, не рычажная
         new("weapon.30-lever-action-carbine", "Рычажный карабин 30-го калибра"),
         new("weapon.signal-handgun", "Сигнальный пистолет (ракетница)"),

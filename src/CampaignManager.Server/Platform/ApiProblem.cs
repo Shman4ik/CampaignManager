@@ -1,5 +1,6 @@
 using CampaignManager.Contracts.Platform;
 using Microsoft.AspNetCore.Diagnostics;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace CampaignManager.Server.Platform;
@@ -50,6 +51,9 @@ public sealed class ApiProblemExceptionHandler(IProblemDetailsService problemDet
         {
             ApiProblemException problem => (problem.StatusCode, problem.Code, problem.Message),
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, ApiProblemCodes.Stale, ApiProblemException.StaleMessage),
+            // Биндинг тела минимального API (неверное значение enum, не тот тип, нечитаемый JSON) — вина клиента, не 500 (#194)
+            BadHttpRequestException bad => (bad.StatusCode, ApiProblemCodes.Invalid, BodyMessage(bad)),
+            JsonException json => (StatusCodes.Status400BadRequest, ApiProblemCodes.Invalid, BodyMessage(json)),
             _ => (0, "", ""),
         };
         if (status == 0)
@@ -70,5 +74,27 @@ public sealed class ApiProblemExceptionHandler(IProblemDetailsService problemDet
                 Extensions = { [ApiProblemCodes.Extension] = code },
             },
         });
+    }
+
+    /// <summary>
+    /// Понятный текст для ошибки чтения тела: поле из пути <see cref="JsonException"/> («$.era» → «era»), если оно известно.
+    /// Само сообщение .NET (с типами и номером строки) наружу не идёт.
+    /// </summary>
+    private static string BodyMessage(Exception exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            if (e is JsonException json)
+            {
+                var field = json.Path?.TrimStart('$', '.');
+                return string.IsNullOrEmpty(field)
+                    ? "Тело запроса не разобрать: проверьте, что это корректный JSON."
+                    : $"Неверное значение в теле запроса: поле «{field}». Проверьте тип и допустимые значения.";
+            }
+        }
+
+        return exception is BadHttpRequestException { StatusCode: not StatusCodes.Status400BadRequest } bad
+            ? bad.Message
+            : "Запрос составлен неверно: тело отсутствует или не читается.";
     }
 }

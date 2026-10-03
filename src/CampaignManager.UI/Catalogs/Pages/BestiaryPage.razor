@@ -9,7 +9,9 @@
    странице — ровно четыре ряда в обеих ориентациях. Касание плитки раскрывает полный статблок во всю
    ширину сетки (dense подтягивает следующие плитки в дыру), раскрытая тварь одна и держится в адресе
    (?open=). После раскрытия страница прокручивает к карточке; отступ под липкие шапку и фильтры даёт
-   scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается. *@
+   scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается.
+   Игроку (CanEdit = false) сервер статблок не отдаёт вовсе (#175): плитка без ПЗ/брони/рассудка, раскрытая
+   карточка — картинки и «Описание». *@
 <CatalogPage TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо"
              Filters="Filters" SearchAlso="c => [c.Description]" PageSize="20" Open="Open"
              New="() => new CreatureDto()" EditHref="EditHref">
@@ -65,8 +67,11 @@
                                 </figure>
                             }
                             <div class="min-w-0 flex-1">
-                                <StatblockView Statblock="creature.Statblock" />
-                                <section class="mt-4 text-sm">
+                                @if (view.CanEdit)
+                                {
+                                    <StatblockView Statblock="creature.Statblock" />
+                                }
+                                <section class="@(view.CanEdit ? "mt-4 text-sm" : "text-sm")">
                                     <h3 class="cm-section-title mb-1">Описание</h3>
                                     <p class="cm-text-muted whitespace-pre-line">@(string.IsNullOrWhiteSpace(creature.Description) ? "Описания нет." : creature.Description)</p>
                                     @if (creature.Source is not null)
@@ -81,7 +86,7 @@
                 else
                 {
                     <div class="cm-card cr-tile overflow-hidden" @key="creature.Id">
-                        <button type="button" class="cr-tile-button" aria-expanded="false" aria-label="@($"{creature.Name}: раскрыть статблок")"
+                        <button type="button" class="cr-tile-button" aria-expanded="false" aria-label="@($"{creature.Name}: раскрыть")"
                                 @onclick="() => OpenAsync(view, creature)">
                             <div class="cr-tile-media">
                                 @if (image is not null)
@@ -101,11 +106,14 @@
                                     <span class="cr-tile-type">@CatalogText.Of(creature.Type)</span>
                                 </div>
                             </div>
-                            <dl class="cr-tile-stats">
-                                <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
-                                <div><dt>Броня</dt><dd>@StatblockView.TileArmor(creature.Statblock)</dd></div>
-                                <div><dt>Рассудок</dt><dd>@(string.IsNullOrWhiteSpace(creature.Statblock.SanityLoss) ? "—" : creature.Statblock.SanityLoss)</dd></div>
-                            </dl>
+                            @if (view.CanEdit)
+                            {
+                                <dl class="cr-tile-stats">
+                                    <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
+                                    <div><dt>Броня</dt><dd>@StatblockView.TileArmor(creature.Statblock)</dd></div>
+                                    <div><dt>Рассудок</dt><dd>@(string.IsNullOrWhiteSpace(creature.Statblock.SanityLoss) ? "—" : creature.Statblock.SanityLoss)</dd></div>
+                                </dl>
+                            }
                         </button>
                     </div>
                 }
