@@ -17,6 +17,19 @@
                 </label>
             </div>
         </div>
+        @if (Occupations.FirstOrDefault(o => o.Id == Draft.OccupationId) is { } current && !_changing)
+        {
+            @* Выбрав профессию, список не держим: на планшете окно с прокруткой внутри страницы — ловушка для пальца. *@
+            <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent-600 bg-accent-50 px-3 py-2" data-testid="occupation-chosen">
+                <div class="flex min-w-0 flex-col">
+                    <span class="font-semibold text-primary-800">@current.Name</span>
+                    <span class="text-xs text-primary-500">@CatalogText.Of(current.SkillPointsFormula) · Средства @current.CreditRatingMin–@current.CreditRatingMax%</span>
+                </div>
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-repeat" data-testid="occupation-change" OnClick="() => _changing = true">Сменить профессию</Button>
+            </div>
+        }
+        else
+        {
         <div class="grid max-h-96 grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3" data-testid="occupations">
             @foreach (var occupation in Filtered)
             {
@@ -38,6 +51,7 @@
         @if (Filtered.Count == 0)
         {
             <p class="cm-text-muted mt-2">Профессии не найдены.</p>
+        }
         }
     </section>
 
@@ -130,6 +144,7 @@
     private const string CustomPrefix = "custom:";
     private string _search = "";
     private bool _lovecraftianOnly;
+    private bool _changing;
     private int? _customSlot;
     private Guid? _customParent;
     private string _customName = "";
@@ -154,6 +169,7 @@
     {
         CreationPlan.SelectOccupation(Draft, OccupationCatalogs.From(occupation));
         _customSlot = null;
+        _changing = false;
         return OnChanged.InvokeAsync();
     }
 
