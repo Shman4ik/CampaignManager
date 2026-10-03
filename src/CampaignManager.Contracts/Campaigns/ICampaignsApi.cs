@@ -21,6 +21,9 @@ public interface ICampaignsApi
 
     Task DeleteCampaignAsync(Guid campaignId, CancellationToken cancellationToken = default);
 
+    /// <summary>Кампания по ссылке-приглашению: любой вошедший, пока кампания не завершена (или он в ней уже участник); иначе 404.</summary>
+    Task<CampaignInviteDto> GetInviteAsync(Guid campaignId, CancellationToken cancellationToken = default);
+
     Task<CampaignDetailsDto> JoinAsync(Guid campaignId, JoinCampaignRequest request, CancellationToken cancellationToken = default);
 
     Task<CampaignMemberDto> UpdateMemberAsync(Guid campaignId, Guid userId, UpdateMemberRequest request, CancellationToken cancellationToken = default);

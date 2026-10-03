@@ -12,6 +12,9 @@ public static class CampaignsRoutes
     /// <summary><c>GET</c> — кампания с участниками; <c>PUT</c> <see cref="CampaignInput"/>; <c>DELETE</c>.</summary>
     public const string CampaignPattern = Campaigns + "/{campaignId:guid}";
 
+    /// <summary><c>GET</c> — <see cref="CampaignInviteDto"/>: что показать по ссылке-приглашению (вступить можно и без неё — с главной).</summary>
+    public const string InvitePattern = CampaignPattern + "/invite";
+
     /// <summary><c>POST</c> <see cref="JoinCampaignRequest"/> — вступить.</summary>
     public const string JoinPattern = CampaignPattern + "/join";
 
@@ -25,6 +28,8 @@ public static class CampaignsRoutes
     public const string SessionPattern = JournalPattern + "/{sessionId:guid}";
 
     public static string Campaign(Guid campaignId) => $"{Campaigns}/{campaignId}";
+
+    public static string Invite(Guid campaignId) => $"{Campaign(campaignId)}/invite";
 
     public static string Join(Guid campaignId) => $"{Campaign(campaignId)}/join";
 

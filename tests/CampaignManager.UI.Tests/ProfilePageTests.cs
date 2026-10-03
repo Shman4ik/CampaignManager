@@ -93,6 +93,24 @@ public sealed class ProfilePageTests : KitContext
         public Task<ProfileDto> SubmitKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public SubmitKeeperApplicationRequest? LastEdit { get; private set; }
+
+        public int Withdrawals { get; private set; }
+
+        public Task<ProfileDto> UpdateKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken = default)
+        {
+            LastEdit = request;
+            Profile = Profile with { LatestApplication = Profile.LatestApplication! with { Message = request.Message?.Trim() ?? "" } };
+            return Task.FromResult(Profile);
+        }
+
+        public Task<ProfileDto> WithdrawKeeperApplicationAsync(CancellationToken cancellationToken = default)
+        {
+            Withdrawals++;
+            Profile = Profile with { LatestApplication = null, CanApply = true };
+            return Task.FromResult(Profile);
+        }
+
         public Task<PreferencesDto> GetPreferencesAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new PreferencesDto(new Dictionary<string, JsonElement>()));
 

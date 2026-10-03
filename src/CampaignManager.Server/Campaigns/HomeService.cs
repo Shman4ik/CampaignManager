@@ -229,6 +229,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
         ];
     }
 
-    private static HomeCharacterDto Character(Guid id, string? name, string? occupation, CharacterKind kind, CharacterStatus status) =>
+    /// <summary>Лист без документа в строку: имя без имени — «Без имени». Общая у главной и страницы кампании.</summary>
+    internal static HomeCharacterDto Character(Guid id, string? name, string? occupation, CharacterKind kind, CharacterStatus status) =>
         new(id, name ?? Unnamed, string.IsNullOrWhiteSpace(occupation) ? null : occupation, kind, status);
 }

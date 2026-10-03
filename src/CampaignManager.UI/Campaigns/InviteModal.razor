@@ -1,0 +1,67 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+@* Приглашение игрока: ссылка на /join/{id}. Человек откроет её, войдёт (если не вошёл) и вступит — Хранителю
+   делать больше нечего. Вступить можно и без ссылки, с главной («Можно вступить»); ссылка нужна, чтобы позвать
+   конкретного человека. Буфер обмена есть только по https и с разрешения браузера — если не вышло, ссылка
+   остаётся в поле выделенной, её можно скопировать руками. *@
+<Modal Open="Open" Title="@($"Пригласить в «{CampaignName}»")" Size="ModalSize.Small" OnClose="CloseAsync">
+    <ChildContent>
+        <div class="flex flex-col gap-3">
+            <p class="text-sm text-primary-600">
+                Отправьте ссылку игроку: он откроет её, войдёт и вступит в кампанию со своим именем.
+            </p>
+            <Field Label="Ссылка-приглашение">
+                <input class="cm-input" readonly value="@Link" aria-label="Ссылка-приглашение" data-testid="invite-link"
+                       onclick="this.select()" />
+            </Field>
+            @if (_copied)
+            {
+                <Alert Tone="Tone.Success" Small="true" ShowIcon="true" class="mb-0">Ссылка скопирована.</Alert>
+            }
+            else if (_copyFailed)
+            {
+                <Alert Tone="Tone.Info" Small="true" ShowIcon="true" class="mb-0">Браузер не дал скопировать — выделите ссылку и скопируйте вручную.</Alert>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Закрыть</Button>
+        <Button Icon="fa-copy" OnClick="CopyAsync">Скопировать ссылку</Button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public string? CampaignName { get; set; }
+
+    [Parameter, EditorRequired] public string Link { get; set; } = "";
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _copied;
+    private bool _copyFailed;
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Link);
+            _copied = true;
+            _copyFailed = false;
+        }
+        catch (JSException)
+        {
+            _copied = false;
+            _copyFailed = true;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _copied = false;
+        _copyFailed = false;
+        await OnClose.InvokeAsync();
+    }
+}
