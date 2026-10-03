@@ -49,20 +49,7 @@ public static class EncounterEngine
     public static List<AddOutcome> AddRange(EncounterState state, IEnumerable<EncounterParticipant> participants, DateTimeOffset now)
     {
         var outcomes = participants.Select(p => Add(state, p, now, log: false)).ToList();
-        var joined = outcomes.Select(o => o.Participant).OfType<EncounterParticipant>().ToList();
-        if (joined.Count > 0)
-        {
-            Log(state, new EncounterLogEntry
-            {
-                Kind = EncounterLogKind.Joined,
-                ActorId = joined.Count == 1 ? joined[0].Id : null,
-                Text = joined.Count == 1
-                    ? $"{joined[0].Name} вступает в сцену ({EncounterText.Of(joined[0].Side)})."
-                    : $"Вступили: {string.Join(", ", joined.Select(p => p.Name))}.",
-                At = now,
-            });
-        }
-
+        LogJoined(state, [.. outcomes.Select(o => o.Participant).OfType<EncounterParticipant>()], now);
         return outcomes;
     }
 
@@ -84,17 +71,48 @@ public static class EncounterEngine
         if (state.Chase is not null)
             ChaseRules.OnAdded(state, participant);
         if (log)
-        {
-            Log(state, new EncounterLogEntry
-            {
-                Kind = EncounterLogKind.Joined,
-                ActorId = participant.Id,
-                Text = $"{participant.Name} вступает в сцену ({EncounterText.Of(participant.Side)}).",
-                At = now,
-            });
-        }
+            LogJoined(state, [participant], now);
 
         return new AddOutcome(participant, null);
+    }
+
+    /// <summary>
+    /// «Вступили: …» — одна запись на тех, кто вошёл подряд: за один раз или несколькими касаниями «Добавить» в одном раунде
+    /// (две минуты между добавлениями): восемь строк «вступил» в начале боя журнал только засоряли.
+    /// </summary>
+    private static void LogJoined(EncounterState state, List<EncounterParticipant> joined, DateTimeOffset now)
+    {
+        if (joined.Count == 0)
+            return;
+
+        const string Prefix = "Вступили: ";
+        var last = state.Log.Count > 0 ? state.Log[^1] : null;
+        List<string>? earlier = null;
+        if (last is { Kind: EncounterLogKind.Joined } && last.Round == state.Round && now - last.At < TimeSpan.FromMinutes(2))
+        {
+            if (last.Text.StartsWith(Prefix, StringComparison.Ordinal))
+                earlier = [.. last.Text[Prefix.Length..].TrimEnd('.').Split(", ")];
+            else if (last.ActorId is { } actorId && state.Find(actorId) is { } who && last.Text.StartsWith(who.Name, StringComparison.Ordinal))
+                earlier = [who.Name];
+        }
+
+        if (earlier is not null)
+        {
+            last!.ActorId = null;
+            last.Text = Prefix + string.Join(", ", earlier.Concat(joined.Select(p => p.Name))) + ".";
+            last.At = now;
+            return;
+        }
+
+        Log(state, new EncounterLogEntry
+        {
+            Kind = EncounterLogKind.Joined,
+            ActorId = joined.Count == 1 ? joined[0].Id : null,
+            Text = joined.Count == 1
+                ? $"{joined[0].Name} вступает в сцену ({EncounterText.Of(joined[0].Side)})."
+                : $"{Prefix}{string.Join(", ", joined.Select(p => p.Name))}.",
+            At = now,
+        });
     }
 
     /// <summary>Убрать участника: кто ходит — не меняется, если только не ходил он сам (тогда ход — следующему).</summary>

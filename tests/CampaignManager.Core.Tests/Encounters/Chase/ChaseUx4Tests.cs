@@ -113,4 +113,21 @@ public sealed class ChaseUx4Tests
         var joined = Assert.Single(state.Log, e => e.Kind == EncounterLogKind.Joined);
         Assert.Equal("Вступили: Вильгельм, Хелен, Вампир.", joined.Text);
     }
+
+    [Fact]
+    public void Participants_added_one_by_one_in_a_row_merge_into_the_same_entry()
+    {
+        var state = new EncounterState();
+
+        EncounterEngine.Add(state, Runner("Вильгельм", ChaseRole.Prey), Now);
+        EncounterEngine.Add(state, Runner("Хелен", ChaseRole.Prey), Now.AddSeconds(20));
+        EncounterEngine.Add(state, Runner("Вампир", ChaseRole.Pursuer), Now.AddSeconds(40));
+
+        var joined = Assert.Single(state.Log, e => e.Kind == EncounterLogKind.Joined);
+        Assert.Equal("Вступили: Вильгельм, Хелен, Вампир.", joined.Text);
+
+        // Через полчаса — уже новая запись, а не дописывание в старую.
+        EncounterEngine.Add(state, Runner("Громила", ChaseRole.Pursuer), Now.AddMinutes(30));
+        Assert.Equal(2, state.Log.Count(e => e.Kind == EncounterLogKind.Joined));
+    }
 }
