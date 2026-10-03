@@ -307,10 +307,10 @@ public sealed class UxX1Tests : KitContext
         var headers = cut.FindAll("th").Select(h => h.TextContent.Trim()).ToList();
         Assert.Contains("Кампании", headers);
         Assert.Contains("Листы", headers);
-        Assert.Contains("Зарегистрирован", headers);
+        Assert.Contains("Регистрация", headers);
         var cells = cut.FindAll("tbody tr td").Select(c => c.TextContent.Trim()).ToList();
         Assert.Contains("3", cells);
         Assert.Contains("5", cells);
-        Assert.Contains(cells, c => c.Contains("14 марта 2026", StringComparison.Ordinal));
+        Assert.Contains(cells, c => c.Contains("14.03.2026", StringComparison.Ordinal));
     }
 }

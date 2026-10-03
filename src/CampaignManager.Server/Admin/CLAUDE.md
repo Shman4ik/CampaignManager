@@ -14,7 +14,7 @@
 | Метод и адрес | Что |
 |---|---|
 | `GET /api/v1/admin/summary` | `PendingApplications` — счётчик у пункта меню «Заявки» |
-| `GET /api/v1/admin/users` | все пользователи по почте (их десятки — поиск и страницы на клиенте) |
+| `GET /api/v1/admin/users` | все пользователи по почте (их десятки — поиск и страницы на клиенте); в строке `CampaignCount` (участие) и `CharacterCount` (листы игрока без архивных — как «Сыщики» в кабинете) |
 | `PUT /api/v1/admin/users/{id}/role` | `{ role }` — сменить роль |
 | `GET /api/v1/admin/keeper-applications?status=` | заявки, новые сверху; без `status` — все |
 | `POST /api/v1/admin/keeper-applications/{id}/approve` | одобрить |
