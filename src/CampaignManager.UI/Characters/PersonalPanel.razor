@@ -11,8 +11,8 @@
    - «Труд.» и «Чрез.» — текст, а не поля; Б.К.У., Комплекция, Скорость и Уклонение — под характеристиками,
      только для чтения: их считает Core (в v1 их можно было править, и пересчёт молча затирал правку). *@
 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-[1fr_0.85fr_1.15fr] lg:divide-x lg:divide-primary-200">
-    <div class="flex flex-col gap-3 max-lg:order-3 md:max-lg:col-span-2 md:max-lg:border-t md:max-lg:border-primary-200 md:max-lg:pt-3">
-        <h3 class="cm-section-title border-b border-primary-200 pb-1">Анкета</h3>
+    <div class="flex flex-col gap-4 max-lg:order-3 md:max-lg:col-span-2 md:max-lg:border-t md:max-lg:border-primary-200 md:max-lg:pt-3">
+        <h3 class="cm-card-title border-b border-primary-200 pb-1">Анкета</h3>
         <div class="flex items-center gap-3">
             <CharacterPortrait Url="@Context.Character.PortraitUrl" ReadOnly="Context.ReadOnly" OnChanged="OnPortraitChanged" />
             <div class="flex min-w-0 flex-1 flex-col gap-2">
@@ -20,13 +20,14 @@
                 <Field Label="Профессия"><input class="cm-input" @bind="Sheet.Personal.Occupation" /></Field>
             </div>
         </div>
+        @* Игрок и кампания — ссылка в потоке без боковых полей, высота добирает касание до 32px (правило 1). *@
         @if (Context.Character.PlayerName is { } player)
         {
-            <div class="text-sm"><span class="cm-meta-label">Игрок:</span> @player</div>
+            <div class="flex min-h-8 items-center gap-1 text-sm"><span class="cm-meta-label">Игрок:</span> @player</div>
         }
         @if (Context.Character.CampaignName is { } campaign)
         {
-            <div class="text-sm">
+            <div class="flex min-h-8 items-center gap-1 text-sm">
                 <span class="cm-meta-label">Кампания:</span>
                 <a class="text-accent-700 underline" href="@($"campaigns/{Context.Character.CampaignId}")">@campaign</a>
             </div>
@@ -44,8 +45,10 @@
     </div>
 
     <div class="max-md:max-w-md max-lg:order-2 md:max-lg:border-l md:max-lg:border-primary-200 md:pl-4">
-        <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Характеристики</h3>
-        <p class="cm-field-note mb-1 md:hidden">Справа от значения — его половина и пятая часть.</p>
+        <h3 class="cm-card-title mb-2 border-b border-primary-200 pb-1">Характеристики</h3>
+        @* Одна подпись над таблицей вместо подсказки в «Навыках» на 900px ниже: названия — кнопки проверки (g2 2.5). На телефоне
+           шапки столбцов нет — ½ и ⅕ поясняет та же строка. *@
+        <p class="cm-field-note mb-1">Касание названия — проверка<span class="md:hidden">; справа — ½ и ⅕</span>.</p>
         <table class="sheet-chars">
             <thead>
                 <tr><th></th><th>Значение</th><th>½</th><th>⅕</th></tr>
@@ -74,7 +77,7 @@
             </tbody>
         </table>
 
-        <h4 class="cm-section-title mt-3 border-t border-primary-200 pt-3">Производные</h4>
+        <h4 class="cm-card-title mt-3 border-t border-primary-200 pt-3">Производные</h4>
         @{ var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog); }
         <dl class="sheet-derived-grid" data-testid="sheet-derived">
             <div><dt>Бонус к урону</dt><dd>@derived.DamageBonus.ToLowerInvariant()</dd></div>
@@ -82,17 +85,14 @@
             <div><dt>Скорость</dt><dd>@derived.Move</dd></div>
             <div><dt>Уклонение</dt><dd>@derived.Dodge</dd></div>
         </dl>
-        <p class="cm-field-note mt-1">
-            Считаются по характеристикам и возрасту; Уклонение — навык, его значение — в «Навыках».
-            @if (HasOverrides)
-            {
-                <text>Часть значений — из книги (НПС).</text>
-            }
-        </p>
+        @if (HasOverrides)
+        {
+            <p class="cm-field-note mt-1">Часть значений — из книги (НПС).</p>
+        }
     </div>
 
     <div class="max-md:max-w-md max-lg:order-1 lg:pl-4">
-        <h3 class="cm-section-title mb-2 border-b border-primary-200 pb-1">Состояние</h3>
+        <h3 class="cm-card-title mb-2 border-b border-primary-200 pb-1">Состояние</h3>
         <table class="sheet-current">
             <thead><tr><th></th><th>Сейчас</th><th>Макс.</th></tr></thead>
             <tbody>
@@ -151,14 +151,14 @@
         else
         {
             <p class="cm-field-note">
-                Серьёзная рана — от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона за одну атаку, смерть — от @Math.Max(1, derived.MaxHitPoints).
+                Серьёзная рана от @WoundRules.MajorWoundThreshold(derived.MaxHitPoints) урона, смерть от @Math.Max(1, derived.MaxHitPoints).
             </p>
         }
 
         @* Отметки тела: рана решает, чем обернётся ноль ПЗ. Отметки безумия — только в блоке «Рассудок»
            (решение владельца, #157): там они идут через SanityRules и ведут приступ; второго места нет. *@
         <div class="sheet-conditions mt-3 border-t border-primary-200 pt-2">
-            <h4 class="text-sm font-semibold text-primary-600">Отметки</h4>
+            <h4 class="cm-card-title">Отметки</h4>
             <div class="sheet-conditions-list">
                 @foreach (var flag in ConditionFlags.Body)
                 {

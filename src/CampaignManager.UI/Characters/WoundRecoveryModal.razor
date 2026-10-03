@@ -42,10 +42,13 @@
             {
                 var (bonus, penalty) = WoundRules.RecoveryDice(_care, _rested, _poor);
                 var con = Sheet.Characteristics[Characteristic.CON];
-                <p class="cm-field-note">
-                    Пока стоит отметка, ПЗ сами не прибывают: в конце каждой недели — проверка ВЫН. Успех +1d3, чрезвычайный +2d3 и
-                    отметка снята, провал — неделя без выздоровления.
-                </p>
+                <details class="sheet-howto">
+                    <summary class="sheet-link"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Как это работает</summary>
+                    <p class="cm-field-note">
+                        Пока стоит отметка, ПЗ сами не прибывают: в конце каждой недели — проверка Выносливости. Успех +1d3, чрезвычайный +2d3 и
+                        отметка снята, провал — неделя без выздоровления.
+                    </p>
+                </details>
                 <div class="flex flex-col" role="group" aria-label="Условия недели">
                     @Condition("Уход врача: его проверка Медицины пройдена (+1 кость)", _care, v => _care = v, "recovery-care")
                     @Condition("Отдых в комфортной обстановке (+1 кость)", _rested, v => _rested = v, "recovery-rest")
@@ -63,8 +66,8 @@
                 }
                 @if (_roll is { } roll && WoundRules.RecoveryDiceCount(Check.Evaluate(roll.Result, con)) is var count and > 0)
                 {
-                    <Field Label="@($"ПЗ: {count}d{WoundRules.HealDieSides}")" Group="true" Note="пусто — бросит правило">
-                        <DiceInput Count="@count" Sides="@WoundRules.HealDieSides" Label="Лечение раны" Value="@_heal" ValueChanged="v => _heal = v" />
+                    <Field Label="@($"Прирост ПЗ, {count}d{WoundRules.HealDieSides}")" Group="true" Note="Пусто — бросит правило.">
+                        <DiceInput Count="@count" Sides="@WoundRules.HealDieSides" Label="Лечение раны" RollText="Бросить" Value="@_heal" ValueChanged="v => _heal = v" />
                     </Field>
                 }
             }
@@ -88,7 +91,7 @@
         </div>
     </ChildContent>
     <Footer>
-        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Закрыть</Button>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Отмена</Button>
         @if (WoundRules.Read(Sheet) is { Dead: false, Dying: false } current)
         {
             @if (current.MajorWound)

@@ -57,11 +57,12 @@
 
     <section data-testid="insanity-state">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 class="cm-section-title">Безумие</h3>
+            <h3 class="cm-card-title">Безумие</h3>
             <Button Small="true" Variant="@(status.BoutDue ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-dice-d20"
                     data-testid="open-insanity-bout" OnClick="() => _boutOpen = true">Приступ безумия</Button>
         </div>
-        <div class="grid grid-cols-2 gap-x-3">
+        @* Два флажка подряд, а не по краям строки: второй стоял в 650px от первого (g2 5.9). *@
+        <div class="flex flex-wrap gap-x-6">
             <label class="@Css.Join("sheet-condition", Sheet.Condition.TemporaryInsanity ? "sheet-condition-on" : null)">
                 <input type="checkbox" class="cm-checkbox" checked="@Sheet.Condition.TemporaryInsanity" @onchange="e => SetTemporary(e.Value is true)" />
                 <span class="min-w-0">
@@ -87,38 +88,38 @@
         {
             <p class="mt-2 text-sm text-primary-700" data-testid="last-bout">
                 <i class="fa-solid fa-clock-rotate-left mr-1 text-primary-400" aria-hidden="true"></i>
-                Последний приступ: <strong>@entry.Title</strong> (табл. @InsanityTables.TableNumeral(bout.Mode), @bout.Roll)@(bout.Duration is { } d ? $" — {InsanityTables.DurationText(bout.Mode, d)}" : "")
-                <span class="text-xs text-primary-400">· @LocalTime.DateTime(bout.RolledAt)</span>
+                Последний приступ: <strong>@entry.Title</strong>@(bout.Duration is { } d ? $" — {InsanityTables.DurationText(bout.Mode, d)}" : "")
+                <span class="text-[0.8125rem] text-primary-600">· @LocalTime.DateTime(bout.RolledAt)</span>
             </p>
         }
         @if (status is { Insane: true, PermanentlyInsane: false })
         {
-            <p class="cm-field-note mt-2">
-                Затаённое безумие: игрок управляет сыщиком, но любая потеря рассудка, даже в 1 пункт, — новый приступ.
-                Галлюцинации распознаёт проверка на реальность — проверка Рассудка, при провале −1 рассудка.
-            </p>
+            <details class="sheet-howto mt-2">
+                <summary class="sheet-link"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Как это работает</summary>
+                <p class="cm-field-note">
+                    Затаённое безумие: игрок управляет сыщиком, но любая потеря Рассудка, даже в 1 пункт, — новый приступ.
+                    Галлюцинации распознаёт проверка Рассудка на реальность, при провале −1 Рассудка.
+                </p>
+            </details>
         }
         <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
             <span class="text-primary-700">Случаев безумия от Мифов:</span>
             <strong>@Sheet.Condition.MythosInsanityCount</strong>
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="RecordMythosAsync">Записать случай (+@SanityRules.NextMythosGain(Sheet) к Мифам)</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="RecordMythosAsync">Записать случай</Button>
             @if (Sheet.Condition.MythosInsanityCount > 0)
             {
                 <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="UndoMythos">Откатить</Button>
             }
         </div>
-        <p class="cm-field-note mt-1">Первый случай даёт +5 к Мифам Ктулху, каждый следующий +1; максимум Рассудка падает вместе с ними. Откат возвращает Мифы и максимум, но не потерянный Рассудок.</p>
     </section>
 
     <HabituationPanel />
 
     <section data-testid="insanity-conditions">
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 class="cm-section-title">Фобии и мании</h3>
-            <div class="flex flex-wrap gap-2">
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-phobia" OnClick="() => OpenCondition(InsanityConditionKind.Phobia)">Добавить фобию</Button>
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-mania" OnClick="() => OpenCondition(InsanityConditionKind.Mania)">Добавить манию</Button>
-            </div>
+            <h3 class="cm-card-title">Фобии и мании</h3>
+            @* Одна кнопка: фобию или манию выбирают в окне сегментом — два входа плюс сегмент в окне были тремя способами выбрать одно (g2 5.5). *@
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-condition" OnClick="() => OpenCondition(InsanityConditionKind.Phobia)">Добавить фобию или манию</Button>
         </div>
         @if (Sheet.InsanityConditions.Count == 0)
         {
@@ -134,7 +135,7 @@
                     {
                         <div class="text-sm text-primary-600">@condition.Description</div>
                     }
-                    <div class="text-sm text-primary-600">@LocalTime.Date(condition.AcquiredAt)@(condition.Active ? "" : " · вылечено")</div>
+                    <div class="text-[0.8125rem] text-primary-600">@LocalTime.Date(condition.AcquiredAt)@(condition.Active ? "" : " · вылечено")</div>
                 </div>
                 <div class="flex gap-2">
                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(condition.Active ? "fa-check" : "fa-rotate-left")"
@@ -146,15 +147,18 @@
         }
         @if (Sheet.InsanityConditions.Any(c => c.Active))
         {
-            <ul class="cm-field-note mt-2 list-disc space-y-1 pl-4">
-                @if (status.Insane)
-                {
-                    <li>Пока сыщик безумен: рядом объект фобии — всё, кроме боя и бегства, со штрафной костью (не для проверок
-                        Рассудка и на реальность); объект мании — штрафная кость ко всем броскам, пока сыщик не утолит влечение.</li>
-                }
-                <li>Лечение: раз в месяц игрового времени психоаналитик проходит проверку Психоанализа, при успехе сыщик —
-                    проверку Рассудка; оба успеха снимают фобию или манию. Крах в любой из них — −1d6 рассудка.</li>
-            </ul>
+            <details class="sheet-howto mt-2">
+                <summary class="sheet-link"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Как это работает</summary>
+                <ul class="cm-field-note list-disc space-y-1 pl-4">
+                    @if (status.Insane)
+                    {
+                        <li>Пока сыщик безумен: рядом объект фобии — всё, кроме боя и бегства, со штрафной костью (не для проверок
+                            Рассудка и на реальность); объект мании — штрафная кость ко всем броскам, пока сыщик не утолит влечение.</li>
+                    }
+                    <li>Лечение: раз в месяц игрового времени психоаналитик проходит проверку Психоанализа, при успехе сыщик —
+                        проверку Рассудка; оба успеха снимают фобию или манию. Крах в любой из них — −1d6 Рассудка.</li>
+                </ul>
+            </details>
         }
     </section>
 </div>

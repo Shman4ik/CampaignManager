@@ -13,7 +13,7 @@
    справочник не трогает. *@
 <section data-testid="weapons">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="cm-section-title">Оружие</h3>
+        <h3 class="cm-card-title">Оружие</h3>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Добавить оружие" data-testid="weapon-add" OnClick="() => _adding = true">Добавить</Button>
     </div>
     @if (_adding)
@@ -31,12 +31,11 @@
     else
     {
         <div class="weapon-head" aria-hidden="true">
-            <span>Название</span><span>Навык</span><span>Урон</span><span>Дальность</span><span>Атаки</span><span>Патроны</span><span>Неисправность</span><span></span>
+            <span>Название</span><span>Навык</span><span>Урон</span><span>Дальность</span><span>Атаки за раунд</span><span>Патроны</span><span>Неисправность</span><span></span>
         </div>
         @foreach (var weapon in Sheet.Weapons)
         {
             var damage = WeaponStatsReader.Damage(weapon);
-            var skill = SkillOf(weapon);
             <div class="weapon-row" @key="weapon.RowId" data-testid="weapon-row">
                 <label class="weapon-cell weapon-name">
                     <span class="weapon-label">Название</span>
@@ -44,43 +43,55 @@
                 </label>
                 <div class="weapon-cell weapon-skill">
                     <span class="weapon-label">Навык</span>
-                    <div class="flex items-center gap-1">
-                        <select class="cm-input" aria-label="@($"{weapon.Name}: навык")" value="@weapon.SkillId" @onchange="e => SetSkill(weapon, e)">
-                            <option value="">—</option>
-                            @foreach (var option in CombatSkills)
-                            {
-                                <option value="@option.Id">@option.Name</option>
-                            }
-                        </select>
-                        @if (skill is not null)
+                    @* Процент навыка — в подписи варианта: отдельная плашка рядом сжимала выбор, и «Стрельба (л…» не читалась (g2 4.1). *@
+                    <select class="cm-input" aria-label="@($"{weapon.Name}: навык")" value="@weapon.SkillId" @onchange="e => SetSkill(weapon, e)">
+                        <option value="">—</option>
+                        @foreach (var option in CombatSkills)
                         {
-                            <button type="button" class="sheet-chip shrink-0" aria-label="@($"Проверка: {skill.Name}")" @onclick="() => Context.Check(skill.Key)">@skill.Value%</button>
+                            <option value="@option.Id">@option.Name@SkillValue(option.Id)</option>
                         }
-                    </div>
+                    </select>
                 </div>
                 <label class="weapon-cell">
                     <span class="weapon-label">Урон</span>
                     <span class="flex items-center">
-                        <input class="cm-input" data-testid="weapon-damage" @bind="weapon.Damage" @bind:after="Context.Changed" />
+                        @* Показывается в записи правила 13 («1d8 + 2», «бонус к урону»); хранится то, что ввели, приведённым к ней при правке. *@
+                        <input class="cm-input" data-testid="weapon-damage" value="@DiceText.Format(weapon.Damage)" @onchange="e => SetDamage(weapon, e)" />
                         <UnparsedMark Show="@(!damage.IsParsed && weapon.Damage.Trim().Length > 0)" What="урон — бой его не бросит" />
                     </span>
                 </label>
                 <label class="weapon-cell"><span class="weapon-label">Дальность</span><input class="cm-input" @bind="weapon.Range" /></label>
-                <label class="weapon-cell"><span class="weapon-label">Атаки</span><input class="cm-input" @bind="weapon.Attacks" /></label>
+                <label class="weapon-cell">
+                    <span class="weapon-label">Атаки за раунд</span>
+                    <span class="flex items-center">
+                        <input class="cm-input" @bind="weapon.Attacks" />
+                        <UnparsedMark Show="@(!WeaponStatsReader.Attacks(weapon).IsParsed && weapon.Attacks.Trim().Length > 0)" What="атаки — бой их не разберёт" />
+                    </span>
+                </label>
                 <label class="weapon-cell"><span class="weapon-label">Патроны</span><input class="cm-input" @bind="weapon.Ammo" /></label>
                 <label class="weapon-cell"><span class="weapon-label">Неисправность</span><input class="cm-input" @bind="weapon.Malfunction" /></label>
                 <div class="weapon-cell weapon-actions">
                     <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Убрать: {weapon.Name}")" OnClick="() => Remove(weapon)" />
                 </div>
                 <div class="weapon-notes">
-                    <label class="weapon-cell min-w-0 flex-1">
-                        <span class="weapon-label">Заметки</span>
-                        <input class="cm-input" placeholder="Заметки" aria-label="@($"{weapon.Name}: заметки")" @bind="weapon.Notes" />
-                    </label>
                     <label class="weapon-impaling">
                         <input type="checkbox" class="cm-checkbox" checked="@weapon.Impaling" @onchange="e => { weapon.Impaling = e.Value is true; Context.Changed(); }" />
                         пронзающее
                     </label>
+                    @* Заметка — по требованию: пустое поле под каждым оружием отнимало строку, а читали её редко (g2 4.3). *@
+                    @if (weapon.Notes.Trim().Length > 0 || _notesOpen.Contains(weapon))
+                    {
+                        <label class="weapon-cell min-w-0 flex-1">
+                            <span class="weapon-label">Заметки</span>
+                            <input class="cm-input" placeholder="Заметки" aria-label="@($"{weapon.Name}: заметки")" @bind="weapon.Notes" />
+                        </label>
+                    }
+                    else
+                    {
+                        <button type="button" class="sheet-link" aria-label="@($"Добавить заметку: {weapon.Name}")" @onclick="() => _notesOpen.Add(weapon)">
+                            <i class="fa-solid fa-plus" aria-hidden="true"></i>Заметка
+                        </button>
+                    }
                 </div>
             </div>
         }
@@ -89,6 +100,8 @@
 
 @code {
     private bool _adding;
+    // SheetWeapon — запись с равенством по значению: правка поля сменила бы хеш, поэтому сравнение по ссылке.
+    private readonly HashSet<SheetWeapon> _notesOpen = new(ReferenceEqualityComparer.Instance);
 
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
@@ -98,9 +111,6 @@
     private IEnumerable<SkillDefinition> CombatSkills => Context.Catalog.Skills
         .Where(s => s.Category is SkillCategory.CombatGeneral or SkillCategory.CombatFirearms && !Context.Catalog.IsParent(s.Id))
         .OrderBy(s => s.Name, StringComparer.CurrentCulture);
-
-    private CheckSubject? SkillOf(SheetWeapon weapon) =>
-        weapon.SkillId is { } id ? CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id) : null;
 
     private void Add(WeaponDto weapon)
     {
@@ -115,6 +125,17 @@
         _adding = false;
         Context.Changed();
     }
+
+    /// <summary>Урон приводится к записи правила 13: «1D8+2» → «1d8 + 2», «БКУ» → «бонус к урону»; парсер боя читает обе записи.</summary>
+    private void SetDamage(SheetWeapon weapon, ChangeEventArgs e)
+    {
+        weapon.Damage = DiceText.Format(e.Value?.ToString());
+        Context.Changed();
+    }
+
+    /// <summary>« — 57%» к подписи навыка; без него (чужой навык, которого нет на листе) — пусто.</summary>
+    private string SkillValue(Guid id) =>
+        CheckSubjects.CatalogSkill(Sheet, Context.Catalog, id) is { } subject ? $" — {subject.Value}%" : "";
 
     private void SetSkill(SheetWeapon weapon, ChangeEventArgs e)
     {

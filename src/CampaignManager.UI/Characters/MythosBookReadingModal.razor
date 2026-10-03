@@ -8,30 +8,33 @@
 @* Чтение книги Мифов. Предпросмотр — то же правило на копии листа (MythosBookRules.Apply по CmJson.Clone), а
    не второй расчёт Мифов и рассудка в разметке, как в v1. Потеря рассудка применяется только числом — бросили
    здесь или вписали с настоящих костей: случайный ноль молча сберёг бы рассудок (знание v1). *@
-<Modal Open="@(Book is not null)" OnClose="OnClose" Title="@Title" Size="ModalSize.Large">
+<Modal Open="@(Book is not null)" OnClose="OnClose" Title="@Title" Size="ModalSize.Medium">
     <ChildContent>
         @if (Book is not null && _preview is { } preview)
         {
             <div class="flex flex-col gap-3" data-testid="mythos-reading">
-                <div class="flex flex-wrap items-end gap-3">
-                    @if (CanRollSanity)
-                    {
-                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" OnClick="RollSanity">Бросить @Book.SanityLoss</Button>
-                    }
-                    <Field Label="Потеря рассудка" Hint="@($"— {(string.IsNullOrWhiteSpace(Book.SanityLoss) ? "впишите" : Book.SanityLoss)}")" class="w-44">
-                        <input type="number" inputmode="numeric" min="0" class="cm-input" data-testid="reading-sanity" @bind="_sanityLoss" @bind:after="Preview" />
+                @* Подпись, поле и «Бросить» — одна линия: кнопка стояла левее поля и ниже его подписи (g2 7.5.2). *@
+                <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+                    <Field Label="Потеря Рассудка" Hint="@($"— {(string.IsNullOrWhiteSpace(Book.SanityLoss) ? "впишите" : DiceText.Format(Book.SanityLoss))}")" Group="true">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="number" inputmode="numeric" min="0" class="cm-input w-24 text-center font-mono" aria-label="Потеря Рассудка" data-testid="reading-sanity" @bind="_sanityLoss" @bind:after="Preview" />
+                            @if (CanRollSanity)
+                            {
+                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" OnClick="RollSanity">Бросить @DiceText.Format(Book.SanityLoss)</Button>
+                            }
+                        </div>
                     </Field>
-                    <label class="flex items-center gap-2 text-sm text-primary-700">
+                    <label class="flex min-h-8 items-center gap-2 text-sm text-primary-700">
                         <input type="checkbox" class="cm-checkbox" @bind="_disbelieves" @bind:after="Preview" />
                         Не верит в Мифы
                     </label>
                 </div>
-                <Field Label="Игровая дата"><input class="cm-input" placeholder="март 1925" @bind="_gameDate" /></Field>
+                <Field Label="Игровая дата" Hint="— например, март 1925" class="sm:w-72"><input class="cm-input" placeholder="март 1925" @bind="_gameDate" /></Field>
 
-                <div class="grid grid-cols-1 gap-2 rounded-md bg-primary-50 p-3 text-sm sm:grid-cols-3" data-testid="reading-preview">
+                <div class="grid grid-cols-1 gap-2 rounded-md bg-primary-50 p-3 text-sm" data-testid="reading-preview">
                     <div><span class="cm-meta-label">Рассудок:</span> @Sheet.Current.Sanity → <strong>@preview.Sheet.Current.Sanity</strong></div>
-                    <div><span class="cm-meta-label">Мифы:</span> @SanityRules.MythosValue(Sheet, Context.Catalog) → <strong>@SanityRules.MythosValue(preview.Sheet, Context.Catalog)</strong> <span class="text-xs text-primary-500">(@GainReason)</span></div>
-                    <div><span class="cm-meta-label">Макс. Рассудка:</span> <strong>@SanityRules.Status(preview.Sheet, Context.Catalog).Max</strong></div>
+                    <div><span class="cm-meta-label">Мифы:</span> @SanityRules.MythosValue(Sheet, Context.Catalog) → <strong>@SanityRules.MythosValue(preview.Sheet, Context.Catalog)</strong> <span class="text-[0.8125rem] text-primary-600">· @GainReason</span></div>
+                    <div><span class="cm-meta-label">Максимум Рассудка:</span> <strong>@SanityRules.Status(preview.Sheet, Context.Catalog).Max</strong></div>
                 </div>
                 @if (SanityRules.Status(preview.Sheet, Context.Catalog) is { IndefiniteLoss: true } && !Sheet.Condition.IndefiniteInsanity)
                 {
@@ -42,7 +45,7 @@
                 {
                     <label class="flex items-center gap-2 text-sm text-primary-700">
                         <input type="checkbox" class="cm-checkbox" @bind="_markLanguage" />
-                        Отметить навык языка «@Book.Language» для фазы развития
+                        Отметить навык языка для фазы развития: @Book.Language
                     </label>
                 }
 
@@ -56,7 +59,7 @@
                                 <input type="checkbox" class="cm-checkbox mt-0.5" disabled="@choice.AlreadyKnown" @bind="choice.Learn" />
                                 <span>
                                     <span class="font-medium">@choice.BookName</span>
-                                    <span class="block text-xs text-primary-500">
+                                    <span class="block text-[0.8125rem] text-primary-600">
                                         @(choice.AlreadyKnown ? "уже на листе" : choice.Match is { } m ? $"справочник: {m.Name}" : "в справочнике нет — ляжет на лист одним названием")
                                     </span>
                                 </span>
@@ -104,15 +107,15 @@
     private CharacterSheet Sheet => Context.Sheet;
 
     private string Title => Book is null ? "" :
-        $"{(_stage == MythosBookStage.InitialReading ? "Начальное чтение" : Book.FullStudyCount > 0 ? "Повторное изучение" : "Полное изучение")}: «{Book.Name}»";
+        $"{(_stage == MythosBookStage.InitialReading ? "Начальное чтение" : Book.FullStudyCount > 0 ? "Повторное изучение" : "Полное изучение")}: {Names.Plain(Book.Name)}";
 
     private bool CanRollSanity => Book is not null && SanityLossFormula.MaxLoss(Book.SanityLoss) > 0;
 
     private bool CanApply => Book is not null && (_disbelieves || _sanityLoss is >= 0);
 
     private string GainReason => Book is null || _stage == MythosBookStage.InitialReading
-        ? "Мифы начального чтения (МКН)"
-        : MythosBookRules.GetsFullGain(Book, SanityRules.MythosValue(Sheet, Context.Catalog)) ? "Мифы полного изучения (МКП): Мифы сыщика ниже рейтинга книги (ЗМ)" : "только МКН: Мифы сыщика не ниже рейтинга книги (ЗМ)";
+        ? "начальное чтение"
+        : MythosBookRules.GetsFullGain(Book, SanityRules.MythosValue(Sheet, Context.Catalog)) ? "полное изучение: Мифы сыщика ниже рейтинга книги" : "начальное чтение: Мифы сыщика не ниже рейтинга книги";
 
     protected override async Task OnParametersSetAsync()
     {

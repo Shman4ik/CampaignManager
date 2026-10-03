@@ -12,29 +12,18 @@
     <ChildContent>
         <div class="cm-stack">
             <section>
-                <h3 class="cm-section-title mb-2">Как разыграть</h3>
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    @foreach (var mode in Modes)
-                    {
-                        <button type="button" class="@Css.Join("bout-mode", _mode == mode ? "bout-mode-active" : null)" aria-pressed="@(_mode == mode ? "true" : "false")"
-                                data-testid="@($"bout-mode-{mode}")" @onclick="() => SelectMode(mode)">
-                            <span class="font-semibold">@(mode == InsanityBoutMode.RealTime ? "В реальном времени" : "Сводка")</span>
-                            <span class="text-xs text-primary-500">
-                                @(mode == InsanityBoutMode.RealTime
-                                    ? "Таблица VII. Рядом другие сыщики, идёт сцена или бой — приступ длится 1d10 раундов."
-                                    : "Таблица VIII. Сыщик один или обезумели все — время проматывается, обычно на 1d10 часов.")
-                            </span>
-                        </button>
-                    }
-                </div>
-            </section>
-            <section>
-                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <h3 class="cm-section-title">Таблица @InsanityTables.TableNumeral(_mode) · 1d10</h3>
+                @* Режим — сегмент и одна строка о нём вместо двух карточек по 79px (g2 7.4.1); номеров таблиц нет (g2 7.4.2).
+                   «Бросить 1d10» — в одном ряду с режимом: отдельный заголовок и подсказка над таблицей съедали ~70px. *@
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <Segmented TValue="InsanityBoutMode" Options="ModeOptions" Value="_mode" ValueChanged="SelectMode" Label="Как разыграть приступ" />
                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="bout-roll"
                             OnClick="() => _roll = Dice.Roll(1, InsanityTables.BoutDie)">Бросить 1d10</Button>
                 </div>
-                <p class="cm-field-note mb-2">Бросили настоящую кость или Хранитель выбирает сам — нажмите строку с этим номером.</p>
+                <p class="cm-field-note mt-1 mb-2" data-testid="bout-mode-note">
+                    @(_mode == InsanityBoutMode.RealTime
+                        ? "Рядом другие сыщики, идёт сцена или бой — приступ длится 1d10 раундов."
+                        : "Сыщик один или обезумели все — время проматывается, обычно на 1d10 часов.")
+                </p>
                 <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
                     @foreach (var option in InsanityTables.Bouts(_mode))
                     {
@@ -67,18 +56,20 @@
                     @if (entry.Acquires is { } kind)
                     {
                         <Button Small="true" Icon="fa-plus" class="mt-3" data-testid="bout-acquire" OnClick="() => AcquireAsync(kind)">
-                            Записать приступ и выбрать @(kind == InsanityConditionKind.Phobia ? "фобию" : "манию") (табл. @InsanityTables.TableNumeral(kind))
+                            Записать приступ и выбрать @(kind == InsanityConditionKind.Phobia ? "фобию" : "манию")
                         </Button>
                     }
                 </section>
             }
-            <section>
+            <details class="sheet-howto">
+                <summary class="sheet-link"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>Как это работает</summary>
                 <ul class="cm-field-note list-disc space-y-1 pl-4">
-                    <li>Пока длится приступ, сыщиком управляет Хранитель, а рассудок он не теряет.</li>
+                    <li>Нажмите строку: выпавшую на кости или выбранную Хранителем.</li>
+                    <li>Пока длится приступ, сыщиком управляет Хранитель, а Рассудок он не теряет.</li>
                     <li>Хранитель может изменить или дописать один пункт биографии.</li>
-                    <li>Затем — затаённое безумие: любая потеря рассудка, даже в 1 пункт, вызывает новый приступ.</li>
+                    <li>Затем — затаённое безумие: любая потеря Рассудка, даже в 1 пункт, вызывает новый приступ.</li>
                 </ul>
-            </section>
+            </details>
         </div>
     </ChildContent>
     <Footer>
@@ -88,7 +79,11 @@
 </Modal>
 
 @code {
-    private static readonly InsanityBoutMode[] Modes = [InsanityBoutMode.RealTime, InsanityBoutMode.Summary];
+    private static readonly IReadOnlyList<SegmentOption<InsanityBoutMode>> ModeOptions =
+    [
+        new(InsanityBoutMode.RealTime, "В реальном времени", TestId: "bout-mode-RealTime"),
+        new(InsanityBoutMode.Summary, "Сводка", TestId: "bout-mode-Summary"),
+    ];
 
     private InsanityBoutMode _mode;
     private int? _roll;

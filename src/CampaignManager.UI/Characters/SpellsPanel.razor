@@ -8,7 +8,7 @@
    Строки — через линейку; описание раскрывается на месте. *@
 <section data-testid="spells">
     <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="cm-section-title">Заклинания</h3>
+        <h3 class="cm-card-title">Заклинания</h3>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" AriaLabel="Добавить заклинание" data-testid="spell-add" OnClick="() => _adding = true">Добавить</Button>
     </div>
     @if (_adding)
@@ -31,7 +31,7 @@
             <div class="border-t border-primary-200 py-2 first:border-t-0" data-testid="spell-row">
                 <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1fr)_auto] sm:items-end">
                     <Field Label="Название"><input class="cm-input" @bind="spell.Name" /></Field>
-                    <Field Label="Стоимость"><input class="cm-input" data-testid="spell-cost" @bind="spell.Cost" /></Field>
+                    <Field Label="Стоимость"><input class="cm-input" data-testid="spell-cost" value="@CostText(spell.Cost)" @onchange="e => SetCost(spell, e)" /></Field>
                     <Field Label="Время"><input class="cm-input" @bind="spell.CastingTime" /></Field>
                     <div class="flex gap-2">
                         <Button Variant="ButtonVariant.Secondary" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
@@ -58,7 +58,16 @@
     private CharacterSheet Sheet => Context.Sheet;
 
     private static string Meta(SpellDto spell) =>
-        string.Join(" · ", new[] { spell.Cost, spell.CastingTime }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        string.Join(" · ", new[] { CostText(spell.Cost), spell.CastingTime }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    /// <summary>Цена в словаре правил 11 и 13 («1d6 ПМ, 1d2 рассудка») — и в поиске, и в строке; в записи хранится так же.</summary>
+    private static string CostText(string? cost) => DiceText.Format(PlayExtras.CostText(cost ?? ""));
+
+    private void SetCost(SheetSpell spell, ChangeEventArgs e)
+    {
+        spell.Cost = CostText(e.Value?.ToString());
+        Context.Changed();
+    }
 
     private void Add(SpellDto spell)
     {

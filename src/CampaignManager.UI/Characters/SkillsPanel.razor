@@ -5,23 +5,25 @@
    переиспользует поле соседнего навыка, когда список перетасовывается (навык уехал из свёрнутых), и
    показывает чужое значение (знание v1). Порядок — «Частые», затем алфавит (Core/SheetSkillLayout.Sections); две колонки — явное деление списка пополам, не CSS columns.
    Свёрнутые специализации на базе стоят в алфавите строкой на месте родителя. *@
-<div class="mb-3 flex flex-wrap items-center gap-2">
-    <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск навыка…" aria-label="Поиск навыка"
-           data-testid="skill-search" @bind="_search" @bind:event="oninput" />
-    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-specialization"
-            OnClick="() => _adding = Adding.Specialization">Специализация</Button>
-    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="add-own-skill"
-            OnClick="() => _adding = Adding.Own">Свой навык</Button>
+@* Поиск липнет под меню секций, пока идёт список (g2 3.5). Кнопки добавления — рядом с ним; на телефоне липкая только строка
+   поиска, а кнопки идут под ней (две строки липкой полосы съедали бы шестую часть экрана). *@
+<div class="sheet-skill-search" data-testid="skill-tools">
+    <div class="flex flex-wrap items-center gap-2">
+        <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск навыка…" aria-label="Поиск навыка"
+               data-testid="skill-search" @bind="_search" @bind:event="oninput" />
+        <div class="flex flex-wrap gap-2 max-md:hidden">@AddButtons("")</div>
+    </div>
 </div>
+<div class="mb-3 flex flex-wrap gap-2 md:hidden">@AddButtons("phone-")</div>
 <p class="cm-field-note mb-3">
-    Тап по названию — проверка и справка. В скобках — база; галочка — успех для фазы развития.
+    Касание названия — проверка. (N) — база навыка; галочка — отметка для фазы развития.
 </p>
 
 @if (_adding == Adding.Specialization)
 {
-    <div class="mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
+    <div class="sheet-skill-form mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
         <Field Label="Навык" class="w-full sm:w-56">
-            <select class="cm-input" @bind="_parentId">
+            <select class="cm-input" @ref="_parentSelect" @bind="_parentId">
                 <option value="">— выберите —</option>
                 @foreach (var parent in Parents)
                 {
@@ -49,16 +51,14 @@
         {
             <p class="cm-field-note w-full" data-testid="specialization-reason">@(_parentId is null ? "Выберите навык." : "Впишите специализацию.")</p>
         }
-        <p class="cm-field-note w-full">
-            Если такой специализации нет в справочнике, её значение — база ближайшей по смыслу, а при её отсутствии 1%.
-        </p>
+        <p class="cm-field-note w-full">Нет в справочнике — база ближайшей по смыслу, иначе 1%.</p>
     </div>
 }
 else if (_adding == Adding.Own)
 {
-    <div class="mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
+    <div class="sheet-skill-form mb-3 flex flex-wrap items-end gap-2 border-y border-primary-200 py-3">
         <Field Label="Название" class="min-w-48 flex-1">
-            <input class="cm-input" data-testid="own-skill-name" @bind="_name" @bind:event="oninput" />
+            <input class="cm-input" @ref="_nameInput" data-testid="own-skill-name" @bind="_name" @bind:event="oninput" />
         </Field>
         <Field Label="Значение" class="w-24">
             <input type="number" inputmode="numeric" min="0" max="99" class="cm-input" @bind="_value" />
@@ -71,7 +71,7 @@ else if (_adding == Adding.Own)
         {
             <p class="cm-field-note w-full">Впишите название.</p>
         }
-        <p class="cm-field-note w-full">Свой навык живёт только на этом листе — в справочник он не попадает.</p>
+        <p class="cm-field-note w-full">Только на этом листе, в справочник не попадёт.</p>
     </div>
 }
 
@@ -119,7 +119,7 @@ else
 
     private RenderFragment Fold(SpecializationFold fold) =>
         @<details class="skill-fold" @key="fold.ParentId" open="@(_search.Length > 0)" data-testid="skill-fold">
-            <summary><i class="fa-solid fa-chevron-right skill-fold-icon" aria-hidden="true"></i><span><span class="skill-fold-name">@fold.ParentName</span><span class="skill-fold-count">специализаций: @fold.Lines.Count</span></span></summary>
+            <summary><i class="fa-solid fa-chevron-right skill-fold-icon" aria-hidden="true"></i><span><span class="skill-fold-name">@fold.ParentName</span><span class="skill-fold-count">· ещё @fold.Lines.Count</span></span></summary>
             @foreach (var line in fold.Lines)
             {
                 @Row(line)
@@ -153,7 +153,38 @@ else
         </div>;
     }
 
+    private RenderFragment AddButtons(string idPrefix) =>
+        @<text>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="@($"{idPrefix}add-specialization")"
+                    OnClick="() => OpenForm(Adding.Specialization)">Специализация</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" data-testid="@($"{idPrefix}add-own-skill")"
+                    OnClick="() => OpenForm(Adding.Own)">Свой навык</Button>
+        </text>;
+
     private enum Adding { None, Specialization, Own }
+
+    private ElementReference _parentSelect;
+    private ElementReference _nameInput;
+    private bool _focusForm;
+
+    /// <summary>Форма открывается между поиском и списком — на телефоне ниже сгиба: фокус в первое поле заодно прокручивает к ней (g2 3.6).</summary>
+    private void OpenForm(Adding adding)
+    {
+        _adding = adding;
+        _focusForm = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusForm)
+            return;
+
+        _focusForm = false;
+        if (_adding == Adding.Specialization)
+            await _parentSelect.FocusAsync();
+        else if (_adding == Adding.Own)
+            await _nameInput.FocusAsync();
+    }
 
     private string _search = "";
     private Adding _adding;
