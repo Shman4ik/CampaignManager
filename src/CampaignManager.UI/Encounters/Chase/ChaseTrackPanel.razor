@@ -9,28 +9,27 @@
 @if (Chase is { } chase)
 {
     <section data-testid="chase-track-section">
+        @* Заголовок, подпись знаков и правка трассы — одной строкой: отдельная полоса подписи и ряд кнопок отнимали ~100px,
+           и «Ход» уезжал под сгиб (H13). Правка — у самой трассы (близость). *@
         <div class="cm-section-header encounter-head">
             <h2 class="cm-section-title">Трасса</h2>
+            <span class="cm-meta flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span><i class="fa-solid fa-bolt text-warning-600" aria-hidden="true"></i> помеха</span>
+                <span><i class="fa-solid fa-road-barrier text-accent-600" aria-hidden="true"></i> преграда</span>
+            </span>
             @if (chase.Phase == ChasePhase.Active)
             {
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="@(chase.LastLocation >= ChaseRules.MaxLocations)"
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" class="ml-auto" Disabled="@(chase.LastLocation >= ChaseRules.MaxLocations)"
                         OnClick="() => Session.ChangeAsync(s => ChaseRules.Resize(s.Chase!, s.Chase!.LastLocation + 1))">Добавить локацию</Button>
+            }
+            else if (chase.Phase == ChasePhase.Setup)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_setupOpen ? "fa-chevron-up" : "fa-sliders")" class="ml-auto" OnClick="() => _setupOpen = !_setupOpen"
+                        aria-expanded="@(_setupOpen ? "true" : "false")" data-testid="chase-track-edit-toggle">Настроить трассу</Button>
             }
         </div>
         <div class="cm-card"><div class="cm-card-body flex flex-col gap-3">
             <ChaseTrack State="Session.State" OnEdit="number => _editing = number" />
-            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 cm-meta">
-                    <span><i class="fa-solid fa-bolt text-warning-600" aria-hidden="true"></i> помеха</span>
-                    <span><i class="fa-solid fa-road-barrier text-accent-600" aria-hidden="true"></i> преграда</span>
-                </div>
-                @if (chase.Phase == ChasePhase.Setup)
-                {
-                    @* Правка трассы — у самой трассы, в строке подписи знаков, а не отдельной полосой ниже (близость). *@
-                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_setupOpen ? "fa-chevron-up" : "fa-sliders")" OnClick="() => _setupOpen = !_setupOpen"
-                            aria-expanded="@(_setupOpen ? "true" : "false")" data-testid="chase-track-edit-toggle">Настроить трассу</Button>
-                }
-            </div>
             @foreach (var (prey, pursuers) in ChaseRules.Contacts(Session.State))
             {
                 @* Игровое событие, не ошибка: тон предупреждения, а не красный (правило 17). Поимка — через предпросмотр, как остальные

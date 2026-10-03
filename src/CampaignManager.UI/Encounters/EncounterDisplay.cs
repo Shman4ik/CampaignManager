@@ -32,7 +32,19 @@ public static partial class EncounterDisplay
 
     /// <summary>Строки записи журнала для показа: без номеров страниц и без счётчиков.</summary>
     public static IReadOnlyList<string> VisibleLines(EncounterLogEntry entry) =>
-        [.. entry.Lines.Where(l => !IsCounterLine(l)).Select(Plain).Where(l => l.Length > 0)];
+        [.. entry.Lines.Where(l => !IsCounterLine(l) && !IsRestatement(entry, l)).Select(Plain).Where(l => l.Length > 0)];
+
+    /// <summary>
+    /// Строка движения, которая только повторяет заголовок записи: «Шоггот: локация 5 → 6» уже в тексте, а «Шоггот: Локация, 5 → 6»
+    /// и «Шоггот: Тратит 1 действие, 1 → 0» под ним — те же сведения тремя строками (H18). Счётчик потраченных действий — внутреннее.
+    /// </summary>
+    private static bool IsRestatement(EncounterLogEntry entry, string line)
+    {
+        if (SpentLine().IsMatch(line))
+            return true;
+
+        return LocationLine().Match(line) is { Success: true } move && Plain(entry.Text).Contains($"локация {move.Groups[1].Value} → {move.Groups[2].Value}", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Итог записи одной строкой — что изменилось у кого: «Адам Урбан-Фокс: Урон 8, 3 → 0» (первая строка «было → стало» без
@@ -54,6 +66,12 @@ public static partial class EncounterDisplay
 
     [GeneratedRegex(@",\s*стр\.\s*[\d\s,–-]+(?=\))")]
     private static partial Regex TailPage();
+
+    [GeneratedRegex(@": Тратит \d+ [^,→]+, \d+ → \d+")]
+    private static partial Regex SpentLine();
+
+    [GeneratedRegex(@": Локация, (\d+) → (\d+)")]
+    private static partial Regex LocationLine();
 
     [GeneratedRegex(@": (?:Атак за раунд|Защит за раунд|Проверок очереди), ")]
     private static partial Regex CounterLine();

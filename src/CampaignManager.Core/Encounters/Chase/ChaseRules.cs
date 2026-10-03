@@ -645,9 +645,12 @@ public static class ChaseRules
             EncounterEngine.Log(state, new EncounterLogEntry
             {
                 Kind = EncounterLogKind.ChaseStart,
-                Text = "Погоня окончена: " + string.Join(", ", state.Participants
+                // «Погоня окончена. Пойманы: A. Сбежали: B, C.» — с заглавной и по группам, как плашка итога на экране.
+                Text = ("Погоня окончена. " + string.Join(" ", state.Participants
                     .Where(p => chase.Runner(p.Id) is { Role: ChaseRole.Prey })
-                    .Select(p => $"{p.Name} — {ChaseText.Of(StatusOf(state, p.Id))}")) + ".",
+                    .GroupBy(p => StatusOf(state, p.Id))
+                    .OrderBy(g => g.Key)
+                    .Select(g => $"{ChaseText.Group(g.Key)}: {string.Join(", ", g.Select(p => p.Name))}."))).TrimEnd(),
                 At = now,
             });
         }

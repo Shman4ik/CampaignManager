@@ -62,6 +62,16 @@ public static class ChaseText
         _ => status.ToString(),
     };
 
+    /// <summary>Множественное число итога погони с заглавной: «Сбежали», «Пойманы» — начало строки «Сбежали: A, B.».</summary>
+    public static string Group(ChaseStatus status) => status switch
+    {
+        ChaseStatus.Escaped => "Сбежали",
+        ChaseStatus.Caught => "Пойманы",
+        ChaseStatus.TooSlow => "Отстали",
+        ChaseStatus.LostTrail => "Потеряли след",
+        _ => "Выбыли",
+    };
+
     public static string Of(ChaseActionKind action) => action switch
     {
         ChaseActionKind.Move => "Вперёд",

@@ -101,7 +101,12 @@ public sealed class CampaignInvestigatorsSource(ICharactersApi characters) : IPa
         var occupation = investigator.Sheet.Personal.Occupation;
         // Состояние — в строке выбора: погибшего сыщика не добавляют вслепую (в погоне он блокировал начало).
         var hitPoints = investigator.Sheet.Current.HitPoints;
-        var state = hitPoints <= 0 ? "ПЗ 0 · мёртв" : investigator.Sheet.Condition.MajorWound ? $"ПЗ {hitPoints} · серьёзная рана" : null;
+        var condition = investigator.Sheet.Condition;
+        var state = condition.Dead ? "ПЗ 0 · мёртв"
+            : condition.Dying ? "ПЗ 0 · при смерти"
+            : hitPoints <= 0 ? "ПЗ 0"
+            : condition.Unconscious ? $"ПЗ {hitPoints} · без сознания"
+            : condition.MajorWound ? $"ПЗ {hitPoints} · серьёзная рана" : null;
         return string.Join(" · ", new[] { occupation, investigator.PlayerName, state }.Where(s => !string.IsNullOrWhiteSpace(s)));
     }
 }
