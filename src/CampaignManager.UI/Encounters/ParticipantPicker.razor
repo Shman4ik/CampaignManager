@@ -4,6 +4,7 @@
 @inject IScenariosApi Scenarios
 @inject IRunsApi Runs
 @inject BrowserStorage Storage
+@inject DialogService Dialogs
 
 @* Добавить участника — единственный список на бой и погоню (знание v1): источники вкладками (сыщики кампании, состав
    сценария, НПС, бестиарий — IParticipantSource), поиск без регистра, «уже в сцене» у листа, который уже стоит (один
@@ -156,6 +157,12 @@
 
     /// <summary>Прохождение, с которым идёт сцена (<c>encounters.run_id</c>): окно открывается на его сценарии.</summary>
     [Parameter] public Guid? RunId { get; set; }
+
+    /// <summary>
+    /// Предупредить, когда в сцену добавляют того, кто не может действовать (при смерти, без сознания, мёртвого): в погоне он
+    /// встал бы бегущим со своей СКО и без вопроса (H19). В бою такой участник — обычное дело (над ним бьются, его лечат).
+    /// </summary>
+    [Parameter] public bool WarnDying { get; set; }
 
     /// <summary>Хранитель выбрал сценарий прохождения кампании — страница пишет это прохождение в сцену.</summary>
     [Parameter] public EventCallback<Guid> OnRunChosen { get; set; }
@@ -360,6 +367,21 @@
         try
         {
             var participants = await option.CreateAsync(CountOf(option), CancellationToken.None);
+            if (WarnDying && participants.Where(p => p.Dying || p.Dead || p.Unconscious).ToList() is { Count: > 0 } unfit)
+            {
+                var names = string.Join(", ", unfit.Select(p => Names.Plain(p.Name)));
+                var reason = unfit.Any(p => p.Dead) ? "Мёртв" : unfit.Any(p => p.Dying) ? "При смерти" : "Без сознания";
+                var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest("Добавить в погоню?", $"{reason} — бежать не сможет.")
+                {
+                    Subject = names,
+                    ConfirmText = "Добавить",
+                    ConfirmVariant = ButtonVariant.Primary,
+                    Details = "Убрать из погони можно в меню строки.",
+                });
+                if (!confirmed)
+                    return;
+            }
+
             if (ChoosesSide)
             {
                 // Сторону берёт выбор рядом с «Добавить»; сыщик с листом остаётся со своими (CreateAsync и так их так отдаёт).

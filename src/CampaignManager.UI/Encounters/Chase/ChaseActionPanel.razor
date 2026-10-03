@@ -11,11 +11,11 @@
    и трасса меняются только «Применить» наверху. Своей карточки не рисует. *@
 @if (Active is not { } actor || Runner is not { } runner)
 {
-    <p class="cm-text-muted">Ход никого: нажмите «Следующий».</p>
+    <p class="cm-text-muted">Ход никого: нажмите «Следующий ход».</p>
 }
 else if (State.Pending is not null)
 {
-    <p class="cm-text-muted" data-testid="chase-pending">Сначала примените или отмените результат выше.</p>
+    <p class="cm-text-muted" data-testid="chase-pending">Сначала примените или отмените результат.</p>
 }
 else
 {
@@ -28,13 +28,13 @@ else
                 <span class="cm-meta">локация @runner.Location</span>
                 @if (runner.Vehicle is { } vehicle && runner.IsDriver)
                 {
-                    <Badge Tone="Tone.Info" Icon="fa-car-side">@vehicle.Name · Компл. @ChaseText.Build(vehicle.BuildLeft)</Badge>
+                    <Badge Tone="Tone.Info" Icon="fa-car-side">@vehicle.Name · Комплекция @ChaseText.Build(vehicle.BuildLeft)</Badge>
                 }
             </div>
             @if (!runner.IsPassenger)
             {
                 @* Словами, как в списке участников: квадратики «☐ 0/1» читались как «8/1» (#213). *@
-                <span class="cm-meta" data-testid="chase-actions-left">Действий: @runner.ActionsLeft из @runner.Actions</span>
+                <span class="cm-meta" data-testid="chase-actions-left">Действий: @runner.ActionsLeft из @runner.Actions · самая медленная СКО @Chase.SlowestMove</span>
             }
         </div>
 
@@ -44,7 +44,7 @@ else
         }
         @if (!runner.SpeedChecked)
         {
-            <Alert Tone="Tone.Warning" Small="true" class="mb-0">Сначала — проверка скорости (в списке бегущих ниже): присоединившийся без неё не двигается.</Alert>
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0">Сначала — проверка скорости: присоединившийся без неё не двигается.</Alert>
         }
         @if (runner.Boost is { } boost)
         {
@@ -69,13 +69,8 @@ else
             <Alert Tone="Tone.Warning" Small="true" class="mb-0">Водитель с серьёзной раной — проверка управления, как при трудной помехе.</Alert>
         }
 
-        <div class="flex flex-wrap gap-2" role="group" aria-label="Действие">
-            @foreach (var action in Actions)
-            {
-                <Button Small="true" Variant="@(action == _action ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="@ChaseText.Icon(action)"
-                        OnClick="() => SelectAsync(action)" data-testid="@($"chase-action-{action}")">@ChaseText.Of(action)</Button>
-            }
-        </div>
+        @* Выбор действия — Segmented: выбранное светлое с галочкой, а не тёмная плита главной кнопки; «Предпросмотр» ниже одна главная (B24, H14). *@
+        <Segmented TValue="ChaseActionKind?" Options="ActionOptions" Value="_action" ValueChanged="a => a is { } kind ? SelectAsync(kind) : Task.CompletedTask" Label="Действие" />
 
         @if (_action is { } selected && Actions.Contains(selected))
         {
@@ -115,7 +110,6 @@ else
     private int _obstacleLocation;
     private bool _obstacleBarrier;
     private string _obstacleName = "";
-    private string _obstacleText = "";
     private int _obstacleHitPoints;
     private int _obstacleCost = 1;
     private bool _obstacleCheck;
@@ -126,6 +120,32 @@ else
     [Parameter, EditorRequired] public ChaseSkills Skills { get; set; } = null!;
 
     private EncounterState State => Session.State;
+
+    private static readonly IReadOnlyList<SegmentOption<bool>> ShootOptions =
+        [new(true, "Остановился (1 действие)"), new(false, "На ходу (штрафная кость)")];
+
+    private static readonly IReadOnlyList<SegmentOption<int>> BoostOptions = [.. Enumerable.Range(2, 4).Select(n => new SegmentOption<int>(n, n.ToString(CultureInfo.InvariantCulture)))];
+
+    private static readonly IReadOnlyList<SegmentOption<int>> HideOptions =
+        [new(0, "0", "Без бонусных костей"), new(1, "1", "Одна бонусная кость"), new(2, "2", "Две бонусные кости")];
+
+    private static readonly IReadOnlyList<SegmentOption<bool>> ObstacleKinds = [new(false, "Помеха"), new(true, "Преграда")];
+
+    private static readonly IReadOnlyList<SegmentOption<DefenseReaction?>> Reactions =
+        [new(null, "Без ответа"), new(DefenseReaction.Dodge, "Уклонение"), new(DefenseReaction.FightBack, "Контратака")];
+
+    private static readonly IReadOnlyList<SegmentOption<DefenseReaction?>> DrivingReactions =
+        [new(null, "Без ответа"), new(DefenseReaction.Dodge, "Увернуться (Вождение)")];
+
+    private IReadOnlyList<SegmentOption<ChaseActionKind?>> ActionOptions =>
+        [.. Actions.Select(a => new SegmentOption<ChaseActionKind?>(a, ChaseText.Of(a), TestId: $"chase-action-{a}"))];
+
+    /// <summary>Осторожность у помехи: сколько действий перемещения отдать за бонусную кость (не больше двух и не больше, чем осталось).</summary>
+    private static IReadOnlyList<SegmentOption<int>> CautionOptions(ChaseRunner runner) =>
+    [
+        .. Enumerable.Range(0, Math.Min(2, Math.Max(0, runner.ActionsLeft - (runner.Boost is null ? 1 : 0))) + 1)
+            .Select(n => new SegmentOption<int>(n, n == 0 ? "Без бонуса" : n == 1 ? "+1 кость" : "+2 кости")),
+    ];
 
     private ChaseState Chase => State.Chase!;
 
@@ -178,7 +198,7 @@ else
             case ChaseActionKind.Melee:
                 UseSkill(actor, "skill.fighting.brawl");
                 _defenceKind = null;
-                _damageFormula = "1D3";
+                _damageFormula = "1d3";
                 break;
             case ChaseActionKind.Maneuver:
                 if (runner.IsDriver)
@@ -192,7 +212,7 @@ else
             case ChaseActionKind.Ranged or ChaseActionKind.Tyres:
                 UseSkill(actor, "skill.firearms.handgun");
                 _stopped = !runner.IsPassenger && runner.ActionsLeft > 0;
-                _damageFormula = action == ChaseActionKind.Ranged ? "1D10" : null;
+                _damageFormula = action == ChaseActionKind.Ranged ? "1d10" : null;
                 break;
             case ChaseActionKind.Ram:
                 _defenceKind = null;
@@ -292,7 +312,7 @@ else
                 ChaseActionKind.Hide => ChaseActions.Hide(state, actor.Id, _check.ToCheck(_difficulty, _bonus),
                     runner.IsDriver ? runner.Vehicle!.Skill ?? ChaseRules.SpeedSkill(actor, runner).Value : null, Dice),
                 ChaseActionKind.Track => ChaseActions.Track(state, actor.Id, _check.ToCheck(_difficulty), Dice),
-                ChaseActionKind.CreateObstacle => ChaseActions.CreateObstacle(state, actor.Id, _obstacleLocation, Obstacle(), _obstacleText,
+                ChaseActionKind.CreateObstacle => ChaseActions.CreateObstacle(state, actor.Id, _obstacleLocation, Obstacle(), ObstacleText(),
                     _obstacleCost, _obstacleCheck ? _check.ToCheck() : null, Dice),
                 ChaseActionKind.DriverControl => ChaseActions.DriverControl(state, actor.Id, DrivingCheck(actor, runner), _unconscious,
                     Mishap(true) with { Crash = VehicleReference.FindCrash(_crash) ?? VehicleReference.DefaultCrash(Difficulty.Hard) }, Dice),
@@ -322,6 +342,9 @@ else
         ? new ChaseLocation { Barrier = new ChaseBarrier { Name = Named("Преграда"), Difficulty = _difficulty, HitPoints = _obstacleHitPoints } }
         : new ChaseLocation { Hazard = new ChaseHazard { Name = Named("Помеха"), Difficulty = _difficulty } };
 
+    /// <summary>Что написать в журнале: «создаёт помеху (Рассыпанные фрукты)»; названия нет — правило подставит «перекрывает путь».</summary>
+    private string ObstacleText() => string.IsNullOrWhiteSpace(_obstacleName) ? "" : $"создаёт {(_obstacleBarrier ? "преграду" : "помеху")} ({_obstacleName.Trim()})";
+
     private string Named(string fallback) => string.IsNullOrWhiteSpace(_obstacleName) ? fallback : _obstacleName.Trim();
 
     private string? Validate(ChaseActionKind action) => action switch
@@ -343,15 +366,7 @@ else
             case ChaseActionKind.Hazard:
             {
                 <Field Label="Осторожность" Group="true" Note="Действие перемещения за бонусную кость, не больше двух">
-                    <div class="flex flex-wrap gap-2">
-                        @for (var i = 0; i <= Math.Min(2, Math.Max(0, runner.ActionsLeft - (runner.Boost is null ? 1 : 0))); i++)
-                        {
-                            var count = i;
-                            <Button Small="true" Variant="@(_bonus == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _bonus = count">
-                                @(count == 0 ? "Без бонуса" : $"+{count} бонусн.")
-                            </Button>
-                        }
-                    </div>
+                    <Segmented TValue="int" Options="@CautionOptions(runner)" Value="_bonus" ValueChanged="v => _bonus = v" Label="Осторожность" />
                 </Field>
                 <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Difficulty="_difficulty"
                                   BonusDice="bonus" PenaltyDice="penalty" Label="Помеха" OnChange="StateHasChanged" />
@@ -391,7 +406,7 @@ else
                 @DefenceFields(false)
                 @if (action == ChaseActionKind.Melee)
                 {
-                    @DamageFields("Урон оружия", "1D3+1D4")
+                    @DamageFields("Урон оружия", "1d3 + 1d4")
                 }
                 else
                 {
@@ -405,18 +420,15 @@ else
                 @TargetField(action)
                 @if (!runner.IsPassenger && runner.ActionsLeft > 0)
                 {
-                    <div class="flex flex-wrap gap-2" role="group" aria-label="Как стреляет">
-                        <Button Small="true" Variant="@(_stopped ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _stopped = true">Остановился (1 действие)</Button>
-                        <Button Small="true" Variant="@(!_stopped ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _stopped = false">На ходу (штрафная кость)</Button>
-                    </div>
+                    <Segmented TValue="bool" Options="ShootOptions" Value="_stopped" ValueChanged="v => _stopped = v" Label="Как стреляет" />
                 }
                 <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" BonusDice="bonus" PenaltyDice="penalty"
                                   Label="Стрельба" OnChange="StateHasChanged" />
                 @if (action == ChaseActionKind.Ranged)
                 {
                     <details class="encounter-rolls">
-                        <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Урон оружия: @(string.IsNullOrWhiteSpace(_damageFormula) ? "—" : _damageFormula)</summary>
-                        <div class="mt-2">@DamageFields("Урон оружия", "1D10")</div>
+                        <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Урон оружия: <DiceText Value="@_damageFormula" /></summary>
+                        <div class="mt-2">@DamageFields("Урон оружия", "1d10")</div>
                     </details>
                     <p class="cm-meta">Огнестрел бьёт на любую дистанцию; броня транспорта защищает водителя и пассажиров.</p>
                 }
@@ -446,13 +458,7 @@ else
             case ChaseActionKind.FloorIt:
             {
                 <Field Label="Сколько локаций за одно действие" Group="true" Note="2–3 — штрафная кость у помех на пути, 4–5 — две">
-                    <div class="flex flex-wrap gap-2">
-                        @for (var n = 2; n <= 5; n++)
-                        {
-                            var count = n;
-                            <Button Small="true" Variant="@(_boost == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _boost = count">@count</Button>
-                        }
-                    </div>
+                    <Segmented TValue="int" Options="BoostOptions" Value="_boost" ValueChanged="v => _boost = v" Label="Сколько локаций за одно действие" />
                 </Field>
                 <p class="cm-meta">
                     Штрафных костей у помех: @ChaseActions.BoostPenaltyDice(_boost, runner.NavigatorAssist)@(runner.NavigatorAssist ? " (штурман снял одну)" : "").
@@ -474,13 +480,7 @@ else
                 @if (action == ChaseActionKind.Hide)
                 {
                     <Field Label="Бонусные кости" Group="true" Note="Хранитель даёт за отрыв и укрытия">
-                        <div class="flex flex-wrap gap-2">
-                            @for (var i = 0; i <= 2; i++)
-                            {
-                                var count = i;
-                                <Button Small="true" Variant="@(_bonus == count ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _bonus = count">@count</Button>
-                            }
-                        </div>
+                        <Segmented TValue="int" Options="HideOptions" Value="_bonus" ValueChanged="v => _bonus = v" Label="Бонусные кости" />
                     </Field>
                     @if (runner.IsDriver)
                     {
@@ -497,18 +497,14 @@ else
             }
             case ChaseActionKind.CreateObstacle:
             {
-                <Field Label="Что получится" Group="true" Note="Дверь без проверки — действие; шкаф — СИЛ и действие; замок Взломом — раунд и проверка">
-                    <div class="flex flex-wrap gap-2" role="group" aria-label="Что получится">
-                        <Button Small="true" Variant="@(!_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-bolt" OnClick="() => _obstacleBarrier = false">Помеха</Button>
-                        <Button Small="true" Variant="@(_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-road-barrier" OnClick="() => _obstacleBarrier = true">Преграда</Button>
-                    </div>
+                @* Одно поле «Название» вместо «Название» и «Что делает» (оба шли в журнал по-разному); тип — Segmented, подсказка
+                   про дверь, шкаф и замок — в раскрытии: правило книги, а не то, что нужно читать каждый раз (H14). *@
+                <Field Label="Тип" Group="true">
+                    <Segmented TValue="bool" Options="ObstacleKinds" Value="_obstacleBarrier" ValueChanged="v => _obstacleBarrier = v" Label="Тип" />
                 </Field>
                 <div class="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
                     <Field Label="Название" class="sm:col-span-3">
                         <input class="cm-input" value="@_obstacleName" placeholder="@(_obstacleBarrier ? "Запертая дверь" : "Рассыпанные фрукты")" @onchange="e => _obstacleName = e.Value?.ToString() ?? string.Empty" />
-                    </Field>
-                    <Field Label="Что делает" class="sm:col-span-3">
-                        <input class="cm-input" value="@_obstacleText" placeholder="опрокидывает прилавок" @onchange="e => _obstacleText = e.Value?.ToString() ?? string.Empty" />
                     </Field>
                     <Field Label="В локации">
                         <input type="number" inputmode="numeric" min="1" max="@Chase.LastLocation" class="cm-input" value="@_obstacleLocation"
@@ -536,6 +532,10 @@ else
                 {
                     <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Label="Создать помеху" OnChange="StateHasChanged" />
                 }
+                <details class="encounter-rolls">
+                    <summary class="cm-meta cursor-pointer py-2">Что считать помехой, а что преградой</summary>
+                    <p class="cm-meta pb-2">Дверь без проверки — действие; шкаф — СИЛ и действие; замок Взломом — раунд и проверка.</p>
+                </details>
                 break;
             }
             case ChaseActionKind.DriverControl:
@@ -564,23 +564,16 @@ else
     private RenderFragment TargetField(ChaseActionKind action) => __builder =>
     {
         <Field Label="Цель">
-            <ParticipantSelect Participants="Targets(action)" Label="Цель" Value="_target" ValueChanged="v => _target = v" />
+            @* Противники первыми, свои последними: цель-преследователь не прячется за тремя союзниками (H15). *@
+            <ParticipantSelect Participants="Targets(action)" Label="Цель" Value="_target" ValueChanged="v => _target = v" Grouped="true" Perspective="Active" />
         </Field>
     };
 
     private RenderFragment DefenceFields(bool driving) => __builder =>
     {
         <Field Label="Ответ цели" Group="true">
-            <div class="flex flex-wrap gap-2">
-                <Button Small="true" Variant="@(_defenceKind is null ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _defenceKind = null">Без ответа</Button>
-                <Button Small="true" Variant="@(_defenceKind == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetDefence(DefenseReaction.Dodge, driving)">
-                    @(driving ? "Увернуться (Вождение)" : "Уклонение")
-                </Button>
-                @if (!driving)
-                {
-                    <Button Small="true" Variant="@(_defenceKind == DefenseReaction.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetDefence(DefenseReaction.FightBack, false)">Контратака</Button>
-                }
-            </div>
+            <Segmented TValue="DefenseReaction?" Options="@(driving ? DrivingReactions : Reactions)" Value="_defenceKind"
+                       ValueChanged="v => { if (v is { } kind) SetDefence(kind, driving); else _defenceKind = null; }" Label="Ответ цели" />
         </Field>
         @if (_defenceKind is not null && Target is { } target)
         {
@@ -630,16 +623,16 @@ else
             else
             {
                 <div class="flex flex-wrap items-end gap-2">
-                    <Field Label="Урон" Note="таблица III" class="w-full sm:w-64">
+                    <Field Label="Урон" class="w-full sm:w-64">
                         <select class="cm-input" value="@(_damageFormula ?? "")" @onchange="e => _damageFormula = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()">
                             <option value="">— без урона —</option>
-                            @if (_damageFormula is { Length: > 0 } formula && OtherDamageReference.Tiers.All(t => t.Formula != formula))
+                            @if (_damageFormula is { Length: > 0 } formula && OtherDamageReference.Tiers.All(t => !string.Equals(t.Formula, formula, StringComparison.OrdinalIgnoreCase)))
                             {
-                                <option value="@formula">@formula</option>
+                                <option value="@formula">@DiceText.Format(formula)</option>
                             }
                             @foreach (var tier in OtherDamageReference.Tiers)
                             {
-                                <option value="@tier.Formula">@tier.Name — @tier.Formula</option>
+                                <option value="@tier.Formula" selected="@string.Equals(_damageFormula, tier.Formula, StringComparison.OrdinalIgnoreCase)">@tier.Name — @DiceText.Format(tier.Formula)</option>
                             }
                         </select>
                     </Field>
@@ -658,18 +651,18 @@ else
     private RenderFragment CrashFields() => __builder =>
     {
         <div class="flex flex-wrap items-end gap-2">
-            <Field Label="Авария" Note="таблица VI, стр. 145: Комплекция и урон каждому внутри" class="w-full sm:w-72">
+            <Field Label="Авария" Note="Комплекция и урон каждому внутри" class="w-full sm:w-72">
                 <select class="cm-input" value="@(_crash ?? "")" @onchange="e => _crash = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString()">
                     <option value="">— без аварии —</option>
                     @foreach (var crash in VehicleReference.Crashes)
                     {
-                        <option value="@crash.Name">@crash.Name — @crash.BuildLoss</option>
+                        <option value="@crash.Name">@crash.Name — @DiceText.Format(crash.BuildLoss)</option>
                     }
                 </select>
             </Field>
             @if (VehicleReference.FindCrash(_crash) is { } chosen)
             {
-                <Field Label="Комплекция −" Note="@($"пусто — {chosen.BuildLoss}")" class="w-28">
+                <Field Label="Комплекция −" Note="@($"пусто — {DiceText.Format(chosen.BuildLoss)}")" class="w-28">
                     <input type="number" inputmode="numeric" min="0" class="cm-input" aria-label="Потеря Комплекции" value="@(_crashRoll?.ToString(CultureInfo.InvariantCulture))"
                            @onchange="e => _crashRoll = Number(e, allowZero: true)" />
                 </Field>

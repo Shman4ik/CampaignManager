@@ -69,7 +69,7 @@
     <ParticipantPicker Open="_pickerOpen" OnClose="() => _pickerOpen = false" Sources="_sources"
                        Context="@(new ParticipantPickerContext(_session.Encounter.CampaignId, _session.Catalog))"
                        UsedCharacterIds="UsedCharacterIds" OnPicked="AddParticipantsAsync"
-                       RunId="_session.Encounter.RunId" OnRunChosen="SetRunAsync" />
+                       RunId="_session.Encounter.RunId" OnRunChosen="SetRunAsync" WarnDying="@(Kind == EncounterKind.Chase)" />
 }
 
 @code {
@@ -130,6 +130,12 @@
     /// <summary>Расстановка боя до первого раунда (инициатива, огнестрел наготове): рядом со списком участников вместо формы действия.</summary>
     [Parameter] public RenderFragment? SetupContent { get; set; }
 
+    /// <summary>
+    /// Своё над обеими колонками, на всю ширину рабочей области (погоня: трасса — локации в ряд не помещались в колонку
+    /// 605px, и три из восьми уезжали за край, H4). Рисуется, когда в сцене есть участники.
+    /// </summary>
+    [Parameter] public RenderFragment? TopContent { get; set; }
+
     /// <summary>Своё в предпросмотре результата — решение Хранителя до «Применить» (погоня: обломки разрушенной преграды).</summary>
     [Parameter] public RenderFragment<EncounterResolution>? PendingContent { get; set; }
 
@@ -144,8 +150,8 @@
     [Parameter] public bool ShowList { get; set; }
 
     /// <summary>
-    /// Колонка действия липнет под шапкой, и в ней же результат («Применить» не уезжает за экран): бой. У погони колонка
-    /// высокая (трасса, бегущие), липнет только результат.
+    /// Колонка действия липнет под шапкой, и в ней же результат («Применить» не уезжает за экран), полоса раунда липнет
+    /// выше неё: бой и погоня (у погони трасса стоит над колонками и в липкую часть не входит, H12/H13).
     /// </summary>
     [Parameter] public bool StickyAction { get; set; } = true;
 
@@ -166,6 +172,17 @@
         : state.Chase is { Phase: ChasePhase.SpeedCheck } ? ChaseText.Of(ChasePhase.SpeedCheck)
         : state.Round == 0 ? "Расстановка"
         : $"Раунд {state.Round}";
+
+    /// <summary>
+    /// Слово в полосе раунда. Погоня окончена — так и пишем (а не «Раунд 2 · ходит …», H16); до первого раунда погони —
+    /// «Перед погоней», этап назван в подзаголовке шапки и в заголовке секции, третьего названия не нужно (H8), а в пустой
+    /// сцене — что делать (H1).
+    /// </summary>
+    private string StripText(EncounterState state, EncounterParticipant? active) =>
+        state.Chase is { Phase: ChasePhase.Ended } ? StageText(state)
+        : state.Round > 0 ? $"Раунд {state.Round} · ходит {active?.Name ?? "—"}"
+        : Kind == EncounterKind.Chase ? (state.Participants.Count == 0 ? "Добавьте участников и создайте трассу" : "Перед погоней")
+        : StageText(state);
 
     private static string? SaveProblem(EncounterSession session) => session.SaveState switch
     {
@@ -733,7 +750,7 @@
         var order = queue.Where(p => !p.Dead).Concat(queue.Where(p => p.Dead)).ToList();
         var pending = state.Pending;
         // Расстановка боя (раунд 0): форма атаки с пустыми «— выберите —» не нужна, нужны участники и «Начать бой» (B5).
-        var preFight = StickyAction && state.Round == 0;
+        var preFight = StickyAction && !StartsItself && state.Round == 0;
         var showAction = order.Count > 0 && !preFight;
         // Последняя запись журнала — под шапкой сцены (правило 14); записи «Лист» — служебные, их не показываем.
         var last = StickyAction ? state.Log.LastOrDefault(e => e.Kind != EncounterLogKind.Sheet) : null;
@@ -765,13 +782,18 @@
             </Alert>
         }
 
+        @if (AllowsMany)
+        {
+            @Siblings(session)
+        }
+
         @* Полоса раунда бою липнет под шапку: «Следующий ход» и последняя запись журнала на виду, пока страница прокручивается к
            результату или к длинному списку участников (B17, B34). У погони полоса обычная (колонка высокая, свои липкие блоки). *@
         <section class="@Css.Join("cm-section", StickyAction ? "md:sticky md:top-14 md:z-20 md:mb-1 md:bg-page md:pb-3" : null)" data-testid="round-strip">
             <div class="cm-card">
                 <div class="@Css.Join("cm-card-body flex flex-wrap items-center gap-x-3 gap-y-2", StickyAction ? "py-2.5" : null)">
                     <div class="min-w-0 flex-1 basis-48" data-testid="round-status">
-                        <div class="font-semibold">@(state.Round == 0 ? StageText(state) : $"Раунд {state.Round} · ходит {active?.Name ?? "—"}")</div>
+                        <div class="font-semibold">@StripText(state, active)</div>
                     </div>
                     <div class="cm-btn-row">
                         @if (state.Chase is { Phase: ChasePhase.Ended })
@@ -796,7 +818,7 @@
                             <ChildContent>
                                 @if (AllowsMany)
                                 {
-                                    <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">@NewWord (разделились)</RowMenuItem>
+                                    <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">Ещё одна погоня (разделились)</RowMenuItem>
                                 }
                                 @if (Kind == EncounterKind.Combat)
                                 {
@@ -825,12 +847,15 @@
                         @(" ")@EncounterDisplay.Plain(last.Text)
                     </button>
                 }
-                @if (AllowsMany)
-                {
-                    @Siblings(session)
-                }
             </div>
         </section>
+
+        @if (showAction && TopContent is not null)
+        {
+            <div class="cm-section" data-testid="top-content">
+                <CascadingValue Value="session" IsFixed="true">@TopContent</CascadingValue>
+            </div>
+        }
 
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
             <section class="@Css.Join("cm-section", showAction ? "lg:col-span-5" : "lg:col-span-7")">
@@ -1115,47 +1140,45 @@
     };
 
     /// <summary>
-    /// Идущие сцены этого вида (погони разделившихся): открытая отмечена, остальные — переход по <c>?id=</c>; «Новая …» —
-    /// ещё одна в той же кампании. Список читается при открытии сцены (переход между ними перечитывает).
+    /// Идущие сцены этого вида (погони разделившихся): переключатель над полосой раунда, открытая отмечена, остальные —
+    /// переход по <c>?id=</c>. Номер — по порядку создания (id v7 растёт со временем), а не по свежести правки: иначе погони
+    /// менялись номерами после каждого хода (H3). Список читается при открытии сцены (переход между ними перечитывает).
     /// </summary>
     private RenderFragment Siblings(EncounterSession session) => __builder =>
     {
         var current = session.Encounter;
-        var all = _active.Where(a => a.CampaignId == current.CampaignId).ToList();
-        var others = all.Where(a => a.Id != current.Id).ToList();
-        if (others.Count == 0)
+        var all = _active.Where(a => a.CampaignId == current.CampaignId).OrderBy(a => a.Id.ToString(), StringComparer.Ordinal).ToList();
+        if (all.Count < 2)
             return;
 
-        // Вкладки погонь: у каждой номер и состав; открытая отмечена, остальные — ссылки по ?id=.
-        <div class="cm-card-body flex flex-wrap items-center gap-2 border-t border-primary-200" data-testid="encounter-siblings">
-            @for (var i = 0; i < all.Count; i++)
-            {
-                var number = i + 1;
-                var item = all[i];
-                @if (item.Id == current.Id)
-                {
-                    @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
-                    <span class="cm-btn cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
-                        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, session.State.Chase?.Name, [.. session.State.Participants.Select(p => p.Name)]) · @StageLabel(session.State.Round, session.State.Chase is { Phase: ChasePhase.Ended })</span>
-                    </span>
-                }
-                else
-                {
-                    <Button Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={item.Id}")" data-testid="sibling">
-                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.Name, item.ParticipantNames) · @StageLabel(item.Round, item.Ended)
-                    </Button>
-                }
-            }
-        </div>
+        List<SegmentOption<Guid>> options = [];
+        for (var i = 0; i < all.Count; i++)
+        {
+            var item = all[i];
+            options.Add(item.Id == current.Id
+                ? new SegmentOption<Guid>(item.Id, SceneLabel(i + 1, current.CampaignId, current.CampaignName, session.State.Chase?.Name, [.. session.State.Participants.Select(p => p.Name)], StageLabel(session.State.Round, session.State.Chase is { Phase: ChasePhase.Ended })), TestId: "sibling-current")
+                : new SegmentOption<Guid>(item.Id, SceneLabel(i + 1, item.CampaignId, item.CampaignName, item.Name, item.ParticipantNames, StageLabel(item.Round, item.Ended)), TestId: "sibling"));
+        }
+
+        @* Выбор из набора — не главная кнопка (рядом «Следующий ход»): открытая погоня — светлая с галочкой (H3). *@
+        <section class="cm-section" data-testid="encounter-siblings">
+            <Segmented TValue="Guid" Options="options" Value="current.Id" ValueChanged="@(id => Navigation.NavigateTo($"{Route}?id={id}"))" Label="Идущие погони" />
+        </section>
     };
 
-    /// <summary>Подпись сцены в переключателе: кто в ней (первые трое), кампания — если она не та, что у открытой.</summary>
-    private string SceneLabel(Guid? campaignId, string? campaignName, string? name, IReadOnlyList<string> names)
+    /// <summary>Имя без фамилии для тесной подписи переключателя: «Адам Урбан-Фокс» → «Адам».</summary>
+    private static string FirstName(string name) => name.Split(' ', 2)[0];
+
+    /// <summary>
+    /// Подпись погони в переключателе: у названной — название без «Погоня N:», у безымянной — номер и кто в ней (первые двое);
+    /// кампания — если она не та, что у открытой; в конце этап.
+    /// </summary>
+    private string SceneLabel(int number, Guid? campaignId, string? campaignName, string? name, IReadOnlyList<string> names, string stage)
     {
         var who = !string.IsNullOrWhiteSpace(name) ? name
-            : names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
-        return campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
+            : names.Count == 0 ? $"Погоня {number}: без участников" : $"Погоня {number}: " + string.Join(", ", names.Take(2).Select(FirstName)) + (names.Count > 2 ? $" и ещё {names.Count - 2}" : "");
+        var label = campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
+        return $"{label} · {stage}";
     }
 
 }

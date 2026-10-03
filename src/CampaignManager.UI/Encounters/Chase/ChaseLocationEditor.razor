@@ -1,52 +1,59 @@
 @using CampaignManager.Core
+@using CampaignManager.Core.Dice
 @using CampaignManager.Core.Encounters.Chase
 @using CampaignManager.Core.KeeperScreen
 
 @* Правка локации трассы: название, помеха или преграда. Помеха — сложность и урон при провале (таблица III, стр. 122 —
    одна копия в Core/KeeperScreen), преграда — сложность и ПЗ (примеры книги, стр. 136; 0 — сломать нельзя). Помеха и
    преграда лежат в той локации, в которую входят. Правка уходит странице целиком — новый экземпляр локации. *@
-<Modal Open="Location is not null" Title="@($"Локация {Location?.Number}")" OnClose="OnClose">
+<Modal Open="Location is not null" Title="@($"Изменить локацию {Location?.Number}")" OnClose="OnClose">
     <ChildContent>
         @if (_draft is not null)
         {
             <div class="flex flex-col gap-3">
-                <Field Label="Название" Hint="«Рынок», «Пожарная лестница» — по желанию">
-                    <input class="cm-input" value="@_draft.Name" @onchange="e => _draft.Name = Text(e)" />
+                <Field Label="Название локации">
+                    <input class="cm-input" placeholder="Рынок" value="@_draft.Name" @onchange="e => _draft.Name = Text(e)" />
                 </Field>
                 @* Выбор — Segmented, а не тёмная кнопка: главная в окне одна — «Сохранить». *@
-                <Segmented TValue="int" Options="KindOptions" Value="_kind" ValueChanged="k => _kind = k" Label="Что мешает войти" />
+                <Field Label="Что мешает войти" Group="true">
+                    <Segmented TValue="int" Options="KindOptions" Value="_kind" ValueChanged="k => _kind = k" Label="Что мешает войти" />
+                </Field>
                 @if (_kind == 1)
                 {
-                    <p class="cm-meta">Помеху проходят всегда: успех — без последствий, провал — урон и 1d3 потерянных действия.</p>
-                    <Field Label="Помеха">
+                    <p class="cm-meta">Помеху проходят всегда; провал — урон и потерянное время.</p>
+                    <Field Label="Название помехи">
                         <input class="cm-input" value="@_hazard.Name" @onchange="SetHazardName" />
                     </Field>
-                    <DifficultyPicker Value="_hazard.Difficulty" ValueChanged="d => _hazard.Difficulty = d" />
-                    <Field Label="Урон при провале" Note="Таблица III; пусто — решите на месте">
+                    <Field Label="Сложность" Group="true">
+                        <DifficultyPicker Value="_hazard.Difficulty" ValueChanged="d => _hazard.Difficulty = d" />
+                    </Field>
+                    <Field Label="Урон при провале">
                         <select class="cm-input" value="@(_hazard.Damage ?? "")" @onchange="e => _hazard.Damage = Text(e)">
                             <option value="">— без урона —</option>
                             @foreach (var tier in OtherDamageReference.Tiers)
                             {
-                                <option value="@tier.Formula">@tier.Name — @tier.Formula</option>
+                                <option value="@tier.Formula">@tier.Name — @DiceText.Format(tier.Formula)</option>
                             }
                         </select>
                     </Field>
                 }
                 else if (_kind == 2)
                 {
-                    <p class="cm-meta">Преграда не пускает, пока не пройдена проверка или не разрушена.</p>
-                    <Field Label="Преграда">
+                    <p class="cm-meta">Преграда не пускает без проверки, пока её не разрушат.</p>
+                    <Field Label="Название преграды">
                         <input class="cm-input" value="@_barrier.Name" @onchange="SetBarrierName" />
                     </Field>
-                    <DifficultyPicker Value="_barrier.Difficulty" ValueChanged="d => _barrier.Difficulty = d" />
+                    <Field Label="Сложность" Group="true">
+                        <DifficultyPicker Value="_barrier.Difficulty" ValueChanged="d => _barrier.Difficulty = d" />
+                    </Field>
                     <div class="flex flex-wrap items-end gap-2">
-                        <Field Label="ПЗ" Note="0 — сломать нельзя" class="w-28">
+                        <Field Label="ПЗ" Note="0 — не сломать" class="w-32">
                             <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_barrier.HitPoints"
                                    @onchange="e => _barrier.HitPoints = Number(e)" />
                         </Field>
-                        <Field Label="Как в книге" class="w-full sm:w-72">
+                        <Field Label="Пример" class="w-full sm:w-72">
                             <select class="cm-input" value="" @onchange="SelectPreset">
-                                <option value="">— пример —</option>
+                                <option value="">— выберите —</option>
                                 @foreach (var preset in VehicleReference.Barriers)
                                 {
                                     <option value="@preset.HitPoints">@preset.Name — @preset.HitPoints ПЗ</option>
