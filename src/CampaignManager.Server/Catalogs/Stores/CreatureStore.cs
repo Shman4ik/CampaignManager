@@ -47,8 +47,7 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
             Type = c.Type,
             Description = c.Description,
             Statblock = CmJson.ReadStatblock(c.Statblock, c.StatblockVersion),
-            Images = c.Images.OrderBy(i => i.Ord)
-                .Select(i => new CreatureImageDto(i.FileId, FilesRoutes.Content(i.FileId), i.Caption)).ToList(),
+            Images = CatalogImages.ToDtos(c.Images),
         }).ToList());
 
     /// <summary>
@@ -70,7 +69,7 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
         }
 
         var statblock = dto.Statblock ?? throw ApiProblemException.Invalid("Нет статблока.");
-        var images = await ImagesAsync(db, dto.Images, write, cancellationToken);
+        var images = await CatalogImages.CheckAsync(db, dto.Images, write, cancellationToken);
         CheckStatblock(statblock, write);
 
         entity.Type = dto.Type;
@@ -78,27 +77,7 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
         entity.Statblock = CmJson.Write(statblock);
         entity.StatblockVersion = Statblock.CurrentVersion;
 
-        // Ключ картинки — (тварь, порядок): как у заклинаний книги, правим на месте.
-        for (var ord = 0; ord < images.Count; ord++)
-        {
-            var current = entity.Images.FirstOrDefault(i => i.Ord == ord);
-            if (current is null)
-            {
-                var added = new CreatureImage { CreatureId = entity.Id, Ord = ord, FileId = images[ord].FileId, Caption = Text(images[ord].Caption) };
-                entity.Images.Add(added);
-                db.Add(added);
-            }
-            else
-            {
-                current.FileId = images[ord].FileId;
-                current.Caption = Text(images[ord].Caption);
-            }
-        }
-
-        foreach (var extra in entity.Images.Where(i => i.Ord >= images.Count).ToList())
-        {
-            entity.Images.Remove(extra);
-        }
+        CatalogImages.Apply(db, entity.Images, images, ord => new CreatureImage { CreatureId = entity.Id, Ord = ord });
     }
 
     /// <summary>
@@ -139,32 +118,4 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
 
     private static bool Rollable(string? formula) =>
         string.IsNullOrWhiteSpace(formula) || DiceFormula.Parse(formula).IsValid;
-
-    private static async Task<List<CreatureImageDto>> ImagesAsync(
-        CmDbContext db,
-        IEnumerable<CreatureImageDto>? incoming,
-        CatalogWrite write,
-        CancellationToken cancellationToken)
-    {
-        var images = (incoming ?? []).ToList();
-        if (images.Count == 0)
-        {
-            return images;
-        }
-
-        var ids = images.Select(i => i.FileId).Distinct().ToList();
-        var known = await db.Files.Where(f => ids.Contains(f.Id)).Select(f => f.Id).ToListAsync(cancellationToken);
-        if (known.Count == ids.Count)
-        {
-            return images;
-        }
-
-        if (!write.IsImport)
-        {
-            throw ApiProblemException.Invalid("Картинка не найдена: загрузите её заново.");
-        }
-
-        write.Warnings.Add("часть картинок из файла в этой базе не найдена — они пропущены.");
-        return images.Where(i => known.Contains(i.FileId)).ToList();
-    }
 }

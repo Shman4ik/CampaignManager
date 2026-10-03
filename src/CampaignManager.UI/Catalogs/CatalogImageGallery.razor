@@ -1,0 +1,38 @@
+@using CampaignManager.Contracts.Catalogs
+
+@* Картинки раскрытой записи справочника (тварь, оружие): большая — выбранная, остальные — миниатюрами по касанию
+   (наведения на iPad нет). Выбор живёт в компоненте: раскрыли другую запись — родитель ставит @key, и снова первая.
+   Картинка не липкая — пряталась бы под фильтрами. Ширину задаёт обёртка родителя. *@
+@if (Images.Count > 0)
+{
+    var shown = Images[Math.Min(_index, Images.Count - 1)];
+    <figure>
+        <img src="@shown.Url" alt="@(shown.Caption ?? Alt)" class="w-full rounded-md" />
+        @if (!string.IsNullOrWhiteSpace(shown.Caption))
+        {
+            <figcaption class="mt-2 text-center text-xs text-primary-500">@shown.Caption</figcaption>
+        }
+        @if (Images.Count > 1)
+        {
+            <div class="mt-3 flex flex-wrap justify-center gap-2">
+                @for (var i = 0; i < Images.Count; i++)
+                {
+                    var index = i;
+                    <button type="button" class="@Css.Join("h-14 w-14 overflow-hidden rounded-md border", index == _index ? "border-accent-500 ring-2 ring-accent-500/30" : "border-primary-200 opacity-70")"
+                            aria-label="@($"Картинка {index + 1}")" @onclick="() => _index = index">
+                        <img src="@ImageUrls.Thumb(Images[index].Url, 160)" alt="" class="h-full w-full object-cover" loading="lazy" />
+                    </button>
+                }
+            </div>
+        }
+    </figure>
+}
+
+@code {
+    private int _index;
+
+    [Parameter, EditorRequired] public IReadOnlyList<CatalogImageDto> Images { get; set; } = [];
+
+    /// <summary>Подпись для картинки без своей подписи — имя записи.</summary>
+    [Parameter, EditorRequired] public string Alt { get; set; } = "";
+}

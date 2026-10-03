@@ -1,0 +1,42 @@
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Contracts.Files
+
+@* Картинки записи справочника в форме (тварь, оружие): подпись, порядок, «убрать», загрузка новой через ImagePicker.
+   Правит список записи на месте — форма сравнивает снимок JSON, правку она увидит. Своей карточки не рисует. *@
+<div class="grid gap-3">
+    <p class="cm-text-muted">@Hint</p>
+    @for (var i = 0; i < Images.Count; i++)
+    {
+        var image = Images[i];
+        var index = i;
+        <div class="flex flex-wrap items-center gap-3" @key="image.FileId">
+            <img src="@ImageUrls.Thumb(image.Url, 160)" alt="" class="@($"{ThumbClass} rounded-md border border-primary-200 object-cover")" />
+            <input class="cm-input min-w-40 flex-1" placeholder="Подпись" aria-label="Подпись картинки" value="@image.Caption"
+                   @onchange="e => Images[index] = image with { Caption = e.Value?.ToString() }" />
+            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-up" AriaLabel="Выше" Disabled="index == 0" OnClick="() => Move(index, -1)" />
+            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-down" AriaLabel="Ниже" Disabled="index == Images.Count - 1" OnClick="() => Move(index, 1)" />
+            <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="Убрать картинку" OnClick="() => Images.RemoveAt(index)" />
+        </div>
+    }
+    <ImagePicker OnChanged="Add" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<CatalogImageDto> Images { get; set; } = [];
+
+    [Parameter] public string Hint { get; set; } = "Первая картинка — обложка.";
+
+    /// <summary>Размер превью под пропорции обложки: у твари 4:5 (<c>h-20 w-16</c>), у оружия 3:2.</summary>
+    [Parameter] public string ThumbClass { get; set; } = "h-20 w-16";
+
+    private void Move(int index, int delta) =>
+        (Images[index + delta], Images[index]) = (Images[index], Images[index + delta]);
+
+    private void Add(StoredFileDto? file)
+    {
+        if (file is not null && Images.All(i => i.FileId != file.Id))
+        {
+            Images.Add(new CatalogImageDto(file.Id, file.Url, null));
+        }
+    }
+}

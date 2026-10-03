@@ -108,6 +108,9 @@ public sealed class Weapon : CatalogEntry
     public decimal? CostClassic { get; set; }
     public decimal? CostModern { get; set; }
     public string Notes { get; set; } = "";
+
+    /// <summary>Первая по <see cref="WeaponImage.Ord"/> — обложка.</summary>
+    public List<WeaponImage> Images { get; set; } = [];
 }
 
 /// <summary>Урон дробовика на дистанции: <c>{"range":"10 м","damage":"4d6"}</c>.</summary>
@@ -180,9 +183,25 @@ public sealed class Creature : CatalogEntry
     public List<CreatureImage> Images { get; set; } = [];
 }
 
-public sealed class CreatureImage
+/// <summary>Картинка записи справочника: у каждого справочника своя таблица, ключ — (запись, порядок).</summary>
+public interface ICatalogImage
+{
+    int Ord { get; set; }
+    Guid FileId { get; set; }
+    string? Caption { get; set; }
+}
+
+public sealed class CreatureImage : ICatalogImage
 {
     public Guid CreatureId { get; set; }
+    public int Ord { get; set; }
+    public Guid FileId { get; set; }
+    public string? Caption { get; set; }
+}
+
+public sealed class WeaponImage : ICatalogImage
+{
+    public Guid WeaponId { get; set; }
     public int Ord { get; set; }
     public Guid FileId { get; set; }
     public string? Caption { get; set; }
@@ -347,6 +366,18 @@ internal sealed class CreatureImageConfiguration : IEntityTypeConfiguration<Crea
         entity.ToTable("creature_images");
         entity.HasKey(i => new { i.CreatureId, i.Ord });
         entity.HasOne<Creature>().WithMany(c => c.Images).HasForeignKey(i => i.CreatureId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class WeaponImageConfiguration : IEntityTypeConfiguration<WeaponImage>
+{
+    public void Configure(EntityTypeBuilder<WeaponImage> entity)
+    {
+        entity.ToTable("weapon_images");
+        entity.HasKey(i => new { i.WeaponId, i.Ord });
+        entity.HasOne<Weapon>().WithMany(w => w.Images).HasForeignKey(i => i.WeaponId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
     }

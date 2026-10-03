@@ -23,6 +23,8 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
 
     public override DbSet<Weapon> Set(CmDbContext db) => db.Weapons;
 
+    public override IQueryable<Weapon> Query(CmDbContext db) => db.Weapons.Include(w => w.Images);
+
     public override Weapon New() => new() { Name = "", Damage = "" };
 
     public override async Task<IReadOnlyList<WeaponDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<Weapon> rows, CancellationToken cancellationToken)
@@ -51,6 +53,7 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
             Cost = w.Cost,
             Notes = w.Notes,
             SingleUse = w.SingleUse,
+            Images = CatalogImages.ToDtos(w.Images),
             BaseRangeM = w.BaseRangeM,
             ShotsPerRound = w.ShotsPerRound,
             MaxShotsPerRound = w.MaxShotsPerRound,
@@ -78,6 +81,7 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
         var skillId = await ResolveSkillAsync(db, dto, cancellationToken);
         var malfunction = Range(dto.Malfunction, 1, 100, "Осечка");
         var eras = Eras(dto.Eras);
+        var images = await CatalogImages.CheckAsync(db, dto.Images, write, cancellationToken);
 
         // Разбор — здесь и только здесь: бой читает готовые числа.
         var parsedDamage = DamageFormulaParser.Parse(damage);
@@ -114,6 +118,7 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
         entity.CostClassic = cost.Cost1920;
         entity.CostModern = cost.CostModern;
         entity.Notes = dto.Notes?.Trim() ?? "";
+        CatalogImages.Apply(db, entity.Images, images, ord => new WeaponImage { WeaponId = entity.Id, Ord = ord });
     }
 
     /// <summary>Навык по id, а в файле обмена из другой базы — по имени.</summary>
