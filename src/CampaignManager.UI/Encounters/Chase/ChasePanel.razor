@@ -88,7 +88,7 @@ else
                         <div class="px-3 pb-3"><Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="mb-0" data-testid="chase-start-note">@note</Alert></div>
                     }
                     <div class="cm-card-footer flex flex-wrap items-center justify-between gap-2">
-                        <Button Variant="ButtonVariant.Secondary" OnClick="() => Session.ChangeAsync(ChaseRules.BackToSetup)">К трассе</Button>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" OnClick="() => Session.ChangeAsync(ChaseRules.BackToSetup)">Назад к трассе</Button>
                         <Button Icon="fa-flag" Disabled="@(ChaseRules.StartRejection(Session.State) is not null)" DisabledReason="@ChaseRules.StartRejection(Session.State)"
                                 OnClick="StartAsync" data-testid="chase-start">Начать погоню</Button>
                     </div>
@@ -154,6 +154,7 @@ else
 @code {
     private ChaseSkills _skills = null!;
     private int _length = 8;
+    private string _name = "";
     private int _gap = 2;
     private int? _editing;
     private bool _runnersOpen;
@@ -174,6 +175,7 @@ else
         {
             _length = chase.LastLocation;
             _gap = chase.StartGap;
+            _name = chase.Name ?? "";
         }
     }
 
@@ -229,6 +231,7 @@ else
     {
         var fresh = state.Chase is null;
         ChaseRules.Begin(state, _length, _gap);
+        state.Chase!.Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim();
         EncounterEngine.Log(state, new EncounterLogEntry
         {
             Kind = EncounterLogKind.ChaseStart,
@@ -259,6 +262,9 @@ else
     {
         @* Одна строка: подписи на одной линии, поля и кнопка одной высоты (cm-field-row — выравнивание по низу). *@
         <div class="cm-field-row">
+            <Field Label="Название" class="w-full sm:w-52">
+                <input class="cm-input" maxlength="40" placeholder="у склада" aria-label="Название погони" value="@_name" @onchange="e => _name = e.Value?.ToString() ?? string.Empty" />
+            </Field>
             <Field Label="Локаций" class="w-28">
                 <input type="number" inputmode="numeric" min="@ChaseRules.MinLocations" max="@ChaseRules.MaxLocations" class="cm-input" value="@_length"
                        @onchange="e => _length = int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : _length" />

@@ -54,6 +54,9 @@ public sealed record ChaseState : DocumentPart
 {
     public ChasePhase Phase { get; set; }
 
+    /// <summary>Имя погони («у склада»): когда в кампании их несколько, по нему различают вкладки; пусто — по составу участников.</summary>
+    public string? Name { get; set; }
+
     /// <summary>Отрыв самого медленного убегающего от самого быстрого преследователя: 2 локации, в особых случаях 1 (стр. 131).</summary>
     public int StartGap { get; set; } = 2;
 

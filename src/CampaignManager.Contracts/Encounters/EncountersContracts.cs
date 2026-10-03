@@ -80,7 +80,9 @@ public sealed record EncounterSummaryDto(
     int Round,
     int ParticipantCount,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<string> ParticipantNames);
+    IReadOnlyList<string> ParticipantNames,
+    string? Name = null,
+    bool Ended = false);
 
 /// <summary>Новая сцена: вид и кампания (null — вне кампании). У Хранителя один активный бой на кампанию; погонь — сколько угодно.</summary>
 /// <param name="RunId">Прохождение сценария в этой кампании (из режима игры сценария); без кампании — 400.</param>

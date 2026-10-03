@@ -53,7 +53,7 @@ public sealed class EncounterService(CmDbContext dbContext, AccessPolicy access,
             {
                 var state = CmJson.ReadEncounterState(r.State, r.StateVersion);
                 return new EncounterSummaryDto(r.Id, r.Kind, r.CampaignId, r.CampaignName, state.Round, state.Participants.Count, r.UpdatedAt,
-                    [.. state.Participants.Select(p => p.Name)]);
+                    [.. state.Participants.Select(p => p.Name)], state.Chase?.Name, state.Chase is { Phase: ChasePhase.Ended });
             }),
         ];
     }

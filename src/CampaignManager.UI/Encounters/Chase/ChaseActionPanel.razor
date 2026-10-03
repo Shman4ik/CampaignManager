@@ -91,7 +91,7 @@ else
                     <Alert Tone="Tone.Error" Small="true" class="mb-0">@_error</Alert>
                 }
                 <div class="flex flex-wrap gap-2">
-                    <Button Icon="fa-eye" OnClick="ProposeAsync" data-testid="chase-propose">Предпросмотр</Button>
+                    <Button Icon="fa-eye" Disabled="@(Validate(selected) is not null)" DisabledReason="@Validate(selected)" OnClick="ProposeAsync" data-testid="chase-propose">Предпросмотр</Button>
                     <Button Variant="ButtonVariant.Secondary" OnClick="() => _action = null">Отмена</Button>
                 </div>
             </div>
@@ -419,13 +419,16 @@ else
                                   Label="Стрельба" OnChange="StateHasChanged" />
                 @if (action == ChaseActionKind.Ranged)
                 {
-                    @DamageFields("Урон оружия", "1D10")
+                    <details class="encounter-rolls">
+                        <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Урон оружия: @(string.IsNullOrWhiteSpace(_damageFormula) ? "—" : _damageFormula)</summary>
+                        <div class="mt-2">@DamageFields("Урон оружия", "1D10")</div>
+                    </details>
                     <p class="cm-meta">Огнестрел бьёт на любую дистанцию; броня транспорта защищает водителя и пассажиров.</p>
                 }
                 else
                 {
                     <p class="cm-meta">Шина — маленькая цель (штрафная кость), броня 3, берёт только проникающее оружие; 2 урона после брони — Комплекция −1.</p>
-                    <Field Label="Урон" Group="true" Note="пусто — 1d10">
+                    <Field Label="Урон по шине" Group="true" Note="пусто — бросится 1d10">
                         <DiceInput Count="1" Sides="10" Value="_damage" ValueChanged="v => _damage = v" Label="Урон по шине" />
                     </Field>
                 }
@@ -491,7 +494,7 @@ else
                 }
                 else
                 {
-                    <p class="cm-meta">Провал — преследователь потерял след, погоня для него окончена.</p>
+                    <Alert Tone="Tone.Info" Small="true" class="mb-0">Провал: преследователь потерял след, погоня для него окончена.</Alert>
                 }
                 <ChaseCheckFields Input="_check" Participant="actor" Catalog="Session.Catalog" Skills="Skills" Difficulty="_difficulty"
                                   BonusDice="bonus" PenaltyDice="penalty" Label="@ChaseText.Of(action)" OnChange="StateHasChanged" />
@@ -499,31 +502,30 @@ else
             }
             case ChaseActionKind.CreateObstacle:
             {
-                <p class="cm-meta">Запереть дверь — действие без проверки; придвинуть шкаф — СИЛ и действие; запереть Взломом — полный раунд и проверка.</p>
-                <div class="flex flex-wrap items-end gap-2">
-                    <Field Label="Что делает" class="min-w-48 flex-1">
+                <Field Label="Что получится" Group="true" Note="Дверь без проверки — действие; шкаф — СИЛ и действие; замок Взломом — раунд и проверка">
+                    <div class="flex flex-wrap gap-2" role="group" aria-label="Что получится">
+                        <Button Small="true" Variant="@(!_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-bolt" OnClick="() => _obstacleBarrier = false">Помеха</Button>
+                        <Button Small="true" Variant="@(_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-road-barrier" OnClick="() => _obstacleBarrier = true">Преграда</Button>
+                    </div>
+                </Field>
+                <div class="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
+                    <Field Label="Название" class="sm:col-span-3">
+                        <input class="cm-input" value="@_obstacleName" placeholder="@(_obstacleBarrier ? "Запертая дверь" : "Рассыпанные фрукты")" @onchange="e => _obstacleName = e.Value?.ToString() ?? string.Empty" />
+                    </Field>
+                    <Field Label="Что делает" class="sm:col-span-3">
                         <input class="cm-input" value="@_obstacleText" placeholder="опрокидывает прилавок" @onchange="e => _obstacleText = e.Value?.ToString() ?? string.Empty" />
                     </Field>
-                    <Field Label="В локации" class="w-24">
+                    <Field Label="В локации">
                         <input type="number" inputmode="numeric" min="1" max="@Chase.LastLocation" class="cm-input" value="@_obstacleLocation"
                                @onchange="e => _obstacleLocation = Math.Clamp(Number(e) ?? runner.Location, 1, Chase.LastLocation)" />
                     </Field>
-                    <Field Label="Действий" class="w-24">
+                    <Field Label="Действий">
                         <input type="number" inputmode="numeric" min="0" max="5" class="cm-input" value="@_obstacleCost"
                                @onchange="e => _obstacleCost = Math.Clamp(Number(e) ?? 0, 0, 5)" />
                     </Field>
-                </div>
-                <div class="flex flex-wrap gap-2" role="group" aria-label="Что получится">
-                    <Button Small="true" Variant="@(!_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-bolt" OnClick="() => _obstacleBarrier = false">Помеха</Button>
-                    <Button Small="true" Variant="@(_obstacleBarrier ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-road-barrier" OnClick="() => _obstacleBarrier = true">Преграда</Button>
-                </div>
-                <div class="flex flex-wrap items-end gap-2">
-                    <Field Label="Название" class="min-w-48 flex-1">
-                        <input class="cm-input" value="@_obstacleName" placeholder="@(_obstacleBarrier ? "Запертая дверь" : "Рассыпанные фрукты")" @onchange="e => _obstacleName = e.Value?.ToString() ?? string.Empty" />
-                    </Field>
                     @if (_obstacleBarrier)
                     {
-                        <Field Label="ПЗ" Note="0 — не сломать" class="w-24">
+                        <Field Label="ПЗ преграды" Note="0 — не сломать">
                             <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_obstacleHitPoints" @onchange="e => _obstacleHitPoints = Number(e) ?? 0" />
                         </Field>
                     }
@@ -573,7 +575,7 @@ else
 
     private RenderFragment DefenceFields(bool driving) => __builder =>
     {
-        <Field Label="Ответ цели" Group="true" Note="Предлагать всегда, сколько бы действий ни осталось">
+        <Field Label="Ответ цели" Group="true">
             <div class="flex flex-wrap gap-2">
                 <Button Small="true" Variant="@(_defenceKind is null ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _defenceKind = null">Без ответа</Button>
                 <Button Small="true" Variant="@(_defenceKind == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetDefence(DefenseReaction.Dodge, driving)">
@@ -611,10 +613,10 @@ else
     private RenderFragment DamageFields(string label, string placeholder) => __builder =>
     {
         <div class="flex flex-wrap items-end gap-2">
-            <Field Label="@label" Note="формула бросится, если не вписано число" class="w-40">
+            <Field Label="Формула" Note="бросится, если число не вписано" class="w-40">
                 <input class="cm-input font-mono" value="@_damageFormula" placeholder="@placeholder" @onchange="e => _damageFormula = e.Value?.ToString()" />
             </Field>
-            <Field Label="Или выпало" class="w-28">
+            <Field Label="Выпало" class="w-28">
                 <input type="number" inputmode="numeric" min="0" class="cm-input" value="@(_damage?.ToString(CultureInfo.InvariantCulture))"
                        @onchange="e => _damage = Number(e, allowZero: true)" />
             </Field>

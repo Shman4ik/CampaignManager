@@ -434,7 +434,7 @@ public sealed class KitUx0bTests : KitContext
     {
         var cut = Render<PlayerStrip>();
 
-        Assert.Contains("Музыка не играет", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("Выберите настроение", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Пауза", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Остановить", cut.Markup, StringComparison.Ordinal);
         Assert.Empty(cut.FindAll("button[disabled]"));

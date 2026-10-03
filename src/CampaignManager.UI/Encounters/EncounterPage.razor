@@ -141,7 +141,7 @@
 
     /// <summary>Под заголовком: кампания и этап («Расстановка», «Раунд 2 · ходит Хелен»); статус сохранения — только если что-то не так.</summary>
     private string? Subtitle => _session is { } session
-        ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
+        ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", session.State.Chase?.Name, StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
         : null;
 
     private static string StageText(EncounterState state) => state.Chase is { Phase: ChasePhase.Ended } ? ChaseText.Of(ChasePhase.Ended)
@@ -507,7 +507,7 @@
     /// <summary>«Завершить бой» / «Завершить погоню» — винительный падеж, имена здесь не склоняются, только вид сцены.</summary>
     private string FinishWord => Kind == EncounterKind.Combat ? "бой" : "погоню";
 
-    private static string RoundLabel(int round) => round == 0 ? "расстановка" : $"раунд {round}";
+    private static string StageLabel(int round, bool ended) => ended ? "окончена" : round == 0 ? "расстановка" : $"раунд {round}";
 
     private string NewWord => Kind == EncounterKind.Combat ? "Новый бой" : "Новая погоня";
 
@@ -862,13 +862,13 @@
                     @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
                     <span class="cm-btn cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
                         <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, [.. session.State.Participants.Select(p => p.Name)]) · @RoundLabel(session.State.Round)</span>
+                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, session.State.Chase?.Name, [.. session.State.Participants.Select(p => p.Name)]) · @StageLabel(session.State.Round, session.State.Chase is { Phase: ChasePhase.Ended })</span>
                     </span>
                 }
                 else
                 {
                     <Button Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={item.Id}")" data-testid="sibling">
-                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.ParticipantNames) · @RoundLabel(item.Round)
+                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.Name, item.ParticipantNames) · @StageLabel(item.Round, item.Ended)
                     </Button>
                 }
             }
@@ -876,9 +876,10 @@
     };
 
     /// <summary>Подпись сцены в переключателе: кто в ней (первые трое), кампания — если она не та, что у открытой.</summary>
-    private string SceneLabel(Guid? campaignId, string? campaignName, IReadOnlyList<string> names)
+    private string SceneLabel(Guid? campaignId, string? campaignName, string? name, IReadOnlyList<string> names)
     {
-        var who = names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
+        var who = !string.IsNullOrWhiteSpace(name) ? name
+            : names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
         return campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
     }
 
