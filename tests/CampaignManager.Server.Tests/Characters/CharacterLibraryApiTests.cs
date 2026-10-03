@@ -3,6 +3,9 @@ using CampaignManager.ApiClient.Characters;
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core;
+using CampaignManager.Core.Campaigns;
+using CampaignManager.Core.Catalogs;
+using CampaignManager.Data.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Identity;
 using CampaignManager.Core.Scenarios;
@@ -221,5 +224,82 @@ public sealed class CharacterLibraryApiTests(CampaignsApp app) : IClassFixture<C
         var read = await Api(player).GetAsync(created.Id, Cancellation); // преген читает любой вошедший
         Assert.Equal(scenario.Id, read.ScenarioId);
         Assert.False(read.CanEdit);
+    }
+
+    [Fact]
+    public async Task Completed_campaign_takes_no_new_sheets_neither_by_context_nor_by_create()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync(UserRole.Player);
+        var done = await app.AddCampaignAsync(keeper, CampaignStatus.Completed, CampaignKind.Campaign, player);
+
+        var playerContext = await Api(player).GetCreationContextAsync(CharacterKind.Player, done.Id, null, Cancellation);
+        Assert.False(playerContext.CanCreate);
+        Assert.Contains("завершена", playerContext.Reason, StringComparison.Ordinal);
+        var keeperContext = await Api(keeper).GetCreationContextAsync(CharacterKind.Npc, done.Id, null, Cancellation);
+        Assert.False(keeperContext.CanCreate);
+        Assert.Contains("завершена", keeperContext.Reason, StringComparison.Ordinal);
+
+        await Fails(HttpStatusCode.Conflict, () => Api(player).CreateAsync(new CreateCharacterRequest
+        {
+            Kind = CharacterKind.Player, CampaignId = done.Id, Sheet = Sheet("Опоздавший"),
+        }, Cancellation));
+
+        // Готовый сыщик и НПС библиотеки кампании не касаются.
+        Assert.True((await Api(keeper).GetCreationContextAsync(CharacterKind.Pregen, null, null, Cancellation)).CanCreate);
+    }
+
+    [Fact]
+    public async Task Keeper_of_another_campaign_is_told_he_is_not_its_keeper()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var otherKeeper = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync(UserRole.Player);
+        var campaign = await app.AddCampaignAsync(keeper, player);
+
+        var foreign = await Api(otherKeeper).GetCreationContextAsync(CharacterKind.Npc, campaign.Id, null, Cancellation);
+        Assert.False(foreign.CanCreate);
+        Assert.Equal("Вы не Хранитель этой кампании.", foreign.Reason);
+
+        var playerNpc = await Api(player).GetCreationContextAsync(CharacterKind.Pregen, null, null, Cancellation);
+        Assert.Equal("НПС и готовых сыщиков заводит Хранитель.", playerNpc.Reason);
+    }
+
+    [Fact]
+    public async Task Library_row_carries_hit_points_best_combat_skill_and_the_role_in_every_scenario()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var scenario = await AddScenarioAsync();
+        Skill brawl, handgun, dodge;
+        await using (var db = app.Database.CreateContext())
+        {
+            string Unique(string name) => $"{name} {Guid.NewGuid():N}"[..28];
+            brawl = new Skill { Name = Unique("Драка"), BaseValue = 25, Category = SkillCategory.CombatGeneral };
+            handgun = new Skill { Name = Unique("Пистолет"), BaseValue = 20, Category = SkillCategory.CombatFirearms };
+            dodge = new Skill { Code = SkillCodes.Dodge, Name = Unique("Уклонение"), BaseValue = 0, Category = SkillCategory.CombatGeneral };
+            db.Skills.RemoveRange(await db.Skills.Where(k => k.Code == SkillCodes.Dodge).ToListAsync(Cancellation));
+            db.Skills.AddRange(brawl, handgun, dodge);
+            await db.SaveChangesAsync(Cancellation);
+        }
+
+        var sheet = Sheet($"Громила {Guid.NewGuid():N}",
+            new SheetSkill { SkillId = brawl.Id, Value = 45 },
+            new SheetSkill { SkillId = handgun.Id, Value = 60 },
+            new SheetSkill { SkillId = dodge.Id, Value = 90 }); // защита не считается боевым навыком
+        sheet.Current.HitPoints = 11;
+        var created = await Api(keeper).CreateAsync(new CreateCharacterRequest
+        {
+            Kind = CharacterKind.Npc, Sheet = sheet, Cast = new NpcCastRequest(scenario.Id, NpcRole.Enemy, 3),
+        }, Cancellation);
+
+        var row = Assert.Single(await Api(keeper).ListAsync(CharacterKind.Npc, archived: false, Cancellation), n => n.Id == created.Id);
+
+        Assert.Equal(11, row.HitPoints);
+        Assert.Equal((handgun.Name, 60), (row.CombatSkill, row.CombatValue));
+        Assert.Equal([new CharacterCastDto(scenario.Name, NpcRole.Enemy, 3)], row.Casts);
+        Assert.Equal([scenario.Name], row.CastIn);
     }
 }

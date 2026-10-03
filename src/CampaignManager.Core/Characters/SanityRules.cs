@@ -201,7 +201,9 @@ public static class SanityRules
         var max = MaxSanity(sheet, catalog);
         var current = Math.Clamp(sheet.Current.Sanity, 0, max);
         var lostToday = sheet.Condition.SanityLostToday;
-        var permanentlyInsane = IsPermanentlyInsane(sheet);
+        // Чистый бланк (МОЩ ещё не вписана, Рассудок 0 из 99) не «неизлечимо безумен»: безумие — про сыщика, у которого
+        // было что терять (ревью g3, 67). Сыщик с МОЩ и Рассудком 0 — по-прежнему на нуле.
+        var permanentlyInsane = IsPermanentlyInsane(sheet) && sheet.Characteristics.Pow > 0;
         var insane = IsInsane(sheet);
 
         return new SanityStatus(

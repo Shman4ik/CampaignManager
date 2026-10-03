@@ -3,12 +3,25 @@
 
 @* Поиск по справочнику для листа — один на оружие, заклинания, книги, предметы и тварей привыкания (в v1 —
    шесть копий). Список грузится целиком (справочник маленький), поиск — без регистра, «ё» и лишних пробелов.
-   Выбор строки отдаёт запись; «Завести вручную» — то, что вписано, когда в справочнике такого нет. *@
+   Выбор строки отдаёт запись; «Добавить «текст»» — то, что вписано, когда в справочнике такого нет.
+   Пустой запрос показывает первые записи (панель открыли ради выбора — пустая рамка ничего не говорила), запрос без
+   совпадений — строку «Не найдено.» (g3, 84). «×» в поле стирает запрос; своя «Отмена» — только у панели листа, которую
+   нечем закрыть, кроме неё: в окне (быстрый НПС) подвал закрывает сам, второй «Отмены» там не ставят (OnCancel не передают). *@
 <div class="catalog-search" data-testid="catalog-search">
     <div class="flex flex-wrap items-center gap-2">
-        <input type="search" class="cm-input min-w-48 flex-1" placeholder="@Placeholder" aria-label="@Placeholder"
-               data-testid="catalog-search-input" @bind="_query" @bind:event="oninput" />
-        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="OnCancel">Отмена</Button>
+        <div class="catalog-search-field">
+            <input type="search" class="cm-input w-full" placeholder="@Placeholder" aria-label="@Placeholder"
+                   data-testid="catalog-search-input" @bind="_query" @bind:event="oninput" />
+            @if (_query.Length > 0)
+            {
+                <button type="button" class="catalog-search-clear" aria-label="Стереть запрос" data-testid="catalog-search-clear"
+                        @onclick="Clear"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            }
+        </div>
+        @if (OnCancel.HasDelegate)
+        {
+            <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="OnCancel">Отмена</Button>
+        }
     </div>
     @if (_items is null)
     {
@@ -21,9 +34,14 @@
     else
     {
         var found = Found();
-        @if (found.Count > 0 || (OnCustom.HasDelegate && !string.IsNullOrWhiteSpace(_query)))
+        var canAddOwn = OnCustom.HasDelegate && !string.IsNullOrWhiteSpace(_query);
+        @if (found.Count == 0 && !canAddOwn && _query.Trim().Length > 0)
         {
-            <div class="catalog-search-results">
+            <p class="cm-empty-compact mt-2" data-testid="catalog-search-empty">@NotFound</p>
+        }
+        else if (found.Count > 0 || canAddOwn)
+        {
+            <div class="@(Compact ? "catalog-search-results catalog-search-compact" : "catalog-search-results")">
                 @foreach (var item in found)
                 {
                     <button type="button" class="catalog-search-row" @onclick="() => OnSelect.InvokeAsync(item)">
@@ -34,7 +52,7 @@
                         }
                     </button>
                 }
-                @if (OnCustom.HasDelegate && !string.IsNullOrWhiteSpace(_query))
+                @if (canAddOwn)
                 {
                     @* Один путь «добавить»: найденное — или то, что вписано в поле, последней строкой. *@
                     <button type="button" class="catalog-search-row" data-testid="catalog-search-custom" @onclick="CustomAsync">
@@ -48,8 +66,6 @@
 </div>
 
 @code {
-    private const int Limit = 10;
-
     private string _query = "";
     private IReadOnlyList<TItem>? _items;
     private string? _error;
@@ -64,6 +80,20 @@
     [Parameter] public Func<TItem, string>? Meta { get; set; }
 
     [Parameter] public string Placeholder { get; set; } = "Найти в справочнике…";
+
+    /// <summary>Строка, когда по запросу ничего нет и своей записи завести нельзя («Оружие не найдено.»).</summary>
+    [Parameter] public string NotFound { get; set; } = "Не найдено.";
+
+    /// <summary>Пустой запрос показывает первые записи списка. Выключают там, где поле всегда на виду и список раздул бы окно.</summary>
+    [Parameter] public bool ShowOnEmpty { get; set; } = true;
+
+    /// <summary>
+    /// Плотный вид для окна: пять строк в одну линию (название и мета рядом), список без своей прокрутки — в окне прокрутка одна,
+    /// у тела (правило 3). Панель листа остаётся прежней: десять строк в рамке с прокруткой.
+    /// </summary>
+    [Parameter] public bool Compact { get; set; }
+
+    private int Limit => Compact ? 5 : 10;
 
     [Parameter] public EventCallback<TItem> OnSelect { get; set; }
 
@@ -87,8 +117,11 @@
     private List<TItem> Found()
     {
         var query = CatalogCodeTable.NormalizeName(_query);
-        if (query.Length == 0 || _items is null)
+        if (_items is null)
             return [];
+
+        if (query.Length == 0)
+            return ShowOnEmpty ? [.. _items.Take(Limit)] : [];
 
         bool Matches(string text) => CatalogCodeTable.NormalizeName(text).Contains(query, StringComparison.Ordinal);
 
@@ -96,4 +129,6 @@
     }
 
     private Task CustomAsync() => OnCustom.InvokeAsync(_query.Trim());
+
+    private void Clear() => _query = "";
 }

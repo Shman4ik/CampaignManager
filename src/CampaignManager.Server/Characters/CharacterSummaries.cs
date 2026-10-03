@@ -1,6 +1,7 @@
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Core.Campaigns;
+using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Documents;
 using CampaignManager.Data;
 using CampaignManager.Data.Characters;
@@ -37,10 +38,16 @@ public static class CharacterSummaries
                 KeepsCampaign = c.CampaignId != null && dbContext.CampaignMembers.Any(m =>
                     m.CampaignId == c.CampaignId && m.UserId == user.Id && m.Role == CampaignRole.Keeper),
                 ScenarioName = dbContext.Scenarios.Where(x => x.Id == c.ScenarioId).Select(x => x.Name).FirstOrDefault(),
-                CastIn = dbContext.ScenarioNpcs.Where(n => n.CharacterId == c.Id)
-                    .Join(dbContext.Scenarios, n => n.ScenarioId, s => s.Id, (n, s) => s.Name).ToList(),
+                Casts = dbContext.ScenarioNpcs.Where(n => n.CharacterId == c.Id)
+                    .Join(dbContext.Scenarios, n => n.ScenarioId, s => s.Id, (n, s) => new { s.Name, n.Role, n.Count }).ToList(),
             })
             .ToListAsync(cancellationToken);
+
+        // Боевые навыки справочника — для строки карточки «ПЗ 11 · Ближний бой 40%». Уклонение не в счёт: это защита, не нападение.
+        var combat = await dbContext.Skills.AsNoTracking()
+            .Where(k => (k.Category == SkillCategory.CombatGeneral || k.Category == SkillCategory.CombatFirearms)
+                        && k.Code != SkillCodes.Dodge)
+            .ToDictionaryAsync(k => k.Id, k => k.Name, cancellationToken);
 
         return
         [
@@ -52,6 +59,7 @@ public static class CharacterSummaries
                     var r = x.Row;
                     var sheet = CmJson.ReadSheet(r.Sheet, r.SheetVersion);
                     var backstory = sheet.Biography.Backstory.Trim();
+                    var best = sheet.Skills.Where(k => k.SkillId is { } id && combat.ContainsKey(id)).MaxBy(k => k.Value);
                     return new CharacterSummaryDto
                     {
                         Id = r.Id,
@@ -71,7 +79,11 @@ public static class CharacterSummaries
                         CampaignName = r.CampaignName,
                         ScenarioId = r.ScenarioId,
                         ScenarioName = r.ScenarioName,
-                        CastIn = [.. r.CastIn.Order(StringComparer.CurrentCulture)],
+                        CastIn = [.. r.Casts.Select(c => c.Name).Order(StringComparer.CurrentCulture)],
+                        Casts = [.. r.Casts.OrderBy(c => c.Name, StringComparer.CurrentCulture).Select(c => new CharacterCastDto(c.Name, c.Role, c.Count))],
+                        HitPoints = sheet.Current.HitPoints,
+                        CombatSkill = best is null ? null : combat[best.SkillId!.Value],
+                        CombatValue = best?.Value ?? 0,
                         CanEdit = x.Rights.CanEdit,
                     };
                 })

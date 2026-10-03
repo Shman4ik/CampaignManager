@@ -5,7 +5,10 @@
 @* НПС в сценарии: роль, количество (три одинаковых громилы — одна строка с «3») и заметка. Лист не копируется —
    правки НПС видны во всех сценариях, где он занят. Одно окно на «В сценарий» с карточки /npcs (выбор сценария —
    только тех, что можно править) и на «Роль» в составе сценария (ScenarioId задан). Повтор — правка той же связи,
-   двойника не бывает. Ошибка — в окне. *@
+   двойника не бывает. Ошибка — в окне.
+   F3b (ревью g3, 79): поля роли, количества и заметки рисуются после списка сценариев — фокус при открытии попадает в
+   «Сценарий», а не в «Роль»; главная кнопка называется как окно («Занять»), пока сценарий не выбран — причина рядом;
+   «Сколько человек». *@
 <Modal Open="Open" Title="@(ScenarioId is null ? "Занять в сценарии" : "Изменить роль НПС")" OnClose="CloseAsync" data-testid="cast-npc">
     <ChildContent>
         <form id="cast-npc-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
@@ -38,22 +41,25 @@
                     </Field>
                 }
             }
-            <div class="grid grid-cols-2 gap-3 sm:w-96">
-                <Field Label="Роль">
-                    <select class="cm-input" data-testid="cast-role" @bind="_role">
-                        @foreach (var role in Enum.GetValues<NpcRole>())
-                        {
-                            <option value="@role">@ScenarioText.Of(role)</option>
-                        }
-                    </select>
+            @if (ScenarioId is not null || _scenarios is not null)
+            {
+                <div class="grid grid-cols-2 gap-3 sm:w-96">
+                    <Field Label="Роль">
+                        <select class="cm-input" data-testid="cast-role" @bind="_role">
+                            @foreach (var role in Enum.GetValues<NpcRole>())
+                            {
+                                <option value="@role">@ScenarioText.Of(role)</option>
+                            }
+                        </select>
+                    </Field>
+                    <Field Label="Сколько человек">
+                        <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" data-testid="cast-count" @bind="_count" />
+                    </Field>
+                </div>
+                <Field Label="Заметка" Hint="(для этого сценария)">
+                    <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
                 </Field>
-                <Field Label="Сколько">
-                    <input class="cm-input" type="number" min="1" max="@CharacterLimits.MaxCastCount" data-testid="cast-count" @bind="_count" />
-                </Field>
-            </div>
-            <Field Label="Заметка" Hint="(для этого сценария)">
-                <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
-            </Field>
+            }
             @if (_error is not null)
             {
                 <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="cast-error">@_error</Alert>
@@ -62,8 +68,9 @@
     </ChildContent>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
-        <Button Type="submit" form="cast-npc-form" Busy="_saving" Disabled="@(ScenarioId is null && _scenarioId is null)" data-testid="cast-save">
-            @(ScenarioId is null ? "Добавить" : "Сохранить")
+        <Button Type="submit" form="cast-npc-form" Busy="_saving" Disabled="@(ScenarioId is null && _scenarioId is null)"
+                DisabledReason="Выберите сценарий" data-testid="cast-save">
+            @(ScenarioId is null ? "Занять" : "Сохранить")
         </Button>
     </Footer>
 </Modal>
@@ -96,6 +103,9 @@
 
     /// <summary>Записано: id сценария.</summary>
     [Parameter] public EventCallback<Guid> OnSaved { get; set; }
+
+    /// <summary>Записано: сценарий с названием, роль и количество — для тоста, который называет всё это.</summary>
+    [Parameter] public EventCallback<NpcCastSaved> OnCastSaved { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -134,8 +144,11 @@
         _error = null;
         try
         {
-            await Api.CastNpcAsync(scenarioId, Character.Id, new NpcCastInput(_role, Math.Clamp(_count, 1, CharacterLimits.MaxCastCount), _notes));
+            var count = Math.Clamp(_count, 1, CharacterLimits.MaxCastCount);
+            await Api.CastNpcAsync(scenarioId, Character.Id, new NpcCastInput(_role, count, _notes));
+            var name = _scenarios?.FirstOrDefault(x => x.Id == scenarioId)?.Name ?? "";
             await OnSaved.InvokeAsync(scenarioId);
+            await OnCastSaved.InvokeAsync(new NpcCastSaved(scenarioId, name, _role, count));
         }
         catch (HttpRequestException ex)
         {
