@@ -72,7 +72,7 @@ public sealed class AdminApiTests(CampaignsApp app) : IClassFixture<CampaignsApp
         var row = Assert.Single(users, u => u.Id == player.Id);
         Assert.Equal(2, row.CampaignCount);
         Assert.Equal(2, row.CharacterCount);
-        Assert.True(row.CreatedAt > DateTimeOffset.UnixEpoch);
+        Assert.Null(row.RegisteredAt); // заведён напрямую, не входом и не переносом — даты регистрации нет
         var keeperRow = Assert.Single(users, u => u.Id == keeper.Id);
         Assert.Equal(2, keeperRow.CampaignCount);
         Assert.Equal(0, keeperRow.CharacterCount);
