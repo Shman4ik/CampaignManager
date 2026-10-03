@@ -30,22 +30,19 @@
                     </div>
 
                     <form class="flex flex-col gap-3" @onsubmit="SaveNameAsync">
-                        <Field Label="Отображаемое имя"
-                               Note="Видно в меню, в кампаниях, где у вас нет своего имени, и администратору в заявке.">
+                        <Field Label="Отображаемое имя" Note="Так вас видят в меню и в кампаниях, где у вас нет своего имени.">
                             <input class="cm-input" maxlength="@ProfileLimits.DisplayNameLength" autocomplete="nickname"
                                    @bind="_name" @bind:event="oninput" />
                         </Field>
 
                         @if (profile.AliasCount > 0)
                         {
-                            <label class="flex items-start gap-3 rounded-md py-1">
-                                <span class="cm-tap-target shrink-0">
-                                    <input type="checkbox" class="cm-checkbox" @bind="_replaceAliases" data-testid="replace-aliases" />
-                                </span>
+                            <label class="cm-tap-row">
+                                <input type="checkbox" class="cm-checkbox" @bind="_replaceAliases" data-testid="replace-aliases" />
                                 <span class="text-sm">
-                                    <span class="block text-primary-800">Заменить и имена в кампаниях (@profile.AliasCount)</span>
+                                    <span class="block text-primary-800">Применить это имя во всех кампаниях</span>
                                     <span class="block text-primary-500">
-                                        В этих кампаниях у вас своё имя. Галочка сбросит их — везде будет имя профиля.
+                                        Сейчас своё имя у вас в кампаниях: @profile.AliasCount. С галочкой оно заменится именем профиля.
                                     </span>
                                 </span>
                             </label>
@@ -57,64 +54,64 @@
                         }
 
                         <div class="flex flex-wrap gap-2">
-                            <Button Type="submit" Icon="fa-floppy-disk" Busy="_savingName" Disabled="@(!NameChanged(profile))">Сохранить имя</Button>
+                            <Button Type="submit" Icon="fa-floppy-disk" Busy="_savingName" Disabled="@(!NameChanged(profile))" DisabledReason="Измените имя, чтобы сохранить">Сохранить имя</Button>
                         </div>
                     </form>
                 </div>
             </div>
         </section>
 
-        <section class="cm-section" aria-labelledby="role-title">
-            <div class="cm-section-header"><h2 id="role-title" class="cm-section-title">Роль</h2></div>
-            <div class="cm-card">
-                <div class="cm-card-body cm-stack">
-                    <p class="text-primary-700">@RoleLabels.RoleDescription(profile.Role)</p>
-
-                    @if (profile.LatestApplication is { } application && profile.Role is UserRole.Player)
-                    {
-                        <div data-testid="application-status">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <Badge Tone="RoleLabels.StatusTone(application.Status)">Заявка: @RoleLabels.Status(application.Status).ToLowerInvariant()</Badge>
-                                <span class="text-sm text-primary-500">от @LocalTime.Date(application.CreatedAt)</span>
+        @* «Роль» нужна, только пока человек может подать заявку на Хранителя; иначе роль уже названа бейджем профиля. *@
+        @if (profile.Role is UserRole.Player)
+        {
+            <section class="cm-section" aria-labelledby="role-title">
+                <div class="cm-section-header"><h2 id="role-title" class="cm-section-title">Заявка на роль Хранителя</h2></div>
+                <div class="cm-card">
+                    <div class="cm-card-body cm-stack">
+                        @if (profile.LatestApplication is { } application)
+                        {
+                            <div data-testid="application-status">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <Badge Tone="RoleLabels.StatusTone(application.Status)">@ApplicationLabel(application.Status)</Badge>
+                                    <span class="text-sm text-primary-500">от @LocalTime.Date(application.CreatedAt)</span>
+                                </div>
+                                @if (application.Status is KeeperApplicationStatus.Pending)
+                                {
+                                    <p class="mt-2 text-sm text-primary-600">После одобрения вы станете Хранителем.</p>
+                                }
+                                @if (application.Status is KeeperApplicationStatus.Rejected && application.ReviewComment is { } comment)
+                                {
+                                    <p class="mt-2 text-sm text-primary-700"><span class="cm-meta-label">Комментарий:</span> @comment</p>
+                                }
                             </div>
-                            @if (application.Status is KeeperApplicationStatus.Pending)
-                            {
-                                <p class="mt-2 text-sm text-primary-600">Администратор её рассмотрит; после одобрения вы станете Хранителем.</p>
-                            }
-                            @if (application.Status is KeeperApplicationStatus.Rejected && application.ReviewComment is { } comment)
-                            {
-                                <p class="mt-2 text-sm text-primary-700"><span class="cm-meta-label">Комментарий:</span> @comment</p>
-                            }
-                        </div>
-                    }
+                        }
+                        else
+                        {
+                            <p class="text-sm text-primary-600">Хранитель ведёт кампании и сценарии. Хотите вести игры — подайте заявку, администратор её рассмотрит.</p>
+                        }
 
-                    @if (profile.CanApply)
-                    {
-                        <form class="flex flex-col gap-3" @onsubmit="ApplyAsync">
-                            @if (profile.LatestApplication is null)
-                            {
-                                <p class="text-sm text-primary-600">
-                                    Хранитель ведёт кампании и сценарии. Хотите вести игры — подайте заявку, администратор её рассмотрит.
-                                </p>
-                            }
-                            <Field Label="Пара слов администратору">
-                                <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ApplicationMessageLength"
-                                          placeholder="Что хотите вести, с кем играете…" @bind="_message"></textarea>
-                            </Field>
-                            @if (_applyError is not null)
-                            {
-                                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_applyError</Alert>
-                            }
-                            <div class="flex flex-wrap gap-2">
-                                <Button Type="submit" Variant="ButtonVariant.Secondary" Icon="fa-paper-plane" Busy="_applying">
-                                    @(profile.LatestApplication is null ? "Подать заявку на Хранителя" : "Подать заявку снова")
-                                </Button>
-                            </div>
-                        </form>
-                    }
+                        @if (profile.CanApply)
+                        {
+                            <form class="flex flex-col gap-3" @onsubmit="ApplyAsync">
+                                <Field Label="Сообщение администратору" Note="Что хотите вести, с кем играете.">
+                                    <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ApplicationMessageLength"
+                                              @bind="_message"></textarea>
+                                </Field>
+                                @if (_applyError is not null)
+                                {
+                                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_applyError</Alert>
+                                }
+                                <div class="cm-btn-row">
+                                    <Button Type="submit" Icon="fa-paper-plane" Busy="_applying">
+                                        @(profile.LatestApplication is null ? "Подать заявку на Хранителя" : "Подать заявку снова")
+                                    </Button>
+                                </div>
+                            </form>
+                        }
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        }
 
         <section class="cm-section" aria-labelledby="games-title">
             <div class="cm-section-header"><h2 id="games-title" class="cm-section-title">Мои игры</h2></div>
@@ -125,12 +122,12 @@
                     <span class="font-semibold text-primary-700">@profile.CampaignCount</span>
                     <i class="fa-solid fa-chevron-right text-xs text-primary-400" aria-hidden="true"></i>
                 </a>
-                <a href="" class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0 hover:bg-primary-50">
+                @* Отдельного списка сыщиков нет (листы — на главной у кампании), поэтому строка не ссылка. *@
+                <div class="flex min-h-11 items-center gap-3 border-t border-primary-200 px-4 py-3 first:border-t-0">
                     <i class="fa-solid fa-user w-5 text-center text-primary-400" aria-hidden="true"></i>
                     <span class="flex-1">Сыщики</span>
                     <span class="font-semibold text-primary-700">@profile.CharacterCount</span>
-                    <i class="fa-solid fa-chevron-right text-xs text-primary-400" aria-hidden="true"></i>
-                </a>
+                </div>
             </div>
         </section>
 
@@ -139,8 +136,8 @@
             <div class="cm-card">
                 <div class="cm-card-body">
                     <p class="text-sm text-primary-600">
-                        О вас хранится только нужное для игры: адрес @profile.Email (им вы входите, другим игрокам он не виден),
-                        отображаемое имя, роль и созданные вами материалы. Удалить учётную запись можно, написав администратору.
+                        О вас хранится только нужное для игры: почта для входа (другим игрокам не видна), имя, роль и созданные
+                        вами материалы. Чтобы удалить учётную запись, напишите администратору.
                     </p>
                 </div>
             </div>
@@ -230,6 +227,13 @@
             _applying = false;
         }
     }
+
+    private static string ApplicationLabel(KeeperApplicationStatus status) => status switch
+    {
+        KeeperApplicationStatus.Pending => "Заявка на рассмотрении",
+        KeeperApplicationStatus.Approved => "Заявка одобрена",
+        _ => "Заявка отклонена",
+    };
 
     private static string Initial(string name) =>
         name.Length > 0 ? char.ToUpper(name[0], CultureInfo.CurrentCulture).ToString() : "?";

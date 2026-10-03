@@ -43,6 +43,6 @@ public sealed class UserMenuTests : KitContext
 
         var user = cut.Find("[data-testid='current-user']");
         Assert.Contains("Нора Флинн", user.TextContent);
-        Assert.Contains("администратор", user.TextContent);
+        Assert.Contains("Администратор", user.TextContent);
     }
 }

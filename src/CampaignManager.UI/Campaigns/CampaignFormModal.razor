@@ -13,7 +13,8 @@
                 <input class="cm-input" maxlength="@CampaignLimits.NameLength" @bind="_name" @bind:event="oninput"
                        placeholder="Например: «Маски Ньярлатхотепа»" />
             </Field>
-            <Field Label="Вид" Note="Ваншот — одна игра с прегенами: игроки вступают в него или бронируют прегена. Объявить ваншот по сценарию — на странице сценария.">
+            @* Подсказка про ваншот — только когда он выбран; у существующей кампании, которую делают ваншотом, — предупреждение. *@
+            <Field Label="Вид" Note="@(_kind == CampaignKind.OneShot ? "Ваншот — одна игра на готовых сыщиков: игрок вступает в него и берёт одного из них. Объявить ваншот по сценарию можно на странице сценария." : null)">
                 <select class="cm-input" @bind="_kind">
                     @foreach (var kind in Enum.GetValues<CampaignKind>())
                     {
@@ -39,6 +40,12 @@
                     </select>
                 </Field>
             </div>
+            @if (Campaign is not null && Campaign.Kind != _kind)
+            {
+                <Alert Tone="Tone.Warning" Small="true" ShowIcon="true" class="mb-0">
+                    Вид кампании меняется с «@CampaignLabels.Kind(Campaign.Kind)» на «@CampaignLabels.Kind(_kind)». Убедитесь, что это нужно: в списках она будет называться иначе.
+                </Alert>
+            }
             @if (_error is not null)
             {
                 <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>

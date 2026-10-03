@@ -31,7 +31,7 @@ public sealed class ProfilePageTests : KitContext
 
         var checkbox = cut.WaitForElement("[data-testid='replace-aliases']");
         Assert.False(checkbox.HasAttribute("checked"));
-        Assert.Contains("Заменить и имена в кампаниях (2)", cut.Markup);
+        Assert.Contains("Применить это имя во всех кампаниях", cut.Markup);
     }
 
     [Fact]

@@ -9,11 +9,12 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 @inject IUserSession Session
+@inject NavigationManager Navigation
 
 @* Пользователи и смена роли. Список целиком одним запросом (людей десятки) — поиск, фильтр и страницы на
    клиенте. Роль меняется сразу и видна человеку со следующего запроса: роль сервер читает из базы
    на каждый запрос, кэша claims v1 больше нет. Знание — Admin/CLAUDE.md. *@
-<PageHeader Title="Пользователи">
+<PageHeader Title="Пользователи" Subtitle="@(_users.Count > 0 ? UsersCount(_users.Count) : null)">
     <Actions>
         <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-inbox" Href="@AdminPages.Applications">
             Заявки
@@ -38,25 +39,33 @@
         </select>
     </FilterPanel>
 
+    @if (UserFilter is not null)
+    {
+        <Alert Tone="Tone.Info" Small="true" ShowIcon="true">
+            <ChildContent>Показан один пользователь — из заявки.</ChildContent>
+            <Actions><Button Small="true" Variant="ButtonVariant.Secondary" Href="@AdminPages.Users">Показать всех</Button></Actions>
+        </Alert>
+    }
+
     <AsyncContent Load="LoadAsync" LoadingMessage="Загружаю пользователей…" Context="loaded">
         @{
             var shown = Filter(_users);
-            var page = shown.Skip((_page - 1) * PageSize).Take(PageSize).ToList();
         }
         <div class="cm-card">
-            <DataTable Items="page" RowKey="u => u.Id" AriaLabel="Пользователи" EmptyText="Нет пользователей по этим условиям.">
+            <DataTable Items="shown" RowKey="u => u.Id" AriaLabel="Пользователи" EmptyText="Нет пользователей по этим условиям."
+                       Page="_page" PageSize="PageSize">
                 <Columns>
-                    <DataColumn TItem="AdminUserDto" Title="Пользователь">
+                    <DataColumn TItem="AdminUserDto" Title="Пользователь" SortBy="u => u.DisplayName" DefaultSort="true">
                         <div class="font-semibold text-primary-800">@context.DisplayName</div>
                         <div class="text-sm text-primary-500">@context.Email</div>
                     </DataColumn>
-                    <DataColumn TItem="AdminUserDto" Title="Роль">
+                    <DataColumn TItem="AdminUserDto" Title="Роль" SortBy="u => u.Role" HeaderClass="w-56">
                         @RoleSelect(context)
                     </DataColumn>
-                    <DataColumn TItem="AdminUserDto" Title="Последний вход">
-                        <span class="whitespace-nowrap">@(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : "не входил")</span>
+                    <DataColumn TItem="AdminUserDto" Title="Последний вход" SortBy="u => u.LastLoginAt ?? DateTimeOffset.MinValue">
+                        <span class="whitespace-nowrap">@(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : NeverSignedIn)</span>
                     </DataColumn>
-                    <DataColumn TItem="AdminUserDto" Title="Заметки">
+                    <DataColumn TItem="AdminUserDto" Title="Состояние">
                         @Notes(context)
                     </DataColumn>
                 </Columns>
@@ -66,7 +75,7 @@
                             <div class="truncate font-semibold text-primary-800">@context.DisplayName</div>
                             <div class="truncate text-sm text-primary-500">@context.Email</div>
                             <div class="text-sm text-primary-500">
-                                Вход: @(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : "не входил")
+                                Вход: @(context.LastLoginAt is { } at ? LocalTime.DateTime(at) : NeverSignedIn)
                             </div>
                             <div class="mt-1">@Notes(context)</div>
                         </div>
@@ -90,6 +99,12 @@
     // Отменённая смена роли: select уже показывает выбранное, разметка — нет. Новый ключ пересоздаёт его.
     private int _selectGeneration;
 
+    /// <summary>Перенесённые из v1 входили в 1.0, а в 2.0 дата входа заполняется только входом: «не входил» читалось как «мёртвая учётка».</summary>
+    private const string NeverSignedIn = "не входил в 2.0";
+
+    /// <summary>Ссылка из заявки: показать одного пользователя (<c>?user=id</c>; почту в адрес не кладём).</summary>
+    [SupplyParameterFromQuery(Name = "user")] public Guid? UserFilter { get; set; }
+
     private int Pending => Badges.Counts.GetValueOrDefault(AdminPages.Applications);
 
     // Счётчик в шапке: при прямой загрузке страницы сводку оболочка дочитывает уже после первой отрисовки.
@@ -102,6 +117,7 @@
     private async Task<List<AdminUserDto>> LoadAsync(CancellationToken cancellationToken)
     {
         _users = [.. await Api.GetUsersAsync(cancellationToken)];
+        StateHasChanged(); // счётчик в подзаголовке — в шапке, вне AsyncContent
         return _users;
     }
 
@@ -123,7 +139,7 @@
             }
             @if (user.HasPendingApplication)
             {
-                <Badge Tone="Tone.Warning" Icon="fa-hourglass-half">Заявка ждёт</Badge>
+                <a href="@AdminPages.Applications" class="inline-flex min-h-11 items-center no-underline"><Badge Tone="Tone.Warning" Icon="fa-hourglass-half">Заявка ждёт</Badge></a>
             }
         </div>;
 
@@ -132,7 +148,8 @@
         var search = _search?.Trim();
         return
         [
-            .. users.Where(u => (_role is null || u.Role == _role)
+            .. users.Where(u => (UserFilter is null || u.Id == UserFilter)
+                                && (_role is null || u.Role == _role)
                                 && (string.IsNullOrEmpty(search)
                                     || u.DisplayName.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                                     || u.Email.Contains(search, StringComparison.OrdinalIgnoreCase))),
@@ -148,6 +165,16 @@
         _page = 1;
     }
 
+    private static string UsersCount(int count) =>
+        $"{count} {(count % 100 is >= 11 and <= 14 ? "пользователей" : (count % 10) switch { 1 => "пользователь", >= 2 and <= 4 => "пользователя", _ => "пользователей" })}";
+
+    private static string ConfirmTitle(UserRole role) => role switch
+    {
+        UserRole.Admin => "Назначить администратором?",
+        UserRole.Keeper => "Назначить Хранителем?",
+        _ => "Сделать игроком?",
+    };
+
     private async Task ChangeRoleAsync(AdminUserDto user, string? value)
     {
         if (!Enum.TryParse<UserRole>(value, out var role) || role == user.Role)
@@ -156,9 +183,10 @@
         }
 
         var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
-            $"{user.DisplayName}: {RoleLabels.Role(role).ToLowerInvariant()}?",
+            ConfirmTitle(role),
             $"Роль сменится с «{RoleLabels.Role(user.Role)}» на «{RoleLabels.Role(role)}». {RoleLabels.RoleDescription(role)}")
         {
+            Subject = user.DisplayName,
             ConfirmText = "Сменить роль",
             ConfirmVariant = ButtonVariant.Primary,
             Details = user.IsMe ? "Это ваша собственная роль." : null,

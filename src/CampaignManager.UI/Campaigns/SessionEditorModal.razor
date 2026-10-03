@@ -34,7 +34,7 @@
                     <Field Label="Дата встречи" class="sm:col-span-2">
                         <input type="date" class="cm-input" @bind="form.SessionDate" @bind:after="Changed" />
                     </Field>
-                    <Field Label="Номер" Note="Предложен следующий.">
+                    <Field Label="Номер" Note="Следующий по порядку; поправьте, если пропущена встреча.">
                         <input type="number" class="cm-input" min="@CampaignLimits.MinSessionNumber" max="@CampaignLimits.MaxSessionNumber"
                                @bind="form.Number" @bind:after="Changed" />
                     </Field>
@@ -45,36 +45,39 @@
                            @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
                 </Field>
 
-                <Field Label="Прохождение" Note="@(Runs.Count == 0 ? "У кампании пока нет прохождений сценариев — встреча без сценария." : null)">
-                    <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed" disabled="@(Runs.Count == 0 && form.RunId is null)">
-                        <option value="">— без сценария —</option>
-                        @foreach (var run in Runs)
-                        {
-                            <option value="@run.RunId">@RunLabel(run)</option>
-                        }
-                        @if (form.RunId is { } linked && Runs.All(r => r.RunId != linked))
-                        {
-                            @* Привязано, но в списке нет: без этой строки select молча показал бы «без сценария». *@
-                            <option value="@linked">@(Session?.ScenarioName ?? "Прохождение недоступно")</option>
-                        }
-                    </select>
-                </Field>
+                @if (Runs.Count > 0 || form.RunId is not null)
+                {
+                    <Field Label="Прохождение">
+                        <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed" >
+                            <option value="">— без сценария —</option>
+                            @foreach (var run in Runs)
+                            {
+                                <option value="@run.RunId">@RunLabel(run)</option>
+                            }
+                            @if (form.RunId is { } linked && Runs.All(r => r.RunId != linked))
+                            {
+                                @* Привязано, но в списке нет: без этой строки select молча показал бы «без сценария». *@
+                                <option value="@linked">@(Session?.ScenarioName ?? "Прохождение недоступно")</option>
+                            }
+                        </select>
+                    </Field>
 
-                <label class="flex cursor-pointer items-start gap-3 py-1">
-                    <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
-                    <span>
-                        <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
-                        <span class="cm-field-note block">Время фазы развития сыщиков (стр. 92): журнал покажет ссылки на их листы.</span>
-                    </span>
-                </label>
+                    <label class="flex min-h-11 cursor-pointer items-start gap-3 py-1">
+                        <input type="checkbox" class="cm-checkbox mt-0.5 shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
+                        <span>
+                            <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
+                            <span class="cm-field-note block">Время фазы развития сыщиков: журнал покажет ссылки на их листы. <BookRef Page="92" /></span>
+                        </span>
+                    </label>
+                }
 
-                <Field Label="Хроника" Hint="(видна игрокам, Markdown)">
+                <Field Label="Хроника" Note="Видна игрокам. Оформление: **жирный**, *курсив*, «# Заголовок», «- пункт списка».">
                     <textarea class="cm-input min-h-40" rows="7" placeholder="Что произошло на встрече"
                               @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
                 </Field>
 
-                <Field Label="Заметки Хранителя" Hint="(только вам, Markdown)">
-                    <textarea class="cm-input min-h-28" rows="4" placeholder="Тайны, зацепки, что готовить к следующей встрече"
+                <Field Label="Заметки Хранителя" Note="Видны только вам; оформление то же.">
+                    <textarea class="cm-input min-h-40" rows="7" placeholder="Тайны, зацепки, что готовить к следующей встрече"
                               @bind="form.KeeperNotes" @bind:event="oninput" @bind:after="Changed"></textarea>
                 </Field>
 

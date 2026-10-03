@@ -4,7 +4,8 @@
 @inject NavigationManager Navigation
 
 @* Кто вошёл, кабинет и выход — подвал оболочки; «Выйти» живёт только здесь (в шапке страницы его нет): Placement="Rail" — подвал рельса планшета,
-   Sheet — подвал листа «Ещё» телефона. Без сессии — «Войти» с возвратом на текущую страницу.
+   Sheet — верх листа «Ещё» телефона (ссылки «О проекте» — подвал листа, их ставит MainLayout). «Выйти» в рельсе тише
+   кабинета: это не то действие, которое ищут чаще. Без сессии — «Войти» с возвратом на текущую страницу.
    Вход и выход — серверные адреса (OIDC), поэтому полной загрузкой страницы. *@
 <AuthorizeView>
     <Authorized>
@@ -14,7 +15,7 @@
                 <span class="cm-rail-icon"><span class="cm-avatar">@Initial(context.User)</span></span>
                 <span class="cm-rail-label">Кабинет</span>
             </NavLink>
-            <button type="button" class="cm-rail-item" @onclick="Logout">
+            <button type="button" class="cm-rail-item text-primary-400" @onclick="Logout">
                 <span class="cm-rail-icon"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></span>
                 <span class="cm-rail-label">Выйти</span>
             </button>
@@ -54,12 +55,6 @@
     </NotAuthorized>
 </AuthorizeView>
 
-@if (Placement == UserMenuPlacement.Sheet)
-{
-    <div class="cm-sheet-section">О проекте</div>
-    <InfoLinks Class="px-3 py-2" />
-}
-
 @code {
     [Parameter] public UserMenuPlacement Placement { get; set; } = UserMenuPlacement.Rail;
 
@@ -80,8 +75,9 @@
     private static string Initial(ClaimsPrincipal user) =>
         Name(user) is { Length: > 0 } name ? char.ToUpper(name[0], CultureInfo.CurrentCulture).ToString() : "?";
 
+    // Роль подписана так же, как в кабинете и в админке: «Администратор», «Хранитель», «Игрок».
     private static string RoleName(ClaimsPrincipal user) =>
-        user.IsInRole(nameof(UserRole.Admin)) ? "администратор" : user.IsInRole(nameof(UserRole.Keeper)) ? "Хранитель" : "игрок";
+        RoleLabels.Role(user.IsInRole(nameof(UserRole.Admin)) ? UserRole.Admin : user.IsInRole(nameof(UserRole.Keeper)) ? UserRole.Keeper : UserRole.Player);
 
     // Выход — серверный адрес: полная загрузка, после неё приложение стартует уже без сессии.
     private void Logout() => Navigation.NavigateTo(IdentityRoutes.Logout.TrimStart('/'), forceLoad: true);

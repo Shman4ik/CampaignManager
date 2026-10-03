@@ -9,6 +9,7 @@
 @inject AdminBadges Badges
 @inject ToastService Toasts
 @inject NavigationManager Navigation
+@inject TimeProvider Time
 
 @* Заявки на роль Хранителя. Одобрение — одна транзакция на сервере: статус заявки и роль (в v1 — два
    контекста, и сбой между ними оставлял одобренную заявку без роли). Вкладка — в адресе (?status=),
@@ -24,8 +25,16 @@
 
     <AsyncContent @ref="_content" Key="ActiveTab" Load="LoadAsync" LoadingMessage="Загружаю заявки…" Context="applications">
         <Empty>
-            <EmptyState Icon="fa-inbox" Title="@(ActiveTab == PendingTab ? "Заявок на рассмотрении нет." : "Заявок нет.")"
-                        Message="Игрок подаёт заявку в личном кабинете — она появится здесь." />
+            @* Текст по вкладке: подсказка «игрок подаёт заявку в кабинете» к «Отклонённым» и «Одобренным» не относится. *@
+            @if (ActiveTab is PendingTab or "all")
+            {
+                <EmptyState Icon="fa-inbox" Title="@(ActiveTab == PendingTab ? "Заявок на рассмотрении нет." : "Заявок нет.")"
+                            Message="Игрок подаёт заявку в личном кабинете — она появится здесь." />
+            }
+            else
+            {
+                <EmptyState Compact="true" Title="@(ActiveTab == "approved" ? "Одобренных заявок нет." : "Отклонённых заявок нет.")" />
+            }
         </Empty>
         <ChildContent>
             <div class="cm-card">
@@ -36,8 +45,13 @@
                         <div class="min-w-0 flex-1 basis-64">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-semibold text-primary-800">@application.UserName</span>
-                                <Badge Tone="RoleLabels.StatusTone(application.Status)">@RoleLabels.Status(application.Status)</Badge>
-                                <Badge Tone="RoleLabels.RoleTone(application.UserRole)">Сейчас: @RoleLabels.Role(application.UserRole).ToLowerInvariant()</Badge>
+                                @* Статус в строке нужен только во «Всех»: на вкладке «Ожидают» он повторял бы вкладку. *@
+                                @if (ActiveTab == "all")
+                                {
+                                    <Badge Tone="RoleLabels.StatusTone(application.Status)">@RoleLabels.Status(application.Status)</Badge>
+                                }
+                                <Badge Tone="RoleLabels.RoleTone(application.UserRole)">Роль: @RoleLabels.Role(application.UserRole).ToLowerInvariant()</Badge>
+                                <a href="@($"{AdminPages.Users}?user={application.UserId}")" class="inline-flex min-h-11 items-center text-sm underline hover:no-underline">Открыть в пользователях</a>
                             </div>
                             <div class="text-sm text-primary-500">@application.UserEmail</div>
                             @if (!string.IsNullOrWhiteSpace(application.Message))
@@ -46,10 +60,14 @@
                             }
                             <div class="cm-meta mt-2">
                                 <span><span class="cm-meta-label">Подана:</span> @LocalTime.DateTime(application.CreatedAt)</span>
+                                @if (application.Status is KeeperApplicationStatus.Pending && WaitingDays(application) is > 0 and var days)
+                                {
+                                    <span>Ждёт @days дн.</span>
+                                }
                                 @if (application.ReviewedAt is { } reviewedAt)
                                 {
                                     <span>
-                                        <span class="cm-meta-label">Рассмотрена:</span> @LocalTime.DateTime(reviewedAt)@(application.ReviewerName is { } reviewer ? $" — {reviewer}" : "")
+                                        <span class="cm-meta-label">Рассмотрена:</span> @LocalTime.DateTime(reviewedAt)@(application.ReviewerName is { } reviewer ? $", администратор {reviewer}" : "")
                                     </span>
                                 }
                             </div>
@@ -77,8 +95,8 @@
 <Modal Open="_rejecting is not null" Title="@($"Отклонить заявку: {_rejecting?.UserName}")" Size="ModalSize.Small" OnClose="CloseReject">
     <ChildContent>
         <form id="reject-form" class="flex flex-col gap-4" @onsubmit="RejectAsync">
-            <Field Label="Комментарий" Note="Его увидит игрок в личном кабинете.">
-                <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ReviewCommentLength" placeholder="Причина…"
+            <Field Label="Комментарий игроку" Note="Игрок увидит его в личном кабинете. Можно оставить пустым.">
+                <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ReviewCommentLength" placeholder="Причина отказа"
                           @bind="_comment"></textarea>
             </Field>
             @if (_rejectError is not null)
@@ -133,8 +151,16 @@
         StateHasChanged();
     });
 
-    private Task<IReadOnlyList<KeeperApplicationDto>> LoadAsync(CancellationToken cancellationToken) =>
-        Api.GetApplicationsAsync(Filters[ActiveTab], cancellationToken);
+    // «Все»: ожидающие — сверху (им нужно действие), дальше история от новых к старым.
+    private async Task<IReadOnlyList<KeeperApplicationDto>> LoadAsync(CancellationToken cancellationToken)
+    {
+        var applications = await Api.GetApplicationsAsync(Filters[ActiveTab], cancellationToken);
+        return ActiveTab == "all"
+            ? [.. applications.OrderBy(a => a.Status is not KeeperApplicationStatus.Pending).ThenByDescending(a => a.CreatedAt)]
+            : applications;
+    }
+
+    private int WaitingDays(KeeperApplicationDto application) => (int)(Time.GetUtcNow() - application.CreatedAt).TotalDays;
 
     private void SelectTab(string key) =>
         Navigation.NavigateTo(key == PendingTab ? AdminPages.Applications : $"{AdminPages.Applications}?status={key}");
