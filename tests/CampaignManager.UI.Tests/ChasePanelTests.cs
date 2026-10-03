@@ -97,9 +97,11 @@ public sealed class ChasePanelTests : KitContext
         var smash = ChaseActions.BreakBarrier(session.State, pursuer.Id, 5, 9, new Core.Dice.SeededDiceRoller(1)).Resolution;
         EncounterEngine.Propose(session.State, smash);
         var cut = Choice(smash);
-        Assert.Contains("cm-btn-primary", cut.Find("[data-testid=chase-debris-none]").ClassName, StringComparison.Ordinal);
+        // Выбор — сегмент (отмеченный светлый), а не вторая главная кнопка рядом с «Применить».
+        Assert.Equal("true", cut.Find("[data-testid=chase-debris-none]").GetAttribute("aria-checked"));
 
         cut.Find("[data-testid=chase-debris-Hard]").Click();
+        Assert.Equal("true", Choice(session.State.Pending!).Find("[data-testid=chase-debris-Hard]").GetAttribute("aria-checked"));
 
         Assert.Equal(Difficulty.Hard, ChaseRules.DebrisOf(session.State.Pending!));
         Assert.NotNull(location.Barrier);

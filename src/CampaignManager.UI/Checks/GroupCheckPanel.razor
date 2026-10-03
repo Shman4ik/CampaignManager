@@ -11,50 +11,56 @@
    Состав — Party (листы и справочник); без него сыщиков вписывают руками: имя и значение навыка. *@
 <div class="cm-stack" data-testid="group-check">
     <section class="flex flex-col gap-3">
-        @if (IsPartyMode)
+        @* Три навыка восприятия — сегменты (выбранный светлый, не главная кнопка), любой другой — «Другой навык» полем с поиском.
+           Раньше те же три были и кнопками, и списком на всю ширину: выбор дублировался (R4). *@
+        <Field Label="Навык" Group="true">
+            <Segmented TValue="string" Options="SkillOptions" Value="SkillChoice" ValueChanged="ChooseSkill" Label="Навык" data-testid="group-check-skill" />
+        </Field>
+        @if (OtherOpen)
         {
-            <Field Label="Навык">
-                <select class="cm-input" data-testid="group-check-skill" @onchange="SelectSkill">
-                    @foreach (var skill in CatalogSkills)
-                    {
-                        <option value="@skill.Id" selected="@(skill.Id == SkillId)">@skill.Name</option>
-                    }
-                </select>
+            <Field Label="Другой навык" class="sm:w-80">
+                @if (IsPartyMode)
+                {
+                    <input class="cm-input" list="group-check-skills" placeholder="Начните вводить название" autocomplete="off"
+                           value="@(Catalog!.Find(SkillId)?.Name)" @onchange="PickOther" data-testid="group-check-other" />
+                    <datalist id="group-check-skills">
+                        @foreach (var skill in CatalogSkills)
+                        {
+                            <option value="@skill.Name"></option>
+                        }
+                    </datalist>
+                }
+                else
+                {
+                    <input class="cm-input" placeholder="Название навыка" @bind="State.SkillName" @bind:event="oninput" data-testid="group-check-other" />
+                }
             </Field>
         }
-        else
-        {
-            <Field Label="Навык">
-                <input class="cm-input" data-testid="group-check-skill" placeholder="Внимание" @bind="State.SkillName" @bind:event="oninput" />
-            </Field>
-        }
-
-        <div class="flex flex-wrap gap-2">
-            @foreach (var (id, name) in PerceptionSkills)
-            {
-                var active = IsPartyMode ? id == SkillId : string.Equals(State.SkillName.Trim(), name, StringComparison.OrdinalIgnoreCase);
-                <Button Small="true" Variant="@(active ? ButtonVariant.Primary : ButtonVariant.Secondary)"
-                        OnClick="() => PickPerception(id, name)">@name</Button>
-            }
-        </div>
 
         <Field Label="Сложность" Group="true">
             <DifficultyPicker Value="@State.Difficulty" ValueChanged="d => State.Difficulty = d" />
         </Field>
 
-        <div class="flex flex-wrap gap-2">
-            <Button Small="true" Icon="fa-dice-d20" Disabled="@(Rows.Count == 0)" data-testid="group-check-roll" OnClick="RollAll">
-                Бросить за всех
-            </Button>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Disabled="@(State.Rolls.Count == 0)" data-testid="group-check-clear"
-                    OnClick="() => State.Rolls.Clear()">Очистить броски</Button>
-            @if (!IsPartyMode)
-            {
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" data-testid="group-check-add" OnClick="AddManual">
-                    Добавить сыщика
-                </Button>
-            }
-        </div>
+        @if (!IsPartyMode || Rows.Count > 0)
+        {
+            @* Бросать не за кого, пока нет состава, — кнопок нет вовсе (правило 8). *@
+            <div class="flex flex-wrap gap-2">
+                @if (Rows.Count > 0)
+                {
+                    <Button Small="true" Icon="fa-dice-d20" data-testid="group-check-roll" OnClick="RollAll">Бросить за всех</Button>
+                }
+                @if (State.Rolls.Count > 0)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" data-testid="group-check-clear" OnClick="() => State.Rolls.Clear()">Очистить броски</Button>
+                }
+                @if (!IsPartyMode)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" data-testid="group-check-add" OnClick="AddManual">
+                        Добавить сыщика
+                    </Button>
+                }
+            </div>
+        }
     </section>
 
     <section>
@@ -190,6 +196,56 @@
             ? GroupCheck.PerceptionSkillCodes.Select(code => Catalog!.FindByCode(code)).OfType<SkillDefinition>().Select(s => ((Guid?)s.Id, s.Name))
             : ManualPerception.Select(name => ((Guid?)null, name));
 
+    private const string OtherKey = "other";
+
+    private bool _otherPicked;
+
+    private static string KeyOf(Guid? id, string name) => id?.ToString() ?? name;
+
+    private IReadOnlyList<SegmentOption<string>> SkillOptions =>
+        [.. PerceptionSkills.Select(x => new SegmentOption<string>(KeyOf(x.Id, x.Name), x.Name)), new SegmentOption<string>(OtherKey, "Другой навык")];
+
+    /// <summary>Выбранный сегмент: один из трёх навыков восприятия или «другой» (выбор не совпал ни с одним).</summary>
+    private string SkillChoice
+    {
+        get
+        {
+            if (_otherPicked)
+                return OtherKey;
+
+            foreach (var (id, name) in PerceptionSkills)
+            {
+                var on = IsPartyMode ? id == SkillId : string.Equals(State.SkillName.Trim(), name, StringComparison.OrdinalIgnoreCase);
+                if (on)
+                    return KeyOf(id, name);
+            }
+
+            return IsPartyMode || State.SkillName.Trim().Length > 0 ? OtherKey : "";
+        }
+    }
+
+    private bool OtherOpen => SkillChoice == OtherKey;
+
+    private void ChooseSkill(string key)
+    {
+        _otherPicked = key == OtherKey;
+        if (_otherPicked)
+            return;
+
+        if (IsPartyMode)
+            State.SkillId = Guid.TryParse(key, out var id) ? id : null;
+        else
+            State.SkillName = key;
+    }
+
+    /// <summary>Другой навык: имя из подсказки поля поиска → навык справочника; неизвестное имя состав не меняет.</summary>
+    private void PickOther(ChangeEventArgs args)
+    {
+        var name = args.Value?.ToString()?.Trim();
+        if (Catalog!.Skills.FirstOrDefault(s => !Catalog.IsParent(s.Id) && string.Equals(s.Name, name, StringComparison.CurrentCultureIgnoreCase)) is { } skill)
+            State.SkillId = skill.Id;
+    }
+
     private string SkillTitle => IsPartyMode
         ? Catalog!.Find(SkillId)?.Name ?? "Навык"
         : string.IsNullOrWhiteSpace(State.SkillName) ? "Навык" : State.SkillName.Trim();
@@ -202,17 +258,6 @@
         .ToList();
 
     private ManualInvestigator? ManualRow(Guid id) => IsPartyMode ? null : State.Manual.FirstOrDefault(m => m.Id == id);
-
-    private void SelectSkill(ChangeEventArgs args) =>
-        State.SkillId = Guid.TryParse(args.Value?.ToString(), out var id) ? id : null;
-
-    private void PickPerception(Guid? id, string name)
-    {
-        if (IsPartyMode)
-            State.SkillId = id;
-        else
-            State.SkillName = name;
-    }
 
     private void RollAll()
     {

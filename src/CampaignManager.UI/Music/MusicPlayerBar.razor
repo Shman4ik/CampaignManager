@@ -7,6 +7,7 @@
 @inject IMusicApi Music
 @inject BrowserStorage Storage
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 
 @* Плеер Хранителя: кнопка «Плеер» в шапке (слоты PageHeaderSlots.Music и MusicPlaying — шапка о модуле не знает) и панель
    внизу колонки страницы. Стоит в MainLayout (через MusicPlayerHost, только Хранителю), поэтому переходы
@@ -31,28 +32,26 @@
 
         @if (_expanded)
         {
-            @if (Player.Current is not null)
+            @if (Player.Current is { } playing)
             {
-                @* Разметка неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
+                @* Разметка полосы неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
                    C# эти элементы после первой отрисовки не патчит. Не привязывать к ним @bind и value с меняющимся
-                   значением — ползунок начнёт вырываться из-под пальца. *@
+                   значением — ползунок начнёт вырываться из-под пальца. Громкость — в той же строке справа (отдельная
+                   строка с одним ползунком съедала 44px, M7); у ролика YouTube её нет вовсе: iPad громкость чужого
+                   iframe не слушает, ползунок был бы обманом. *@
                 <div class="cm-music-seek">
                     <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
                     <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0" aria-label="Позиция в треке" disabled />
                     <span class="cm-music-time" id="cm-music-duration">--:--</span>
+                    @if (!playing.IsYouTube)
+                    {
+                        <div class="cm-music-volume">
+                            <Button Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
+                                    AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
+                            <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
+                        </div>
+                    }
                 </div>
-            }
-
-            @* Громкость — только пока есть трек: в покое на панели остаются настроения. *@
-            @if (Player.Current is not null)
-            {
-            <div class="cm-music-row">
-                <div class="cm-music-volume">
-                    <Button Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
-                            AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
-                    <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
-                </div>
-            </div>
             }
 
             <div class="cm-music-row cm-music-moods">
@@ -65,7 +64,11 @@
                             Variant="@(IsCurrentPool(current) ? ButtonVariant.Primary : ButtonVariant.Secondary)"
                             OnClick="() => Player.PlayTag(current)">@current</Button>
                 }
-                <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-up-right-from-square" class="ml-auto" Href="music">@Terms.Library</Button>
+                @if (!OnLibraryPage)
+                {
+                    @* На самой фонотеке ссылка вела бы на неё же. *@
+                    <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-up-right-from-square" class="ml-auto" Href="music">@Terms.Library</Button>
+                }
             </div>
         }
 
@@ -93,7 +96,8 @@
 @code {
     private RenderFragment PlayerButton => __builder =>
     {
-        <Button Small="true" Variant="@(Player.IsPanelOpen ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+        @* Открытая панель — светлая кнопка с рамкой акцента, не главная: рядом «Добавить трек», «Следующий ход», и главная на экране одна. *@
+        <Button Small="true" Variant="ButtonVariant.Secondary" class="@(Player.IsPanelOpen ? "cm-chip-on" : null)"
                 Icon="@(Player.IsPlaying ? "fa-volume-high" : "fa-headphones")" aria-expanded="@(Player.IsPanelOpen ? "true" : "false")"
                 data-testid="music-panel-toggle" OnClick="Player.TogglePanel">
             @* На телефоне шапка сама оставит только значок (shell.css, .cm-topbar-actions). *@
@@ -119,6 +123,7 @@
     protected override async Task OnInitializedAsync()
     {
         Player.Changed += OnPlayerChanged;
+        Navigation.LocationChanged += OnLocationChanged;
         _wasOpen = Player.IsPanelOpen;
         _hasLibrary = Player.Library.Count > 0;
 
@@ -223,6 +228,10 @@
         ["volume"] = track.Volume,
     };
 
+    private bool OnLibraryPage => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("music", StringComparison.OrdinalIgnoreCase);
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
     private bool IsCurrentPool(string tag) => Player.IsPlaying && Player.PoolLabel == tag;
 
     private void OnVolumeInput(ChangeEventArgs args)
@@ -268,6 +277,7 @@
     public async ValueTask DisposeAsync()
     {
         Player.Changed -= OnPlayerChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
         try
         {
             if (_module is not null)
