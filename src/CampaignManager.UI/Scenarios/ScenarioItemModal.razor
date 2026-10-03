@@ -8,8 +8,9 @@
     <ChildContent>
         <form id="item-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
             <Field Label="Название" Error="@_nameError"
-                   Note="@(Item?.CatalogName is { } catalog ? $"Пусто — как в справочнике: «{catalog}»." : null)">
-                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="item-name" @bind="_name" @bind:event="oninput" />
+                   Note="@(Item?.CatalogName is { } catalog ? $"Пусто — как в справочнике: {catalog}." : null)">
+                <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="item-name" @bind="_name" @bind:event="oninput"
+                       aria-invalid="@(_nameError is null ? null : "true")" autofocus />
             </Field>
             <Field Label="Описание" Note="@(Item?.ItemId is not null ? "Пусто — описание справочника." : null)">
                 <textarea class="cm-input" rows="4" maxlength="@ScenarioLimits.TextLength" @bind="_description"></textarea>
@@ -20,12 +21,15 @@
             <Field Label="Заметки">
                 <textarea class="cm-input" rows="2" maxlength="@ScenarioLimits.TextLength" @bind="_notes"></textarea>
             </Field>
-            @if (_error is not null)
-            {
-                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
-            }
+            <ValidationScroll Trigger="_attempt" />
         </form>
     </ChildContent>
+    <FooterError>
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+        }
+    </FooterError>
     <Footer>
         <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
         <Button Type="submit" form="item-form" Busy="_saving" data-testid="item-save">@(Item is null ? "Добавить" : "Сохранить")</Button>
@@ -41,6 +45,7 @@
     private string? _nameError;
     private string? _error;
     private bool _saving;
+    private int _attempt;
 
     [Parameter] public bool Open { get; set; }
 
@@ -74,6 +79,8 @@
     private async Task SaveAsync()
     {
         _nameError = Item?.ItemId is null && string.IsNullOrWhiteSpace(_name) ? "У своего предмета должно быть название." : null;
+        if (_nameError is not null)
+            _attempt++;
         if (_nameError is not null || _saving)
             return;
 
