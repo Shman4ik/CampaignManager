@@ -205,6 +205,41 @@ public sealed class SheetSkillLayoutTests
         Assert.Equal(-1, string.CompareOrdinal(SheetSkillLayout.AlphabeticKey("Ёж"), SheetSkillLayout.AlphabeticKey("Жук")));
     }
 
+    [Fact]
+    public void Play_mode_shows_only_developed_skills_alphabetically_and_all_lines_include_the_rest()
+    {
+        var sheet = NewSheet(50,
+            Skill("Слух", 45),
+            Skill("Внимание", 25, isChecked: true), // на базе, но с отметкой развития — за столом она нужна
+            Skill("Психология", 10), // строка есть, но на базе
+            Skill("Стрельба (пистолет)", 60),
+            Skill(Mythos, 4),
+            new SheetSkill { Name = "Гадание на картах", Value = 30 });
+
+        var developed = SheetSkillLayout.Developed(sheet, Catalog);
+
+        Assert.Equal(["Внимание", "Гадание на картах", Mythos, "Слух", "Стрельба (пистолет)"], developed.Select(l => l.Name));
+        var all = SheetSkillLayout.All(sheet, Catalog);
+        Assert.Contains(all, l => l.Name == "Психология" && l.Value == 10);
+        Assert.Contains(all, l => l.Name == "Стрельба (винтовка)"); // свёрнутая специализация тоже ищется
+        Assert.Equal(all.Count, all.Select(l => l.Key).Distinct().Count());
+        Assert.Equal(all.Select(l => l.Name).OrderBy(SheetSkillLayout.AlphabeticKey, StringComparer.Ordinal), all.Select(l => l.Name));
+    }
+
+    [Theory]
+    [InlineData(0, new int[0])]
+    [InlineData(2, new[] { 1, 1 })]
+    [InlineData(7, new[] { 3, 2, 2 })]
+    [InlineData(8, new[] { 3, 3, 2 })]
+    [InlineData(9, new[] { 3, 3, 3 })]
+    public void Split_into_three_columns_keeps_order_and_puts_extra_items_first(int count, int[] sizes)
+    {
+        var columns = SheetSkillLayout.SplitInto(Enumerable.Range(0, count).ToList(), 3);
+
+        Assert.Equal(sizes, columns.Select(c => c.Count));
+        Assert.Equal(Enumerable.Range(0, count), columns.SelectMany(c => c));
+    }
+
     [Theory]
     [InlineData(0, 0, 0)]
     [InlineData(1, 1, 0)]

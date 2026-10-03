@@ -1,0 +1,33 @@
+@using CampaignManager.Core.Characters
+
+@* Итог одной атаки: мгновенная смерть или серьёзная рана с проверкой Выносливости. Одна разметка для «Состояния»
+   листа и полосы режима «Игра»; ничего не пишет — только показывает исход WoundRules.ApplyDamage. *@
+@if (Hit is { InstantDeath: true })
+{
+    <Alert Tone="Tone.Error" ShowIcon="true" Small="true" class="@AlertClass" Icon="fa-skull" data-testid="wound-death">
+        Урон одной атаки не меньше максимума ПЗ — <strong>мгновенная смерть</strong>.
+    </Alert>
+}
+else if (Hit is { MajorWound: true })
+{
+    <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" class="@AlertClass" data-testid="wound-major">
+        <ChildContent>
+            <strong>Серьёзная рана:</strong> сыщик падает. Нужна проверка Выносливости — провал значит потерю сознания (отметка «Без сознания»).@(Context.Sheet.Condition.Dying ? " ПЗ на нуле — при смерти: первая помощь в этом раунде или проверка Выносливости в конце следующего." : "")
+        </ChildContent>
+        <Actions>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="check-con" OnClick='() => Context.Check("char:CON")'>Проверка Выносливости</Button>
+        </Actions>
+    </Alert>
+}
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    /// <summary>Исход последней атаки; null — показывать нечего.</summary>
+    [Parameter] public DamageOutcome? Hit { get; set; }
+
+    [Parameter] public string AlertClass { get; set; } = "mt-2 mb-0";
+
+    /// <summary>Есть что показать — хозяин прячет вместо алерта свою подсказку о порогах.</summary>
+    public static bool Shows(DamageOutcome? hit) => hit is { InstantDeath: true } or { MajorWound: true };
+}
