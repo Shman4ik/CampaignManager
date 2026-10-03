@@ -37,18 +37,13 @@
 
                 @* Обе вкладки остаются в разметке (скрыта неактивная): набранное и фокус не пропадают при переключении. *@
                 <div class="@Css.Join("flex flex-col gap-4", _tab == NotesTab ? "hidden" : null)">
-                    <Field Label="Заголовок">
-                        <input class="cm-input" maxlength="@CampaignLimits.SessionTitleLength" placeholder="Например: Дом на Френч-Хилл"
-                               @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
-                    </Field>
-
-                    <Field Label="Хроника" Hint="Markdown" Note="Видна игрокам.">
-                        <textarea class="cm-input min-h-40" rows="6" placeholder="Что произошло на встрече"
-                                  @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
-                    </Field>
-
-                    @* Поля по содержимому: дата — 12rem, номер — 6rem, прохождение берёт остаток; флажок — в той же строке. *@
+                    @* Заголовок, дата и номер — одна строка (флажок и прохождение — тоже): окно умещается в 462px под шапкой браузера, а
+                       «Хроника» — главное поле — видна целиком. *@
                     <div class="cm-field-row flex flex-wrap gap-x-4 gap-y-3">
+                        <Field Label="Заголовок" class="min-w-48 flex-1">
+                            <input class="cm-input" maxlength="@CampaignLimits.SessionTitleLength" placeholder="Например: Дом на Френч-Хилл"
+                                   @bind="form.Title" @bind:event="oninput" @bind:after="Changed" />
+                        </Field>
                         <Field Label="Дата встречи" class="w-44">
                             <input type="date" class="cm-input" @bind="form.SessionDate" @bind:after="Changed" />
                         </Field>
@@ -56,8 +51,16 @@
                             <input type="number" class="cm-input" min="@CampaignLimits.MinSessionNumber" max="@CampaignLimits.MaxSessionNumber"
                                    @bind="form.Number" @bind:after="Changed" />
                         </Field>
-                        @if (Runs.Count > 0 || form.RunId is not null)
-                        {
+                    </div>
+
+                    <Field Label="Хроника" Hint="Markdown" Note="Видна игрокам.">
+                        <textarea class="cm-input min-h-28" rows="4" placeholder="Что произошло на встрече"
+                                  @bind="form.Summary" @bind:event="oninput" @bind:after="Changed"></textarea>
+                    </Field>
+
+                    @if (Runs.Count > 0 || form.RunId is not null)
+                    {
+                        <div class="cm-field-row flex flex-wrap gap-x-4 gap-y-3">
                             <Field Label="Прохождение" class="min-w-48 flex-1">
                                 <select class="cm-input" @bind="form.RunIdText" @bind:after="Changed">
                                     <option value="">— без сценария —</option>
@@ -72,24 +75,20 @@
                                     }
                                 </select>
                             </Field>
-                        }
-                    </div>
-
-                    @if (Runs.Count > 0 || form.RunId is not null)
-                    {
-                        <label class="cm-tap-row">
-                            <input type="checkbox" class="cm-checkbox shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
-                            <span>
-                                <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
-                                <span class="cm-field-note block">Журнал покажет ссылки на листы для фазы развития.</span>
-                            </span>
-                        </label>
+                            <label class="cm-tap-row min-w-48 flex-1">
+                                <input type="checkbox" class="cm-checkbox shrink-0" @bind="form.ScenarioCompleted" @bind:after="Changed" />
+                                <span>
+                                    <span class="cm-field-label mb-0 block">Сценарий или глава завершены</span>
+                                    <span class="cm-field-note block">Журнал покажет ссылки на листы сыщиков.</span>
+                                </span>
+                            </label>
+                        </div>
                     }
                 </div>
 
                 <div class="@(_tab == NotesTab ? null : "hidden")">
                     <Field Label="Заметки Хранителя" Hint="Markdown" Note="Видны только вам.">
-                        <textarea class="cm-input min-h-40" rows="8" placeholder="Тайны, зацепки, что готовить к следующей встрече"
+                        <textarea class="cm-input min-h-44" rows="8" placeholder="Тайны, зацепки, что готовить к следующей встрече"
                                   @bind="form.KeeperNotes" @bind:event="oninput" @bind:after="Changed"></textarea>
                     </Field>
                 </div>
@@ -129,7 +128,7 @@
     private const string NotesTab = "notes";
 
     /// <summary>Высота тела по самой высокой вкладке («Запись» с прохождением и флажком), замеренная на 1194×696, — вкладки не прыгают.</summary>
-    private const string TabsMinHeight = "27rem";
+    private const string TabsMinHeight = "27.5rem";
 
     private static readonly IReadOnlyList<Tabs.Item> _tabs =
     [

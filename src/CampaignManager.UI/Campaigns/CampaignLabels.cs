@@ -34,12 +34,6 @@ public static class CampaignLabels
         _ => "Кампания",
     };
 
-    public static string Era(Era era) => era switch
-    {
-        Core.Era.Modern => "Современность",
-        _ => "1920-е (классика)",
-    };
-
     public static string Role(CampaignRole role) => role switch
     {
         CampaignRole.Keeper => "Хранитель",

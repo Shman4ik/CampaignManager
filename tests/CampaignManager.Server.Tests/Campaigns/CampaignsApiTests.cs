@@ -259,6 +259,41 @@ public sealed class CampaignsApiTests(CampaignsApp app) : IClassFixture<Campaign
         await ApiAssert.FailsWith(HttpStatusCode.Unauthorized, () => app.Api(null).GetCampaignsAsync(Cancellation));
     }
 
+    // C1: живая игра — первой: активные, на паузе, планируемые, завершённые; внутри — новые сверху.
+    [Fact]
+    public async Task List_puts_active_campaigns_first_and_completed_last()
+    {
+        TestDatabase.SkipIfMissing();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync();
+        var done = await app.AddCampaignAsync(keeper, CampaignStatus.Completed, CampaignKind.Campaign, player);
+        var planned = await app.AddCampaignAsync(keeper, CampaignStatus.Planning, CampaignKind.Campaign, player);
+        var active = await app.AddCampaignAsync(keeper, CampaignStatus.Active, CampaignKind.Campaign, player);
+        var paused = await app.AddCampaignAsync(keeper, CampaignStatus.OnHold, CampaignKind.Campaign, player);
+        var doneLater = await app.AddCampaignAsync(keeper, CampaignStatus.Completed, CampaignKind.Campaign, player);
+
+        var ids = (await app.Api(player).GetCampaignsAsync(Cancellation)).Select(c => c.Id).ToList();
+
+        Assert.Equal([active.Id, paused.Id, planned.Id, doneLater.Id, done.Id], ids);
+    }
+
+    // Обработчик общий (Platform), а не кампаний: то же в админке — неверная роль в теле.
+    [Fact]
+    public async Task Broken_enum_in_another_module_is_400_too()
+    {
+        TestDatabase.SkipIfMissing();
+        var admin = await app.AddUserAsync(UserRole.Admin);
+        var someone = await app.AddUserAsync();
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, Contracts.Admin.AdminRoutes.UserRole(someone.Id))
+        {
+            Content = new StringContent("""{"role":"Bogus"}""", System.Text.Encoding.UTF8, "application/json"),
+        };
+        using var response = await app.Http(admin).SendAsync(request, Cancellation);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // #194: неверное значение enum (и любая ошибка чтения тела) — 400 с понятным текстом, а не 500; общим обработчиком,
     // поэтому и создание, и правка, и журнал.
     [Theory]
