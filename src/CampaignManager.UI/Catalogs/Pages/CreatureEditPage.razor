@@ -1,7 +1,6 @@
 @page "/bestiary/creatures/edit/{Id:guid?}"
 @attribute [Authorize(Policy = Policies.Keeper)]
 @using System.Text.Json
-@using CampaignManager.Contracts.Files
 @using CampaignManager.UI.Platform
 @using CampaignManager.Contracts.Identity
 @using CampaignManager.Contracts.Platform
@@ -191,22 +190,8 @@
             <section class="cm-section">
                 <div class="cm-section-header"><h2 class="cm-section-title">Иллюстрации</h2></div>
                 <div class="cm-card">
-                    <div class="cm-card-body grid gap-3">
-                        <p class="cm-text-muted">Первая картинка — обложка плитки.</p>
-                        @for (var i = 0; i < c.Images.Count; i++)
-                        {
-                            var image = c.Images[i];
-                            var index = i;
-                            <div class="flex flex-wrap items-center gap-3" @key="image.FileId">
-                                <img src="@image.Url" alt="" class="h-20 w-16 rounded-md border border-primary-200 object-cover" />
-                                <input class="cm-input min-w-40 flex-1" placeholder="Подпись" aria-label="Подпись картинки" value="@image.Caption"
-                                       @onchange="e => c.Images[index] = image with { Caption = e.Value?.ToString() }" />
-                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-up" AriaLabel="Выше" Disabled="index == 0" OnClick="() => Move(c, index, -1)" />
-                                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-arrow-down" AriaLabel="Ниже" Disabled="index == c.Images.Count - 1" OnClick="() => Move(c, index, 1)" />
-                                <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="Убрать картинку" OnClick="() => c.Images.RemoveAt(index)" />
-                            </div>
-                        }
-                        <ImagePicker OnChanged="file => AddImage(c, file)" />
+                    <div class="cm-card-body">
+                        <CatalogImagesEditor Images="c.Images" Hint="Первая картинка — обложка плитки." />
                     </div>
                 </div>
             </section>
@@ -340,19 +325,6 @@
         string.IsNullOrWhiteSpace(creature.Name) ? new() { ["name"] = "Нужно название." } : [];
 
     private string? ErrorOf(Dictionary<string, string> errors, string key) => _attempt > 0 ? errors.GetValueOrDefault(key) : null;
-
-    private static void Move(CreatureDto creature, int index, int delta)
-    {
-        (creature.Images[index + delta], creature.Images[index]) = (creature.Images[index], creature.Images[index + delta]);
-    }
-
-    private static void AddImage(CreatureDto creature, StoredFileDto? file)
-    {
-        if (file is not null && creature.Images.All(i => i.FileId != file.Id))
-        {
-            creature.Images.Add(new CreatureImageDto(file.Id, file.Url, null));
-        }
-    }
 
     // Бой бросает только то, что понимает DiceFormula: «1д6» и «1D6+БкУ» — да, «см. описание» — нет.
     // Это предупреждение, а не запрет: такой урон сохранится текстом.

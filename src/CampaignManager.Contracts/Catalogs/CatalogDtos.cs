@@ -149,6 +149,9 @@ public sealed class WeaponDto : CatalogItemDto
 
     public bool SingleUse { get; set; }
 
+    /// <summary>Иллюстрации, как у твари бестиария: первая — обложка (миниатюра в строке).</summary>
+    public List<CatalogImageDto> Images { get; set; } = [];
+
     // ── Разобрано сервером из строк ──
 
     public int? BaseRangeM { get; set; }
@@ -260,11 +263,12 @@ public sealed class CreatureDto : CatalogItemDto
     public Statblock Statblock { get; set; } = new();
 
     /// <summary>Первая — обложка.</summary>
-    public List<CreatureImageDto> Images { get; set; } = [];
+    public List<CatalogImageDto> Images { get; set; } = [];
 }
 
+/// <summary>Картинка записи справочника (тварь, оружие) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
-public sealed record CreatureImageDto(Guid FileId, string? Url, string? Caption);
+public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 
 /// <summary>Справочник целиком и права текущего пользователя на него (одни на все записи).</summary>
 public sealed record CatalogList<T>(IReadOnlyList<T> Items, bool CanEdit)

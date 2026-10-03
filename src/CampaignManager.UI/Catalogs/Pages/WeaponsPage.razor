@@ -13,12 +13,17 @@
              TableFrom="TableBreakpoint.Xl" State="_state" Validate="Validate" New="() => new WeaponDto { Type = WeaponType.Pistols }" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[24%]" Context="w">
-            <span class="font-medium text-primary-800">@w.Name</span>
-            @if (view.ShowEra)
-            {
-                <EraBadges Values="w.Eras" />
-            }
-            <WeaponMarks Weapon="w" />
+            <div class="flex items-center gap-3">
+                @Cover(w, "h-10 w-15")
+                <div class="min-w-0">
+                    <span class="font-medium text-primary-800">@w.Name</span>
+                    @if (view.ShowEra)
+                    {
+                        <EraBadges Values="w.Eras" />
+                    }
+                    <WeaponMarks Weapon="w" />
+                </div>
+            </div>
         </DataColumn>
         @if (!view.IsFixed("type"))
         {
@@ -42,8 +47,13 @@
         </DataColumn>
     </Columns>
     <CardTemplate Context="w">
-        <p class="font-medium text-primary-800">@w.Name<WeaponMarks Weapon="w" /></p>
-        <p class="cm-meta">@CatalogText.Of(w.Type) · @w.SkillName</p>
+        <div class="flex items-center gap-3">
+            @Cover(w, "h-16 w-24")
+            <div class="min-w-0">
+                <p class="font-medium text-primary-800">@w.Name<WeaponMarks Weapon="w" /></p>
+                <p class="cm-meta">@CatalogText.Of(w.Type) · @w.SkillName</p>
+            </div>
+        </div>
         <dl class="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm sm:grid-cols-3">
             <div><dt class="inline cm-text-muted">Урон </dt><dd class="inline"><DiceText Value="@w.Damage" /><UnparsedMark Show="!DamageFormulaParser.Parse(w.Damage).IsParsed" What="урон" /></dd></div>
             <div><dt class="inline cm-text-muted me-1">@Terms.Range</dt><dd class="inline">@w.Range</dd></div>
@@ -117,9 +127,32 @@
         { } value => value.ToString(System.Globalization.CultureInfo.CurrentCulture),
     };
 
+    // Обложка — первая картинка, как плитка бестиария; без картинок — заглушка того же размера, чтобы названия стояли ровно.
+    private static RenderFragment Cover(WeaponDto w, string size) => __builder =>
+    {
+        @if (w.Images.FirstOrDefault() is { } cover)
+        {
+            <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="@($"{size} shrink-0 rounded-xs object-cover")" loading="lazy" decoding="async" />
+        }
+        else
+        {
+            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
+                <i class="fa-solid fa-gun"></i>
+            </span>
+        }
+    };
+
+    // Картинки слева (галерея бестиария: большая и миниатюры по касанию), сведения справа; на узком экране — под ней.
     private static RenderFragment<WeaponDto> Detail => w => __builder =>
     {
-        <dl class="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
+        @if (w.Images.Count > 0)
+        {
+            <div class="w-full max-w-sm">
+                <CatalogImageGallery @key="w.Id" Images="w.Images" Alt="@w.Name" />
+            </div>
+        }
+        <dl class="grid min-w-0 flex-1 basis-80 content-start gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
             <div><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? "—")</dd></div>
             @if (w.DamageByRange is { Count: > 0 } byRange)
             {
@@ -136,6 +169,7 @@
             <div><dt class="cm-meta-label inline">Пронзающее: </dt><dd class="inline">@(w.IsImpaling ? "да" : "нет")</dd></div>
             <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@(string.IsNullOrWhiteSpace(w.Source) ? "—" : w.Source)</dd></div>
         </dl>
+        </div>
     };
 
     private RenderFragment<WeaponDto> Form => w => __builder =>
@@ -199,6 +233,9 @@
             </Field>
             <Field Label="Примечания" class="sm:col-span-2"><textarea class="cm-input" rows="2" @bind="w.Notes"></textarea></Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="w.Source" /></Field>
+            <Field Label="Иллюстрации" Group="true" class="sm:col-span-2">
+                <CatalogImagesEditor Images="w.Images" Hint="Первая картинка — обложка в строке справочника." ThumbClass="h-16 w-24" />
+            </Field>
         </div>
     };
 

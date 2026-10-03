@@ -2,10 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using CampaignManager.Contracts.Catalogs;
+using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core;
 using CampaignManager.Core.Admin;
 using CampaignManager.Core.Catalogs;
+using CampaignManager.Data.Files;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -171,6 +173,38 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(40m, pistol.CostClassic);
         Assert.Equal(500m, pistol.CostModern);
         Assert.Equal("Стрельба (пистолет)", pistol.SkillName);
+    }
+
+    [Fact]
+    public async Task Weapon_images_keep_order_and_captions_like_bestiary()
+    {
+        TestDatabase.SkipIfMissing();
+        Guid side, drum;
+        await using (var db = app.Database.CreateContext())
+        {
+            var files = new[] { new StoredFile { ExternalUrl = "https://example.test/side.webp" }, new StoredFile { ExternalUrl = "https://example.test/drum.webp" } };
+            db.Files.AddRange(files);
+            await db.SaveChangesAsync(Cancellation);
+            (side, drum) = (files[0].Id, files[1].Id);
+        }
+
+        var weapon = Weapon(Unique("Томпсон"));
+        weapon.Images = [new CatalogImageDto(side, null, " Вид сбоку "), new CatalogImageDto(drum, null, null)];
+        var created = await app.Weapons().CreateAsync(weapon, Cancellation);
+
+        Assert.Equal([side, drum], created.Images.Select(i => i.FileId));
+        Assert.Equal("Вид сбоку", created.Images[0].Caption);
+        Assert.Equal(FilesRoutes.Content(side), created.Images[0].Url);
+
+        // Обложкой стал барабан, вид сбоку убран — правка только детей тоже сдвигает версию записи.
+        created.Images = [created.Images[1]];
+        var updated = await app.Weapons().UpdateAsync(created, Cancellation);
+        Assert.Equal([drum], updated.Images.Select(i => i.FileId));
+        Assert.NotEqual(created.Version, updated.Version);
+
+        updated.Images = [new CatalogImageDto(Guid.NewGuid(), null, null)];
+        var missing = await Assert.ThrowsAsync<ApiException>(() => app.Weapons().UpdateAsync(updated, Cancellation));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
     }
 
     [Fact]
