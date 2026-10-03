@@ -1,83 +1,107 @@
+@using CampaignManager.Core
 @using CampaignManager.Core.Characters
 
-@* Шаг «Биография»: анкета и шесть граф по спискам книги — выбрать пункт или бросить 1d10 (бросок
-   можно вписать: DiceInput). Ключевая связь — отметка графы, её текст уходит в лист (SheetBuilder.FromDraft).
-   Тексты списков — BiographyTables (Core), одна копия на помощник и случайного сыщика. *@
+@* Шаг «Биография»: основное и шесть граф по спискам книги — выбрать пункт или бросить 1d10 (бросок можно вписать:
+   DiceInput). Графы — аккордеон: открыт один блок, остальные — строкой с началом текста и галочкой (форма из шести
+   одинаковых блоков занимала два экрана). Ключевая связь — радио рядом с названием графы, её текст уходит в лист
+   (SheetBuilder.FromDraft). Имя спрашивается на первом шаге. Тексты списков — BiographyTables (Core), одна копия на
+   помощник и случайного сыщика. Введённое уходит в черновик на каждое нажатие (oninput), а не при потере фокуса. *@
 <div class="cm-stack">
     <section>
-        <h3 class="cm-section-title mb-2">Сыщик</h3>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field Label="Имя" Required="true">
-                <input class="cm-input" maxlength="200" data-testid="investigator-name" value="@Draft.Personal.Name"
-                       @onchange="e => SetAsync(() => Draft.Personal.Name = Text(e))" />
-            </Field>
+        <h3 class="cm-section-title mb-2">Основное</h3>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field Label="Пол">
-                <input class="cm-input" list="wizard-gender" value="@Draft.Personal.Gender" @onchange="e => SetAsync(() => Draft.Personal.Gender = Text(e))" />
+                <input class="cm-input" list="wizard-gender" value="@Draft.Personal.Gender" @oninput="e => SetAsync(() => Draft.Personal.Gender = Text(e))" />
                 <datalist id="wizard-gender"><option value="Мужской"></option><option value="Женский"></option></datalist>
             </Field>
             <Field Label="Место рождения">
-                <input class="cm-input" value="@Draft.Personal.Birthplace" @onchange="e => SetAsync(() => Draft.Personal.Birthplace = Text(e))" />
+                <input class="cm-input" value="@Draft.Personal.Birthplace" @oninput="e => SetAsync(() => Draft.Personal.Birthplace = Text(e))" />
             </Field>
             <Field Label="Место жительства">
-                <input class="cm-input" value="@Draft.Personal.Residence" @onchange="e => SetAsync(() => Draft.Personal.Residence = Text(e))" />
+                <input class="cm-input" value="@Draft.Personal.Residence" @oninput="e => SetAsync(() => Draft.Personal.Residence = Text(e))" />
             </Field>
         </div>
-        <p class="cm-field-note mt-2">
-            @Draft.Age лет · @(string.IsNullOrEmpty(Draft.OccupationName) ? "профессия не выбрана" : Draft.OccupationName). Пол и место
-            рождения не дают ни бонусов, ни штрафов.
+        <p class="mt-2 text-[0.8125rem] text-primary-700">
+            @Terms.Years(Draft.Age) · @(string.IsNullOrEmpty(Draft.OccupationName) ? "профессия не выбрана" : Draft.OccupationName)
         </p>
     </section>
 
-    @foreach (var section in BiographyTables.Sections)
-    {
-        <section @key="section.Key" data-testid="@($"bio-section-{section.Key}")">
-            <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <h3 class="cm-section-title">@section.Title</h3>
-                <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
-                    <input type="radio" name="key-connection" class="cm-checkbox" checked="@(Draft.KeyConnectionSection == section.Key)"
-                           data-testid="@($"key-connection-{section.Key}")" @onchange="() => SetAsync(() => Draft.KeyConnectionSection = section.Key)" />
-                    ключевая связь
-                </label>
-            </div>
-            <p class="cm-field-note mb-2">@section.Hint</p>
-            <div class="mb-2 flex flex-wrap items-center gap-2">
-                <select class="cm-input min-w-48 flex-1" value="" aria-label="@($"{section.Title}: пункт списка")"
-                        @onchange="e => SetAsync(() => section.Append(Draft.Biography, Text(e)))">
-                    <option value="">@(section.Key == "appearance" ? "— выбрать слово —" : "— выбрать пункт списка —")</option>
-                    @for (var i = 0; i < section.Options.Count; i++)
-                    {
-                        var option = section.Key == "appearance" ? section.Options[i] : BiographyTables.Entry(section.Options, i + 1);
-                        <option value="@option">@option</option>
-                    }
-                </select>
-                @if (section.Key != "appearance")
-                {
-                    <DiceInput Count="1" Sides="10" Label="@section.Title" Value="RollOf(section.Key)"
-                               ValueChanged="roll => RollIntoAsync(section, section.Key, section.Options, roll)" />
-                }
-                @if (section.Key == "people")
-                {
-                    <span class="text-sm text-primary-600">чем важен:</span>
-                    <DiceInput Count="1" Sides="10" Label="Чем важен" Value="RollOf(ReasonKey)"
-                               ValueChanged="roll => RollIntoAsync(section, ReasonKey, BiographyTables.SignificantPeopleReasons, roll)" />
-                }
-            </div>
-            <textarea class="cm-input" rows="3" aria-label="@section.Title" data-testid="@($"bio-{section.Key}")" value="@section.Read(Draft.Biography)"
-                      @onchange="e => SetAsync(() => section.Write(Draft.Biography, Text(e)))"></textarea>
-        </section>
-    }
-
     <section>
-        <p class="text-primary-700">
-            Заполнено граф: <strong>@BiographyTables.FilledCount(Draft.Biography)</strong> из @BiographyTables.Sections.Count. Книга просит
-            хотя бы @BiographyTables.RecommendedFilled и одну ключевую связь — сыщик опирается на неё, возвращая рассудок.
-        </p>
+        <div class="flex items-center justify-between gap-2">
+            <h3 class="cm-section-title">Графы</h3>
+            <span class="flex items-center gap-1 text-[0.8125rem] text-primary-700">
+                Ключевая связь
+                <TouchPopover AriaLabel="Что такое ключевая связь">
+                    <Trigger><i class="fa-solid fa-circle-info" aria-hidden="true"></i></Trigger>
+                    <Panel>К этой графе сыщик возвращается, восстанавливая Рассудок.</Panel>
+                </TouchPopover>
+            </span>
+        </div>
+
+        @foreach (var section in BiographyTables.Sections)
+        {
+            var open = OpenKey == section.Key;
+            var text = section.Read(Draft.Biography);
+            var filled = !string.IsNullOrWhiteSpace(text);
+            <div class="wizard-bio-row" @key="section.Key" data-testid="@($"bio-section-{section.Key}")">
+                <div class="flex items-center gap-1">
+                    <button type="button" class="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                            data-testid="@($"bio-toggle-{section.Key}")" @onclick="() => Toggle(section.Key)">
+                        <i class="@($"fa-solid {(open ? "fa-chevron-down" : "fa-chevron-right")} w-3 shrink-0 text-[0.75rem] text-primary-600")" aria-hidden="true"></i>
+                        <span class="shrink-0 font-semibold text-primary-800">@section.Title</span>
+                        @if (!open)
+                        {
+                            <span class="min-w-0 truncate text-[0.8125rem] text-primary-700">@Preview(text)</span>
+                        }
+                        @if (filled)
+                        {
+                            <i class="fa-solid fa-check shrink-0 text-success-700" aria-label="заполнено" role="img"></i>
+                        }
+                    </button>
+                    <label class="flex size-11 shrink-0 cursor-pointer items-center justify-center">
+                        <input type="radio" name="key-connection" class="cm-checkbox size-5" checked="@(Draft.KeyConnectionSection == section.Key)"
+                               aria-label="@($"Ключевая связь: {section.Title}")" data-testid="@($"key-connection-{section.Key}")"
+                               @onchange="() => SetAsync(() => Draft.KeyConnectionSection = section.Key)" />
+                    </label>
+                </div>
+                @if (open)
+                {
+                    <div class="pb-3 pl-5">
+                        <p class="cm-field-note mb-2">@section.Hint</p>
+                        <div class="mb-2 flex flex-wrap items-center gap-2">
+                            <select class="cm-input min-w-48 flex-1" value="" aria-label="@($"{section.Title}: пункт списка")"
+                                    @onchange="e => SetAsync(() => section.Append(Draft.Biography, Text(e)))">
+                                <option value="">@(section.Key == "appearance" ? "— выбрать слово —" : "— выбрать пункт списка —")</option>
+                                @foreach (var option in section.Options)
+                                {
+                                    <option value="@option">@option</option>
+                                }
+                            </select>
+                            @if (section.Key != "appearance")
+                            {
+                                <DiceInput Count="1" Sides="10" Label="@section.Title" Value="RollOf(section.Key)"
+                                           ValueChanged="roll => RollIntoAsync(section, section.Key, section.Options, roll)" />
+                            }
+                            @if (section.Key == "people")
+                            {
+                                <span class="text-[0.8125rem] text-primary-700">чем важен:</span>
+                                <DiceInput Count="1" Sides="10" Label="Чем важен" Value="RollOf(ReasonKey)"
+                                           ValueChanged="roll => RollIntoAsync(section, ReasonKey, BiographyTables.SignificantPeopleReasons, roll)" />
+                            }
+                        </div>
+                        <textarea class="cm-input" rows="3" aria-label="@section.Title" data-testid="@($"bio-{section.Key}")" value="@text"
+                                  @oninput="e => SetAsync(() => section.Write(Draft.Biography, Text(e)))"></textarea>
+                    </div>
+                }
+            </div>
+        }
     </section>
 </div>
 
 @code {
     private const string ReasonKey = "people-reason";
     private readonly Dictionary<string, int?> _rolls = [];
+    private string? _open;
 
     [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
 
@@ -85,7 +109,18 @@
 
     private InvestigatorDraft Draft => Plan.Draft;
 
+    /// <summary>Открытая графа: при входе на шаг — первая незаполненная, дальше — что выбрал игрок (не прыгает, пока он набирает текст).</summary>
+    private string? OpenKey => _open;
+
+    protected override void OnInitialized() =>
+        _open = BiographyTables.Sections.FirstOrDefault(s => string.IsNullOrWhiteSpace(s.Read(Draft.Biography)))?.Key;
+
+    private void Toggle(string key) => _open = _open == key ? null : key;
+
     private static string Text(ChangeEventArgs e) => e.Value?.ToString() ?? "";
+
+    /// <summary>Начало графы одной строкой для свёрнутого блока: первая строка текста.</summary>
+    private static string Preview(string text) => string.IsNullOrWhiteSpace(text) ? "" : text.Split('\n', 2)[0].Trim();
 
     private int? RollOf(string key) => _rolls.GetValueOrDefault(key);
 

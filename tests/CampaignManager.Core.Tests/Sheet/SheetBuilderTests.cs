@@ -153,6 +153,34 @@ public sealed class SheetBuilderTests
         Assert.Equal("Верная", sheet.Biography.KeyConnection);
     }
 
+    [Fact]
+    public void FromDraft_WeaponsFromDraft_CopiedToSheet()
+    {
+        var occupation = Doctor();
+        var draft = new InvestigatorDraft { Age = Age, Era = Era.Classic };
+        foreach (var key in Enum.GetValues<Characteristic>())
+            draft.SetCharacteristic(key, Same[key]);
+        draft.SetLuckRolls([55]);
+        draft.Personal.Name = "Грей";
+        var rifle = SheetCopies.Weapon(new WeaponData(Guid.NewGuid(), "Винтовка") { SkillId = Id("Стрельба (винтовка)"), Damage = "2d6+4" });
+        draft.Weapons.Add(rifle);
+
+        var sheet = SheetBuilder.FromDraft(draft, Catalog, occupation);
+
+        var copy = Assert.Single(sheet.Weapons);
+        Assert.Equal("Винтовка", copy.Name);
+        Assert.Equal(rifle.CatalogWeaponId, copy.CatalogWeaponId);
+        Assert.NotSame(rifle, copy);
+    }
+
+    [Fact]
+    public void BiographyEntry_HasNoBookRowNumber()
+    {
+        Assert.Equal(BiographyTables.Ideals[1], BiographyTables.Entry(BiographyTables.Ideals, 2));
+        Assert.DoesNotMatch(@"^\d+\. ", BiographyTables.Entry(BiographyTables.Traits, 10));
+        Assert.Equal("", BiographyTables.Entry(BiographyTables.Traits, 0));
+    }
+
     // ── Быстрый НПС ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -371,6 +399,8 @@ public sealed class SheetBuilderTests
         var sheet = SheetBuilder.FromDraft(plan);
         Assert.Subset(Lines(sheet).Select(l => l.Name).ToHashSet(), Lines(Blank()).Select(l => l.Name).ToHashSet());
         Assert.Equal(draft.Luck, sheet.Current.Luck);
+        Assert.True(draft.IsRandom);
+        Assert.DoesNotMatch(@"^\d+\. ", draft.Biography.IdealsAndPrinciples);
     }
 
     [Fact]

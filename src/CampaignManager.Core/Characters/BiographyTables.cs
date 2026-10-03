@@ -194,7 +194,10 @@ public static class BiographyTables
         return (roll, table[roll - 1]);
     }
 
-    /// <summary>Пункт по выпавшему (1–10, вписанному с настоящей кости) — «№. текст».</summary>
+    /// <summary>
+    ///     Пункт по выпавшему (1–10, вписанному с настоящей кости) — текст без номера: номер строки книги на листе
+    ///     ничего не значит (находка ревью g3, п. 45). Скобка с примерами остаётся заготовкой для правки.
+    /// </summary>
     public static string Entry(IReadOnlyList<string> table, int roll) =>
-        roll >= 1 && roll <= table.Count ? $"{roll}. {table[roll - 1]}" : "";
+        roll >= 1 && roll <= table.Count ? table[roll - 1] : "";
 }

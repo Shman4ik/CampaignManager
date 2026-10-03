@@ -1,14 +1,22 @@
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
 
-@* «Итог»: ровно то, что уйдёт в базу, — лист собирает тот же SheetBuilder.FromDraft, что и кнопка «Создать». Сюда
-   же открывается случайный сыщик: у каждого блока «Изменить» ведёт на свой шаг. *@
+@* «Итог»: ровно то, что станет листом, — лист собирает тот же SheetBuilder.FromDraft, что и кнопка «Создать». Сюда же
+   открывается случайный сыщик: у каждого блока «Изменить» ведёт на свой шаг (у верхнего — на «Способ», где имя и возраст),
+   а у случайного есть «Бросить заново». Имя — книжное (засечки), но не второй крупный заголовок под шапкой. *@
 <div class="cm-stack" data-testid="wizard-summary">
     <section>
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 class="cm-h4" data-testid="summary-name">@(string.IsNullOrWhiteSpace(_sheet.Personal.Name) ? "Без имени" : _sheet.Personal.Name)</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="cm-title-serif text-base font-semibold text-primary-900" data-testid="summary-name">@(string.IsNullOrWhiteSpace(_sheet.Personal.Name) ? "Без имени" : _sheet.Personal.Name)</h3>
+            <div class="flex flex-wrap items-center gap-2">
+                @if (Plan.Draft.IsRandom)
+                {
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="summary-reroll" OnClick="OnRandom">Бросить заново</Button>
+                }
+                <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Имя и возраст" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Method)">Изменить</Button>
+            </div>
         </div>
-        <div class="cm-meta mt-1">
+        <div class="cm-meta mt-1 text-primary-700">
             <span>@Terms.Years(_sheet.Personal.Age)</span>
             @if (!string.IsNullOrWhiteSpace(_sheet.Personal.Gender))
             {
@@ -32,9 +40,9 @@
             {
                 var value = _sheet.Characteristics[info.Key];
                 <div class="rounded-md border border-primary-200 px-2 py-1 text-center" @key="info.Key">
-                    <dt class="text-xs text-primary-500">@info.Abbreviation</dt>
+                    <dt class="text-[0.8125rem] text-primary-700">@info.Abbreviation</dt>
                     <dd class="text-lg font-semibold text-primary-800">@value</dd>
-                    <dd class="text-xs text-primary-500">@CharacteristicMath.Half(value) / @CharacteristicMath.Fifth(value)</dd>
+                    <dd class="text-[0.8125rem] text-primary-700">@CharacteristicMath.Half(value) / @CharacteristicMath.Fifth(value)</dd>
                 </div>
             }
         </dl>
@@ -69,11 +77,15 @@
             <h3 class="cm-section-title">Деньги и снаряжение</h3>
             <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Деньги и снаряжение" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Gear)">Изменить</Button>
         </div>
-        <div class="cm-meta">
+        <div class="cm-meta text-primary-700">
             <span><span class="cm-meta-label">Наличные:</span> $@FinanceRules.Format(_sheet.Finances.Cash ?? 0)</span>
             <span><span class="cm-meta-label">Карманные:</span> $@FinanceRules.Format(_sheet.Finances.PocketMoney ?? 0)</span>
-            <span><span class="cm-meta-label">Активы:</span> @_sheet.Finances.Assets</span>
+            <span><span class="cm-meta-label">Активы:</span> @AssetsText</span>
         </div>
+        @if (_sheet.Weapons.Count > 0)
+        {
+            <p class="mt-2 text-primary-700"><span class="cm-meta-label">Оружие:</span> @string.Join(", ", _sheet.Weapons.Select(w => w.Name))</p>
+        }
         @if (_sheet.Equipment.Count > 0)
         {
             <p class="mt-2 text-primary-700"><span class="cm-meta-label">Снаряжение:</span> @string.Join(", ", _sheet.Equipment.Select(e => e.Name))</p>
@@ -118,6 +130,14 @@
     [Parameter, EditorRequired] public CreationPlan Plan { get; set; } = null!;
 
     [Parameter] public EventCallback<CreationStep> OnGoTo { get; set; }
+
+    /// <summary>«Бросить заново» — только у случайного сыщика (<see cref="InvestigatorDraft.IsRandom"/>).</summary>
+    [Parameter] public EventCallback OnRandom { get; set; }
+
+    /// <summary>Активы цифрой — со знаком доллара (правило 13: «$1000»), словами («нет») — как есть.</summary>
+    private string AssetsText => _sheet.Finances.Assets is { Length: > 0 } assets
+        ? char.IsDigit(assets[0]) ? "$" + assets : assets
+        : Terms.None;
 
     protected override void OnParametersSet()
     {

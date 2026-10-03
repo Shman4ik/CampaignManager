@@ -1,0 +1,227 @@
+/*
+  Помощник создания сыщика (UI/Characters/Creation). Слой components, как у cm-*: утилита на элементе перебивает.
+  Размеры — пол владельца 2026-10-03: кнопка и поле от 32px, плитка и чип — 36px (корневой CLAUDE.md, «Целевые устройства»).
+*/
+@layer components {
+  /* ── Степпер: подпись только у текущего шага, у остальных номер и галочка (находка g3, п. 1–2) ── */
+  .wizard-steps {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .wizard-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--color-primary-700);
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-300);
+    border-radius: 0.5rem;
+  }
+
+  .wizard-chip:hover:not(:disabled) {
+    background: var(--color-primary-100);
+  }
+
+  .wizard-chip:focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+  }
+
+  .wizard-chip:disabled {
+    color: var(--color-primary-500);
+    background: var(--color-primary-100);
+    border-color: var(--color-primary-200);
+    cursor: not-allowed;
+  }
+
+  .wizard-chip[aria-current="step"] {
+    padding: 0 0.875rem;
+    color: var(--color-primary-900);
+    background: var(--color-accent-50);
+    border-color: var(--color-accent-600);
+    box-shadow: 0 0 0 1px var(--color-accent-600);
+  }
+
+  .wizard-chip-done i {
+    color: var(--color-success-700);
+  }
+
+  @media (width < 40rem) {
+    /* Телефон: семь чипов в одну строку, подпись шага — над ними; пройденный — одна галочка. */
+    .wizard-steps {
+      justify-content: space-between;
+    }
+
+    .wizard-chip {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 0;
+    }
+
+    .wizard-chip[aria-current="step"] {
+      padding: 0;
+    }
+
+    .wizard-chip-done .wizard-chip-number {
+      display: none;
+    }
+  }
+
+  /* ── Подвал «Назад/Далее» и остаток очков не уезжают с экрана ── */
+  .wizard-footer {
+    position: sticky;
+    bottom: calc(var(--cm-tabbar-height) + env(safe-area-inset-bottom));
+    z-index: 5;
+    flex-wrap: nowrap;
+    background: var(--color-white);
+    box-shadow: 0 -1px 0 var(--color-primary-200);
+  }
+
+  /* Кнопки подвала — 36px: на телефоне подвал в один ряд (причина слева, кнопки справа), а не в два по 44. */
+  .wizard-footer .cm-btn {
+    min-height: 2.25rem;
+    padding-block: 0.25rem;
+  }
+
+  .wizard-footer .cm-btn-icon {
+    width: 2.25rem;
+  }
+
+  @media (min-width: 48rem) {
+    .wizard-footer {
+      bottom: 0;
+    }
+  }
+
+  .wizard-reason {
+    min-width: 0;
+    flex: 1 1 0;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+  }
+
+  /* Остаток очков и сброс липнут под шапкой: вводишь значения в конце длинного списка, а остаток нужен перед глазами. */
+  .wizard-budgets {
+    position: sticky;
+    top: var(--cm-topbar-height);
+    z-index: 4;
+    min-height: 3rem;
+    padding: 0.375rem 0;
+    background: var(--color-white);
+    border-bottom: 1px solid var(--color-primary-200);
+  }
+
+  .wizard-budgets .cm-btn {
+    min-height: 2.25rem;
+    padding-block: 0.25rem;
+  }
+
+  /* Полоса остатка уже отделена линией снизу — линейка cm-stack над следующим блоком второй раз не нужна. */
+  .wizard-budgets + * {
+    margin-top: 0;
+    padding-top: 0.75rem;
+    border-top: 0;
+  }
+
+  /* Таблица навыков помощника: шапка липнет под полосой остатка (поэтому без своей прокрутки вбок — она
+     сделала бы обёртку областью прилипания), на телефоне помещается без прокрутки: узкие ячейки и поля. */
+  .wizard-skills {
+    --wizard-sticky-top: calc(var(--cm-topbar-height) + 3rem);
+  }
+
+  .wizard-skills th,
+  .wizard-skills td {
+    padding: 0.25rem 0.375rem;
+  }
+
+  .wizard-skills thead th {
+    position: sticky;
+    top: var(--wizard-sticky-top);
+    z-index: 3;
+    text-align: center;
+  }
+
+  .wizard-skills thead th:first-child {
+    text-align: left;
+  }
+
+  .wizard-skills .wizard-skills-group th {
+    position: static;
+    padding-top: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: left;
+    color: var(--color-primary-700);
+    background: transparent;
+  }
+
+  .wizard-skills input.cm-input {
+    min-height: 2rem;
+    padding: 0.125rem 0.25rem;
+    text-align: center;
+  }
+
+  /* Плитка выбора (способ, профессия, формула очков): выбранная — светлая с рамкой акцента, не тёмная заливка. */
+  .wizard-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-height: 2.25rem;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-200);
+    border-radius: 0.375rem;
+  }
+
+  .wizard-tile:hover {
+    background: var(--color-primary-50);
+  }
+
+  .wizard-tile:focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+  }
+
+  .wizard-tile[aria-pressed="true"] {
+    background: var(--color-accent-50);
+    border-color: var(--color-accent-600);
+    box-shadow: 0 0 0 1px var(--color-accent-600);
+  }
+
+  /* Таблица характеристик: строки по 44px (было 65), поля 36px — «Итог» стоит сразу за полем броска. */
+  .wizard-chars th,
+  .wizard-chars td {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .wizard-chars .cm-input {
+    min-height: 2.25rem;
+    padding-block: 0.25rem;
+  }
+
+  /* Поле суммы костей: подсказка «сумма» помещается целиком (общий .roll-input — 5rem). */
+  .wizard-step .roll .roll-input {
+    width: 5.75rem;
+  }
+
+  .wizard-step .roll {
+    flex-wrap: nowrap;
+    gap: 0.375rem;
+  }
+
+  /* Графа биографии: заголовок-строка раскрывает блок, радио «ключевая связь» — рядом, а не внутри кнопки. */
+  .wizard-bio-row + .wizard-bio-row {
+    border-top: 1px solid var(--color-primary-200);
+  }
+}

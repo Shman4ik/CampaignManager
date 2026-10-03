@@ -371,13 +371,15 @@ public sealed class CreationPlan
     /// <summary>Что мешает уйти с шага; null — шаг заполнен. Вперёд по шагам — только через эту проверку.</summary>
     public string? Validate(CreationStep step) => step switch
     {
-        CreationStep.Method => InvestigatorCreationRules.IsBookAge(Draft.Age)
-            ? null
-            : $"Возраст сыщика — от {InvestigatorCreationRules.MinAge} до {InvestigatorCreationRules.MaxAge} лет",
+        // Имя спрашивают на первом шаге: безымянным сыщик не доходит до пятого (находка ревью g3, п. 42).
+        CreationStep.Method => string.IsNullOrWhiteSpace(Draft.Personal.Name)
+            ? "Впишите имя сыщика"
+            : InvestigatorCreationRules.IsBookAge(Draft.Age)
+                ? null
+                : $"Возраст сыщика — от {InvestigatorCreationRules.MinAge} до {InvestigatorCreationRules.MaxAge} лет",
         CreationStep.Characteristics => ValidateCharacteristics(),
         CreationStep.Occupation => ValidateOccupation(),
         CreationStep.Skills => ValidateSkills(),
-        CreationStep.Biography => string.IsNullOrWhiteSpace(Draft.Personal.Name) ? "Впишите имя сыщика" : null,
         _ => null,
     };
 
@@ -440,7 +442,7 @@ public sealed class CreationPlan
         {
             var missing = BlitzSkillKeys.Count(k => !Draft.BlitzValues.ContainsKey(k));
             if (missing > 0)
-                return $"Раздайте блиц-значения профессиональным навыкам и Средствам: осталось {missing}";
+                return $"Раздайте значения готового набора профессиональным навыкам и Средствам: осталось {missing}";
 
             var chosen = Draft.BlitzPersonalSkills.Count(k => k.Length > 0);
             return chosen < InvestigatorCreationRules.BlitzPersonalSkillCount

@@ -1,12 +1,15 @@
+@using CampaignManager.Core
 @using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
 
-@* Вторичные атрибуты в помощнике — плитками; числа считает DerivedAttributeRules (Core), здесь только показ.
-   Рассудок нового сыщика = МОЩ. *@
-<dl class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8" data-testid="derived">
+@* Производные в помощнике — плитками; числа считает DerivedAttributeRules (Core), здесь только показ.
+   Рассудок нового сыщика = МОЩ. Пока не определены все характеристики (Ready="false") — тире: выдуманные «ПЗ 0,
+   Рассудок 1, бонус к урону −2» для пустых характеристик вводили в заблуждение (находка g3, п. 18). *@
+<dl class="@(Compact ? "grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2" : "grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8")" data-testid="derived">
     @foreach (var (label, value) in Tiles)
     {
         <div class="rounded-md border border-primary-200 bg-primary-50 px-3 py-2" @key="label">
-            <dt class="text-xs text-primary-500">@label</dt>
+            <dt class="text-[0.8125rem] text-primary-700">@label</dt>
             <dd class="text-lg font-semibold text-primary-800">@value</dd>
         </div>
     }
@@ -20,15 +23,24 @@
     /// <summary>Рассудок на старте: МОЩ, не выше максимума; null — показывать максимум.</summary>
     [Parameter] public int? Sanity { get; set; }
 
+    /// <summary>Характеристики определены: иначе все плитки — тире.</summary>
+    [Parameter] public bool Ready { get; set; } = true;
+
+    /// <summary>Узкая колонка (справа от таблицы): две плитки в ряд с lg вместо восьми.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    private string Shown(string value) => Ready ? value : Terms.None;
+
     private IEnumerable<(string, string)> Tiles =>
     [
-        ("ПЗ", Derived.MaxHitPoints.ToString(CultureInfo.CurrentCulture)),
-        ("ПМ", Derived.MaxMagicPoints.ToString(CultureInfo.CurrentCulture)),
-        ("Рассудок", (Sanity ?? Derived.MaxSanity).ToString(CultureInfo.CurrentCulture)),
-        ("Удача", Luck > 0 ? Luck.ToString(CultureInfo.CurrentCulture) : "—"),
-        ("Скорость", Derived.Move.ToString(CultureInfo.CurrentCulture)),
-        ("Бонус к урону", Derived.DamageBonus),
-        ("Комплекция", Derived.Build.ToString(CultureInfo.CurrentCulture)),
-        ("Уклонение", Derived.Dodge.ToString(CultureInfo.CurrentCulture)),
+        ("ПЗ", Shown(Derived.MaxHitPoints.ToString(CultureInfo.CurrentCulture))),
+        ("ПМ", Shown(Derived.MaxMagicPoints.ToString(CultureInfo.CurrentCulture))),
+        ("Рассудок", Shown((Sanity ?? Derived.MaxSanity).ToString(CultureInfo.CurrentCulture))),
+        ("Удача", Luck > 0 ? Luck.ToString(CultureInfo.CurrentCulture) : Terms.None),
+        ("Скорость", Shown(Derived.Move.ToString(CultureInfo.CurrentCulture))),
+        // «+1D4» из таблицы I — к виду правила 13 (1d4) на выводе; сама строка Core нужна разборщикам боя как есть.
+        ("Бонус к урону", Shown(DiceNotation.Format(Derived.DamageBonus))),
+        ("Комплекция", Shown(Derived.Build.ToString(CultureInfo.CurrentCulture))),
+        ("Уклонение", Shown(Derived.Dodge.ToString(CultureInfo.CurrentCulture))),
     ];
 }

@@ -188,4 +188,20 @@ public sealed class CreationPlanTests
         Assert.Equal(value, InvestigatorCreationRules.FromDiceSum(key, sum));
         Assert.Equal(sum, InvestigatorCreationRules.DiceSumOf(key, value));
     }
+
+    [Fact]
+    public void Method_Step_RequiresNameThenAge()
+    {
+        var draft = Filled();
+        var plan = new CreationPlan(draft, Catalog, null);
+
+        Assert.Equal("Впишите имя сыщика", plan.Validate(CreationStep.Method));
+
+        draft.Personal.Name = "  ";
+        Assert.Equal("Впишите имя сыщика", plan.Validate(CreationStep.Method));
+
+        draft.Personal.Name = "Артур Морган";
+        Assert.Null(plan.Validate(CreationStep.Method));
+        Assert.Null(plan.Validate(CreationStep.Biography)); // имя больше не держит биографию
+    }
 }

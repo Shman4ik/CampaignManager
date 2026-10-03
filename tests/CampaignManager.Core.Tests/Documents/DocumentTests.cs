@@ -158,6 +158,8 @@ public sealed class DocumentTests
             EducationChecks = [new EducationCheck(71, 70, 4)],
             FormulaChoice = Characteristic.DEX,
             OccupationPoints = { ["Внимание"] = 10 },
+            IsRandom = true,
+            Weapons = [new SheetWeapon { Name = "Кольт", Damage = "1d10+2" }],
         };
 
         var json = CmJson.Serialize(draft);
@@ -169,5 +171,7 @@ public sealed class DocumentTests
         Assert.Equal(60, read.Rolled[Characteristic.STR]);
         Assert.Equal(4, read.EducationChecks[0].Gain);
         Assert.Equal(Characteristic.DEX, read.FormulaChoice);
+        Assert.True(read.IsRandom);
+        Assert.Equal("Кольт", Assert.Single(read.Weapons).Name);
     }
 }

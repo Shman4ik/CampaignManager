@@ -31,6 +31,9 @@ public static class CreationLinks
     public static string Wizard(CharacterKind kind, Guid? campaignId, Guid? scenarioId, bool random = false) =>
         "character/wizard" + Query(kind, campaignId, scenarioId, random ? "random=1" : null);
 
+    /// <summary>«Пустой лист» игрока в кампании: страница с одной карточкой «Чистый лист» (сыщик сразу идёт в помощник).</summary>
+    public static string Blank(Guid campaignId) => $"character/create/{campaignId}?blank=1";
+
     public static string Create(CharacterKind kind, Guid? campaignId, Guid? scenarioId) => kind is CharacterKind.Player && campaignId is { } campaign
         ? $"character/create/{campaign}" + Query(kind, null, scenarioId, null)
         : $"character/create/{RouteKind(kind) ?? "player"}" + Query(kind, campaignId, scenarioId, null, withKind: false);
@@ -47,24 +50,34 @@ public static class CreationLinks
     public static string KindTitle(CharacterKind kind) => kind switch
     {
         CharacterKind.Npc => "НПС",
-        CharacterKind.Pregen => "Преген",
+        CharacterKind.Pregen => "Готовый сыщик",
         _ => "Сыщик",
     };
+
+    /// <summary>«Случайный сыщик» / «Случайный НПС» / «Случайный готовый сыщик» — ссылка на первом шаге помощника.</summary>
+    public static string RandomTitle(CharacterKind kind) => kind is CharacterKind.Player
+        ? "Случайный сыщик"
+        : "Случайный " + (kind is CharacterKind.Npc ? "НПС" : "готовый сыщик");
+
+    /// <summary>Куда вернуться и как это назвать в сообщении «Черновик сохранён — продолжить можно …».</summary>
+    public static string ResumeHint(CharacterKind kind, Guid? scenarioId) => scenarioId is not null
+        ? "из сценария"
+        : kind is CharacterKind.Player ? "с главной" : "из библиотеки";
 
     public static string NewTitle(CharacterKind kind) => kind switch
     {
         CharacterKind.Npc => "Новый НПС",
-        CharacterKind.Pregen => "Новый преген",
+        CharacterKind.Pregen => "Новый готовый сыщик",
         _ => "Новый сыщик",
     };
 
-    /// <summary>Подзаголовок страницы создания: куда ляжет лист и эпоха — вместо цветной метки без легенды.</summary>
+    /// <summary>Подзаголовок страницы создания: где окажется лист и эпоха — вместо цветной метки без легенды.</summary>
     public static string PlaceText(CreationContextDto context)
     {
-        var place = context.ScenarioName is { } scenario ? $"сценарий «{scenario}»"
-            : context.CampaignName is { } campaign ? $"кампания «{campaign}»"
-            : context.Kind is CharacterKind.Player ? "без кампании" : "библиотека НПС и готовых сыщиков";
-        return $"Куда ляжет: {place} · {EraTitle(context.Era)}";
+        var place = context.ScenarioName is { } scenario ? $"Сценарий «{scenario}»"
+            : context.CampaignName is { } campaign ? $"Кампания «{campaign}»"
+            : context.Kind is CharacterKind.Player ? "Без кампании" : "Библиотека";
+        return $"{place} · {EraTitle(context.Era)}";
     }
 
     public static string EraTitle(Era era) => era is Era.Modern ? "Наше время" : "1920-е";

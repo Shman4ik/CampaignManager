@@ -1,0 +1,30 @@
+@* Числовое поле помощника: значение уходит в черновик на каждое нажатие (oninput), а не при потере фокуса.
+   На iPad касание кнопки «Далее» не снимает фокус с поля — со значением по change оно пропало бы (находка ревью g3,
+   п. 9). Решает, что делать с числом, страница: правило может его зажать в пределы. Пока поле в фокусе, набранное
+   остаётся как есть; по change (уход из поля) поле перерисовывается значением модели — так «30» превращается в
+   предельные «24», а непригодное «5» (возраст) возвращается к прежнему. Нечисло и пустое поле игнорируются. *@
+<input @key="_key" type="number" inputmode="numeric" class="@Css.Join("cm-input", Css.ClassOf(AdditionalAttributes))"
+       min="@Min" max="@Max" value="@Value" @oninput="OnInputAsync" @onchange="OnChange"
+       @attributes="Css.WithoutClass(AdditionalAttributes)" />
+
+@code {
+    private int _key;
+
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    [Parameter] public int? Min { get; set; }
+
+    [Parameter] public int? Max { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private Task OnInputAsync(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? ValueChanged.InvokeAsync(value)
+            : Task.CompletedTask;
+
+    private void OnChange() => _key++;
+}
