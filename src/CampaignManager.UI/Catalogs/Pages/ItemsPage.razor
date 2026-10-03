@@ -2,39 +2,43 @@
 @attribute [Authorize]
 @using CampaignManager.Core.Catalogs
 
-@* Предметы: Название · Тип · Цена · Описание. Колонок пять — таблица помещается и в портрет iPad (с md).
-   Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки;
-   описание раскрытие не печатает заново, а снимает обрезку с той же ячейки. *@
+@* Предметы: Название · Тип · Цена; описание — строкой под названием. Таблица помещается и в портрет iPad (с md).
+   Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки; колонки шеврона
+   нет, пока раскрывать нечего (у 256 из 257 — нечего). Картинка — миниатюрой 40×27 у названия, как у оружия. *@
 <CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет" Plural="предметов"
              Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
-             New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore" State="_state">
+             New="() => new ItemDto()" OnLoaded="Loaded" OnFormOpening="OnOpening" RowDetail="Detail" CanExpand="HasMore" State="_state">
     <Columns Context="view">
-        <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[50%]" Context="item">
-            <span class="font-medium text-primary-800">@item.Name</span>
-            @if (view.ShowEra)
-            {
-                <EraBadges Values="item.Eras" />
-            }
-            @if (item.ImageUrl is not null)
-            {
-                <i class="fa-regular fa-image ml-1.5 text-primary-400" role="img" aria-label="Есть картинка"></i>
-            }
-            @* Описание — строкой под названием, а не своим столбцом: после переноса цены оно есть у единиц, и пустой
-               столбец занимал 450px. Длинное — в раскрытии. *@
-            @if (!string.IsNullOrWhiteSpace(item.Description))
-            {
-                <p class="cm-meta line-clamp-2">@item.Description</p>
-            }
+        <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[58%]" Context="item">
+            <div class="flex items-center gap-3">
+                @if (item.ImageUrl is not null)
+                {
+                    @* Миниатюра, как у оружия (X15); без картинки места не занимаем — у 256 из 257 её нет. *@
+                    <img src="@ImageUrls.Thumb(item.ImageUrl, 240)" alt="" class="h-[27px] w-10 shrink-0 rounded-xs bg-primary-100 object-cover" loading="lazy" decoding="async" />
+                }
+                <div class="min-w-0">
+                    <span class="font-medium text-primary-800">@item.Name</span>
+                    @if (view.ShowEra)
+                    {
+                        <EraBadges Values="item.Eras" />
+                    }
+                    @* Описание — строкой под названием, а не своим столбцом. Длинное — в раскрытии. *@
+                    @if (!string.IsNullOrWhiteSpace(item.Description))
+                    {
+                        <p class="cm-meta line-clamp-2">@item.Description</p>
+                    }
+                </div>
+            </div>
         </DataColumn>
         @if (!view.IsFixed("type"))
         {
-            <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" Context="item">@item.Type</DataColumn>
+            <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[16%]" Context="item">@item.Type</DataColumn>
         }
-        <DataColumn TItem="ItemDto" Title="Цена" SortBy="i => i.Price ?? decimal.MaxValue" HeaderClass="w-[11%] whitespace-nowrap" CellClass="whitespace-nowrap" AlignEnd="true" Context="item">@PriceText.Format(item.Price)</DataColumn>
+        <DataColumn TItem="ItemDto" Title="Цена" SortBy="i => i.Price ?? decimal.MaxValue" HeaderClass="w-[14%] whitespace-nowrap" CellClass="whitespace-nowrap" AlignEnd="true" Context="item">@PriceText.Format(item.Price)</DataColumn>
     </Columns>
     <CardTemplate Context="item">
         <p class="font-medium text-primary-800">@item.Name</p>
-        <p class="cm-meta">@item.Type@(item.Price is null ? "" : " · " + PriceText.Format(item.Price))</p>
+        <p class="cm-meta">@item.Type@(item.Price is null ? "" : (string.IsNullOrEmpty(item.Type) ? "" : " · ") + PriceText.Format(item.Price))</p>
         @if (!string.IsNullOrEmpty(item.Description))
         {
             <p class="mt-1 line-clamp-2 text-sm text-primary-600">@item.Description</p>
@@ -45,17 +49,25 @@
             <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
                 <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="item.Name" />
             </Field>
-            <Field Label="Тип" Note="Выберите из списка или впишите новый."><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
-            <Field Label="Цена" Hint="($)" Note="Пусто — цена не указана. Условия («за ночь», «от») — в описании.">
+            <Field Label="Тип">
+                @* Список — стрелкой и выбором (поле с datalist не показывало, что варианты есть); новый тип — «Другой тип…» (I3). *@
+                <select class="cm-input" value="@TypeChoice(item)" @onchange="e => ChooseType(item, e.Value?.ToString())">
+                    <option value="">— без типа —</option>
+                    @foreach (var type in _types)
+                    {
+                        <option value="@type">@type</option>
+                    }
+                    <option value="@OtherType">Другой тип…</option>
+                </select>
+                @if (_otherType)
+                {
+                    <input class="cm-input mt-2" placeholder="Название типа" aria-label="Название нового типа" @bind="item.Type" @bind:event="oninput" />
+                }
+            </Field>
+            <Field Label="Цена" Hint="($)" Note="Пусто — цена не указана.">
                 <input class="cm-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="9,50" @bind="item.Price" />
             </Field>
-            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="item.Source" /></Field>
-            <datalist id="item-types">
-                @foreach (var type in _types)
-                {
-                    <option value="@type"></option>
-                }
-            </datalist>
+            <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="item.Source" /></Field>
             <div class="sm:col-span-2"><EraPicker Show="_state.ErasVary" @bind-Values="item.Eras" /></div>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="4" @bind="item.Description"></textarea></Field>
             <Field Label="Картинка" Group="true" class="sm:col-span-2">
@@ -79,6 +91,21 @@
     {
         _types = [.. items.Select(i => i.Type).OfType<string>().Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
         _filters = [new("type", Terms.AnyType, [.. _types.Select(t => new CatalogOption(t, t))], (item, type) => item.Type == type)];
+    }
+
+    private const string OtherType = "other";
+    private bool _otherType;
+
+    // Тип записи, которого нет в списке, — «Другой»: поле для названия появляется при выборе и у такой записи.
+    private string TypeChoice(ItemDto item) =>
+        _otherType || (!string.IsNullOrEmpty(item.Type) && !_types.Contains(item.Type, StringComparer.CurrentCultureIgnoreCase)) ? OtherType : item.Type ?? "";
+
+    private void OnOpening() => _otherType = false;
+
+    private void ChooseType(ItemDto item, string? value)
+    {
+        _otherType = value == OtherType;
+        item.Type = value is null or OtherType ? null : value;
     }
 
     private static bool HasMore(ItemDto item) =>

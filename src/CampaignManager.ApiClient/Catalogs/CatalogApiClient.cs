@@ -50,6 +50,12 @@ public abstract class CatalogApiClient<T>(HttpClient http, CatalogRoute route, J
         await ApiResponses.EnsureSuccessAsync(response, cancellationToken, withCode: true);
     }
 
+    public async Task<CatalogUsage> UsageAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(route.Usage(id), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.CatalogUsage, cancellationToken, withCode: true);
+    }
+
     public async Task<CatalogImportReport> ImportAsync(Stream file, bool overwrite, bool dryRun, CancellationToken cancellationToken = default)
     {
         using var content = new StreamContent(file);

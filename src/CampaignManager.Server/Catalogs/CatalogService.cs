@@ -85,6 +85,16 @@ public sealed class CatalogService<TEntity, TDto>(
         await SaveAsync(cancellationToken, id);
     }
 
+    /// <summary>Кто держит запись — до удаления: подтверждение называет их, а не отказ после него.</summary>
+    public async Task<CatalogUsage> UsageAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await access.ForCatalogAsync(cancellationToken).Demand(Operation.Delete);
+        var users = await UsersAsync(id, cancellationToken);
+        return users.Count == 0
+            ? CatalogUsage.None
+            : new CatalogUsage(users.Count, [.. users.Take(5)], store.UsersBlockDelete, store.UsersNote);
+    }
+
     public async Task<CatalogFile<TDto>> ExportAsync(CancellationToken cancellationToken)
     {
         var (list, _) = await ListAsync(cancellationToken);

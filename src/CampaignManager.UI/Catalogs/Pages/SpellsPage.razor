@@ -1,11 +1,14 @@
 @page "/spells"
 @attribute [Authorize]
+@using System.Text.RegularExpressions
 @using CampaignManager.Core.Catalogs
+@inject ICatalogApi<BookDto> BooksApi
 
 @* Заклинания: Название · Тип · Стоимость · Время сотворения. Колонок пять — таблица с lg (портрет
    iPad её вмещает, замер v1). Стоимость и время — длинный свободный текст: в строке обрезаны и
    разворачиваются на месте; в раскрытии — только то, чего в колонках нет (другие названия, описание).
-   При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. *@
+   При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. В раскрытии — «В книгах: …» ссылками на
+   раскрытую книгу (P4): за столом нужно знать, где искать заклинание. *@
 <CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание" Plural="заклинаний"
              Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Md" OnLoaded="Loaded" State="_state" Validate="Validate"
              New="() => new SpellDto()" OnFormOpening="OnOpening" RowDetail="Detail" Form="Form">
@@ -29,8 +32,50 @@
     private IReadOnlyList<CatalogFilter<SpellDto>> _filters = [];
     private IReadOnlyList<string> _types = [];
 
+    private IReadOnlyList<BookDto> _books = [];
+    private IReadOnlyList<SpellData> _spellData = [];
+    private Dictionary<Guid, List<BookDto>> _booksBySpell = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _books = (await BooksApi.ListAsync()).Items;
+            Link();
+        }
+        catch (HttpRequestException)
+        {
+            // Без книг раскрытие обходится без строки «В книгах».
+        }
+    }
+
+    // Заклинание ↔ книги: связь, записанная у книги, или то же точное совпадение имени, что ищет сервер.
+    private void Link()
+    {
+        Dictionary<Guid, List<BookDto>> map = [];
+        foreach (var book in _books)
+        {
+            foreach (var entry in book.Spells)
+            {
+                var id = entry.SpellId ?? SpellMatcher.Match(_spellData, entry.RawName)?.Id;
+                if (id is { } spellId)
+                {
+                    var list = map.TryGetValue(spellId, out var known) ? known : map[spellId] = [];
+                    if (!list.Contains(book))
+                    {
+                        list.Add(book);
+                    }
+                }
+            }
+        }
+
+        _booksBySpell = map;
+    }
+
     private void Loaded(IReadOnlyList<SpellDto> spells)
     {
+        _spellData = [.. spells.Select(sp => new SpellData(sp.Id, sp.Name) { AlternativeNames = sp.AltNames })];
+        Link();
         _types = [.. spells.Select(s => s.SpellType).Where(t => t.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
         // Составной тип («Атака/Проклятие») — несколько тегов: фильтр по тегу находит и его, иначе 28 значений не сужают список.
         var tags = spells.SelectMany(s => Tags(s.SpellType)).Distinct(StringComparer.CurrentCultureIgnoreCase).Order().ToList();
@@ -63,19 +108,47 @@
 
     private static IReadOnlyDictionary<string, string> Validate(SpellDto s) =>
         string.IsNullOrWhiteSpace(s.SpellType)
-            ? new Dictionary<string, string> { ["type"] = "Нужен тип заклинания: «Призыв», «Контакт»…" }
+            ? new Dictionary<string, string> { ["type"] = "Выберите тип заклинания." }
             : new Dictionary<string, string>();
 
-    private static RenderFragment<SpellDto> Detail => s => __builder =>
+    // Остаток переноса: составной тип «Атака/Проклятие» оставил один тип, остальные — строкой «Также: Проклятие.» в конце
+    // описания. В тексте её не показываем — это тип, а не описание; выводим отдельной строкой «Также относится к».
+    private static readonly Regex AlsoTail = new(@"\s*Также:\s*(?<also>[^\n]+?)\.?\s*$", RegexOptions.CultureInvariant);
+
+    private static (string Text, string? Also) SplitAlso(string? description)
     {
+        var text = description ?? "";
+        var match = AlsoTail.Match(text);
+        return match.Success ? (text[..match.Index].TrimEnd(), match.Groups["also"].Value) : (text, null);
+    }
+
+    private RenderFragment<SpellDto> Detail => s => __builder =>
+    {
+        var (description, also) = SplitAlso(s.Description);
+        var books = _booksBySpell.GetValueOrDefault(s.Id) ?? [];
         <div class="grid gap-2 text-sm">
             @if (s.AltNames.Count > 0)
             {
                 <p><span class="cm-meta-label">Другие названия: </span>@string.Join(", ", s.AltNames)</p>
             }
-            @if (!string.IsNullOrWhiteSpace(s.Description))
+            @if (also is not null)
             {
-                <p class="max-w-prose whitespace-pre-line text-primary-700">@s.Description</p>
+                <p><span class="cm-meta-label">Также относится к: </span>@also</p>
+            }
+            @if (books.Count > 0)
+            {
+                <p>
+                    <span class="cm-meta-label">В книгах: </span>
+                    @for (var i = 0; i < books.Count; i++)
+                    {
+                        @(i > 0 ? ", " : "")
+                        <a class="text-accent-700 underline" href="@($"books?open={books[i].Id}")">@books[i].Name</a>
+                    }
+                </p>
+            }
+            @if (!string.IsNullOrWhiteSpace(description))
+            {
+                <p class="max-w-prose whitespace-pre-line text-primary-700">@description</p>
             }
             else
             {
@@ -109,7 +182,7 @@
                     <input class="cm-input mt-2" placeholder="Название типа" aria-label="Название нового типа" @bind="s.SpellType" @bind:event="oninput" />
                 }
             </Field>
-            <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="s.Source" /></Field>
+            <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="s.Source" /></Field>
             <Field Label="Стоимость" class="sm:col-span-2" Note="@CostHint(s.Cost)">
                 <input class="cm-input" placeholder="8 ПМ, 1d6 рассудка" @bind="s.Cost" @bind:event="oninput" />
             </Field>
@@ -117,7 +190,7 @@
                 <input class="cm-input" placeholder="1 раунд" @bind="s.CastingTime" @bind:event="oninput" />
             </Field>
             <Field Label="Другие названия" Group="true" class="sm:col-span-2"
-                   Note="По ним книга Мифов находит заклинание в справочнике — пишите так, как названо в книгах.">
+                   Note="Как называют заклинание в книгах.">
                 <StringListEditor Values="s.AltNames" ValuesChanged="v => s.AltNames = [.. v]" ItemLabel="Название" Placeholder="Как ещё называют" />
             </Field>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="6" @bind="s.Description"></textarea></Field>
@@ -125,6 +198,8 @@
     };
 
     // Подсказка для боя — не правда, а то, что поймёт помощник: неразобранное Хранитель подтвердит сам.
+    private static readonly Regex Variable = new(@"[≥≤]|>=|<=|\bс\s+(?:человека|цели|участника)|за\s+каждого|варьир|от\s+\d", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static string? CostHint(string? cost)
     {
         var estimate = SpellStatsReader.ParseCost(cost);
@@ -133,7 +208,8 @@
             return null;
         }
 
-        if (estimate.IsEmpty)
+        // «≥1 ПМ с человека», «варьирует»: стоимость не фиксированная — подсказка «спишется ПМ 1» обманула бы Хранителя.
+        if (estimate.IsEmpty || Variable.IsMatch(cost))
         {
             return "В бою стоимость не посчитается сама — впишите её при сотворении.";
         }

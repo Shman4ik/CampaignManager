@@ -101,6 +101,10 @@ public static class CatalogsModule
             })
             .WithName($"Delete-{route.Name}");
 
+        group.MapGet("{id:guid}/usage", async Task<IResult> (Guid id, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
+                TypedResults.Ok(await catalog.UsageAsync(id, cancellationToken)))
+            .WithName($"Usage-{route.Name}");
+
         group.MapGet("export", async Task<IResult> (CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
             {
                 var file = await catalog.ExportAsync(cancellationToken);

@@ -18,6 +18,8 @@ public sealed record CatalogRoute(string Name)
     public string Sync => Base + "/sync";
 
     public string Item(Guid id) => $"{Base}/{id}";
+
+    public string Usage(Guid id) => $"{Item(id)}/usage";
 }
 
 public static class CatalogsRoutes
@@ -59,6 +61,12 @@ public interface ICatalogApi<T>
 
     /// <summary>Удалить. На запись ссылаются — 409 <c>in-use</c>.</summary>
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Кто держит запись, — до удаления, чтобы подтверждение сказало об этом, а не отказ после него. По умолчанию
+    /// никто (реализация без сведений); сервер отвечает по справочнику.
+    /// </summary>
+    Task<CatalogUsage> UsageAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(CatalogUsage.None);
 
     /// <summary>
     /// Импорт файла обмена как есть (<see cref="CatalogFile{T}"/>): существующая запись (по коду, иначе

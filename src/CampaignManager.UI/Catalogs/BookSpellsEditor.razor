@@ -1,36 +1,58 @@
 @using CampaignManager.Core.Catalogs
 
-@* Возможные заклинания книги: строка книги и связь со справочником. Каждая правка отдаёт новый
-   список (как StringListEditor). Связь, которую не выбрали руками, сервер ищет сам — только точным
-   совпадением имени или другого названия (SpellMatcher), без нечёткого поиска: не нашлось — пусть
-   Хранитель свяжет руками, а не получит молча чужое заклинание. Своей карточки не рисует. *@
-<div class="grid gap-2">
+@* Возможные заклинания книги: строка книги и связь со справочником. Каждая правка отдаёт новый список (как
+   StringListEditor). Связь, которую не выбрали руками, сервер ищет сам — только точным совпадением имени или другого
+   названия (SpellMatcher), без нечёткого поиска: не нашлось — Хранитель свяжет руками, а не получит молча чужое.
+   Название — строка книги, текстом (не полем); связь — «Связать…» только у не связанных: выбор из девяноста семи
+   заклинаний — окно с поиском, а не список в каждой строке (K5). Убрать — нейтральный крестик: форма — черновик.
+   Своей карточки не рисует. *@
+<div>
     @for (var i = 0; i < Spells.Count; i++)
     {
         var index = i;
         var spell = Spells[index];
-        <div class="flex flex-wrap items-center gap-2" @key="index">
-            <input class="cm-input min-w-40 flex-1" value="@spell.RawName" aria-label="@($"Заклинание {index + 1}")"
-                   @onchange="e => RenameAsync(index, e.Value?.ToString())" />
-            <select class="cm-input w-full sm:w-64 shrink-0" aria-label="@($"Связь в справочнике: {spell.RawName}")"
-                    value="@(spell.SpellId?.ToString() ?? "")"
-                    @onchange="e => LinkAsync(index, e.Value?.ToString())">
-                <option value="">@(Match(spell) is { } guess ? $"сам найдёт: {guess.Name}" : "— не связано —")</option>
-                @foreach (var option in _sorted)
+        var linked = Linked(spell);
+        <div class="@Css.Join("flex items-center gap-2 border-t border-primary-200 py-1 first:border-t-0")" @key="index">
+            <div class="min-w-0 flex-1">
+                <span class="font-medium text-primary-800">@spell.RawName</span>
+                @if (linked is not null)
                 {
-                    <option value="@option.Id">@option.Name</option>
+                    <span class="cm-meta ml-2"><i class="fa-solid fa-link" aria-hidden="true"></i> @(Same(linked.Name, spell.RawName) ? "в справочнике" : linked.Name)</span>
                 }
-            </select>
-            <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" AriaLabel="@($"Удалить: {spell.RawName}")" OnClick="() => RemoveAsync(index)" />
+                else
+                {
+                    <span class="cm-meta ml-2">нет в справочнике</span>
+                }
+            </div>
+            @if (linked is null)
+            {
+                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-link" AriaLabel="@($"Связать со справочником: {spell.RawName}")"
+                        OnClick="() => OpenPicker(index)">Связать…</Button>
+            }
+            <Button Variant="ButtonVariant.Ghost" Icon="fa-xmark" AriaLabel="@($"Удалить: {spell.RawName}")" OnClick="() => RemoveAsync(index)" />
         </div>
     }
-    <div>
-        <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-plus" OnClick="AddAsync">Добавить заклинание</Button>
+    <div class="@Css.Join("flex flex-wrap items-center gap-2", Spells.Count > 0 ? "mt-2" : null)">
+        <input class="cm-input min-w-40 flex-1" placeholder="Название, как в книге" aria-label="Новое заклинание книги" @bind="_draft"
+               @bind:event="oninput" @onkeydown="OnKeyDownAsync" />
+        @if (!string.IsNullOrWhiteSpace(_draft))
+        {
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="AddDraftAsync">Добавить</Button>
+        }
+        <Button Variant="ButtonVariant.Secondary" Icon="fa-book-skull" OnClick="() => OpenPicker(null)">Из справочника…</Button>
     </div>
 </div>
 
+<CatalogPickerModal TItem="SpellDto" Open="_picking" Title="@(_pickIndex is { } at ? $"Связать: {Spells[at].RawName}" : "Заклинание из справочника")"
+                    Load="_ => Task.FromResult<IReadOnlyList<SpellDto>>(_sorted)" Key="s => s.Id" Name="s => s.Name"
+                    Meta="s => s.SpellType" Also="s => s.AltNames" Placeholder="Поиск заклинания…" Empty="Справочник заклинаний пуст."
+                    ConfirmText="@(_pickIndex is null ? "Добавить" : "Связать")" OnPick="PickAsync" OnClose="() => _picking = false" />
+
 @code {
     private List<SpellDto> _sorted = [];
+    private string? _draft;
+    private bool _picking;
+    private int? _pickIndex;
 
     [Parameter] public List<BookSpellDto> Spells { get; set; } = [];
 
@@ -41,23 +63,64 @@
     protected override void OnParametersSet() =>
         _sorted = [.. Catalog.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)];
 
-    /// <summary>Что найдёт сервер для несвязанной строки — тем же правилом.</summary>
-    private SpellData? Match(BookSpellDto spell) =>
-        string.IsNullOrWhiteSpace(spell.RawName)
-            ? null
-            : SpellMatcher.Match(_sorted.Select(s => new SpellData(s.Id, s.Name) { AlternativeNames = s.AltNames }), spell.RawName);
-
-    private Task RenameAsync(int index, string? name) =>
-        ReplaceAsync(index, Spells[index] with { RawName = name?.Trim() ?? "" });
-
-    private Task LinkAsync(int index, string? spellId) =>
-        ReplaceAsync(index, Spells[index] with { SpellId = Guid.TryParse(spellId, out var id) ? id : null });
-
-    private Task ReplaceAsync(int index, BookSpellDto spell)
+    /// <summary>Заклинание справочника: выбранное руками или то, что найдёт сервер тем же правилом.</summary>
+    private SpellDto? Linked(BookSpellDto spell)
     {
-        var list = Spells.ToList();
-        list[index] = spell;
-        return SpellsChanged.InvokeAsync(list);
+        if (spell.SpellId is { } id)
+        {
+            return _sorted.FirstOrDefault(s => s.Id == id);
+        }
+
+        if (string.IsNullOrWhiteSpace(spell.RawName))
+        {
+            return null;
+        }
+
+        var match = SpellMatcher.Match(_sorted.Select(s => new SpellData(s.Id, s.Name) { AlternativeNames = s.AltNames }), spell.RawName);
+        return match is null ? null : _sorted.FirstOrDefault(s => s.Id == match.Id);
+    }
+
+    private static bool Same(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.CurrentCultureIgnoreCase);
+
+    private void OpenPicker(int? index)
+    {
+        _pickIndex = index;
+        _picking = true;
+    }
+
+    private async Task PickAsync(SpellDto spell)
+    {
+        _picking = false;
+        if (_pickIndex is { } index && index < Spells.Count)
+        {
+            var list = Spells.ToList();
+            list[index] = list[index] with { SpellId = spell.Id };
+            await SpellsChanged.InvokeAsync(list);
+        }
+        else
+        {
+            await SpellsChanged.InvokeAsync([.. Spells, new BookSpellDto(spell.Name, spell.Id)]);
+        }
+    }
+
+    private async Task AddDraftAsync()
+    {
+        var name = _draft?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
+        _draft = null;
+        await SpellsChanged.InvokeAsync([.. Spells, new BookSpellDto(name, null)]);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddDraftAsync();
+        }
     }
 
     private Task RemoveAsync(int index)
@@ -66,6 +129,4 @@
         list.RemoveAt(index);
         return SpellsChanged.InvokeAsync(list);
     }
-
-    private Task AddAsync() => SpellsChanged.InvokeAsync([.. Spells, new BookSpellDto("", null)]);
 }

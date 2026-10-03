@@ -3,45 +3,41 @@
 @using CampaignManager.Core.Catalogs
 @inject ICatalogApi<SpellDto> SpellsApi
 
-@* Книги: Название · Язык · Автор · Рассудок · МКН · МКП · ЗМ · Оккульт. Таблица с lg: её естественная ширина ~700px —
-   на ландшафте iPad Pro 11" (колонка ~1064) влезает с запасом, в портрете (~690) нет (замер 2026-10-03). Фильтр категории убирает чужие колонки: у оккультных
-   книг МКН/МКП/ЗМ пусты всегда, у книг Мифов — «+Оккультизм»; метка категории у названия — только без
-   фильтра. Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка. *@
+@* Книги: Название · Язык · Автор · Потеря Рассудка · Мифы. Таблица с md (K7): колонки уложены в ~690px портрета iPad Pro
+   11", карточки остались телефону. Фильтр категории убирает чужие колонки: у оккультных книг числа Мифов пусты
+   всегда, у книг Мифов — «+Оккультизм»; метка категории — только у меньшинства («Оккультизм», 10 книг из 106):
+   «Мифы» у каждой строки ничего не различает (K1). Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка. *@
 <CatalogPage TItem="BookDto" Title="Книги" Icon="fa-book-open" AddLabel="Добавить книгу" Noun="книгу" Plural="книг"
-             Filters="Filters" SearchAlso="b => b.AltNames.Append(b.Author)" TableFrom="TableBreakpoint.Lg" State="_state"
+             Filters="Filters" SearchAlso="b => b.AltNames.Append(b.Author)" TableFrom="TableBreakpoint.Md" State="_state"
              New="() => new BookDto()" OnFormOpening="EnsureSpellsAsync" RowDetail="Detail" Form="Form">
     <Columns Context="view">
-        <DataColumn TItem="BookDto" Title="Название" SortBy="b => b.Name" DefaultSort="false" HeaderClass="w-[26%]" Context="b">
+        <DataColumn TItem="BookDto" Title="Название" SortBy="b => b.Name" DefaultSort="false" HeaderClass="w-[30%]" Context="b">
             <span class="font-medium text-primary-800">@b.Name</span>
-            @if (!view.IsFixed("type"))
+            @if (!view.IsFixed("type") && b.BookType == BookType.OccultBook)
             {
-                <Badge Tone="@(b.BookType == BookType.MythosBook ? Tone.Info : Tone.Stone)" class="ml-1.5 align-middle">@CatalogText.Short(b.BookType)</Badge>
+                <Badge Tone="Tone.Stone" class="ml-1.5 align-middle">@CatalogText.Short(b.BookType)</Badge>
             }
         </DataColumn>
-        <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[12%]" Context="b">@Dash(b.Language)</DataColumn>
-        <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[16%]" Context="b">@Dash(b.Author)</DataColumn>
+        <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[14%]" Context="b">@Dash(b.Language)</DataColumn>
+        <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[22%]" Context="b">@Dash(b.Author)</DataColumn>
         <DataColumn TItem="BookDto" Title="@Terms.SanityLoss" HeaderClass="whitespace-normal" Context="b"><DiceText Value="@b.SanityLoss" /></DataColumn>
-        @* Четыре числовых столбца были пусты у 70–90% книг и отнимали треть ширины: одно «Числа» — только то, что есть. *@
+        @* Четыре числовых столбца были пусты у 70–90% книг: один «Мифы» — «+1 / +3 · 12» (чтение / полное изучение ·
+           значение), расшифровка — в раскрытии (K2). *@
         @if (ShowNumbers(view))
         {
-            <DataColumn TItem="BookDto" Title="Мифы (чтение, значение) / Оккультизм" HeaderClass="w-[26%] whitespace-normal" SortBy="b => b.MythosRating ?? b.OccultismBonus" Context="b">@Numbers(b)</DataColumn>
+            <DataColumn TItem="BookDto" Title="Мифы" HeaderClass="w-[16%]" CellClass="whitespace-nowrap" SortBy="b => b.MythosRating ?? b.OccultismBonus" Context="b">@Numbers(b)</DataColumn>
         }
     </Columns>
     <CardTemplate Context="b">
-        <p class="font-medium text-primary-800">@b.Name <Badge Tone="@(b.BookType == BookType.MythosBook ? Tone.Info : Tone.Stone)" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge></p>
+        <p class="font-medium text-primary-800">@b.Name @if (b.BookType == BookType.OccultBook) { <Badge Tone="Tone.Stone" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge> }</p>
         <p class="cm-meta">@string.Join(" · ", new[] { b.Language, b.Author }.Where(x => !string.IsNullOrEmpty(x)))</p>
         <p class="mt-1 text-sm text-primary-600">
-            Потеря Рассудка: @(b.SanityLoss ?? "—")
-            @* Пустое не рисуем: у большинства книг Мифов этих чисел нет, три прочерка в каждой карточке ничего не говорят. *@
-            @if (b.BookType == BookType.MythosBook)
+            Потеря Рассудка: @(b.SanityLoss ?? Terms.None)
+            @* Пустое не рисуем: у большинства книг Мифов этих чисел нет, прочерк в каждой карточке ничего не говорит.
+               «+1 / +3 · 12» — как в столбце таблицы, расшифровка — в раскрытии. *@
+            @if (Numbers(b) != Terms.None)
             {
-                @if (b.MythosInitial is not null) { <text> · Мифы (начальное) @Plus(b.MythosInitial)</text> }
-                @if (b.MythosFull is not null) { <text> · Мифы (полное) @Plus(b.MythosFull)</text> }
-                @if (b.MythosRating is not null) { <text> · Значение Мифов @b.MythosRating</text> }
-            }
-            else if (b.OccultismBonus is not null)
-            {
-                <text> · Оккультизм @Plus(b.OccultismBonus)</text>
+                <text> · @(b.BookType == BookType.MythosBook ? "Мифы " : "")@Numbers(b)</text>
             }
         </p>
     </CardTemplate>
@@ -65,6 +61,7 @@
         try
         {
             _spells = (await SpellsApi.ListAsync()).Items.ToDictionary(s => s.Id);
+            _spellData = [.. _spells.Values.Select(s => new SpellData(s.Id, s.Name) { AlternativeNames = s.AltNames })];
         }
         catch (HttpRequestException)
         {
@@ -78,14 +75,44 @@
     private static bool ShowNumbers(CatalogView<BookDto> view) =>
         view.Filtered.Any(b => b.MythosInitial is not null || b.MythosFull is not null || b.MythosRating is not null || b.OccultismBonus is not null);
 
+    // «+1 / +3 · 12»: чтение / полное изучение, потом значение; оккультной книге — «Оккультизм +5». Пусто — тире.
     private static string Numbers(BookDto b)
     {
         List<string> parts = [];
-        if (b.MythosInitial is not null) parts.Add($"начальное {Plus(b.MythosInitial)}");
-        if (b.MythosFull is not null) parts.Add($"полное {Plus(b.MythosFull)}");
+        var reading = string.Join(" / ", new[] { Plus(b.MythosInitial), Plus(b.MythosFull) }.Where(x => x is not null));
+        if (reading.Length > 0) parts.Add(reading);
+        if (b.MythosRating is not null) parts.Add(b.MythosRating.ToString()!);
+        var mythos = string.Join(" · ", parts);
+        if (b.OccultismBonus is not null)
+        {
+            mythos = (mythos.Length > 0 ? mythos + " · " : "") + $"Оккультизм {Plus(b.OccultismBonus)}";
+        }
+
+        return mythos.Length == 0 ? Terms.None : mythos;
+    }
+
+    // Расшифровка «+1 / +3 · 12» для раскрытой книги.
+    private static string? NumbersLegend(BookDto b)
+    {
+        List<string> parts = [];
+        if (b.MythosInitial is not null) parts.Add($"за начальное чтение {Plus(b.MythosInitial)}");
+        if (b.MythosFull is not null) parts.Add($"за полное изучение {Plus(b.MythosFull)}");
         if (b.MythosRating is not null) parts.Add($"значение {b.MythosRating}");
-        if (b.OccultismBonus is not null) parts.Add($"Оккультизм {Plus(b.OccultismBonus)}");
-        return parts.Count == 0 ? "—" : string.Join(" · ", parts);
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
+    private IReadOnlyList<SpellData> _spellData = [];
+
+    // Что книга знает как заклинание справочника: связь, записанная при импорте, или то же точное совпадение, что
+    // ищет сервер и показывает форма (K3).
+    private SpellDto? Linked(BookSpellDto spell)
+    {
+        if (spell.SpellId is { } id && _spells.TryGetValue(id, out var byId))
+        {
+            return byId;
+        }
+
+        return SpellMatcher.Match(_spellData, spell.RawName) is { } match && _spells.TryGetValue(match.Id, out var found) ? found : null;
     }
 
     private static string Dash(string? text) => string.IsNullOrWhiteSpace(text) ? "—" : text;
@@ -102,7 +129,11 @@
             <dl class="grid min-w-0 flex-1 gap-1">
                 @if (b.Year is not null)
                 {
-                    <div><dt class="cm-meta-label inline">Год, век: </dt><dd class="inline">@b.Year</dd></div>
+                    <div><dt class="cm-meta-label inline">Год: </dt><dd class="inline">@b.Year</dd></div>
+                }
+                @if (NumbersLegend(b) is { } legend)
+                {
+                    <div><dt class="cm-meta-label inline">Мифы: </dt><dd class="inline">@legend</dd></div>
                 }
                 @if (b.StudyWeeks is not null)
                 {
@@ -121,13 +152,14 @@
                             {
                                 var spell = b.Spells[i];
                                 @(i > 0 ? ", " : "")
-                                @if (spell.SpellId is { } id && _spells.TryGetValue(id, out var linked))
+                                @* Все названия — ссылки на запись справочника (на её страницу и раскрытую); нет в справочнике — серым. *@
+                                @if (Linked(spell) is { } linked)
                                 {
-                                    <a class="text-accent-700 underline" href="@($"spells?q={Uri.EscapeDataString(linked.Name)}")">@spell.RawName</a>
+                                    <a class="text-accent-700 underline" href="@($"spells?open={linked.Id}")">@spell.RawName</a>
                                 }
                                 else
                                 {
-                                    <span>@spell.RawName</span>
+                                    <span class="cm-text-muted">@spell.RawName <span class="cm-meta">(нет в справочнике)</span></span>
                                 }
                             }
                         </dd>
@@ -161,13 +193,13 @@
             </Field>
             <Field Label="Язык"><input class="cm-input" @bind="b.Language" /></Field>
             <Field Label="Автор"><input class="cm-input" @bind="b.Author" /></Field>
-            <Field Label="Год, век"><input class="cm-input" placeholder="ок. 730 г. н. э." @bind="b.Year" /></Field>
+            <Field Label="Год"><input class="cm-input" placeholder="ок. 730 г. н. э." @bind="b.Year" /></Field>
             <Field Label="Потеря Рассудка"><input class="cm-input cm-dice" placeholder="1d10" @bind="b.SanityLoss" /></Field>
             @if (b.BookType == BookType.MythosBook)
             {
-                <Field Label="Мифы (начальное)" Note="За начальное чтение."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosInitial" /></Field>
-                <Field Label="Мифы (полное)" Note="За полное изучение."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosFull" /></Field>
-                <Field Label="Значение Мифов" Note="Значение Мифов самой книги."><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosRating" /></Field>
+                <Field Label="Мифы за чтение"><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosInitial" /></Field>
+                <Field Label="Мифы за полное изучение"><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosFull" /></Field>
+                <Field Label="Значение Мифов"><input class="cm-input" type="number" min="0" max="99" @bind="b.MythosRating" /></Field>
             }
             else
             {
@@ -178,14 +210,14 @@
                 <StringListEditor Values="b.AltNames" ValuesChanged="v => b.AltNames = [.. v]" ItemLabel="Название" Placeholder="Как ещё называют книгу" />
             </Field>
             <Field Label="Возможные заклинания" Group="true" class="sm:col-span-2"
-                   Note="Как записано в книге. Связь со справочником сервер находит сам по точному имени или другому названию; не нашлось — выберите руками.">
+                   Note="Как записано в книге; связь со справочником сервер ищет сам.">
                 <BookSpellsEditor Spells="b.Spells" SpellsChanged="v => b.Spells = v" Catalog="_spells.Values" />
             </Field>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="4" @bind="b.Description"></textarea></Field>
             <Field Label="Обложка" Group="true" class="sm:col-span-2">
                 <ImagePicker FileId="b.ImageFileId" Url="@b.ImageUrl" OnChanged="file => { b.ImageFileId = file?.Id; b.ImageUrl = file?.Url; }" />
             </Field>
-            <Field Label="Источник" Hint="(страница книги)" class="sm:col-span-2"><input class="cm-input" @bind="b.Source" /></Field>
+            <Field Label="Источник" Note="Книга и страница." class="sm:col-span-2"><input class="cm-input" @bind="b.Source" /></Field>
         </div>
     };
 }

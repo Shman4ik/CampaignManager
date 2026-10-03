@@ -25,6 +25,21 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
 
     public override IQueryable<Weapon> Query(CmDbContext db) => db.Weapons.Include(w => w.Images);
 
+    // Лист хранит ссылку на оружие внутри документа (catalogWeaponId), а не внешним ключом: удалить можно, в листе
+    // остаётся название и строка. Хранитель вправе знать, в скольких листах оно было (W10). jsonb печатает «"ключ": "значение"».
+    public override bool UsersBlockDelete => false;
+
+    public override string? UsersNote => "В листах останется название.";
+
+    public override async Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken)
+    {
+        var pattern = $"%\"catalogWeaponId\": \"{id}\"%";
+        var names = await db.Database
+            .SqlQuery<string>($"select coalesce(name, '') as \"Value\" from cm.characters where sheet::text like {pattern} order by 1")
+            .ToListAsync(cancellationToken);
+        return [.. names.Select(n => $"лист сыщика {(n.Length == 0 ? "без имени" : n)}")];
+    }
+
     public override Weapon New() => new() { Name = "", Damage = "" };
 
     public override async Task<IReadOnlyList<WeaponDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<Weapon> rows, CancellationToken cancellationToken)
