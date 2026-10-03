@@ -141,7 +141,9 @@ public static class IdentityModule
         options.Cookie.IsEssential = true;
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
-        options.LoginPath = IdentityRoutes.LoginPage;
+        // Страница без сессии — сразу в Auth0 через /account/login, без своего экрана с кнопкой «Войти»: витрина
+        // входа — страница Auth0 (tools/auth0). /login остаётся экраном ошибок входа и тестового входа.
+        options.LoginPath = IdentityRoutes.Login;
         options.ReturnUrlParameter = IdentityRoutes.ReturnUrlParameter;
 
         // API отвечает кодом, а не редиректом на страницу входа: клиенту WebAssembly и приложению

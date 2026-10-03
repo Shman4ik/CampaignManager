@@ -28,7 +28,7 @@ Rulebook/sourcebook catalog (independent entity).
 здесь всегда были не замыслом, а недоделкой. Разметку списка держит
 `Components/BooksListView.razor` (таблица + карточки) и `Components/BookTableRow.razor`
 (строка), страница отвечает за фильтры и модалки. Страницу, сортировку и раскрытую строку
-держит общий `Shared/Model/CatalogListState<Book>` (см. `docs/design-system.md`, «Каталог»).
+держит общий `Shared/Model/CatalogListState<Book>` (см. `docs/design-system-v1.md`, «Каталог»).
 Модалка правит полную копию книги (`Utilities/Services/EntityCloner.Clone`), поэтому новое
 поле `Book` в неё попадает само — перечислять поля руками не нужно.
 

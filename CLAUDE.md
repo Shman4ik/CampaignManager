@@ -21,7 +21,8 @@ Entity Framework Core and Auth0 (OpenID Connect) authentication.
 (D2): в нём только исправления того, что мешает играть; новое делается сразу в 2.0.
 
 Код 2.0 — `src/`, `tests/CampaignManager.{Core,Server}.Tests`, `tools/`; правила работы с ним —
-[src/CLAUDE.md](src/CLAUDE.md). Всё ниже про `CampaignManager.Web` — это v1. Корневые
+[src/CLAUDE.md](src/CLAUDE.md). **Дизайн 2.0** — [docs/design-system.md](docs/design-system.md) (композиция и
+обязательное ревью по скриншоту) и скилл `campaign-manager-design`; раздел «UI Patterns» ниже — про v1. Всё ниже про `CampaignManager.Web` — это v1. Корневые
 `Directory.Build.props`/`Directory.Packages.props` относятся только к 2.0: проекты v1 исключены
 по имени, их csproj по-прежнему держат версии пакетов сами.
 
@@ -227,16 +228,19 @@ Reference-data services (catalog features like Items, Skills, Spells, Weapons, B
 - **Structured logging**: `logger.LogError(ex, "Error loading {SkillId}", id)` — never string interpolation
 - **`TreatWarningsAsErrors`** is enabled (except CS1591 for missing XML docs)
 
-### UI Patterns
+### UI Patterns (v1)
+
+Только `CampaignManager.Web`. Для 2.0 — [docs/design-system.md](docs/design-system.md) и
+[src/CampaignManager.UI/CLAUDE.md](src/CampaignManager.UI/CLAUDE.md); общие для обоих — «Целевые устройства» ниже.
 
 - All interactive components use `@rendermode InteractiveServer`
 - **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
 - Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
-- Design system guide (in Russian) at `docs/design-system.md`
+- Design system guide (in Russian) at `docs/design-system-v1.md`
 - Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, Tabs, etc.
   Страница-список собирается из них в одном порядке (FilterPanel → LoadingIndicator/EmptyState →
   список → Pagination), вкладки — только `<Tabs>`, диалог — только `<Modal>`, свои спиннеры,
-  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `docs/design-system.md`.
+  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `docs/design-system-v1.md`.
 
 #### Уведомления — только `<Alert>`
 
@@ -283,7 +287,7 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
 - Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
   **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
   `cm-btn-error` and `<Button Variant="error">` render different reds.
-- Full details and the class inventory: `docs/design-system.md`.
+- Full details and the class inventory: `docs/design-system-v1.md`.
 
 ### Целевые устройства: iPad Pro 11" и iPhone (решение владельца 2026-10-03)
 

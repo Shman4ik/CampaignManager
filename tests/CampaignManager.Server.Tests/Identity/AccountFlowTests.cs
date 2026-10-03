@@ -66,15 +66,16 @@ public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
         Assert.Contains(response.Headers.GetValues("Set-Cookie"),
             cookie => cookie.StartsWith(AutoLogin.AttemptCookie + "=1;") && cookie.Contains("expires=", StringComparison.OrdinalIgnoreCase));
 
-        var again = PageLoad("/", $"{AutoLogin.RememberedCookie}=google:keeper@example.test; {AutoLogin.AttemptCookie}=1");
+        // Открытая страница: главная без сессии сама ведёт на вход, а здесь проверяется только, что автовход не повторился.
+        var again = PageLoad("/about", $"{AutoLogin.RememberedCookie}=google:keeper@example.test; {AutoLogin.AttemptCookie}=1");
         Assert.Equal(HttpStatusCode.OK, (await Browser().SendAsync(again, Cancellation)).StatusCode);
     }
 
-    // Пароль автовход не угадает: браузер, входивший по почте, просто открывает страницу.
+    // Пароль автовход не угадает: браузер, входивший по почте, просто открывает (открытую) страницу.
     [Fact]
     public async Task Email_login_is_not_repeated_automatically()
     {
-        var response = await Browser().SendAsync(PageLoad("/", $"{AutoLogin.RememberedCookie}=email:a@example.test"), Cancellation);
+        var response = await Browser().SendAsync(PageLoad("/about", $"{AutoLogin.RememberedCookie}=email:a@example.test"), Cancellation);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -110,6 +111,22 @@ public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
         var response = await Browser().SendAsync(PageLoad(IdentityRoutes.LoginPage, cookie: null), Cancellation);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // Гость не видит своей витрины с «Войти»: любая страница без сессии, главная тоже, сразу ведёт на вход Auth0
+    // (через /account/login с адресом возврата). API по-прежнему отвечает 401.
+    [Theory]
+    [InlineData("/", "%2F")]
+    [InlineData("/campaigns?status=active", "%2Fcampaigns%3Fstatus%3Dactive")]
+    public async Task Page_without_session_goes_straight_to_auth0_sign_in(string path, string returnUrl)
+    {
+        var response = await Browser().SendAsync(PageLoad(path, cookie: null), Cancellation);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal($"{IdentityRoutes.Login}?{IdentityRoutes.ReturnUrlParameter}={returnUrl}", response.Headers.Location!.PathAndQuery);
+
+        var authorize = await Browser().SendAsync(PageLoad(response.Headers.Location.PathAndQuery, cookie: null), Cancellation);
+        AuthorizeQuery(authorize);
     }
 
     [Theory]

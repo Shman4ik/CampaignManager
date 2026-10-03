@@ -1,8 +1,9 @@
 # CampaignManager.UI — дизайн-система, UI-кит, оболочка
 
-Страницы и компоненты 2.0 (Blazor WebAssembly, D1). Ходит только в `Contracts` и `Core`. Знание
-перенесено из `docs/design-system.md`, `design-system.css` v1 и корневого `CLAUDE.md` (каркас
-страницы, кнопки, Alert, iPad); обходы v1 (circuit, пререндер, `!`-утилиты) — нет. Все компоненты
+Страницы и компоненты 2.0 (Blazor WebAssembly, D1). Ходит только в `Contracts` и `Core`. Здесь — **как
+устроен кит**; как строить экран и как его проверять — [docs/design-system.md](../../docs/design-system.md)
+(«Композиция», «Ревью по скриншоту», правила 1–17), порядок работы — скилл `campaign-manager-design`.
+Правила v1 (`docs/design-system-v1.md`, корневой «UI Patterns») здесь не действуют. Все компоненты
 вживую — `/dev/ui` (только Development), каждый новый компонент кита — туда же.
 
 ## Папки
@@ -12,7 +13,7 @@
 | `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `play.css` (режим «Игра» листа), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки), `kit.css` (подсказки по касанию, меню «⋯», выбор файла, сводка ошибок, липкая колонка, полоса страниц, пустая строка), `music.css` (плеер: панель и полоса) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator`; волна UX-0b — `RowMenu`/`RowMenuItem`, `BookRef`, `Abbr`, `FilePicker`, `SectionHeader`, `FormErrors`/`ValidationScroll`, `UnsavedChangesGuard`, `StickyPane`, `DiceText`, `Names` (см. «Компоненты UX-0b») |
 | `Layout/` | `MainLayout`, `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
-| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки; `InfoLinks` — ссылки на `/about` и `/legal` (страница входа, лист «Ещё», заглушка гостя); сами страницы — статические, их рендерит сервер (`Server/Components/Pages/About.razor`, `Legal.razor`, `[ExcludeFromInteractiveRouting]`, простая шапка без рельса: бот Google и Auth0 читают HTML без JS), текст — `Pages/AboutContent`, `LegalContent` (адреса v1, на `/legal` ссылаются Google-клиент и Auth0; тест `Info_pages_are_open_without_sign_in_with_text_in_html`) |
+| `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки; `InfoLinks` — ссылки на `/about` и `/legal` (страница входа, лист «Ещё»); сами страницы — статические, их рендерит сервер (`Server/Components/Pages/About.razor`, `Legal.razor`, `[ExcludeFromInteractiveRouting]`, простая шапка без рельса: бот Google и Auth0 читают HTML без JS), текст — `Pages/AboutContent`, `LegalContent` (адреса v1, на `/legal` ссылаются Google-клиент и Auth0; тест `Info_pages_are_open_without_sign_in_with_text_in_html`) |
 | `Platform/` | `ApiActivity` — состояние связи и записи; `BrowserStorage` — `localStorage` для черновиков; `ApiErrors` — текст отказа API |
 | `Pages/` | страницы; `Pages/Dev` — `/dev/ping`, `/dev/files` (T1.5, загрузка и отдача; сироты — в админке), `/dev/ui`, `/dev/checks` (T2.7) |
 | `Campaigns/` | главная, кампании, участники, журнал — [CLAUDE.md](Campaigns/CLAUDE.md) |
@@ -41,6 +42,10 @@
   `gray-*`/`slate-*` → `primary-*` (в v1 два серых спорили на одном экране), `info-*` → `accent-*`
   (повторяла hex-в-hex), `red/green/amber/blue-*` → `error/success/warning/accent-*`. Несуществующий
   класс Tailwind просто не соберёт — проверяй экран, а не только сборку.
+- **Эксперимент «сепия» (2026-10-03):** `?palette=sepia` (браузер запоминает, `?palette=default` — назад) перекрашивает
+  primary в тёплые чернила, accent — в охру, фон — в пергамент страницы входа Auth0: `Styles/palette-sepia.css`
+  (только переменные под `:root[data-palette]`) и `Layout/PaletteSwitch`. Решит владелец — значения в `theme.css`,
+  а файл с переключателем удалить. Новый цвет — только через токены, иначе вариант палитры его не перекрасит.
 - **Числа в `style` не подставлять**: культура WebAssembly — `ru-RU`, `@(1.5)rem` превращается в «1,5rem», и браузер
   молча выбрасывает правило (так в T2.5a пропал отступ дерева локаций). Шаги — классами (`pl-4`/`pl-10`…), а если
   без числа никак — `ToString(CultureInfo.InvariantCulture)`.
@@ -109,7 +114,7 @@
   «Плеером» и «Ширмой» сжимала заголовок в ноль, а библиотека НПС раздвигала страницу вбок. Поэтому
   у кнопки шапки — `Icon` и подпись простым текстом; прятать подпись самому (`hidden md:inline`) не
   нужно — `hidden` к тому же снимает с кнопки имя. Подпись остаётся у кнопки без иконки («Назад») и
-  со счётчиком (`cm-count-badge`) — таких в шапке не больше одной. Проверка — `scrollWidth` на 390×844
+  со счётчиком (`cm-count-badge`) — таких в шапке не больше одной. Проверка — `scrollWidth` на 393×651
   под Хранителем (у него в шапке ещё «Плеер» и «Ширма»).
 - **Кнопки модулей в шапке** (ширма, плеер) — через слоты: модуль рисует
   `<SectionContent SectionName="@PageHeaderSlots.KeeperScreen">` из своего компонента в
@@ -126,8 +131,9 @@
   `cm-section-divided`), элементы списка — строки `border-t border-primary-200 first:border-t-0`.
   Компонент, который всегда стоит в карточке, своей не рисует и пишет об этом в комментарии
   (`DataTable`, `StringListEditor`). `EmptyState` сам карточка — ставится вместо списка.
-- **Никогда `max-w-*` + `mx-auto` на содержимое страницы**: колонка `cm-main` — флекс, и `mx-auto`
-  снимает растяжение — редкая страница схлопывается узким столбцом.
+- **`mx-auto` у прямого потомка `cm-page` — нельзя**: колонка `cm-main` — флекс, и `mx-auto` снимает растяжение —
+  страница схлопывается узким столбцом. `max-w-*` **можно и нужно**, когда содержимое узкое (форма, текст, одна
+  кнопка): карточка встаёт у левого края по своей ширине, а не тянется пустой на всю колонку («Композиция», «Ширина»).
 
 ## Оболочка
 

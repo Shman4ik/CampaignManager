@@ -1,325 +1,128 @@
-﻿# CampaignManager Design System
+# CampaignManager 2.0 — дизайн-система
 
-Tailwind CSS + custom CSS utilities in `wwwroot/css/design-system.css`. Colors defined in `tailwind.config.js`.
+Правила того, **как выглядит и как проверяется** экран 2.0. Где что лежит:
 
-## Colors
-
-7 palettes × 11 shades (50–950). Use Tailwind classes: `bg-{palette}-{shade}`, `text-{palette}-{shade}`, `border-{palette}-{shade}`.
-CSS variables `--color-{palette}-{shade}` available for primary, secondary, accent.
-
-| Palette | 500 | Usage |
-|---------|-----|-------|
-| primary | #64748B | Nav, headings, primary buttons |
-| secondary | #78716C | Backgrounds, secondary accents |
-| accent | #4B7FAF | Highlights, badges |
-| success | #2C9D49 | Positive feedback |
-| warning | #D97706 | Caution |
-| error | #C71D20 | Errors, destructive actions |
-| info | #4B7FAF | Info messages (= accent) |
-
-**Только эти палитры плюс нейтральный `gray-*`.** Дефолтные тейлвиндовские `blue-*`, `red-*`,
-`green-*`, `yellow-*`, `amber-*`, `orange-*`, `purple-*`, `emerald-*`, `slate-*` не используются:
-они ярче общего тона и на одном экране расходятся с `cm-btn-*`. Цвет несёт смысл —
-ошибка/опасность `error`, внимание `warning`, успех `success`, информация и выделение
-`accent`; вторая «нейтральная» краска, когда нужна пара к accent (раздатки рядом с фактами,
-Рассудок рядом с ПМ), — `secondary`. Класс — всегда полным литералом (`bg-error-100`), а не
-`$"bg-{color}-100"`: Tailwind собирает только то, что целиком встречается в исходниках.
-Эмодзи вместо иконок не ставить — только Font Awesome (`fa-triangle-exclamation`,
-`fa-check`, `fa-xmark`).
-
-## CSS Variables
-
-```
---cm-background: #F8F9FA          --cm-text-foreground: #0f172a
---cm-overlay: rgba(0,0,0,0.5)     --cm-border-color: #e2e8f0
---cm-border-color-hover: #cbd5e1  --cm-radius-md: 0.375rem
---cm-shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.05)
---cm-gradient-primary: linear-gradient(135deg, var(--color-primary-700), var(--color-primary-800))
---font-family-primary: 'Inter', system-ui, sans-serif
---font-family-serif: 'Bitter', Georgia, 'Times New Roman', serif
-```
-
-## Typography — Heading Classes
-
-h1–h3: serif font (RPG book style). h4–h6: sans-serif. All have responsive sizes at <640px.
-
-| Class | Size | Mobile | Weight | Line-height | Margin-bottom |
-|-------|------|--------|--------|-------------|---------------|
-| cm-h1 | 3rem | 2.25rem | 700 | 1.2 | 0.5rem |
-| cm-h2 | 2.25rem | 1.875rem | 700 | 1.2 | 0.375rem |
-| cm-h3 | 1.875rem | 1.5rem | 600 | 1.3 | 0.25rem |
-| cm-h4 | 1.5rem | 1.25rem | 600 | 1.3 | 0.25rem |
-| cm-h5 | 1.25rem | 1.125rem | 500 | 1.4 | 0.125rem |
-| cm-h6 | 1.125rem | 1rem | 500 | 1.4 | 0.125rem |
-
-Usage: `<h1 class="cm-h1">Title</h1>`
-
-## Page Shell
-
-Every routable page has the same three-part shell — the main page (`Components/Pages/Home.razor`)
-is the reference:
-
-```razor
-<PageTitle>Кампании</PageTitle>
-
-<PageHeader Title="Кампании">
-    <Actions>
-        <button class="cm-btn cm-btn-primary cm-btn-sm">…</button>
-    </Actions>
-</PageHeader>
-
-<div class="cm-page">
-    …
-</div>
-```
-
-- `PageHeader` is the 56px sticky topbar. Every page has one, including info pages. Page-level
-  actions go in its `Actions` slot — never floating in the body — and are always `cm-btn-sm`
-  (the topbar is only 56px tall).
-- `PageHeader` сам дописывает справа кнопку «Ширма» (ширма Хранителя, `Features/KeeperScreen`);
-  остальным пользователям она не видна. Выключает её только `ShowKeeperScreen="false"` на самой
-  `/reference`. Своих шапок в обход `PageHeader` не заводить — иначе кнопку ширмы придётся ставить руками.
-- `cm-page` is the content container: full width, 20px padding. Do **not** use
-  `max-w-*` + `mx-auto` here — those are flex items of a column flex container, so `mx-auto`
-  disables stretch and collapses sparse pages to their content width.
-- Inside, group content with `cm-section` + `cm-section-header` > `cm-section-title`
-  (the small uppercase label), and put content in `cm-card` > `cm-card-header` /
-  `cm-card-body` / `cm-card-footer`.
-- **One card level, never two.** A card inside a card — a white panel on a white panel, or a
-  grey inset around a table that already sits in a card — is the thing this system is meant to
-  avoid; it reads as clutter rather than structure. Separate blocks inside one card with a rule
-  (`cm-stack`, or `cm-section-divided` on a single block), and render list items as rows
-  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards.
-- A component that always renders inside a card must not draw its own — the parent gives it
-  the frame and the padding. Say so in a comment at the top of the file so nobody adds one back.
-
-| Class | Use |
-|-------|-----|
-| cm-page | Page content container, directly under `<PageHeader>` |
-| cm-section | Vertical group; `cm-section-divided` adds a top rule |
-| cm-stack | Blocks stacked in one card: a rule between siblings instead of nested cards |
-| cm-section-title | Small uppercase group label (inside `cm-section-header`) |
-| cm-card-title | Card heading (inside `cm-card-header`) |
-| cm-card-count | Count pill after a card title |
-| cm-count-badge | Attention count on a button or nav item |
-| cm-field-label | Form field label; `cm-field-hint` for the "(optional)" part |
-| cm-checkbox | Checkbox |
-| cm-tap-target | `<label>` around a small control in a dense row: 36×36 touch area via `::after`, layout size unchanged |
-| cm-text-muted | Secondary body copy inside cards |
-| cm-table | Data tables (catalogues, admin lists) |
-
-## Боковое меню
-
-`Components/Layout/Sidebar.razor` + `SidebarItem.razor`, стили — раздел «Боковое меню» в
-`design-system.css`.
-
-- **Меню — всегда рельс с подписями, как в iPadOS** (`--sidebar-width`, 76px): иконка, под ней
-  подпись 11px, видна всегда. Имя пункта в `title=` на планшете никто не увидит, поэтому голых
-  иконок нет.
-- **Развернуть меню нельзя** — ни стрелкой, ни настройкой. Раньше были 240px с полными
-  подписями и оверлей поверх страницы на портрете iPad; на столе они только отнимали ширину
-  у страницы. Не возвращай.
-- Подпись — `ShortLabel` у `SidebarItem` (по умолчанию `Label`). Она обязана влезать одной
-  строкой без многоточия: не длиннее «Заклинания». Длиннее — задай короткий вариант
-  («Пользователи» → «Аккаунты»).
-- Счётчик на пункте (заявки) — пилюля на плече иконки.
-- Нижняя навигация телефона (`MobileBottomNav`, ≤768px) подписывает вкладки тем же 11px.
-
-## Каталог (страница-список)
-
-Любая страница «список с фильтром» — оружие, существа, навыки, кампании, шаблоны
-сценариев — собирается из одних и тех же общих компонентов, в этом порядке:
-
-1. `<FilterPanel OnReset="…">` — поиск и селекты **внутри** панели, а не голой строкой над
-   списком. Панель — **одна строка** с переносом, на всех страницах одинаковая: без шапки
-   «Фильтры», без сворачивания, «Сбросить» в конце строки. Поля — её прямые дети, ширину
-   задаёт обёртка (`.cm-input` прибит к `width: 100%`): поиск `min-w-[12rem] flex-1`,
-   селект `w-56 shrink-0` (на телефоне `w-full sm:w-56`). Поле поиска — `type="search"`,
-   `cm-input` без иконки-лупы; селекты — тоже `cm-input`. Подписей `cm-field-label` над
-   полями нет: смысл несут `placeholder`, `aria-label` и первый пункт селекта («Все типы»).
-   Флажки фильтра — строкой высотой с поле, `label` обнимает чекбокс. Блок, которому нужна
-   своя строка (чипы тегов в фонотеке), — `w-full order-last`: «Сбросить» остаётся в первой.
-   Панель липнет под шапку страницы (`top-14`) — поиск под рукой при прокрутке длинного списка.
-2. `<LoadingIndicator/>` пока грузится.
-3. `<EmptyState>` вместо списка, когда пусто: основное действие «Добавить …» и, если пусто
-   из-за фильтра, «Очистить фильтры» рядом.
-4. Сам список и `<Pagination>` под ним (если список постраничный). Каждый обработчик
-   фильтра сбрасывает страницу на первую — иначе с пятой страницы поиск уводит в пустоту.
-
-Страницу, сортировку по колонке и раскрытую строку плотных каталогов (оружие, предметы,
-книги, заклинания) держит общий `Components/Shared/Model/CatalogListState<T>`: страница
-отдаёт ему свою функцию фильтра и ключи сортировки по колонкам (`CatalogSort.By`), а у себя
-оставляет только поля фильтров. Сброс страницы после фильтра — `catalog.ResetPage()`.
-Новый каталог того же вида собирается на нём же, а не на своей копии `currentPage`/`ToggleSort`.
-Модалка правки получает полную копию записи — `Utilities/Services/EntityCloner.Clone(entity)`,
-а не `new T { … }` с перечислением полей: забытое поле такая копия молча обнуляла.
-
-## Button Semantics
-
-Colour carries meaning; do not pick it for variety.
-
-| Intent | Class |
-|--------|-------|
-| The page's or dialog's main action (save, submit, create, current page) | `cm-btn-primary` |
-| Everything neutral (back, cancel, toggle, secondary nav) | `cm-btn-secondary` |
-| Row/card edit action | `cm-btn-outline-primary` |
-| Row/card destructive action, reset | `cm-btn-outline-error` |
-| Irreversible destructive confirmation inside a dialog | `cm-btn-error` |
-| Approving someone else's request | `cm-btn-success` |
-
-`cm-btn-info` (blue) is **not** for ordinary actions — it used to be scattered across submit
-buttons and made the same action look different on every page. Blue stays for informational
-`Badge`/`Alert`.
-
-Row actions carry a text label: there is no hover tooltip on the iPad this app targets, so a
-`title=` explains nothing. **The one exception is a dense catalogue table** (weapons, items,
-books, spells — rows with eight numeric columns): there edit and delete are bare icons, because
-a label on every row would eat a column. The exception is narrow:
-
-- only the universally read glyphs — pen (`fa-pen`) for edit, bin (`fa-trash-alt`) for delete;
-  any other action in the row still gets a visible label;
-- `cm-btn-sm cm-btn-icon` (36×36) plus `aria-label` naming the row («Изменить: Кольт .45»),
-  never `title=` alone;
-- the same row rendered as a card below the table breakpoint keeps the same icons, so one
-  catalogue does not switch conventions between orientations.
-
-Lists of cards, rows inside a page section and form rows are not dense tables — label them.
-
-## CSS Button Classes
-
-Base `cm-btn` (44px, font-weight 600, rounded-lg) + variant. All have hover/active/disabled states.
-
-| Class | Style |
-|-------|-------|
-| cm-btn-sm | 36px height |
-| cm-btn-lg | 52px height |
-| cm-btn-primary | primary-700 bg, white text |
-| cm-btn-secondary | gray bg, dark text, border |
-| cm-btn-success | green bg, white text |
-| cm-btn-error | red bg, white text |
-| cm-btn-warning | amber bg, white text |
-| cm-btn-info | accent-600 bg, white text |
-| cm-btn-outline-primary | transparent, primary border |
-| cm-btn-outline-error | transparent, error border |
-
-Usage: `<button class="cm-btn cm-btn-primary">Save</button>`
-
-Prefer the `<Button>` Blazor component over raw `cm-btn` classes in new code.
-`<Button>` рисует ровно эти же классы (`cm-btn cm-btn-{variant} cm-btn-{size}`),
-так что компонент и ручная разметка выглядят одинаково — своего набора
-Tailwind-классов у компонента больше нет.
-
-## CSS Form Input
-
-`cm-input` — block, full-width, accent-500 focus ring, disabled gray bg.
-
-Usage: `<input class="cm-input" />`
-
-Модификаторы:
-
-| Класс | Зачем |
+| Что | Где |
 |---|---|
-| `cm-input-icon-left` | отступ слева под вложенную иконку. В поиске каталогов лупу не ставим — см. «Каталог» |
-| `cm-field-label-inline` | подпись слева от поля, а не над ним — снимает нижний отступ |
-| `cm-field-note` | подсказка под полем: правило из книги со ссылкой на страницу |
+| Токены (цвета, шрифты) | `src/CampaignManager.UI/Styles/theme.css` — единственный источник |
+| Классы `cm-*`, оболочка | `Styles/components.css`, `Styles/shell.css` |
+| Компоненты кита и как их ставить | [src/CampaignManager.UI/CLAUDE.md](../src/CampaignManager.UI/CLAUDE.md), вживую — `/dev/ui` |
+| Как строить экран | раздел «Композиция» ниже |
+| Как проверять | раздел «Ревью по скриншоту» ниже — **обязателен** |
+| Правила по элементам (тап-цели, окна, тексты…) | «Правила 2.0 после аудита», пункты 1–17 |
+| Порядок работы агента над UI | скилл `.claude/skills/campaign-manager-design` |
+| Устройства и вьюпорты | корневой `CLAUDE.md`, «Целевые устройства» |
 
-**`design-system.css` подключается после тейлвиндовского `styles.css`**, поэтому свойства,
-которые `.cm-input` задаёт сам, утилитами не переопределяются: `w-20`, `flex-1` и `pl-8`
-на самом поле молча не работают против `width: 100%` и сокращённого `padding`. Ширину
-задавайте обёрткой (`<div class="w-20"><input class="cm-input"/></div>`), а новые отступы —
-модификатором в дизайн-системе, а не утилитой на странице.
+v1 (`CampaignManager.Web`) — [design-system-v1.md](design-system-v1.md), заморожен; его правила для 2.0 не действуют.
 
-## Shared Blazor Components
+## Почему эти два раздела появились (2026-10-03)
 
-All in `Components/Shared/`, globally available.
+Главная гостя 2.0 соблюдала каждое правило по элементам — и выглядела плохо: карточка во всю колонку ~1600px с
+содержимым в левых 530px, второй крупный заголовок под шапкой, кнопка-плита на 384px с подсказкой в четыре строки
+вплотную под ней, ссылки на 8px правее общей линии, пустая нижняя половина экрана. Причины:
 
-### Badge
-Color label. `<Badge Variant="success" Size="sm">Active</Badge>`
-- `Variant` string = "primary" — primary|secondary|accent|success|warning|error|info
-- `Size` string = "md" — sm|md|lg
-- `Rounded` string = "lg" — md|lg|full
-- `WithBorder` bool = true
+- правила говорили, **чего нельзя** с элементами, и ничего — о композиции: ширине, пустоте, иерархии, ритме;
+- правило «никогда `max-w-*` + `mx-auto`» читалось как «всё во всю ширину», а альтернативы не давало;
+- проверка мерила `scrollWidth` и высоту кнопок «без скриншотов» — уродство так не ловится;
+- скилл дизайна описывал v1 (Blazor Server, меню 240px, кнопки 36–52px, «(стр. N)» в подсказках) и спорил с 2.0.
 
-### Button
-Interactive button. `<Button Variant="error" Icon="fa-trash" OnClick="Delete">Remove</Button>`
-- `Variant` string = "primary" — primary|secondary|success|error|warning|info|outline-primary|outline-error
-- `Size` string = "md" — sm|md|lg
-- `Icon` string? — FontAwesome class, e.g. "fa-plus"
-- `IsDisabled` bool = false
-- `FullWidth` bool = false
-- `ButtonType` string = "button" — button|submit|reset
-- `AdditionalClasses` string?
-- `OnClick` EventCallback
+## Композиция
 
-### Alert
-Status block. `<Alert Type="warning" Title="Warning">Message</Alert>`
-- `Type` string = "info" — success|warning|error|info|primary|secondary|accent
-- `Title` string?
+### Архетип страницы — первым делом
 
-### Modal
-Dialog container. Scrollable body, header/footer slots.
-```
-<Modal IsVisible="@_show" OnClose="Close" Title="Edit" MaxWidth="2xl">
-    Body content
-    <FooterContent><Button Variant="primary" OnClick="Save">Save</Button></FooterContent>
-</Modal>
-```
-- `IsVisible` bool
-- `OnClose` EventCallback
-- `Title` string = ""
-- `MaxWidth` string = "4xl" — sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl. Компонент переводит их в
-  полные литералы `max-w-*`; другое значение даёт 4xl. Интерполяцией (`$"max-w-{…}"`) класс
-  не собирать — Tailwind его не увидит, и модалка растянется на весь экран
-- `MaxHeight` string? = "70vh" — любое CSS-значение, идёт в `style` тела. `null` — тело без
-  своего предела. В любом случае окно не выше экрана: при длинном содержимом прокручивается
-  тело, шапка и подвал с кнопками остаются видны
-- `HeaderColorScheme` string = "primary"
-- `CloseOnBackdropClick` bool = true — `false` выключает и закрытие по фону, и Esc (крестик
-  в шапке остаётся). Ставить на диалоги посреди игры, где случайное касание мимо окна не
-  должно ничего пропускать (проверка ВЫН умирающих в бою)
-- `FooterContent` RenderFragment?
+Прежде чем верстать, назови архетип. Раскладка берётся от него, а не от «карточки во всю ширину».
 
-Любой диалог — это `<Modal>`, а не свой `fixed inset-0` с белой панелью: у самодельных не было
-ни анимации, ни блокировки прокрутки страницы, ни закрытия по Esc, и шапка у каждого своя.
+| Архетип | Примеры | Раскладка |
+|---|---|---|
+| **Сцена** — игра за столом | `/combat`, `/chase`, режим игры сценария, лист в режиме «Игра» | с `lg` две колонки: список + липкая колонка действия (п. 14); всё частое видно без прокрутки на 1194×696 |
+| **Список** | справочники, `/campaigns`, `/scenarios`, админка | `FilterPanel` → таблица или сетка во всю колонку → `Pagination` |
+| **Рабочее место объекта** | кампания, сценарий, лист | вкладки + карточки; ширину берут таблицы и сетки, текст внутри — своей ширины |
+| **Форма страницей** | `/profile`, создание | колонка формы `max-w-2xl` (42rem) слева; справа с `lg` — пояснение или превью, иначе ничего |
+| **Витрина** | вход (страница Auth0, `tools/auth0/`), `/about`, `/legal` | знак, название, одна фраза, одно действие; текст `max-w-prose`; иллюстрация — только здесь |
+| **Заглушка** | «Нет доступа», 404, пустая страница | `EmptyState` (≤ 160px), без второй карточки и без пояснительных абзацев |
 
-### Tabs
-Вкладки над содержимым страницы. `<Tabs Items="…" @bind-ActiveKey="_tab"/>`, где `Items` —
-список `Tabs.Item(Key, Label, Icon?, Count?)`; счётчик показывается пилюлей, если больше нуля.
-Компонент ничего не хранит, содержимое вкладки страница рисует сама под ним. Вкладка 44px в
-высоту — тап-цель. Своих полос `border-b-2` на странице не заводить.
+Если страница не ложится ни в один архетип и выходит «одна карточка с текстом и кнопкой на пустом экране» — скорее
+всего, ей не нужна своя страница: окно, строка в другой странице или внешний экран (так гость теперь сразу попадает на
+страницу входа Auth0, а не на свою витрину с кнопкой «Войти»).
 
-### ConfirmationModal
-Dangerous action confirmation. Optional type-to-confirm.
-```
-<ConfirmationModal IsVisible="@_show" OnConfirm="Delete" OnCancel="Cancel"
-                   IconType="error" RequireConfirmationText="true" ConfirmationTextRequired="DELETE" />
-```
-- `IsVisible` bool, `OnConfirm` EventCallback, `OnCancel` EventCallback
-- `Title` string = "Подтверждение", `Message` string = "Вы уверены?"
-- `WarningText` string = "Это действие нельзя отменить."
-- `ConfirmText`/`CancelText`/`LoadingText` strings
-- `IconType` string = "warning" — warning|error|info|question|success
-- `RequireConfirmationText` bool = false, `ConfirmationTextRequired` string = "УДАЛИТЬ"
-- `IsLoading` bool = false, `CloseOnBackdropClick` bool = true
-- `DetailsContent` RenderFragment?
+### Ширина
 
-### Other Components
+- **Ширину карточки задаёт содержимое, а не колонка.** Во всю колонку — таблица, сетка карточек, трасса погони,
+  журнал. Форма — `max-w-xl`…`max-w-2xl`, текст — `max-w-prose` (65 знаков), одиночная кнопка — по своей ширине
+  (`min-w-48` допустим). `w-full` у кнопки — только на телефоне и в колонке уже 24rem.
+- **Узкая карточка стоит у левого края колонки**: `max-w-xl` **без** `mx-auto`. Запрет касается только `mx-auto` у
+  прямого потомка `cm-page`: колонка — флекс, и `mx-auto` снимает растяжение. Центрировать, если правда нужно, —
+  `grid place-items-center` у обёртки.
+- **Карточка не пустует.** Пусто больше трети ширины карточки — сузь её или займи вторую колонку тем, что относится к
+  делу (сводка, превью, пояснение). Растянуть узкое содержимое на всю ширину (`w-full` у кнопки, `max-w-none` у
+  абзаца) — не решение: строка в 150 знаков не читается.
+- **Колонки.** Ландшафт iPad (колонка ~1064px): две колонки 2:1 или 1:1. Портрет (~704px): одна колонка либо своя
+  раскладка с `md:`; три колонки в портрете не держим. Телефон (~361px): одна.
 
-| Component | Parameters | Purpose |
-|-----------|-----------|---------|
-| NotificationAlert | Type, Message, OnClose | Dismissable notification |
-| EmptyState | Title, Message, IconClass, ActionButton(RF) | No-data placeholder. Сам является `cm-card` — ставится на место списка, не внутрь другой карточки. В ActionButton: основное действие (`primary`, «Добавить …») и, если пусто из-за фильтра, `secondary` «Очистить фильтры» |
-| LoadingIndicator | Message (по умолчанию «Загрузка…») | Единственный спиннер: своих `animate-spin` на страницах не рисовать |
-| Pagination | CurrentPage, TotalPages, TotalItems, ItemsPerPage, OnPageChanged | Page nav |
-| FilterPanel | ChildContent, OnReset, ActionButtons(RF) | Однострочный липкий фильтр; OnReset рисует стандартную кнопку «Сбросить» |
-| SortableTableHeader | Title, FieldName, CurrentSortField, SortAscending, OnSortChanged | Sortable column header |
-| InitialSizeTextArea | InitialRows | Auto-expanding textarea (3–15 rows) |
+### Высота и сгиб
+
+- Под шапкой в ландшафте ~620px. Первый экран отвечает на «что это и что здесь делать»: главное действие — над сгибом.
+- Одна карточка в верхней трети и пустой экран под ней — сигнал, что страница лишняя (см. «Архетип») или что ей нужна
+  раскладка витрины.
+
+### Иерархия
+
+- **Один главный заголовок на экран — заголовок шапки** (`PageHeader`, 15px/600). Под ним в теле — только
+  `cm-section-title` (13px, капс, серый) и `cm-card-title` (14px/600). Второй крупный заголовок в теле (`cm-h4`, 20–24px)
+  спорит с шапкой — не ставим; исключения — витрина и книжные имена (ниже).
+- Шкала текста: 15 (шапка) / 14 (тело, заголовок карточки) / 13 (мелкое, подсказки, мета). Новых размеров между ними не
+  заводить; 11px — только подписи рельса и нижней панели (п. 2).
+- **Засечки** (Bitter, `cm-title-serif`) — для книжного: имя сыщика на листе, название сценария, раздатка, витрина. Не
+  для подписей интерфейса.
+- Одна `primary` на экран и на окно (п. 6). Тёмная кнопка на 384px — тоже нарушение иерархии: она перевешивает всё.
+
+### Ритм и выравнивание
+
+- Шаг — 4px. **Внутри группы плотнее, чем между группами:** подпись → поле 4–8px, кнопка → её подсказка 8px, группы в
+  карточке 16–20px (`cm-stack` — 20px), секции страницы 28px (`cm-section`). Одинаковые отступы везде прячут структуру,
+  слипшиеся пары (4px между кнопкой и абзацем) — тоже.
+- **Одна левая линия.** Текст, поля, кнопки и ссылки в карточке начинаются на одном отступе (`cm-card-body` — 16px).
+  У ссылки и кнопки-призрака в потоке текста нет своих боковых полей — зона касания добирается высотой (`min-h-8`), а
+  не `px-2`, иначе элемент съезжает с линии.
+- Подсказка — одна строка 13px (п. 2). Абзац о том, как всё устроено внутри («учётки заводит администратор», «вошедший
+  через Google входит сам»), в интерфейс не пишем: это знание для `CLAUDE.md`, а не для человека за столом.
+
+### Бренд
+
+- Знак (`logo-mark.svg`) — в рельсе и на витрине. Иллюстрация (`login-art.webp`) — только витрина (страница входа
+  Auth0); в рабочих экранах её нет. Цвета — только палитры `theme.css`; тёмный фон под иллюстрацией — `secondary-900`.
+
+## Ревью по скриншоту
+
+Замер в `javascript_tool` (`scrollWidth`, высоты контролов) ловит поломки, а не уродство: главную гостя он пропустил
+дважды (#226, #228). Поэтому **каждая страница, которую задела правка, проверяется глазами**:
+
+1. Скриншот на **1194×696** (ландшафт iPad Pro 11"); для страниц Хранителя — ещё **834×1056**, для страниц игрока —
+   **393×651**. Данные — реальные (dev-вход на копии `dev`), а не пустой список: пустая и полная страница — разные экраны.
+2. Сначала **смотреть на скриншот как ревьюер**, потом — в код. Пройти чек-лист; «нет» хоть на один вопрос — править
+   до PR, а не записывать в «Не проверено».
+3. В описании PR, раздел «Проверка», — по строке на вьюпорт: что смотрел и что поправил после взгляда. Слова
+   «скриншот сделан» без вывода — не проверка.
+4. Замеры JS остаются дополнением: горизонтальная прокрутка на портрете и телефоне, высота тап-целей (п. 1).
+
+**Чек-лист** (по одному взгляду на каждый вьюпорт):
+
+1. **Главное.** За две секунды ясно, что это за экран и что здесь делать; главное действие — над сгибом.
+2. **Пустота.** Нет карточки, пустой больше чем на треть ширины; нет пустой нижней половины экрана при одной карточке.
+3. **Заголовки.** Один крупный — в шапке; в теле ничего с ним не спорит.
+4. **Линия.** Всё в карточке на одной левой линии; ничего не съехало на 4–8px.
+5. **Ритм.** Внутри группы плотнее, чем между группами; нет слипшихся пар и нет «всё через 16px».
+6. **Соразмерность.** Кнопка и поле — по содержимому, не плитой на пол-экрана; иконка того же веса, что текст рядом.
+7. **Текст.** Строки ≤ 75 знаков; подсказки в одну строку; нет абзацев о внутреннем устройстве.
+8. **Цвет.** Одна `primary`; цвет только со смыслом (п. 17); серый не светлее `primary-600`.
+9. **Портрет и телефон.** Своя раскладка, а не сжатый ландшафт и не столбик с пустыми полями.
+10. **Соседи.** Рядом со страницей того же архетипа она выглядит из той же системы (отступы, заголовки, кнопки).
 
 ## Правила 2.0 после аудита
 
 Сводка аудита UI/UX перед переключением прода (T3.2): 48 страниц, issue с меткой `ux` (#144–#191), общие
-проблемы пяти групп. Ниже — **одно правило на проблему**, с числами. Они сильнее всего, что выше, где
-написано иначе; план правок — [docs/v2/UX-REVIEW.md](v2/UX-REVIEW.md). Приоритет владельца: вёрстка и плотность,
+проблемы пяти групп. Ниже — **одно правило на проблему**, с числами; это правила по элементам, композиция и проверка —
+в разделах выше. Где v1 ([design-system-v1.md](design-system-v1.md)) пишет иначе, действуют они; план правок — [docs/v2/UX-REVIEW.md](v2/UX-REVIEW.md). Приоритет владельца: вёрстка и плотность,
 согласованность, тексты. Устройство — iPad Pro 11" за столом: ландшафт 1194×696 первым, портрет 834×1056, игроку — iPhone
 393×651 (решение владельца 2026-10-03, корневой `CLAUDE.md`, «Целевые устройства»).
 
