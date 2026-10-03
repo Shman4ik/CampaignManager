@@ -42,8 +42,10 @@ public sealed class PlatformApiTests(CmApp app) : IClassFixture<CmApp>
     // обязан быть в HTML ответа (страницы рендерит сервер статически, а не WebAssembly без пререндера).
     [Theory]
     [InlineData("/about", "ссылку-приглашение")]
+    [InlineData("/about", "href=\"/legal\"")]
+    [InlineData("/about", "Политика конфиденциальности")]
     [InlineData("/legal", "Chaosium Inc.")]
-    [InlineData("/legal", "Конфиденциальность")]
+    [InlineData("/legal", "Политика конфиденциальности")]
     public async Task Info_pages_are_open_without_sign_in_with_text_in_html(string address, string phrase)
     {
         var response = await app.CreateClient().GetAsync(address, Cancellation);
