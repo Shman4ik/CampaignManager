@@ -95,7 +95,7 @@ public sealed class CombatPanelTests : KitContext
         Assert.Contains("целится", cut.Markup, StringComparison.Ordinal);
     }
 
-    private sealed class SavingEncounters : IEncountersApi
+    internal sealed class SavingEncounters : IEncountersApi
     {
         private uint _version = 1;
 
@@ -115,7 +115,7 @@ public sealed class CombatPanelTests : KitContext
     }
 
     /// <summary>Листов в сцене нет — API листа звать некому.</summary>
-    private sealed class NoCharacters : ICharactersApi
+    internal sealed class NoCharacters : ICharactersApi
     {
         public Task<CharacterCreatedDto> CreateAsync(CreateCharacterRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CreationContextDto> GetCreationContextAsync(CharacterKind kind, Guid? campaignId, Guid? scenarioId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

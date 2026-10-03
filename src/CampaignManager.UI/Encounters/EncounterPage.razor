@@ -14,6 +14,7 @@
 @inject ICatalogApi<SkillDto> Skills
 @inject ICatalogApi<CreatureDto> Creatures
 @inject IScenariosApi Scenarios
+@inject IRunsApi Runs
 @inject BrowserStorage Storage
 @inject TimeProvider Time
 @inject NavigationManager Navigation
@@ -29,6 +30,11 @@
     <Actions>
         @* Одна кнопка настроения («Бой» / «Погоня»); сам плеер — слот «Плеер» шапки. *@
         <MusicPoolButton Pool="@MusicPool.Of([MoodTag])" Label="@MoodTag" Text="@EncounterText.Of(Kind)" />
+        @if (_scenarioLink is { } scenario)
+        {
+            @* Сцена идёт по прохождению сценария: назад в режим игры — одним касанием, не через «Сценарии → сценарий → партия». *@
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@scenario.Href" data-testid="to-scenario">К сценарию</Button>
+        }
     </Actions>
 </PageHeader>
 
@@ -59,7 +65,7 @@
     <ParticipantPicker Open="_pickerOpen" OnClose="() => _pickerOpen = false" Sources="_sources"
                        Context="@(new ParticipantPickerContext(_session.Encounter.CampaignId, _session.Catalog))"
                        UsedCharacterIds="UsedCharacterIds" OnPicked="AddParticipantsAsync"
-                       RunId="_session.Encounter.RunId" OnRunChosen="id => _session.SetRunAsync(id)" />
+                       RunId="_session.Encounter.RunId" OnRunChosen="SetRunAsync" />
 }
 
 @code {
@@ -75,6 +81,7 @@
     private bool _effectOpen;
     private string? _error;
     private string? _notice;
+    private (string Href, string Name)? _scenarioLink;
     private (uint Version, EncounterState State)? _draftChoice;
     private string _note = "";
     private Guid? _loadedFor;
@@ -134,7 +141,7 @@
 
     /// <summary>Под заголовком: кампания и этап («Расстановка», «Раунд 2 · ходит Хелен»); статус сохранения — только если что-то не так.</summary>
     private string? Subtitle => _session is { } session
-        ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
+        ? string.Join(" · ", new[] { session.Encounter.CampaignName ?? "Вне кампании", session.State.Chase?.Name, StageText(session.State), SaveProblem(session) }.Where(t => !string.IsNullOrEmpty(t)))
         : null;
 
     private static string StageText(EncounterState state) => state.Chase is { Phase: ChasePhase.Ended } ? ChaseText.Of(ChasePhase.Ended)
@@ -189,8 +196,8 @@
             if (match is not null)
             {
                 await OpenAsync(match.Id);
-                if (RunId is { } attach && _session is { Encounter.RunId: null } opened)
-                    await opened.SetRunAsync(attach);
+                if (RunId is { } attach && _session is { Encounter.RunId: null })
+                    await SetRunAsync(attach);
                 return;
             }
 
@@ -211,6 +218,35 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private static string RuleIcon(bool on) => on ? "fa-square-check" : "fa-square";
+
+    private static string RuleState(bool on) => on ? "включена" : "выключена";
+
+    private async Task SetRunAsync(Guid runId)
+    {
+        if (_session is null)
+            return;
+        await _session.SetRunAsync(runId);
+        await LoadScenarioLinkAsync();
+    }
+
+    /// <summary>Ссылка «К сценарию»: сценарий и партия — из списка прохождений кампании сцены; нет прохождения — нет ссылки.</summary>
+    private async Task LoadScenarioLinkAsync()
+    {
+        _scenarioLink = null;
+        if (_session?.Encounter is not { RunId: { } runId, CampaignId: { } campaignId })
+            return;
+        try
+        {
+            if ((await Runs.ListForCampaignAsync(campaignId)).FirstOrDefault(r => r.Id == runId) is { } run)
+                _scenarioLink = (ScenarioLinks.Play(run.ScenarioId, runId: run.Id), run.ScenarioName);
+        }
+        catch (HttpRequestException)
+        {
+            // Ссылка — удобство: не нашлась, сцена от этого не страдает.
         }
     }
 
@@ -250,6 +286,7 @@
         _loading = false;
         StateHasChanged();
         StartLoop();
+        await LoadScenarioLinkAsync();
         await session.RefreshFromSheetsAsync();
         await session.TickAsync();
     }
@@ -470,7 +507,7 @@
     /// <summary>«Завершить бой» / «Завершить погоню» — винительный падеж, имена здесь не склоняются, только вид сцены.</summary>
     private string FinishWord => Kind == EncounterKind.Combat ? "бой" : "погоню";
 
-    private static string RoundLabel(int round) => round == 0 ? "расстановка" : $"раунд {round}";
+    private static string StageLabel(int round, bool ended) => ended ? "окончена" : round == 0 ? "расстановка" : $"раунд {round}";
 
     private string NewWord => Kind == EncounterKind.Combat ? "Новый бой" : "Новая погоня";
 
@@ -636,6 +673,13 @@
                                 @if (AllowsMany)
                                 {
                                     <RowMenuItem Icon="fa-code-branch" OnClick="() => StartInAsync(session.Encounter.CampaignId)">Новая @FinishWord (разделились)</RowMenuItem>
+                                }
+                                @if (Kind == EncounterKind.Combat)
+                                {
+                                    @* Необязательные правила — настройка сцены, а не действие персонажа: живут здесь, а не во вкладке «Прочее». *@
+                                    <RowMenuItem Icon="@RuleIcon(state.Combat.InitiativeRolls)" OnClick="() => Change(s => s.Combat.InitiativeRolls = !s.Combat.InitiativeRolls)">Инициатива броском ЛВК: @RuleState(state.Combat.InitiativeRolls)</RowMenuItem>
+                                    <RowMenuItem Icon="@RuleIcon(state.Combat.CinematicKnockout)" OnClick="() => Change(s => s.Combat.CinematicKnockout = !s.Combat.CinematicKnockout)">Нокаут манёвром: @RuleState(state.Combat.CinematicKnockout)</RowMenuItem>
+                                    <RowMenuItem Icon="@RuleIcon(state.Combat.LuckToStayConscious)" OnClick="() => Change(s => s.Combat.LuckToStayConscious = !s.Combat.LuckToStayConscious)">Удача против обморока: @RuleState(state.Combat.LuckToStayConscious)</RowMenuItem>
                                 }
                                 <RowMenuItem Icon="fa-list" OnClick="@(() => Navigation.NavigateTo($"{Route}?list=1"))">Все сцены</RowMenuItem>
                             </ChildContent>
@@ -818,13 +862,13 @@
                     @* Открытая — не кнопка: переходить некуда. Вид кнопки — чтобы ряд читался одним переключателем. *@
                     <span class="cm-btn cm-btn-primary cursor-default" aria-current="true" data-testid="sibling-current">
                         <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, [.. session.State.Participants.Select(p => p.Name)]) · @RoundLabel(session.State.Round)</span>
+                        <span>Погоня @number: @SceneLabel(current.CampaignId, current.CampaignName, session.State.Chase?.Name, [.. session.State.Participants.Select(p => p.Name)]) · @StageLabel(session.State.Round, session.State.Chase is { Phase: ChasePhase.Ended })</span>
                     </span>
                 }
                 else
                 {
                     <Button Variant="ButtonVariant.Secondary" Href="@($"{Route}?id={item.Id}")" data-testid="sibling">
-                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.ParticipantNames) · @RoundLabel(item.Round)
+                        Погоня @number: @SceneLabel(item.CampaignId, item.CampaignName, item.Name, item.ParticipantNames) · @StageLabel(item.Round, item.Ended)
                     </Button>
                 }
             }
@@ -832,9 +876,10 @@
     };
 
     /// <summary>Подпись сцены в переключателе: кто в ней (первые трое), кампания — если она не та, что у открытой.</summary>
-    private string SceneLabel(Guid? campaignId, string? campaignName, IReadOnlyList<string> names)
+    private string SceneLabel(Guid? campaignId, string? campaignName, string? name, IReadOnlyList<string> names)
     {
-        var who = names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
+        var who = !string.IsNullOrWhiteSpace(name) ? name
+            : names.Count == 0 ? "без участников" : string.Join(", ", names.Take(3)) + (names.Count > 3 ? $" и ещё {names.Count - 3}" : "");
         return campaignId == _session?.Encounter.CampaignId ? who : $"{campaignName ?? "Вне кампании"}: {who}";
     }
 

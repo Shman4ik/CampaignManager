@@ -8,34 +8,39 @@
    ½ или ⅕, стр. 142) и бросок — RollInput, вписать или бросить; кости — те же, что возьмёт правило (ChaseActions.ActionDice).
    Состояние — в ChaseCheckInput панели: навык и значение переходят из действия в действие, бросок обнуляется. *@
 <div class="flex flex-col gap-2">
-    <div class="flex flex-wrap items-end gap-2">
-        @if (!FixedSkill)
-        {
-            <Field Label="Навык" class="w-full sm:w-56">
-                <select class="cm-input" value="@Input.Key" @onchange="SelectSkill" aria-label="@($"{Label}: навык")">
-                    @foreach (var option in ChaseSkills.Options(Catalog))
-                    {
-                        <option value="@option.Key">@option.Label</option>
-                    }
-                </select>
-            </Field>
-        }
-        <Field Label="@(FixedSkill ? Input.Label : "Значение")" class="w-28">
+    @* Значение — всегда на виду (подпись — навык действия), выбор другого навыка — под «Другой навык»: у стрельбы
+       было девять полей подряд, из них нужных на деле два — значение и бросок. *@
+    <div class="flex flex-wrap items-end gap-3">
+        <Field Label="@(Input.Label.Length > 0 ? Input.Label : "Значение")" class="w-full sm:w-56">
             <input type="number" inputmode="numeric" min="0" max="200" class="cm-input" aria-label="@($"{Label}: значение")"
                    value="@(Input.Value?.ToString(CultureInfo.InvariantCulture))" @onchange="SetValue" />
         </Field>
         @if (Participant.SourceCharacterId is null)
         {
-            <div class="mb-1 flex flex-wrap gap-1" role="group" aria-label="Нет навыка — от ЛВК">
-                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Capable)">ЛВК</Button>
-                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Uncertain)">½ ЛВК</Button>
-                <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Unlikely)">⅕ ЛВК</Button>
-            </div>
+            <Field Label="Нет навыка — взять от ЛВК" Group="true">
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Нет навыка — от ЛВК">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Capable)">ЛВК</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Uncertain)">½ ЛВК</Button>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="() => Substitute(SkillAptitude.Unlikely)">⅕ ЛВК</Button>
+                </div>
+            </Field>
         }
     </div>
-    @if (Participant.SourceCharacterId is null && !FixedSkill)
+    @if (!FixedSkill)
     {
-        <p class="cm-meta">Навыка у твари нет — ЛВК, если способность подразумевается; ½ — если неясно; ⅕ — если её нет.</p>
+        <details class="encounter-rolls" data-testid="chase-other-skill">
+            <summary><i class="fa-solid fa-sliders mr-2" aria-hidden="true"></i>Другой навык</summary>
+            <div class="mt-2">
+                <Field Label="Навык" class="w-full sm:w-72">
+                    <select class="cm-input" value="@Input.Key" @onchange="SelectSkill" aria-label="@($"{Label}: навык")">
+                        @foreach (var option in ChaseSkills.Options(Catalog))
+                        {
+                            <option value="@option.Key" selected="@(option.Key == Input.Key)">@option.Label</option>
+                        }
+                    </select>
+                </Field>
+            </div>
+        </details>
     }
     <Field Label="Бросок" Group="true">
         <RollInput Value="Input.Value" Difficulty="Difficulty" BonusDice="BonusDice" PenaltyDice="PenaltyDice" Label="@Label"

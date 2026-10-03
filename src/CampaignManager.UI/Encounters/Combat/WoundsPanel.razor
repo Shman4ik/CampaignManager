@@ -4,15 +4,28 @@
    листом; в v1 всё это жило в razor и правило участников мимо «Применить». Своей карточки не рисует. *@
 <div class="flex flex-col gap-4" data-testid="wounds-panel">
     <section class="flex flex-col gap-3">
-        <h3 class="font-semibold text-primary-900">Первая помощь и Медицина</h3>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field Label="Кто лечит">
-                <ParticipantSelect Participants="State.Participants" Where="p => !p.Dead && !p.Unconscious" Label="Кто лечит" Value="ActorId" ValueChanged="SelectActor" />
-            </Field>
-            <Field Label="Кого">
-                <ParticipantSelect Participants="State.Participants" Where="Wounded" Label="Пострадавший" Value="_patientId" ValueChanged="SelectPatient" />
-            </Field>
-        </div>
+        <h3 class="cm-card-title">Первая помощь и Медицина</h3>
+        <Field Label="Кто лечит">
+            <ParticipantSelect Participants="State.Participants" Where="p => !p.Dead && !p.Unconscious" Label="Кто лечит" Value="ActorId" ValueChanged="PickHealer" />
+        </Field>
+        @* Раненые — кнопками с ПЗ: список, а не выпадающий выбор вслепую («— выберите —» при ранах на столе). *@
+        <Field Label="Кого лечим" Group="true">
+            @if (State.Participants.Where(Wounded).ToList() is { Count: > 0 } wounded)
+            {
+                <div class="flex flex-wrap gap-2" data-testid="wounded-list">
+                    @foreach (var w in wounded)
+                    {
+                        <Button Small="true" Variant="@(w.Id == _patientId ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SelectPatient(w.Id)">
+                            @w.Name · ПЗ @w.HitPoints/@w.MaxHitPoints@(w.Dying ? " · при смерти" : "")
+                        </Button>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="cm-meta">Раненых нет.</p>
+            }
+        </Field>
         @if (Actor is { } healer && Patient is { } patient)
         {
             <p class="cm-meta">
@@ -21,14 +34,14 @@
             </p>
             <div class="flex flex-wrap items-start gap-4">
                 <div class="flex flex-col gap-2">
-                    <Field Label="Первая помощь" Group="true" Note="@(patient.Dying ? "умирающему — временная стабилизация" : "+1 ПЗ и в сознание")">
+                    <Field Label="Первая помощь" Group="true" Note="@(patient.Dying ? "умирающему — временная стабилизация" : "вернёт 1 ПЗ и сознание")">
                         <RollInput Label="Первая помощь" Value="healer.Profile.FirstAid" Roll="_firstAidRoll" RollChanged="r => _firstAidRoll = r" />
                     </Field>
                     @if (CombatRules.FirstAidBlockReason(patient) is { } noFirstAid)
                     {
                         <p class="cm-meta">@noFirstAid</p>
                     }
-                    <div><Button Small="true" Icon="fa-kit-medical" Disabled="@(CombatRules.FirstAidBlockReason(patient) is not null)" OnClick="FirstAidAsync" data-testid="first-aid">Первая помощь</Button></div>
+                    <div><Button Small="true" Icon="fa-kit-medical" Disabled="@(CombatRules.FirstAidBlockReason(patient) is not null)" OnClick="FirstAidAsync" data-testid="first-aid">Оказать первую помощь</Button></div>
                 </div>
                 <div class="flex flex-col gap-2">
                     <Field Label="Медицина" Group="true" Note="не меньше часа; не в тот же день — трудная">
@@ -51,7 +64,7 @@
     @if (Stabilized.Count > 0)
     {
         <section class="flex flex-col gap-2 border-t border-primary-200 pt-3">
-            <h3 class="font-semibold text-primary-900">Стабилизированные: ВЫН в конце каждого часа</h3>
+            <h3 class="cm-card-title">Стабилизированные: ВЫН в конце каждого часа</h3>
             <p class="cm-meta">Провал — временный ПЗ потерян, снова при смерти; успех — ждёт Медицину ещё час.</p>
             @foreach (var p in Stabilized)
             {
@@ -65,7 +78,7 @@
     }
 
     <section class="flex flex-col gap-3 border-t border-primary-200 pt-3">
-        <h3 class="font-semibold text-primary-900">Выздоровление</h3>
+        <h3 class="cm-card-title">Выздоровление</h3>
         <Field Label="Кто">
             <ParticipantSelect Participants="State.Participants" Where="p => !p.Dead && !p.Dying && p.HitPoints < p.MaxHitPoints" Label="Кто выздоравливает" Value="_recoveryId" ValueChanged="v => _recoveryId = v" />
         </Field>
@@ -92,7 +105,7 @@
             {
                 <div class="flex flex-wrap items-end gap-3">
                     <Field Label="Дней отдыха" class="w-28" Note="1 ПЗ в день">
-                        <input type="number" inputmode="numeric" min="1" class="cm-input cm-input-sm" value="@_days" @onchange="e => _days = int.TryParse(e.Value?.ToString(), out var d) && d > 0 ? d : 1" />
+                        <input type="number" inputmode="numeric" min="1" class="cm-input" value="@_days" @onchange="e => _days = int.TryParse(e.Value?.ToString(), out var d) && d > 0 ? d : 1" />
                     </Field>
                     <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-bed" OnClick="() => RestAsync(r)" class="mb-1">Отдых</Button>
                 </div>
@@ -119,12 +132,28 @@
     protected override void Follow()
     {
         base.Follow();
-        // Лечит тот, кто в сознании: у умирающего, чей ход, бинтовать некому — берём первого на ногах (лучшая Первая помощь).
-        if (Actor is null or { Dead: true } or { Unconscious: true } or { Dying: true })
+        // Лечит тот, кто в сознании и умеет: ход переходит к твари без Первой помощи — берём лучшего на ногах (если Хранитель
+        // не выбрал лекаря сам); у умирающего, чей ход, бинтовать некому.
+        var unfit = Actor is null or { Dead: true } or { Unconscious: true } or { Dying: true };
+        if (unfit || (_healerAuto && Actor is { Profile: { FirstAid: 0, Medicine: 0 } }))
+        {
+            _healerAuto = true;
             ActorId = State.Participants.Where(p => !p.Dead && !p.Unconscious && !p.Dying)
-                .OrderByDescending(p => p.Profile.FirstAid).FirstOrDefault()?.Id;
+                .OrderByDescending(p => Math.Max(p.Profile.FirstAid, p.Profile.Medicine)).FirstOrDefault()?.Id;
+        }
         if (Patient is null or { Dead: true })
             _patientId = State.Participants.Where(Wounded).OrderByDescending(p => p.Dying).FirstOrDefault()?.Id;
+        // «Кто выздоравливает» — тоже не пустое, пока в сцене есть кому: первый раненый не при смерти.
+        if (_recoveryId is null || State.Find(_recoveryId.Value) is not { Dead: false, Dying: false } current || current.HitPoints >= current.MaxHitPoints)
+            _recoveryId = State.Participants.FirstOrDefault(p => !p.Dead && !p.Dying && p.HitPoints < p.MaxHitPoints)?.Id;
+    }
+
+    private bool _healerAuto = true;
+
+    private void PickHealer(Guid? id)
+    {
+        _healerAuto = false;
+        SelectActor(id);
     }
 
     private void SelectPatient(Guid? id)

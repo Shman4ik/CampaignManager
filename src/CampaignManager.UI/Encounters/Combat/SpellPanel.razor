@@ -9,15 +9,29 @@
         </Field>
         @if (Actor is { Combat.Casting: null } picker)
         {
+            @* Одно поле вместо «выбор + название»: у заклинателя без заклинаний листа — сразу ввод названия. *@
             <Field Label="Заклинание">
-                <select class="cm-input" aria-label="Заклинание" data-testid="spell-select" value="@_spellIndex" @onchange="SelectSpell">
-                    <option value="-1">— своё —</option>
-                    @for (var i = 0; i < picker.Profile.Spells.Count; i++)
-                    {
-                        <option value="@i">@picker.Profile.Spells[i].Name</option>
-                    }
-                </select>
+                @if (picker.Profile.Spells.Count > 0)
+                {
+                    <select class="cm-input" aria-label="Заклинание" data-testid="spell-select" value="@_spellIndex" @onchange="SelectSpell">
+                        @for (var i = 0; i < picker.Profile.Spells.Count; i++)
+                        {
+                            <option value="@i" selected="@(i == _spellIndex)">@picker.Profile.Spells[i].Name</option>
+                        }
+                        <option value="-1" selected="@(_spellIndex < 0)">— своё, впишу название —</option>
+                    </select>
+                }
+                else
+                {
+                    <input class="cm-input" aria-label="Название заклинания" placeholder="Название" value="@_name" @onchange="SetName" data-testid="spell-name" />
+                }
             </Field>
+            @if (picker.Profile.Spells.Count > 0 && _spellIndex < 0)
+            {
+                <Field Label="Название" class="sm:col-span-2">
+                    <input class="cm-input" aria-label="Название заклинания" value="@_name" @onchange="SetName" data-testid="spell-name" />
+                </Field>
+            }
         }
     </div>
 
@@ -38,28 +52,24 @@
     }
     else if (Actor is { } actor)
     {
-        @if (_spellIndex < 0)
-        {
-            <Field Label="Название"><input class="cm-input" value="@_name" @onchange="SetName" /></Field>
-        }
-        else if (Spell is { } spell)
+        @if (Spell is { } spell)
         {
             <p class="cm-meta">Цена по книге: @(string.IsNullOrWhiteSpace(spell.Cost) ? "—" : spell.Cost) · время: @(string.IsNullOrWhiteSpace(spell.CastingTime) ? "—" : spell.CastingTime)</p>
         }
-        <div class="flex flex-wrap items-end gap-3">
+        <div class="grid grid-cols-2 items-start gap-3 sm:grid-cols-5">
             @CostField("ПМ", _mp, _mpFormula, v => _mp = v)
             @CostField("Рассудок", _san, _sanFormula, v => _san = v)
             @CostField("МОЩ", _pow, _powFormula, v => _pow = v)
             @CostField("ПЗ", _hp, _hpFormula, v => _hp = v)
-            <Field Label="Раундов сотворения" class="w-32" Note="0 — мгновенно">
-                <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" value="@_rounds" @onchange="e => _rounds = int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : 1" />
+            <Field Label="Раундов" Note="0 — сразу">
+                <input type="number" inputmode="numeric" min="0" class="cm-input" value="@_rounds" @onchange="e => _rounds = int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : 1" aria-label="Раундов сотворения (0 — мгновенно)" />
             </Field>
         </div>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field Label="Цель (необязательно)">
+        <div class="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+            <Field Label="Цель">
                 <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId" Label="Цель заклинания" Placeholder="— без цели —" Value="_targetId" ValueChanged="v => _targetId = v" />
             </Field>
-            <div class="flex flex-col gap-1 pt-1 text-sm">
+            <div class="flex flex-col text-sm sm:pt-6">
                 <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" checked="@_resists" @onchange="e => _resists = e.Value is true" disabled="@(_targetId is null)" /> Цель сопротивляется МОЩ</label>
                 @if (actor.Kind == ParticipantKind.Investigator)
                 {
@@ -73,7 +83,7 @@
         </div>
         @Rolls(actor)
         <div>
-            <Button Icon="fa-wand-sparkles" Disabled="@(SpellName.Length == 0)" OnClick="CastAsync" data-testid="spell-cast">
+            <Button Icon="fa-wand-sparkles" Disabled="@(SpellName.Length == 0)" DisabledReason="@(SpellName.Length == 0 ? "Не хватает: название заклинания" : null)" OnClick="CastAsync" data-testid="spell-cast">
                 @(_rounds >= 2 ? "Начать сотворение" : "Сотворить")
             </Button>
         </div>
@@ -154,9 +164,9 @@
     }
 
     private RenderFragment CostField(string label, int value, string? formula, Action<int> set) =>
-        @<Field Label="@label" class="w-28" Note="@(formula is null ? null : $"по книге {formula}")">
+        @<Field Label="@label" Note="@(formula is null ? null : $"по книге {formula}")">
             <div class="flex items-center gap-1">
-                <input type="number" inputmode="numeric" min="0" class="cm-input cm-input-sm" aria-label="@($"Цена: {label}")" value="@value"
+                <input type="number" inputmode="numeric" min="0" class="cm-input" aria-label="@($"Цена: {label}")" value="@value"
                        @onchange="e => set(int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : 0)" />
                 @if (formula is not null)
                 {
@@ -168,7 +178,7 @@
 
     private RenderFragment Rolls(EncounterParticipant caster) =>
         @<details class="encounter-rolls">
-            <summary>Броски со стола (необязательно)</summary>
+            <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Вписать броски с костей</summary>
             <div class="mt-2 flex flex-col gap-3">
                 @if (_firstCast)
                 {

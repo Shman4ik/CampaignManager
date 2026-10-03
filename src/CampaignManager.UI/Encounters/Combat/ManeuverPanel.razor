@@ -1,18 +1,19 @@
-@* Манёвр (стр. 103): разоружить, сбить с ног, захват, толкнуть, вырваться, невыгодное положение; нокаут — необязательное
+@* Манёвр (стр. 103; подписи те же, что у «Атаки»: «Кто действует», «Цель»; навык и защита — в «Дополнительно»): разоружить, сбить с ног, захват, толкнуть, вырваться, невыгодное положение; нокаут — необязательное
    правило (стр. 123). Комплекция — из снимков: разница 3+ — невозможно, меньше — штрафные кости. Правила —
    CombatRules.Maneuver. Своей карточки не рисует. *@
 <div class="flex flex-col gap-3" data-testid="maneuver-panel">
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field Label="Кто">
+        <Field Label="Кто действует">
             <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто выполняет манёвр" Value="ActorId" ValueChanged="SelectActor" />
         </Field>
-        <Field Label="Против кого">
+        <Field Label="Цель">
             <ParticipantSelect Participants="State.Participants" Where="p => p.Id != ActorId && !p.Dead" Label="Цель манёвра" Value="_targetId" ValueChanged="v => _targetId = v" />
         </Field>
     </div>
 
     <Field Label="Манёвр" Group="true">
-        <div class="flex flex-wrap gap-2">
+        @* Сеткой, а не строкой с переносом: «Невыгодное положение» не остаётся одиноко на второй строке. *@
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             @foreach (var type in Types)
             {
                 <Button Small="true" Variant="@(type == _type ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _type = type">@CombatRules.NameOf(type)</Button>
@@ -23,31 +24,38 @@
     @if (Actor is { } actor && Target is { } target)
     {
         var gap = target.Stats.Build - actor.Stats.Build;
-        <p class="cm-meta">
-            Комплекция @actor.Name @actor.Stats.Build, @target.Name @target.Stats.Build:
-            @(gap >= 3 ? "разница 3 и больше — манёвр невозможен" : gap > 0 ? $"штрафных костей {Math.Min(gap, 2)}" : "без штрафа").
-        </p>
-        <div class="flex flex-wrap gap-4">
-            <Field Label="Навык манёвра" Group="true">
-                <select class="cm-input" aria-label="Навык манёвра" value="@_skillKey" @onchange="e => _skillKey = e.Value?.ToString()">
-                    @foreach (var attack in actor.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Maneuver))
-                    {
-                        <option value="@attack.Key">@attack.Name — @attack.Skill%</option>
-                    }
-                </select>
-            </Field>
-            <Field Label="Цель защищается" Group="true">
-                <div class="flex flex-wrap gap-2">
-                    <Button Small="true" Variant="@(_reaction == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
-                    <Button Small="true" Variant="@(_reaction == DefenseReaction.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
-                </div>
-            </Field>
-            <Field Label="Кости Хранителя" Group="true">
-                <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
-            </Field>
-        </div>
+        if (gap >= 3)
+        {
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0">Манёвр невозможен: @target.Name крупнее на @gap (комплекция @target.Stats.Build против @actor.Stats.Build).</Alert>
+        }
+        else if (gap > 0)
+        {
+            <p class="cm-meta">@target.Name крупнее: штрафных костей @Math.Min(gap, 2) (комплекция @target.Stats.Build против @actor.Stats.Build).</p>
+        }
+        <details class="encounter-rolls" data-testid="maneuver-extra">
+            <summary><i class="fa-solid fa-sliders mr-2" aria-hidden="true"></i>Дополнительно</summary>
+            <div class="mt-2 flex flex-wrap gap-4">
+                <Field Label="Навык манёвра" Group="true">
+                    <select class="cm-input" aria-label="Навык манёвра" value="@_skillKey" @onchange="e => _skillKey = e.Value?.ToString()">
+                        @foreach (var attack in actor.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Maneuver))
+                        {
+                            <option value="@attack.Key" selected="@(attack.Key == _skillKey)">@attack.Name — @attack.Skill%</option>
+                        }
+                    </select>
+                </Field>
+                <Field Label="Цель защищается" Group="true">
+                    <div class="flex flex-wrap gap-2">
+                        <Button Small="true" Variant="@(_reaction == DefenseReaction.Dodge ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.Dodge">Уклонение</Button>
+                        <Button Small="true" Variant="@(_reaction == DefenseReaction.FightBack ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => _reaction = DefenseReaction.FightBack">Контратака</Button>
+                    </div>
+                </Field>
+                <Field Label="Кости Хранителя" Group="true">
+                    <ExtraDicePicker Value="_net" ValueChanged="v => _net = v" />
+                </Field>
+            </div>
+        </details>
         <details class="encounter-rolls">
-            <summary>Броски со стола (необязательно)</summary>
+            <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Вписать броски с костей</summary>
             <div class="mt-2 flex flex-col gap-3">
                 <Field Label="Манёвр" Group="true">
                     <RollInput Label="Манёвр" Value="@Skill(actor)" BonusDice="@Split(_net).Bonus" PenaltyDice="@(Split(_net).Penalty + Math.Clamp(gap, 0, 2))"
@@ -61,7 +69,8 @@
     }
 
     <div>
-        <Button Icon="fa-people-pulling" Disabled="@(Actor is null || Target is null)" OnClick="ResolveAsync" data-testid="maneuver-resolve">Провести манёвр</Button>
+        <Button Icon="fa-people-pulling" Disabled="@(Actor is null || Target is null)" DisabledReason="@(Actor is null ? "Выберите, кто действует" : Target is null ? "Выберите цель" : null)"
+                OnClick="ResolveAsync" data-testid="maneuver-resolve">Провести манёвр</Button>
     </div>
 </div>
 
