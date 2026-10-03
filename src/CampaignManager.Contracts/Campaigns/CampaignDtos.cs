@@ -24,15 +24,50 @@ public sealed record CampaignSummaryDto(
     bool CanEdit,
     bool CanDelete);
 
-/// <summary>Кампания с участниками.</summary>
+/// <summary>Кампания с участниками, их сыщиками, НПС, прохождениями и последней встречей.</summary>
 /// <param name="CanLeave">Я игрок этой кампании и могу выйти. Хранитель выйти не может — кампания без него не живёт.</param>
+/// <param name="Npcs">НПС кампании — только тому, кто её правит (Хранитель, администратор); игроку пусто.</param>
+/// <param name="Runs">Прохождения сценариев в кампании, новые сверху — только тому, кто её правит: название сценария игроку
+/// может спойлерить (игроку их показывает «Журнал» — по встречам, которые Хранитель привязал).</param>
+/// <param name="LastSession">Последняя встреча журнала (по дате, затем по номеру); <c>null</c> — журнал пуст.</param>
 public sealed record CampaignDetailsDto(
     CampaignSummaryDto Campaign,
     IReadOnlyList<CampaignMemberDto> Members,
-    bool CanLeave);
+    bool CanLeave,
+    IReadOnlyList<HomeCharacterDto> Npcs,
+    IReadOnlyList<CampaignRunDto> Runs,
+    CampaignLastSessionDto? LastSession);
+
+/// <summary>Прохождение сценария в кампании — строка на странице кампании.</summary>
+public sealed record CampaignRunDto(
+    Guid RunId,
+    Guid ScenarioId,
+    string ScenarioName,
+    ScenarioRunStatus Status,
+    DateTimeOffset? ScheduledAt,
+    bool SignupOpen);
+
+public sealed record CampaignLastSessionDto(Guid Id, int Number, DateOnly SessionDate, string? Title);
+
+/// <summary>
+/// Что видит человек, открывший ссылку-приглашение: кампания, куда можно вступить. Почт нет — Хранитель по имени.
+/// </summary>
+/// <param name="IsMember">Я уже участник — вступать не нужно, страница откроет кампанию.</param>
+/// <param name="CanJoin">Вступить можно: кампания не завершена и меня в ней нет.</param>
+public sealed record CampaignInviteDto(
+    Guid Id,
+    string Name,
+    CampaignKind Kind,
+    CampaignStatus Status,
+    Era Era,
+    string? KeeperName,
+    int PlayerCount,
+    bool IsMember,
+    bool CanJoin);
 
 /// <param name="Name">Как участника видят в этой кампании: псевдоним, иначе имя; <c>null</c> — показать нечего.</param>
 /// <param name="Alias">Псевдоним в этой кампании; <c>null</c> — используется имя из профиля.</param>
+/// <param name="Characters">Его сыщики в этой кампании: Хранителю и администратору все листы, игроку — только его активный.</param>
 /// <param name="CanRename">Мне можно сменить его псевдоним: свой — всегда, чужой — Хранителю кампании.</param>
 /// <param name="CanRemove">Мне можно исключить его: игрока — Хранителю кампании.</param>
 public sealed record CampaignMemberDto(
@@ -43,7 +78,8 @@ public sealed record CampaignMemberDto(
     DateTimeOffset JoinedAt,
     bool IsMe,
     bool CanRename,
-    bool CanRemove);
+    bool CanRemove,
+    IReadOnlyList<HomeCharacterDto> Characters);
 
 /// <summary>Одна форма на создание и правку.</summary>
 public sealed record CampaignInput(string Name, CampaignKind Kind, CampaignStatus Status, Era Era);

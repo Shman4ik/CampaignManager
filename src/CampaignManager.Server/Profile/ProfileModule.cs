@@ -25,6 +25,12 @@ public static class ProfileModule
         app.MapPost(ProfileRoutes.KeeperApplication, (SubmitKeeperApplicationRequest request, ProfileService profile, CancellationToken ct) =>
                 profile.SubmitKeeperApplicationAsync(request, ct))
             .RequireAuthorization().WithName("SubmitKeeperApplication").WithTags(Tag);
+        app.MapPut(ProfileRoutes.KeeperApplication, (SubmitKeeperApplicationRequest request, ProfileService profile, CancellationToken ct) =>
+                profile.UpdateKeeperApplicationAsync(request, ct))
+            .RequireAuthorization().WithName("UpdateKeeperApplication").WithTags(Tag);
+        app.MapDelete(ProfileRoutes.KeeperApplication, (ProfileService profile, CancellationToken ct) =>
+                profile.WithdrawKeeperApplicationAsync(ct))
+            .RequireAuthorization().WithName("WithdrawKeeperApplication").WithTags(Tag);
 
         app.MapGet(ProfileRoutes.Preferences, (ProfileService profile, CancellationToken ct) => profile.GetPreferencesAsync(ct))
             .RequireAuthorization().WithName("GetPreferences").WithTags(Tag);

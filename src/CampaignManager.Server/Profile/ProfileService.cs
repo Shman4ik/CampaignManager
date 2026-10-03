@@ -127,6 +127,55 @@ public sealed class ProfileService(
             ApiProblemException.Conflict("Заявка уже отправлена и ждёт рассмотрения.");
     }
 
+    /// <summary>
+    /// Переписать текст своей заявки, пока она на рассмотрении. Условие «на рассмотрении» — в самом запросе:
+    /// если администратор успел решить, обновится ноль строк и игрок получит 409, а не молчаливую правку
+    /// уже рассмотренной заявки.
+    /// </summary>
+    public async Task<ProfileDto> UpdateKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken)
+    {
+        var me = await RequireUserAsync(cancellationToken);
+        var message = request.Message?.Trim() ?? "";
+        if (message.Length > ProfileLimits.ApplicationMessageLength)
+        {
+            throw ApiProblemException.Invalid($"Текст заявки — не длиннее {ProfileLimits.ApplicationMessageLength} символов.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var changed = await dbContext.KeeperApplications
+            .Where(a => a.UserId == me.Id && a.Status == KeeperApplicationStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.Message, message).SetProperty(a => a.UpdatedAt, now), cancellationToken);
+        if (changed == 0)
+        {
+            throw NotPending();
+        }
+
+        logger.LogInformation("Пользователь {UserId} дописал заявку на роль Хранителя", me.Id);
+        return await GetAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Отозвать свою заявку на рассмотрении. Строка удаляется (а не получает новый статус): так не нужна миграция
+    /// CHECK по статусам, а «отозвана» ничего не решает — подать заявку снова можно сразу.
+    /// </summary>
+    public async Task<ProfileDto> WithdrawKeeperApplicationAsync(CancellationToken cancellationToken)
+    {
+        var me = await RequireUserAsync(cancellationToken);
+        var deleted = await dbContext.KeeperApplications
+            .Where(a => a.UserId == me.Id && a.Status == KeeperApplicationStatus.Pending)
+            .ExecuteDeleteAsync(cancellationToken);
+        if (deleted == 0)
+        {
+            throw NotPending();
+        }
+
+        logger.LogInformation("Пользователь {UserId} отозвал заявку на роль Хранителя", me.Id);
+        return await GetAsync(cancellationToken);
+    }
+
+    private static ApiProblemException NotPending() =>
+        ApiProblemException.Conflict("Заявки на рассмотрении нет: её уже рассмотрели или отозвали.");
+
     public async Task<PreferencesDto> GetPreferencesAsync(CancellationToken cancellationToken)
     {
         var me = await RequireUserAsync(cancellationToken);

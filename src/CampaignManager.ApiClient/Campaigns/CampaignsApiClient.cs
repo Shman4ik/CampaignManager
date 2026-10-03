@@ -44,6 +44,12 @@ public sealed class CampaignsApiClient(HttpClient http) : ICampaignsApi
         await ApiResponses.EnsureSuccessAsync(response, cancellationToken);
     }
 
+    public async Task<CampaignInviteDto> GetInviteAsync(Guid campaignId, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync(CampaignsRoutes.Invite(campaignId), cancellationToken);
+        return await ApiResponses.ReadAsync(response, Json.CampaignInviteDto, cancellationToken);
+    }
+
     public async Task<CampaignDetailsDto> JoinAsync(Guid campaignId, JoinCampaignRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await http.PostAsJsonAsync(CampaignsRoutes.Join(campaignId), request, Json.JoinCampaignRequest, cancellationToken);

@@ -103,6 +103,74 @@ public sealed class ProfileApiTests(CampaignsApp app) : IClassFixture<CampaignsA
         Assert.Equal("Дмитрий", (await Api(player).GetProfileAsync(Cancellation)).DisplayName);
     }
 
+    // UX-2 X1: пока заявку не рассмотрели, игрок дописывает текст или отзывает её; рассмотренную - нельзя.
+    [Fact]
+    public async Task Player_edits_and_withdraws_pending_application_and_can_apply_again()
+    {
+        TestDatabase.SkipIfMissing();
+        var player = await app.AddUserAsync(UserRole.Player, "Соискатель");
+        var other = await app.AddUserAsync(UserRole.Player, "Другой");
+        await Api(player).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Хочу вести"), Cancellation);
+        await Api(other).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Чужая"), Cancellation);
+
+        var edited = await Api(player).UpdateKeeperApplicationAsync(new SubmitKeeperApplicationRequest("  Хочу вести «Маски»  "), Cancellation);
+
+        var application = Assert.IsType<MyKeeperApplicationDto>(edited.LatestApplication);
+        Assert.Equal(KeeperApplicationStatus.Pending, application.Status);
+        Assert.Equal("Хочу вести «Маски»", application.Message);
+        Assert.Equal("Чужая", (await Api(other).GetProfileAsync(Cancellation)).LatestApplication!.Message);
+
+        var withdrawn = await Api(player).WithdrawKeeperApplicationAsync(Cancellation);
+
+        Assert.Null(withdrawn.LatestApplication);
+        Assert.True(withdrawn.CanApply);
+        Assert.NotNull((await Api(other).GetProfileAsync(Cancellation)).LatestApplication);
+        await ApiAssert.FailsWith(HttpStatusCode.Conflict, () => Api(player).WithdrawKeeperApplicationAsync(Cancellation));
+        await ApiAssert.FailsWith(HttpStatusCode.Conflict,
+            () => Api(player).UpdateKeeperApplicationAsync(new SubmitKeeperApplicationRequest("ещё"), Cancellation));
+        Assert.NotNull((await Api(player).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Снова"), Cancellation)).LatestApplication);
+    }
+
+    [Fact]
+    public async Task Reviewed_application_cannot_be_edited_or_withdrawn_and_text_is_limited()
+    {
+        TestDatabase.SkipIfMissing();
+        var admin = await app.AddUserAsync(UserRole.Admin);
+        var player = await app.AddUserAsync(UserRole.Player);
+        var rejected = await app.AddUserAsync(UserRole.Player);
+        var submitted = await Api(player).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Хочу"), Cancellation);
+        var second = await Api(rejected).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Хочу"), Cancellation);
+        var adminApi = new CampaignManager.ApiClient.Admin.AdminApiClient(app.Http(admin));
+        await adminApi.ApproveAsync(submitted.LatestApplication!.Id, Cancellation);
+        await adminApi.RejectAsync(second.LatestApplication!.Id, "Позже", Cancellation);
+
+        foreach (var user in new[] { player, rejected })
+        {
+            await ApiAssert.FailsWith(HttpStatusCode.Conflict,
+                () => Api(user).UpdateKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Поздно"), Cancellation));
+            await ApiAssert.FailsWith(HttpStatusCode.Conflict, () => Api(user).WithdrawKeeperApplicationAsync(Cancellation));
+        }
+
+        // Отклонённая остаётся в истории: её комментарий игрок видит.
+        Assert.Equal("Позже", (await Api(rejected).GetProfileAsync(Cancellation)).LatestApplication!.ReviewComment);
+
+        var pending = await app.AddUserAsync(UserRole.Player);
+        await Api(pending).SubmitKeeperApplicationAsync(new SubmitKeeperApplicationRequest("Хочу"), Cancellation);
+        await ApiAssert.FailsWith(HttpStatusCode.BadRequest, () => Api(pending).UpdateKeeperApplicationAsync(
+            new SubmitKeeperApplicationRequest(new string('а', ProfileLimits.ApplicationMessageLength + 1)), Cancellation));
+    }
+
+    [Fact]
+    public async Task Anonymous_cannot_edit_or_withdraw_application()
+    {
+        TestDatabase.SkipIfMissing();
+        var anonymous = new ProfileApiClient(app.CreateClient());
+
+        await ApiAssert.FailsWith(HttpStatusCode.Unauthorized, () => anonymous.WithdrawKeeperApplicationAsync(Cancellation));
+        await ApiAssert.FailsWith(HttpStatusCode.Unauthorized,
+            () => anonymous.UpdateKeeperApplicationAsync(new SubmitKeeperApplicationRequest("x"), Cancellation));
+    }
+
     [Fact]
     public async Task Player_applies_once_while_pending()
     {

@@ -1,6 +1,7 @@
 using CampaignManager.Contracts.Campaigns;
 using CampaignManager.Core;
 using CampaignManager.Core.Campaigns;
+using CampaignManager.Core.Characters;
 using CampaignManager.Data;
 using CampaignManager.Data.Campaigns;
 using CampaignManager.Server.Access;
@@ -54,6 +55,20 @@ public sealed class CampaignService(
             })
             .ToListAsync(cancellationToken);
 
+        // Листы — без документа (имя и профессия — generated-колонки). Правило то же, что у главной и у
+        // AccessPolicy.ForCharacter: тот, кто правит кампанию, видит все листы игроков и НПС; игрок — только
+        // свой активный (чужие листы ему не открываются, значит и называть их незачем).
+        var canEdit = campaign.CanEdit;
+        var sheets = await dbContext.Characters
+            .Where(ch => ch.CampaignId == campaignId
+                         && ((ch.Kind == CharacterKind.Player && (canEdit || (ch.OwnerId == user.Id && ch.Status == CharacterStatus.Active)))
+                             || (ch.Kind == CharacterKind.Npc && canEdit)))
+            .OrderBy(ch => ch.CreatedAt)
+            .Select(ch => new { ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status, ch.OwnerId })
+            .ToListAsync(cancellationToken);
+        static HomeCharacterDto Sheet(Guid id, string? name, string? occupation, CharacterKind kind, CharacterStatus status) =>
+            HomeService.Character(id, name, occupation, kind, status);
+
         var campaignAccess = new Access.Access(CanRead: true, campaign.CanEdit, campaign.CanDelete);
         List<CampaignMemberDto> dtos =
         [
@@ -61,11 +76,65 @@ public sealed class CampaignService(
             {
                 var memberAccess = AccessPolicy.ForMember(user, campaignAccess, m.UserId, m.Role);
                 return new CampaignMemberDto(m.UserId, PublicNames.Of(m.DisplayName, m.UserName), m.DisplayName, m.Role, m.JoinedAt,
-                    IsMe: m.UserId == user.Id, memberAccess.CanEdit, memberAccess.CanDelete);
+                    IsMe: m.UserId == user.Id, memberAccess.CanEdit, memberAccess.CanDelete,
+                    [
+                        .. sheets.Where(ch => ch.Kind == CharacterKind.Player && ch.OwnerId == m.UserId)
+                            .Select(ch => Sheet(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status)),
+                    ]);
             }),
         ];
 
-        return new CampaignDetailsDto(campaign, dtos, CanLeave: campaign.MyRole is CampaignRole.Player);
+        // Прохождения — тому, кто правит: название сценария игроку не показываем (спойлер), как и в форме встречи.
+        List<CampaignRunDto> runs = canEdit
+            ? await dbContext.ScenarioRuns
+                .Where(r => r.CampaignId == campaignId)
+                .OrderByDescending(r => r.ScheduledAt ?? r.CreatedAt)
+                .Select(r => new CampaignRunDto(
+                    r.Id,
+                    r.ScenarioId,
+                    dbContext.Scenarios.Where(sc => sc.Id == r.ScenarioId).Select(sc => sc.Name).First(),
+                    r.Status,
+                    r.ScheduledAt,
+                    r.SignupOpen))
+                .ToListAsync(cancellationToken)
+            : [];
+
+        // Сортировка «дата, затем номер» — в памяти, как в журнале: EF не сортирует по полям record-проекции.
+        var lastSession = (await dbContext.CampaignSessions
+                .Where(cs => cs.CampaignId == campaignId)
+                .Select(cs => new { cs.Id, cs.Number, cs.SessionDate, cs.Title })
+                .ToListAsync(cancellationToken))
+            .OrderByDescending(cs => cs.SessionDate).ThenByDescending(cs => cs.Number)
+            .Select(cs => new CampaignLastSessionDto(cs.Id, cs.Number, cs.SessionDate, cs.Title))
+            .FirstOrDefault();
+
+        return new CampaignDetailsDto(
+            campaign,
+            dtos,
+            CanLeave: campaign.MyRole is CampaignRole.Player,
+            [.. sheets.Where(ch => ch.Kind == CharacterKind.Npc).Select(ch => Sheet(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status))],
+            runs,
+            lastSession);
+    }
+
+    /// <summary>
+    /// Ссылка-приглашение: имя кампании, Хранитель, число игроков и «вступить можно». Видна любому вошедшему, пока
+    /// кампания не завершена (так же, как её видно на главной в «Можно вступить»); участнику — и после завершения.
+    /// Иначе 404 — кампании нет или её не видно, неразличимо.
+    /// </summary>
+    public async Task<CampaignInviteDto> GetInviteAsync(Guid campaignId, CancellationToken cancellationToken)
+    {
+        var user = await RequireUserAsync(cancellationToken);
+        var row = await Summaries(dbContext.Campaigns.Where(c => c.Id == campaignId), user.Id)
+            .SingleOrDefaultAsync(cancellationToken) ?? throw AccessDeniedException.NotFound();
+        var isMember = row.MyRole is not null;
+        if (row.Status == CampaignStatus.Completed && !isMember)
+        {
+            throw AccessDeniedException.NotFound();
+        }
+
+        return new CampaignInviteDto(row.Id, row.Name, row.Kind, row.Status, row.Era, PublicNames.Of(row.KeeperAlias, row.KeeperName),
+            row.PlayerCount, isMember, CanJoin: !isMember && row.Status != CampaignStatus.Completed);
     }
 
     /// <summary>Только Хранитель по роли (в v1 — кто угодно); создатель — Хранитель-участник кампании.</summary>

@@ -33,6 +33,7 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CampaignSummaryDto))]
 [JsonSerializable(typeof(CampaignDetailsDto))]
 [JsonSerializable(typeof(CampaignMemberDto))]
+[JsonSerializable(typeof(CampaignInviteDto))]
 [JsonSerializable(typeof(CampaignInput))]
 [JsonSerializable(typeof(JoinCampaignRequest))]
 [JsonSerializable(typeof(UpdateMemberRequest))]

@@ -37,6 +37,7 @@ internal static class TableFakes
         public Task<CampaignSummaryDto> CreateCampaignAsync(CampaignInput input, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CampaignSummaryDto> UpdateCampaignAsync(Guid campaignId, CampaignInput input, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeleteCampaignAsync(Guid campaignId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<CampaignInviteDto> GetInviteAsync(Guid campaignId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CampaignDetailsDto> JoinAsync(Guid campaignId, JoinCampaignRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<CampaignMemberDto> UpdateMemberAsync(Guid campaignId, Guid userId, UpdateMemberRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task RemoveMemberAsync(Guid campaignId, Guid userId, CancellationToken cancellationToken = default) => throw new NotSupportedException();

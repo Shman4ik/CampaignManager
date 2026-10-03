@@ -15,6 +15,12 @@ public interface IProfileApi
 
     Task<ProfileDto> SubmitKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>Переписать текст заявки, пока она на рассмотрении; рассмотренной (или без заявки) — 409.</summary>
+    Task<ProfileDto> UpdateKeeperApplicationAsync(SubmitKeeperApplicationRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Отозвать заявку на рассмотрении: строка удаляется, подать новую можно сразу. Рассмотренную отозвать нельзя — 409.</summary>
+    Task<ProfileDto> WithdrawKeeperApplicationAsync(CancellationToken cancellationToken = default);
+
     Task<PreferencesDto> GetPreferencesAsync(CancellationToken cancellationToken = default);
 
     Task SetPreferenceAsync(string key, JsonElement value, CancellationToken cancellationToken = default);

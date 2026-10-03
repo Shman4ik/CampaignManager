@@ -1,0 +1,111 @@
+@page "/join/{CampaignId:guid}"
+@attribute [Authorize]
+@using System.Security.Claims
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.UI.Platform
+@inject ICampaignsApi Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+@* Ссылка-приглашение («Пригласить» на странице кампании). Вошедшему показывает, куда его зовут, и даёт вступить;
+   участнику сразу открывает кампанию. Не вошедшего приложение отправит на вход и вернёт сюда. Кампании нет или она
+   завершена — 404 сервера: «приглашение недействительно». Вступление — тот же JoinAsync, что и на главной. *@
+<PageHeader Title="Приглашение" DocumentTitle="Приглашение в кампанию" />
+
+<div class="cm-page">
+        <AsyncContent Key="CampaignId" Load="LoadAsync" LoadingMessage="Открываю приглашение…" Context="invite" ErrorTitle="Приглашение недоступно">
+            <Empty>
+                <EmptyState Icon="fa-link-slash" Title="Приглашение недействительно."
+                            Message="Кампании нет или она уже завершена. Попросите Хранителя прислать новую ссылку.">
+                    <Actions><Button Href="" Icon="fa-house">На главную</Button></Actions>
+                </EmptyState>
+            </Empty>
+            <ChildContent>
+                <section class="cm-section" aria-label="Приглашение">
+                    <div class="cm-card">
+                        <div class="cm-card-body cm-stack">
+                            <div>
+                                <h2 class="cm-card-title" data-testid="invite-name">@invite!.Name</h2>
+                                <p class="text-sm text-primary-500">
+                                    @CampaignLabels.Kind(invite.Kind) · @CampaignLabels.Era(invite.Era) · @CampaignLabels.Status(invite.Status)
+                                </p>
+                            </div>
+                            <div class="cm-meta">
+                                @if (invite.KeeperName is { } keeper)
+                                {
+                                    <span><span class="cm-meta-label">Хранитель:</span> @keeper</span>
+                                }
+                                <span><span class="cm-meta-label">Игроков:</span> @invite.PlayerCount</span>
+                            </div>
+                            <p class="text-sm text-primary-600">Вас пригласили в эту кампанию. Вступив, вы увидите журнал и сможете завести сыщика.</p>
+                            <div class="cm-btn-row">
+                                <Button Icon="fa-right-to-bracket" OnClick="() => _joining = true">Вступить</Button>
+                                <Button Variant="ButtonVariant.Secondary" Href="">Не сейчас</Button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                <AuthorizeView>
+                    <MemberNameModal Open="_joining" Title="@($"Вступить: {invite.Name}")" ConfirmText="Вступить"
+                                     Value="@ProfileName(context.User)" ProfileName="@ProfileName(context.User)"
+                                     Busy="_busy" Error="@_error" OnSave="JoinAsync" OnClose="() => _joining = false" />
+                </AuthorizeView>
+            </ChildContent>
+        </AsyncContent>
+</div>
+
+@code {
+    [Parameter] public Guid CampaignId { get; set; }
+
+    private bool _joining;
+    private bool _busy;
+    private string? _error;
+
+    /// <summary>Имя профиля для поля «Имя в кампании»; почту не подставляем.</summary>
+    private static string? ProfileName(ClaimsPrincipal user) =>
+        user.Identity?.Name is { } name && !name.Contains('@', StringComparison.Ordinal) ? name : null;
+
+    /// <summary>
+    /// Участнику страница не нужна — уходим в кампанию. Закрытая (404) приглашением не является — пустое место, не ошибка.
+    /// Вступить нельзя, хотя кампания видна (CanJoin = false без членства) — бывает только у завершённой, её сервер не отдаёт.
+    /// </summary>
+    private async Task<CampaignInviteDto?> LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invite = await Api.GetInviteAsync(CampaignId, cancellationToken);
+            if (invite.IsMember)
+            {
+                Navigation.NavigateTo($"campaigns/{CampaignId}", replace: true);
+                return null;
+            }
+
+            return invite;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    private async Task JoinAsync(string displayName)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.JoinAsync(CampaignId, new JoinCampaignRequest(displayName));
+            _joining = false;
+            Toasts.Success("Вы в кампании.");
+            Navigation.NavigateTo($"campaigns/{CampaignId}");
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

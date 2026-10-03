@@ -3,6 +3,7 @@ using CampaignManager.ApiClient.Admin;
 using CampaignManager.ApiClient.Identity;
 using CampaignManager.ApiClient.Profile;
 using CampaignManager.Contracts.Profile;
+using CampaignManager.Core.Characters;
 using CampaignManager.Core.Identity;
 using CampaignManager.Data.Identity;
 using CampaignManager.Server.Tests.Campaigns;
@@ -49,6 +50,33 @@ public sealed class AdminApiTests(CampaignsApp app) : IClassFixture<CampaignsApp
         var users = await Admin(admin).GetUsersAsync(Cancellation);
         Assert.Contains(users, u => u.Id == admin.Id && u.IsMe);
         Assert.Contains(users, u => u.Id == player.Id && u.Role == UserRole.Keeper && u.Email == player.Email);
+    }
+
+    // UX-2 X1: «Кампании», «Листы» и дата регистрации - в строке пользователя.
+    [Fact]
+    public async Task Users_carry_campaign_and_sheet_counts()
+    {
+        TestDatabase.SkipIfMissing();
+        var admin = await app.AddUserAsync(UserRole.Admin);
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync(UserRole.Player, "Игрок");
+        var first = await app.AddCampaignAsync(keeper, player);
+        await app.AddCampaignAsync(keeper, player);
+        await app.AddCharacterAsync(CharacterKind.Player, "Харви", player.Id, first.Id);
+        await app.AddCharacterAsync(CharacterKind.Player, "Без кампании", player.Id);
+        await app.AddCharacterAsync(CharacterKind.Player, "Архив", player.Id, status: CharacterStatus.Archived);
+        await app.AddCharacterAsync(CharacterKind.Npc, "НПС кампании", campaign: first.Id);
+
+        var users = await Admin(admin).GetUsersAsync(Cancellation);
+
+        var row = Assert.Single(users, u => u.Id == player.Id);
+        Assert.Equal(2, row.CampaignCount);
+        Assert.Equal(2, row.CharacterCount);
+        Assert.True(row.CreatedAt > DateTimeOffset.UnixEpoch);
+        var keeperRow = Assert.Single(users, u => u.Id == keeper.Id);
+        Assert.Equal(2, keeperRow.CampaignCount);
+        Assert.Equal(0, keeperRow.CharacterCount);
+        Assert.Equal(0, Assert.Single(users, u => u.Id == admin.Id).CampaignCount);
     }
 
     [Fact]

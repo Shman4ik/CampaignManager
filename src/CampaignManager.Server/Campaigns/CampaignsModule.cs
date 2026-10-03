@@ -43,6 +43,9 @@ public static class CampaignsModule
             })
             .RequireAuthorization().WithName("DeleteCampaign").WithTags(Tag);
 
+        app.MapGet(CampaignsRoutes.InvitePattern, (Guid campaignId, CampaignService campaigns, CancellationToken ct) =>
+                campaigns.GetInviteAsync(campaignId, ct))
+            .RequireAuthorization().WithName("GetCampaignInvite").WithTags(Tag);
         app.MapPost(CampaignsRoutes.JoinPattern, (Guid campaignId, JoinCampaignRequest request, CampaignService campaigns,
                 CancellationToken ct) => campaigns.JoinAsync(campaignId, request, ct))
             .RequireAuthorization().WithName("JoinCampaign").WithTags(Tag);

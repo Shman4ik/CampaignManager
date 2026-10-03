@@ -3,6 +3,7 @@
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.Core.Campaigns
 @using CampaignManager.UI.Platform
+@using CampaignManager.UI.Scenarios
 @inject ICampaignsApi Api
 @inject DialogService Dialogs
 @inject ToastService Toasts
@@ -15,6 +16,10 @@
             DocumentTitle="@(_details is null ? "Кампания" : $"Кампания: {_details.Campaign.Name}")">
     <Actions>
         <Button Small="true" Icon="fa-pen-nib" Href="@($"campaigns/{CampaignId}/journal")">Журнал</Button>
+        @if (_details is { Campaign: { CanEdit: true, Status: not CampaignStatus.Completed } })
+        {
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-user-plus" OnClick="() => _inviting = true">Пригласить</Button>
+        }
         @if (_details?.Campaign.CanEdit == true)
         {
             <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => _formOpen = true">Изменить</Button>
@@ -41,7 +46,8 @@
         @if (campaign.CanEdit && campaign.PlayerCount == 0 && active)
         {
             <Alert Tone="Tone.Info" ShowIcon="true" Title="Игроков пока нет">
-                Кампания видна всем вошедшим на главной в блоке «Можно вступить» — игрок вступает сам и появляется здесь.
+                «Пригласить» даёт ссылку: игрок откроет её, войдёт и вступит. Кампания также видна всем вошедшим на главной
+                в блоке «Можно вступить» — игрок вступает сам и появляется здесь.
             </Alert>
         }
 
@@ -66,6 +72,23 @@
                             <div class="text-sm text-primary-500">
                                 В кампании с @LocalTime.Date(member.JoinedAt)@(member.Alias is null ? "" : " · имя задано для этой кампании")
                             </div>
+                            @* Сыщики игрока: Хранителю — все листы, игроку — его активный. У Хранителя листов нет. *@
+                            @if (member.Role == CampaignRole.Player)
+                            {
+                                @if (member.Characters.Count > 0)
+                                {
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        @foreach (var character in member.Characters)
+                                        {
+                                            <CharacterChip Character="character" @key="character.Id" />
+                                        }
+                                    </div>
+                                }
+                                else if (campaign.CanEdit || member.IsMe)
+                                {
+                                    <div class="mt-1 text-sm text-primary-500">Листа пока нет</div>
+                                }
+                            }
                         </div>
                         @{
                             var canRemove = member.CanRemove && !member.IsMe && active;
@@ -92,7 +115,77 @@
             </div>
         </section>
 
-        <p class="cm-text-muted">Создана @LocalTime.Date(campaign.CreatedAt)</p>
+        @if (campaign.CanEdit)
+        {
+            <section class="cm-section" aria-label="Прохождения">
+                <div class="cm-card">
+                    <SectionHeader Title="Прохождения" Count="details.Runs.Count">
+                        <Actions><Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" Href="@ScenarioLinks.List">К сценариям</Button></Actions>
+                    </SectionHeader>
+                    @if (details.Runs.Count == 0)
+                    {
+                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">
+                            Игр по сценариям пока нет. Начать можно из сценария — «Играть в кампании».
+                        </p>
+                    }
+                    @foreach (var run in details.Runs)
+                    {
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 px-4 py-3 first:border-t-0"
+                             @key="run.RunId" data-testid="campaign-run">
+                            <div class="min-w-0 flex-1 basis-56">
+                                <a href="@ScenarioLinks.Workspace(run.ScenarioId)" class="inline-flex min-h-11 items-center font-semibold text-primary-800 hover:underline">@run.ScenarioName</a>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-primary-500">
+                                    <Badge Tone="ScenarioLabels.RunTone(run.Status)">@ScenarioLabels.RunStatus(run.Status)</Badge>
+                                    @if (run.SignupOpen && run.Status != ScenarioRunStatus.Finished)
+                                    {
+                                        <Badge Tone="Tone.Info">Запись открыта</Badge>
+                                    }
+                                    @if (run.ScheduledAt is { } at)
+                                    {
+                                        <span>@LocalTime.DateTime(at)</span>
+                                    }
+                                </div>
+                            </div>
+                            @if (run.Status != ScenarioRunStatus.Finished)
+                            {
+                                <Button Small="true" Icon="fa-play" Href="@ScenarioLinks.Play(run.ScenarioId, runId: run.RunId)">Играть</Button>
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <section class="cm-section" aria-label="НПС кампании">
+                <div class="cm-card">
+                    <SectionHeader Title="НПС кампании" Count="details.Npcs.Count">
+                        <Actions>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Href="@($"character/create/npc?campaignId={CampaignId}")">НПС</Button>
+                        </Actions>
+                    </SectionHeader>
+                    @if (details.Npcs.Count == 0)
+                    {
+                        <p class="border-t border-primary-200 px-4 py-3 text-sm text-primary-600 first:border-t-0">НПС кампании пока нет.</p>
+                    }
+                    else
+                    {
+                        <div class="flex flex-wrap gap-2 border-t border-primary-200 px-4 py-3 first:border-t-0">
+                            @foreach (var npc in details.Npcs)
+                            {
+                                <CharacterChip Character="npc" @key="npc.Id" />
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <p class="cm-text-muted">
+            Создана @LocalTime.Date(campaign.CreatedAt)
+            @if (details.LastSession is { } last)
+            {
+                <span> · Последняя встреча: <a href="@($"campaigns/{CampaignId}/journal")" class="underline hover:no-underline">№@last.Number@(string.IsNullOrWhiteSpace(last.Title) ? "" : $" «{last.Title}»")</a>, @LocalTime.Date(last.SessionDate)</span>
+            }
+        </p>
 
         @* Редкое и необратимое — внизу, а не первым на экране (правило 7). *@
         @if (campaign.CanDelete || details.CanLeave)
@@ -122,6 +215,7 @@
     </AsyncContent>
 </div>
 
+<InviteModal Open="_inviting" CampaignName="@_details?.Campaign.Name" Link="@InviteLink" OnClose="() => _inviting = false" />
 <CampaignFormModal Open="_formOpen" Campaign="_details?.Campaign" OnClose="() => _formOpen = false" OnSaved="SavedAsync" />
 <MemberNameModal Open="_renaming is not null" ForSelf="@(_renaming?.IsMe ?? true)"
                  Title="@(_renaming?.IsMe == true ? "Ваше имя в кампании" : $"Имя в кампании: {CampaignLabels.Person(_renaming?.Name)}")"
@@ -134,6 +228,10 @@
     private AsyncContent<CampaignDetailsDto?>? _content;
     private CampaignDetailsDto? _details;
     private bool _formOpen;
+    private bool _inviting;
+
+    /// <summary>Ссылка-приглашение — страница <c>/join/{id}</c> абсолютным адресом: её отправляют в мессенджер.</summary>
+    private string InviteLink => Navigation.ToAbsoluteUri($"join/{CampaignId}").ToString();
     private CampaignMemberDto? _renaming;
     private string? _renameError;
     private bool _busy;

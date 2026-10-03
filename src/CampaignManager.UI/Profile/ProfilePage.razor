@@ -6,6 +6,7 @@
 @inject IProfileApi Api
 @inject IUserSession Session
 @inject ToastService Toasts
+@inject DialogService Dialogs
 
 @* Личный кабинет: имя, роль и заявка на Хранителя, сводка по играм. Его видит и игрок — проверять и на
    телефоне. Данные только свои: сервер берёт пользователя из сессии. Знание — Profile/CLAUDE.md. *@
@@ -77,7 +78,7 @@
                                 </div>
                                 @if (application.Status is KeeperApplicationStatus.Pending)
                                 {
-                                    <p class="mt-2 text-sm text-primary-600">После одобрения вы станете Хранителем.</p>
+                                    <p class="mt-2 text-sm text-primary-600">После одобрения вы станете Хранителем. Пока заявку не рассмотрели, её текст можно дописать, а саму заявку — отозвать.</p>
                                 }
                                 @if (application.Status is KeeperApplicationStatus.Rejected && application.ReviewComment is { } comment)
                                 {
@@ -88,6 +89,27 @@
                         else
                         {
                             <p class="text-sm text-primary-600">Хранитель ведёт кампании и сценарии. Хотите вести игры — подайте заявку, администратор её рассмотрит.</p>
+                        }
+
+                        @if (profile.LatestApplication is { Status: KeeperApplicationStatus.Pending })
+                        {
+                            <form class="flex flex-col gap-3" @onsubmit="UpdateApplicationAsync" data-testid="application-edit">
+                                <Field Label="Сообщение администратору" Note="Что хотите вести, с кем играете.">
+                                    <textarea class="cm-input" rows="3" maxlength="@ProfileLimits.ApplicationMessageLength"
+                                              @bind="_pendingMessage" @bind:event="oninput"></textarea>
+                                </Field>
+                                @if (_applyError is not null)
+                                {
+                                    <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_applyError</Alert>
+                                }
+                                <div class="cm-btn-row">
+                                    <Button Type="submit" Icon="fa-floppy-disk" Busy="_applying"
+                                            Disabled="@(string.Equals(_pendingMessage?.Trim() ?? "", profile.LatestApplication.Message, StringComparison.Ordinal))"
+                                            DisabledReason="Измените текст, чтобы сохранить">Сохранить текст</Button>
+                                    <Button Variant="ButtonVariant.OutlineError" Icon="fa-rotate-left" Disabled="_applying"
+                                            OnClick="WithdrawAsync">Отозвать заявку</Button>
+                                </div>
+                            </form>
                         }
 
                         @if (profile.CanApply)
@@ -153,6 +175,7 @@
     // и смена имени в кабинете не должна молча их выравнивать.
     private bool _replaceAliases;
     private string? _message;
+    private string? _pendingMessage;
     private string? _nameError;
     private string? _applyError;
     private bool _savingName;
@@ -168,6 +191,7 @@
     {
         _profile = profile;
         _name = profile.DisplayName;
+        _pendingMessage = profile.LatestApplication is { Status: KeeperApplicationStatus.Pending } pending ? pending.Message : null;
         _replaceAliases = false;
     }
 
@@ -221,6 +245,67 @@
         catch (HttpRequestException ex)
         {
             _applyError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private async Task UpdateApplicationAsync()
+    {
+        if (_applying)
+        {
+            return;
+        }
+
+        _applying = true;
+        _applyError = null;
+        try
+        {
+            Show(await Api.UpdateKeeperApplicationAsync(new SubmitKeeperApplicationRequest(_pendingMessage)));
+            Toasts.Success("Текст заявки сохранён.");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+        {
+            // Заявку успели рассмотреть: форма над ней больше не нужна.
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось сохранить");
+            Show(await Api.GetProfileAsync());
+        }
+        catch (HttpRequestException ex)
+        {
+            _applyError = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private async Task WithdrawAsync()
+    {
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest(
+            "Отозвать заявку?", "Администратор её не увидит. Подать новую можно в любой момент.")
+        {
+            ConfirmText = "Отозвать",
+        });
+        if (!confirmed || _applying)
+        {
+            return;
+        }
+
+        _applying = true;
+        _applyError = null;
+        try
+        {
+            Show(await Api.WithdrawKeeperApplicationAsync());
+            Toasts.Success("Заявка отозвана.");
+        }
+        catch (HttpRequestException ex)
+        {
+            // Администратор успел решить: покажем актуальное состояние, а не оставим форму над рассмотренной заявкой.
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось отозвать");
+            Show(await Api.GetProfileAsync());
         }
         finally
         {
