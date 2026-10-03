@@ -7,23 +7,21 @@
    девять полей дважды, а описание и журнал рисовались ещё и на странице просмотра). Правка — с версией корня:
    изменили на другом устройстве — текст в окне и «Перечитать», а не молчаливая перезапись. Анонса здесь нет:
    он у прохождения (T2.5c). *@
-<Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Описание сценария")" OnClose="CloseAsync" data-testid="scenario-form">
+<Modal Open="Open" Title="@(Scenario is null ? "Новый сценарий" : "Изменить сценарий")" OnClose="CloseAsync" data-testid="scenario-form">
     <ChildContent>
-        <form id="scenario-form" class="flex flex-col gap-4" @onsubmit="SaveAsync">
-            <Field Label="Название" Error="@_nameError">
+        <form id="scenario-form" class="grid grid-cols-1 gap-4 sm:grid-cols-2" @onsubmit="SaveAsync">
+            <Field Label="Название" Required="true" Error="@_nameError" class="sm:col-span-2">
                 <input class="cm-input" maxlength="@ScenarioLimits.NameLength" data-testid="scenario-name" @bind="_name" @bind:event="oninput"
-                       placeholder="Например: «Безымянный туман»" />
+                       placeholder="Например: «Безымянный туман»" autofocus />
             </Field>
-            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field Label="Место действия">
-                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_setting" placeholder="Бостон, Массачусетс" />
-                </Field>
-                <Field Label="Время действия">
-                    <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_settingDate" placeholder="Июнь 1925 года" />
-                </Field>
-            </div>
-            <Field Label="Эпоха" Note="По ней имена быстрых НПС и цены; время действия — просто текст." class="sm:w-72">
-                <select class="cm-input" value="@(_era?.ToString() ?? "")" @onchange="e => _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null">
+            <Field Label="Место действия">
+                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_setting" placeholder="Бостон, Массачусетс" />
+            </Field>
+            <Field Label="Время действия">
+                <input class="cm-input" maxlength="@ScenarioLimits.ShortTextLength" @bind="_settingDate" placeholder="Июнь 1925 года" />
+            </Field>
+            <Field Label="Эпоха" Note="От эпохи зависят имена и цены быстрых НПС." class="sm:col-span-2">
+                <select class="cm-input sm:w-72" value="@(_era?.ToString() ?? "")" @onchange="e => _era = Enum.TryParse<Era>(e.Value?.ToString(), out var era) ? era : null">
                     <option value="">Не указана</option>
                     @foreach (var era in Enum.GetValues<Era>())
                     {
@@ -31,12 +29,12 @@
                     }
                 </select>
             </Field>
-            <Field Label="Кратко" Hint="(для списка сценариев)">
+            <Field Label="Кратко" Note="Показывается в списке сценариев." class="sm:col-span-2">
                 <textarea class="cm-input" rows="3" maxlength="@ScenarioLimits.TextLength" @bind="_summary"></textarea>
             </Field>
             @if (_error is not null)
             {
-                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0" data-testid="scenario-form-error">
+                <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0 sm:col-span-2" data-testid="scenario-form-error">
                     <ChildContent>@_error</ChildContent>
                     <Actions>
                         @if (_stale)

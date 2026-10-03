@@ -4,6 +4,8 @@
 @using CampaignManager.Contracts.Scenarios
 @inject IScenariosApi Api
 @inject NavigationManager Navigation
+@inject DialogService Dialogs
+@inject ToastService Toasts
 
 @* Рабочее место сценария: одна страница с вкладками вместо пары «просмотр + правка» v1 (там описание и журнал
    рисовались дважды, а сохранение просмотра затирало правки правки). Сценарий читается одним запросом, а пишется по
@@ -11,35 +13,43 @@
    запись не трогает. Открытая вкладка — в адресе (?tab=). /scenarios/{id}/edit — старый адрес правки: ведёт на
    «Описание» с открытой формой. Режим игры — тот же адрес с ?mode=play&location=&handout=&run= (ScenarioPlay): вместо
    вкладок — три колонки во всю высоту (.cm-play), шапка та же. *@
-<PageHeader Title="@(_scenario?.Name ?? "Сценарий")" Game="true">
+<PageHeader Title="@(_scenario is null ? "Сценарий" : IsPlay ? $"Игра: {_scenario.Name}" : $"Сценарий: {_scenario.Name}")" Game="true">
     <Actions>
         @if (IsPlay)
         {
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-table-columns" data-testid="leave-play"
-                    Href="@ScenarioLinks.Workspace(ScenarioId)">Рабочее место</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" data-testid="leave-play"
+                    Href="@ScenarioLinks.Workspace(ScenarioId)">Выйти из режима игры</Button>
         }
-        else
+        else if (_scenario is not null)
         {
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-arrow-left" Href="@ScenarioLinks.List">Сценарии</Button>
-            @if (_scenario?.CanEdit == true)
-            {
-                <Button Small="true" Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" data-testid="edit-scenario" OnClick="() => _formOpen = true">Описание</Button>
-            }
-            @if (_scenario is not null)
-            {
-                <Button Small="true" Icon="fa-play" data-testid="enter-play" Href="@ScenarioLinks.Play(ScenarioId)">Режим игры</Button>
-            }
-        }
-        @if (_scenario is not null)
-        {
-            @* Файл сценария (T2.5d) — тем же форматом, что принимает «Импорт JSON» на /scenarios. *@
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-file-export" Href="@ScenarioExchangeRoutes.Export(_scenario.Id)"
-                    download="" data-testid="export-scenario">Экспорт JSON</Button>
+            <Button Small="true" Icon="fa-play" data-testid="enter-play" Href="@ScenarioLinks.Play(ScenarioId)">Режим игры</Button>
+            <RowMenu AriaLabel="Действия со сценарием" data-testid="scenario-menu">
+                <ChildContent>
+                    @if (_scenario.CanEdit)
+                    {
+                        <RowMenuItem Icon="fa-pen" OnClick="() => _formOpen = true">Изменить сценарий</RowMenuItem>
+                    }
+                    @* Файл сценария (T2.5d) — тем же форматом, что принимает «Импорт JSON» на /scenarios. *@
+                    <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт JSON</RowMenuItem>
+                </ChildContent>
+                <Danger>
+                    @if (_scenario.CanDelete)
+                    {
+                        <RowMenuItem Icon="fa-trash-can" Danger="true" OnClick="DeleteAsync">Удалить сценарий</RowMenuItem>
+                    }
+                </Danger>
+            </RowMenu>
         }
     </Actions>
 </PageHeader>
 
 <div class="@(IsPlay ? "cm-play" : "cm-page")">
+    @if (!IsPlay)
+    {
+        <a class="cm-back-link" href="@ScenarioLinks.List">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>Сценарии
+        </a>
+    }
     <AsyncContent @ref="_content" Key="ScenarioId" Load="LoadAsync" LoadingMessage="Загружаю сценарий…" Context="loaded"
                   ErrorTitle="Сценарий недоступен">
         <Empty>
@@ -86,7 +96,7 @@
                         <ScenarioPregensTab Scenario="scenario" OnChanged="ReloadAsync" />
                         break;
                     default:
-                        <ScenarioDescriptionTab Scenario="scenario" OnEdit="() => _formOpen = true" OnOpenTab="SelectTab" OnChanged="ReloadAsync" />
+                        <ScenarioDescriptionTab Scenario="scenario" OnChanged="ReloadAsync" />
                         break;
                 }
             }
@@ -148,6 +158,31 @@
         return _scenario;
     }
 
+    private void ExportAsync() => Navigation.NavigateTo(ScenarioExchangeRoutes.Export(ScenarioId), forceLoad: true);
+
+    private async Task DeleteAsync()
+    {
+        if (_scenario is not { } scenario)
+            return;
+
+        var message = scenario.RunCount > 0
+            ? "Сценарий проходят в кампаниях — сервер его не удалит, пока есть партии."
+            : "Локации, проверки, факты, раздатки, твари, предметы и состав НПС удалятся вместе с ним. Листы НПС и прегены останутся в библиотеке.";
+        if (!await Dialogs.ConfirmDeleteAsync($"Удалить «{scenario.Name}»?", message))
+            return;
+
+        try
+        {
+            await Api.DeleteAsync(scenario.Id);
+            Toasts.Success("Сценарий удалён.");
+            Navigation.NavigateTo(ScenarioLinks.List);
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+    }
+
     private Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
 
     private async Task HeaderSavedAsync()
@@ -162,13 +197,13 @@
     [
         new(ScenarioLinks.Tabs.Description, "Описание", "fa-circle-info"),
         new(ScenarioLinks.Tabs.Text, "Текст", "fa-file-lines"),
-        new(ScenarioLinks.Tabs.Locations, "Локации", "fa-location-dot", s.Locations.Count),
-        new(ScenarioLinks.Tabs.Checks, "Проверки", "fa-dice-d20", s.Locations.Sum(l => l.Checks.Count)),
-        new(ScenarioLinks.Tabs.Facts, "Факты", "fa-key", s.KeyFacts.Count),
-        new(ScenarioLinks.Tabs.Handouts, "Раздатки", "fa-file-image", s.Handouts.Count),
-        new(ScenarioLinks.Tabs.Creatures, "Твари", "fa-skull", s.Creatures.Count),
-        new(ScenarioLinks.Tabs.Items, "Предметы", "fa-box", s.Items.Count),
-        new(ScenarioLinks.Tabs.Npcs, "НПС", "fa-masks-theater", s.Npcs.Count),
-        new(ScenarioLinks.Tabs.Pregens, "Прегены", "fa-user", s.Pregens.Count),
+        new(ScenarioLinks.Tabs.Locations, "Локации", "fa-location-dot"),
+        new(ScenarioLinks.Tabs.Checks, "Проверки", "fa-dice-d20")),
+        new(ScenarioLinks.Tabs.Facts, "Факты", "fa-key"),
+        new(ScenarioLinks.Tabs.Handouts, "Раздатки", "fa-file-image"),
+        new(ScenarioLinks.Tabs.Creatures, "Твари", "fa-skull"),
+        new(ScenarioLinks.Tabs.Items, "Предметы", "fa-box"),
+        new(ScenarioLinks.Tabs.Npcs, "НПС", "fa-masks-theater"),
+        new(ScenarioLinks.Tabs.Pregens, "Прегены", "fa-user"),
     ];
 }
