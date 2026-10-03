@@ -3,23 +3,24 @@
 @* «Факты» — ключевые факты Хранителя: что на самом деле произошло, хронология, награды. В режиме игры (T2.5b) — их
    панель справа. Содержание — Markdown, длинное раскрывается касанием. *@
 <section class="cm-section">
-    <div class="cm-section-header flex-wrap gap-2">
-        <h2 class="cm-section-title">Ключевые факты</h2>
-        @if (CanEdit)
-        {
-            <div class="flex flex-wrap gap-2">
-                @if (Scenario.KeyFacts.Count > 1)
-                {
-                    <Button Small="true" Variant="@(Reordering ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-arrow-down-up-across-line"
-                            OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
-                }
-                <Button Small="true" Icon="fa-plus" data-testid="add-fact" OnClick="() => Open(null)">Факт</Button>
-            </div>
-        }
-    </div>
+    @* Заголовка секции над одноимённой вкладкой нет (правило 5): в строке действий вкладки — порядок и добавление. *@
+    @if (CanEdit)
+    {
+        <div class="cm-btn-row mb-3 justify-end">
+            @if (Scenario.KeyFacts.Count > 1)
+            {
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-arrow-down-up-across-line"
+                        OnClick="() => Reordering = !Reordering">@(Reordering ? "Готово" : "Порядок")</Button>
+            }
+            @if (!Reordering)
+            {
+                <Button Icon="fa-plus" data-testid="add-fact" OnClick="() => Open(null)">Добавить факт</Button>
+            }
+        </div>
+    }
     @if (Scenario.KeyFacts.Count == 0)
     {
-        <EmptyState Icon="fa-key" Title="Фактов пока нет." Message="Предыстория, зловещая истина, хронология и награды — то, что Хранитель держит в голове." />
+        <EmptyState Compact="true" Title="Нет фактов. Их видит только Хранитель — в режиме игры, справа." />
     }
     else
     {
@@ -31,7 +32,7 @@
                 var open = _open.Contains(fact.Id);
                 <div class="border-t border-primary-200 px-4 py-3 first:border-t-0" @key="fact.Id" data-testid="fact-row">
                     <div class="flex flex-wrap items-start justify-between gap-2">
-                        <button type="button" class="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                        <button type="button" class="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
                                 @onclick="() => Toggle(fact.Id)">
                             <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") w-3 text-xs text-primary-400" aria-hidden="true"></i>
                             <Badge Tone="ScenarioLabels.FactTone(fact.Type)">@ScenarioText.Of(fact.Type)</Badge>
@@ -40,7 +41,7 @@
                         <PartRowActions CanEdit="CanEdit" Reordering="Reordering" Busy="Busy" CanUp="index > 0" CanDown="index < ids.Count - 1"
                                         OnUp="() => MoveAsync(ScenarioPart.KeyFacts, ids, fact.Id, -1)"
                                         OnDown="() => MoveAsync(ScenarioPart.KeyFacts, ids, fact.Id, 1)"
-                                        OnEdit="() => Open(fact)" OnDelete="() => RemoveAsync(fact)" />
+                                        OnEdit="() => Open(fact)" OnDelete="() => RemoveAsync(fact)" MenuLabel="@("Действия: " + fact.Title)" />
                     </div>
                     @if (open)
                     {
