@@ -3,14 +3,34 @@
 @* Пункт RowMenu (≥ 44px). Danger — красный, ставится в слот Danger меню. Confirm* — единый вызов подтверждения:
    пока заголовок задан, перед OnClick спрашивается окно (имя объекта в тексте — Names.Plain, последствие и
    «нельзя отменить» — только если правда: Details пишут явно). Меню закрывается само до вопроса. *@
-<button type="button" role="menuitem" class="@Css.Join("cm-menu-item", Danger ? "cm-menu-item-danger" : null)"
-        disabled="@Disabled" @onclick="ClickAsync">
-    @if (Icon is not null)
-    {
-        <i class="fa-solid @Icon" aria-hidden="true"></i>
-    }
-    <span>@ChildContent</span>
-</button>
+@if (Href is not null)
+{
+    @* Ссылка, а не кнопка: новая вкладка по прямому касанию — Safari на iPad блокирует window.open из async-обработчика. *@
+    <a role="menuitem" class="@Css.Join("cm-menu-item", Danger ? "cm-menu-item-danger" : null)" href="@Href" target="@Target"
+       rel="@(Target == "_blank" ? "noopener" : null)" @onclick="CloseSoonAsync">
+        @if (Icon is not null)
+        {
+            <i class="fa-solid @Icon" aria-hidden="true"></i>
+        }
+        <span>@ChildContent</span>
+    </a>
+}
+else
+{
+    <button type="button" role="@(Checked is null ? "menuitem" : "menuitemcheckbox")" aria-checked="@(Checked is { } on ? (on ? "true" : "false") : null)"
+            class="@Css.Join("cm-menu-item", Danger ? "cm-menu-item-danger" : null)" disabled="@Disabled" @onclick="ClickAsync">
+        @if (Checked is { } mark)
+        {
+            @* Правило сцены: галочка у включённого, у выключенного — пустое место того же размера (названия стоят ровно). *@
+            <i class="@Css.Join("fa-solid fa-check", mark ? "text-accent-700" : "opacity-0")" aria-hidden="true"></i>
+        }
+        else if (Icon is not null)
+        {
+            <i class="fa-solid @Icon" aria-hidden="true"></i>
+        }
+        <span>@ChildContent</span>
+    </button>
+}
 
 @code {
     [CascadingParameter] private RowMenu? Menu { get; set; }
@@ -20,6 +40,15 @@
     [Parameter] public bool Danger { get; set; }
 
     [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Пункт-переключатель (правило сцены): задан — у пункта галочка, когда включён, и <c>aria-checked</c>.</summary>
+    [Parameter] public bool? Checked { get; set; }
+
+    /// <summary>Пункт-ссылка (например «Открыть лист» в новой вкладке): обычный <c>&lt;a&gt;</c>, жест не теряется.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    /// <summary>Куда открыть ссылку: <c>_blank</c> — новая вкладка.</summary>
+    [Parameter] public string? Target { get; set; }
 
     [Parameter] public EventCallback OnClick { get; set; }
 
@@ -36,6 +65,13 @@
 
     /// <summary>Мелкая строка под вопросом; null — её нет («Нельзя отменить» пишут, только если это правда).</summary>
     [Parameter] public string? ConfirmDetails { get; set; }
+
+    /// <summary>Меню закрывается после того, как браузер пошёл по ссылке: снятый из разметки <c>&lt;a&gt;</c> мог бы не сработать.</summary>
+    private async Task CloseSoonAsync()
+    {
+        await Task.Delay(120);
+        Menu?.Close();
+    }
 
     private async Task ClickAsync()
     {

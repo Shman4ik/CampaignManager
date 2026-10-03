@@ -1,0 +1,36 @@
+@inherits CombatPanelBase
+
+@* Расстановка боя (раунд 0): вместо формы атаки с пустыми списками — то, что решают до первого хода: у кого огнестрел наготове
+   (+50 к порядку по ЛВК, стр. 110) и броски инициативы, если правило включено. Участников добавляют слева, «Начать бой» — в
+   полосе раунда (B5). Нечего показывать — не рисуется вовсе. *@
+@if (Guns.Count > 0 || State.Combat.InitiativeRolls)
+{
+    <section class="cm-section" data-testid="combat-setup">
+        <div class="cm-section-header encounter-head"><h2 class="cm-section-title">Перед боем</h2></div>
+        <div class="cm-card">
+            <div class="cm-card-body flex flex-col gap-4">
+                @if (Guns.Count > 0)
+                {
+                    <Field Label="Огнестрел наготове" Group="true" Note="Ходит раньше: +50 к порядку по ЛВК">
+                        <div class="flex flex-wrap gap-2">
+                            @foreach (var gun in Guns)
+                            {
+                                var holder = gun;
+                                <button type="button" class="cm-btn cm-btn-secondary cm-btn-sm encounter-chip" aria-pressed="@(holder.Combat.FirearmReady ? "true" : "false")"
+                                        data-testid="firearm-ready" @onclick="() => ApplyNowAsync(CombatRules.FirearmReady(State, holder.Id, !holder.Combat.FirearmReady))">
+                                    <i class="fa-solid fa-gun" aria-hidden="true"></i> @holder.Name
+                                </button>
+                            }
+                        </div>
+                    </Field>
+                }
+                <InitiativeBlock />
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private List<EncounterParticipant> Guns =>
+        [.. State.Participants.Where(p => !p.Dead && p.Profile.Attacks.Any(a => a.AmmoCapacity is not null))];
+}

@@ -1,8 +1,9 @@
 @using CampaignManager.Core.Encounters
 
 @* Предпросмотр результата — один на все действия сцены (в v1 — семь реализаций). Строки — что выпало и как
-   считали; таблица — что изменится у каждого («было → станет» и чем чревато), посчитано тем же EncounterEngine, что
-   применит. «Применить» — единственный путь изменить участников; «Отменить» выбрасывает эффекты, отменять нечего.
+   считали; таблица — что изменится у каждого («было → станет»), посчитано тем же EncounterEngine, что применит. «Чем
+   чревато» отдельным столбцом не рисуем: заголовок результата уже говорит это (B29); пояснение, которого в заголовке нет,
+   стоит мелко под названием строки. «Применить» — единственный путь изменить участников; «Отменить» выбрасывает эффекты, отменять нечего.
    Своей карточки не рисует: стоит в карточке страницы. *@
 <div class="flex flex-col gap-3" data-testid="resolution-preview">
     <div>
@@ -18,18 +19,10 @@
         }
     </div>
 
+    @* Счётчики боя («Атак за раунд», «Защит за раунд») — внутреннее: движок их ведёт, на экране и в журнале их нет (B30). *@
     @if (Main.Count > 0)
     {
         @Table(Main)
-    }
-
-    @* Счётчики («Атак за раунд», «Защит за раунд») — внутреннее: не перебивают главное (попадание, ПЗ), лежат под «Подробностями». *@
-    @if (Counters.Count > 0)
-    {
-        <details class="encounter-rolls">
-            <summary class="cm-meta cursor-pointer py-2">Подробности: счётчики (@Counters.Count)</summary>
-            @Table(Counters)
-        </details>
     }
 
     @if (SheetTargets.Count > 0)
@@ -62,26 +55,43 @@
 
     private IReadOnlyList<EffectPreview> Lines => EncounterEngine.Preview(State, Resolution);
 
-    private List<EffectPreview> Main => [.. Lines.Where(l => !EncounterDisplay.IsCounter(l.Label))];
+    private List<EffectPreview> Main => [.. Lines.Where(l => !l.IsCounter)];
 
-    private List<EffectPreview> Counters => [.. Lines.Where(l => EncounterDisplay.IsCounter(l.Label))];
+    /// <summary>
+    /// Пояснение строки, которого нет в заголовке результата: части по «;» и «,» сверяются с заголовком, «источник: формула»
+    /// («Ближний бой: 2d6») — как бросали, это уже в строках броска.
+    /// </summary>
+    private string? ExtraNote(EffectPreview line)
+    {
+        var title = EncounterDisplay.Plain(Resolution.Title);
+        var parts = EncounterDisplay.Plain(line.Note)
+            .Split(new[] { ';', ',' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Where(part => !part.Contains(": ", StringComparison.Ordinal) && !title.Contains(part, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
 
     private RenderFragment Table(List<EffectPreview> lines) => __builder =>
     {
         <div class="cm-table-wrap">
             <table class="cm-table">
                 <thead>
-                    <tr><th>Кто</th><th>Что</th><th class="text-right">Было</th><th class="text-right">Станет</th><th>Чем чревато</th></tr>
+                    <tr><th>Кто</th><th>Что</th><th class="text-right">Было</th><th class="text-right">Станет</th></tr>
                 </thead>
                 <tbody>
                     @foreach (var line in lines)
                     {
                         <tr>
                             <td class="font-medium">@line.Name</td>
-                            <td>@line.Label</td>
+                            <td>
+                                @line.Label
+                                @if (ExtraNote(line) is { } extra)
+                                {
+                                    <div class="cm-meta">@extra</div>
+                                }
+                            </td>
                             <td class="text-right font-mono">@line.Before</td>
                             <td class="text-right font-mono font-bold">@line.After</td>
-                            <td class="text-sm text-primary-700">@EncounterDisplay.Plain(line.Note)</td>
                         </tr>
                     }
                 </tbody>
