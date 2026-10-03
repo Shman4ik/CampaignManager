@@ -149,7 +149,7 @@ public sealed class AdminService(
             u.Email,
             u.DisplayName,
             u.Role,
-            u.CreatedAt,
+            u.RegisteredAt,
             u.LastLoginAt,
             u.Id == myId,
             dbContext.KeeperApplications.Any(a => a.UserId == u.Id && a.Status == KeeperApplicationStatus.Pending),

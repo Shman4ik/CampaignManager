@@ -298,11 +298,34 @@ public sealed class ChecksTests : KitContext
             .Add(c => c.Sheet, Sheet())
             .Add(c => c.Catalog, Catalog)
             .Add(c => c.InitialKey, $"skill:{Spot.Id}")
-            .Add(c => c.Details, "<p>Исход из сценария</p>"));
+            .Add(c => c.Details, passed => "<p>Исход из сценария</p>"));
 
         Assert.Empty(cut.FindAll("[data-testid='check-details']"));
         cut.Find("[data-testid='check-roll-first'] input").Change("70");
         Assert.Contains("Исход из сценария", cut.Find("[data-testid='check-details']").TextContent);
+    }
+
+    // Исход из сценария — сразу под результатом, до Удачи и повтора, и знает, пройдена ли проверка.
+    [Fact]
+    public void Details_come_before_luck_and_push_and_know_whether_the_check_passed()
+    {
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, Sheet())
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Spot.Id}")
+            .Add(c => c.OnSheetChange, _ => { })
+            .Add(c => c.Details, passed => passed ? "<p>ИСХОД-УСПЕХ</p>" : "<p>ИСХОД-ПРОВАЛ</p>"));
+
+        Enter(cut, "first", 95);
+
+        var markup = cut.Markup;
+        Assert.Contains("ИСХОД-ПРОВАЛ", cut.Find("[data-testid='check-details']").TextContent);
+        Assert.True(markup.IndexOf("check-details", StringComparison.Ordinal) < markup.IndexOf("check-luck", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf("check-details", StringComparison.Ordinal) < markup.IndexOf("check-push", StringComparison.Ordinal));
+
+        cut.Find("[data-testid='check-reset']").Click();
+        Enter(cut, "first", 10);
+        Assert.Contains("ИСХОД-УСПЕХ", cut.Find("[data-testid='check-details']").TextContent);
     }
 
     [Fact]
@@ -315,7 +338,7 @@ public sealed class ChecksTests : KitContext
             .Add(m => m.Catalog, Catalog)
             .Add(m => m.InitialKey, $"skill:{Spot.Id}")
             .Add(m => m.InitialInvestigatorId, ann.Id)
-            .Add(m => m.Details, "<p>Исход</p>"));
+            .Add(m => m.Details, passed => "<p>Исход</p>"));
 
         cut.Find("[data-testid='check-roll-first'] input").Change("70");
         Assert.Contains("Исход", cut.Find("[data-testid='check-details']").TextContent);

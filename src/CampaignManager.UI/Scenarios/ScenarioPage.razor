@@ -4,6 +4,7 @@
 @using CampaignManager.Contracts.Scenarios
 @using CampaignManager.UI.Platform
 @inject IScenariosApi Api
+@inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject DialogService Dialogs
 @inject ToastService Toasts
@@ -160,6 +161,26 @@
 
         StateHasChanged(); // шапка — вне AsyncContent
         return _scenario;
+    }
+
+    private string? _revealedTab;
+
+    /// <summary>Открытая вкладка — в видимую область ряда (он прокручивается): после загрузки и при каждой смене вкладки.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsPlay || _scenario is null || _revealedTab == ActiveTab)
+            return;
+
+        _revealedTab = ActiveTab;
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Scenarios/ScenarioPage.razor.js");
+            await module.InvokeVoidAsync("revealActiveTab");
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
+        {
+            // Подсказка прокрутки не стоит ошибки страницы: bUnit и закрытая вкладка её не покажут.
+        }
     }
 
     private void ExportAsync() => Navigation.NavigateTo(ScenarioExchangeRoutes.Export(ScenarioId), forceLoad: true);

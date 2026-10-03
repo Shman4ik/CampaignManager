@@ -27,6 +27,7 @@ public sealed class UserDirectoryTests(SchemaDatabase database) : IClassFixture<
         var row = await db.Users.SingleAsync(u => u.Id == user.Id, Cancellation);
         Assert.Equal(("google-oauth2|1", "Харви", UserRole.Player), (row.Auth0Sub, row.DisplayName, row.Role));
         Assert.NotNull(row.LastLoginAt);
+        Assert.NotNull(row.RegisteredAt); // заведён входом — это и есть регистрация
     }
 
     // Перенесённый из v1 пользователь: sub пуст, почта та же (в другом регистре) — строка его, не новая.
@@ -43,6 +44,7 @@ public sealed class UserDirectoryTests(SchemaDatabase database) : IClassFixture<
         await using var db = database.CreateContext();
         var row = await db.Users.SingleAsync(u => u.Id == migrated.Id, Cancellation);
         Assert.Equal(("auth0|42", UserRole.Keeper, "Хранитель"), (row.Auth0Sub, row.Role, row.DisplayName));
+        Assert.Null(row.RegisteredAt); // первый вход перенесённого не делает его «зарегистрированным»: дату решает перенос
     }
 
     [Fact]

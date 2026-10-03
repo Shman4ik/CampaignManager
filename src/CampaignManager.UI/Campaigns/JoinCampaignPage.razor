@@ -10,20 +10,20 @@
 @* Ссылка-приглашение («Пригласить» на странице кампании). Вошедшему показывает, куда его зовут, и даёт вступить;
    участнику сразу открывает кампанию. Не вошедшего приложение отправит на вход и вернёт сюда. Кампании нет или она
    завершена — 404 сервера: «приглашение недействительно». Вступление — тот же JoinAsync, что и на главной. *@
-<PageHeader Title="Приглашение" DocumentTitle="Приглашение в кампанию" />
+<PageHeader Title="@(_invite is null ? "Приглашение" : $"Приглашение: {_invite.Name}")" DocumentTitle="@(_invite is null ? "Приглашение" : $"Приглашение: {_invite.Name}")" />
 
 <div class="cm-page">
         <AsyncContent Key="CampaignId" Load="LoadAsync" LoadingMessage="Открываю приглашение…" Context="invite" ErrorTitle="Приглашение недоступно">
             <Empty>
-                <EmptyState Icon="fa-link-slash" Title="Приглашение недействительно."
-                            Message="Кампании нет или она уже завершена. Попросите Хранителя прислать новую ссылку.">
-                    <Actions><Button Href="" Icon="fa-house">На главную</Button></Actions>
-                </EmptyState>
+                @* Одна строка и кнопка: заголовок страницы уже говорит «Приглашение», второй заголовок и абзац об одном — лишние. *@
+                <Alert Tone="Tone.Warning" ShowIcon="true" Actions="@HomeAction" data-testid="invite-invalid">
+                    Приглашение недействительно: кампании нет или она уже завершена. Попросите Хранителя прислать новую ссылку.
+                </Alert>
             </Empty>
             <ChildContent>
                 <section class="cm-section" aria-label="Приглашение">
                     <div class="cm-card">
-                        <div class="cm-card-body cm-stack">
+                        <div class="cm-card-body flex flex-col gap-3">
                             <div>
                                 <h2 class="cm-card-title" data-testid="invite-name">@invite!.Name</h2>
                                 <p class="text-sm text-primary-500">
@@ -57,6 +57,10 @@
 @code {
     [Parameter] public Guid CampaignId { get; set; }
 
+    private CampaignInviteDto? _invite;
+
+    private RenderFragment HomeAction => @<Button Href="" Icon="fa-house" Small="true">На главную</Button>;
+
     private bool _joining;
     private bool _busy;
     private string? _error;
@@ -80,6 +84,8 @@
                 return null;
             }
 
+            _invite = invite;
+            StateHasChanged(); // название — в шапке, вне AsyncContent
             return invite;
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)

@@ -89,6 +89,55 @@ public sealed class UxX1Tests : KitContext
         Assert.DoesNotContain("Пригласить", cut.Markup, StringComparison.Ordinal);
     }
 
+    // Завершённой кампании не нужны действия живой игры: «Добавить НПС», подсказка про начало игры, «Выйти» (журнал — архив).
+    [Fact]
+    public void Completed_campaign_has_no_live_game_actions_for_keeper_or_player()
+    {
+        UseCampaign(Details(keeper: true, CampaignStatus.Completed) with { Runs = [] });
+        var keeper = Render<CampaignPage>(p => p.Add(c => c.CampaignId, CampaignId));
+        keeper.WaitForElement("[aria-label=Участники]");
+
+        Assert.DoesNotContain("Добавить НПС", keeper.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("К сценариям", keeper.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Начать можно из сценария", keeper.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Completed_campaign_does_not_offer_the_player_to_leave()
+    {
+        UseCampaign(Details(keeper: false, CampaignStatus.Completed));
+        var cut = Render<CampaignPage>(p => p.Add(c => c.CampaignId, CampaignId));
+        cut.WaitForElement("[aria-label=Участники]");
+
+        Assert.DoesNotContain("Выйти из кампании", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Active_campaign_keeper_sees_add_npc()
+    {
+        UseCampaign(Details(keeper: true));
+        var keeper = Render<CampaignPage>(p => p.Add(c => c.CampaignId, CampaignId));
+        keeper.WaitForElement("[data-testid=campaign-run]");
+        Assert.Contains("Добавить НПС", keeper.Markup, StringComparison.Ordinal);
+    }
+
+    // В шапке длинное название обрезается, поэтому страница показывает его целиком и строку статуса, роли, вида и эпохи.
+    [Fact]
+    public void Long_campaign_name_is_shown_in_full_under_the_header_with_status_and_role()
+    {
+        var details = Details(keeper: true);
+        var longName = "Очень длинное название кампании для проверки переноса строки в шапке";
+        UseCampaign(details with { Campaign = details.Campaign with { Name = longName } });
+
+        var cut = Render<CampaignPage>(p => p.Add(c => c.CampaignId, CampaignId));
+        cut.WaitForElement("[data-testid=campaign-full-name]");
+
+        Assert.Equal(longName, cut.Find("[data-testid=campaign-full-name]").TextContent);
+        var facts = cut.Find("[data-testid=campaign-facts]").TextContent;
+        Assert.Contains("Активна", facts, StringComparison.Ordinal);
+        Assert.Contains("вы — Хранитель", facts, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Invite_modal_shows_absolute_link_and_copies_it()
     {
@@ -312,5 +361,27 @@ public sealed class UxX1Tests : KitContext
         Assert.Contains("3", cells);
         Assert.Contains("5", cells);
         Assert.Contains(cells, c => c.Contains("14.03.2026", StringComparison.Ordinal));
+    }
+
+    // «Регистрация» перенесённого без записей в v1 — пусто, а не день переноса.
+    [Fact]
+    public void Registration_is_a_dash_when_the_user_has_no_known_date()
+    {
+        Services.AddSingleton<IUserSession>(new NoSession());
+        Services.AddSingleton(Fake.Of<IAdminApi>(new()
+        {
+            [nameof(IAdminApi.GetUsersAsync)] = _ => Task.FromResult<IReadOnlyList<AdminUserDto>>(
+            [
+                new(Guid.NewGuid(), "a@example.test", "Алиса", UserRole.Player, null, null, false, false, CampaignCount: 0, CharacterCount: 0),
+            ]),
+            [nameof(IAdminApi.GetSummaryAsync)] = _ => Task.FromResult(new AdminSummaryDto(0)),
+        }));
+
+        var cut = Render<AdminUsersPage>();
+        cut.WaitForElement("table");
+
+        var cells = cut.FindAll("tbody tr td").Select(c => c.TextContent.Trim()).ToList();
+        Assert.Contains("—", cells);
+        Assert.DoesNotContain(cells, c => c.Contains("2026", StringComparison.Ordinal));
     }
 }

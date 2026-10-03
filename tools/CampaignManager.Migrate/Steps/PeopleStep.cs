@@ -10,8 +10,37 @@ namespace CampaignManager.Migrate.Steps;
 /// <summary>Люди: пользователи, их настройки, заявки на Хранителя; ключи Data Protection.</summary>
 public static class PeopleStep
 {
+    /// <summary>
+    /// «Регистрация» перенесённого пользователя (решение владельца 2026-10-03): v1 даты регистрации не хранил, поэтому
+    /// берётся его первая запись там — кампания, которую он ведёт, место игрока в кампании, заявка на Хранителя или
+    /// сценарий, который он создал. Записей нет — <c>null</c> (в админке пусто), а не день переноса.
+    /// </summary>
+    public static Dictionary<string, DateTimeOffset> FirstRecords(V1Database v1)
+    {
+        var first = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+
+        void Note(IEnumerable<System.Text.Json.Nodes.JsonObject> rows, string emailColumn)
+        {
+            foreach (var row in rows)
+            {
+                if (row.Text(emailColumn) is { } email && row.Time("CreatedAt") is { } at
+                    && (!first.TryGetValue(email, out var known) || at < known))
+                {
+                    first[email] = at;
+                }
+            }
+        }
+
+        Note(v1.Campaigns, "KeeperEmail");
+        Note(v1.CampaignPlayers, "PlayerEmail");
+        Note(v1.KeeperApplications, "UserEmail");
+        Note(v1.Scenarios, "CreatorEmail");
+        return first;
+    }
+
     public static void Run(MigrationState s)
     {
+        var firstRecords = FirstRecords(s.V1);
         foreach (var row in s.V1.Users)
         {
             var email = row.Text("Email") ?? throw new InvalidOperationException($"У пользователя v1 {row.Str("Id")} нет почты.");
@@ -20,6 +49,7 @@ public static class PeopleStep
                 Id = row.Guid("Id") ?? Guid.CreateVersion7(),
                 Email = email,
                 DisplayName = row.Text("UserName") ?? email,
+                RegisteredAt = firstRecords.TryGetValue(email, out var firstAt) ? firstAt : null,
                 // PlayerRole v1 лежит числом: 0 — игрок, 1 — Хранитель, 2 — администратор
                 Role = row.Int("Role") switch
                 {

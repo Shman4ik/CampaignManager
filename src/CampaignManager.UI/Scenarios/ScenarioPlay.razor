@@ -71,7 +71,7 @@ else
                     }
                 </select>
                 @RunPicker
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-key" class="ml-auto xl:hidden" data-testid="open-facts"
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-key" class="xl:hidden" data-testid="open-facts"
                         OnClick="() => _factsOpen = true">Раздатки и факты</Button>
             </div>
 
@@ -103,22 +103,26 @@ else
                  InitialDifficulty="@(_check?.Difficulty ?? Difficulty.Regular)"
                  InitialInvestigatorId="@_checkInvestigatorId" OnInvestigatorChanged="id => _checkInvestigatorId = id">
     <Details>
+        @* Выпавший исход — сразу под броском, цветным блоком; второй не мешает читать первый: он свёрнут. *@
         @if (_check is not null && (_check.OnSuccess is not null || _check.OnFailure is not null))
         {
+            var (hit, hitTitle, miss, missTitle) = context
+                ? (_check.OnSuccess, "Успех", _check.OnFailure, "Провал")
+                : (_check.OnFailure, "Провал", _check.OnSuccess, "Успех");
             <div class="flex flex-col gap-2" data-testid="check-scenario-outcomes">
-                @if (_check.OnSuccess is { } success)
+                @if (hit is not null)
                 {
-                    <div>
-                        <p class="text-sm font-semibold uppercase text-success-700">Успех</p>
-                        <Markdown Text="@success" class="text-sm" />
+                    <div class="@(context ? "border-success-300 bg-success-50" : "border-error-300 bg-error-50") rounded-md border px-3 py-2" data-testid="check-outcome-hit">
+                        <p class="@(context ? "text-success-700" : "text-error-700") text-sm font-semibold uppercase">@hitTitle</p>
+                        <Markdown Text="@hit" />
                     </div>
                 }
-                @if (_check.OnFailure is { } failure)
+                @if (miss is not null)
                 {
-                    <div>
-                        <p class="text-sm font-semibold uppercase text-error-700">Провал</p>
-                        <Markdown Text="@failure" class="text-sm" />
-                    </div>
+                    <details data-testid="check-outcome-miss">
+                        <summary class="cm-tap-row cursor-pointer text-sm text-primary-600">Если выпадет иначе: @missTitle.ToLowerInvariant()</summary>
+                        <Markdown Text="@miss" class="text-sm" />
+                    </details>
                 }
             </div>
         }
@@ -232,7 +236,7 @@ else
         }
         else if (_runs is not null)
         {
-            <select class="cm-input w-full sm:w-80" aria-label="Партия: чьи сыщики в проверках" data-testid="play-run" @onchange="SelectRun">
+            <select class="cm-input w-full sm:w-72" aria-label="Партия: чьи сыщики в проверках" data-testid="play-run" @onchange="SelectRun">
                 @foreach (var run in _runs)
                 {
                     <option value="@run.Id" selected="@(ActiveRun?.Id == run.Id)">@RunLabel(run)</option>
@@ -289,8 +293,11 @@ else
             }
             @if (Scenario.BodyMd is { } body)
             {
-                <details class="border-t border-primary-200 pt-2" data-testid="play-body">
-                    <summary class="cm-tap-row cursor-pointer font-semibold text-primary-800">Текст сценария</summary>
+                <details class="group border-t border-primary-200 pt-2" data-testid="play-body">
+                    @* Шеврон: без него раскрывающийся текст похож на жирную подпись. *@
+                    <summary class="cm-tap-row cursor-pointer list-none font-semibold text-primary-800 [&::-webkit-details-marker]:hidden">
+                        <i class="fa-solid fa-chevron-down w-4 text-xs text-primary-500 transition-transform group-open:rotate-180" aria-hidden="true"></i>Текст сценария
+                    </summary>
                     <Markdown Text="@body" class="pt-2" />
                 </details>
             }
@@ -302,8 +309,8 @@ else
         var pool = MusicPool.Of(location.MusicTags, location.TrackIds);
         var children = Scenario.Locations.Where(l => l.ParentId == location.Id).ToList();
         <section class="flex flex-col gap-4" data-testid="play-location-detail">
-            <div class="flex items-start gap-2">
-                <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-start gap-2">
+                <div class="min-w-0 flex-1 basis-56">
                     @if (location.ParentId is not null)
                     {
                         <p class="cm-text-muted text-sm">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
@@ -314,12 +321,10 @@ else
                         <p class="cm-text-muted text-sm"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
                     }
                 </div>
-                @* Настройка музыки — редкая правка, не игровое действие: в «⋯», а на виду — «Играть». *@
+                @* Настройка музыки — редкая правка, не игровое действие: вторичная кнопка с подписью (меню «⋯» ради одного пункта не нужно). *@
                 @if (Scenario.CanEdit)
                 {
-                    <RowMenu AriaLabel="Действия локации">
-                        <RowMenuItem Icon="fa-sliders" OnClick="() => _musicOpen = true">@(pool.IsEmpty ? "Настроить музыку" : "Изменить музыку")</RowMenuItem>
-                    </RowMenu>
+                    <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-sliders" data-testid="location-music" OnClick="() => _musicOpen = true">@(pool.IsEmpty ? "Настроить музыку" : "Изменить музыку")</Button>
                 }
             </div>
 

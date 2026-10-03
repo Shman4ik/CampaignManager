@@ -75,7 +75,7 @@ public static class V1Fixture
         INSERT INTO games."UserPreferences" VALUES ('71000000-0000-0000-0000-000000000001', 'player@example.test',
             '{"ui.sidebarExpanded": "false", "ui.lastCharacterId": "40000000-0000-0000-0000-000000000001"}', now());
         INSERT INTO games."KeeperApplications" VALUES ('72000000-0000-0000-0000-000000000001', 'player@example.test', '', 'Pending',
-            NULL, NULL, NULL, now(), now());
+            NULL, NULL, NULL, '2024-05-06T10:00:00Z', now());
         INSERT INTO games."Campaigns" VALUES ('10000000-0000-0000-0000-000000000001', 'Ваншот на пробу', 'Completed', 'keeper@example.test', 1, now(), now());
         INSERT INTO games."CampaignPlayers" VALUES
             ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'player@example.test', 'Псевдоним', now()),
