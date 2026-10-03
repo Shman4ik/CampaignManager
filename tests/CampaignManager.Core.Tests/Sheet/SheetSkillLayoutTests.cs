@@ -230,20 +230,6 @@ public sealed class SheetSkillLayoutTests
     }
 
     [Theory]
-    [InlineData(0, new int[0])]
-    [InlineData(2, new[] { 1, 1 })]
-    [InlineData(7, new[] { 3, 2, 2 })]
-    [InlineData(8, new[] { 3, 3, 2 })]
-    [InlineData(9, new[] { 3, 3, 3 })]
-    public void Split_into_three_columns_keeps_order_and_puts_extra_items_first(int count, int[] sizes)
-    {
-        var columns = SheetSkillLayout.SplitInto(Enumerable.Range(0, count).ToList(), 3);
-
-        Assert.Equal(sizes, columns.Select(c => c.Count));
-        Assert.Equal(Enumerable.Range(0, count), columns.SelectMany(c => c));
-    }
-
-    [Theory]
     [InlineData(0, 0, 0)]
     [InlineData(1, 1, 0)]
     [InlineData(4, 2, 2)]

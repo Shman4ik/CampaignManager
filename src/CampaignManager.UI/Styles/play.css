@@ -1,17 +1,25 @@
 /*
   Режим «Игра» листа сыщика (Characters/Play*.razor, решение владельца 2026-10-03): всё, что нужно за столом, — на
-  одном экране iPad 1366×1024 без прокрутки страницы; на 1024×1366 — почти без неё. Раскладка — от ширины колонки
-  (@container), а не окна: рельс и отступы съедают ширину по-разному.
+  одном экране. Целевые размеры — iPad Pro 11" и iPhone (корневой CLAUDE.md, «Целевые устройства»): колонка «Игры»
+  ≈ 1064px в ландшафте, ≈ 704px в портрете, ≈ 361px на телефоне. Раскладка — от ширины колонки (@container), а не
+  окна: рельс и отступы съедают ширину по-разному.
 
-  Управление полосы состояния — «таблетки» 34px и отметки 32px, а не 44px листа: владелец попросил кнопки меньше и
-  изящнее (макет 2026-10-03). Ниже 32px не опускать — это всё ещё палец на iPad.
+  Размеры касания — правило владельца 2026-10-03 (UI/CLAUDE.md, «Тап-цели»): кнопка, поле, отметка — от 32px
+  («таблетки» 34px, отметки 32px), строка-кнопка плотного списка (навык) — от 28px.
 */
 @layer components {
+  /* Плотность и шрифты «Игры» — одним местом; подбирать здесь, а не по классам. */
   .play {
+    --play-skill-row: 28px;          /* строка навыка — целиком кнопка проверки */
+    --play-skill-text: 0.8125rem;    /* название навыка */
+    --play-skill-value: 0.875rem;    /* значение навыка */
+    --play-num-font: var(--font-mono); /* ½ и ⅕ у навыков, характеристик и оружия */
+    --play-big-value: 1.625rem;      /* ПЗ, ПМ, Рассудок, Удача */
+    --play-stat-value: 1.3125rem;    /* характеристики */
     container: play / inline-size;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.625rem;
   }
 
   .play-fieldset {
@@ -105,7 +113,7 @@
   .play-vital-value {
     grid-area: value;
     white-space: nowrap;
-    font-size: 1.625rem;
+    font-size: var(--play-big-value);
     font-weight: 700;
     line-height: 1.05;
     letter-spacing: -0.01em;
@@ -154,8 +162,8 @@
   }
 
   /* Широкая плитка: действие («[число] Урон», «[число] Потеря») встаёт в строку числа справа от шага. Порог — по
-     ширине самого действия. */
-  @container vital (min-width: 340px) {
+     ширине самого действия: плитке ПЗ со значением «12 / 12» нужно 299px, трёхзначным — чуть больше. */
+  @container vital (min-width: 310px) {
     .play-vital-in {
       grid-template-columns: auto minmax(0, 1fr) auto;
       grid-template-areas: "label label label" "value step extra" "bar bar bar";
@@ -174,8 +182,9 @@
     }
   }
 
-  /* Плитки: телефон — столбик, уже — 2×2, портрет iPad — четыре в ряд, ландшафт — по весу действий. */
-  @container vitals (min-width: 560px) {
+  /* Плитки: уже телефона — столбик; телефон и портрет iPad — 2×2; ландшафт — четыре в ряд по весу действий: ПЗ и
+     Рассудку с уроном и потерей нужно ~300px, ПМ и Удаче — ~185px (замер на 1064px: 322 и 201). */
+  @container vitals (min-width: 340px) {
     .play-vital-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -189,9 +198,9 @@
     }
   }
 
-  @container vitals (min-width: 860px) {
+  @container vitals (min-width: 1000px) {
     .play-vital-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: 1.6fr 1fr 1.6fr 1fr;
     }
 
     .play-vital {
@@ -203,9 +212,10 @@
     }
   }
 
-  @container vitals (min-width: 1100px) {
-    .play-vital-grid {
-      grid-template-columns: 1.6fr 1fr 1.6fr 1fr;
+  /* Телефон, 2×2: плитка ~180px — поля плитки уже, иначе «14 / 14» и шаг ПМ не встают в строку. */
+  @container vitals (max-width: 559.98px) {
+    .play-vital-in {
+      padding-inline: 0.625rem;
     }
   }
 
@@ -398,7 +408,7 @@
     align-content: center;
     justify-items: center;
     gap: 0.125rem;
-    min-height: 4rem;
+    min-height: 3.5rem;
     padding: 0.4375rem 0.25rem;
     text-align: center;
     border-right: 1px solid var(--color-primary-200);
@@ -424,7 +434,7 @@
   }
 
   .play-stat-value {
-    font-size: 1.3125rem;
+    font-size: var(--play-stat-value);
     font-weight: 700;
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
@@ -432,7 +442,7 @@
   }
 
   .play-stat-parts {
-    font-family: var(--font-mono);
+    font-family: var(--play-num-font);
     font-size: 0.6875rem;
     color: var(--color-primary-500);
   }
@@ -445,7 +455,8 @@
     font-size: 1.125rem;
   }
 
-  @container play (min-width: 720px) {
+  /* Портрет iPad (~704px) — два ряда по шесть, а не три по четыре. */
+  @container play (min-width: 600px) {
     .play-stats {
       grid-template-columns: repeat(6, minmax(0, 1fr));
     }
@@ -470,21 +481,21 @@
   .play-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.75rem;
+    gap: 0.625rem;
   }
 
   .play-side {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
-    gap: 0.75rem;
+    gap: 0.625rem;
     min-width: 0;
   }
 
   .play-side-stack {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.625rem;
     min-width: 0;
   }
 
@@ -492,15 +503,17 @@
     display: none;
   }
 
-  @container play (min-width: 720px) {
+  @container play (min-width: 600px) {
     .play-side {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @container play (min-width: 1150px) {
-    .play-body {
-      grid-template-columns: minmax(0, 1fr) 22rem;
+  /* Ландшафт: оружие, заклинания и вещи — колонкой справа от навыков, но только если в ней что-то есть; иначе навыки
+     занимают всю ширину и встают в четыре колонки (12 строк вместо 16 — на ~700px высоты это и есть «один экран»). */
+  @container play (min-width: 1000px) {
+    .play-body:has(.play-side .play-card) {
+      grid-template-columns: minmax(0, 1fr) 19rem;
     }
 
     .play-side {
@@ -541,32 +554,43 @@
     min-width: 0;
   }
 
+  /* Колонки — CSS columns, а не явное деление: их число зависит от ширины карточки (1 → 2 → 3 → 4), а алфавит идёт
+     сверху вниз в любой из раскладок. Строки одной высоты, поэтому колонки выходят ровными. */
   .play-skill-cols {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    columns: 1;
+    column-gap: 1rem;
+    column-rule: 1px solid var(--color-primary-200);
     padding: 0 0.5rem 0.625rem;
   }
 
-  @container skills (min-width: 720px) {
+  @container skills (min-width: 440px) {
     .play-skill-cols {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      column-gap: 0.625rem;
-    }
-
-    .play-skill-col + .play-skill-col {
-      padding-left: 0.625rem;
-      border-left: 1px solid var(--color-primary-200);
+      columns: 2;
     }
   }
 
-  /* Строка навыка — целиком кнопка проверки: 32px во всю ширину колонки (все навыки листа должны встать в экран). */
+  @container skills (min-width: 640px) {
+    .play-skill-cols {
+      columns: 3;
+    }
+  }
+
+  @container skills (min-width: 960px) {
+    .play-skill-cols {
+      columns: 4;
+    }
+  }
+
+  /* Строка навыка — целиком кнопка проверки, 28px (пол плотной строки-кнопки) во всю ширину колонки: все навыки листа
+     должны встать в экран. Числа ужаты до своих двух цифр — в портрете iPad колонка ~210px, каждый пиксель — названию. */
   .play-skill {
     display: grid;
-    grid-template-columns: 1.125rem minmax(0, 1fr) 1.875rem 1.5rem 1.375rem;
+    grid-template-columns: 0.75rem minmax(0, 1fr) 1.75rem 1.25rem 1.125rem;
     align-items: center;
     column-gap: 0.25rem;
+    break-inside: avoid;
     width: 100%;
-    min-height: 32px;
+    min-height: var(--play-skill-row);
     padding: 0 0.25rem;
     text-align: left;
     border-radius: 0.375rem;
@@ -586,14 +610,16 @@
     min-width: 0;
     padding-block: 0.125rem;
     overflow-wrap: break-word;
-    font-size: 0.8125rem;
+    hyphens: auto; /* «Ориентирова-ние», а не «Ориентировани|е»: html lang="ru" */
+    font-family: var(--play-name-font, inherit);
+    font-size: var(--play-skill-text);
     line-height: 1.2;
     color: var(--color-primary-900);
   }
 
   .play-skill-value {
     text-align: right;
-    font-size: 0.875rem;
+    font-size: var(--play-skill-value);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--color-primary-900);
@@ -601,7 +627,8 @@
 
   .play-skill-part {
     text-align: right;
-    font-family: var(--font-mono);
+    font-family: var(--play-num-font);
+    font-variant-numeric: tabular-nums;
     font-size: 0.6875rem;
     color: var(--color-primary-500);
   }
@@ -630,6 +657,7 @@
   }
 
   .play-row-name {
+    font-family: var(--play-name-font, inherit);
     font-size: 0.8125rem;
     font-weight: 600;
     color: var(--color-primary-900);
@@ -649,7 +677,7 @@
     align-items: center;
     justify-content: center;
     min-width: 3.75rem;
-    min-height: 40px;
+    min-height: 36px;
     padding: 0.125rem 0.5rem;
     color: var(--color-accent-700);
     background: var(--color-accent-50);
@@ -669,7 +697,7 @@
   }
 
   .play-roll-parts {
-    font-family: var(--font-mono);
+    font-family: var(--play-num-font);
     font-size: 0.625rem;
   }
 

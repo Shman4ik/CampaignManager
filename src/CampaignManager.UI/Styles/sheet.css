@@ -4,6 +4,136 @@
   v1 (Characters/CLAUDE.md модуля UI).
 */
 @layer components {
+  /* ── Размеры и шрифты листа — одним местом (оба режима: «Лист» и «Игра» лежат в .sheet) ──
+     Правило владельца 2026-10-03 (UI/CLAUDE.md, «Тап-цели»): кнопка, поле, отметка — от 32px, строка-кнопка плотного
+     списка — от 28px; 44px больше не требование. Подбирать плотность и типографику листа — здесь, а не по классам. */
+  .sheet {
+    --sheet-control: 36px;          /* поле, кнопка, плашка-проверка, отметка */
+    --sheet-row: 36px;              /* строка навыка в «Листе» */
+    --sheet-field-text: 0.875rem;   /* текст в поле */
+    --sheet-name-text: 0.875rem;    /* название навыка в «Листе» */
+    --sheet-num-font: var(--font-mono); /* ½ и ⅕, максимумы */
+  }
+
+  /* На телефоне поле — 16px: при меньшем шрифте Safari на iPhone увеличивает страницу при фокусе. */
+  @media (max-width: 767.98px) {
+    .sheet {
+      --sheet-field-text: 1rem;
+    }
+  }
+
+  /* Окна листа (лечение, приступ, книги) живут в DOM внутри .sheet, но это обычные диалоги кита — их не трогаем. */
+  .sheet .cm-input:not(textarea, dialog *) {
+    min-height: var(--sheet-control);
+    padding-block: 0.25rem;
+    font-size: var(--sheet-field-text);
+  }
+
+  .sheet .cm-btn:not(dialog *) {
+    min-height: var(--sheet-control);
+    padding: 0.25rem 0.75rem;
+  }
+
+  .sheet .cm-btn-icon:not(dialog *) {
+    width: var(--sheet-control);
+    padding: 0;
+  }
+
+  /* Невидимая зона касания крестика и галочки навыка — по высоте строки, а не 44px: иначе соседние строки перекрывают
+     друг друга, и касание попадает в чужую галочку. */
+  .sheet .cm-tap-target::after {
+    width: var(--sheet-control);
+    height: var(--sheet-control);
+  }
+
+  /* ── Эксперимент с типографикой (временно, 2026-10-03) ──
+     Владелец подбирает размеры и шрифты листа на своём iPad: ?typo=b|c|d у адреса листа (CharacterPage кладёт значение в
+     data-typo). «a» — то, что выше и в play.css. Выбранный вариант переезжает в переменные выше, блок и параметр
+     удаляются. */
+  .sheet[data-typo="b"],
+  .sheet[data-typo="b"] .play {
+    /* «Крупный»: читать с расстояния вытянутой руки */
+    --sheet-control: 40px;
+    --sheet-row: 40px;
+    --sheet-field-text: 1rem;
+    --sheet-name-text: 0.9375rem;
+    --play-skill-row: 32px;
+    --play-skill-text: 0.875rem;
+    --play-skill-value: 0.9375rem;
+    --play-big-value: 1.875rem;
+    --play-stat-value: 1.5rem;
+  }
+
+  .sheet[data-typo="c"],
+  .sheet[data-typo="c"] .play {
+    /* «Книжный»: названия — Bitter (как заголовки книги правил), числа — Inter с моноширинными цифрами */
+    --sheet-num-font: var(--font-sans);
+    --play-num-font: var(--font-sans);
+    --play-name-font: var(--font-serif);
+    --sheet-name-font: var(--font-serif);
+    --play-skill-text: 0.875rem;
+    --sheet-name-text: 0.9375rem;
+  }
+
+  .sheet[data-typo="c"] .cm-section-title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--color-primary-800);
+  }
+
+  .sheet[data-typo="d"],
+  .sheet[data-typo="d"] .play {
+    /* «Плотный»: всё на одном экране, минимальные разрешённые размеры */
+    --sheet-control: 32px;
+    --sheet-row: 32px;
+    --sheet-field-text: 0.8125rem;
+    --sheet-name-text: 0.8125rem;
+    --sheet-num-font: var(--font-sans);
+    --play-num-font: var(--font-sans);
+    --play-skill-row: 28px;
+    --play-skill-text: 0.75rem;
+    --play-skill-value: 0.8125rem;
+    --play-big-value: 1.5rem;
+    --play-stat-value: 1.125rem;
+  }
+
+  @media (max-width: 767.98px) {
+    .sheet[data-typo="d"] {
+      --sheet-field-text: 1rem;
+    }
+  }
+
+  /* Переключатель вариантов под листом — только на время эксперимента. */
+  .typo-switch {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-primary-500);
+  }
+
+  .typo-switch a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 0.625rem;
+    color: var(--color-primary-700);
+    background: var(--color-white);
+    border: 1px solid var(--color-primary-200);
+    border-radius: 999px;
+  }
+
+  .typo-switch a[aria-current="true"] {
+    font-weight: 600;
+    color: var(--color-white);
+    background: var(--color-primary-700);
+    border-color: var(--color-primary-700);
+  }
+
   /* ── Меню секций над листом: строится из того же списка, что и секции ── */
   .sheet-nav {
     position: sticky;
@@ -25,10 +155,9 @@
     align-items: center;
     gap: 0.375rem;
     min-height: 36px;
-    padding: 0 0.625rem;
+    padding: 0 0.75rem;
     border-radius: 999px;
-    min-height: 44px;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--color-primary-600);
     background: var(--color-white);
@@ -41,7 +170,7 @@
     border-color: var(--color-accent-300);
   }
 
-  /* Шапка секции — свёртка 44px и пара кнопок в одном ряду: поля вокруг по 4px, а не 12 (закрытая секция 52px, а не 69). */
+  /* Шапка секции — свёртка 40px и пара кнопок в одном ряду: поля вокруг по 4px, а не 12 (закрытая секция 52px, а не 69). */
   .sheet-section .cm-card-header {
     padding-block: 0.25rem;
   }
@@ -61,7 +190,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 44px;
+    min-height: 40px;
     text-align: left;
   }
 
@@ -79,7 +208,7 @@
     align-items: center;
     justify-content: center;
     min-width: 2.75rem;
-    min-height: 44px;
+    min-height: var(--sheet-control);
     padding: 0 0.5rem;
     border-radius: 0.375rem;
     font-size: 0.8125rem;
@@ -129,7 +258,7 @@
     width: 4.5rem;
   }
 
-  /* «Сейчас»: две кнопки по 44px и поле на три цифры (≥56px) — 9rem сжимали поле до 44px, «50» читалось «5C». */
+  /* «Сейчас»: две кнопки и поле на три цифры (≥56px) — поле уже 44px читало «50» как «5C». */
   .sheet-current th:nth-child(2) {
     width: 10.5rem;
   }
@@ -143,9 +272,10 @@
     border-top: 1px solid var(--color-primary-100);
   }
 
-  /* Ниже lg восемь характеристик встают в два столбца по четыре (СИЛ…ЛВК · НАР…ОБР): экран телефона не
-     тратится на длинный столбик; ½ и ⅕ поясняет строка над таблицей, шапка таблицы скрыта. */
-  @media (max-width: 1023.98px) {
+  /* На телефоне восемь характеристик встают в два столбца по четыре (СИЛ…ЛВК · НАР…ОБР): экран не тратится на длинный
+     столбик; ½ и ⅕ поясняет строка над таблицей, шапка таблицы скрыта. С md (портрет iPad) характеристики — своя
+     колонка рядом с «Состоянием», и в ней обычная таблица. */
+  @media (max-width: 767.98px) {
     .sheet-chars thead {
       display: none;
     }
@@ -181,7 +311,7 @@
   /* «Труд.», «Чрез.», максимумы — текст, а не поля: их считает Core. */
   .sheet-derived {
     text-align: center;
-    font-family: var(--font-mono);
+    font-family: var(--sheet-num-font);
     color: var(--color-primary-600);
   }
 
@@ -254,7 +384,7 @@
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    min-height: 44px;
+    min-height: var(--sheet-control);
     padding: 0 0.5rem;
     border-radius: 0.375rem;
     font-size: 0.875rem;
@@ -311,8 +441,9 @@
     column-gap: 1.5rem;
   }
 
-  /* С 1024px — две колонки: первая половина списка слева сверху вниз, вторая справа. Ниже — одна, в том же порядке. */
-  @media (min-width: 1024px) {
+  /* С md (портрет iPad, колонка ~670px) — две колонки: первая половина списка слева сверху вниз, вторая справа. На
+     телефоне — одна, в том же порядке. */
+  @media (min-width: 768px) {
     .skill-halves {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -352,7 +483,7 @@
     }
   }
 
-  @media not all and (min-width: 1024px) {
+  @media not all and (min-width: 768px) {
     .skill-labels-second {
       display: none;
     }
@@ -370,7 +501,7 @@
     grid-template-columns: 1rem minmax(0, 1fr) 1.25rem 3.25rem 1.5rem 1.5rem;
     align-items: center;
     gap: 0.25rem;
-    min-height: 44px;
+    min-height: var(--sheet-row);
   }
 
   @media (min-width: 640px) {
@@ -391,12 +522,14 @@
   }
 
   .skill-name {
+    font-family: var(--sheet-name-font, inherit);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     min-width: 0;
     overflow-wrap: break-word;
-    font-size: 0.875rem;
+    hyphens: auto; /* «Ориентирова-ние», а не «Ориентировани|е»: html lang="ru" */
+    font-size: var(--sheet-name-text);
     line-height: 1.25;
   }
 
@@ -405,7 +538,7 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    min-height: 44px;
+    min-height: var(--sheet-row);
     font-weight: 500;
     text-align: left;
     color: var(--color-primary-800);
@@ -424,19 +557,20 @@
   }
 
   .skill-value {
-    min-height: 44px;
+    min-height: calc(var(--sheet-row) - 4px);
   }
 
   .skill-derived {
     text-align: center;
-    font-family: var(--font-mono);
+    font-family: var(--sheet-num-font);
+    font-variant-numeric: tabular-nums;
     font-size: 0.8125rem;
     color: var(--color-primary-600);
   }
 
   /* «Наука: показать ещё 10» — кнопка с рамкой, а не серый текст: по виду понятно, что её нажимают. */
   .skill-fold summary {
-    min-height: 44px;
+    min-height: var(--sheet-control);
     display: inline-flex;
     align-items: center;
     padding: 0 0.75rem;
@@ -527,7 +661,7 @@
     flex-shrink: 0;
     align-items: center;
     gap: 0.375rem;
-    min-height: 44px;
+    min-height: var(--sheet-control);
     font-size: 0.8125rem;
     color: var(--color-primary-600);
   }
@@ -544,6 +678,35 @@
     }
 
     .weapon-skill {
+      grid-column: span 2;
+    }
+  }
+
+  /* Портрет iPad (колонка ~670px): строка оружия — в три ряда, а не в четыре: название, навык, урон; дальность, атаки,
+     патроны, неисправность и корзина; заметки. Сетка в 12 долей. */
+  @media (min-width: 768px) and (max-width: 1023.98px) {
+    .weapon-row {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .weapon-name {
+      grid-column: span 4;
+    }
+
+    .weapon-skill {
+      grid-column: span 6;
+    }
+
+    .weapon-row > .weapon-cell:not(.weapon-name, .weapon-skill, .weapon-actions) {
+      grid-column: span 2;
+    }
+
+    .weapon-row > .weapon-cell:nth-child(4),
+    .weapon-row > .weapon-cell:nth-child(7) {
+      grid-column: span 3;
+    }
+
+    .weapon-actions {
       grid-column: span 2;
     }
   }
@@ -656,10 +819,6 @@
     }
   }
 
-  /* Тесные ячейки листа — всё равно 44px: лист — главный экран игрока, касание пальцем, а не мышью. */
-  .sheet .cm-input-sm {
-    min-height: 44px;
-  }
 
   /* Таблица навыков помощника на телефоне помещается без прокрутки вбок: узкие ячейки и поля. */
   .wizard-skills th,

@@ -172,5 +172,5 @@ where l.scenario_id = '<id>' order by p.name nulls first, l.ord;
 
 ## Проверка на iPad
 
-Основное устройство — iPad Pro M2: окно импорта и рабочее место смотреть на `resize_window` 1366×1024 и 1024×1366,
+Основное устройство — iPad Pro 11": окно импорта и рабочее место смотреть на `resize_window` 1194×696 и 834×1056,
 потом `preset: "desktop"`.

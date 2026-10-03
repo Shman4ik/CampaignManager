@@ -30,19 +30,26 @@
         @if (_context is not null)
         {
             <nav class="sheet-mode" aria-label="Режим листа" data-testid="sheet-mode">
-                <a href="@($"character/{CharacterId}")" aria-current="@(SheetMode ? null : "page")" data-testid="mode-play">
+                <a href="@WithTypo($"character/{CharacterId}")" aria-current="@(SheetMode ? null : "page")" data-testid="mode-play">
                     <i class="fa-solid fa-dice-d20" aria-hidden="true"></i><span class="max-md:sr-only">Игра</span>
                 </a>
-                <a href="@SheetModeHref(CharacterId)" aria-current="@(SheetMode ? "page" : null)" data-testid="mode-sheet">
+                <a href="@WithTypo(SheetModeHref(CharacterId))" aria-current="@(SheetMode ? "page" : null)" data-testid="mode-sheet">
                     <i class="fa-solid fa-pen" aria-hidden="true"></i><span class="max-md:sr-only">Лист</span>
                 </a>
             </nav>
         }
         @if (_context is not null && !_context.ReadOnly)
         {
+            @* Индикатор говорит, только когда есть что сказать: правки, запись, ошибка; «Сохранено» — пару секунд после
+               записи и гаснет (решение владельца 2026-10-03: постоянное «Сохранено» ничего не сообщало и отнимало шапку).
+               Сама живая область остаётся в DOM — иначе диктор не объявит появление состояния. *@
             <span class="sheet-save-state @SaveStateClass" role="status" aria-live="polite" data-testid="autosave-status">
-                <i class="fa-solid @SaveStateIcon" aria-hidden="true"></i>
-                <span class="hidden md:inline">@SaveStateText</span>
+                @if (ShowSaveState)
+                {
+                    <i class="fa-solid @SaveStateIcon" aria-hidden="true"></i>
+                    @* Ниже lg (портрет iPad) — только значок: подпись отнимала у имени листа 90px. *@
+                    <span class="max-lg:sr-only">@SaveStateText</span>
+                }
             </span>
             <Button Small="true" Icon="fa-floppy-disk" Busy="@_saver.IsBusy"
                     Disabled="@(_saver.State is SheetSaveState.Conflict or SheetSaveState.Rejected)" data-testid="save-sheet"
@@ -138,7 +145,7 @@
 
             <CascadingValue Value="context">
                 @* change всплывает от любого поля листа: черновик пишется сразу, а не на тике автосохранения. *@
-                <div class="sheet" @onchange="KeepDraftAsync">
+                <div class="sheet" data-typo="@TypoVariant" @onchange="KeepDraftAsync">
                     @if (!SheetMode)
                     {
                         <PlaySheet />
@@ -202,6 +209,16 @@
                     }
                 </div>
 
+                @* Эксперимент с типографикой (временно, 2026-10-03): владелец сравнивает варианты на своём iPad.
+                   Варианты — sheet.css, «Эксперимент с типографикой»; после выбора блок и параметр typo удаляются. *@
+                <nav class="typo-switch" aria-label="Вариант типографики" data-testid="typo-switch">
+                    <span>Типографика:</span>
+                    @foreach (var (key, label) in TypoVariants)
+                    {
+                        <a href="@TypoHref(key)" aria-current="@(TypoVariant == key ? "true" : null)">@key.ToUpperInvariant() · @label</a>
+                    }
+                </nav>
+
                 <DevelopmentPhaseModal @bind-Open="_developmentOpen" />
             </CascadingValue>
 
@@ -231,6 +248,24 @@
 
     /// <summary>Режим из адреса: <c>sheet</c> — секции для заполнения; всё остальное — «Игра».</summary>
     [SupplyParameterFromQuery(Name = "mode")] public string? Mode { get; set; }
+
+    /// <summary>Вариант типографики листа (временно, эксперимент 2026-10-03): a — текущий, b–d — sheet.css.</summary>
+    [SupplyParameterFromQuery(Name = "typo")] public string? Typo { get; set; }
+
+    private static readonly (string Key, string Label)[] TypoVariants =
+        [("a", "как сейчас"), ("b", "крупный"), ("c", "книжный"), ("d", "плотный")];
+
+    private string TypoVariant => TypoVariants.Any(v => v.Key == Typo) ? Typo! : "a";
+
+    private string TypoHref(string key)
+    {
+        var mode = SheetMode ? $"mode={SheetModeValue}&" : "";
+        return $"character/{CharacterId}?{mode}typo={key}";
+    }
+
+    /// <summary>Переключатель «Игра / Лист» не теряет выбранный вариант типографики.</summary>
+    private string WithTypo(string href) =>
+        Typo is null ? href : $"{href}{(href.Contains('?') ? '&' : '?')}typo={Uri.EscapeDataString(Typo)}";
 
     private const string SheetModeValue = "sheet";
 
@@ -384,6 +419,8 @@
                 Toasts.Error(_saver.Error ?? "Лист не сохранился.", "Лист не сохранён — повторю сам");
                 break;
             case SheetSaveState.Saved:
+                if (changed || manual)
+                    FlashSaved();
                 if (changed && _draftNotice is { NeedsChoice: false, Saved: false } restored)
                     _draftNotice = restored with { Saved = true };
                 if (_failureShown)
@@ -504,6 +541,30 @@
     {
         if (!_collapsed.Remove(section.Id))
             _collapsed.Add(section.Id);
+    }
+
+    /// <summary>Сколько держится «Сохранено» после записи.</summary>
+    private static readonly TimeSpan SavedFlash = TimeSpan.FromSeconds(2.5);
+
+    private int _savedFlash;
+
+    private bool ShowSaveState => _saver.State != SheetSaveState.Saved || _savedFlash > 0;
+
+    /// <summary>«Сохранено» — на пару секунд; новая запись продлевает показ (счётчик, а не флаг: старая пауза не гасит новую).</summary>
+    private void FlashSaved()
+    {
+        var flash = ++_savedFlash;
+        _ = HideSavedAsync(flash);
+    }
+
+    private async Task HideSavedAsync(int flash)
+    {
+        await Task.Delay(SavedFlash);
+        if (flash != _savedFlash)
+            return;
+
+        _savedFlash = 0;
+        await InvokeAsync(StateHasChanged);
     }
 
     private string SaveStateText => _saver.State switch
