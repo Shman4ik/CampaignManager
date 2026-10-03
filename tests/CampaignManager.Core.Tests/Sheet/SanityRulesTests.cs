@@ -188,6 +188,17 @@ public sealed class SanityRulesTests
     public void IsPermanentlyInsane_SanityAtOrBelowZero(int sanity, bool expected) =>
         Assert.Equal(expected, SanityRules.IsPermanentlyInsane(NewSheet(sanity)));
 
+    [Fact]
+    [Trait("page", "154")]
+    public void Status_BlankSheetWithoutPow_IsNotPermanentlyInsane()
+    {
+        // Чистый бланк: МОЩ не вписана, Рассудок 0 из 99 — плашки «неизлечимо безумен» быть не должно (g3, 67).
+        var blank = new CharacterSheet { Characteristics = Chars(pow: 0), Current = new CurrentValues { Sanity = 0 } };
+        Assert.False(SanityRules.Status(blank, Catalog).PermanentlyInsane);
+
+        Assert.True(SanityRules.Status(NewSheet(0), Catalog).PermanentlyInsane); // МОЩ 70, Рассудок 0
+    }
+
     // ── Списание: оба окна ──────────────────────────────────────────────────
 
     [Fact]

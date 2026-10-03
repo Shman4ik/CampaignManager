@@ -223,8 +223,22 @@ public sealed class CharacterSummaryDto
     /// <summary>Сценарии, где НПС занят (связи <c>scenario_npcs</c>).</summary>
     public List<string> CastIn { get; set; } = [];
 
+    /// <summary>Те же связи с ролью и количеством — для чипа «Дом с привидением · враг ×3» (ревью g3, 70).</summary>
+    public List<CharacterCastDto> Casts { get; set; } = [];
+
+    /// <summary>ПЗ сейчас — строка карточки для стола: «ПЗ 11 · Ближний бой 40%» (ревью g3, 69).</summary>
+    public int HitPoints { get; set; }
+
+    /// <summary>Лучший боевой навык листа (ближний бой, стрельба, метание — без Уклонения); null — боевых строк нет.</summary>
+    public string? CombatSkill { get; set; }
+
+    public int CombatValue { get; set; }
+
     public bool CanEdit { get; set; }
 }
+
+/// <summary>Где занят НПС: сценарий, роль и количество (один лист — «3 бандита»).</summary>
+public sealed record CharacterCastDto(string Scenario, NpcRole Role, int Count);
 
 /// <summary>
 /// Лист сыщика. Ошибки — <see cref="Platform.ApiException"/>: 404 — листа нет или он не виден (неразличимо),

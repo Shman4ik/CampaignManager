@@ -17,7 +17,10 @@
    CastNpcDialog с ролью и количеством), поэтому правка листа видна во всех сценариях. «Удалить» — архив (статус
    листа с If-Match), безвозвратно отсюда ничего не пропадает.
    Чужие НПС кампаний сюда не попадают — список фильтрует сервер правилом листа (AccessPolicy.ForCharacter). *@
-@* Заголовок = подпись пункта рельса (правило 5); готовые сыщики — вторая вкладка. *@
+@* Заголовок = подпись пункта рельса (правило 5); готовые сыщики — вторая вкладка. F3b (ревью g3, 72–81, 86): «Сбросить фильтры»
+   активна только при фильтре, селект «Любое место» не пропадает, «Только архив», пустой результат — строка, подзаголовок со
+   склонением, тосты называют объект (одно подтверждение), на телефоне фильтр — поиск и кнопка «Фильтры», по 12 карточек,
+   «Быстрый НПС» оставляет в библиотеке с тостом «Создан: … — Открыть». *@
 <PageHeader Title="НПС" Subtitle="@CountText">
     <Actions>
         @if (Kind is CharacterKind.Npc)
@@ -31,23 +34,31 @@
 
 <div class="cm-page">
     <Tabs Items="Items" ActiveKey="@ActiveTab" ActiveKeyChanged="SelectTab" AriaLabel="Вид листа" />
-    <FilterPanel OnReset="ResetFilters">
+    <FilterPanel OnReset="ResetFilters" CanReset="@CanReset">
         <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по имени, профессии, месту…" aria-label="Поиск"
                data-testid="npc-search" @bind="_search" @bind:event="oninput" />
-        @if (_places.Count > 0)
-        {
-            <select class="cm-input w-auto min-w-48" aria-label="Где лист" data-testid="npc-place" value="@_place" @onchange="SelectPlace">
-                <option value="">Где угодно</option>
+        @* На телефоне — поиск и «Фильтры» (место и архив прячутся, пока не нужны): четыре ряда фильтра отнимали ≈200px из 651. *@
+        <button type="button" class="cm-btn cm-btn-secondary cm-btn-icon relative sm:hidden" aria-label="Фильтры" aria-expanded="@(_filtersOpen ? "true" : "false")"
+                data-testid="npc-filters-toggle" @onclick="() => _filtersOpen = !_filtersOpen">
+            <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+            @if (_place.Length > 0 || ShowArchived)
+            {
+                <span class="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent-600" aria-hidden="true"></span>
+            }
+        </button>
+        <div class="@(_filtersOpen ? "flex" : "hidden") w-full flex-wrap items-center gap-x-3 gap-y-2 sm:contents">
+            <select class="cm-input w-full shrink-0 sm:w-56" aria-label="Сценарий или кампания" data-testid="npc-place" value="@_place" disabled="@(_places.Count == 0)" @onchange="SelectPlace">
+                <option value="">Любое место</option>
                 @foreach (var place in _places)
                 {
                     <option value="@place">@place</option>
                 }
             </select>
-        }
-        <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
-            <input type="checkbox" class="cm-checkbox" checked="@ShowArchived" data-testid="show-archived" @onchange="ToggleArchived" />
-            Архив
-        </label>
+            <label class="flex min-h-11 items-center gap-2 text-sm text-primary-700">
+                <input type="checkbox" class="cm-checkbox" checked="@ShowArchived" data-testid="show-archived" @onchange="ToggleArchived" />
+                Только архив
+            </label>
+        </div>
     </FilterPanel>
 
     <AsyncContent @ref="_content" Key="@LoadKey" Load="LoadAsync" LoadingMessage="Загружаю библиотеку…" Context="items">
@@ -59,9 +70,8 @@
             }
             @if (found.Count == 0)
             {
-                @* Кнопка добавления — в шапке, «Сбросить» — в строке фильтров: второй копии здесь нет. *@
-                <EmptyState Icon="fa-users-slash" Title="@EmptyTitle(items)"
-                            Message="@(items.Count == 0 && !ShowArchived ? "Созданные здесь листы доступны во всех сценариях." : null)" />
+                @* Кнопка добавления — в шапке, «Сбросить» — в строке фильтров: второй копии здесь нет; пустое — одна строка (правило 4). *@
+                <EmptyState Compact="true" Title="@EmptyTitle(items)" />
             }
             else
             {
@@ -80,14 +90,14 @@
 
 @if (_quickOpen)
 {
-    <QuickNpcModal Open="true" Campaigns="_keeperCampaigns" OnClose="() => _quickOpen = false" OnCreated="QuickCreated" />
+    <QuickNpcModal Open="true" Campaigns="_keeperCampaigns" OnClose="() => _quickOpen = false" OnCreatedNamed="QuickCreatedAsync" />
 }
 
-<CastNpcDialog Open="_casting is not null" Character="_casting" OnClose="() => _casting = null" OnSaved="CastAsync" />
+<CastNpcDialog Open="_casting is not null" Character="_casting" OnClose="() => _casting = null" OnCastSaved="CastAsync" />
 
 @code {
     private const string PregenTab = "pregen";
-    private const int PageSize = 24;
+    private const int PageSize = 12;
     private string _place = "";
     private int _page = 1;
     private IReadOnlyList<string> _places = [];
@@ -95,6 +105,7 @@
     private string _search = "";
     private Guid? _busy;
     private bool _quickOpen;
+    private bool _filtersOpen;
     private int? _count;
     private IReadOnlyList<CampaignSummaryDto> _keeperCampaigns = [];
     private CharacterSummaryDto? _casting;
@@ -146,13 +157,27 @@
         ];
     }
 
-    private string EmptyTitle(IReadOnlyList<CharacterSummaryDto> items) => items.Count > 0
-        ? "Никого по этим условиям."
-        : ShowArchived ? "Архив пуст." : Kind is CharacterKind.Npc ? "НПС пока нет." : "Готовых сыщиков пока нет.";
+    private bool CanReset => _search.Length > 0 || _place.Length > 0 || ShowArchived;
 
+    private string EmptyTitle(IReadOnlyList<CharacterSummaryDto> items)
+    {
+        var plural = Kind is CharacterKind.Npc ? "НПС" : "готовых сыщиков";
+        return items.Count > 0 ? EmptyState.NoneByFilter(plural) : EmptyState.None(plural + (ShowArchived ? " в архиве" : ""));
+    }
+
+    /// <summary>«32 листа» / «3 готовых сыщика» — со склонением; «32 НПС» повторяло заголовок.</summary>
     private string? CountText => _count is { } count
-        ? $"{count} {(Kind is CharacterKind.Npc ? "НПС" : "готовых сыщиков")}{(ShowArchived ? " в архиве" : "")}"
+        ? Kind is CharacterKind.Npc
+            ? $"{count} {Plural(count, "лист", "листа", "листов")}{(ShowArchived ? " в архиве" : "")}"
+            : $"{count} {Plural(count, "готовый сыщик", "готовых сыщика", "готовых сыщиков")}{(ShowArchived ? " в архиве" : "")}"
         : null;
+
+    private static string Plural(int n, string one, string few, string many) => (n % 100 is >= 11 and <= 14 ? 0 : n % 10) switch
+    {
+        1 => one,
+        2 or 3 or 4 => few,
+        _ => many,
+    };
 
     private string Url(string tab, bool archived)
     {
@@ -197,30 +222,49 @@
         _quickOpen = true;
     }
 
-    private async Task CastAsync(Guid scenarioId)
+    /// <summary>Тост называет НПС, сценарий, роль и количество — «сценарий» без названия ничего не подтверждал (ревью g3, 78).</summary>
+    private async Task CastAsync(NpcCastSaved saved)
     {
-        Toasts.Success($"{Names.Plain(_casting?.Name ?? "НПС")} занят в сценарии.");
+        var role = CampaignManager.Core.Scenarios.ScenarioText.Of(saved.Role).ToLowerInvariant() + (saved.Count > 1 ? $" ×{saved.Count}" : "");
+        Toasts.Success($"{Names.Plain(_casting?.Name ?? "НПС")} занят в сценарии:", subject: $"{saved.ScenarioName} · {role}");
         _casting = null;
         if (_content is not null)
             await _content.ReloadAsync();
     }
 
-    private void QuickCreated(Guid id) => Navigation.NavigateTo($"character/{id}");
+    /// <summary>
+    /// Быстрый НПС из библиотеки остаётся в библиотеке: лист — «Открыть» в тосте; несколько НПС подряд не возвращают сюда каждый
+    /// раз (решение оркестратора по ревью g3, 86).
+    /// </summary>
+    private async Task QuickCreatedAsync((Guid Id, string Name) created)
+    {
+        var (id, name) = created;
+        _quickOpen = false;
+        Toasts.Show(Tone.Success, "Создан:", action: new ToastAction("Открыть", () =>
+        {
+            Navigation.NavigateTo($"character/{id}");
+            return Task.CompletedTask;
+        }), subject: name);
+        if (_content is not null)
+            await _content.ReloadAsync();
+    }
 
     private async Task ArchiveAsync(CharacterSummaryDto character)
     {
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Убрать в архив?", "Лист останется в архиве этой страницы.")
+        // Обратимое действие — кнопка подтверждения обычная, не красная (ревью g3, 80).
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Убрать в архив?", "Вернуть можно через «Только архив».")
             {
                 Subject = character.Name,
                 ConfirmText = "В архив",
-                Details = "Можно вернуть.",
+                ConfirmVariant = ButtonVariant.Primary,
+                Details = null,
             }))
             return;
 
-        await SetStatusAsync(character, CharacterStatus.Archived, "Лист в архиве.");
+        await SetStatusAsync(character, CharacterStatus.Archived, "В архиве:");
     }
 
-    private Task RestoreAsync(CharacterSummaryDto character) => SetStatusAsync(character, CharacterStatus.Active, "Лист вернулся из архива.");
+    private Task RestoreAsync(CharacterSummaryDto character) => SetStatusAsync(character, CharacterStatus.Active, "Вернулся из архива:");
 
     private async Task SetStatusAsync(CharacterSummaryDto character, CharacterStatus status, string done)
     {
@@ -228,7 +272,7 @@
         try
         {
             await Api.SetStatusAsync(character.Id, status, character.Version);
-            Toasts.Success(done);
+            Toasts.Success(done, subject: character.Name);
             if (_content is not null)
                 await _content.ReloadAsync();
         }

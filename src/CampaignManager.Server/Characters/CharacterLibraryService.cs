@@ -29,6 +29,9 @@ public sealed class CharacterLibraryService(
     private const string OneActiveSheet =
         "У вас уже есть активный сыщик в этой кампании — сначала смените его статус на листе (выбыл, в отставке).";
 
+    /// <summary>В завершённой кампании новых листов не заводят: на главной кнопки нет, адрес её не обходит (ревью g3, 63).</summary>
+    private const string CampaignCompleted = "Кампания завершена: новых листов в ней не заводят.";
+
     /// <summary>Новый лист. Лист и связь НПС со сценарием — одной записью: либо оба, либо ничего.</summary>
     public async Task<CharacterCreatedDto> CreateAsync(CreateCharacterRequest request, CancellationToken cancellationToken)
     {
@@ -39,6 +42,12 @@ public sealed class CharacterLibraryService(
 
         await access.CanCreateCharacterAsync(request.Kind, request.CampaignId, cancellationToken).Demand();
         var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
+
+        if (request.Kind is not CharacterKind.Pregen && request.CampaignId is { } placeCampaignId
+                                                      && await IsCompletedAsync(placeCampaignId, cancellationToken))
+        {
+            throw ApiProblemException.Conflict(CampaignCompleted);
+        }
 
         switch (request.Kind)
         {
@@ -149,9 +158,18 @@ public sealed class CharacterLibraryService(
             context.Reason = kind switch
             {
                 CharacterKind.Player => "Сыщика заводят в кампании, где вы участник: вступите в неё с главной.",
-                CharacterKind.Npc when campaignId is not null => "НПС кампании заводит её Хранитель.",
-                _ => "НПС и прегенов заводит Хранитель.",
+                // Хранитель другой кампании слышит причину по делу, а не «её Хранитель» (ревью g3, 66).
+                CharacterKind.Npc when campaignId is not null => user.IsKeeper
+                    ? "Вы не Хранитель этой кампании."
+                    : "НПС кампании заводит её Хранитель.",
+                _ => "НПС и готовых сыщиков заводит Хранитель.",
             };
+            return context;
+        }
+
+        if (placeCampaign is { } completedCampaign && await IsCompletedAsync(completedCampaign, cancellationToken))
+        {
+            context.Reason = CampaignCompleted;
             return context;
         }
 
@@ -190,6 +208,9 @@ public sealed class CharacterLibraryService(
             c.Kind == kind && (archived ? c.Status == CharacterStatus.Archived : c.Status != CharacterStatus.Archived));
         return await CharacterSummaries.ReadAsync(dbContext, query, user, cancellationToken);
     }
+
+    private Task<bool> IsCompletedAsync(Guid campaignId, CancellationToken cancellationToken) =>
+        dbContext.Campaigns.AnyAsync(c => c.Id == campaignId && c.Status == CampaignStatus.Completed, cancellationToken);
 
     private Task<Guid?> ActiveSheetAsync(Guid campaignId, Guid userId, CancellationToken cancellationToken) =>
         dbContext.Characters
