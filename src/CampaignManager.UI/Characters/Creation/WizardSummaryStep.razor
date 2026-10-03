@@ -7,10 +7,9 @@
     <section>
         <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h3 class="cm-h4" data-testid="summary-name">@(string.IsNullOrWhiteSpace(_sheet.Personal.Name) ? "Без имени" : _sheet.Personal.Name)</h3>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Biography)">Изменить</Button>
         </div>
         <div class="cm-meta mt-1">
-            <span>@_sheet.Personal.Age лет</span>
+            <span>@Terms.Years(_sheet.Personal.Age)</span>
             @if (!string.IsNullOrWhiteSpace(_sheet.Personal.Gender))
             {
                 <span>@_sheet.Personal.Gender</span>
@@ -26,7 +25,7 @@
     <section>
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Характеристики</h3>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Characteristics)">Изменить</Button>
+            <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Характеристики" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Characteristics)">Изменить</Button>
         </div>
         <dl class="mb-3 grid grid-cols-4 gap-2 lg:grid-cols-8" data-testid="summary-characteristics">
             @foreach (var info in InvestigatorCreationRules.Characteristics)
@@ -45,7 +44,7 @@
     <section>
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Навыки выше базы</h3>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Skills)">Изменить</Button>
+            <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Навыки" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Skills)">Изменить</Button>
         </div>
         @if (_improved.Count == 0)
         {
@@ -68,7 +67,7 @@
     <section>
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Деньги и снаряжение</h3>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Gear)">Изменить</Button>
+            <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Деньги и снаряжение" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Gear)">Изменить</Button>
         </div>
         <div class="cm-meta">
             <span><span class="cm-meta-label">Наличные:</span> $@FinanceRules.Format(_sheet.Finances.Cash ?? 0)</span>
@@ -84,7 +83,7 @@
     <section>
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 class="cm-section-title">Биография</h3>
-            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-pen" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Biography)">Изменить</Button>
+            <Button Small="true" Variant="ButtonVariant.Ghost" Icon="fa-pen" AriaLabel="Изменить: Биография" OnClick="() => OnGoTo.InvokeAsync(CreationStep.Biography)">Изменить</Button>
         </div>
         @if (BiographyTables.FilledCount(_sheet.Biography) == 0)
         {
@@ -128,6 +127,7 @@
         [
             .. _sheet.Skills
                 .Select(entry => SheetSkillLayout.Line(_sheet, Plan.Catalog, entry))
+                .Where(l => l.Value > l.BaseValue)
                 .OrderByDescending(l => l.Value)
                 .ThenBy(l => l.Name, StringComparer.CurrentCulture),
         ];

@@ -14,6 +14,7 @@
 @inject DialogService Dialogs
 @inject IDiceRoller Dice
 @inject NavigationManager Navigation
+@inject ToastService Toasts
 
 @* Помощник создания сыщика (T2.4): способ и пять шагов главы 3 плюс «Итог». Черновик — InvestigatorDraft в
    localStorage (переживает перезагрузку и уход со страницы), правила — Core: правки шагов — методы черновика,
@@ -48,7 +49,8 @@
                 var step = CurrentStep;
                 var validation = plan.Validate(step);
 
-                <nav class="mb-3 flex flex-wrap gap-2" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
+                <p class="cm-meta mb-1 sm:hidden" data-testid="wizard-step-caption">Шаг @((int)step + 1) из @((int)CreationStep.Summary + 1) — @Steps[step].Title</p>
+                <nav class="mb-3 flex flex-wrap gap-1 sm:gap-2" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
                     @foreach (var item in Enum.GetValues<CreationStep>())
                     {
                         var target = item;
@@ -58,7 +60,7 @@
                                 Variant="@(target == step ? ButtonVariant.OutlinePrimary : ButtonVariant.Secondary)"
                                 Icon="@(target < step ? "fa-check" : null)"
                                 Disabled="@(!reachable)" OnClick="() => GoToAsync(target)">
-                            @((int)target + 1)<span class="@(target == step ? null : "max-sm:sr-only")">. @Steps[target].Title</span>
+                            @((int)target + 1)<span class="max-sm:sr-only">. @Steps[target].Title</span>
                         </Button>
                     }
                 </nav>
@@ -299,15 +301,17 @@
         _error = null;
         try
         {
+            var sheet = SheetBuilder.FromDraft(plan);
             var created = await Api.CreateAsync(new CreateCharacterRequest
             {
                 Kind = CreationKind,
                 CampaignId = CampaignOrNull,
                 ScenarioId = CreationKind is CharacterKind.Pregen ? ScenarioId : null,
                 Cast = CreationKind is CharacterKind.Npc && ScenarioId is { } scenario ? new NpcCastRequest(scenario) : null,
-                Sheet = SheetBuilder.FromDraft(plan),
+                Sheet = sheet,
             });
             await Storage.RemoveAsync(DraftKey);
+            Toasts.Success(string.IsNullOrWhiteSpace(sheet.Personal.Name) ? "Лист создан." : $"Лист создан: {sheet.Personal.Name}.");
             Navigation.NavigateTo($"character/{created.Id}", replace: true);
         }
         catch (HttpRequestException ex)
