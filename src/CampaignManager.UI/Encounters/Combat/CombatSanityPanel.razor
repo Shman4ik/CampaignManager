@@ -6,23 +6,23 @@
         <Field Label="Кто видит">
             <ParticipantSelect Participants="State.Participants" Where="p => p.Sanity is not null && !p.Dead" Label="Кто проходит проверку" Value="ActorId" ValueChanged="SelectActor" />
         </Field>
-        <Field Label="Что видит" Note="Тварь — запись потери и привыкание к её виду">
+        <Field Label="Что видит" Note="Выберите тварь — потеря возьмётся из её записи">
             <ParticipantSelect Participants="State.Participants" Where="p => p.Kind == ParticipantKind.Creature" Label="Тварь" Placeholder="— без твари —"
                                Value="_creatureId" ValueChanged="SelectCreature" />
         </Field>
     </div>
-    <div class="flex flex-wrap items-end gap-3">
-        <Field Label="Потеря при успехе" class="w-32">
-            <input class="cm-input font-mono" value="@_success" @onchange="e => _success = Text(e, '0')" />
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field Label="Потеря при успехе">
+            <input class="cm-input font-mono" aria-label="Потеря Рассудка при успехе" value="@_success" @onchange="e => _success = Text(e, '0')" />
         </Field>
-        <Field Label="При провале" class="w-32">
-            <input class="cm-input font-mono" data-testid="sanity-failure" value="@_failure" @onchange="e => _failure = Text(e, '0')" />
+        <Field Label="Потеря при провале">
+            <input class="cm-input font-mono" aria-label="Потеря Рассудка при провале" data-testid="sanity-failure" value="@_failure" @onchange="e => _failure = Text(e, '0')" />
         </Field>
     </div>
     @if (Actor is { Sanity: { } sanity } actor)
     {
         <details class="encounter-rolls">
-            <summary>Броски со стола (необязательно)</summary>
+            <summary><i class="fa-solid fa-dice mr-2" aria-hidden="true"></i>Вписать броски с костей</summary>
             <div class="mt-2 flex flex-col gap-3">
                 <Field Label="@($"Рассудок {sanity}")" Group="true">
                     <RollInput Label="Рассудок" Value="sanity" Roll="_roll" RollChanged="r => _roll = r" />
@@ -35,7 +35,7 @@
         </details>
     }
     <div>
-        <Button Icon="fa-brain" Disabled="@(Actor is not { Sanity: not null })" OnClick="ResolveAsync" data-testid="sanity-resolve">Проверка Рассудка</Button>
+        <Button Icon="fa-brain" Disabled="@(Actor is not { Sanity: not null })" DisabledReason="@(Actor is not { Sanity: not null } ? "Выберите, кто видит" : null)" OnClick="ResolveAsync" data-testid="sanity-resolve">Проверить Рассудок</Button>
     </div>
 </div>
 

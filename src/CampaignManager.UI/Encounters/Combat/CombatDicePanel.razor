@@ -1,0 +1,63 @@
+@using CampaignManager.UI.Checks
+@* Кости в бою: проверка участника сцены. Кто проверяется и что — выбором (характеристики, Удача, Рассудок, Уклонение,
+   навыки боя из снимка участника), значение подставляется; «вписать вручную» — для навыка, которого в снимке нет.
+   Сама проверка — общий SkillCheckPanel (InCombat: повторов нет, стр. 102), цель ему задана снаружи. Своей карточки не рисует. *@
+<div class="flex flex-col gap-3" data-testid="dice-panel">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field Label="Кто проверяется">
+            <ParticipantSelect Participants="State.Participants" Where="Alive" Label="Кто проверяется" Value="ActorId" ValueChanged="SelectActor" />
+        </Field>
+        <Field Label="Что проверяем">
+            <select class="cm-input" aria-label="Что проверяем" data-testid="dice-target" value="@_key" @onchange="e => _key = e.Value?.ToString() ?? ManualKey" disabled="@(Actor is null)">
+                @foreach (var option in Options)
+                {
+                    <option value="@option.Key" selected="@(option.Key == _key)">@option.Name@(option.Value is { } v ? $" ({v})" : "")</option>
+                }
+            </select>
+        </Field>
+    </div>
+    @{
+        var chosen = Options.FirstOrDefault(o => o.Key == _key);
+        var known = Actor is not null && chosen?.Value is not null;
+    }
+    <SkillCheckPanel @key="@($"{ActorId}:{_key}")" InCombat="true" FixedSubject="@known"
+                     InitialName="@(known ? $"{Actor!.Name}: {chosen!.Name}" : null)" InitialValue="@(known ? chosen!.Value : null)" />
+</div>
+
+@code {
+    private const string ManualKey = "manual";
+
+    private string _key = ManualKey;
+
+    private sealed record Option(string Key, string Name, int? Value);
+
+    private IReadOnlyList<Option> Options
+    {
+        get
+        {
+            List<Option> list = [new(ManualKey, "— вписать значение вручную —", null)];
+            if (Actor is not { } a)
+                return list;
+
+            list.AddRange(
+            [
+                new("str", "СИЛ", a.Stats.Str), new("con", "ВЫН", a.Stats.Con), new("siz", "ТЕЛ", a.Stats.Siz),
+                new("dex", "ЛВК", a.Stats.Dex), new("int", "ИНТ", a.Stats.Int), new("pow", "МОЩ", a.Stats.Pow),
+                new("dodge", "Уклонение", a.Stats.Dodge),
+            ]);
+            if (a.Luck is { } luck)
+                list.Add(new("luck", "Удача", luck));
+            if (a.Sanity is { } sanity)
+                list.Add(new("sanity", "Рассудок", sanity));
+            foreach (var attack in a.Profile.Attacks)
+                list.Add(new($"attack:{attack.Key}", attack.Name, attack.Skill));
+            if (a.Profile.FirstAid > 0)
+                list.Add(new("firstaid", "Первая помощь", a.Profile.FirstAid));
+            if (a.Profile.Medicine > 0)
+                list.Add(new("medicine", "Медицина", a.Profile.Medicine));
+            return list;
+        }
+    }
+
+    protected override void OnActorChanged() => _key = ManualKey;
+}
