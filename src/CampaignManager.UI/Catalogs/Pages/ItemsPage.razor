@@ -6,7 +6,7 @@
    описание раскрытие не печатает заново, а снимает обрезку с той же ячейки. *@
 <CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет" Plural="предметов"
              Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
-             New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore">
+             New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore" State="_state">
     <Columns Context="view">
         <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[32%]" Context="item">
             <span class="font-medium text-primary-800">@item.Name</span>
@@ -35,8 +35,10 @@
     </CardTemplate>
     <Form Context="item">
         <div class="grid gap-4 sm:grid-cols-2">
-            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="item.Name" /></Field>
-            <Field Label="Тип"><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
+                <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="item.Name" />
+            </Field>
+            <Field Label="Тип" Note="Выберите из списка или впишите новый."><input class="cm-input" list="item-types" @bind="item.Type" /></Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="item.Source" /></Field>
             <datalist id="item-types">
                 @foreach (var type in _types)
@@ -44,7 +46,7 @@
                     <option value="@type"></option>
                 }
             </datalist>
-            <div class="sm:col-span-2"><EraPicker @bind-Values="item.Eras" /></div>
+            <div class="sm:col-span-2"><EraPicker Show="_state.ErasVary" @bind-Values="item.Eras" /></div>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="4" @bind="item.Description"></textarea></Field>
             <Field Label="Картинка" Group="true" class="sm:col-span-2">
                 <ImagePicker FileId="item.ImageFileId" Url="@item.ImageUrl"
@@ -58,6 +60,7 @@
     /// <summary>Столько описания входит в колонку на портрете iPad (замер v1).</summary>
     private const int VisibleDescription = 60;
 
+    private readonly CatalogFormState _state = new();
     private IReadOnlyList<CatalogFilter<ItemDto>> _filters = [];
     private IReadOnlyList<string> _types = [];
 

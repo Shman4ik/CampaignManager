@@ -150,20 +150,14 @@
     <UnsavedChangesGuard @ref="_guard" Dirty="IsDirty" />
     <Modal Open="_editing is not null" Title="@FormTitle" Size="FormSize" OnClose="CloseFormAsync">
         <ChildContent>
-            @if (_formError is not null)
-            {
-                <Alert Tone="Tone.Error" ShowIcon="true">
-                    <ChildContent>@_formError</ChildContent>
-                    <Actions>
-                        @if (_stale)
-                        {
-                            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
-                        }
-                    </Actions>
-                </Alert>
-            }
             @if (_editing is not null)
             {
+                _state.ErasVary = ErasVary;
+                if (_state.Attempted)
+                {
+                    _state.Set(Check(_editing)); // после первой попытки ошибки гаснут по мере правки
+                }
+
                 @Form(_editing)
                 @* «Удалить» — не в строке, а здесь (правило 7): рядом с частым действием опасного не ставим. *@
                 @if (!_isNew && _canEdit)
@@ -174,6 +168,24 @@
                 }
             }
         </ChildContent>
+        <FooterHint>
+            @* Все ошибки полей сразу и рядом с кнопкой; страница прокручивается к первой (правило 9). *@
+            <FormErrors Errors="_state.Messages" Attempt="_state.Attempt" />
+        </FooterHint>
+        <FooterError>
+            @if (_formError is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0">
+                    <ChildContent>@_formError</ChildContent>
+                    <Actions>
+                        @if (_stale)
+                        {
+                            <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate-right" OnClick="RereadAsync">Перечитать</Button>
+                        }
+                    </Actions>
+                </Alert>
+            }
+        </FooterError>
         <Footer>
             <Button Variant="ButtonVariant.Secondary" OnClick="CloseFormAsync">Отмена</Button>
             <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
@@ -219,6 +231,7 @@
     private bool _syncing;
     private CatalogImportReport? _syncReport;
     private Guid? _pagedTo;
+    private CatalogFormState _ownState = new();
 
     [Parameter, EditorRequired] public string Title { get; set; } = "";
 
@@ -274,6 +287,17 @@
 
     /// <summary>Плотный справочник: таблица — свой скроллпорт с липкими шапкой и названием.</summary>
     [Parameter] public bool Scroll { get; set; } = true;
+
+    /// <summary>
+    /// Проверка формы до отправки: поле → текст ошибки (все сразу, правило 9). Название проверяется всегда; страница
+    /// добавляет своё обязательное (урон и навык оружия, тип заклинания). Остальное проверяет сервер.
+    /// </summary>
+    [Parameter] public Func<TItem, IReadOnlyDictionary<string, string>>? Validate { get; set; }
+
+    /// <summary>Ошибки формы по полям: страница читает их в <c>Form</c> (<see cref="CatalogFormState.For"/>); не задан — свой.</summary>
+    [Parameter] public CatalogFormState? State { get; set; }
+
+    private CatalogFormState _state => State ?? _ownState;
 
     /// <summary>Форма записи в окне; получает копию — отмена ничего не портит.</summary>
     [Parameter] public RenderFragment<TItem>? Form { get; set; }
@@ -578,6 +602,7 @@
         _isNew = true;
         _editing = New();
         _initialJson = Serialize(_editing);
+        _state.Reset();
         _formError = null;
         _stale = false;
     }
@@ -595,6 +620,7 @@
         _editing = Copy(item);
         _initialJson = Serialize(_editing);
         _editingName = item.Name;
+        _state.Reset();
         _formError = null;
         _stale = false;
     }
@@ -615,8 +641,28 @@
     private void CloseForm()
     {
         _editing = null;
+        _state.Reset();
         _formError = null;
         _stale = false;
+    }
+
+    private IReadOnlyDictionary<string, string> Check(TItem item)
+    {
+        var errors = new Dictionary<string, string>();
+        if (string.IsNullOrWhiteSpace(item.Name))
+        {
+            errors["name"] = "Нужно название.";
+        }
+
+        if (Validate is not null)
+        {
+            foreach (var (key, message) in Validate(item))
+            {
+                errors.TryAdd(key, message);
+            }
+        }
+
+        return errors;
     }
 
     private async Task SaveAsync()
@@ -626,9 +672,13 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_editing.Name))
+        var errors = Check(_editing);
+        if (errors.Count > 0)
         {
-            _formError = "Нужно название.";
+            _state.Set(errors);
+            _state.Attempted = true;
+            _state.Attempt++;
+            _formError = null;
             return;
         }
 

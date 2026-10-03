@@ -9,8 +9,8 @@
    подписаны: голые иконки — только в плотной таблице. Счётчик «навыков: N из 8» — проверка правила
    книги (стр. 37), он же у Хранителя в форме. «С правилами» — синхронизация с сидом книги по коду. *@
 <CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию" Plural="профессий"
-             Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="12" Sorts="Sorts" Sync="true"
-             New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form" FormSize="ModalSize.ExtraLarge">
+             Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="12" Sorts="Sorts" Sync="true" State="_state" Validate="Validate"
+             New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form">
     <Body Context="view">
         <div class="cm-grid-cards">
             @foreach (var occupation in view.Page)
@@ -30,15 +30,17 @@
                     </div>
                     <div class="cm-card-body flex-1 text-sm">
                         <p class="cm-meta mb-2">
-                            <span><span class="cm-meta-label">Очки:</span> @CatalogText.Of(occupation.SkillPointsFormula)</span>
+                            <span><span class="cm-meta-label">Очки навыков:</span> @Formula(occupation.SkillPointsFormula)</span>
                             <span><span class="cm-meta-label">Средства:</span> @occupation.CreditRatingMin–@occupation.CreditRatingMax</span>
                         </p>
                         <div class="flex flex-wrap gap-1.5">
-                            @foreach (var slot in occupation.Slots)
+                            @foreach (var (slot, times) in Grouped(occupation.Slots))
                             {
-                                @* Длинный выбор («4 из: …») переносится внутри чипа — иначе на телефоне страница уезжает вбок. *@
-                                <Badge Tone="@(slot.Kind is OccupationSlotKind.Skill or OccupationSlotKind.Specialization ? Tone.Neutral : Tone.Stone)"
-                                       class="max-w-full whitespace-normal">@SlotLabel(slot)</Badge>
+                                @* Длинный выбор («4 из: …») переносится внутри чипа — иначе на телефоне страница уезжает вбок.
+                                   Одинаковые слоты подряд — одним чипом «любой навык ×4»; слоты «со словами» (выбор, любой, социальный)
+                                   отличаются тоном от названного навыка. *@
+                                <Badge Tone="@(slot.Kind is OccupationSlotKind.Skill or OccupationSlotKind.Specialization ? Tone.Neutral : Tone.Info)"
+                                       class="max-w-full whitespace-normal">@SlotLabel(slot)@(times > 1 ? $" ×{times}" : "")</Badge>
                             }
                         </div>
                         @if (count != OccupationRules.RequiredSkillCount)
@@ -74,7 +76,54 @@
     private static readonly IReadOnlyList<CatalogToggle<OccupationDto>> Toggles =
         [new("lovecraft", Terms.FromLovecraft, o => o.IsLovecraftian)];
 
+    private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
+
+    private static IReadOnlyDictionary<string, string> Validate(OccupationDto o) =>
+        o.CreditRatingMin > o.CreditRatingMax
+            ? new Dictionary<string, string> { ["credit"] = "Нижняя граница Средств больше верхней." }
+            : new Dictionary<string, string>();
+
+    private static IEnumerable<(OccupationSlotDto Slot, int Times)> Grouped(IEnumerable<OccupationSlotDto> slots)
+    {
+        List<(OccupationSlotDto Slot, int Times)> result = [];
+        foreach (var slot in slots)
+        {
+            if (result.Count > 0 && SlotLabel(result[^1].Slot) == SlotLabel(slot))
+            {
+                result[^1] = (result[^1].Slot, result[^1].Times + 1);
+            }
+            else
+            {
+                result.Add((slot, 1));
+            }
+        }
+
+        return result;
+    }
+
+    // ОБР, ЛВК, СИЛ… — сокращения характеристик: касанием расшифровываются (правило 11).
+    private static readonly Dictionary<string, string> Characteristics = new()
+    {
+        ["ОБР"] = "Образование", ["ЛВК"] = "Ловкость", ["СИЛ"] = "Сила", ["НАР"] = "Внешность", ["МОЩ"] = "Мощь",
+    };
+
+    private static RenderFragment Formula(SkillPointsFormula formula) => __builder =>
+    {
+        foreach (var word in CatalogText.Of(formula).Split(' '))
+        {
+            var bare = word.Trim('(', ')', ',');
+            if (Characteristics.TryGetValue(bare, out var full))
+            {
+                <Abbr Short="@bare" Full="@full" />
+                <text>@word.Replace(bare, "") </text>
+            }
+            else
+            {
+                <text>@word </text>
+            }
+        }
+    };
 
     private async Task EnsureSkillsAsync()
     {
@@ -116,9 +165,11 @@
 
     private RenderFragment<OccupationDto> Form => o => __builder =>
     {
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="o.Name" /></Field>
-            <Field Label="Очки навыков" class="sm:col-span-2" Note="Если формула даёт выбор, берётся выбранная характеристика (стр. 38–39).">
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
+                <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="o.Name" />
+            </Field>
+            <Field Label="Очки навыков" class="sm:col-span-2" Note="Если формула даёт выбор, берётся выбранная характеристика.">
                 <select class="cm-input" @bind="o.SkillPointsFormula">
                     @foreach (var formula in Enum.GetValues<SkillPointsFormula>())
                     {
@@ -126,15 +177,17 @@
                     }
                 </select>
             </Field>
-            <Field Label="Средства от"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMin" /></Field>
-            <Field Label="Средства до"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMax" /></Field>
+            <div class="grid grid-cols-2 gap-4">
+                <Field Label="Средства от" Error="@_state.For("credit")"><input class="cm-input" type="number" min="0" max="99" aria-invalid="@_state.Invalid("credit")" @bind="o.CreditRatingMin" /></Field>
+                <Field Label="Средства до"><input class="cm-input" type="number" min="0" max="99" @bind="o.CreditRatingMax" /></Field>
+            </div>
             <Field Label="Особенности" Group="true">
-                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="o.IsLovecraftian" /><span>Лавкрафтовская</span></label>
+                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="o.IsLovecraftian" /><span>Из Лавкрафта</span></label>
             </Field>
             <Field Label="Источник" Hint="(страница книги)"><input class="cm-input" @bind="o.Source" /></Field>
-            <div class="sm:col-span-2 lg:col-span-4"><EraPicker @bind-Values="o.Eras" /></div>
+            <div class="sm:col-span-2 lg:col-span-4"><EraPicker Show="_state.ErasVary" @bind-Values="o.Eras" /></div>
             <Field Label="Навыки профессии" Group="true" class="sm:col-span-2 lg:col-span-4"
-                   Note="Ровно восемь профессиональных навыков; Средства — не слот, их задаёт диапазон.">
+                   Note="Нужно ровно восемь; Средства — не слот, их задаёт диапазон.">
                 <OccupationSlotsEditor Slots="o.Slots" SlotsChanged="v => o.Slots = v" Skills="_skills" />
             </Field>
             <Field Label="Теги" Group="true" class="sm:col-span-2 lg:col-span-4" Note="Для взвешенного выбора навыков в случайном черновике сыщика.">

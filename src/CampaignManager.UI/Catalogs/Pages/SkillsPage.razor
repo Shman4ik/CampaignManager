@@ -8,24 +8,24 @@
    (?open=): на него можно дать ссылку, старые /skills/detail/{id} ведут сюда же. *@
 <CatalogPage TItem="SkillDto" Title="Навыки" Icon="fa-brain" AddLabel="Добавить навык" Noun="навык" Plural="навыков"
              Filters="Filters" Toggles="Toggles" ErasOf="s => s.Eras" SearchAlso="s => [ParentName(s)]" TableFrom="TableBreakpoint.Md"
-             New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
+             State="_state" New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
     <Columns Context="view">
-        <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[45%]" Context="s">
+        <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[46%]" Context="s">
             <span class="font-medium text-primary-800">@s.Name</span>
             @if (s.IsUncommon)
             {
-                <Badge Tone="Tone.Warning" class="ml-1.5 align-middle">необычный</Badge>
+                <Badge Tone="Tone.Warning" class="ml-1.5 align-middle">Необычный</Badge>
             }
             @if (view.ShowEra)
             {
                 <EraBadges Values="s.Eras" />
             }
         </DataColumn>
+        <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" HeaderClass="w-[14%]" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
         @if (!view.IsFixed("category"))
         {
             <DataColumn TItem="SkillDto" Title="Категория" SortBy="s => CatalogText.Of(s.Category)" Context="s">@CatalogText.Of(s.Category)</DataColumn>
         }
-        <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" AlignEnd="true" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
     </Columns>
     <CardTemplate Context="s">
         <p class="font-medium text-primary-800">@s.Name</p>
@@ -43,6 +43,7 @@
         new("specializations", "Специализации", s => s.ParentId is not null),
     ];
 
+    private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
 
     [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
@@ -54,7 +55,7 @@
 
     private RenderFragment<SkillDto> Detail => s => __builder =>
     {
-        <SkillDetails Skill="s" Catalog="_skills" />
+        <SkillDetails Skill="s" Catalog="_skills" InRow="true" ShowEra="_skills.Any(o => !o.Eras.SequenceEqual(s.Eras))" />
     };
 
     // Родителем может быть только навык без родителя: у специализаций одна ступень.
@@ -64,8 +65,8 @@
     private RenderFragment<SkillDto> Form => s => __builder =>
     {
         <div class="grid gap-4 sm:grid-cols-2">
-            <Field Label="Название" class="sm:col-span-2" Note="Специализация пишется с родителем в скобках: «Наука (химия)».">
-                <input class="cm-input" @bind="s.Name" />
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2" Note="Специализация пишется с родителем в скобках: «Наука (химия)».">
+                <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="s.Name" />
             </Field>
             <Field Label="Специализация навыка">
                 <select class="cm-input" @bind="s.ParentId">
@@ -84,7 +85,7 @@
                     }
                 </select>
             </Field>
-            <Field Label="База" Hint="(%)" Note="Уклонение — ½ ЛВК (стр. 57), родной язык — ОБР (стр. 77).">
+            <Field Label="База" Hint="(%)" Note="Число или формула: ½ ЛВК, ОБР.">
                 <div class="flex gap-2">
                     <select class="cm-input w-36 shrink-0" aria-label="Формула базы" value="@(s.BaseFormula ?? "")"
                             @onchange="e => s.BaseFormula = e.Value is string { Length: > 0 } formula ? formula : null">
@@ -99,10 +100,10 @@
                 </div>
             </Field>
             <Field Label="Особенности" Group="true">
-                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="s.IsUncommon" /><span>Необычный навык</span></label>
-                <label class="flex min-h-9 items-center gap-2"><input type="checkbox" class="cm-checkbox" @bind="s.CanRetry" /><span>Проверку можно повторить</span></label>
+                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="s.IsUncommon" /><span>Необычный навык</span></label>
+                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="s.CanRetry" /><span>Проверку можно повторить</span></label>
             </Field>
-            <div class="sm:col-span-2"><EraPicker @bind-Values="s.Eras" /></div>
+            <div class="sm:col-span-2"><EraPicker Show="_state.ErasVary" @bind-Values="s.Eras" /></div>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="5" @bind="s.Description"></textarea></Field>
             <Field Label="Примеры применения" Group="true" class="sm:col-span-2">
                 <StringListEditor Values="s.UsageExamples" ValuesChanged="v => s.UsageExamples = [.. v]" ItemLabel="Пример" />
