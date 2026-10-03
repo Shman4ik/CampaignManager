@@ -5,22 +5,33 @@
 
 @* Проверка скорости (стр. 130): ВЫН пешком, навык управления за рулём (½ ЛВК, если навыка нет; поломка — штрафная кость).
    Чрезвычайный успех — +1 СКО на всю погоню, провал — −1. Бросок вписывают или бросают; «Записать» сразу применяет
-   результат правилом Core (эффект через Apply, запись в журнал). Пассажиры проверку не проходят (стр. 139). Посреди погони
+   результат правилом Core (эффект через Apply, запись в журнал); «Бросить за всех» бросает кости у тех, кому бросок не
+   вписан, и записывает всех сразу. Пассажиры проверку не проходят (стр. 139). Посреди погони
    здесь те, кто присоединился или пересел (стр. 140–141). Своей карточки не рисует. *@
 <div data-testid="chase-speed-checks">
     @if (Rows.Count(x => !x.Runner.SpeedChecked) > 1)
     {
         <div class="flex justify-end border-b border-primary-200 px-3 py-2">
-            <Button Variant="ButtonVariant.Secondary" Icon="fa-check-double" OnClick="RecordAllAsync" data-testid="speed-record-all">Записать все</Button>
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" OnClick="RecordAllAsync" data-testid="speed-record-all">Бросить за всех</Button>
         </div>
     }
     @foreach (var (participant, runner) in Rows)
     {
         var skill = ChaseRules.SpeedSkill(participant, runner);
-        @* Три колонки: кто, бросок или итог, кнопка. Итог и кнопка стоят в своих колонках — строка не меняет высоту, когда вписали бросок. *@
-        <div @key="participant.Id" class="grid items-end gap-x-3 gap-y-2 border-t border-primary-200 px-3 py-3 first:border-t-0 md:grid-cols-[minmax(10rem,1fr)_minmax(0,2fr)_9rem]">
+        @* Три колонки: кто, бросок или итог, кнопка. Итог — той же строкой, что имя (бейдж рядом, не в своей ячейке выше
+           или ниже), всё по центру: строка 56px, у записанных и ждущих одной высоты, список не прыгает (H7). *@
+        <div @key="participant.Id" class="@Css.Join("grid gap-x-3 gap-y-2 border-t border-primary-200 px-3 py-2 first:border-t-0",
+                                                runner.SpeedChecked ? "items-center md:grid-cols-[minmax(0,1fr)_9rem]" : "items-end md:grid-cols-[minmax(10rem,1fr)_minmax(0,2fr)_9rem]")">
             <div>
-                <div class="font-semibold text-primary-900">@participant.Name</div>
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="font-semibold text-primary-900">@participant.Name</span>
+                    @if (runner.SpeedChecked)
+                    {
+                        <Badge Tone="@(runner.SpeedModifier switch { > 0 => Tone.Success, < 0 => Tone.Warning, _ => Tone.Neutral })" Icon="fa-check">
+                            @(runner.SpeedModifier switch { > 0 => "+1 к СКО", < 0 => "−1 к СКО", _ => "без поправки" })
+                        </Badge>
+                    }
+                </div>
                 <div class="cm-meta">
                     @ChaseText.Of(runner.Role) · СКО @ChaseRules.BaseMove(participant, runner)
                     @if (runner.SpeedChecked)
@@ -31,11 +42,6 @@
             </div>
             @if (runner.SpeedChecked)
             {
-                <div class="speed-cell">
-                    <Badge Tone="@(runner.SpeedModifier switch { > 0 => Tone.Success, < 0 => Tone.Warning, _ => Tone.Neutral })" Icon="fa-check">
-                        @(runner.SpeedModifier switch { > 0 => "+1 к СКО", < 0 => "−1 к СКО", _ => "без поправки" })
-                    </Badge>
-                </div>
                 @if (!PendingOnly)
                 {
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => ReopenAsync(participant.Id)" data-testid="speed-reopen">Исправить</Button>

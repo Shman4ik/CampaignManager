@@ -8,27 +8,27 @@
 @* Форма трека в окне справочника; правит копию (CatalogPage). Источник — ровно одно из двух: ролик YouTube
    (ссылка любой формы — сервер достанет идентификатор) или загруженный звук. Внешний адрес файла не
    предлагается: звук идёт через Web Audio, а с чужого origin он там немой. *@
-<div class="grid gap-4 sm:grid-cols-2">
-    <Field Label="Название" class="sm:col-span-2"><input class="cm-input" @bind="Track.Name" /></Field>
+@* Окно не выше экрана (правило 3, M8): название и источник — в одной строке, начало, громкость и «по кругу» — в одной, настроения
+   свёрнуты в строку. Громкость трека — только у файлов: у ролика YouTube её нет и в плеере (iPad чужой iframe не слушает). *@
+<div class="grid gap-4 sm:grid-cols-6">
+    <Field Label="Название" Required="true" class="sm:col-span-3"><input class="cm-input" @bind="Track.Name" /></Field>
 
-    <Field Label="Источник" Group="true" class="sm:col-span-2">
-        <div class="flex flex-wrap gap-2">
-            <Button Small="true" Variant="@(_youTube ? ButtonVariant.Secondary : ButtonVariant.Primary)" Icon="fa-file-audio"
-                    aria-pressed="@(_youTube ? "false" : "true")" OnClick="() => SetSource(youTube: false)">Файл</Button>
-            <Button Small="true" Variant="@(_youTube ? ButtonVariant.Primary : ButtonVariant.Secondary)" Icon="fa-brands fa-youtube"
-                    aria-pressed="@(_youTube ? "true" : "false")" OnClick="() => SetSource(youTube: true)">YouTube</Button>
-        </div>
+    <Field Label="Источник" Group="true" class="sm:col-span-3">
+        @* Выбор из двух — Segmented, а не тёмная кнопка: главная в окне одна — «Сохранить». *@
+        <Segmented TValue="bool" Options="SourceOptions" Value="_youTube" ValueChanged="v => SetSource(youTube: v)" Label="Источник" />
     </Field>
 
     @if (_youTube)
     {
-        <Field Label="Ссылка на ролик" class="sm:col-span-2" Note="@VideoNote" Error="@VideoError">
-            <input class="cm-input" placeholder="https://www.youtube.com/watch?v=…" @bind="Track.YoutubeId" @bind:event="oninput" />
+        @* Ссылка целиком (https://www.youtube.com/watch?v=…), а не голый идентификатор: по нему не видно, что за поле, и подсказка
+           повторяла его второй раз («Ролик WF8iZWrOmb0»). Сервер достаёт идентификатор из ссылки любой формы. *@
+        <Field Label="Ссылка на ролик" class="sm:col-span-4" Note="@VideoNote" Error="@VideoError">
+            <input class="cm-input" placeholder="https://www.youtube.com/watch?v=…" value="@_videoText" @oninput="OnVideoInput" />
         </Field>
     }
     else
     {
-        <Field Label="Звуковой файл" Group="true" class="sm:col-span-2" Note="mp3, ogg, m4a, wav, flac — до 50 МБ">
+        <Field Label="Звуковой файл" Group="true" class="sm:col-span-4" Note="mp3, ogg, m4a, wav, flac — до 50 МБ">
             <div class="flex flex-wrap items-center gap-3">
                 <label class="@Css.Join("cm-btn cm-btn-secondary cm-btn-sm", _uploading ? "pointer-events-none opacity-70" : null)">
                     <i class="fa-solid fa-upload" aria-hidden="true"></i>
@@ -47,28 +47,47 @@
         </Field>
     }
 
-    <Field Label="Начать с секунды">
+    <Field Label="Начать с секунды" class="sm:col-span-2">
         <input class="cm-input" type="number" min="0" inputmode="numeric" @bind="Track.StartSeconds" />
     </Field>
-    <Field Label="@($"Громкость трека: {Track.Volume}%")" Note="@(_youTube ? "На iPad громкость YouTube не меняется — только у файлов." : null)">
-        <input type="range" min="0" max="100" step="5" class="w-full" @bind="Track.Volume" @bind:event="oninput" />
+
+    <Field Label="Настроения" Group="true" class="sm:col-span-4">
+        @if (!_tagsOpen)
+        {
+            @* Свёрнуто в строку: чипы всех известных тегов уводили «Заметки» под сгиб окна (M8). *@
+            <div class="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1">
+                <span data-testid="track-tags-summary" class="@(Track.Tags.Count == 0 ? "cm-text-muted" : null)">@(Track.Tags.Count == 0 ? "Не выбраны" : string.Join(", ", Track.Tags))</span>
+                <button type="button" class="cm-link-btn" @onclick="() => _tagsOpen = true">@(Track.Tags.Count == 0 ? "Выбрать" : "Изменить")</button>
+            </div>
+        }
+        else
+        {
+            <MusicTagPicker Values="Track.Tags" ValuesChanged="tags => Track.Tags = [.. tags]" Known="KnownTags" />
+        }
     </Field>
-    <label class="cm-tap-row sm:col-span-2">
+    <label class="cm-tap-row self-start sm:col-span-2 sm:pt-7">
         <input type="checkbox" class="cm-checkbox" @bind="Track.Loop" />
-        <span>По кругу — иначе по окончании заиграет другой трек того же настроения</span>
+        <span>По кругу</span>
     </label>
 
-    <Field Label="Настроения" Group="true" class="sm:col-span-2">
-        <MusicTagPicker Values="Track.Tags" ValuesChanged="tags => Track.Tags = [.. tags]" Known="KnownTags" />
-    </Field>
+    @if (!_youTube)
+    {
+        <Field Label="@($"Громкость трека: {Track.Volume}%")" class="sm:col-span-6">
+            <input type="range" min="0" max="100" step="5" class="w-full max-w-sm" @bind="Track.Volume" @bind:event="oninput" />
+        </Field>
+    }
 
-    <Field Label="Заметки" class="sm:col-span-2">
+    <Field Label="Заметки" class="sm:col-span-6">
         <textarea class="cm-input" rows="2" @bind="Track.Notes"></textarea>
     </Field>
 </div>
 
 @code {
+    private static readonly IReadOnlyList<SegmentOption<bool>> SourceOptions = [new(false, "Файл"), new(true, "YouTube")];
+
     private bool _youTube;
+    private bool _tagsOpen;
+    private string _videoText = "";
     private bool _uploading;
     private string? _uploadError;
     private MusicTrackDto? _for;
@@ -85,6 +104,8 @@
         {
             _for = Track;
             _youTube = Track.IsYouTube;
+            _tagsOpen = false;
+            _videoText = Track.YoutubeId is { Length: > 0 } id ? YouTubeVideo.WatchUrl(id) : "";
             _uploadError = null;
         }
     }
@@ -102,10 +123,17 @@
         else
         {
             Track.YoutubeId = null;
+            _videoText = "";
         }
     }
 
-    private string? VideoNote => YouTubeVideo.TryParseId(Track.YoutubeId, out var id) ? $"Ролик {id}" : "Ролик с запретом встраивания (чаще всего каналы «… - Topic») играть не будет.";
+    private string? VideoNote => YouTubeVideo.TryParseId(Track.YoutubeId, out _) ? null : "Ролик с запретом встраивания (чаще всего каналы «… - Topic») играть не будет.";
+
+    private void OnVideoInput(ChangeEventArgs e)
+    {
+        _videoText = e.Value?.ToString() ?? "";
+        Track.YoutubeId = _videoText;
+    }
 
     private string? VideoError => !string.IsNullOrWhiteSpace(Track.YoutubeId) && !YouTubeVideo.TryParseId(Track.YoutubeId, out _)
         ? "Не похоже на ссылку на ролик YouTube."

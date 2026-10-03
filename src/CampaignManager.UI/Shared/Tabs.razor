@@ -2,8 +2,12 @@
    (@bind-ActiveKey), и держит её в адресе (?tab=…), чтобы на неё можно было дать ссылку.
    Содержимое вкладки страница рисует под компонентом сама. Вкладка 44px — палец на iPad.
    Sticky — липкие под шапкой (top-14) для страниц-сцен и ширмы, где вкладки нужны при прокрутке (правило 14).
-   Подпись вкладки = заголовок окна создания («Факты» — «Новый факт»); счётчик нуля не рисуется. *@
-<div class="@Css.Join("cm-tabs", Sticky ? "cm-tabs-sticky" : null)" role="tablist" aria-label="@AriaLabel">
+   Подпись вкладки = заголовок окна создания («Факты» — «Новый факт»); счётчик нуля не рисуется.
+   Scrolls — вкладки одной строкой, не помещающееся листается вбок (ширма в панели 480px), открытая вкладка подводится в
+   видимую часть строки (Tabs.razor.js). *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+<div class="@Css.Join("cm-tabs", Sticky ? "cm-tabs-sticky" : null)" role="tablist" aria-label="@AriaLabel" @ref="_tabs">
     @foreach (var item in Items)
     {
         var active = item.Key == ActiveKey;
@@ -50,6 +54,43 @@
 
     /// <summary>Вкладки липнут под шапку страницы (<c>top-14</c>) — для сцен и ширмы, где страница длинная.</summary>
     [Parameter] public bool Sticky { get; set; }
+
+    /// <summary>Строка вкладок прокручивается вбок (CSS задаёт страница); открытая вкладка сама попадает в видимую часть.</summary>
+    [Parameter] public bool Scrolls { get; set; }
+
+    private ElementReference _tabs;
+    private IJSObjectReference? _module;
+    private string? _revealed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Scrolls || _revealed == ActiveKey)
+            return;
+
+        _revealed = ActiveKey;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/Tabs.razor.js");
+            await _module.InvokeVoidAsync("reveal", _tabs);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+            return;
+
+        try
+        {
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
 
     private Task SelectAsync(string key) =>
         key == ActiveKey ? Task.CompletedTask : ActiveKeyChanged.InvokeAsync(key);

@@ -1,0 +1,60 @@
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+
+@* Форма трассы: название, число локаций, отрыв убегающих и кнопка. Одна на «Создать трассу» (правая колонка, пока трассы
+   нет) и «Изменить трассу» (в карточке трассы, пока погоня не началась). Подписи на одной линии, поля и кнопка одной
+   высоты (cm-field-row — выравнивание по низу). Своей карточки не рисует. *@
+<div class="cm-field-row">
+    <Field Label="Название" class="w-full sm:w-52">
+        <input class="cm-input" maxlength="40" placeholder="у склада" aria-label="Название погони" value="@_name" @onchange="e => _name = e.Value?.ToString() ?? string.Empty" />
+    </Field>
+    <Field Label="Локаций" class="w-28">
+        <input type="number" inputmode="numeric" min="@ChaseRules.MinLocations" max="@ChaseRules.MaxLocations" class="cm-input" value="@_length"
+               @onchange="e => _length = int.TryParse(e.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : _length" />
+    </Field>
+    <Field Label="Отрыв убегающих" class="w-52">
+        <select class="cm-input" value="@_gap" @onchange="SetGap">
+            <option value="2">2 локации (обычно)</option>
+            <option value="1">1 локация</option>
+        </select>
+    </Field>
+    <Button Icon="fa-route" OnClick="CreateTrackAsync" data-testid="chase-track-create">@Action</Button>
+</div>
+
+@code {
+    private int _length = 8;
+    private string _name = "";
+    private int _gap = 2;
+
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    /// <summary>Подпись кнопки: «Создать трассу» или «Изменить трассу».</summary>
+    [Parameter, EditorRequired] public string Action { get; set; } = "";
+
+    protected override void OnInitialized()
+    {
+        if (Session.State.Chase is { } chase)
+        {
+            _length = chase.LastLocation;
+            _gap = chase.StartGap;
+            _name = chase.Name ?? "";
+        }
+    }
+
+    private void SetGap(ChangeEventArgs e) => _gap = e.Value?.ToString() == "1" ? 1 : 2;
+
+    private Task CreateTrackAsync() => Session.ChangeAsync(state =>
+    {
+        var fresh = state.Chase is null;
+        ChaseRules.Begin(state, _length, _gap);
+        state.Chase!.Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim();
+        EncounterEngine.Log(state, new EncounterLogEntry
+        {
+            Kind = EncounterLogKind.ChaseStart,
+            Text = fresh
+                ? $"Трасса: {ChaseText.Locations(state.Chase!.LastLocation)}, отрыв {state.Chase.StartGap}."
+                : $"Трасса изменена: {ChaseText.Locations(state.Chase!.LastLocation)}, отрыв {state.Chase.StartGap}.",
+            At = Session.Now,
+        });
+    });
+}

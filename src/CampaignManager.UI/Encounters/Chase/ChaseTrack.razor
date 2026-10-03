@@ -1,13 +1,15 @@
 @using CampaignManager.Core.Encounters
 @using CampaignManager.Core.Encounters.Chase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 @* Трасса погони: локации в ряд, у каждой — что мешает в неё войти (помеха — молния, преграда — шлагбаум) и кто в ней.
    Широкая трасса прокручивается в своём блоке (overflow-x-auto), страница вбок не едет. Имена бегущих — подписью, а не
    в title (в v1 ChaseTrack держал имя только во всплывающей подсказке — на iPad его не увидеть). Роль — цветом и словом:
    убегающий — зелёный, преследователь — красный (единственное место, где цвет погони несёт свой смысл). Своей карточки
    не рисует. *@
-<div class="overflow-x-auto pb-2" data-testid="chase-track">
-    <ol class="chase-track">
+<div class="overflow-x-auto pb-2" data-testid="chase-track" @ref="_scroller">
+    <ol class="chase-track" style="@TrackStyle">
         @foreach (var location in Chase.Locations)
         {
             var here = Runners.Where(x => x.Runner.Location == location.Number).ToList();
@@ -42,7 +44,7 @@
                         <span>@hazard.Name · @ChaseText.Of(hazard.Difficulty)</span>
                     </div>
                 }
-                <div class="flex flex-col gap-1 p-2">
+                <div class="flex flex-col gap-1 p-1.5">
                     @foreach (var (participant, runner) in here)
                     {
                         <span @key="participant.Id"
@@ -52,7 +54,7 @@
                             {
                                 <i class="fa-solid fa-car-side" aria-hidden="true"></i>
                             }
-                            <span class="truncate">@participant.Name</span>
+                            <span class="min-w-0">@participant.Name</span>
                             @if (participant.IsOut)
                             {
                                 @* Состояние — значком и словом для чтения с экрана: «(сбежал)» в 9rem переносилось на три строки. *@
@@ -72,7 +74,50 @@
 
     [Parameter] public EventCallback<int> OnEdit { get; set; }
 
+    private ElementReference _scroller;
+    private IJSObjectReference? _module;
+    private string? _centeredOn;
+
     private ChaseState Chase => State.Chase!;
+
+    /// <summary>Колонки поровну на всю ширину, но не уже 7rem: восемь локаций ландшафта iPad помещаются, дальше — прокрутка. Число — инвариантной культурой.</summary>
+    private string TrackStyle => $"grid-template-columns: repeat({Chase.Locations.Count.ToString(CultureInfo.InvariantCulture)}, minmax(7rem, 1fr))";
+
+    /// <summary>Где сейчас внимание: тот, чей ход, и его локация; смена — повод доехать до неё в узкой трассе.</summary>
+    private string AttentionKey => State.ActiveParticipantId is { } id && Chase.Runner(id) is { } runner
+        ? $"{id}:{runner.Location}:{Chase.Phase}"
+        : $"-:{Chase.Phase}:{Runners.Select(x => x.Runner.Location).DefaultIfEmpty(0).Max()}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var key = AttentionKey;
+        if (key == _centeredOn)
+            return;
+
+        _centeredOn = key;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Encounters/Chase/ChaseTrack.razor.js");
+            await _module.InvokeVoidAsync("centerActive", _scroller);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+            return;
+
+        try
+        {
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
 
     /// <summary>Почему выбыл: сбежал, пойман, отстал… или просто «выбыл» (без сознания, отметка Хранителя).</summary>
     private string OutText(EncounterParticipant participant) =>

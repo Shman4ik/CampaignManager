@@ -1,0 +1,82 @@
+@using CampaignManager.Core.Encounters
+@using CampaignManager.Core.Encounters.Chase
+@implements IDisposable
+
+@* Трасса погони над обеими колонками (EncounterPage.TopContent): локации в ряд на всю ширину рабочей области, под ними —
+   подпись знаков, «настигнут» (поимку объявляет Хранитель) и, пока погоня не началась, правка трассы. Трасса не липнет:
+   ход и результат стоят в липкой колонке ниже, результат не сдвигает трассу (H12, H13). Получает EncounterSession каскадом;
+   перерисовывается по её Changed. Нет трассы — ничего: форму «Создать трассу» рисует ChasePanel в колонке действия. *@
+@if (Chase is { } chase)
+{
+    <section data-testid="chase-track-section">
+        @* Заголовок, подпись знаков и правка трассы — одной строкой: отдельная полоса подписи и ряд кнопок отнимали ~100px,
+           и «Ход» уезжал под сгиб (H13). Правка — у самой трассы (близость). *@
+        <div class="cm-section-header encounter-head">
+            <h2 class="cm-section-title">Трасса</h2>
+            <span class="cm-meta flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span><i class="fa-solid fa-bolt text-warning-600" aria-hidden="true"></i> помеха</span>
+                <span><i class="fa-solid fa-road-barrier text-accent-600" aria-hidden="true"></i> преграда</span>
+            </span>
+            @if (chase.Phase == ChasePhase.Active)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus" class="ml-auto" Disabled="@(chase.LastLocation >= ChaseRules.MaxLocations)"
+                        OnClick="() => Session.ChangeAsync(s => ChaseRules.Resize(s.Chase!, s.Chase!.LastLocation + 1))">Добавить локацию</Button>
+            }
+            else if (chase.Phase == ChasePhase.Setup)
+            {
+                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="@(_setupOpen ? "fa-chevron-up" : "fa-sliders")" class="ml-auto" OnClick="() => _setupOpen = !_setupOpen"
+                        aria-expanded="@(_setupOpen ? "true" : "false")" data-testid="chase-track-edit-toggle">Настроить трассу</Button>
+            }
+        </div>
+        <div class="cm-card"><div class="cm-card-body flex flex-col gap-3">
+            <ChaseTrack State="Session.State" OnEdit="number => _editing = number" />
+            @foreach (var (prey, pursuers) in ChaseRules.Contacts(Session.State))
+            {
+                @* Игровое событие, не ошибка: тон предупреждения, а не красный (правило 17). Поимка — через предпросмотр, как остальные
+                   необратимые изменения состояния игры (правило 7): «Применить» или «Отменить» в колонке действия (H11). *@
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warning-200 bg-warning-50 px-3 py-2" @key="prey.Id" data-testid="chase-contact">
+                    <span>
+                        <i class="fa-solid fa-hand-fist text-warning-700" aria-hidden="true"></i>
+                        <b>@prey.Name</b> настигнут: @string.Join(", ", pursuers.Select(p => p.Name)). Можно драться и проводить манёвр.
+                    </span>
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-handcuffs" Disabled="@(Session.State.Pending is not null)"
+                            DisabledReason="@(Session.State.Pending is not null ? "Сначала решите результат" : null)"
+                            OnClick="() => CatchAsync(prey.Id, pursuers[0].Id)" data-testid="chase-catch">Объявить поимку</Button>
+                </div>
+            }
+            @if (chase.Phase == ChasePhase.Setup && _setupOpen)
+            {
+                <div class="border-t border-primary-200 pt-3" data-testid="chase-track-edit"><ChaseTrackForm Action="Изменить трассу" /></div>
+            }
+        </div></div>
+    </section>
+
+    <ChaseLocationEditor Location="@(_editing is { } n ? chase.Location(n) : null)" OnClose="() => _editing = null" OnSave="SaveLocationAsync" />
+}
+
+@code {
+    private int? _editing;
+    private bool _setupOpen;
+
+    [CascadingParameter] public EncounterSession Session { get; set; } = null!;
+
+    private ChaseState? Chase => Session.State.Chase;
+
+    protected override void OnInitialized() => Session.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Session.Changed -= OnChanged;
+
+    private Task CatchAsync(Guid preyId, Guid catcherId) => Session.ChangeAsync(state =>
+    {
+        if (ChaseRules.Catch(state, preyId, catcherId) is { } caught)
+            EncounterEngine.Propose(state, caught);
+    });
+
+    private async Task SaveLocationAsync(ChaseLocation location)
+    {
+        _editing = null;
+        await Session.ChangeAsync(state => ChaseRules.SetLocation(state.Chase!, location));
+    }
+}

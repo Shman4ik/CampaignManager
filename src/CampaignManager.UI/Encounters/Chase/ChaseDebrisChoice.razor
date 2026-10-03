@@ -10,16 +10,8 @@
 {
     var debris = ChaseRules.DebrisOf(Resolution);
     <Field Label="Обломки" Group="true" Note="Преграды больше нет; обломки могут стать помехой для тех, кто движется следом">
-        <div class="flex flex-wrap gap-2" data-testid="chase-debris">
-            <Button Small="true" Variant="@(debris is null ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetAsync(null)"
-                    data-testid="chase-debris-none">Проход свободен</Button>
-            @foreach (var difficulty in Enum.GetValues<Difficulty>())
-            {
-                var chosen = difficulty;
-                <Button Small="true" Variant="@(debris == chosen ? ButtonVariant.Primary : ButtonVariant.Secondary)" OnClick="() => SetAsync(chosen)"
-                        data-testid="@($"chase-debris-{chosen}")">Помеха: @ChaseText.Of(chosen)</Button>
-            }
-        </div>
+        @* Выбор — Segmented: «Применить» в этом же предпросмотре одна главная (B24). *@
+        <Segmented TValue="Difficulty?" Options="Options" Value="debris" ValueChanged="SetAsync" Label="Обломки" data-testid="chase-debris" />
     </Field>
 }
 
@@ -27,6 +19,12 @@
     [CascadingParameter] public EncounterSession Session { get; set; } = null!;
 
     [Parameter, EditorRequired] public EncounterResolution Resolution { get; set; } = null!;
+
+    private static readonly IReadOnlyList<SegmentOption<Difficulty?>> Options =
+    [
+        new(null, "Проход свободен", TestId: "chase-debris-none"),
+        .. Enum.GetValues<Difficulty>().Select(d => new SegmentOption<Difficulty?>(d, $"Помеха: {ChaseText.Of(d)}", TestId: $"chase-debris-{d}")),
+    ];
 
     private Task SetAsync(Difficulty? difficulty) => Session.ChangeAsync(state => ChaseRules.SetDebris(state, difficulty));
 }

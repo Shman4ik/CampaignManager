@@ -27,6 +27,8 @@
     <Actions>
         @if (_canEdit)
         {
+            @* Вторая кнопка справочника (фонотека: «Загрузить файлы») — рядом с «Добавить», а не в «⋯». *@
+            @HeaderActions
             <Button Small="true" Icon="fa-plus" OnClick="AddAsync">@AddLabel</Button>
         }
     </Actions>
@@ -94,6 +96,7 @@
             {
                 @* Импорт, экспорт и «С правилами» — редкие действия: одно «⋯», а не ряд из трёх кнопок (на телефоне он рвался). *@
                 <RowMenu AriaLabel="@(Sync ? "Ещё: импорт, экспорт, сверка с книгой правил" : "Ещё: импорт, экспорт")">
+                    @MenuItems
                     <RowMenuItem Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</RowMenuItem>
                     <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт</RowMenuItem>
                     @if (Sync)
@@ -139,7 +142,7 @@
                 @* Ключ — фильтры, которые прячут колонки и метки: ячейки DataColumn таблица рисует раньше, чем
                    колонки получат новый вид, и без пересоздания метка эпохи отставала бы на один рендер. *@
                 <DataTable @key="ColumnsKey" TItem="TItem" Items="view.Filtered" RowKey="i => i.Id" Page="_page" PageSize="PageSize"
-                           TableFrom="TableFrom" Scroll="Scroll" RowDetail="RowDetail" CanExpand="CanExpand"
+                           TableFrom="TableFrom" Scroll="Scroll" StickyHead="StickyHead" RowDetail="RowDetail" CanExpand="CanExpand"
                            OpenKey="(object?)OpenId" OpenKeyChanged="SetOpenKey"
                            CardTemplate="CardTemplate is null ? null : Card" AriaLabel="@Title">
                     <Columns>
@@ -312,6 +315,22 @@
     [Parameter] public bool Scroll { get; set; } = true;
 
     /// <summary>
+    /// Таблица прокручивается вместе со страницей (не вложенной прокруткой), шапка столбцов липнет под шапку страницы:
+    /// для справочника с широкими строками и тремя-четырьмя колонками (фонотека), где «первая колонка липнет» не нужна.
+    /// Вместе с <c>Scroll="false"</c>.
+    /// </summary>
+    [Parameter] public bool StickyHead { get; set; }
+
+    /// <summary>Кнопка шапки рядом с «Добавить» (фонотека — «Загрузить файлы»).</summary>
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>Свои пункты в меню «⋯» панели фильтров, перед «Импорт» и «Экспорт» (фонотека — «Настроения плеера»).</summary>
+    [Parameter] public RenderFragment? MenuItems { get; set; }
+
+    /// <summary>Заголовок окна создания, если он не совпадает с подписью кнопки («Новый трек» при кнопке «Добавить трек»).</summary>
+    [Parameter] public string? NewTitle { get; set; }
+
+    /// <summary>
     /// Проверка формы до отправки: поле → текст ошибки (все сразу, правило 9). Название проверяется всегда; страница
     /// добавляет своё обязательное (урон и навык оружия, тип заклинания). Остальное проверяет сервер.
     /// </summary>
@@ -349,7 +368,7 @@
     [Parameter] public EventCallback<IReadOnlyList<TItem>> OnLoaded { get; set; }
 
     // Заголовок — имя на момент открытия: пока его правят, окно не должно переименовываться.
-    private string FormTitle => _isNew ? AddLabel : $"Изменить: {_editingName}";
+    private string FormTitle => _isNew ? NewTitle ?? AddLabel : $"Изменить: {_editingName}";
 
     private string? _editingName;
 

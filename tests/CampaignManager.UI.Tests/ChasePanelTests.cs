@@ -97,13 +97,37 @@ public sealed class ChasePanelTests : KitContext
         var smash = ChaseActions.BreakBarrier(session.State, pursuer.Id, 5, 9, new Core.Dice.SeededDiceRoller(1)).Resolution;
         EncounterEngine.Propose(session.State, smash);
         var cut = Choice(smash);
-        Assert.Contains("cm-btn-primary", cut.Find("[data-testid=chase-debris-none]").ClassName, StringComparison.Ordinal);
+        // Выбор — сегмент (отмеченный светлый), а не вторая главная кнопка рядом с «Применить».
+        Assert.Equal("true", cut.Find("[data-testid=chase-debris-none]").GetAttribute("aria-checked"));
 
         cut.Find("[data-testid=chase-debris-Hard]").Click();
+        Assert.Equal("true", Choice(session.State.Pending!).Find("[data-testid=chase-debris-Hard]").GetAttribute("aria-checked"));
 
         Assert.Equal(Difficulty.Hard, ChaseRules.DebrisOf(session.State.Pending!));
         Assert.NotNull(location.Barrier);
         Assert.Null(location.Hazard);
+    }
+
+    /// <summary>Поимка (H11): объявляет Хранитель через предпросмотр, а не сразу; блок контакта — предупреждение, не ошибка.</summary>
+    [Fact]
+    public void Contact_offers_to_declare_the_catch_and_it_goes_through_the_preview()
+    {
+        var (session, prey, pursuer) = Scene();
+        ChaseRules.SetPosition(session.State, pursuer.Id, session.State.Chase!.Runner(prey.Id)!.Location);
+
+        var cut = Render<CascadingValue<EncounterSession>>(p => p
+            .Add(c => c.Value, session)
+            .Add(c => c.IsFixed, true)
+            .AddChildContent<ChaseTrackPanel>());
+
+        var contact = cut.Find("[data-testid=chase-contact]");
+        Assert.Contains("настигнут", contact.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("error", contact.ClassName, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=chase-catch]").Click();
+
+        Assert.NotNull(session.State.Pending); // предпросмотр, а не сразу «пойман»
+        Assert.Equal(ChaseStatus.Running, ChaseRules.StatusOf(session.State, prey.Id));
     }
 
     [Fact]

@@ -263,8 +263,9 @@ async function ensureYouTubePlayer() {
                     if (event.data === YT.PlayerState.ENDED) notify('NotifyEnded');
                 },
                 onError: () => {
+                    // Окошко с английской плашкой «Video unavailable» не показываем: ошибку говорит наша панель (M6).
                     clearGestureProbe();
-                    setYouTubeTucked(false);
+                    setYouTubeTucked(true);
                     notify('NotifyError',
                         'Этот ролик нельзя воспроизвести встроенным плеером — владелец запретил встраивание. Выберите другой трек или загрузите файл.');
                 },
