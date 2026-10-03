@@ -107,6 +107,71 @@ public sealed class ParticipantPickerTests : KitContext
         Assert.Equal(FogScenario, _loadedScenarios[^1]);
     }
 
+    private static readonly Guid FogRunOld = Guid.Parse("0199b000-0000-7000-8000-000000000205");
+
+    private IRenderedComponent<ParticipantPicker> OpenWithOtherTab(Guid? runId, bool open = true) =>
+        Render<ParticipantPicker>(p => p
+            .Add(c => c.Open, open)
+            .Add(c => c.Sources, [new OtherSource(), new RecordingScenarioSource(_loadedScenarios)])
+            .Add(c => c.Context, new ParticipantPickerContext(CampaignId, new SkillCatalog([])))
+            .Add(c => c.RunId, runId));
+
+    [Fact]
+    public void Two_runs_of_one_scenario_list_it_once_and_prefer_the_run_of_the_scene()
+    {
+        // Список API — от свежих к старым: старое прохождение «Тумана» идёт после «Масок».
+        _runs = [Run(FogRun, FogScenario, "Туман"), Run(MasksRun, MasksScenario, "Маски"), Run(FogRunOld, FogScenario, "Туман")];
+
+        var fresh = Open(CampaignId, null);
+        var options = fresh.Find("[data-testid=picker-run]").QuerySelectorAll("option").Skip(1).ToList();
+        Assert.Equal(2, options.Count);
+        Assert.Equal([FogRun.ToString(), MasksRun.ToString()], options.Select(o => o.GetAttribute("value")));
+
+        var bound = Open(CampaignId, FogRunOld);
+        Assert.Equal(FogRunOld.ToString(), bound.Find("[data-testid=picker-run]").GetAttribute("value"));
+        Assert.Equal(2, bound.Find("[data-testid=picker-run]").QuerySelectorAll("option").Skip(1).Count());
+        Assert.Equal(FogScenario, _loadedScenarios[^1]);
+    }
+
+    [Fact]
+    public void Scene_run_is_preselected_when_the_scenario_tab_is_opened_later_and_the_choice_survives_tabs_and_reopening()
+    {
+        _runs = [Run(FogRun, FogScenario, "Туман"), Run(MasksRun, MasksScenario, "Маски")];
+        var chosen = new List<Guid>();
+        var cut = Render<ParticipantPicker>(p => p
+            .Add(c => c.Open, true)
+            .Add(c => c.Sources, [new OtherSource(), new RecordingScenarioSource(_loadedScenarios)])
+            .Add(c => c.Context, new ParticipantPickerContext(CampaignId, new SkillCatalog([])))
+            .Add(c => c.RunId, FogRun)
+            .Add(c => c.OnRunChosen, id => chosen.Add(id)));
+
+        cut.FindAll("[role=tab]").Single(t => t.TextContent.Contains("Сценарий", StringComparison.Ordinal)).Click();
+        Assert.Equal(FogRun.ToString(), cut.Find("[data-testid=picker-run]").GetAttribute("value"));
+        Assert.Equal(FogScenario, _loadedScenarios[^1]);
+
+        cut.Find("[data-testid=picker-run]").Change(MasksRun.ToString());
+        cut.FindAll("[role=tab]").First().Click();
+        cut.FindAll("[role=tab]").Single(t => t.TextContent.Contains("Сценарий", StringComparison.Ordinal)).Click();
+        Assert.Equal(MasksRun.ToString(), cut.Find("[data-testid=picker-run]").GetAttribute("value"));
+
+        cut.Render(p => p.Add(c => c.Open, false));
+        cut.Render(p => p.Add(c => c.Open, true).Add(c => c.RunId, MasksRun));
+        Assert.Equal(MasksRun.ToString(), cut.Find("[data-testid=picker-run]").GetAttribute("value"));
+        Assert.Equal([MasksRun], chosen);
+    }
+
+    private sealed class OtherSource : IParticipantSource
+    {
+        public string Key => "other";
+
+        public string Label => "Сыщики";
+
+        public string Icon => "fa-user";
+
+        public Task<ParticipantSourceResult> LoadAsync(ParticipantPickerContext context, CancellationToken cancellationToken) =>
+            Task.FromResult(new ParticipantSourceResult([]));
+    }
+
     private sealed class RecordingScenarioSource(List<Guid?> loaded) : IParticipantSource
     {
         public string Key => "scenario";
