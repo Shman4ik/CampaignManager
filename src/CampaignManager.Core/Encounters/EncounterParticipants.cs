@@ -104,7 +104,10 @@ public static class EncounterParticipants
         participant.Dying = sheet.Condition.Dying;
         participant.Stabilized = sheet.Condition.Stabilized;
         participant.Dead = sheet.Condition.Dead;
+        // Подобранное в сцене (НПС) живёт только в снимке — обновление из листа его не стирает.
+        var picked = participant.Profile.Attacks.Where(a => a.Picked).ToList();
         participant.Profile = CombatProfiles.FromSheet(sheet, catalog);
+        participant.Profile.Attacks.AddRange(picked.Where(p => participant.Profile.Attacks.All(a => a.Key != p.Key)));
     }
 
     /// <summary>Раны участника для <see cref="WoundRules"/> — те же поля, что у листа.</summary>

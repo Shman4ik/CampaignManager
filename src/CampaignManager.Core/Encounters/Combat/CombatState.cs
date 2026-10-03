@@ -55,6 +55,22 @@ public sealed record CombatProfile : DocumentPart
     public int MechanicalRepair { get; set; }
 
     public List<CombatSpell> Spells { get; set; } = [];
+
+    /// <summary>
+    /// Навыки участника — для «Чем»: атаковать навыком без оружия в руках (выбрать оружие этого навыка из справочника).
+    /// У листа — боевые навыки (<see cref="CombatProfiles.CombatSkillsOf"/>), у статблока — его навыки со ссылкой.
+    /// </summary>
+    public List<CombatSkill> Skills { get; set; } = [];
+}
+
+/// <summary>Навык участника в снимке боя: ссылка на справочник, имя и значение.</summary>
+public sealed record CombatSkill : DocumentPart
+{
+    public Guid SkillId { get; set; }
+
+    public string Name { get; set; } = "";
+
+    public int Value { get; set; }
 }
 
 /// <summary>Атака участника: оружие листа или атака статблока.</summary>
@@ -92,6 +108,12 @@ public sealed record CombatAttack : DocumentPart
     public bool Automatic { get; set; }
 
     public string? Description { get; set; }
+
+    /// <summary>
+    /// Подобрано в этой сцене («Чем» → оружие из справочника) у участника без листа или у НПС: живёт только в снимке сцены и
+    /// переживает обновление снимка из листа (<see cref="EncounterParticipants.Refresh"/>). Сыщику подобранное пишется в лист.
+    /// </summary>
+    public bool Picked { get; set; }
 
     [JsonIgnore]
     public bool IsRanged => Kind == CombatAttackKind.Ranged;

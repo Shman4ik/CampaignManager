@@ -97,4 +97,69 @@ public sealed class CombatProfilesTests
         Assert.False(a.Dead);
         Assert.Contains("мгновенная смерть", lines[2].Note);
     }
+
+    private static SkillCatalog CombatCatalog()
+    {
+        var fighting = new SkillDefinition(Guid.NewGuid(), "Ближний бой") { Code = SkillCodes.Fighting, Category = SkillCategory.CombatGeneral };
+        var firearms = new SkillDefinition(Guid.NewGuid(), "Стрельба") { Code = SkillCodes.Firearms, Category = SkillCategory.CombatFirearms };
+        return new SkillCatalog(
+        [
+            fighting, firearms,
+            new(Guid.NewGuid(), "Ближний бой (драка)") { Code = "skill.fighting.brawl", ParentId = fighting.Id, BaseValue = 25, Category = SkillCategory.CombatGeneral },
+            new(Guid.NewGuid(), "Ближний бой (меч)") { Code = "skill.fighting.sword", ParentId = fighting.Id, BaseValue = 20, Category = SkillCategory.CombatGeneral },
+            new(Guid.NewGuid(), "Стрельба (пистолет)") { Code = "skill.firearms.handgun", ParentId = firearms.Id, BaseValue = 20, Category = SkillCategory.CombatFirearms },
+            new(Guid.NewGuid(), "Стрельба (винтовка/дробовик)") { Code = "skill.firearms.rifle-shotgun", ParentId = firearms.Id, BaseValue = 25, Category = SkillCategory.CombatFirearms },
+            new(Guid.NewGuid(), "Стрельба (пулемёт)") { Code = "skill.firearms.machine-gun", ParentId = firearms.Id, BaseValue = 10, Category = SkillCategory.CombatFirearms },
+            new(Guid.NewGuid(), "Метание") { Code = "skill.throw", BaseValue = 20, Category = SkillCategory.CombatGeneral },
+            new(Guid.NewGuid(), "Внимание") { Code = "skill.spot-hidden", BaseValue = 25 },
+        ]);
+    }
+
+    [Fact]
+    public void CombatSkills_AreSheetSpecialisationsPlusPrintedOnes_WithoutGroupParents()
+    {
+        var catalog = CombatCatalog();
+        var sword = catalog.FindByCode("skill.fighting.sword")!.Id;
+        var sheet = NewSheet(50, new SheetSkill { SkillId = sword, Value = 40 }, new SheetSkill { SkillId = catalog.FindByCode("skill.spot-hidden")!.Id, Value = 60 });
+
+        var profile = CombatProfiles.FromSheet(sheet, catalog);
+
+        Assert.Equal(
+            ["Ближний бой (драка) 25", "Ближний бой (меч) 40", "Метание 20", "Стрельба (винтовка/дробовик) 25", "Стрельба (пистолет) 20"],
+            profile.Skills.Select(s => $"{s.Name} {s.Value}"));
+        // Пулемёта на листе нет и на бланке он не напечатан — в «Чем» его нет; драка — уже атака, навыком не повторяется.
+        Assert.DoesNotContain(CombatProfiles.CombatSkillsOf(profile, catalog), s => s.Name.Contains("драка", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PickedWeapon_GoesToSnapshotWithSkillOfParticipant_AndSurvivesRefresh()
+    {
+        var catalog = CombatCatalog();
+        var handgun = catalog.FindByCode("skill.firearms.handgun")!.Id;
+        var sheet = NewSheet(50, new SheetSkill { SkillId = handgun, Value = 55 });
+        var npc = EncounterParticipants.FromSheet(Guid.NewGuid(), CharacterKind.Npc, sheet, catalog);
+        var colt = new SheetWeapon { Name = "Кольт .45", SkillId = handgun, Damage = "1D10+2", Range = "15 метров", Ammo = "7", Malfunction = "100" };
+
+        Assert.False(CombatProfiles.PickedWeaponGoesToSheet(npc));
+        var attack = CombatProfiles.AddPicked(npc, colt, catalog);
+
+        Assert.True(attack.Picked);
+        Assert.Equal(55, attack.Skill);
+        Assert.Equal(CombatAttackKind.Ranged, attack.Kind);
+        EncounterParticipants.Refresh(npc, sheet, catalog);
+        Assert.Contains(npc.Profile.Attacks, a => a.Key == attack.Key);
+
+        // Навыка нет ни в листе, ни в статблоке — база справочника.
+        var ghoul = EncounterParticipants.FromStatblock(null, "Гуль", new Statblock { HitPoints = 13 });
+        var rifle = new SheetWeapon { Name = "Винтовка", SkillId = catalog.FindByCode("skill.firearms.rifle-shotgun")!.Id, Damage = "2D6+4" };
+        Assert.Equal(25, CombatProfiles.AddPicked(ghoul, rifle, catalog).Skill);
+    }
+
+    [Fact]
+    public void PickedWeapon_ForInvestigator_GoesToSheet()
+    {
+        var investigator = EncounterParticipants.FromSheet(Guid.NewGuid(), CharacterKind.Player, NewSheet(), Catalog);
+
+        Assert.True(CombatProfiles.PickedWeaponGoesToSheet(investigator));
+    }
 }
