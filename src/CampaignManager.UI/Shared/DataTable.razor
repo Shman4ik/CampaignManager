@@ -11,6 +11,24 @@
 @if (CardTemplate is not null)
 {
     <div class="@CardsClass">
+        @* Узкий экран (портрет, телефон): заголовков с кнопками сортировки нет — порядок задаёт этот выбор. *@
+        @if (SortableColumns.Count > 0)
+        {
+            <div class="cm-sortbar">
+                <label class="cm-sortbar-field">
+                    <span>Сортировка</span>
+                    <select class="cm-input" value="@SortSelectValue" @onchange="SortSelectedAsync">
+                        @foreach (var column in SortableColumns)
+                        {
+                            <option value="@ColumnId(column)">@column.Title</option>
+                        }
+                    </select>
+                </label>
+                <Button Variant="ButtonVariant.Secondary" Icon="@(SortedDescendingNow ? "fa-arrow-down-wide-short" : "fa-arrow-up-short-wide")"
+                        AriaLabel="@(SortedDescendingNow ? "По убыванию — изменить на по возрастанию" : "По возрастанию — изменить на по убыванию")"
+                        OnClick="ReverseSortAsync" />
+            </div>
+        }
         @if (_items.Count == 0)
         {
             <p class="px-4 py-5 text-center text-sm text-primary-500">@EmptyText</p>
@@ -130,8 +148,18 @@
     /// </summary>
     [Parameter] public int Page { get; set; } = 1;
 
-    /// <summary>Строка, раскрытая снаружи (<c>?open=</c> в адресе): раскрывается, когда ключ меняется.</summary>
+    /// <summary>
+    /// Строка, раскрытая снаружи (<c>?open=</c> в адресе): раскрывается, когда ключ меняется. Без
+    /// <see cref="OpenKeyChanged"/> строки раскрываются и сворачиваются сами, ключ их только добавляет.
+    /// </summary>
     [Parameter] public object? OpenKey { get; set; }
+
+    /// <summary>
+    /// Задан — таблица управляется снаружи: раскрыта ровно одна строка, та, что в <see cref="OpenKey"/>; касание
+    /// строки не раскрывает её само, а сообщает ключ (или null — свернуть). Так состояние живёт в адресе
+    /// (<c>?open=</c>): переживает F5, на него можно дать ссылку.
+    /// </summary>
+    [Parameter] public EventCallback<object?> OpenKeyChanged { get; set; }
 
     /// <summary>Строк на страницу; 0 — все.</summary>
     [Parameter] public int PageSize { get; set; }
@@ -193,9 +221,19 @@
 
     private object? _openedKey;
 
+    private bool Controlled => OpenKeyChanged.HasDelegate;
+
     protected override void OnParametersSet()
     {
-        if (OpenKey is not null && !Equals(OpenKey, _openedKey))
+        if (Controlled)
+        {
+            _expanded.Clear();
+            if (OpenKey is not null)
+            {
+                _expanded.Add(OpenKey);
+            }
+        }
+        else if (OpenKey is not null && !Equals(OpenKey, _openedKey))
         {
             _expanded.Add(OpenKey);
         }
@@ -227,19 +265,43 @@
 
     private object KeyOf(TItem item) => RowKey?.Invoke(item) ?? item!;
 
-    private async Task SortByAsync(DataColumn<TItem> column)
+    private async Task SortByAsync(DataColumn<TItem> column, bool? forceDescending = null)
     {
         if (ExternalSort)
         {
-            var descending = Sort is { } current && current.Key == column.SortKey && !current.Descending;
+            var descending = forceDescending ?? (Sort is { } current && current.Key == column.SortKey && !current.Descending);
             await SortChanged.InvokeAsync(new DataSort(column.SortKey!, descending));
             return;
         }
 
-        _descending = _sortColumn == column && !_descending;
+        _descending = forceDescending ?? (_sortColumn == column && !_descending);
         _sortColumn = column;
         _items = Arrange();
     }
+
+    // ── Сортировка на узком экране: выбор вместо заголовков ──
+
+    private List<DataColumn<TItem>> SortableColumns => [.. _columns.Where(IsSortable)];
+
+    private string ColumnId(DataColumn<TItem> column) => _columns.IndexOf(column).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private DataColumn<TItem>? CurrentSortColumn => ExternalSort
+        ? _columns.FirstOrDefault(c => c.SortKey is not null && Sort is { } sort && sort.Key == c.SortKey)
+        : _sortColumn;
+
+    private string SortSelectValue => CurrentSortColumn is { } column ? ColumnId(column) : "";
+
+    private bool SortedDescendingNow => CurrentSortColumn is { } column && SortedDescending(column) == true;
+
+    private Task SortSelectedAsync(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var index) && index >= 0 && index < _columns.Count
+            ? SortByAsync(_columns[index], false)
+            : Task.CompletedTask;
+
+    private Task ReverseSortAsync() =>
+        (CurrentSortColumn ?? SortableColumns.FirstOrDefault()) is { } column
+            ? SortByAsync(column, CurrentSortColumn is null ? false : !SortedDescendingNow)
+            : Task.CompletedTask;
 
     private bool? SortedDescending(DataColumn<TItem> column) => ExternalSort
         ? Sort is { } sort && sort.Key == column.SortKey ? sort.Descending : null
@@ -263,6 +325,12 @@
 
     private void Toggle(object key)
     {
+        if (Controlled)
+        {
+            _ = OpenKeyChanged.InvokeAsync(_expanded.Contains(key) ? null : key);
+            return;
+        }
+
         if (!_expanded.Remove(key))
         {
             _expanded.Add(key);

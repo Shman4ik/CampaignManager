@@ -1,0 +1,138 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Кнопка «⋯» (44×44) и меню действий строки или карточки (правило 7). В строке — одна главная кнопка и это меню:
+   «Удалить», «Исключить», «Завершить», «Убрать», «Остановить» живут только здесь, в окне правки или в «Опасной зоне»
+   страницы. Опасные пункты — в слоте Danger: они идут последними, под линейкой, красным, и подтверждаются одним
+   вызовом (параметры Confirm* у RowMenuItem). Заменяет пары «Изменить + Удалить».
+
+   Меню — position: fixed: его ставит RowMenu.razor.js от кнопки (в таблице с overflow и внутри карточки оно иначе
+   обрезалось бы), закрывается касанием мимо, Esc и прокруткой. Первый пункт получает фокус. *@
+<span class="cm-menu" @onkeydown="OnKey">
+    <button type="button" @ref="_button" class="cm-btn cm-btn-ghost cm-btn-icon" aria-haspopup="menu"
+            aria-expanded="@(_open ? "true" : "false")" aria-label="@AriaLabel" @onclick="ToggleAsync">
+        <i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+    </button>
+    @if (_open)
+    {
+        <button type="button" class="cm-pop-backdrop" tabindex="-1" aria-hidden="true" @onclick="Close"></button>
+        <div @ref="_panel" class="cm-menu-panel" role="menu" aria-label="@AriaLabel">
+            <CascadingValue Value="this" IsFixed="true">
+                @ChildContent
+                @if (Danger is not null)
+                {
+                    <div class="cm-menu-sep" role="separator"></div>
+                    @Danger
+                }
+            </CascadingValue>
+        </div>
+    }
+</span>
+
+@code {
+    private ElementReference _button;
+    private ElementReference _panel;
+    private bool _open;
+    private bool _placed;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _placement;
+    private DotNetObjectReference<RowMenu>? _self;
+
+    /// <summary>Что за строка: «Действия: Кольт .45» — у кнопки без текста имя обязательно.</summary>
+    [Parameter, EditorRequired] public string AriaLabel { get; set; } = "Действия";
+
+    /// <summary>Обычные пункты — RowMenuItem.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Опасные пункты (Danger="true"): под линейкой в конце меню.</summary>
+    [Parameter] public RenderFragment? Danger { get; set; }
+
+    /// <summary>Закрыть меню — пункт зовёт перед своим действием.</summary>
+    public void Close()
+    {
+        _open = false;
+        _placed = false;
+        _ = ReleaseAsync();
+        StateHasChanged();
+    }
+
+    private Task ToggleAsync()
+    {
+        if (_open)
+        {
+            Close();
+        }
+        else
+        {
+            _open = true;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && _open)
+        {
+            Close();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_open || _placed)
+        {
+            return;
+        }
+
+        _placed = true;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Shared/RowMenu.razor.js");
+            _self ??= DotNetObjectReference.Create(this);
+            _placement = await _module.InvokeAsync<IJSObjectReference>("place", _button, _panel, _self);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    /// <summary>Вызывает модуль: страницу прокрутили — меню осталось бы висеть там, где кнопки уже нет.</summary>
+    [JSInvokable]
+    public void CloseFromScript() => InvokeAsync(Close);
+
+    private async Task ReleaseAsync()
+    {
+        var placement = _placement;
+        _placement = null;
+        if (placement is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await placement.InvokeVoidAsync("release");
+            await placement.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await ReleaseAsync();
+        _self?.Dispose();
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

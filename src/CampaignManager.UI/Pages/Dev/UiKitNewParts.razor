@@ -1,0 +1,148 @@
+@using CampaignManager.Core
+@inject ToastService Toasts
+
+@* Компоненты кита волны UX-0b на /dev/ui: меню строки, ссылки на книгу, выбор файла, заголовок секции, ошибки
+   формы, защита от ухода, сокращения, липкая колонка, кости, имена, словарь. Отдельным компонентом, чтобы
+   страница кита не разрасталась и не пересекалась с правками UX-0a. Данные выдуманы. *@
+<section class="cm-section">
+    <div class="cm-section-header"><h2 class="cm-section-title">Меню строки, ссылки, сокращения</h2></div>
+    <div class="cm-card">
+        <div class="cm-card-body cm-stack">
+            <div>
+                <div class="cm-field-label mb-2">RowMenu — «⋯» 44px; опасное — под линейкой и с подтверждением</div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-primary-800">Кольт «Миротворец»</span>
+                    <RowMenu AriaLabel="Действия: Кольт «Миротворец»">
+                        <ChildContent>
+                            <RowMenuItem Icon="fa-pen" OnClick="@(() => Toasts.Info("Изменить"))">Изменить оружие</RowMenuItem>
+                            <RowMenuItem Icon="fa-copy" OnClick="@(() => Toasts.Info("Копия"))">Сделать копию</RowMenuItem>
+                            <RowMenuItem Icon="fa-lock" Disabled="true">Недоступно</RowMenuItem>
+                        </ChildContent>
+                        <Danger>
+                            <RowMenuItem Danger="true" Icon="fa-trash-can" ConfirmTitle="Удалить оружие?"
+                                         ConfirmMessage="@($"{Names.Plain("«Кольт «Миротворец»»")} исчезнет из справочника.")"
+                                         ConfirmText="Удалить оружие" ConfirmDetails="Это действие нельзя отменить."
+                                         OnClick="@(() => Toasts.Success($"Удалено: {Names.Plain("«Кольт»")}."))">Удалить оружие</RowMenuItem>
+                        </Danger>
+                    </RowMenu>
+                </div>
+            </div>
+            <div>
+                <div class="cm-field-label mb-2">BookRef и Abbr — по касанию, не title=</div>
+                <p class="text-sm text-primary-700">
+                    Статблок как в книге <BookRef Page="277–280">Короткие числа сеткой, оговорки — строкой.</BookRef>,
+                    урон <DiceText Value="1D6+БкУ" />;
+                    столбец <Abbr Short="МКН" Full="Мифы: начальное чтение" /> и <Abbr Short="ЗМ" Full="Мифы: заклинания" />.
+                </p>
+            </div>
+            <div>
+                <div class="cm-field-label mb-2">DiceText — одна запись костей</div>
+                <p class="text-sm text-primary-700">
+                    <DiceText Value="1D6" /> · <DiceText Value="1d6+2" /> · <DiceText Value="3D6*5" /> · <DiceText Value="2д6 − 1" /> ·
+                    <DiceText Value="@null" /> (пусто — тире) · <DiceText Value="1d4 + Б.К.У." />
+                </p>
+            </div>
+            <div>
+                <div class="cm-field-label mb-2">Names и Terms — без кавычек и склонения</div>
+                <p class="text-sm text-primary-700">
+                    Удалить оружие @Names.Strong("«Кольт «Миротворец»»")? · @Names.Labelled("Цель", "Артур Нельсон", "промах") ·
+                    @Terms.Empty("книг") · @Terms.EmptyFiltered("книг") · @Terms.Meters(100) · @Terms.Dollars(1000)
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cm-section">
+    <div class="cm-section-header"><h2 class="cm-section-title">Секция, выбор файла, ошибки формы</h2></div>
+    <div class="cm-card">
+        <SectionHeader Title="Локации" Count="_locations">
+            <Actions>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" OnClick="() => _locations++">Добавить локацию</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-minus" Disabled="_locations == 0" OnClick="() => _locations--">Убрать</Button>
+            </Actions>
+        </SectionHeader>
+        <div class="cm-card-body cm-stack">
+            <p class="text-[0.8125rem] text-primary-600">Счётчик нуля не рисуется; без действия и без записей заголовок исчезает целиком.</p>
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <div class="cm-field-label mb-2">FilePicker</div>
+                    <FilePicker Accept=".json" OnChange="e => _file = e.File.Name" />
+                </div>
+                <div>
+                    <div class="cm-field-label mb-2">FilePicker — выбрать нельзя, причина рядом</div>
+                    <FilePicker Disabled="true" DisabledReason="Сначала введите название." />
+                </div>
+            </div>
+            <div>
+                <div class="cm-field-label mb-2">FormErrors — все ошибки сразу, прокрутка к первой</div>
+                <label class="block max-w-sm text-[0.8125rem] text-primary-700">
+                    Название *
+                    <input class="@Css.Join("cm-input", _attempt > 0 && string.IsNullOrWhiteSpace(_title) ? "cm-input-invalid" : null)"
+                           aria-invalid="@(_attempt > 0 && string.IsNullOrWhiteSpace(_title) ? "true" : null)" @bind="_title" @bind:event="oninput" />
+                </label>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <Button Icon="fa-floppy-disk" OnClick="TrySave">Сохранить</Button>
+                    <FormErrors Errors="_errors" Attempt="_attempt" />
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <UnsavedChangesGuard @ref="_guard" Dirty="_dirty" />
+                <label class="cm-tap-row"><input type="checkbox" class="cm-checkbox" @bind="_dirty" /> <span>Есть несохранённые изменения (переход по ссылке спросит)</span></label>
+                <Button Variant="ButtonVariant.Secondary" OnClick="AskLeaveAsync">Выйти</Button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cm-section">
+    <div class="cm-section-header"><h2 class="cm-section-title">Липкие колонка и вкладки, полоса страниц</h2></div>
+    <div class="cm-card">
+        <div class="cm-card-body">
+            <Tabs Items="_tabs" @bind-ActiveKey="_tab" AriaLabel="Липкие вкладки" Sticky="true" />
+            <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
+                <ol class="space-y-2 text-sm text-primary-700">
+                    @for (var i = 1; i <= 30; i++)
+                    {
+                        <li class="rounded-md border border-primary-200 px-3 py-2">Участник @i</li>
+                    }
+                </ol>
+                <StickyPane>
+                    <div class="rounded-md border border-primary-200 bg-white p-3 text-sm">
+                        <strong>StickyPane</strong>: колонка действия липнет под шапку с 1024px и прокручивается внутри.
+                    </div>
+                </StickyPane>
+            </div>
+        </div>
+    </div>
+    <Pagination TotalItems="95" PageSize="20" @bind-CurrentPage="_page" />
+</section>
+
+@code {
+    private int _locations = 2;
+    private string? _file;
+    private string _title = "";
+    private int _attempt;
+    private IReadOnlyList<string> _errors = [];
+    private bool _dirty;
+    private UnsavedChangesGuard? _guard;
+    private int _page = 2;
+    private string _tab = "a";
+
+    private static readonly IReadOnlyList<Tabs.Item> _tabs =
+        [new("a", "Описание"), new("b", "Факты", Count: 3), new("c", "Раздатки", Count: 0)];
+
+    private void TrySave()
+    {
+        _attempt++;
+        _errors = string.IsNullOrWhiteSpace(_title) ? ["Введите название."] : [];
+    }
+
+    private async Task AskLeaveAsync()
+    {
+        if (_guard is not null && await _guard.ConfirmLeaveAsync())
+        {
+            Toasts.Info("Можно уходить.");
+        }
+    }
+}

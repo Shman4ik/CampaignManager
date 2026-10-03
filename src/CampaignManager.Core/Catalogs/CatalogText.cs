@@ -1,3 +1,5 @@
+using CampaignManager.Core.Dice;
+
 namespace CampaignManager.Core.Catalogs;
 
 /// <summary>
@@ -96,20 +98,25 @@ public static class CatalogText
         _ => "ближний бой",
     };
 
+    /// <summary>Как бонус к урону входит в урон атаки; слово — из словаря (<see cref="Terms.DamageBonus"/>), не «БкУ».</summary>
     public static string Of(CreatureDamageBonusMode mode) => mode switch
     {
-        CreatureDamageBonusMode.Full => "+ БкУ",
-        CreatureDamageBonusMode.Half => "+ ½ БкУ",
-        CreatureDamageBonusMode.OnlyBonus => "урон равен БкУ",
-        _ => "без БкУ",
+        CreatureDamageBonusMode.Full => $"+ {Terms.DamageBonus}",
+        CreatureDamageBonusMode.Half => "+ ½ бонуса к урону",
+        CreatureDamageBonusMode.OnlyBonus => "урон равен бонусу к урону",
+        _ => "без бонуса к урону",
     };
 
-    /// <summary>Урон атаки твари как в книге: «2d6 + БкУ»; «урон равен БкУ» — своих костей нет (стр. 306).</summary>
-    public static string Damage(CreatureAttack attack) => attack.DamageBonusMode switch
+    /// <summary>Урон атаки твари как в книге: «2d6 + бонус к урону»; «равен бонусу к урону» — своих костей нет (стр. 306).</summary>
+    public static string Damage(CreatureAttack attack)
     {
-        CreatureDamageBonusMode.OnlyBonus => "равен БкУ",
-        CreatureDamageBonusMode.Full => $"{attack.Damage} + БкУ",
-        CreatureDamageBonusMode.Half => $"{attack.Damage} + ½ БкУ",
-        _ => attack.Damage,
-    };
+        var dice = DiceNotation.Format(attack.Damage);
+        return attack.DamageBonusMode switch
+        {
+            CreatureDamageBonusMode.OnlyBonus => "равен бонусу к урону",
+            CreatureDamageBonusMode.Full => $"{dice} + {Terms.DamageBonus}",
+            CreatureDamageBonusMode.Half => $"{dice} + ½ бонуса к урону",
+            _ => dice,
+        };
+    }
 }

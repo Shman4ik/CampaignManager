@@ -1,0 +1,38 @@
+@* Итог проверки формы (правило 9): «Проверьте поля: N» — одна строка у кнопки «Сохранить» (подвал окна или низ
+   страницы). Проверка показывает все ошибки сразу, а не по одной за нажатие; у каждого поля — своя красная рамка и
+   текст под ним (Field Error=). Здесь — только сводка и, если страница длинная, список ошибок со ссылкой «к полю».
+   После неудачной попытки (Attempt вырос) страница прокручивается к первому полю с ошибкой и ставит в него фокус
+   (ValidationScroll). Ошибка сервера — не сюда, а Alert у кнопки. *@
+@if (Errors.Count > 0)
+{
+    <div class="@Css.Join("cm-form-errors", Css.ClassOf(AdditionalAttributes))" role="alert" @attributes="Css.WithoutClass(AdditionalAttributes)">
+        <span class="cm-form-errors-count"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> Проверьте поля: @Errors.Count</span>
+        @if (ShowList)
+        {
+            <ul class="cm-form-errors-list">
+                @foreach (var error in Errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        }
+    </div>
+    <ValidationScroll Trigger="Attempt" Container="@Container" />
+}
+
+@code {
+    /// <summary>Тексты ошибок по полям — все, а не первая.</summary>
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    /// <summary>Счётчик неудачных попыток сохранения: вырос — прокрутить и сфокусировать первое поле с ошибкой.</summary>
+    [Parameter] public int Attempt { get; set; }
+
+    /// <summary>Список под строкой: на странице в 2000px — да, у кнопки в подвале окна — нет.</summary>
+    [Parameter] public bool ShowList { get; set; }
+
+    /// <summary>CSS-селектор контейнера, где искать поля с ошибкой (по умолчанию — окно или форма вокруг).</summary>
+    [Parameter] public string? Container { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

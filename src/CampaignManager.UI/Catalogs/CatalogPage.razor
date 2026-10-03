@@ -10,12 +10,19 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 @inject NavigationManager Navigation
+@implements IDisposable
 
 @* Страница справочника — одна на все семь (в v1 четыре плотных каталога совпадали на 83–88%).
    Список приходит целиком (справочники маленькие), поиск, фильтры, сортировка и страницы — здесь,
    у всех справочников одинаково. Своё у справочника — колонки (Columns) или своя раскладка (Body:
    карточки профессий, галерея бестиария), раскрытие, форма. Кнопки правки — только при CanEdit из
-   API; защищает сервер (403), здесь они просто не рисуются. *@
+   API; защищает сервер (403), здесь они просто не рисуются.
+
+   Общий каркас (UX-0b, правила 4, 11, 12, 17): раскрытая запись всегда в адресе (?open=), у всех справочников;
+   одна кнопка «Сбросить фильтры» (неактивна, пока фильтров нет); эпоха — только когда записи из разных эпох;
+   пагинация под списком, вне карточки; в строке одна иконка «Изменить», «Удалить» — в окне правки; название и тип
+   не обрезаются; пустое — одной строкой («Нет книг.» / «Нет книг по этим условиям.»); уход с несохранённой
+   формы — один вопрос. *@
 <PageHeader Title="@Title">
     <Actions>
         @if (_canEdit)
@@ -26,7 +33,7 @@
 </PageHeader>
 
 <div class="cm-page">
-    <FilterPanel OnReset="ResetFilters">
+    <FilterPanel OnReset="ResetFilters" CanReset="HasFilters">
         <ChildContent>
             <input class="cm-input min-w-48 flex-1" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
                    value="@_search" @oninput="OnSearch" />
@@ -45,10 +52,19 @@
             @if (ErasVary || _era is not null)
             {
                 <select class="cm-input w-full sm:w-44 shrink-0" aria-label="Эпоха" value="@(_era?.ToString() ?? "")" @onchange="SetEra">
-                    <option value="">Любая эпоха</option>
+                    <option value="">@Terms.AnyEra</option>
                     @foreach (var era in Enum.GetValues<Era>())
                     {
                         <option value="@era">@CatalogText.Of(era)</option>
+                    }
+                </select>
+            }
+            @if (Sorts.Count > 1)
+            {
+                <select class="cm-input w-full sm:w-52 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); _page = 1; }">
+                    @foreach (var sort in Sorts)
+                    {
+                        <option value="@sort.Key">@sort.Label</option>
                     }
                 </select>
             }
@@ -65,11 +81,11 @@
             @ToolbarActions
             @if (_canEdit)
             {
-                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</Button>
-                <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-file-export" Href="@Api.Route.Export" download="">Экспорт</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-file-export" Href="@Api.Route.Export" download="">Экспорт</Button>
                 @if (Sync)
                 {
-                    <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-rotate" Busy="_syncing" OnClick="SyncAsync">С правилами</Button>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate" Busy="_syncing" OnClick="SyncAsync">С правилами</Button>
                 }
             }
         </Actions>
@@ -81,32 +97,27 @@
         }
         @if (_items.Count == 0)
         {
-            <EmptyState Title="@EmptyTitle" Message="@(_canEdit ? "Добавьте первую запись или импортируйте файл." : "Хранитель ещё ничего сюда не добавил.")" Icon="@Icon">
-                <Actions>
-                    @if (_canEdit)
-                    {
-                        <Button Icon="fa-plus" OnClick="AddAsync">@AddLabel</Button>
-                    }
-                </Actions>
-            </EmptyState>
+            @* Большая карточка — только когда пуста вся страница и в шапке нет «Добавить» (правило 4). *@
+            @if (_canEdit)
+            {
+                <p class="cm-empty-line">@Terms.Empty(Plural)</p>
+            }
+            else
+            {
+                <EmptyState Title="@Terms.Empty(Plural)" Message="Хранитель ещё ничего сюда не добавил." Icon="@Icon" />
+            }
         }
         else if (view.Filtered.Count == 0)
         {
-            <EmptyState Title="Ничего не найдено по этим условиям." Message="Измените поиск или сбросьте фильтры." Icon="fa-magnifying-glass">
-                <Actions>
-                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">Очистить фильтры</Button>
-                </Actions>
-            </EmptyState>
+            <p class="cm-empty-line">
+                <span>@Terms.EmptyFiltered(Plural)</span>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">@Terms.ResetFilters</Button>
+            </p>
         }
         else if (Body is not null)
         {
             @Body(view)
-            @if (TotalPages(view.Filtered.Count) > 1)
-            {
-                <div class="cm-card mt-4">
-                    <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
-                </div>
-            }
+            <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
         }
         else
         {
@@ -114,7 +125,8 @@
                 @* Ключ — фильтры, которые прячут колонки и метки: ячейки DataColumn таблица рисует раньше, чем
                    колонки получат новый вид, и без пересоздания метка эпохи отставала бы на один рендер. *@
                 <DataTable @key="ColumnsKey" TItem="TItem" Items="view.Filtered" RowKey="i => i.Id" Page="_page" PageSize="PageSize"
-                           TableFrom="TableFrom" Scroll="Scroll" RowDetail="RowDetail" CanExpand="CanExpand" OpenKey="Open"
+                           TableFrom="TableFrom" Scroll="Scroll" RowDetail="RowDetail" CanExpand="CanExpand"
+                           OpenKey="(object?)OpenId" OpenKeyChanged="SetOpenKey"
                            CardTemplate="CardTemplate is null ? null : Card" AriaLabel="@Title">
                     <Columns>
                         @Columns?.Invoke(view)
@@ -126,15 +138,17 @@
                         }
                     </Columns>
                 </DataTable>
-                <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
             </div>
+            @* Страницы — под карточкой, вне её (правило 17). *@
+            <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
         }
     </AsyncContent>
 </div>
 
 @if (Form is not null)
 {
-    <Modal Open="_editing is not null" Title="@FormTitle" Size="FormSize" OnClose="CloseForm">
+    <UnsavedChangesGuard @ref="_guard" Dirty="IsDirty" />
+    <Modal Open="_editing is not null" Title="@FormTitle" Size="FormSize" OnClose="CloseFormAsync">
         <ChildContent>
             @if (_formError is not null)
             {
@@ -151,10 +165,17 @@
             @if (_editing is not null)
             {
                 @Form(_editing)
+                @* «Удалить» — не в строке, а здесь (правило 7): рядом с частым действием опасного не ставим. *@
+                @if (!_isNew && _canEdit)
+                {
+                    <div class="cm-danger-zone">
+                        <Button Variant="ButtonVariant.OutlineError" Icon="fa-trash-can" OnClick="DeleteEditingAsync">Удалить @Noun</Button>
+                    </div>
+                }
             }
         </ChildContent>
         <Footer>
-            <Button Variant="ButtonVariant.Secondary" OnClick="CloseForm">Отмена</Button>
+            <Button Variant="ButtonVariant.Secondary" OnClick="CloseFormAsync">Отмена</Button>
             <Button Icon="fa-floppy-disk" Busy="_saving" OnClick="SaveAsync">Сохранить</Button>
         </Footer>
     </Modal>
@@ -193,6 +214,8 @@
     private string? _formError;
     private bool _stale;
     private bool _importOpen;
+    private string? _initialJson;
+    private UnsavedChangesGuard? _guard;
     private bool _syncing;
     private CatalogImportReport? _syncReport;
     private Guid? _pagedTo;
@@ -214,7 +237,8 @@
     /// <summary>«оружие», «навык» — в подтверждении удаления.</summary>
     [Parameter, EditorRequired] public string Noun { get; set; } = "";
 
-    [Parameter] public string EmptyTitle { get; set; } = "В справочнике пока пусто.";
+    /// <summary>«оружия», «книг» — для пустого состояния: «Нет книг.» / «Нет книг по этим условиям.»</summary>
+    [Parameter] public string Plural { get; set; } = "записей";
 
     [Parameter] public string SearchPlaceholder { get; set; } = "Поиск по названию";
 
@@ -224,6 +248,9 @@
     [Parameter] public IReadOnlyList<CatalogFilter<TItem>> Filters { get; set; } = [];
 
     [Parameter] public IReadOnlyList<CatalogToggle<TItem>> Toggles { get; set; } = [];
+
+    /// <summary>Порядок для своей раскладки без заголовков таблицы (карточки профессий): выбор в панели фильтров.</summary>
+    [Parameter] public IReadOnlyList<CatalogSort<TItem>> Sorts { get; set; } = [];
 
     /// <summary>Эпохи записи — у справочника с эпохой появляется фильтр по ней.</summary>
     [Parameter] public Func<TItem, IReadOnlyList<Era>>? ErasOf { get; set; }
@@ -265,7 +292,10 @@
     /// <summary>Есть сид книги — кнопка «С правилами».</summary>
     [Parameter] public bool Sync { get; set; }
 
-    /// <summary>Раскрытая запись из адреса (<c>?open=</c>).</summary>
+    /// <summary>
+    /// Раскрытая запись, если страница сама разбирает адрес. Не нужен: каркас читает <c>?open=</c> сам и следит за
+    /// его сменой — параметр остался для страниц, которым запись нужна и у себя (галерея бестиария).
+    /// </summary>
     [Parameter] public Guid? Open { get; set; }
 
     /// <summary>Список загружен или изменился — странице, которой нужны имена (родители навыков).</summary>
@@ -279,6 +309,7 @@
     // ?q= — поиск из ссылки (заклинание книги ведёт на справочник заклинаний).
     protected override void OnInitialized()
     {
+        Navigation.LocationChanged += OnLocationChanged;
         var query = new Uri(Navigation.Uri).Query;
         foreach (var part in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -288,6 +319,35 @@
                 _search = Uri.UnescapeDataString(value.Replace('+', ' ')).Trim();
             }
         }
+    }
+
+    // ?open= меняют и переход по ссылке, и «назад»: страница перерисовывается по смене адреса, а не по своим кликам.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    /// <summary>Раскрытая запись: из адреса (<c>?open=</c>), иначе — переданная страницей.</summary>
+    private Guid? OpenId => OpenFromQuery() ?? Open;
+
+    private Guid? OpenFromQuery()
+    {
+        foreach (var part in new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.Split('=', 2) is ["open", var value] && Guid.TryParse(Uri.UnescapeDataString(value), out var id))
+            {
+                return id;
+            }
+        }
+
+        return null;
+    }
+
+    private Task SetOpenKey(object? key)
+    {
+        var open = key is Guid id ? (Guid?)id : null;
+        _pagedTo = open;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("open", open), replace: true);
+        return Task.CompletedTask;
     }
 
     private async Task<CatalogList<TItem>> LoadAsync(CancellationToken cancellationToken)
@@ -307,9 +367,9 @@
 
     private CatalogView<TItem> View()
     {
-        var filtered = _items.Where(Matches).OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        var filtered = Order(_items.Where(Matches)).ToList();
         // Раскрытая по адресу запись — на своей странице, а не «где-то дальше».
-        if (Open is { } open && _pagedTo != open && PageSize > 0)
+        if (OpenId is { } open && _pagedTo != open && PageSize > 0)
         {
             var index = filtered.FindIndex(i => i.Id == open);
             if (index >= 0)
@@ -333,9 +393,27 @@
             Actions = RowActions,
             Edit = EditAsync,
             Delete = DeleteAsync,
-            Open = Open,
+            Open = OpenId,
             ToggleOpen = ToggleOpenAsync,
         };
+    }
+
+    private string SortKey => _sortKey is not null && Sorts.Any(s => s.Key == _sortKey) ? _sortKey : Sorts.FirstOrDefault()?.Key ?? "";
+
+    private string? _sortKey;
+
+    private IEnumerable<TItem> Order(IEnumerable<TItem> items)
+    {
+        var sort = Sorts.FirstOrDefault(s => s.Key == SortKey);
+        if (sort is null)
+        {
+            return items.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase);
+        }
+
+        var ordered = sort.Descending
+            ? items.OrderByDescending(sort.By, Comparer<object?>.Default)
+            : items.OrderBy(sort.By, Comparer<object?>.Default);
+        return ordered.ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase);
     }
 
     private bool Matches(TItem item)
@@ -376,6 +454,9 @@
     /// </summary>
     private bool ErasVary => ErasOf is not null
         && _items.Select(i => string.Join(",", ErasOf(i).Order())).Distinct().Skip(1).Any();
+
+    /// <summary>Есть что сбрасывать: «Сбросить фильтры» неактивна, пока поиск и фильтры пусты (правило 4).</summary>
+    private bool HasFilters => _search.Length > 0 || _filters.Count > 0 || _toggles.Count > 0 || _era is not null;
 
     private string ColumnsKey => $"{_era}|{string.Join(",", _filters.OrderBy(f => f.Key).Select(f => $"{f.Key}={f.Value}"))}";
 
@@ -435,14 +516,13 @@
 
     private Task ToggleOpenAsync(TItem item)
     {
-        var open = Open == item.Id ? null : (Guid?)item.Id;
-        _pagedTo = open;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("open", open), replace: true);
-        return Task.CompletedTask;
+        return SetOpenKey(OpenId == item.Id ? null : item.Id);
     }
 
     // ── Строка ──
 
+    // В строке каталога одна иконка «Изменить» (правило 7): «Удалить» — в окне правки. Иконка 36px — плотная
+    // таблица справочника, где это допустимо; в карточке на узком экране — полная кнопка 44px.
     private RenderFragment<TItem> RowActions => item => __builder =>
     {
         if (!_canEdit)
@@ -450,11 +530,9 @@
             return;
         }
 
-        <div class="inline-flex gap-1.5" @onclick:stopPropagation="true">
-            <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {item.Name}")"
+        <div class="inline-flex gap-2" @onclick:stopPropagation="true">
+            <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(item.Name)}")"
                     OnClick="() => EditAsync(item)" />
-            <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" AriaLabel="@($"Удалить: {item.Name}")"
-                    OnClick="() => DeleteAsync(item)" />
         </div>
     };
 
@@ -468,29 +546,23 @@
                     <EraBadges Values="ErasOf(item)" />
                 }
             </div>
-            @RowActions(item)
+            @if (_canEdit)
+            {
+                <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(item.Name)}")"
+                        OnClick="() => EditAsync(item)" />
+            }
         </div>
         @if (RowDetail is not null && (CanExpand?.Invoke(item) ?? true))
         {
-            var open = _openCards.Contains(item.Id);
-            <Button Variant="ButtonVariant.Ghost" Small="true" class="mt-1 -ml-3" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
-                    aria-expanded="@(open ? "true" : "false")" OnClick="() => ToggleCard(item.Id)">@(open ? "Свернуть" : "Подробнее")</Button>
+            var open = OpenId == item.Id;
+            <Button Variant="ButtonVariant.Ghost" class="mt-1 -ml-3" Icon="@(open ? "fa-chevron-up" : "fa-chevron-down")"
+                    aria-expanded="@(open ? "true" : "false")" OnClick="() => ToggleOpenAsync(item)">@(open ? "Свернуть" : "Подробнее")</Button>
             @if (open)
             {
                 <div class="mt-2 rounded-md bg-primary-50 p-3">@RowDetail(item)</div>
             }
         }
     };
-
-    private readonly HashSet<Guid> _openCards = [];
-
-    private void ToggleCard(Guid id)
-    {
-        if (!_openCards.Remove(id))
-        {
-            _openCards.Add(id);
-        }
-    }
 
     // ── Правка ──
 
@@ -505,6 +577,7 @@
 
         _isNew = true;
         _editing = New();
+        _initialJson = Serialize(_editing);
         _formError = null;
         _stale = false;
     }
@@ -520,10 +593,24 @@
 
         _isNew = false;
         _editing = Copy(item);
+        _initialJson = Serialize(_editing);
         _editingName = item.Name;
         _formError = null;
         _stale = false;
     }
+
+    // Отмена и крестик спрашивают, если форму успели изменить; сохранение закрывает окно без вопроса.
+    private async Task CloseFormAsync()
+    {
+        if (_guard is not null && !await _guard.ConfirmLeaveAsync())
+        {
+            return;
+        }
+
+        CloseForm();
+    }
+
+    private bool IsDirty => _editing is not null && Serialize(_editing) != _initialJson;
 
     private void CloseForm()
     {
@@ -561,7 +648,7 @@
                 _items.Add(saved);
             }
 
-            Toasts.Success($"«{saved.Name}» сохранено.");
+            Toasts.Success($"Сохранено: {Names.Plain(saved.Name)}.");
             _editing = null;
             await OnLoaded.InvokeAsync(_items);
         }
@@ -586,27 +673,43 @@
         var id = _editing?.Id;
         await ReloadAsync();
         _editing = _items.FirstOrDefault(i => i.Id == id) is { } fresh ? Copy(fresh) : null;
+        _initialJson = _editing is null ? null : Serialize(_editing);
         _formError = _editing is null ? null : "Это свежая версия записи — ваши правки нужно внести заново.";
         _stale = false;
     }
 
-    private async Task DeleteAsync(TItem item)
+    private async Task<bool> DeleteAsync(TItem item)
     {
-        if (!await Dialogs.ConfirmDeleteAsync($"Удалить {Noun}?", $"«{item.Name}» исчезнет из справочника."))
+        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest($"Удалить {Noun}?", $"{Names.Plain(item.Name)} исчезнет из справочника.")
         {
-            return;
+            ConfirmText = $"Удалить {Noun}",
+        });
+        if (!confirmed)
+        {
+            return false;
         }
 
         try
         {
             await Api.DeleteAsync(item.Id);
             _items.RemoveAll(i => i.Id == item.Id);
-            Toasts.Success($"«{item.Name}» удалено.");
+            Toasts.Success($"Удалено: {Names.Plain(item.Name)}.");
             await OnLoaded.InvokeAsync(_items);
+            return true;
         }
         catch (HttpRequestException ex)
         {
             Toasts.Error(ApiErrors.Describe(ex), "Не удалось удалить");
+            return false;
+        }
+    }
+
+    /// <summary>«Удалить» из окна правки: подтверждение, удаление и закрытие окна без вопроса о правках.</summary>
+    private async Task DeleteEditingAsync()
+    {
+        if (_editing is { } item && await DeleteAsync(item))
+        {
+            CloseForm();
         }
     }
 
@@ -642,5 +745,7 @@
     }
 
     /// <summary>Копия записи для формы — через тот же сгенерированный JSON, что и API: новое поле копируется само.</summary>
-    private static TItem Copy(TItem item) => JsonSerializer.Deserialize(JsonSerializer.Serialize(item, ItemType), ItemType)!;
+    private static TItem Copy(TItem item) => JsonSerializer.Deserialize(Serialize(item), ItemType)!;
+
+    private static string Serialize(TItem item) => JsonSerializer.Serialize(item, ItemType);
 }

@@ -12,7 +12,7 @@
    scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается.
    Игроку (CanEdit = false) сервер статблок не отдаёт вовсе (#175): плитка без ПЗ/брони/рассудка, раскрытая
    карточка — картинки и «Описание». *@
-<CatalogPage TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо"
+<CatalogPage TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо" Plural="существ"
              Filters="Filters" SearchAlso="c => [c.Description]" PageSize="20" Open="Open"
              New="() => new CreatureDto()" EditHref="EditHref">
     <Body Context="view">
@@ -34,7 +34,11 @@
                                 @if (view.CanEdit)
                                 {
                                     <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" OnClick="() => view.Edit(creature)">Изменить</Button>
-                                    <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" OnClick="() => view.Delete(creature)">Удалить</Button>
+                                    <RowMenu AriaLabel="@($"Действия: {creature.Name}")">
+                                        <Danger>
+                                            <RowMenuItem Danger="true" Icon="fa-trash-can" OnClick="() => view.Delete(creature)">Удалить существо</RowMenuItem>
+                                        </Danger>
+                                    </RowMenu>
                                 }
                                 <Button Variant="ButtonVariant.Secondary" Small="true" Icon="fa-compress" OnClick="() => view.ToggleOpen(creature)">Свернуть</Button>
                             </div>
@@ -106,7 +110,7 @@
                                     <span class="cr-tile-type">@CatalogText.Of(creature.Type)</span>
                                 </div>
                             </div>
-                            @if (view.CanEdit)
+                            @if (view.CanEdit && !StatblockView.IsBlank(creature.Statblock))
                             {
                                 <dl class="cr-tile-stats">
                                     <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
@@ -124,7 +128,7 @@
 
 @code {
     private static readonly IReadOnlyList<CatalogFilter<CreatureDto>> Filters =
-        [CatalogFilter<CreatureDto>.ForEnum<CreatureType>("type", "Все типы", CatalogText.Of, c => c.Type)];
+        [CatalogFilter<CreatureDto>.ForEnum<CreatureType>("type", Terms.AnyType, CatalogText.Of, c => c.Type)];
 
     private IJSObjectReference? _module;
     private int _imageIndex;

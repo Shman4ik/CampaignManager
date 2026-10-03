@@ -6,17 +6,17 @@
    iPad её вмещает, замер v1). Стоимость и время — длинный свободный текст: в строке обрезаны и
    разворачиваются на месте; в раскрытии — только то, чего в колонках нет (другие названия, описание).
    При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. *@
-<CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание"
+<CatalogPage TItem="SpellDto" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание" Plural="заклинаний"
              Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded"
              New="() => new SpellDto()" RowDetail="Detail" Form="Form">
     <Columns Context="view">
-        <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" CellClass="cm-clip font-medium text-primary-800" Context="s">@s.Name</DataColumn>
+        <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" CellClass="font-medium text-primary-800" Context="s">@s.Name</DataColumn>
         @if (!view.IsFixed("type"))
         {
-            <DataColumn TItem="SpellDto" Title="Тип" SortBy="s => s.SpellType" HeaderClass="w-[14%]" CellClass="cm-clip" Context="s">@s.SpellType</DataColumn>
+            <DataColumn TItem="SpellDto" Title="Тип" SortBy="s => s.SpellType" HeaderClass="w-[14%]" Context="s">@s.SpellType</DataColumn>
         }
-        <DataColumn TItem="SpellDto" Title="Стоимость" HeaderClass="@(view.IsFixed("type") ? "w-[44%]" : "w-[34%]")" CellClass="cm-clip" Context="s">@s.Cost</DataColumn>
-        <DataColumn TItem="SpellDto" Title="Время сотворения" CellClass="cm-clip" Context="s">@s.CastingTime</DataColumn>
+        <DataColumn TItem="SpellDto" Title="Стоимость" HeaderClass="@(view.IsFixed("type") ? "w-[44%]" : "w-[34%]")" Context="s">@s.Cost</DataColumn>
+        <DataColumn TItem="SpellDto" Title="Время сотворения" Context="s">@s.CastingTime</DataColumn>
     </Columns>
     <CardTemplate Context="s">
         <p class="font-medium text-primary-800">@s.Name</p>
@@ -32,7 +32,7 @@
     private void Loaded(IReadOnlyList<SpellDto> spells)
     {
         _types = [.. spells.Select(s => s.SpellType).Where(t => t.Length > 0).Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
-        _filters = [new("type", "Все типы", [.. _types.Select(t => new CatalogOption(t, t))], (spell, type) => spell.SpellType == type)];
+        _filters = [new("type", Terms.AnyType, [.. _types.Select(t => new CatalogOption(t, t))], (spell, type) => spell.SpellType == type)];
     }
 
     private static RenderFragment<SpellDto> Detail => s => __builder =>

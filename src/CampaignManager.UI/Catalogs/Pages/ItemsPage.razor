@@ -4,7 +4,7 @@
 @* Предметы: Название · Тип · Описание. Колонок четыре — таблица помещается и в портрет iPad (с md).
    Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки;
    описание раскрытие не печатает заново, а снимает обрезку с той же ячейки. *@
-<CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет"
+<CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет" Plural="предметов"
              Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
              New="() => new ItemDto()" OnLoaded="Loaded" RowDetail="Detail" CanExpand="HasMore">
     <Columns Context="view">
@@ -21,7 +21,7 @@
         </DataColumn>
         @if (!view.IsFixed("type"))
         {
-            <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" CellClass="cm-clip" Context="item">@item.Type</DataColumn>
+            <DataColumn TItem="ItemDto" Title="Тип" SortBy="i => i.Type" HeaderClass="w-[18%]" Context="item">@item.Type</DataColumn>
         }
         <DataColumn TItem="ItemDto" Title="Описание" CellClass="cm-clip text-primary-600" Context="item">@item.Description</DataColumn>
     </Columns>
@@ -65,7 +65,7 @@
     private void Loaded(IReadOnlyList<ItemDto> items)
     {
         _types = [.. items.Select(i => i.Type).OfType<string>().Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
-        _filters = [new("type", "Все типы", [.. _types.Select(t => new CatalogOption(t, t))], (item, type) => item.Type == type)];
+        _filters = [new("type", Terms.AnyType, [.. _types.Select(t => new CatalogOption(t, t))], (item, type) => item.Type == type)];
     }
 
     private static bool HasMore(ItemDto item) =>

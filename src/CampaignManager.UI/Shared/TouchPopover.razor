@@ -1,0 +1,38 @@
+@* Всплывающая подсказка по касанию — основа BookRef и Abbr. На iPad нет наведения, поэтому title= ничего не
+   объяснит (правило 2 и «Never rely on title=»): касание открывает панель под значком, повторное касание, касание
+   мимо и Esc — закрывают. Панель — в потоке рядом с кнопкой, без JS и без позиционирования: короткий текст
+   (расшифровка, страница книги) под строкой помещается. Не для меню действий — это RowMenu. *@
+<span class="cm-pop" @onkeydown="OnKey">
+    <button type="button" class="@Css.Join("cm-pop-trigger", TriggerClass)" aria-haspopup="dialog" aria-expanded="@(_open ? "true" : "false")"
+            aria-label="@AriaLabel" @onclick="Toggle">@Trigger</button>
+    @if (_open)
+    {
+        <button type="button" class="cm-pop-backdrop" tabindex="-1" aria-hidden="true" @onclick="Close"></button>
+        <span class="cm-pop-panel" role="dialog" aria-label="@AriaLabel">@Panel</span>
+    }
+</span>
+
+@code {
+    private bool _open;
+
+    [Parameter, EditorRequired] public RenderFragment Trigger { get; set; } = null!;
+
+    [Parameter, EditorRequired] public RenderFragment Panel { get; set; } = null!;
+
+    /// <summary>Имя кнопки для диктора, если её видимый текст не говорит сам за себя.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    [Parameter] public string? TriggerClass { get; set; }
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _open = false;
+        }
+    }
+}

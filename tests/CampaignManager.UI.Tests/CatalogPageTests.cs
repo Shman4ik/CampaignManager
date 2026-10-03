@@ -5,6 +5,8 @@ using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core;
 using CampaignManager.UI.Catalogs.Pages;
+using CampaignManager.UI.Shared;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -93,6 +95,152 @@ public sealed class CatalogPageTests : KitContext
         page.FindAll("dialog button").First(b => b.TextContent.Contains("Сохранить", StringComparison.Ordinal)).Click();
 
         page.WaitForAssertion(() => Assert.Contains("уже есть в справочнике", page.Find("dialog").TextContent, StringComparison.Ordinal));
+    }
+
+    // ── Общий каркас (UX-0b) ──
+
+    private static ItemDto Described(string name) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = name,
+        Description = "Длинное описание предмета, которое не помещается в колонку и поэтому раскрывается строкой.",
+        Eras = [.. Enum.GetValues<Era>()],
+    };
+
+    [Fact]
+    public void Open_row_comes_from_the_address_and_toggling_writes_it_back()
+    {
+        var lamp = Described("Лампа");
+        _api.Items = [Described("Бинокль"), lamp];
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo($"/items?open={lamp.Id}");
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Single(page.FindAll(".cm-row-detail")));
+        // Свернуть — касанием раскрытой строки: адрес теряет open.
+        page.FindAll("tbody tr:not(.cm-row-detail)")[1].Click();
+        page.WaitForAssertion(() => Assert.Empty(page.FindAll(".cm-row-detail")));
+        Assert.DoesNotContain("open=", navigation.Uri, StringComparison.Ordinal);
+
+        // Раскрыть другую — адрес получает её id.
+        page.FindAll("tbody tr:not(.cm-row-detail)")[0].Click();
+        page.WaitForAssertion(() => Assert.Single(page.FindAll(".cm-row-detail")));
+        Assert.Contains("open=", navigation.Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reset_filters_is_one_button_and_inactive_until_there_is_something_to_reset()
+    {
+        _api.Items = [Item("Фонарь"), Item("Бинокль")];
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+
+        var reset = page.FindAll("button").Single(b => b.TextContent.Contains("Сбросить фильтры", StringComparison.Ordinal));
+        Assert.NotNull(reset.GetAttribute("disabled"));
+
+        page.Find("input[type=search]").Input("фонарь");
+        reset = page.FindAll("button").Single(b => b.TextContent.Contains("Сбросить фильтры", StringComparison.Ordinal));
+        Assert.Null(reset.GetAttribute("disabled"));
+        Assert.DoesNotContain("Бинокль", page.Markup, StringComparison.Ordinal);
+
+        reset.Click();
+        Assert.Contains("Бинокль", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Empty_filter_result_is_one_line_with_the_reset_button()
+    {
+        _api.Items = [Item("Фонарь")];
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+
+        page.Find("input[type=search]").Input("такого нет");
+
+        var line = page.Find(".cm-empty-line");
+        Assert.Contains("Нет предметов по этим условиям.", line.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Сбросить фильтры", line.TextContent, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll(".cm-empty"));
+    }
+
+    [Fact]
+    public void Empty_catalog_for_the_keeper_is_one_line_because_the_header_has_the_add_button()
+    {
+        _api.CanEdit = true;
+        _api.Items = [];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Equal("Нет предметов.", page.Find(".cm-empty-line").TextContent.Trim()));
+    }
+
+    [Fact]
+    public void Era_filter_is_absent_while_every_record_is_from_one_era()
+    {
+        _api.Items = [Item("Фонарь", Era.Classic), Item("Бинокль", Era.Classic)];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Фонарь", page.Markup, StringComparison.Ordinal));
+        Assert.Empty(page.FindAll("select[aria-label='Эпоха']"));
+        Assert.DoesNotContain("1920-е", page.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Row_has_a_single_edit_icon_and_delete_lives_in_the_edit_window()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+
+        Assert.Empty(page.FindAll("[aria-label^='Удалить']"));
+        Assert.Empty(page.FindAll("dialog"));
+
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        var delete = page.FindAll("dialog button").Single(b => b.TextContent.Contains("Удалить предмет", StringComparison.Ordinal));
+        delete.Click();
+
+        Assert.Equal("Удалить предмет?", dialogs.Current!.Title);
+        Assert.DoesNotContain("«", dialogs.Current.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pagination_sits_under_the_card_not_in_it()
+    {
+        _api.Items = [.. Enumerable.Range(1, 30).Select(i => Item($"Ящик {i:00}"))];
+
+        var page = Render<ItemsPage>();
+
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("nav.cm-pagination")));
+        Assert.Empty(page.FindAll(".cm-card nav.cm-pagination"));
+        Assert.Empty(page.FindAll(".cm-card-footer"));
+    }
+
+    [Fact]
+    public async Task Closing_a_changed_form_asks_once_and_a_clean_form_closes_silently()
+    {
+        _api.CanEdit = true;
+        _api.Items = [Item("Фонарь")];
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var page = Render<ItemsPage>();
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']")));
+
+        // Не тронули — закрывается без вопроса.
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        page.FindAll("dialog button").First(b => b.TextContent.Contains("Отмена", StringComparison.Ordinal)).Click();
+        Assert.Null(dialogs.Current);
+        Assert.Empty(page.FindAll("dialog"));
+
+        // Тронули — спрашивает; «Остаться» оставляет окно.
+        page.Find("table [aria-label='Изменить: Фонарь']").Click();
+        page.Find("dialog input").Change("Фонарь-2");
+        page.FindAll("dialog button").First(b => b.TextContent.Contains("Отмена", StringComparison.Ordinal)).Click();
+        Assert.Equal("Есть несохранённые изменения. Выйти?", dialogs.Current!.Title);
+        await page.InvokeAsync(() => dialogs.Complete(false));
+        await Task.Delay(100, Xunit.TestContext.Current.CancellationToken);
+        Assert.NotEmpty(page.FindAll("dialog"));
     }
 
     private static ItemDto Item(string name, params Era[] eras) => new()

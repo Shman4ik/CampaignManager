@@ -8,8 +8,8 @@
    навыков чипами в строку таблицы не сжать. Профессий три десятка — без страниц. Кнопки карточки
    подписаны: голые иконки — только в плотной таблице. Счётчик «навыков: N из 8» — проверка правила
    книги (стр. 37), он же у Хранителя в форме. «С правилами» — синхронизация с сидом книги по коду. *@
-<CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию"
-             Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="0" Sync="true"
+<CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию" Plural="профессий"
+             Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="12" Sorts="Sorts" Sync="true"
              New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form" FormSize="ModalSize.ExtraLarge">
     <Body Context="view">
         <div class="cm-grid-cards">
@@ -21,7 +21,7 @@
                         <h2 class="cm-card-title min-w-0 flex-1">@occupation.Name</h2>
                         @if (occupation.IsLovecraftian)
                         {
-                            <Badge Tone="Tone.Info">Лавкрафт</Badge>
+                            <Badge Tone="Tone.Info">@Terms.FromLovecraft</Badge>
                         }
                         @if (view.ShowEra)
                         {
@@ -49,8 +49,8 @@
                     @if (view.CanEdit)
                     {
                         <div class="cm-card-footer flex-wrap justify-end">
-                            <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" OnClick="() => view.Edit(occupation)">Изменить</Button>
-                            <Button Variant="ButtonVariant.OutlineError" Small="true" Icon="fa-trash-can" OnClick="() => view.Delete(occupation)">Удалить</Button>
+                            @* «Удалить» — в окне правки (правило 7). *@
+                            <Button Variant="ButtonVariant.OutlinePrimary" Icon="fa-pen" OnClick="() => view.Edit(occupation)">Изменить профессию</Button>
                         </div>
                     }
                 </article>
@@ -61,10 +61,18 @@
 
 @code {
     private static readonly IReadOnlyList<CatalogFilter<OccupationDto>> Filters =
-        [CatalogFilter<OccupationDto>.ForEnum<SkillPointsFormula>("formula", "Любые очки навыков", CatalogText.Of, o => o.SkillPointsFormula)];
+        [CatalogFilter<OccupationDto>.ForEnum<SkillPointsFormula>("formula", Terms.AnySkillPoints, CatalogText.Of, o => o.SkillPointsFormula)];
+
+    // Карточки без заголовков таблицы: порядок — выбором в панели фильтров (решение владельца 2026-10-03: страницы по 12).
+    private static readonly IReadOnlyList<CatalogSort<OccupationDto>> Sorts =
+    [
+        new("name", "По названию", o => o.Name),
+        new("credit", "По Средствам, больше сверху", o => o.CreditRatingMax, Descending: true),
+        new("formula", "По очкам навыков", o => CatalogText.Of(o.SkillPointsFormula)),
+    ];
 
     private static readonly IReadOnlyList<CatalogToggle<OccupationDto>> Toggles =
-        [new("lovecraft", "Лавкрафтовские", o => o.IsLovecraftian)];
+        [new("lovecraft", Terms.FromLovecraft, o => o.IsLovecraftian)];
 
     private IReadOnlyList<SkillDto> _skills = [];
 

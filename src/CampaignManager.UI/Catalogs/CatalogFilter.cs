@@ -20,6 +20,12 @@ public sealed record CatalogFilter<T>(string Key, string AllLabel, IReadOnlyList
             (item, selected) => value(item).ToString() == selected);
 }
 
+/// <summary>
+/// Порядок списка для справочника без таблицы (профессии — карточками: заголовков с сортировкой нет). Первый в
+/// списке — порядок по умолчанию; выбор — в панели фильтров. Сортировка названием — всегда вторым ключом.
+/// </summary>
+public sealed record CatalogSort<T>(string Key, string Label, Func<T, object?> By, bool Descending = false);
+
 /// <summary>Флажок-фильтр: «Только редкое», «Только книги Мифов».</summary>
 public sealed record CatalogToggle<T>(string Key, string Label, Func<T, bool> Matches);
 
