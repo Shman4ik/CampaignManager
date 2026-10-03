@@ -22,6 +22,14 @@ public static partial class Terms
     public const string AnySkillPoints = "Любые очки навыков";
     public const string AnyEra = "Любая эпоха";
 
+    /// <summary>Возраст с правильным склонением: «1 год», «22 года», «42 года», «11 лет».</summary>
+    public static string Years(int age) => $"{age} " + (age % 100 is >= 11 and <= 14 ? 0 : age % 10) switch
+    {
+        1 => "год",
+        2 or 3 or 4 => "года",
+        _ => "лет",
+    };
+
     /// <summary>Пустой список: «Нет книг.»</summary>
     public static string Empty(string plural) => $"Нет {plural}.";
 

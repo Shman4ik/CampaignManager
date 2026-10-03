@@ -13,8 +13,7 @@
             OnClick="() => _adding = Adding.Own">Свой навык</Button>
 </div>
 <p class="cm-field-note mb-3">
-    Коснитесь названия навыка — откроется проверка (справка по навыку — в ней же). В скобках — базовое значение;
-    галочка — отметка успеха для фазы развития. Три числа справа: значение, половина, пятая часть.
+    Тап по названию — проверка и справка. В скобках — база; галочка — успех для фазы развития.
 </p>
 
 @if (_adding == Adding.Specialization)
@@ -39,10 +38,16 @@
                 }
             </datalist>
         </Field>
-        <Button Small="true" Icon="fa-plus" Disabled="@(_parentId is null || string.IsNullOrWhiteSpace(_name))" data-testid="specialization-add"
-                DisabledReason="@(_parentId is null ? "Выберите навык" : "Впишите специализацию")"
-                OnClick="AddSpecialization">Добавить</Button>
-        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        @* «Добавить · Отмена» — один ряд; почему «Добавить» недоступна — отдельной строкой под ним, а не зажатой между кнопками. *@
+        <div class="flex gap-2">
+            <Button Small="true" Icon="fa-plus" Disabled="@(_parentId is null || string.IsNullOrWhiteSpace(_name))" data-testid="specialization-add"
+                    OnClick="AddSpecialization">Добавить</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        </div>
+        @if (_parentId is null || string.IsNullOrWhiteSpace(_name))
+        {
+            <p class="cm-field-note w-full" data-testid="specialization-reason">@(_parentId is null ? "Выберите навык." : "Впишите специализацию.")</p>
+        }
         <p class="cm-field-note w-full">
             Если такой специализации нет в справочнике, её значение — база ближайшей по смыслу, а при её отсутствии 1%.
         </p>
@@ -57,8 +62,14 @@ else if (_adding == Adding.Own)
         <Field Label="Значение" class="w-24">
             <input type="number" inputmode="numeric" min="0" max="99" class="cm-input" @bind="_value" />
         </Field>
-        <Button Small="true" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_name)" DisabledReason="Впишите название" data-testid="own-skill-add" OnClick="AddOwn">Добавить</Button>
-        <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        <div class="flex gap-2">
+            <Button Small="true" Icon="fa-plus" Disabled="@string.IsNullOrWhiteSpace(_name)" data-testid="own-skill-add" OnClick="AddOwn">Добавить</Button>
+            <Button Small="true" Variant="ButtonVariant.Secondary" OnClick="CancelAdd">Отмена</Button>
+        </div>
+        @if (string.IsNullOrWhiteSpace(_name))
+        {
+            <p class="cm-field-note w-full">Впишите название.</p>
+        }
         <p class="cm-field-note w-full">Свой навык живёт только на этом листе — в справочник он не попадает.</p>
     </div>
 }
@@ -74,7 +85,10 @@ else
         @foreach (var group in groups)
         {
             <section class="skill-group" @key="group.Title">
-                <h3 class="skill-group-title">@group.Title</h3>
+                <h3 class="skill-group-title">
+                    <span>@group.Title</span>
+                    <span class="skill-col">знач.</span><span class="skill-col">½</span><span class="skill-col">⅕</span>
+                </h3>
                 @foreach (var line in group.Lines)
                 {
                     <SkillRow @key="line.Key" Line="line" OnValue="v => SetValue(line, v)" OnChecked="v => SetChecked(line, v)"

@@ -21,7 +21,7 @@ public sealed record BiographyField(string Key, string Label, string Placeholder
 public static class BiographyFields
 {
     public static BiographyField KeyConnection { get; } = new("key", "Ключевая связь",
-        "Самое важное, что держит сыщика в здравом уме", b => b.KeyConnection, (b, v) => b.KeyConnection = v);
+        "Что держит сыщика в здравом уме", b => b.KeyConnection, (b, v) => b.KeyConnection = v);
 
     public static IReadOnlyList<BiographyField> Short { get; } =
     [
