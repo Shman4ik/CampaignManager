@@ -223,20 +223,20 @@ public sealed class UxU1Tests : KitContext
 
     // ── /about и /legal ─────────────────────────────────────────────────────
 
-    // Страницы в общей оболочке (PageHeader, cm-page), тексты про 2.0: ни кодов приглашения, ни вики, ни «issue».
+    // Тела страниц (их рендерит сервер статически), тексты про 2.0: ни кодов приглашения, ни вики, ни «issue».
     [Fact]
-    public void About_uses_the_page_shell_and_has_no_v1_leftovers()
+    public void About_content_has_no_v1_leftovers()
     {
-        var about = Render<AboutPage>();
+        var about = Render<AboutContent>();
 
         AssertShellWithoutV1Leftovers(about.Markup, about);
         Assert.Contains("ссылку-приглашение", about.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Legal_uses_the_page_shell_and_has_no_v1_leftovers()
+    public void Legal_content_has_no_v1_leftovers()
     {
-        var legal = Render<LegalPage>();
+        var legal = Render<LegalContent>();
 
         AssertShellWithoutV1Leftovers(legal.Markup, legal);
         Assert.Contains("Chaosium Inc.", legal.Markup, StringComparison.Ordinal);
@@ -244,7 +244,6 @@ public sealed class UxU1Tests : KitContext
 
     private static void AssertShellWithoutV1Leftovers(string text, Bunit.IRenderedComponent<Microsoft.AspNetCore.Components.IComponent> cut)
     {
-        Assert.Single(cut.FindAll("header.cm-topbar"));
         Assert.Single(cut.FindAll("div.cm-page"));
         Assert.DoesNotContain("коду приглашения", text, StringComparison.Ordinal);
         Assert.DoesNotContain("вики", text, StringComparison.OrdinalIgnoreCase);

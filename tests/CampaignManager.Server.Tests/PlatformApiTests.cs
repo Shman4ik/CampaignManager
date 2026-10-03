@@ -38,16 +38,19 @@ public sealed class PlatformApiTests(CmApp app) : IClassFixture<CmApp>
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
-    // Адреса v1: на /legal ссылаются настройки Google-клиента и Auth0. Страницы — в общей оболочке WebAssembly, гостю без входа.
+    // Адреса v1: на /legal ссылаются настройки Google-клиента и Auth0. Их читают боты без JS, поэтому текст
+    // обязан быть в HTML ответа (страницы рендерит сервер статически, а не WebAssembly без пререндера).
     [Theory]
-    [InlineData("/about")]
-    [InlineData("/legal")]
-    public async Task Info_pages_are_open_without_sign_in(string address)
+    [InlineData("/about", "ссылку-приглашение")]
+    [InlineData("/legal", "Chaosium Inc.")]
+    [InlineData("/legal", "Конфиденциальность")]
+    public async Task Info_pages_are_open_without_sign_in_with_text_in_html(string address, string phrase)
     {
         var response = await app.CreateClient().GetAsync(address, Cancellation);
+        var html = await response.Content.ReadAsStringAsync(Cancellation);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("id=\"app-loading\"", await response.Content.ReadAsStringAsync(Cancellation));
+        Assert.Contains(phrase, html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
