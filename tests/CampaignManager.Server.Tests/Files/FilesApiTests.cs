@@ -366,7 +366,7 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
     {
         using var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(width, height);
         using var stream = new MemoryStream();
-        image.SaveAsPng(stream);
+        SixLabors.ImageSharp.ImageExtensions.SaveAsPng(image, stream);
         return stream.ToArray();
     }
 

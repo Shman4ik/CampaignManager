@@ -23,7 +23,7 @@
                     <dd class="text-base font-semibold text-primary-800">@value</dd>
                     @if (dice is not null)
                     {
-                        <dd class="cm-dice text-[0.6875rem] text-primary-500">@dice</dd>
+                        <dd class="cm-dice text-[0.6875rem] leading-tight text-primary-500 [overflow-wrap:anywhere]">@dice</dd>
                     }
                 </div>
             }
@@ -32,9 +32,16 @@
     }
 
     <dl class="grid gap-0.5">
-        @foreach (var (label, value) in Lines)
+        @foreach (var (label, value, note) in Lines)
         {
-            <div><dt class="cm-meta-label inline">@label: </dt><dd class="inline">@value</dd></div>
+            @* Оговорка книги («не погибает, а уходит…») — своей строкой под числом: в одной строке она рвала сетку. *@
+            <div>
+                <dt class="cm-meta-label inline">@label: </dt><dd class="inline">@value</dd>
+                @if (!string.IsNullOrWhiteSpace(note))
+                {
+                    <dd class="block text-primary-600">@note</dd>
+                }
+            </div>
         }
     </dl>
 
@@ -127,33 +134,33 @@
         }
     }
 
-    private IEnumerable<(string Label, string Value)> Lines
+    private IEnumerable<(string Label, string Value, string? Note)> Lines
     {
         get
         {
             var s = Statblock;
-            yield return (Terms.DamageBonusTitle, string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus);
-            yield return (Terms.Build, s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture));
+            yield return (Terms.DamageBonusTitle, string.IsNullOrWhiteSpace(s.DamageBonus) ? "0" : s.DamageBonus, null);
+            yield return (Terms.Build, s.Build.ToString(System.Globalization.CultureInfo.CurrentCulture), null);
             if (Speed(s.Speed) is { } speed)
             {
-                yield return (Terms.Speed, speed);
+                yield return (Terms.Speed, speed, null);
             }
 
-            yield return (Terms.AttacksPerRound, s.AttacksPerRoundNote is { Length: > 0 } note ? $"{s.AttacksPerRound} ({note})" : $"{s.AttacksPerRound}");
-            yield return ("Броня", ArmorText(s));
+            yield return (Terms.AttacksPerRound, $"{s.AttacksPerRound}", s.AttacksPerRoundNote);
+            yield return ("Броня", s.Armor > 0 ? $"{s.Armor}" : Terms.None, s.ArmorNote);
             if (s.Dodge > 0)
             {
-                yield return (Terms.Dodge, $"{s.Dodge}%");
+                yield return (Terms.Dodge, $"{s.Dodge}%", null);
             }
 
             if (!string.IsNullOrWhiteSpace(s.SanityLoss))
             {
-                yield return (Terms.SanityLoss, s.SanityLoss);
+                yield return (Terms.SanityLoss, s.SanityLoss, null);
             }
 
             if (s.Initiative > 0)
             {
-                yield return ("Инициатива", $"{s.Initiative}");
+                yield return ("Инициатива", $"{s.Initiative}", null);
             }
         }
     }
@@ -177,19 +184,6 @@
         if (speed.Fly is { } fly) parts.Add($"полёт {fly}");
         return string.Join(" / ", parts);
     }
-
-    /// <summary>
-    /// «Броня: нет» у книги часто идёт с оговоркой, которая и есть настоящая защита («огнестрел наносит
-    /// минимальный урон», «регенерирует»), поэтому ноль без оговорки — «—», с оговоркой — она сама.
-    /// </summary>
-    public static string ArmorText(Statblock s) =>
-        (s.Armor, s.ArmorNote) switch
-        {
-            ( > 0, { Length: > 0 } note) => $"{s.Armor} — {note}",
-            ( > 0, _) => $"{s.Armor}",
-            (_, { Length: > 0 } note) => note,
-            _ => Terms.None,
-        };
 
     /// <summary>На плитке места для оговорки нет, но и «нет» там, где тварь регенерирует, соврало бы: «особая».</summary>
     public static string TileArmor(Statblock s) =>
