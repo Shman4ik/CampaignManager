@@ -253,7 +253,7 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(1, skillUsage.Count);
         Assert.True(skillUsage.Blocks);
         Assert.Contains(sling.Name, skillUsage.Examples[0], StringComparison.Ordinal);
-        Assert.Equal(CatalogUsage.None, await app.Weapons().UsageAsync(sling.Id, Cancellation));
+        Assert.Equal(0, (await app.Weapons().UsageAsync(sling.Id, Cancellation)).Count);
 
         // Оружие лежит в листе ссылкой внутри документа, а не внешним ключом: удалить можно, но Хранитель узнаёт, где оно было.
         await using (var db = app.Database.CreateContext())

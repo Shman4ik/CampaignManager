@@ -15,13 +15,15 @@
         <div class="@Css.Join("flex items-center gap-2 border-t border-primary-200 py-1 first:border-t-0")" @key="index">
             <div class="min-w-0 flex-1">
                 <span class="font-medium text-primary-800">@spell.RawName</span>
-                @if (linked is not null)
+                @* Связанное под тем же именем — без пометки (шесть «в справочнике» подряд ничего не говорят): пометка
+                   только у отличия — другое имя в справочнике или его отсутствие. *@
+                @if (linked is null)
                 {
-                    <span class="cm-meta ml-2"><i class="fa-solid fa-link" aria-hidden="true"></i> @(Same(linked.Name, spell.RawName) ? "в справочнике" : linked.Name)</span>
+                    <span class="ml-2 text-[0.8125rem] text-primary-600">нет в справочнике</span>
                 }
-                else
+                else if (!Same(linked.Name, spell.RawName))
                 {
-                    <span class="cm-meta ml-2">нет в справочнике</span>
+                    <span class="ml-2 text-[0.8125rem] text-primary-600"><i class="fa-solid fa-link" aria-hidden="true"></i> @linked.Name</span>
                 }
             </div>
             @if (linked is null)
@@ -46,7 +48,7 @@
 <CatalogPickerModal TItem="SpellDto" Open="_picking" Title="@(_pickIndex is { } at ? $"Связать: {Spells[at].RawName}" : "Заклинание из справочника")"
                     Load="_ => Task.FromResult<IReadOnlyList<SpellDto>>(_sorted)" Key="s => s.Id" Name="s => s.Name"
                     Meta="s => s.SpellType" Also="s => s.AltNames" Placeholder="Поиск заклинания…" Empty="Справочник заклинаний пуст."
-                    ConfirmText="@(_pickIndex is null ? "Добавить" : "Связать")" OnPick="PickAsync" OnClose="() => _picking = false" />
+                    ConfirmText="@(_pickIndex is null ? "Добавить" : "Связать")" ConfirmIcon="@(_pickIndex is null ? "fa-plus" : "fa-link")" OnPick="PickAsync" OnClose="() => _picking = false" />
 
 @code {
     private List<SpellDto> _sorted = [];
