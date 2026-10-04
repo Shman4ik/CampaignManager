@@ -140,12 +140,13 @@ public sealed class PlaySheetTests : KitContext
     }
 
     [Fact]
-    public void Npc_has_no_luck_tile()
+    public void Npc_has_a_luck_tile_too()
     {
         var context = new SheetContext(new CharacterDto { Sheet = Sheet(), CanEdit = true, Kind = CharacterKind.Npc }, Catalog, [], null!, () => { }, _checks.Add);
         var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<PlayVitals>());
 
-        Assert.Empty(cut.FindAll("[data-testid='play-luck']"));
+        // Владелец 2026-10-04: решение «у НПС Удачи нет» (g2 8.1) отменено.
+        Assert.NotNull(cut.Find("[data-testid='play-luck']"));
         Assert.NotNull(cut.Find("[data-testid='play-san']"));
     }
 
@@ -261,6 +262,36 @@ public sealed class PlaySheetTests : KitContext
         Assert.Contains("Ближний бой (драка) — навык не указан", cut.Find("[data-testid='play-weapon-fallback']").TextContent);
         cut.Find("[data-testid='play-weapon-check']").Click();
         Assert.Equal($"skill:{brawl.Id}", Assert.Single(_checks));
+    }
+
+    [Fact]
+    public void Unarmed_brawl_row_is_always_there_and_checks_brawl()
+    {
+        var brawl = new SkillDefinition(Guid.NewGuid(), "Ближний бой (драка)") { Code = "skill.fighting.brawl", BaseValue = 25, Category = SkillCategory.CombatGeneral };
+        var catalog = new SkillCatalog([Spot, brawl]);
+        var context = new SheetContext(new CharacterDto { Sheet = Sheet(), CanEdit = true, Kind = CharacterKind.Npc }, catalog, [], null!, () => { }, _checks.Add);
+        var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<PlayWeapons>());
+
+        // Лист без оружия: карточка есть, драться есть чем — 1d3 + бонус к урону (стр. 66).
+        var row = cut.Find("[data-testid='play-weapon-unarmed']");
+        Assert.Contains("Драка (без оружия)", row.TextContent);
+        Assert.Contains("1d3", row.TextContent);
+        cut.Find("[data-testid='play-weapon-unarmed-check']").Click();
+        Assert.Equal($"skill:{brawl.Id}", Assert.Single(_checks));
+    }
+
+    [Fact]
+    public void Brawl_weapon_row_replaces_the_unarmed_row()
+    {
+        var brawl = new SkillDefinition(Guid.NewGuid(), "Ближний бой (драка)") { Code = "skill.fighting.brawl", BaseValue = 25, Category = SkillCategory.CombatGeneral };
+        var catalog = new SkillCatalog([Spot, brawl]);
+        var sheet = Sheet();
+        sheet.Weapons.Add(new SheetWeapon { Name = "Драка", SkillId = brawl.Id, Damage = "1d3+БкУ" });
+        var context = new SheetContext(new CharacterDto { Sheet = sheet, CanEdit = true }, catalog, [], null!, () => { }, _checks.Add);
+        var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<PlayWeapons>());
+
+        Assert.Empty(cut.FindAll("[data-testid='play-weapon-unarmed']"));
+        Assert.Single(cut.FindAll("[data-testid='play-weapon']"));
     }
 
     [Fact]

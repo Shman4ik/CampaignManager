@@ -89,10 +89,10 @@
   /* Телефон: пороги переносятся на вторую строку — подпись каждой плитки занимает две строки, иначе число ПЗ вставало
      ниже числа ПМ в соседней плитке. */
   @media (width < 40rem) {
-    /* Только второй ряд плиток (Рассудок · Удача): у Рассудка пояснение «за день 0 из 10» переносится, и число Удачи иначе
-       вставало выше. У первого ряда (ПЗ · ПМ) пояснения на телефоне нет — лишнего места ему не нужно. */
-    .play-vital[data-k="san"] .play-vital-label,
-    .play-vital[data-k="luck"] .play-vital-label {
+    /* Первый ряд плиток (ПЗ · Рассудок): у Рассудка пояснение «за день 0 из 10» переносится, и число ПЗ иначе вставало
+       выше. Второй ряд (ПМ · Удача) компактный, пояснений у него нет. */
+    .play-vital[data-k="hp"] .play-vital-label,
+    .play-vital[data-k="san"] .play-vital-label {
       min-height: 2.5rem;
     }
   }
@@ -141,9 +141,10 @@
     color: var(--color-primary-400);
   }
 
+  /* Шаг — сразу за числом и в узкой плитке: у ПМ и Удачи он стоял у правого края, у ПЗ и Рассудка — у числа. */
   .play-vital-step {
     grid-area: step;
-    justify-self: end;
+    justify-self: start;
   }
 
   .play-vital-extra {
@@ -176,10 +177,18 @@
   /* Широкая плитка: действие («[число] Урон», «[число] Потеря») встаёт в строку числа справа от шага. Порог — по
      ширине самого действия: плитке ПЗ со значением «12 / 12» нужно 299px, трёхзначным — чуть больше. */
   @container vital (min-width: 310px) {
+    /* Шаг и действие — сразу за числом одной группой: прижатые к правому краю широкой плитки (на 1870px — в 400px от
+       числа), они читались как чужие кнопки (владелец 2026-10-04). Остаток строки — пустой хвостовой колонкой. */
     .play-vital-in {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      grid-template-areas: "label label label" "value step extra" "bar bar bar";
+      grid-template-columns: auto auto auto minmax(0, 1fr);
+      grid-template-areas: "label label label label" "value step extra ." "bar bar bar bar";
       grid-template-rows: auto 1fr auto;
+      column-gap: 0.75rem;
+    }
+
+    .play-vital-step {
+      justify-self: start;
+      margin-left: 0.25rem;
     }
 
     .play-vital-extra {
@@ -191,6 +200,35 @@
     .play-vital-extra .play-pill,
     .play-vital-extra .play-pill button {
       flex: none;
+    }
+  }
+
+  /* Компактная плитка (ПМ, Удача — второй ряд, владелец 2026-10-04): число мельче, поля уже; когда влезает — подпись, число
+     и шаг одной строкой. Меняются за столом реже ПЗ и Рассудка, поэтому места им меньше. */
+  .play-vital[data-compact] .play-vital-in {
+    row-gap: 0.125rem;
+    align-content: center; /* в ландшафте ряд по высоте ПЗ — компактная плитка посередине, а не прилипшей к верху */
+    padding-block: 0.375rem 0.5rem;
+  }
+
+  .play-vital[data-compact] .play-vital-value {
+    font-size: 1.125rem;
+  }
+
+  .play-vital[data-compact] .play-pill {
+    height: 32px;
+  }
+
+  @container vital (min-width: 250px) {
+    .play-vital[data-compact] .play-vital-in {
+      grid-template-columns: auto auto auto minmax(0, 1fr);
+      grid-template-areas: "label value step ." "bar bar bar bar";
+      grid-template-rows: auto auto;
+      column-gap: 0.75rem;
+    }
+
+    .play-vital[data-compact] .play-vital-bar {
+      margin-top: 0.25rem;
     }
   }
 
@@ -212,7 +250,7 @@
 
   @container vitals (min-width: 1000px) {
     .play-vital-grid {
-      grid-template-columns: 1.6fr 1fr 1.6fr 1fr;
+      grid-template-columns: 1.6fr 1.6fr 1fr 1fr;
     }
 
     .play-vital {
@@ -224,31 +262,16 @@
     }
   }
 
-  /* НПС без Удачи (g2 8.1): три плитки. В 2×2 последняя занимает ряд целиком, в ландшафте — те же веса без четвёртой. */
-  @container vitals (min-width: 340px) {
-    .play-vital-grid[data-count="3"] .play-vital:last-child {
-      grid-column: 1 / -1;
-      border-left: 0;
-      border-top: 1px solid var(--color-primary-200);
-    }
-  }
-
-  @container vitals (min-width: 1000px) {
-    .play-vital-grid[data-count="3"] {
-      grid-template-columns: 1.6fr 1fr 1.6fr;
-    }
-
-    .play-vital-grid[data-count="3"] .play-vital:last-child {
-      grid-column: auto;
-      border-top: 0;
-      border-left: 1px solid var(--color-primary-200);
-    }
-  }
-
-  /* Телефон, 2×2: плитка ~180px — поля плитки уже, иначе «14 / 14» и шаг ПМ не встают в строку. */
+  /* Телефон, 2×2: плитка ~180px — поля плитки уже, иначе «14 / 14» и шаг ПМ не встают в строку. «Мёртв» здесь уходит
+     на свою строку — линейка перед ним торчала бы обрубком, отделяет сам перенос. */
   @container vitals (max-width: 559.98px) {
     .play-vital-in {
       padding-inline: 0.625rem;
+    }
+
+    .play-flag-group-end {
+      padding-inline-start: 0;
+      border-inline-start: 0;
     }
   }
 
@@ -354,9 +377,11 @@
     gap: 0.375rem;
   }
 
-  /* «Мёртв» — отдельной группой с промежутком: рядом с «Без сознания» одно касание хоронило сыщика (g2 1.14). */
+  /* «Мёртв» — отдельной группой за линейкой: рядом с «Без сознания» одно касание хоронило сыщика (g2 1.14). Не к правому
+     краю: на широком экране кнопка уезжала от своих соседей на полстраницы. */
   .play-flag-group-end {
-    margin-inline-start: auto;
+    padding-inline-start: 1rem;
+    border-inline-start: 1px solid var(--color-primary-200);
   }
 
   .play-flag {
@@ -417,10 +442,12 @@
     border-color: var(--color-secondary-200);
   }
 
+  /* Сильное состояние разума («Неизлечимо безумен», приступ) — той же тревожной плашкой, что включённые отметки тела:
+     тёмная заливка читалась как нажатая главная кнопка. */
   .play-flag-mind.play-flag-on {
-    color: var(--color-secondary-800);
-    background: var(--color-secondary-200);
-    border-color: var(--color-secondary-500);
+    color: var(--color-error-700);
+    background: var(--color-error-50);
+    border-color: var(--color-error-200);
   }
 
   .play-vitals-alerts {
@@ -441,9 +468,12 @@
     overflow: hidden;
   }
 
+  /* Подпись сверху растягивается, число и ½ · ⅕ прижаты книзу: в одном ряду числа стоят на одной линии, даже если подпись
+     соседней плитки («БОНУС К УРОНУ» на телефоне) ушла на две строки. */
   .play-stat {
     display: grid;
-    align-content: center;
+    grid-template-rows: 1fr auto auto;
+    align-items: end;
     justify-items: center;
     gap: 0.125rem;
     min-height: 3.5rem;
@@ -464,10 +494,14 @@
     color: var(--color-primary-500);
   }
 
+  /* Подписи производных — тем же видом, что ключи характеристик: две разные подписи в одной полосе выглядели как две
+     разные полосы. */
   .play-stat-label {
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1.2;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     color: var(--color-primary-500);
   }
 
@@ -485,12 +519,10 @@
     color: var(--color-primary-500);
   }
 
-  .play-stat-derived {
-    background: var(--color-primary-50);
-  }
-
-  .play-stat-derived .play-stat-value {
-    font-size: 1.125rem;
+  /* Производные отделены от характеристик линейкой потолще, а не другим фоном: числа обеих групп стоят на одной линии
+     (у производной без ½ и ⅕ — пустая третья строка, PlayStats). */
+  .play-stat-derived-first {
+    border-left: 2px solid var(--color-primary-200);
   }
 
   /* Портрет iPad (~704px) — два ряда по шесть, а не три по четыре. */
@@ -503,7 +535,7 @@
   /* Восемь характеристик и четыре производных — одной строкой; производным шире: подписи словами. */
   @container play (min-width: 860px) {
     .play-stats {
-      grid-template-columns: repeat(8, minmax(0, 1fr)) repeat(4, minmax(0, 1.4fr));
+      grid-template-columns: repeat(8, minmax(0, 1fr)) repeat(4, minmax(0, 1.6fr));
     }
 
     .play-stat {
@@ -512,6 +544,12 @@
 
     .play-stat:last-child {
       border-right: 0;
+    }
+
+    /* Одной строкой подпись не переносится: «БОНУС К УРОНУ» в плитке ~120px на iPad иначе уходило на две строки и
+       сдвигало число ниже соседних. В плитках телефона и портрета перенос нужен — там подпись шире плитки. */
+    .play-stat-label {
+      white-space: nowrap;
     }
   }
 
@@ -646,13 +684,106 @@
         columns: 4;
       }
     }
+
+    /* Широкий экран: пятая колонка, чтобы колонка не росла за ~280px — иначе число уходило от названия на 200px. */
+    @container skills (min-width: 1240px) {
+      .play-skill-cols {
+        columns: 5;
+      }
+    }
   }
 
+  /* «Частые» — порядок по важности, не алфавит: строками, а не колонками. Колонками 13 навыков в четыре колонки выходили
+     4-4-4-1 — один навык в пустой колонке; строками последний ряд просто короче. */
+  .play-skill-cols-rows {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 1rem;
+    padding: 0 0.5rem 0.625rem;
+  }
+
+  /* Разделитель колонок — как column-rule у алфавита: линия посередине зазора у каждой строки не первой колонки; строки
+     идут без зазора, поэтому линия сплошная. Число колонок задаёт --rows-cols, его меняют те же пороги. */
+  .play-skill-cols-rows > .play-skill {
+    position: relative;
+  }
+
+  .play-skill-cols-rows > .play-skill::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: -0.5rem;
+    display: none;
+    border-left: 1px solid var(--color-primary-200);
+  }
+
+  @container skills (min-width: 440px) {
+    .play-skill-cols-rows {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .play-skill-cols-rows > .play-skill:not(:nth-child(2n + 1))::before {
+      display: block;
+    }
+  }
+
+  @container play (min-width: 1000px) {
+    @container skills (min-width: 640px) {
+      .play-skill-cols-rows {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .play-skill-cols-rows > .play-skill::before {
+        display: block;
+      }
+
+      .play-skill-cols-rows > .play-skill:nth-child(3n + 1)::before {
+        display: none;
+      }
+    }
+
+    @container skills (min-width: 960px) {
+      .play-skill-cols-rows {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .play-skill-cols-rows > .play-skill::before {
+        display: block;
+      }
+
+      .play-skill-cols-rows > .play-skill:nth-child(4n + 1)::before {
+        display: none;
+      }
+    }
+
+    @container skills (min-width: 1240px) {
+      .play-skill-cols-rows {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+
+      .play-skill-cols-rows > .play-skill::before {
+        display: block;
+      }
+
+      .play-skill-cols-rows > .play-skill:nth-child(5n + 1)::before {
+        display: none;
+      }
+    }
+  }
+
+  /* Подпись чисел — в строке заголовка, сразу за «Навыки», а не отдельной строкой над списком. */
   .play-skill-legend {
     margin: 0;
-    padding: 0 0.875rem 0.25rem;
     font-size: 0.8125rem;
     color: var(--color-primary-600);
+  }
+
+  .play-card-head .play-skill-legend {
+    flex: 1;
+  }
+
+  .play-skills .play-card-head .cm-section-title {
+    flex: none;
   }
 
   .play-skill-subtitle {
