@@ -12,11 +12,13 @@
 @* Главная — только для вошедших: гостя сервер сразу уводит на страницу входа Auth0 (своей витрины с «Войти» нет,
    v1 к тому же отдавал анониму названия и почты Хранителей). Один GET /api/v1/home: открытые ваншоты, свои кампании (Хранителю — с
    игроками, листами и НПС), доступные для вступления. Почт нет нигде: люди — по имени в кампании.
-   Порядок — по важности за столом: свои кампании (там «Открыть лист»), затем открытая запись на ваншоты и «Можно
-   вступить». Раскладка (решение оркестратора, H2): слева «Ваши кампании», справа с lg (aside, 1:2) — «Ваншоты — открыта
-   запись» и «Можно вступить»; без них кампании идут во всю колонку в две колонки потоком. Завершённые кампании —
-   строки в одной карточке под активными. Вступление («Вступить») — сразу, с именем профиля, без окна: имя в кампании
-   меняется потом в «⋯ → Имя в кампании» (JN2). *@
+   Раскладка зависит от того, кто смотрит (владелец 2026-10-04, HomeLayout): анонс ваншота — приглашение, поэтому он во всю
+   колонку, а не в узкой правой. Игроку без своих кампаний анонс — первый блок страницы; игроку со своими кампаниями — сразу под
+   ними (полоса над кампаниями уводила «Открыть лист» за сгиб на 1194×696). Текст анонса целиком, на телефоне — четыре строки.
+   Хранитель свою игру видит на карточке своей кампании («Запись открыта: свободно N из M»), занявший место игрок — там же (дата,
+   «Снять запись»). «Можно вступить» — справа с lg (aside, 2:1); игра, анонс которой уже на странице, туда не попадает: в анонсе
+   есть и «Занять», и «Создать своего сыщика» (он вступает сам). Без aside кампании идут во всю колонку в две колонки потоком.
+   Завершённые кампании — строки в одной карточке под активными. «Вступить» — сразу, с именем профиля, без окна (JN2). *@
 <PageHeader Title="Главная" />
 
 <div class="cm-page">
@@ -26,9 +28,17 @@
                 @{
                     var current = home.Mine.Where(c => !HomeCampaignCard.IsCompleted(c)).ToList();
                     var finished = home.Mine.Where(HomeCampaignCard.IsCompleted).ToList();
-                    var hasAside = home.OneShots.Count > 0 || home.Available.Count > 0;
+                    var layout = HomeLayout.Of(home);
+                    var hasAside = layout.Available.Count > 0;
+                    var hasInvites = layout.Invites.Count > 0;
+                    // Своих кампаний нет — анонс главный: первым на любом экране.
+                    var invitesFirst = hasInvites && current.Count == 0;
                 }
                 <div class="@Css.Join("grid items-start gap-x-7", hasAside ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : null)">
+                @if (invitesFirst)
+                {
+                    @Invites(layout, last: false)
+                }
                 <div class="min-w-0">
                 <section class="cm-section" aria-labelledby="home-mine">
                     <div class="cm-section-header">
@@ -39,8 +49,16 @@
                     </div>
                     @if (home.Mine.Count == 0)
                     {
-                        <EmptyState Icon="fa-map" Title="Вы пока ни в одной кампании."
-                                    Message="@(home.Available.Count > 0 || home.OneShots.Count > 0 ? "Вступите в кампанию — Хранитель увидит вас среди игроков." : "Когда Хранитель заведёт кампанию, она появится здесь.")" />
+                        @if (hasInvites)
+                        {
+                            @* Главное на странице — анонс выше: здесь одна строка, а не карточка с иконкой. *@
+                            <EmptyState Compact="true" Title="Вы пока ни в одной кампании." />
+                        }
+                        else
+                        {
+                            <EmptyState Icon="fa-map" Title="Вы пока ни в одной кампании."
+                                        Message="@(hasAside ? "Вступите в кампанию — Хранитель увидит вас среди игроков." : "Когда Хранитель заведёт кампанию, она появится здесь.")" />
+                        }
                     }
                     else
                     {
@@ -51,7 +69,7 @@
                             <div class="@Css.Join("[&>article]:mb-3 [&>article]:break-inside-avoid", hasAside ? null : "lg:columns-2 lg:gap-3")">
                                 @foreach (var campaign in current)
                                 {
-                                    <HomeCampaignCard Campaign="campaign" @key="campaign.Id" />
+                                    <HomeCampaignCard Campaign="campaign" Run="layout.RunOf(campaign.Id)" OnChanged="ReloadAsync" @key="campaign.Id" />
                                 }
                             </div>
                         }
@@ -72,28 +90,18 @@
                 </section>
                 </div>
 
+                @if (hasInvites && !invitesFirst)
+                {
+                    @Invites(layout, last: true)
+                }
+
                 @if (hasAside)
                 {
                 <aside class="min-w-0" aria-label="Куда можно вступить">
-                @if (home.OneShots.Count > 0)
-                {
-                    <section class="cm-section" aria-labelledby="home-oneshots">
-                        <div class="cm-section-header"><h2 id="home-oneshots" class="cm-section-title">Ваншоты — открыта запись</h2></div>
-                        <div class="grid grid-cols-1 items-start gap-3">
-                            @foreach (var run in home.OneShots)
-                            {
-                                <OneShotCard Run="run" StartCollapsed="true" OnChanged="ReloadAsync" @key="run.RunId" />
-                            }
-                        </div>
-                    </section>
-                }
-
-                @if (home.Available.Count > 0)
-                {
                     <section class="cm-section" aria-labelledby="home-available">
                         <div class="cm-section-header"><h2 id="home-available" class="cm-section-title">Можно вступить</h2></div>
                         <div class="grid grid-cols-1 items-start gap-3">
-                            @foreach (var campaign in home.Available)
+                            @foreach (var campaign in layout.Available)
                             {
                                 <div class="cm-card flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" @key="campaign.Id">
                                     <div class="min-w-0 flex-1 basis-32">
@@ -117,7 +125,6 @@
                             }
                         </div>
                     </section>
-                }
                 </aside>
                 }
                 </div>
@@ -174,4 +181,19 @@
     }
 
     private Task ReloadAsync() => _home?.ReloadAsync() ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Анонсы во всю колонку сетки (<c>col-span-full</c>). <paramref name="last"/> — у игрока есть свои кампании: анонс идёт под ними
+    /// (с lg — и под «Можно вступить», <c>order-last</c>), «Открыть лист» остаётся над сгибом.
+    /// </summary>
+    private RenderFragment Invites(HomeLayout layout, bool last) =>
+        @<section class="@Css.Join("cm-section min-w-0 lg:col-span-full", last ? "lg:order-last" : null)" aria-labelledby="home-oneshots">
+            <div class="cm-section-header"><h2 id="home-oneshots" class="cm-section-title">Ваншоты — открыта запись</h2></div>
+            <div class="grid grid-cols-1 gap-3">
+                @foreach (var run in layout.Invites)
+                {
+                    <OneShotCard Run="run" IsMember="layout.IsMember(run.CampaignId)" OnChanged="ReloadAsync" @key="run.RunId" />
+                }
+            </div>
+        </section>;
 }

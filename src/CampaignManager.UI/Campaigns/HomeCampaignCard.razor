@@ -10,7 +10,10 @@
    ваших кампаниях») и НПС кампании. Второстепенное — журнал (читать: книга, не перо) — в подвале.
    Завершённая кампания (правило 17) — строка, а не карточка: имя, статус, «Журнал» (и «Открыть лист», если он есть);
    «Создать сыщика», «+ НПС» и список игроков ей не нужны. Строки завершённых стоят в одной карточке главной
-   (HomePage), поэтому сама строка рамки не рисует. *@
+   (HomePage), поэтому сама строка рамки не рисует.
+   Разовая игра с открытой записью (Run): Хранителю — строка «Запись открыта: свободно N из M» и дата вместо отдельного
+   анонса справа (свою игру он видит здесь, анонс — приглашение для игроков); игроку, который уже занял место, — дата игры
+   и «Снять запись» в подвале (анонс с главной для него уходит). *@
 @if (Completed)
 {
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-primary-200 px-4 py-2 first:border-t-0"
@@ -56,6 +59,10 @@ else
             @if (!Kept)
             {
                 <div class="cm-meta mb-3">
+                    @if (Run?.ScheduledAt is { } when)
+                    {
+                        <span><i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@LocalTime.DateTime(when)</span>
+                    }
                     @if (Campaign.KeeperName is { } keeperName)
                     {
                         <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
@@ -97,6 +104,17 @@ else
             }
             else
             {
+                @if (Run is { } run)
+                {
+                    <div class="cm-meta mb-3" data-testid="signup-line">
+                        <span><i class="fa-solid fa-bullhorn mr-1" aria-hidden="true"></i><span class="cm-meta-label">Запись открыта:</span>
+                            свободно @run.Pregens.Count(p => !p.IsReserved) из @run.Pregens.Count</span>
+                        @if (run.ScheduledAt is { } when)
+                        {
+                            <span><i class="fa-regular fa-calendar mr-1" aria-hidden="true"></i>@LocalTime.DateTime(when)</span>
+                        }
+                    </div>
+                }
                 @* Нулевые секции («Игроки (0)», «НПС (0)») не рисуются: пустота ради заголовка — шум. *@
                 @if (Campaign.Players.Count == 0)
                 {
@@ -154,12 +172,25 @@ else
                 <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-plus"
                         Href="@($"character/create/npc?campaignId={Campaign.Id}")">Добавить НПС</Button>
             }
+            else if (MyPlace is { } place)
+            {
+                <ReleaseReservationButton RunId="Run!.RunId" Pregen="place" OnChanged="OnChanged" />
+            }
         </div>
     </article>
 }
 
 @code {
     [Parameter, EditorRequired] public HomeCampaignDto Campaign { get; set; } = null!;
+
+    /// <summary>Разовая игра этой кампании с открытой записью, если есть.</summary>
+    [Parameter] public HomeOneShotDto? Run { get; set; }
+
+    /// <summary>Запись снята — главной перечитать себя.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>Место, которое занял я (готовый сыщик), — для «Снять запись».</summary>
+    private HomePregenDto? MyPlace => Run?.Pregens.FirstOrDefault(p => p.IsMine && p.CanRelease);
 
     private bool Kept => Campaign.MyRole == CampaignRole.Keeper;
 

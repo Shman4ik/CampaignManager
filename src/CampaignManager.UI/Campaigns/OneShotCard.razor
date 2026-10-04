@@ -1,26 +1,30 @@
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.Contracts.Scenarios
+@using CampaignManager.Core.Characters
+@using CampaignManager.UI.Characters.Creation
 @using CampaignManager.UI.Platform
 @inject IRunsApi Runs
-@inject DialogService Dialogs
+@inject ICampaignsApi Campaigns
 @inject ToastService Toasts
+@inject NavigationManager Navigation
 
-@* Прохождение с открытой записью: сценарий, дата, Хранитель, анонс и готовые сыщики — кто какого занял.
-   Запись на место (T2.5c; в коде и API — бронь): «Занять» у свободного сыщика, пока у меня нет места в этой игре и я её не
-   веду (CanReserve), — вторичной кнопкой: тёмная кнопка в каждой строке давала до четырёх primary на экране, главная
-   здесь одна — «Вступить» (H5). У своего — «Лист» (копия сыщика у меня в кампании) и «Снять запись»; ведущий снимает любую
-   (CanRelease). Флаги — с сервера, решает он же. Анонс сжат до трёх строк («Подробнее»), сыщики — за кнопкой «Выбрать сыщика»
-   (StartCollapsed). *@
-<article class="cm-card flex flex-col" aria-labelledby="@($"run-{Run.RunId}")">
+@* Анонс разовой игры с открытой записью — приглашение игроку, поэтому во всю колонку главной (владелец 2026-10-04): слева
+   анонс (дата, Хранитель, текст), справа с lg — готовые сыщики сразу, без кнопки-раскрытия, и «Создать своего сыщика».
+   Заголовок — название игры, под которым её объявил Хранитель (кампания), а не сценария: так же она зовётся в «Ваших кампаниях».
+   Запись на место (T2.5c; в коде и API — бронь): «Занять» у свободного сыщика, пока можно (CanReserve), — вторичной кнопкой:
+   тёмная кнопка в каждой строке давала до четырёх primary на экране (H5). У своего — «Лист» и «Снять запись»; ведущий
+   снимает любую (CanRelease). Флаги — с сервера, решает он же. «Создать своего сыщика» вступает в кампанию игры (если ещё не
+   участник) и открывает помощник; черновик помощника — тот же, что у «Создать сыщика» в карточке кампании. *@
+<article class="cm-card" aria-labelledby="@($"run-{Run.RunId}")" data-testid="one-shot">
     <div class="cm-card-header">
-        <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48">@Run.ScenarioName</h3>
+        <h3 id="@($"run-{Run.RunId}")" class="cm-card-title min-w-0 flex-1 basis-48">@Run.CampaignName</h3>
         @if (Run.IsMine)
         {
             <Badge Tone="Tone.Info" Icon="fa-book-skull">Вы ведёте</Badge>
         }
     </div>
-    <div class="cm-card-body cm-stack flex-1">
-        <div>
+    <div class="cm-card-body grid items-start gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div class="min-w-0 max-w-prose">
             <div class="cm-meta">
                 @if (Run.ScheduledAt is { } when)
                 {
@@ -34,14 +38,15 @@
                 {
                     <span><span class="cm-meta-label">Хранитель:</span> @keeperName</span>
                 }
-                <span>Свободно @Run.Pregens.Count(p => !p.IsReserved) из @Run.Pregens.Count</span>
             </div>
             @if (!string.IsNullOrWhiteSpace(Run.Announcement))
             {
-                @* Анонс сжат до трёх строк: вложенной прокрутки нет (на тач-экране она ловила жест страницы). *@
+                @* Анонс целиком с md; на телефоне — четыре строки и «Подробнее», иначе текст уводит готовых сыщиков и «Занять» за сгиб
+                   (вложенной прокрутки нет: на тач-экране она ловила жест страницы). *@
                 <div class="mt-2">
-                    <Markdown Text="@Run.Announcement" class="@(_announcementOpen ? null : "line-clamp-3")" />
-                    <button type="button" class="cm-link-btn" aria-expanded="@(_announcementOpen ? "true" : "false")"
+                    <Markdown Text="@Run.Announcement" class="@AnnouncementClass" />
+                    <button type="button" class="cm-link-btn md:hidden"
+                            aria-expanded="@(_announcementOpen ? "true" : "false")"
                             data-testid="announcement-toggle" @onclick="() => _announcementOpen = !_announcementOpen">
                         @(_announcementOpen ? "Свернуть описание" : "Подробнее")
                         <i class="fa-solid @(_announcementOpen ? "fa-chevron-up" : "fa-chevron-down") text-xs" aria-hidden="true"></i>
@@ -50,17 +55,15 @@
             }
         </div>
 
-        @if (_collapsed)
-        {
-            <div>
-                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-users" data-testid="pregens-open"
-                        OnClick="() => _collapsed = false">Выбрать сыщика</Button>
-            </div>
-        }
-        else
-        {
-        <div>
-            <h4 class="mb-1 text-sm font-semibold text-primary-800">Готовые сыщики</h4>
+        @* В портрете колонка одна — список той же ширины, что текст: «Занять» не уезжает от имени на другой край карточки. *@
+        <div class="min-w-0 max-w-prose">
+            <h4 class="mb-1 text-sm font-semibold text-primary-800">
+                Готовые сыщики
+                @if (Run.Pregens.Count > 0)
+                {
+                    <span class="font-normal text-primary-600">· свободно @Run.Pregens.Count(p => !p.IsReserved) из @Run.Pregens.Count</span>
+                }
+            </h4>
             @if (Run.Pregens.Count == 0)
             {
                 <p class="cm-text-muted">Хранитель ещё не добавил готовых сыщиков.</p>
@@ -104,33 +107,39 @@
                                 }
                                 @if (pregen.CanRelease)
                                 {
-                                    <Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-user-xmark" Busy="@(_busy == pregen.Id)"
-                                            Disabled="@(_busy is not null)" data-testid="release" OnClick="() => ReleaseAsync(pregen)">Снять запись</Button>
+                                    <ReleaseReservationButton RunId="Run.RunId" Pregen="pregen" OnChanged="OnChanged" />
                                 }
                             </span>
                         </li>
                     }
                 </ul>
             }
+
+            @if (Run.CanReserve)
+            {
+                <div class="mt-2 border-t border-primary-200 pt-3">
+                    <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-wand-magic-sparkles" Busy="_creating" Disabled="@(_busy is not null || _creating)"
+                            data-testid="create-own" OnClick="CreateOwnAsync">Создать своего сыщика</Button>
+                </div>
+            }
         </div>
-        }
     </div>
 </article>
 
 @code {
     private Guid? _busy;
-    private bool _collapsed;
+    private bool _creating;
     private bool _announcementOpen;
 
     [Parameter, EditorRequired] public HomeOneShotDto Run { get; set; } = null!;
 
-    /// <summary>Бронь взята или снята — главной перечитать себя (ваншот появится среди моих кампаний).</summary>
+    /// <summary>Бронь взята или снята — главной перечитать себя (игра появится среди моих кампаний).</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
 
-    /// <summary>На главной карточка сложена до строки с кнопкой «Выбрать сыщика»: объявление не вытесняет «Открыть лист».</summary>
-    [Parameter] public bool StartCollapsed { get; set; }
+    /// <summary>Я уже участник кампании этой игры: «Создать своего сыщика» сразу открывает помощник, без вступления.</summary>
+    [Parameter] public bool IsMember { get; set; }
 
-    protected override void OnInitialized() => _collapsed = StartCollapsed;
+    private string? AnnouncementClass => _announcementOpen ? null : "max-md:line-clamp-4";
 
     private async Task ReserveAsync(HomePregenDto pregen)
     {
@@ -152,34 +161,23 @@
         }
     }
 
-    private async Task ReleaseAsync(HomePregenDto pregen)
+    /// <summary>Свой сыщик вместо готового: вступить с именем профиля (как «Вступить», JN2) и открыть помощник этой кампании.</summary>
+    private async Task CreateOwnAsync()
     {
-        var whose = pregen.IsMine ? "Ваша копия листа" : $"Копия листа у игрока{(pregen.ReservedBy is { } by ? $" {by}" : "")}";
-        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Снять запись?",
-                $"Готовый сыщик снова свободен. {whose} уйдёт в архив.")
-            {
-                Subject = pregen.Name,
-                ConfirmText = "Снять запись",
-                Details = null,
-            }))
-        {
-            return;
-        }
-
-        _busy = pregen.Id;
+        _creating = true;
         try
         {
-            await Runs.ReleaseAsync(Run.RunId, pregen.Id);
-            Toasts.Success("Запись снята:", subject: pregen.Name);
-            await OnChanged.InvokeAsync();
+            if (!IsMember)
+            {
+                await Campaigns.JoinAsync(Run.CampaignId, new JoinCampaignRequest(""));
+            }
+
+            Navigation.NavigateTo(CreationLinks.Wizard(CharacterKind.Player, Run.CampaignId, null));
         }
         catch (HttpRequestException ex)
         {
-            Toasts.Error(ApiErrors.Describe(ex));
-        }
-        finally
-        {
-            _busy = null;
+            Toasts.Error(ApiErrors.Describe(ex), "Не удалось вступить");
+            _creating = false;
         }
     }
 
