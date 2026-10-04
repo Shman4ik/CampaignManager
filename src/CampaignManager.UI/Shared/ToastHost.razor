@@ -1,8 +1,10 @@
 @implements IDisposable
 @inject ToastService Toasts
+@inject NavigationManager Navigation
 
 @* Стопка уведомлений ToastService снизу по центру (на телефоне — над нижней панелью): шапку и кнопки
-   «Начать»/«Завершить» они не закрывают. Стоит один раз в MainLayout. *@
+   «Начать»/«Завершить» они не закрывают. Стоит один раз в MainLayout. Переход на другую страницу (другой путь, не только
+   ?query) снимает тосты с «Отменить»: их действие правит объект ушедшей страницы. *@
 <div class="cm-toasts" aria-live="polite">
     @foreach (var toast in Toasts.Messages)
     {
@@ -23,9 +25,32 @@
         <Button Variant="ButtonVariant.Secondary" data-testid="toast-action" OnClick="() => Toasts.RunActionAsync(toast.Id)">@toast.Action!.Label</Button>
     };
 
-    protected override void OnInitialized() => Toasts.Changed += OnChanged;
+    private string _path = "";
+
+    protected override void OnInitialized()
+    {
+        _path = PathOf(Navigation.Uri);
+        Toasts.Changed += OnChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => Toasts.Changed -= OnChanged;
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var path = PathOf(e.Location);
+        if (path == _path)
+            return; // смена ?mode=, ?open= — та же страница, её «Отменить» по-прежнему в силе
+
+        _path = path;
+        Toasts.DropActions();
+    }
+
+    private string PathOf(string uri) => Navigation.ToBaseRelativePath(uri).Split('?', '#')[0];
+
+    public void Dispose()
+    {
+        Toasts.Changed -= OnChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
 }
