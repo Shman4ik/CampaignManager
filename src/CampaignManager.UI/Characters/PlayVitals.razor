@@ -1,24 +1,25 @@
 @using CampaignManager.Core.Characters
 @inject DialogService Dialogs
 
-@* Полоса состояния режима «Игра» (макет владельца 2026-10-03): ПЗ · ПМ · Рассудок · Удача одной карточкой. Шаг ±1 —
+@* Полоса состояния режима «Игра» (макет владельца 2026-10-03): ПЗ · Рассудок · ПМ · Удача одной карточкой. Рассудок —
+   в первом ряду рядом с ПЗ, ПМ и Удача — вторым, компактным рядом (владелец 2026-10-04: за столом меняются ПЗ и Рассудок). Шаг ±1 —
    правка числа, как в «Состоянии» листа; урон — одна атака через WoundRules.ApplyDamage; потеря Рассудка — одна
    причина через SanityRules.ApplyLoss, только вписанным числом (кнопки костей владелец убрал: кости бросают за
    столом; бросок в приложении остался в «Рассудке» листа). Ниже — отметки тела
    переключателями и безумие только состоянием: переключает его блок «Рассудок» (#157). Подсказки исхода (рана,
    проверка ИНТ, приступ) — те же компоненты, что у листа.
    Только для чтения (g2 1.8: нечего выключать «без причины» — правило 8): плитки показывают числа и полосу, шага, «Урон»,
-   «Потеря», тревог и невключённых отметок нет; включённые отметки — состоянием. У НПС Удачи нет (g2 8.1).
+   «Потеря», тревог и невключённых отметок нет; включённые отметки — состоянием. Удача — у всех, и у НПС (владелец
+   2026-10-04: решение g2 8.1 «у НПС Удачи нет» отменено).
    «Мёртв» отделён от остальных отметок и спрашивает подтверждение (g2 1.14): одно касание не должно хоронить сыщика. *@
 @{
     var derived = DerivedAttributeRules.Compute(Sheet, Context.Catalog);
     var sanity = SanityRules.Status(Sheet, Context.Catalog);
     var edit = !Context.ReadOnly;
-    var hasLuck = Context.Character.Kind is not CharacterKind.Npc;
 }
 <section class="cm-card play-vitals" aria-label="Состояние" data-testid="play-vitals">
     <div class="play-fieldset">
-        <div class="play-vital-grid" data-count="@(hasLuck ? 4 : 3)">
+        <div class="play-vital-grid">
             <PlayVital Key="hp" Title="ПЗ" Kind="StatKind.HitPoints" Value="Sheet.Current.HitPoints" Max="derived.MaxHitPoints" ReadOnly="!edit"
                        Note="@($"серьёзная от {WoundRules.MajorWoundThreshold(derived.MaxHitPoints)} · смерть от {Math.Max(1, derived.MaxHitPoints)}")"
                        HideNoteOnPhone="true"
@@ -33,8 +34,6 @@
                     </div>
                 </Extra>
             </PlayVital>
-            <PlayVital Key="mp" Title="ПМ" Kind="StatKind.MagicPoints" Value="Sheet.Current.MagicPoints" Max="derived.MaxMagicPoints" ReadOnly="!edit"
-                       OnStep="d => Set(v => Sheet.Current.MagicPoints = v, Sheet.Current.MagicPoints + d, derived.MaxMagicPoints)" />
             <PlayVital Key="san" Title="Рассудок" Kind="StatKind.Sanity" Value="Sheet.Current.Sanity" Max="derived.MaxSanity" ReadOnly="!edit"
                        Note="@($"за день {(sanity.LostToday > 0 ? $"−{sanity.LostToday}" : "0")} из {sanity.IndefiniteThreshold}")"
                        OnStep="d => Set(v => Sheet.Current.Sanity = v, Sheet.Current.Sanity + d, derived.MaxSanity)">
@@ -45,17 +44,16 @@
                     </div>
                 </Extra>
             </PlayVital>
-            @if (hasLuck)
-            {
-                <PlayVital Key="luck" Title="Удача" Kind="StatKind.Luck" Value="Sheet.Current.Luck" Max="derived.MaxLuck" ReadOnly="!edit"
-                           OnStep="d => Set(v => Sheet.Current.Luck = v, Sheet.Current.Luck + d, derived.MaxLuck)">
-                    <Label>
-                        <button type="button" class="play-vital-check" aria-label="Проверка Удачи" data-testid="play-luck-check" @onclick='() => Context.Check("luck")'>
-                            Удача<i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
-                        </button>
-                    </Label>
-                </PlayVital>
-            }
+            <PlayVital Key="mp" Title="ПМ" Compact="true" Kind="StatKind.MagicPoints" Value="Sheet.Current.MagicPoints" Max="derived.MaxMagicPoints" ReadOnly="!edit"
+                       OnStep="d => Set(v => Sheet.Current.MagicPoints = v, Sheet.Current.MagicPoints + d, derived.MaxMagicPoints)" />
+            <PlayVital Key="luck" Title="Удача" Compact="true" Kind="StatKind.Luck" Value="Sheet.Current.Luck" Max="derived.MaxLuck" ReadOnly="!edit"
+                       OnStep="d => Set(v => Sheet.Current.Luck = v, Sheet.Current.Luck + d, derived.MaxLuck)">
+                <Label>
+                    <button type="button" class="play-vital-check" aria-label="Проверка Удачи" data-testid="play-luck-check" @onclick='() => Context.Check("luck")'>
+                        Удача<i class="fa-solid fa-dice-d20" aria-hidden="true"></i>
+                    </button>
+                </Label>
+            </PlayVital>
         </div>
 
         @if (edit)

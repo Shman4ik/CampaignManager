@@ -60,7 +60,8 @@ public static class CombatProfiles
         };
     }
 
-    private static bool IsBrawlDuplicate(SheetWeapon weapon, SkillCatalog catalog) =>
+    /// <summary>Строка оружия «Драка…» с навыком драки — та же безоружная атака (её не показывают второй раз: бой, «Игра» листа).</summary>
+    public static bool IsBrawlDuplicate(SheetWeapon weapon, SkillCatalog catalog) =>
         weapon.SkillId is { } id && catalog.CodeOf(id) == SkillCodes.Fighting + ".brawl"
         && weapon.Name.Trim().StartsWith("Драка", StringComparison.OrdinalIgnoreCase);
 
