@@ -76,7 +76,7 @@ Tailwind CSS компилируется автоматически при сбо
 
 ## Деплой
 
-На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). При push в `master` Docker-образ публикуется в GitHub Container Registry, а тег коммитится в GitOps-репозиторий (`.github/workflows/docker-build-deploy.yml`).
+На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). При push в `master`, задевшем `src/**`, образ 2.0 публикуется в GitHub Container Registry, а тег коммитится в GitOps-репозиторий — сразу для прода и беты (`.github/workflows/v2-deploy.yml`).
 
 ```bash
 docker pull ghcr.io/shman4ik/campaign-manager:latest

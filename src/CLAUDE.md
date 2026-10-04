@@ -283,16 +283,18 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - **Обязательные правила продукта:** любой бросок можно вписать (`RollInput`/`DiceInput`); время —
   в поясе браузера (`LocalTime`); числа в `style` — инвариантной культурой; «одна копия формулы» в Core.
 
-## Beta-стенд
+## Деплой и beta-стенд
 
-**https://beta.cthulhu.dmnet.dev** — 2.0 на живой системе, по мере влития карточек (T0.4). Прод v1
-(`cthulhu.dmnet.dev`) и его выкатка не затронуты.
+**Прод — https://cthulhu.dmnet.dev — на 2.0 с 2026-10-04** (T3.2, [CUTOVER.md](../docs/v2/CUTOVER.md)): namespace
+`campaign-manager`, тот же SealedSecret `campaign-manager-env`, что был у v1 (2.0 читает те же ключи), Neon `main`, бакет
+`campain-manager`. **Beta — https://beta.cthulhu.dmnet.dev** — тот же образ на Neon `dev` (T0.4). Один push катит обоих:
+проверять до слияния — на своей копии `dev`, бета уже не «до прода».
 
 - **Выкатка.** Push в `master`, задевший `src/**`, `Directory.*.props`, `global.json`, `NuGet.config` или сам
-  воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-beta-deploy.yml` делает
+  воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-deploy.yml` делает
   `dotnet publish` прямо на раннере (в `artifacts/v2`, без анализаторов — их уже прогнал CI), упаковывает
   его стадией `prebuilt` из `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и коммитит тег в приватный
-  `Shman4ik/dmnet-gitops`, `workloads/campaign-manager-beta/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`,
+  `Shman4ik/dmnet-gitops`, `workloads/campaign-manager/kustomization.yaml` и `workloads/campaign-manager-beta/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`,
   тот же, что у v1). Argo CD (Application `campaign-manager-beta`, namespace `campaign-manager-beta`)
   катит его за ~90 с. Старые версии пакета чистятся, последние 10 остаются.
 - **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .` (цель по
@@ -325,18 +327,23 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   `Minio__AccessKey`/`Minio__SecretKey` в секрет ещё не положены: до них сервер работает, а запросы к
   файлам отвечают ошибкой с именем недостающей настройки. Ключ — отдельный пользователь MinIO с правами
   только на этот бакет, а не корневой.
-- **База — та же ветка `dev`, что у локальной разработки**, и её сбрасывает и наполняет T1.3 (`--reset`,
-  `neonctl branches reset dev --parent`) — данные беты в любой момент могут быть заменены, это нормально.
-  **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её на `dev`
-  **до слияния** своего PR — иначе бета после выкатки упадёт на первом запросе к новой таблице:
+- **Базы.** Прод — ветка Neon `main` (настоящие данные), бета — `dev`, та же, что у локальной разработки (её можно
+  сбросить от `main`: `neonctl branches reset dev --parent` — после этого в `dev` сразу прод-данные, схема `cm` уже есть).
+  **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её **до слияния** своего PR
+  **на обе ветки — `dev` и `main`**: выкатка идёт на прод и бету одновременно, и без миграции прод упадёт на первом
+  запросе к новой таблице. Миграция должна быть совместимой с кодом до неё (под старой версии живёт до замены):
 
   ```bash
   CM_DB="<строка ветки dev из appsettings.Development.json>" dotnet ef database update --project src/CampaignManager.Data
+  CM_DB="<строка main — из секрета прода, не печатая>" dotnet ef database update --project src/CampaignManager.Data
   ```
 
-  После сброса ветки `dev` от `main` схемы `cm` нет — накатить той же командой (и перенос T1.3).
-- **Откат** — revert коммита `campaign-manager-beta 0.2.N` в dmnet-gitops (или ручной `newTag` на
-  прежнюю версию, PR в dmnet-gitops): Argo вернёт прежний образ. Миграцию откат не отменяет.
+  Строку `main` взять из секрета прода в переменную, не выводя (`kubectl get secret campaign-manager-env` на VPS через
+  `ssh vps`, ключ `ConnectionStrings__DefaultConnection`, base64). Перенос T1.3 на `main` больше не запускать: он стирает
+  данные игры (`--reset`).
+- **Откат** — revert коммита `campaign-manager 0.2.N` в dmnet-gitops (или ручной `newTag` на прежнюю версию, PR в
+  dmnet-gitops): Argo вернёт прежний образ прода и беты. Миграцию откат не отменяет. Откат прода на v1 — revert
+  dmnet-gitops#3 (до T3.3, пока схемы `games`/`identity` живы).
 - **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан, как и у прода:
   войти может любой с подтверждённой почтой и станет игроком на данных `dev`. Первые админы —
   `Authorization__AdminEmails__0` в секрет тем же `kubeseal --raw`, если роли из переноса не хватит.
