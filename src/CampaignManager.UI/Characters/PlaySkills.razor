@@ -3,7 +3,7 @@
 @using CampaignManager.Core.Characters
 
 @* Навыки режима «Игра» — все, что лист показывает развёрнутыми (решение владельца 2026-10-03, SheetSkillLayout.Sections):
-   «Частые» первым блоком (решение оркестратора, g2 1.2: «Внимание», «Слух», «Скрытность» нужны за столом чаще, чем
+   «Частые» первым блоком без подписи, ниже за тонкой линией — остальные (решение оркестратора, g2 1.2: «Внимание», «Слух», «Скрытность» нужны за столом чаще, чем
    сороковой навык по алфавиту), ниже остальные по алфавиту. Колонок столько, сколько влезает (play.css: 1 на телефоне, 2 в
    портрете iPad, 3–4 в ландшафте), — поэтому CSS columns, а не явное деление, как у листа.
    Развитые — жирным, на базе — приглушены только значения меньше 20 (g2 1.17: родной язык 75 и Уклонение 22 «на базе» — одни из
@@ -28,11 +28,9 @@
     {
         @foreach (var section in sections.Where(s => s.Lines.Count > 0))
         {
-            <section data-testid="@section.TestId">
-                @if (section.Title is not null)
-                {
-                    <h3 class="play-skill-subtitle">@section.Title</h3>
-                }
+            @* Подписи групп на экране нет (владелец 2026-10-04: место дороже) — группы разделяет тонкая линия (play.css); диктору
+               название группы читается из aria-label. *@
+            <section class="play-skill-group" aria-label="@section.Title" data-testid="@section.TestId">
                 <div class="@(section.Rows ? "play-skill-cols-rows" : "play-skill-cols")">
                     @foreach (var line in section.Lines)
                     {
@@ -81,8 +79,8 @@
             var sections = SheetSkillLayout.Sections(Context.Sheet, Context.Catalog);
             return
             [
-                new Block(sections.Frequent.Count > 0 ? "Частые" : null, "play-skills-frequent", sections.Frequent, Rows: true),
-                new Block(sections.Frequent.Count > 0 ? "Остальные по алфавиту" : null, "play-skills-others", sections.Others),
+                new Block(sections.Frequent.Count > 0 ? "Частые навыки" : null, "play-skills-frequent", sections.Frequent, Rows: true),
+                new Block(sections.Frequent.Count > 0 ? "Остальные навыки, по алфавиту" : null, "play-skills-others", sections.Others),
             ];
         }
 
