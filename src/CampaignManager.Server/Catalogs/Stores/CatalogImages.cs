@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CampaignManager.Server.Catalogs.Stores;
 
 /// <summary>
-/// Картинки записи справочника — одна логика на бестиарий и оружие: файлы <c>cm.files</c> по порядку, первая — обложка.
-/// Таблицы разные (<c>creature_images</c>, <c>weapon_images</c>), ключ — (запись, порядок).
+/// Картинки записи справочника — одна логика на бестиарий, оружие и профессии: файлы <c>cm.files</c> по порядку, первая — обложка.
+/// Таблицы разные (<c>creature_images</c>, <c>weapon_images</c>, <c>occupation_images</c>), ключ — (запись, порядок).
 /// </summary>
 internal static class CatalogImages
 {

@@ -508,6 +508,46 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(edited, (await app.Occupations().ListAsync(Cancellation)).Items.Single(o => o.Id == doctor.Id).CreditRatingMax);
     }
 
+    // Картинки профессии — пользовательские, как у бестиария и оружия: сид книги их не знает, и сверка с ним их не стирает.
+    [Fact]
+    public async Task Occupation_images_keep_order_and_captions_and_survive_sync()
+    {
+        TestDatabase.SkipIfMissing();
+        Guid portrait, desk;
+        await using (var db = app.Database.CreateContext())
+        {
+            var files = new[] { new StoredFile { ExternalUrl = "https://example.test/portrait.webp" }, new StoredFile { ExternalUrl = "https://example.test/desk.webp" } };
+            db.Files.AddRange(files);
+            await db.SaveChangesAsync(Cancellation);
+            (portrait, desk) = (files[0].Id, files[1].Id);
+        }
+
+        await app.Occupations().SyncAsync(dryRun: false, Cancellation);
+        var antiquarian = (await app.Occupations().ListAsync(Cancellation)).Items.Single(o => o.Code == "occupation.antiquarian");
+        antiquarian.Images = [new CatalogImageDto(portrait, null, " В лавке "), new CatalogImageDto(desk, null, null)];
+        var updated = await app.Occupations().UpdateAsync(antiquarian, Cancellation);
+
+        Assert.Equal([portrait, desk], updated.Images.Select(i => i.FileId));
+        Assert.Equal("В лавке", updated.Images[0].Caption);
+        Assert.Equal(FilesRoutes.Content(portrait), updated.Images[0].Url);
+
+        // Обложкой стал стол — правка только детей тоже сдвигает версию записи.
+        updated.Images = [updated.Images[1], updated.Images[0]];
+        var reordered = await app.Occupations().UpdateAsync(updated, Cancellation);
+        Assert.Equal([desk, portrait], reordered.Images.Select(i => i.FileId));
+        Assert.NotEqual(updated.Version, reordered.Version);
+
+        var report = await app.Occupations().SyncAsync(dryRun: false, Cancellation);
+
+        Assert.Equal("без изменений", report.Lines.Single(l => l.Name == antiquarian.Name).Message);
+        var synced = (await app.Occupations().ListAsync(Cancellation)).Items.Single(o => o.Id == antiquarian.Id);
+        Assert.Equal([desk, portrait], synced.Images.Select(i => i.FileId));
+
+        synced.Images = [new CatalogImageDto(Guid.NewGuid(), null, null)];
+        var missing = await Assert.ThrowsAsync<ApiException>(() => app.Occupations().UpdateAsync(synced, Cancellation));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+    }
+
     [Fact]
     public async Task Occupation_slot_must_match_its_kind()
     {

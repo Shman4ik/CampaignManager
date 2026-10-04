@@ -330,6 +330,23 @@ create table cm.creature_images (           -- первая по ord — обл�
     primary key (creature_id, ord)
 );
 
+-- картинки оружия (#227) и профессий — так же, как у тварей: пользовательские файлы, первая — обложка
+create table cm.weapon_images (
+    weapon_id    uuid not null references cm.weapons on delete cascade,
+    ord          int not null,
+    file_id      uuid not null references cm.files on delete restrict,
+    caption      text,
+    primary key (weapon_id, ord)
+);
+
+create table cm.occupation_images (
+    occupation_id uuid not null references cm.occupations on delete cascade,
+    ord           int not null,
+    file_id       uuid not null references cm.files on delete restrict,
+    caption       text,
+    primary key (occupation_id, ord)
+);
+
 create table cm.music_tracks (
     id             uuid primary key,
     name           text not null,
@@ -753,6 +770,8 @@ where not exists (select 1 from cm.characters        where portrait_file_id = f.
   and not exists (select 1 from cm.books             where image_file_id = f.id)
   and not exists (select 1 from cm.items             where image_file_id = f.id)
   and not exists (select 1 from cm.creature_images   where file_id = f.id)
+  and not exists (select 1 from cm.weapon_images     where file_id = f.id)
+  and not exists (select 1 from cm.occupation_images where file_id = f.id)
   and not exists (select 1 from cm.scenario_handouts where file_id = f.id)
   and not exists (select 1 from cm.music_tracks      where file_id = f.id);
 ```

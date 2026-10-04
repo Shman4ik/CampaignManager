@@ -42,6 +42,9 @@ public sealed class Occupation : CatalogEntry
     public List<string> Tags { get; set; } = [];
 
     public List<OccupationSlot> Slots { get; set; } = [];
+
+    /// <summary>Первая по <see cref="OccupationImage.Ord"/> — обложка карточки.</summary>
+    public List<OccupationImage> Images { get; set; } = [];
 }
 
 /// <summary>
@@ -202,6 +205,14 @@ public sealed class CreatureImage : ICatalogImage
 public sealed class WeaponImage : ICatalogImage
 {
     public Guid WeaponId { get; set; }
+    public int Ord { get; set; }
+    public Guid FileId { get; set; }
+    public string? Caption { get; set; }
+}
+
+public sealed class OccupationImage : ICatalogImage
+{
+    public Guid OccupationId { get; set; }
     public int Ord { get; set; }
     public Guid FileId { get; set; }
     public string? Caption { get; set; }
@@ -378,6 +389,18 @@ internal sealed class WeaponImageConfiguration : IEntityTypeConfiguration<Weapon
         entity.ToTable("weapon_images");
         entity.HasKey(i => new { i.WeaponId, i.Ord });
         entity.HasOne<Weapon>().WithMany(w => w.Images).HasForeignKey(i => i.WeaponId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class OccupationImageConfiguration : IEntityTypeConfiguration<OccupationImage>
+{
+    public void Configure(EntityTypeBuilder<OccupationImage> entity)
+    {
+        entity.ToTable("occupation_images");
+        entity.HasKey(i => new { i.OccupationId, i.Ord });
+        entity.HasOne<Occupation>().WithMany(o => o.Images).HasForeignKey(i => i.OccupationId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
     }
