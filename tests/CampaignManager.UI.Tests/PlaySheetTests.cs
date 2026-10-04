@@ -300,7 +300,7 @@ public sealed class PlaySheetTests : KitContext
         var sheet = Sheet();
         sheet.Spells.Add(new SheetSpell { Name = "Затуманить память", Cost = "1d6 магии, 1d2 Рассудка", Description = "Стирает воспоминания.", CastingTime = "1 раунд" });
         sheet.Spells.Add(new SheetSpell { Name = "Без описания", Cost = "5 МОЩ" });
-        var cut = Render<PlayExtras>(sheet);
+        var cut = Render<PlaySpells>(sheet);
 
         Assert.Equal("1d6 ПМ, 1d2 рассудка", cut.Find("[data-testid='play-spell-toggle'] .play-row-meta").TextContent.Trim());
         Assert.Empty(cut.FindAll("[data-testid='play-spell-detail']"));
@@ -319,7 +319,7 @@ public sealed class PlaySheetTests : KitContext
         var sheet = Sheet();
         sheet.Equipment.Add(new EquipmentItem { Name = "Фонарь" });
         sheet.Equipment.Add(new EquipmentItem { Name = "Нож" });
-        var gear = Render<PlayExtras>(sheet);
+        var gear = Render<PlayGear>(sheet);
         Assert.Equal("Фонарь · Нож", System.Text.RegularExpressions.Regex.Replace(gear.Find(".play-gear").TextContent, @"\s+", " ").Trim());
         Assert.Empty(gear.FindAll("li"));
 

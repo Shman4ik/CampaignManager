@@ -1,0 +1,35 @@
+@using CampaignManager.Core
+@using CampaignManager.Core.Characters
+
+@* «При себе» режима «Игра» — только чтение; пустая секция не рисуется (правило пустых состояний), правка — в режиме «Лист».
+   Простой список через « · », а не «таблетки» (g2 1.9): те нажимаются (отметки состояния), предметы — нет. Отдельно от
+   заклинаний: в портрете они стоят рядом, а одна без другой — во всю ширину (play.css). *@
+@if (Sheet.Equipment.Count > 0 || Sheet.Finances.Cash is not null)
+{
+    <section class="cm-card play-card" aria-label="При себе" data-testid="play-gear">
+        <div class="play-card-head"><h2 class="cm-section-title">При себе</h2></div>
+        @if (Sheet.Equipment.Count > 0)
+        {
+            <p class="play-gear">
+                @for (var i = 0; i < Sheet.Equipment.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        <span class="play-gear-sep" aria-hidden="true"> · </span>
+                    }
+                    <span class="play-gear-item">@Sheet.Equipment[i].Name</span>
+                }
+            </p>
+        }
+        @if (Sheet.Finances.Cash is { } cash)
+        {
+            <p class="play-money">Наличные <strong>@Terms.Dollars(cash)</strong></p>
+        }
+    </section>
+}
+
+@code {
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+}
