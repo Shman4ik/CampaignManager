@@ -26,7 +26,7 @@ dotnet run --project tools/CampaignManager.Migrate -- --settings <файл> --re
 - Весь прогон — **одна транзакция**: упал шаг или проверка — `cm` остаётся, какой была. Объекты MinIO копируются
   до коммита, но копия идемпотентна (уже лежащий в цели объект не копируется второй раз).
 - Ветку `dev` пересоздают от `main` перед прогоном: `npx neonctl@latest branches reset dev --parent --project-id
-  old-wood-199224` — это стирает и `cm`, после сброса **сразу** `dotnet ef database update` (на `dev` живёт beta-стенд).
+  jolly-hill-30043612` — это стирает и `cm`, после сброса **сразу** `dotnet ef database update` (на `dev` живёт beta-стенд).
 
 ## Как устроено
 

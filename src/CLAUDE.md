@@ -137,7 +137,7 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
   с `ON DELETE SET NULL (campaign_id)` (в модели он `ClientNoAction`: EF обнулил бы и `owner_id`,
   а это нарушает `ck_characters_owner`). Частичные индексы, `NULLS NOT DISTINCT`, GIN и триграммы EF
   делает сам (`HasFilter`, `AreNullsDistinct(false)`, `HasMethod`/`HasOperators`).
-- Нужен PostgreSQL 15+ (`SET NULL (колонка)`, `NULLS NOT DISTINCT`): Neon — 15, CI и локальные тесты — 17.
+- Нужен PostgreSQL 15+ (`SET NULL (колонка)`, `NULLS NOT DISTINCT`): Neon, CI и локальные тесты — 17.
 - Конвенция snake_case не считает цифру границей слова: `Auth0Sub` → `auth0sub`, поэтому у таких
   свойств имя колонки задано явно (`auth0_sub`).
 - После правки модели: `dotnet ef migrations add <Имя> --project src/CampaignManager.Data`. Тест
@@ -326,8 +326,11 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   `Minio__AccessKey`/`Minio__SecretKey` в секрет ещё не положены: до них сервер работает, а запросы к
   файлам отвечают ошибкой с именем недостающей настройки. Ключ — отдельный пользователь MinIO с правами
   только на этот бакет, а не корневой.
-- **Базы.** Прод — ветка Neon `main` (настоящие данные), бета — `dev`, та же, что у локальной разработки (её можно
-  сбросить от `main`: `neonctl branches reset dev --parent` — после этого в `dev` сразу прод-данные, схема `cm` уже есть).
+- **Базы.** Neon-проект `jolly-hill-30043612` (PostgreSQL 17). Прод — ветка `main` (настоящие данные), бета — `dev`,
+  та же, что у локальной разработки (её можно сбросить от `main`: `neonctl branches reset dev --parent --project-id
+  jolly-hill-30043612` — после этого в `dev` сразу прод-данные, схема `cm` уже есть). Пароль роли `shman4ik` на `dev` свой, не как у `main`: после сброса проверить, что строка из
+  `appsettings.Development.json` подходит, а если пароль вернулся к прод-паролю — сменить его на `dev` и перезапечатать
+  `campaign-manager-beta-env`.
   **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её **до слияния** своего PR
   **на обе ветки — `dev` и `main`**: выкатка идёт на прод и бету одновременно, и без миграции прод упадёт на первом
   запросе к новой таблице. Миграция должна быть совместимой с кодом до неё (под старой версии живёт до замены):

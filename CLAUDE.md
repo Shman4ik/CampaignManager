@@ -9,7 +9,8 @@ CampaignManager — менеджер игр Call of Cthulhu 7e: кампании
 (Neon) через EF Core, Auth0.** Прод — https://cthulhu.dmnet.dev, бета — https://beta.cthulhu.dmnet.dev.
 
 Это «2.0»: первая версия (Blazor Server, `CampaignManager.Web`) работала до 2026-10-04 и удалена из репозитория в T3.3
-(история — в git и `docs/v2/`). Схемы v1 в базе (`games`, `identity`) ещё живы — их снимает владелец отдельным шагом.
+(история — в git и `docs/v2/`). Схем v1 (`games`, `identity`) в нынешней базе нет: в
+Neon-проект на PostgreSQL 17 (T3.4) переехала только `cm`.
 
 Где что:
 - **Правила кода** — [src/CLAUDE.md](src/CLAUDE.md) (проекты, база, тесты, вход под ролями, запуск, деплой, памятка
@@ -34,8 +35,10 @@ Development — `/dev/login?as=player|keeper|admin` (src/CLAUDE.md, «Прове
 
 ## Данные и деплой
 
-- **Neon:** проект `old-wood-199224`; ветка `main` — прод, `dev` — локальная разработка и бета. В прод не писать из
-  разработки; проверять на своей копии `dev` (`pg_dump --schema=cm` в контейнер `wslc`).
+- **Neon:** проект `CampaignManager` (`jolly-hill-30043612`, PostgreSQL 17, aws-eu-central-1, с 2026-10-04); ветка
+  `main` — прод, `dev` — локальная разработка и бета (пароль роли на ветках разный). В прод не писать из разработки;
+  проверять на своей копии `dev` (`pg_dump --schema=cm` в контейнер `wslc`). Старый проект `old-wood-199224` (PG 15) —
+  только откат до 2026-10-18 (`docs/v2/TASKS.md`, T3.4).
 - **Push в `master`, задевший `src/**`,** выкатывает **прод и бету сразу** (`.github/workflows/v2-deploy.yml` → тег в
   `Shman4ik/dmnet-gitops` → Argo CD). Миграции сервер не применяет: новую миграцию накатить **до слияния на `dev` и
   `main`**. Подробности и откат — src/CLAUDE.md, «Деплой и beta-стенд».
