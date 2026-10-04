@@ -2,10 +2,12 @@
 
 Модуль T2.3: `CharactersModule` (`AddCharactersModule`/`MapCharactersApi`), `CharacterService`. Маршруты, DTO и
 `ICharactersApi` — `Contracts/Characters`, клиент — `ApiClient/Characters`, страница —
-[UI/Characters/CLAUDE.md](../../CampaignManager.UI/Characters/CLAUDE.md). Таблица — `characters` из T1.2; миграций
+[UI/Characters/CLAUDE.md](../../CampaignManager.UI/Characters/CLAUDE.md). Таблица — `characters` из T1.2 и `character_drafts` (миграция `CharacterDrafts`, черновик помощника); других миграций
 модуль не добавил. Создание листов и библиотека НПС и прегенов — `CharacterLibraryService` (T2.4); бронь прегена (T2.5c) — копия его листа
 игроку (`kind = Player`, `origin_character_id` = преген, кампания прохождения) пишет `RunService` модуля Scenarios, снятие брони
 уводит копию в архив.
+Черновик помощника сыщика игрока в кампании — `CharacterDraftService`, таблица `character_drafts` (миграция `CharacterDrafts`,
+раздел «Черновик помощника» ниже).
 Строки `CharacterSummaryDto` собирает `CharacterSummaries.ReadAsync` — одна сборка для `/npcs` и для состава и прегенов
 сценария (T2.5a, видимость — правилом листа по прочитанной строке).
 
@@ -22,6 +24,10 @@
 | `PUT /api/v1/characters/{id}/status` | `{ status }`, `If-Match` | `ForCharacterAsync` Edit |
 | `GET /api/v1/characters/{id}/party` | соседи по столу для «Знакомых сыщиков» | `ForCharacterAsync` Read |
 | `GET /api/v1/campaigns/{id}/investigators` | активные сыщики кампании с листами — групповая проверка ширмы | `ForCampaignAsync` Edit (Хранитель кампании) |
+| `GET /api/v1/campaigns/{id}/character-draft` | мой черновик помощника в кампании (`CharacterDraftDto`, `ETag`, `no-store`); нет — 404 | `ForCharacterDraftAsync` Read |
+| `PUT /api/v1/campaigns/{id}/character-draft` | мой черновик целиком (`InvestigatorDraft`): первый — без `If-Match`, дальше — с версией | `CanWriteCharacterDraftAsync` (участник кампании) |
+| `DELETE /api/v1/campaigns/{id}/character-draft` | «Начать заново»; черновика нет — тоже 204 | `ForCharacterDraftAsync` Delete |
+| `GET /api/v1/campaigns/{id}/character-drafts/{userId}` | черновик игрока | `ForCharacterDraftAsync` Read (сам игрок, Хранитель кампании, админ) |
 
 Записи отвечают `{ version, updatedAt }` — новая версия для следующего `If-Match`.
 
@@ -57,6 +63,28 @@
 - Библиотека: НПС — из библиотеки и кампаний, которые ведёт Хранитель (администратору — все); прегены — все; архив —
   отдельным запросом. «Удалить» в UI — статус `Archived` через `PUT …/status`.
 
+## Черновик помощника (решение владельца 2026-10-04)
+
+Игрок, создающий сыщика в кампании (и в разовой игре — «Создать своего сыщика» в анонсе), возвращается к созданию на любом
+шаге с любого устройства, а Хранитель кампании видит, что сыщика создают и на каком шаге.
+
+- **Схема — своя таблица `cm.character_drafts`**, а не строка `characters` со статусом «черновик»: документ черновика —
+  `InvestigatorDraft` (выбор шагов, броски, очки по ключам помощника), это не лист, и листа из него ещё нет; строка листа со
+  статусом черновика нарушила бы `ck_characters_owner`, «один активный лист» и все выборки листов (главная, ширма, соседи по
+  столу). Ключ — `(campaign_id, owner_id)`: один черновик на участника; составной FK на `campaign_members` с
+  **`ON DELETE CASCADE`** — выход, исключение и удаление кампании стирают черновик базой, сервису помнить не надо.
+  Колонки: `draft` jsonb + `draft_version` (`InvestigatorDraft.CurrentVersion`, апкастер Core), `step` (копия `StepIndex`,
+  0–6, CHECK — главная читает его без документа), `created_at`/`updated_at`, `xmin` — версия.
+- **Запись — с версией, как лист**: первая без `If-Match`; черновик уже есть, а версии нет — 428; устаревшая — 409 `stale`;
+  версия пришла, а черновика нет (лист создан или «Начать заново» на другом устройстве) — тоже 409 `stale`, не тихое
+  воскрешение; две первые записи одновременно — 409 по ключу. Проверка: шаг 0–6, имя до 200 знаков, документ до 256 КБ.
+- **Пишет только сам игрок** (`CanWriteCharacterDraftAsync` — участник кампании; администратор без участия не пишет: FK).
+  Читают он, Хранитель кампании и администратор; соседу и постороннему — 404, как и несуществующий.
+- **Стирают**: `CharacterLibraryService.CreateAsync` (лист `Player` в кампании — той же `SaveChanges`), бронь прегена
+  (`RunService.ReserveAsync` — сыщик в игре появился), `DELETE` («Начать заново»), каскад от `campaign_members`.
+- Шаг и время черновика без документа отдают главная и страница кампании (`HomePlayerDto.Draft`, `HomeCampaignDto.MyDraft`,
+  `CampaignMemberDto.Draft` — модуль Campaigns, правило `AccessPolicy.ForCharacterDraft` по прочитанной строке).
+
 ## Тесты
 
 `Server.Tests/Characters/CharactersApiTests` на `CampaignsApp` (своя база со схемой `cm`): чтение владельцем и
@@ -64,4 +92,6 @@
 устройств, 428 без версии, 400 на неизвестный навык, незнакомые поля, преген только для чтения (403), соседи по
 столу, сыщики кампании только Хранителю, второй активный лист, портрет. `CharacterLibraryApiTests` — создание по видам и
 местам, второй активный сыщик (409), неизвестный навык (400), быстрый НПС со связью и без двойника, библиотека без чужих
-НПС кампаний и не игроку, архив.
+НПС кампаний и не игроку, архив. `CharacterDraftsApiTests` — черновик с двух устройств (версия, 409, 428), кто читает (Хранитель,
+админ — да; сосед, чужой Хранитель — 404), шаг на главной и странице кампании, стирание при создании листа, «Начать заново»,
+выходе из кампании и брони прегена, 400 на шаг вне 0–6 и длинное имя.
