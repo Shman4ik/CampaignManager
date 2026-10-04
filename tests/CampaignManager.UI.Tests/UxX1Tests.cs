@@ -138,7 +138,8 @@ public sealed class UxX1Tests : KitContext
         Assert.Empty(cut.FindAll("[data-testid=campaign-full-name]"));
         Assert.Empty(cut.FindAll("[data-testid=campaign-facts]"));
         Assert.Contains("вы — Хранитель", cut.Find("[data-testid=page-subtitle]").TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("1920", cut.Markup, StringComparison.Ordinal);
+        // Эпоха текстом («1920-е»), а не «1920» вообще: случайный Guid в разметке тоже мог содержать «1920» (тест мигал в CI).
+        Assert.DoesNotContain("1920-е", string.Concat(cut.Nodes.Select(n => n.TextContent)), StringComparison.Ordinal);
     }
 
     [Fact]
