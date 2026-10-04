@@ -27,7 +27,7 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
     public override DbSet<Occupation> Set(CmDbContext db) => db.Occupations;
 
     public override IQueryable<Occupation> Query(CmDbContext db) =>
-        db.Occupations.Include(o => o.Slots).ThenInclude(s => s.Options);
+        db.Occupations.Include(o => o.Slots).ThenInclude(s => s.Options).Include(o => o.Images);
 
     public override Occupation New() => new() { Name = "" };
 
@@ -58,6 +58,7 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
                 Options = s.Options.Select(x => x.SkillId).ToList(),
                 OptionNames = s.Options.Select(x => names.GetValueOrDefault(x.SkillId) ?? "").ToList(),
             }).ToList(),
+            Images = CatalogImages.ToDtos(o.Images),
             ProfessionalSkillCount = OccupationRules.ProfessionalSkillCount(Definition(o.Slots), catalog),
         }).ToList();
     }
@@ -90,6 +91,8 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
         }
 
         var eras = Eras(dto.Eras);
+        // Картинки — пользовательские: сид книги их не знает, и сверка с ним их не стирает.
+        var images = write.IsSeed ? null : await CatalogImages.CheckAsync(db, dto.Images, write, cancellationToken);
         var catalog = await SkillCatalogAsync(db, cancellationToken);
         var skills = catalog.Skills.ToDictionary(s => s.Id, s => s.Name);
         var byName = skills.ToLookup(s => s.Value.ToLowerInvariant(), s => s.Key);
@@ -121,6 +124,11 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
             slot.OccupationId = entity.Id;
             entity.Slots.Add(slot);
             db.Add(slot);
+        }
+
+        if (images is not null)
+        {
+            CatalogImages.Apply(db, entity.Images, images, ord => new OccupationImage { OccupationId = entity.Id, Ord = ord });
         }
     }
 

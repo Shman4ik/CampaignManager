@@ -78,6 +78,9 @@ public sealed class OccupationDto : CatalogItemDto
     /// <summary>Слоты в порядке книги. Слот «Средства» (он есть у перенесённых из v1) навыком профессии не считается.</summary>
     public List<OccupationSlotDto> Slots { get; set; } = [];
 
+    /// <summary>Иллюстрации, как у твари бестиария: первая — обложка карточки.</summary>
+    public List<CatalogImageDto> Images { get; set; } = [];
+
     /// <summary>
     /// Сколько профессиональных навыков дают слоты (только чтение; считает сервер правилом Core
     /// <c>OccupationRules.ProfessionalSkillCount</c>: Средства и Мифы не в счёт). По книге — ровно 8.
@@ -266,7 +269,7 @@ public sealed class CreatureDto : CatalogItemDto
     public List<CatalogImageDto> Images { get; set; } = [];
 }
 
-/// <summary>Картинка записи справочника (тварь, оружие) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
+/// <summary>Картинка записи справочника (тварь, оружие, профессия) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
 public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 

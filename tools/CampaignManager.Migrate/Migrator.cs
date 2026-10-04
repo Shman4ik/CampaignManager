@@ -131,6 +131,7 @@ public sealed class Migrator(string connectionString, IFileStore files, Migratio
               AND NOT EXISTS (SELECT 1 FROM cm.items             WHERE image_file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM cm.creature_images   WHERE file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM cm.weapon_images     WHERE file_id = f.id)
+              AND NOT EXISTS (SELECT 1 FROM cm.occupation_images WHERE file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM cm.scenario_handouts WHERE file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM cm.music_tracks      WHERE file_id = f.id)
             """).ToListAsync(cancellationToken);

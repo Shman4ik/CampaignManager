@@ -7,18 +7,36 @@
 @* Профессии — единственный справочник на карточках, а не таблицей: формула, Средства и до десятка
    навыков чипами в строку таблицы не сжать. Профессий три десятка — страницы по 12. «Изменить» — иконка-карандаш в
    шапке карточки (O1: кнопка 232×44 с подписью занимала четверть карточки). Счётчик «навыков: N из 8» — проверка
-   правила книги (стр. 37), он же у Хранителя в форме. «Сверить с книгой правил» — синхронизация с сидом книги. *@
+   правила книги (стр. 37), он же у Хранителя в форме. «Сверить с книгой правил» — синхронизация с сидом книги.
+   Картинки — как у бестиария и оружия (пользовательские файлы, первая — обложка): обложка 4:5 слева от сведений, без
+   картинок — заглушка того же размера. Касание обложки или названия раскрывает карточку: в альбоме на две колонки из
+   трёх (во всю ширину справа от картинки пустовало бы — статблока, как у твари, у профессии нет), в портрете и на
+   телефоне — во всю ширину; dense подтягивает соседей в дыру. Галерея слева, сведения справа, на телефоне — галерея
+   сверху. Раскрытая одна, в адресе (?open=). Раскрывается только профессия с картинками — без них показывать нечего. *@
 <CatalogPage TItem="OccupationDto" Title="Профессии" Icon="fa-user-tie" AddLabel="Добавить профессию" Noun="профессию" Plural="профессий"
              Filters="Filters" Toggles="Toggles" ErasOf="o => o.Eras" SearchAlso="SlotNames" PageSize="12" Sorts="Sorts" Sync="true" State="_state" Validate="Validate"
              New="NewOccupation" OnFormOpening="EnsureSkillsAsync" Form="Form" FormSize="ModalSize.Large">
     <Body Context="view">
-        <div class="cm-grid-cards">
+        <div class="@Css.Join("cm-grid-cards", view.Open is not null ? "grid-flow-row-dense" : null)">
             @foreach (var occupation in view.Page)
             {
-                var count = occupation.ProfessionalSkillCount;
-                <article class="cm-card flex flex-col" @key="occupation.Id">
+                var expandable = occupation.Images.Count > 0;
+                var open = expandable && view.Open == occupation.Id;
+                <article id="@($"occupation-{occupation.Id}")" class="@Css.Join("cm-card oc-card flex flex-col", open ? "oc-open col-span-full lg:col-span-2" : null)" @key="occupation.Id">
                     <div class="cm-card-header flex-wrap gap-y-1">
-                        <h2 class="cm-card-title min-w-0 flex-1">@occupation.Name</h2>
+                        @if (expandable)
+                        {
+                            @* Название — кнопка раскрытия, шеврон слева, как у раскрытой твари бестиария. *@
+                            <button type="button" class="flex min-h-8 min-w-0 flex-1 items-center gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
+                                    @onclick="() => view.ToggleOpen(occupation)">
+                                <i class="@($"fa-solid {(open ? "fa-chevron-up" : "fa-chevron-down")} shrink-0 text-sm text-primary-400")" aria-hidden="true"></i>
+                                <h2 class="cm-card-title min-w-0 break-words">@occupation.Name</h2>
+                            </button>
+                        }
+                        else
+                        {
+                            <h2 class="cm-card-title min-w-0 flex-1">@occupation.Name</h2>
+                        }
                         @if (occupation.IsLovecraftian)
                         {
                             <Badge Tone="Tone.Info">@Terms.FromLovecraft</Badge>
@@ -37,23 +55,37 @@
                         }
                     </div>
                     <div class="cm-card-body flex-1 text-sm">
-                        <p class="cm-meta mb-2">
-                            <span><span class="cm-meta-label">Очки навыков:</span> @Formula(occupation.SkillPointsFormula)</span>
-                            <span><span class="cm-meta-label">Средства:</span> @occupation.CreditRatingMin–@occupation.CreditRatingMax</span>
-                        </p>
-                        <div class="flex flex-wrap gap-1.5">
-                            @foreach (var (slot, times) in Grouped(occupation.Slots))
-                            {
-                                @* Длинный выбор («4 из: …») переносится внутри чипа — иначе на телефоне страница уезжает вбок.
-                                   Одинаковые слоты подряд — одним чипом «любой навык ×4»; слоты «со словами» (выбор, любой, социальный)
-                                   отличаются тоном от названного навыка. *@
-                                <Badge Tone="@(slot.Kind is OccupationSlotKind.Skill or OccupationSlotKind.Specialization ? Tone.Neutral : Tone.Info)"
-                                       class="max-w-full whitespace-normal">@SlotLabel(slot)@(times > 1 ? $" ×{times}" : "")</Badge>
-                            }
-                        </div>
-                        @if (count != OccupationRules.RequiredSkillCount)
+                        @if (open)
                         {
-                            <Alert Tone="Tone.Warning" Small="true" class="mb-0 mt-2">Навыков @count из @OccupationRules.RequiredSkillCount — по книге ровно восемь плюс Средства.</Alert>
+                            <div class="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
+                                <div class="oc-open-media">
+                                    <CatalogImageGallery @key="occupation.Id" Images="occupation.Images" Alt="@occupation.Name" />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    @Details(occupation)
+                                    @if (occupation.Source is not null)
+                                    {
+                                        <p class="cm-meta mt-3">Источник: @occupation.Source</p>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="flex items-start gap-3">
+                                @if (occupation.Images.FirstOrDefault() is { } cover)
+                                {
+                                    <button type="button" class="oc-cover" aria-label="@($"{Names.Plain(occupation.Name)}: иллюстрации")" aria-expanded="false"
+                                            @onclick="() => view.ToggleOpen(occupation)">
+                                        <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" loading="lazy" decoding="async" />
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="oc-cover oc-cover-empty" aria-hidden="true"><i class="fa-solid fa-user-tie"></i></span>
+                                }
+                                <div class="min-w-0 flex-1">@Details(occupation)</div>
+                            </div>
                         }
                     </div>
                 </article>
@@ -84,6 +116,30 @@
         o.CreditRatingMin > o.CreditRatingMax
             ? new Dictionary<string, string> { ["credit"] = "Нижняя граница Средств больше верхней." }
             : new Dictionary<string, string>();
+
+    // Сведения карточки — одни и те же в свёрнутой и раскрытой: формула, Средства, навыки чипами, счёт навыков.
+    private static RenderFragment Details(OccupationDto occupation) => __builder =>
+    {
+        var count = occupation.ProfessionalSkillCount;
+        <p class="cm-meta mb-2">
+            <span><span class="cm-meta-label">Очки навыков:</span> @Formula(occupation.SkillPointsFormula)</span>
+            <span><span class="cm-meta-label">Средства:</span> @occupation.CreditRatingMin–@occupation.CreditRatingMax</span>
+        </p>
+        <div class="flex flex-wrap gap-1.5">
+            @foreach (var (slot, times) in Grouped(occupation.Slots))
+            {
+                @* Длинный выбор («4 из: …») переносится внутри чипа — иначе на телефоне страница уезжает вбок.
+                   Одинаковые слоты подряд — одним чипом «любой навык ×4»; слоты «со словами» (выбор, любой, социальный)
+                   отличаются тоном от названного навыка. *@
+                <Badge Tone="@(slot.Kind is OccupationSlotKind.Skill or OccupationSlotKind.Specialization ? Tone.Neutral : Tone.Info)"
+                       class="max-w-full whitespace-normal">@SlotLabel(slot)@(times > 1 ? $" ×{times}" : "")</Badge>
+            }
+        </div>
+        @if (count != OccupationRules.RequiredSkillCount)
+        {
+            <Alert Tone="Tone.Warning" Small="true" class="mb-0 mt-2">Навыков @count из @OccupationRules.RequiredSkillCount — по книге ровно восемь плюс Средства.</Alert>
+        }
+    };
 
     private static IEnumerable<(OccupationSlotDto Slot, int Times)> Grouped(IEnumerable<OccupationSlotDto> slots)
     {
@@ -197,6 +253,9 @@
             <Field Label="Навыки профессии" Group="true" class="sm:col-span-6"
                    Note="Ровно восемь навыков; Средства — выше, диапазоном.">
                 <OccupationSlotsEditor Slots="o.Slots" SlotsChanged="v => o.Slots = v" Skills="_skills" />
+            </Field>
+            <Field Label="Иллюстрации" Group="true" class="sm:col-span-6">
+                <CatalogImagesEditor Images="o.Images" Hint="Первая картинка — обложка карточки." />
             </Field>
             <Field Label="Теги" Group="true" class="sm:col-span-6" Note="Для взвешенного выбора навыков в случайном черновике сыщика.">
                 <StringListEditor Values="o.Tags" ValuesChanged="v => o.Tags = [.. v]" ItemLabel="Тег" Chips="true" Placeholder="Научная, Боевая…" />

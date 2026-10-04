@@ -102,6 +102,12 @@ public sealed class CatalogWrite
 {
     public bool IsImport { get; init; }
 
+    /// <summary>
+    /// Сверка с книгой правил (<see cref="CatalogService{TEntity, TDto}.SyncAsync"/>): сид знает только правила книги,
+    /// пользовательского (картинок) в нём нет — его запись не трогает.
+    /// </summary>
+    public bool IsSeed { get; init; }
+
     /// <summary>Сохранилось, но в игре сработает не так, как ждёшь (формула, которую бой не бросит).</summary>
     public List<string> Warnings { get; } = [];
 }

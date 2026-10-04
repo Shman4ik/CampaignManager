@@ -163,7 +163,7 @@ public sealed class CatalogService<TEntity, TDto>(
                 continue;
             }
 
-            var write = new CatalogWrite { IsImport = true };
+            var write = new CatalogWrite { IsImport = true, IsSeed = byCodeOnly }; // только по коду сверяется сид книги
             try
             {
                 var isNew = target is null;

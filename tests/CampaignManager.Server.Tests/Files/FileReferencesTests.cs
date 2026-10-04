@@ -25,6 +25,7 @@ public sealed class FileReferencesTests
             ("cm.creature_images", "file_id"),
             ("cm.items", "image_file_id"),
             ("cm.music_tracks", "file_id"),
+            ("cm.occupation_images", "file_id"),
             ("cm.scenario_handouts", "file_id"),
             ("cm.weapon_images", "file_id"),
         ], FileReferences.All(context.Model));
