@@ -40,6 +40,10 @@ public static class CmJson
     public static EncounterState ReadEncounterState(JsonDocument json, int version) =>
         Read(DocumentKind.EncounterState, json, version, CmJsonContext.Default.EncounterState);
 
+    /// <summary>Черновик помощника из колонки <c>character_drafts.draft</c> версии <paramref name="version"/>.</summary>
+    public static InvestigatorDraft ReadDraft(JsonDocument json, int version) =>
+        Read(DocumentKind.InvestigatorDraft, json, version, CmJsonContext.Default.InvestigatorDraft);
+
     /// <summary>Документ для колонки; версия — <c>CurrentVersion</c> его типа.</summary>
     public static JsonDocument Write(CharacterSheet sheet) =>
         JsonSerializer.SerializeToDocument(sheet, CmJsonContext.Default.CharacterSheet);
@@ -49,6 +53,9 @@ public static class CmJson
 
     public static JsonDocument Write(EncounterState state) =>
         JsonSerializer.SerializeToDocument(state, CmJsonContext.Default.EncounterState);
+
+    public static JsonDocument Write(InvestigatorDraft draft) =>
+        JsonSerializer.SerializeToDocument(draft, CmJsonContext.Default.InvestigatorDraft);
 
     /// <summary>Лист строкой — слепок для автосохранения и черновика (сравнение «изменилось ли»).</summary>
     public static string Serialize(CharacterSheet sheet) =>

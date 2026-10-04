@@ -47,6 +47,8 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(IReadOnlyList<PartyMemberDto>))]
 [JsonSerializable(typeof(IReadOnlyList<InvestigatorDto>))]
 [JsonSerializable(typeof(CampaignManager.Core.Characters.CharacterSheet))]
+[JsonSerializable(typeof(CampaignManager.Core.Characters.InvestigatorDraft))]
+[JsonSerializable(typeof(CharacterDraftDto))]
 [JsonSerializable(typeof(CreateCharacterRequest))]
 [JsonSerializable(typeof(CharacterCreatedDto))]
 [JsonSerializable(typeof(CreationContextDto))]

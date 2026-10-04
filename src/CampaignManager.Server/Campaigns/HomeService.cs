@@ -1,4 +1,5 @@
 using CampaignManager.Contracts.Campaigns;
+using CampaignManager.Contracts.Characters;
 using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Characters;
 using CampaignManager.Data;
@@ -70,6 +71,15 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
             .Select(ch => new { ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status, ch.OwnerId, CampaignId = ch.CampaignId!.Value })
             .ToListAsync(cancellationToken);
 
+        // Черновики помощника (без документа — шаг и время): Хранителю — игроков его кампаний, игроку — свой. Правило —
+        // AccessPolicy.ForCharacterDraft.
+        var drafts = await dbContext.CharacterDrafts
+            .Where(d => mineIds.Contains(d.CampaignId) && (d.OwnerId == me || keptIds.Contains(d.CampaignId)))
+            .Select(d => new { d.CampaignId, d.OwnerId, d.Step, d.UpdatedAt })
+            .ToListAsync(cancellationToken);
+        CharacterDraftSummaryDto? DraftOf(Guid campaignId, Guid ownerId) =>
+            drafts.FirstOrDefault(d => d.CampaignId == campaignId && d.OwnerId == ownerId) is { } d ? new(d.Step, d.UpdatedAt) : null;
+
         var available = await dbContext.Campaigns
             // Ваншоты здесь тоже: вступить в них можно и обычным участником, а не только бронью прегена
             // (решение владельца, T2.2).
@@ -116,12 +126,14 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                                     [
                                         .. sheets.Where(ch => ch.Kind == CharacterKind.Player && ch.OwnerId == p.UserId)
                                             .Select(ch => Character(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status)),
-                                    ])),
+                                    ],
+                                    DraftOf(c.Id, p.UserId))),
                             ]
                             : [],
                         kept
                             ? [.. sheets.Where(ch => ch.Kind == CharacterKind.Npc).Select(ch => Character(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status))]
-                            : []);
+                            : [],
+                        DraftOf(c.Id, me));
                 }),
             ],
             [.. available.Select(c => new HomeAvailableCampaignDto(c.Id, c.Name, c.Kind, c.Status, c.CreatedAt,

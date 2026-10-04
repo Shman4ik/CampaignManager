@@ -1,3 +1,4 @@
+using CampaignManager.Contracts.Characters;
 using CampaignManager.Core;
 using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Characters;
@@ -72,6 +73,7 @@ public sealed record CampaignInviteDto(
 /// <param name="Characters">Его сыщики в этой кампании: Хранителю и администратору все листы, игроку — только его активный.</param>
 /// <param name="CanRename">Мне можно сменить его псевдоним: свой — всегда, чужой — Хранителю кампании.</param>
 /// <param name="CanRemove">Мне можно исключить его: игрока — Хранителю кампании.</param>
+/// <param name="Draft">Начатый черновик сыщика в помощнике — тому, кто правит кампанию, и самому участнику; иначе <c>null</c>.</param>
 public sealed record CampaignMemberDto(
     Guid UserId,
     string? Name,
@@ -81,7 +83,8 @@ public sealed record CampaignMemberDto(
     bool IsMe,
     bool CanRename,
     bool CanRemove,
-    IReadOnlyList<HomeCharacterDto> Characters);
+    IReadOnlyList<HomeCharacterDto> Characters,
+    CharacterDraftSummaryDto? Draft = null);
 
 /// <summary>Одна форма на создание и правку.</summary>
 public sealed record CampaignInput(string Name, CampaignKind Kind, CampaignStatus Status, Era Era);
@@ -154,6 +157,7 @@ public sealed record HomeDto(
 /// <param name="MyCharacter">Мой активный лист в кампании.</param>
 /// <param name="Players">Игроки со всеми листами — только в кампаниях, которые я веду.</param>
 /// <param name="Npcs">НПС кампании — только в кампаниях, которые я веду.</param>
+/// <param name="MyDraft">Мой начатый черновик сыщика в помощнике («Продолжить создание»); <c>null</c> — его нет.</param>
 public sealed record HomeCampaignDto(
     Guid Id,
     string Name,
@@ -164,9 +168,11 @@ public sealed record HomeCampaignDto(
     int PlayerCount,
     HomeCharacterDto? MyCharacter,
     IReadOnlyList<HomePlayerDto> Players,
-    IReadOnlyList<HomeCharacterDto> Npcs);
+    IReadOnlyList<HomeCharacterDto> Npcs,
+    CharacterDraftSummaryDto? MyDraft = null);
 
-public sealed record HomePlayerDto(Guid UserId, string? Name, IReadOnlyList<HomeCharacterDto> Characters);
+/// <param name="Draft">Черновик сыщика, который игрок начал в помощнике; <c>null</c> — не начинал.</param>
+public sealed record HomePlayerDto(Guid UserId, string? Name, IReadOnlyList<HomeCharacterDto> Characters, CharacterDraftSummaryDto? Draft = null);
 
 public sealed record HomeCharacterDto(Guid Id, string Name, string? Occupation, CharacterKind Kind, CharacterStatus Status);
 

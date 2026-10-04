@@ -293,6 +293,13 @@ public sealed class RunService(CmDbContext dbContext, AccessPolicy access, Curre
             CreatedById = user.Id,
         };
         dbContext.Characters.Add(copy);
+        // Сыщик в игре теперь есть — начатый в помощнике черновик больше не нужен (как после «Создать сыщика»).
+        if (run.Role is not null
+            && await dbContext.CharacterDrafts.FindAsync([run.CampaignId, user.Id], cancellationToken) is { } draft)
+        {
+            dbContext.CharacterDrafts.Remove(draft);
+        }
+
         dbContext.RunReservations.Add(new RunReservation { RunId = runId, PregenId = pregenId, UserId = user.Id, CharacterId = copy.Id });
 
         try
