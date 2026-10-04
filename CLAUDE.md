@@ -10,6 +10,10 @@ Entity Framework Core and Auth0 (OpenID Connect) authentication.
 
 ## CampaignManager 2.0
 
+**Прод на 2.0 с 2026-10-04** (T3.2): https://cthulhu.dmnet.dev — `src/CampaignManager.Server`, схема `cm` на Neon
+`main`, деплой — `.github/workflows/v2-deploy.yml` (прод и бета одним push). v1 (`CampaignManager.Web`) больше не
+выкатывается и ждёт удаления в T3.3 (после 2026-10-18); правила ниже про v1 — только для его кода до удаления.
+
 Готовится переписывание с новой схемой базы, API и мобильным приложением на Avalonia. Документы:
 
 - [docs/v2/README.md](docs/v2/README.md) — цели, решения, архитектура;

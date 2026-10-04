@@ -87,7 +87,7 @@ Neon (`ep-white-leaf-435379…/neondb`, память `postgres-mcp-dev-db`).
 [src/CLAUDE.md](../../src/CLAUDE.md), «Beta-стенд». Что сделано:
 - образ `src/Dockerfile` (сервер вместе с клиентом WebAssembly, Node для Tailwind); собран в `wslc`,
   `/health`, `/api/v1/ping` до ветки `dev` и редирект входа на Auth0 с `https://`-адресом возврата проверены;
-- `.github/workflows/v2-beta-deploy.yml`: на push в `master` по `src/**` и общим props — образ
+- `.github/workflows/v2-beta-deploy.yml` (с T3.2 — `v2-deploy.yml`, катит и прод): на push в `master` по `src/**` и общим props — образ
   `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и тег в dmnet-gitops,
   `workloads/campaign-manager-beta`; деплой v1 не тронут;
 - dmnet-gitops: Application `campaign-manager-beta`, Deployment/Service/Ingress (cert-manager +
@@ -1221,7 +1221,10 @@ origin для аудио, перемотка, жест пользователя 
 
 ### T3.2 — Переключение прода
 
-**Инструкция готова 2026-10-04:** [CUTOVER.md](CUTOVER.md) — 2.0 встаёт на место v1 в том же namespace, с тем же
+**Сделано 2026-10-04** (владелец разрешил выполнить автоматически): ветка-страховка Neon `pre-v2-2026-10-04`;
+схема `cm` на `main` (5 миграций) и перенос — счётчики совпали с прогоном на `dev` ([migration-report-prod.md](migration-report-prod.md));
+dmnet-gitops#3 — прод на `campaign-manager-v2:0.2.82` с тем же секретом; `v2-deploy.yml` катит прод и бету, воркфлоу v1 удалён.
+Готово окончательно — после недели без отката (до 2026-10-11). **Инструкция:** [CUTOVER.md](CUTOVER.md) — 2.0 встаёт на место v1 в том же namespace, с тем же
 секретом, Auth0 и бакетом; откат — revert одного PR в `dmnet-gitops`.
 
 **Цель.** Прод работает на 2.0 и схеме `cm`. **Делает владелец по готовой инструкции**: агенту
