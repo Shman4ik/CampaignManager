@@ -115,11 +115,28 @@ public sealed class UxF3bTests : KitContext
         });
 
     [Fact]
-    public void Search_shows_the_first_records_on_an_empty_query()
+    public void Search_shows_the_whole_list_on_an_empty_query_and_says_how_long_it_is()
     {
         var cut = Search();
 
-        cut.WaitForAssertion(() => Assert.Equal(10, cut.FindAll(".catalog-search-row").Count));
+        // Весь список, а не первые десять: из ста фобий были видны десять (владелец 2026-10-04). Все 12 — достижимы.
+        cut.WaitForAssertion(() => Assert.Equal(12, cut.FindAll(".catalog-search-row").Count));
+        Assert.Equal("Записей: 12 — листайте список", cut.Find("[data-testid=catalog-search-count]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void Search_keeps_every_match_not_only_the_first_ten()
+    {
+        var items = Enumerable.Range(1, 100).Select(i => $"{i}. Фобия").ToList();
+        var cut = Render<CatalogSearch<string>>(p => p
+            .Add(c => c.Load, () => Task.FromResult<IReadOnlyList<string>>(items))
+            .Add(c => c.Name, s => s));
+        cut.WaitForAssertion(() => Assert.Equal(100, cut.FindAll(".catalog-search-row").Count));
+
+        cut.Find("[data-testid=catalog-search-input]").Input("фобия");
+
+        Assert.Equal(100, cut.FindAll(".catalog-search-row").Count);
+        Assert.Contains("100. Фобия", cut.FindAll(".catalog-search-row").Last().TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,11 +194,11 @@ public sealed class UxF3bTests : KitContext
     }
 
     [Fact]
-    public void Compact_search_shows_five_rows_without_its_own_scroll()
+    public void Compact_search_also_shows_every_row()
     {
         var cut = Search(p => p.Add(c => c.Compact, true));
 
-        cut.WaitForAssertion(() => Assert.Equal(5, cut.FindAll(".catalog-search-row").Count));
+        cut.WaitForAssertion(() => Assert.Equal(12, cut.FindAll(".catalog-search-row").Count));
         Assert.Contains("catalog-search-compact", cut.Find(".catalog-search-results").ClassName, StringComparison.Ordinal);
     }
 

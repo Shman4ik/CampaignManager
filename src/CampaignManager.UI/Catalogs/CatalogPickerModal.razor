@@ -35,6 +35,12 @@
                 }
                 else
                 {
+                    @* Список целиком (владелец 2026-10-04: каждая запись должна быть достижима без поиска); при длинном списке над
+                       рамкой — сколько в нём записей: полосы прокрутки на iPad не видно. *@
+                    @if (found.Count > 7)
+                    {
+                        <p class="cm-field-note" data-testid="picker-count">Записей: @found.Count — листайте список</p>
+                    }
                     <div class="@Css.Join(ListClass ?? (ChildContent is null ? "max-h-[46vh]" : "max-h-[min(calc(100dvh-30rem),22rem)] min-h-24"), "overflow-y-auto rounded-md border border-primary-200")" role="listbox" aria-label="@Title">
                         @foreach (var item in found)
                         {
@@ -57,10 +63,6 @@
                             </button>
                         }
                     </div>
-                    @if (_more > 0)
-                    {
-                        <p class="cm-field-note">И ещё @_more — уточните поиск.</p>
-                    }
                 }
             }
             @if (Extra is not null)
@@ -86,13 +88,10 @@
 </Modal>
 
 @code {
-    private const int Limit = 50;
-
     private string _query = "";
     private IReadOnlyList<TItem>? _items;
     private string? _error;
     private TItem? _selected;
-    private int _more;
     private bool _wasOpen;
 
     [Parameter] public bool Open { get; set; }
@@ -186,8 +185,7 @@
             .Where(i => Filter is null || Filter(i))
             .Where(i => query.Length == 0 || Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false))
             .ToList();
-        _more = Math.Max(0, all.Count - Limit);
-        return [.. all.Take(Limit)];
+        return all;
     }
 
     private Task PickAsync() => _selected is null || Busy ? Task.CompletedTask : OnPick.InvokeAsync(_selected);
