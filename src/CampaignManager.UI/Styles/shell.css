@@ -38,8 +38,16 @@
 
   /* ── Рельс ── как в iPadOS: иконка и подпись 11px под ней, подпись видна всегда —
      наведения на планшете нет, title= её не заменит. Развернуть рельс нельзя: на iPad
-     широкое меню только отнимало ширину у страницы. */
+     широкое меню только отнимало ширину у страницы.
+     Высота пункта идёт от высоты экрана: на 696px (ландшафт iPad Pro 11") — 34px, иначе пятнадцать пунктов Хранителя
+     и подвал не влезают; выше экран — выше пункт, до 48px. Делитель 20 — пункты администратора (18) и подвал (2),
+     130px — знак, поля и линейки групп: у администратора прокрутка начинается, только когда пункт упёрся в 34px. */
   .cm-rail {
+    --cm-rail-item-height: clamp(34px, calc((100dvh - 130px) / 20), 48px);
+    --cm-rail-icon-height: 16px;
+    --cm-rail-icon-size: 15px;
+    --cm-rail-item-gap: 1px;
+    --cm-rail-group-gap: 5px;
     display: none;
     position: fixed;
     inset: 0 auto 0 0;
@@ -53,6 +61,16 @@
   @media (min-width: 48rem) {
     .cm-rail {
       display: flex;
+    }
+  }
+
+  /* С 960px пункт уже ≥ 41px — иконке и линейкам возвращается воздух (портрет iPad, монитор). */
+  @media (min-height: 60rem) {
+    .cm-rail {
+      --cm-rail-icon-height: 20px;
+      --cm-rail-icon-size: 18px;
+      --cm-rail-item-gap: 3px;
+      --cm-rail-group-gap: 8px;
     }
   }
 
@@ -94,8 +112,8 @@
   /* Группа после первой — тонкая линейка без подписи (подпись 10px нарушала п. 2, а строка над группой отнимала 16px
      высоты: Хранителю нужно, чтобы все пункты влезали без прокрутки). Имя группы — в aria-label. */
   .cm-rail-group + .cm-rail-group {
-    margin-top: 5px;
-    padding-top: 5px;
+    margin-top: var(--cm-rail-group-gap);
+    padding-top: var(--cm-rail-group-gap);
     border-top: 1px solid var(--color-primary-300);
   }
 
@@ -105,16 +123,17 @@
     border-top: 1px solid var(--color-primary-200);
   }
 
-  /* 34px в высоту (пол тап-цели — 32): на iPad Pro 11" в ландшафте (696px под шапкой браузера) все пятнадцать пунктов
-     Хранителя и подвал влезают без прокрутки; у администратора (восемнадцать) прокрутка есть и обозначена тенью. */
+  /* От 34px (пол тап-цели — 32) до 48px по высоте экрана (--cm-rail-item-height у .cm-rail): на iPad Pro 11" в ландшафте
+     все пятнадцать пунктов Хранителя и подвал влезают без прокрутки; у администратора (восемнадцать) прокрутка есть и
+     обозначена тенью. */
   .cm-rail-item {
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1px;
-    min-height: 34px;
+    gap: var(--cm-rail-item-gap);
+    min-height: var(--cm-rail-item-height);
     padding: 2px 2px;
     text-align: center;
     white-space: nowrap;
@@ -147,10 +166,10 @@
     border-radius: 999px;
   }
 
-  /* В рельсе иконка 16px высотой, кружок меньше обычного. */
+  /* В рельсе кружок по высоте иконки (16 или 20px), меньше обычного. */
   .cm-rail-icon .cm-avatar {
-    width: 18px;
-    height: 18px;
+    width: calc(var(--cm-rail-icon-height) + 2px);
+    height: calc(var(--cm-rail-icon-height) + 2px);
     font-size: 11px;
   }
 
@@ -174,9 +193,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 16px;
-    font-size: 15px;
+    width: 22px;
+    height: var(--cm-rail-icon-height);
+    font-size: var(--cm-rail-icon-size);
   }
 
   /* Одна строка без многоточия: ShortLabel подбирается так, чтобы влезать целиком
@@ -211,6 +230,11 @@
     background: var(--color-error-500);
     border: 1px solid var(--color-primary-50);
     border-radius: 99px;
+  }
+
+  /* В рельсе пункт выше содержимого — счётчик держится верха иконки (иконка + зазор + подпись ≈ 13px), а не верха пункта. */
+  .cm-rail-item .cm-nav-badge {
+    top: calc(50% - (var(--cm-rail-icon-height) + var(--cm-rail-item-gap) + 13px) / 2);
   }
 
   /* ── Нижняя панель телефона ── */
