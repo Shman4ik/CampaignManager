@@ -347,3 +347,39 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан, как и у прода:
   войти может любой с подтверждённой почтой и станет игроком на данных `dev`. Первые админы —
   `Authorization__AdminEmails__0` в секрет тем же `kubeseal --raw`, если роли из переноса не хватит.
+
+### Бэкапы
+
+- **Ежедневный дамп прода.** CronJob `cm-backup` (namespace `campaign-manager`, dmnet-gitops
+  `workloads/campaign-manager/backup-cronjob.yaml`, dmnet-gitops#6) каждую ночь в **03:00 по Праге** делает
+  `pg_dump -Fc --schema=cm --no-owner --no-privileges` ветки `main` и кладёт его в MinIO:
+  **`s3.dmnet.dev`, бакет `campaign-manager-backups`, `cm-backups/cm-YYYY-MM-DD.dump`** (приватный, отдельный от боевого
+  `campain-manager`). Хранится **30 дней** — старше удаляет та же job (`mc rm --older-than 30d`). Строку подключения
+  и ключ MinIO job берёт из секрета прода `campaign-manager-env`: после переезда в другой проект Neon перенастраивать
+  нечего. Первый дамп — `cm-2026-10-04.dump`, восстановление проверено (число строк совпало с продом).
+- **Проверить, что бэкап идёт** (на VPS, `ssh vps`): `kubectl -n campaign-manager get cronjob,job` и
+  `kubectl -n campaign-manager logs job/<имя> -c upload` — в конце список объектов в бакете. Снять дамп вне
+  расписания: `kubectl -n campaign-manager create job --from=cronjob/cm-backup cm-backup-manual-<N>`, потом удалить job.
+- **Восстановить.** Дамп содержит только схему `cm` (расширения `citext` и `pg_trgm` — в схеме `public`, их создают
+  заранее). Сначала — в одноразовый Postgres, не поверх прода:
+
+  ```bash
+  # ключ MinIO — из секрета прода в переменные, не печатая; клиент — образ cgr.dev/chainguard/minio-client
+  mc alias set s3 https://s3.dmnet.dev "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY"
+  mc ls s3/campaign-manager-backups/cm-backups/
+  mc cp s3/campaign-manager-backups/cm-backups/cm-2026-10-04.dump ./cm.dump
+
+  wslc run -d --rm --name cm-restore -e POSTGRES_HOST_AUTH_METHOD=trust postgres:17
+  wslc exec cm-restore psql -U postgres -c "create extension citext; create extension pg_trgm;"
+  wslc exec -i cm-restore sh -c 'cat > /tmp/cm.dump' < cm.dump
+  wslc exec cm-restore pg_restore -U postgres -d postgres --no-owner --no-privileges --exit-on-error /tmp/cm.dump
+  wslc exec cm-restore psql -U postgres -c "select count(*) from cm.characters"
+  ```
+
+  Вернуть в Neon: новая ветка от `main` (или пустая база), в ней `drop schema cm cascade`, расширения, затем тот же
+  `pg_restore` со строкой этой ветки в `PG*`-переменных (Neon требует `PGSSLMODE=require`). Приложение переключается
+  на неё новым значением `ConnectionStrings__DefaultConnection` в SealedSecret или `neonctl branches set-default`.
+  Дамп скачивать `mc cp`, а не выводом в лог пода: `kubectl logs` портит бинарные данные.
+- **Что ещё есть.** В Neon (бесплатный тариф, расписания снимков нет): **восстановление на точку во времени — 24 часа**
+  (Restore ветки в консоли); ручной снимок **`after-v2-cutover-2026-10-04`**; ветка **`pre-v2-2026-10-04`** — `main` на
+  2026-10-04 17:39 UTC, до перехода прода на 2.0. Старше суток и после этих точек — только дампы из MinIO.
