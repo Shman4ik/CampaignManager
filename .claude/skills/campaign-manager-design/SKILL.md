@@ -20,7 +20,6 @@ user-invocable: true
 | `CLAUDE.md` модуля страницы | `src/CampaignManager.UI/<Модуль>/CLAUDE.md` | решения владельца по этому экрану |
 | Устройства | корневой `CLAUDE.md`, «Целевые устройства» | 1194×696 (главный), 834×1056, 393×651; тап-цели от 32/28px |
 
-Правила v1 (корневой «UI Patterns», `docs/design-system-v1.md`, `wwwroot/css/design-system.css`) к 2.0 не относятся.
 
 ## Порядок
 
@@ -71,7 +70,7 @@ user-invocable: true
 ## Ассеты
 
 - Знак и логотип — `src/CampaignManager.UI/wwwroot/logo-mark.svg`, `logo.svg` (исходники — `docs/assets/`).
-- Иллюстрация витрины — `CampaignManager.Web/wwwroot/img/auth/login-art.webp`: её берёт страница входа Auth0 с домена
+- Иллюстрация витрины — `src/CampaignManager.Server/wwwroot/img/auth/login-art.webp`: её берёт страница входа Auth0 с домена
   прода. В рабочих экранах иллюстраций нет.
 - Иконки — Font Awesome 6.7.2 из `src/CampaignManager.UI/wwwroot/lib/fontawesome/` (`fa-solid fa-…`), эмодзи нет.
 - Шрифты — свои, `wwwroot/fonts/`: Inter (интерфейс), Bitter (книжное: имя сыщика, сценарий, раздатка, витрина),

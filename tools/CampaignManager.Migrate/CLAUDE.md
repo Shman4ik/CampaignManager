@@ -14,8 +14,9 @@ dotnet run --project tools/CampaignManager.Migrate -- --settings <файл> --re
 
 - **`--settings`** — JSON вне репозитория: `ConnectionStrings:Cm` (если нет `CM_DB`) и `Minio`: `Endpoint`,
   `AccessKey`, `SecretKey`, `Secure`, `SourceBucket` (боевой `campain-manager`, только чтение), `TargetBucket`
-  (`campaign-manager-dev` для ветки dev). Собирать скриптом из `CampaignManager.Web/appsettings*.json` основного
-  чекаута, не печатая. На проде (T3.2) источник и цель — один бакет, тогда объекты не копируются вовсе.
+  (`campaign-manager-dev` для ветки dev). Ключ, читающий боевой бакет, — из секрета прода (`Minio__AccessKey`/`SecretKey`
+  на VPS), собирать скриптом, не печатая. На проде (T3.2, сделано 2026-10-04) источник и цель — один бакет, объекты не
+  копировались. **На `main` перенос больше не запускать**: `--reset` стёр бы данные игры 2.0.
 - **Повторный прогон на `dev`, когда объекты уже в `campaign-manager-dev`**: `SourceBucket` = `TargetBucket` =
   `campaign-manager-dev` и ключ 2.0 из `src/CampaignManager.Server/appsettings.Development.json` (у него права только
   на этот бакет, боевой он не читает). Перенос только сверяет объекты в цели — размеры и «не нашлось» те же.

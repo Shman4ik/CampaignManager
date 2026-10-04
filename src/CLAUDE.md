@@ -74,8 +74,8 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
 - **Страницы UI — `[Authorize(Policy = Policies.Keeper)]`, не `Roles`**: сервер проверяет атрибут
   страницы при прямой загрузке, а роли в куке нет.
 - Сервер без `Authentication:Auth0:Domain`/`ClientId` не стартует (в v1 это был 500 на каждый
-  запрос) — кроме Development: там без них доступен только тестовый вход (см. «Проверка под ролями»). Значения dev-приложения — в `Server/appsettings.Development.json` (копируются скриптом
-  из `CampaignManager.Web/appsettings.Development.json` основного чекаута вместе со строкой подключения).
+  запрос) — кроме Development: там без них доступен только тестовый вход (см. «Проверка под ролями»). Значения dev-приложения — в `Server/appsettings.Development.json` основного чекаута (в worktree копировать скриптом
+  целиком, не печатая).
 
 ## UI и Tailwind
 
@@ -97,8 +97,8 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
 ## База
 
 - Строка подключения сервера — `ConnectionStrings:DefaultConnection` в
-  `Server/appsettings.Development.json` (в `.gitignore`; в worktree скопировать строку из
-  `CampaignManager.Web/appsettings.Development.json` основного чекаута — это ветка Neon `dev`).
+  `Server/appsettings.Development.json` (в `.gitignore`; в worktree — копия этого файла из основного чекаута,
+  ветка Neon `dev`).
   **В прод не писать.**
 - `dotnet ef` работает с `Data` напрямую, без `Program.cs` и Auth0 (`DesignTimeCmDbContextFactory`):
   `dotnet ef migrations add <Имя> --project src/CampaignManager.Data`. Строка — из `CM_DB`, без
@@ -246,8 +246,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 
 - **Конфиг.** Скопировать **целиком** `src/CampaignManager.Server/appsettings.Development.json`
   основного чекаута (`X:\source\CampaignManager`) в тот же путь worktree — скриптом, не печатая: там
-  строка ветки Neon `dev`, Auth0 dev и ключ MinIO только на `campaign-manager-dev`. Конфиг v1
-  (`CampaignManager.Web/...`) не брать: его ключ MinIO открывает боевой бакет.
+  строка ветки Neon `dev`, Auth0 dev и ключ MinIO только на `campaign-manager-dev`.
 - **Порт и контейнер** выдаёт оркестратор (свой на задачу). Сервер —
   `dotnet run --project src/CampaignManager.Server --no-build --no-launch-profile --urls https://localhost:<порт>`
   с `ASPNETCORE_ENVIRONMENT=Development`, лог — в файл с уникальным именем (не общий `server.log`).
@@ -313,7 +312,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   namespace `campaign-manager-beta`): `ConnectionStrings__DefaultConnection` — **ветка Neon `dev`**,
   `Authentication__Auth0__{Domain,ClientId,ClientSecret}` — **dev-приложение Auth0** (в нём разрешены
   `https://beta.cthulhu.dmnet.dev/signin-oidc` и `/signout-callback-oidc`). Значения копируются
-  скриптом из `CampaignManager.Web/appsettings.Development.json` основного чекаута и шифруются
+  скриптом из `src/CampaignManager.Server/appsettings.Development.json` основного чекаута и шифруются
   `kubeseal --raw` на VPS, не попадая ни в вывод, ни в git. Добавить ключ, не расшифровывая остальные:
 
   ```bash
@@ -343,7 +342,8 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   данные игры (`--reset`).
 - **Откат** — revert коммита `campaign-manager 0.2.N` в dmnet-gitops (или ручной `newTag` на прежнюю версию, PR в
   dmnet-gitops): Argo вернёт прежний образ прода и беты. Миграцию откат не отменяет. Откат прода на v1 — revert
-  dmnet-gitops#3 (до T3.3, пока схемы `games`/`identity` живы).
+  dmnet-gitops#3: образ v1 хранится в ghcr, схемы `games`/`identity` живы, пока их не снимет владелец (код v1 — в git
+  до T3.3, PR удаления).
 - **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан, как и у прода:
   войти может любой с подтверждённой почтой и станет игроком на данных `dev`. Первые админы —
   `Authorization__AdminEmails__0` в секрет тем же `kubeseal --raw`, если роли из переноса не хватит.

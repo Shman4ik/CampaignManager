@@ -1247,6 +1247,12 @@ dmnet-gitops#3 — прод на `campaign-manager-v2:0.2.82` с тем же с�
 
 **Зависит от:** T3.2 + две недели без отката.
 
+**Код удалён 2026-10-04** (решение владельца — раньше срока: код в git, откат прода на v1 — revert dmnet-gitops#3, образ
+v1 в ghcr): `CampaignManager.Web`, `CampaignManager.ServiceDefaults`, `scripts/`, корневой `Dockerfile`,
+`tests/CampaignManager.Rules.Tests`, `docs/design-system-v1.md`; корневой `CLAUDE.md` и README — под 2.0; файлы Codex
+(`.codex/`, `.agents/`, `AGENTS.md`, не в git) удалены. **Осталось владельцу:** снять схемы `games`/`identity` после
+свежего бэкапа Neon и ключи v1 из секрета прода (`Authentication__Google__*`, `Community__DonateUrl`).
+
 **Шаги.** Удалить `CampaignManager.Web`, `CampaignManager.ServiceDefaults` (D6.2; AppHost, `.ai/`,
 `copilot-instructions.md` и скиллы Aspire уже убраны уборкой репозитория) и `scripts/`. Удалить
 **целиком** `tests/CampaignManager.Rules.Tests` (тесты T0.2 на коде v1; решение владельца 2026-10-02) —
