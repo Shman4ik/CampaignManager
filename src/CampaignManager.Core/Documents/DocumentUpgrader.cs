@@ -12,6 +12,7 @@ public enum DocumentKind
     CharacterSheet,
     Statblock,
     EncounterState,
+    InvestigatorDraft,
 }
 
 /// <summary>
@@ -38,6 +39,7 @@ public static class DocumentUpgrader
         DocumentKind.CharacterSheet => CharacterSheet.CurrentVersion,
         DocumentKind.Statblock => Statblock.CurrentVersion,
         DocumentKind.EncounterState => EncounterState.CurrentVersion,
+        DocumentKind.InvestigatorDraft => InvestigatorDraft.CurrentVersion,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 

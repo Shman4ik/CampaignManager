@@ -21,7 +21,8 @@ public enum CreationMethod
 
 /// <summary>
 /// Черновик помощника создания сыщика — всё, что игрок выбрал и набросал. Живёт в браузере
-/// (<c>localStorage</c>) и переживает уход со страницы; поэтому сериализуется тем же <c>CmJson</c>.
+/// (<c>localStorage</c>) и переживает уход со страницы; черновик сыщика игрока в кампании ещё и на сервере
+/// (<c>cm.character_drafts</c>) — его продолжают с другого устройства и видит Хранитель. Поэтому сериализуется тем же <c>CmJson</c>.
 /// <para>
 /// Навыки в словарях — по <b>ключу навыка помощника</b> (<see cref="CreationPlan.KeyOf"/>): <c>Id</c> справочника
 /// строкой, а для своей специализации — её уточнение («латынь»; родитель — в <see cref="AddedSpecializations"/>).
@@ -33,6 +34,10 @@ public enum CreationMethod
 /// </summary>
 public sealed class InvestigatorDraft
 {
+    /// <summary>Текущая версия документа черновика (<c>character_drafts.draft_version</c>; в <c>localStorage</c> версии нет).</summary>
+    public const int CurrentVersion = 1;
+
+    /// <summary>Шаг помощника — номер <see cref="CreationStep"/>; его же видит Хранитель («шаг 4 из 7»).</summary>
     public int StepIndex { get; set; }
 
     public CreationMethod Method { get; set; } = CreationMethod.Standard;

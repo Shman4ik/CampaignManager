@@ -107,6 +107,14 @@ public sealed class AccessWorld : IAsyncLifetime
             StateVersion = EncounterState.CurrentVersion,
         };
         db.Encounters.Add(encounter);
+        db.CharacterDrafts.Add(new CharacterDraft
+        {
+            CampaignId = campaign.Id,
+            OwnerId = User("player").Id,
+            Draft = CmJson.Write(new InvestigatorDraft { StepIndex = 3 }),
+            DraftVersion = InvestigatorDraft.CurrentVersion,
+            Step = 3,
+        });
         await db.SaveChangesAsync();
 
         (Campaign, CompletedCampaign, Scenario, OrphanScenario, Run) = (campaign.Id, completed.Id, scenario.Id, orphan.Id, run.Id);

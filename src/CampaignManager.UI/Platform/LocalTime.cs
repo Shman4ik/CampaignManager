@@ -25,6 +25,43 @@ public static class LocalTime
     /// <summary>Дата без пояса: «2 октября 2026».</summary>
     public static string Date(DateOnly value) => value.ToString("d MMMM yyyy", Russian);
 
+    /// <summary>
+    /// Сколько прошло — для «изменён 2 часа назад»: «только что», минуты, часы, «вчера», дни до недели, дальше — дата.
+    /// <paramref name="now"/> — <c>TimeProvider.GetUtcNow()</c> страницы (в тестах — подставное время).
+    /// </summary>
+    public static string Ago(DateTimeOffset value, DateTimeOffset now)
+    {
+        var passed = now - value;
+        if (passed < TimeSpan.FromMinutes(1))
+            return "только что";
+        if (passed < TimeSpan.FromHours(1))
+            return Count((int)passed.TotalMinutes, "минуту", "минуты", "минут") + " назад";
+        if (passed < TimeSpan.FromDays(1))
+            return Count((int)passed.TotalHours, "час", "часа", "часов") + " назад";
+
+        var days = now.ToLocalTime().Date.Subtract(value.ToLocalTime().Date).Days;
+        return days switch
+        {
+            <= 1 => "вчера",
+            < 7 => Count(days, "день", "дня", "дней") + " назад",
+            _ => Date(value),
+        };
+    }
+
+    /// <summary>«1 час», «2 часа», «5 часов», «21 час».</summary>
+    private static string Count(int count, string one, string few, string many)
+    {
+        var tens = count % 100;
+        var units = count % 10;
+        var word = tens is >= 11 and <= 14 ? many : units switch
+        {
+            1 => one,
+            >= 2 and <= 4 => few,
+            _ => many,
+        };
+        return count == 1 ? word : $"{count} {word}";
+    }
+
     /// <summary>Значение для <c>&lt;input type="datetime-local"&gt;</c>: момент в поясе браузера, без смещения.</summary>
     public static System.DateTime? ToInput(DateTimeOffset? value) =>
         value is { } moment ? System.DateTime.SpecifyKind(moment.ToLocalTime().DateTime, DateTimeKind.Unspecified) : null;

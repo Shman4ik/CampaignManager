@@ -353,6 +353,7 @@ public sealed class WizardTests : KitContext
                     Slots = [.. occupation.Slots.Select(sl => new OccupationSlotDto { Kind = sl.Kind, SkillId = sl.SkillId })],
                 },
             };
+        Services.AddSingleton(Fake.Of<ICharacterDraftsApi>([]));
         Services.AddSingleton(Fake.Of<ICharactersApi>(new()
         {
             [nameof(ICharactersApi.GetCreationContextAsync)] = _ => Task.FromResult(new CreationContextDto { Kind = CharacterKind.Player, CanCreate = true, CampaignName = "Тест" }),

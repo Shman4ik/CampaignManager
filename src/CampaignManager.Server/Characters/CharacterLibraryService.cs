@@ -96,6 +96,14 @@ public sealed class CharacterLibraryService(
         };
         dbContext.Characters.Add(character);
 
+        // Лист сыщика в кампании создан — черновик помощника той же записью уходит: Хранитель больше не видит «создаёт сыщика»,
+        // другое устройство не предложит продолжить.
+        if (character is { Kind: CharacterKind.Player, CampaignId: { } draftCampaignId }
+            && await dbContext.CharacterDrafts.FindAsync([draftCampaignId, user.Id], cancellationToken) is { } draft)
+        {
+            dbContext.CharacterDrafts.Remove(draft);
+        }
+
         if (request.Cast is { } castRow)
         {
             dbContext.ScenarioNpcs.Add(new ScenarioNpc

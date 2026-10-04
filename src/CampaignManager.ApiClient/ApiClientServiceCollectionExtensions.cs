@@ -42,6 +42,7 @@ public static class ApiClientServiceCollectionExtensions
         });
         services.AddHttpClient<ICampaignsApi, CampaignsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICharactersApi, CharactersApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<ICharacterDraftsApi, CharacterDraftsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IEncountersApi, EncountersApiClient>(http => http.BaseAddress = baseAddress);
 
         // Справочники — один клиент на справочник, общий код в CatalogApiClient.

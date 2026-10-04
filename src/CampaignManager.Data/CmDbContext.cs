@@ -62,6 +62,7 @@ public sealed class CmDbContext(DbContextOptions<CmDbContext> options) : DbConte
     public DbSet<LocationTrack> LocationTracks => Set<LocationTrack>();
 
     public DbSet<Character> Characters => Set<Character>();
+    public DbSet<CharacterDraft> CharacterDrafts => Set<CharacterDraft>();
 
     public DbSet<Encounter> Encounters => Set<Encounter>();
 

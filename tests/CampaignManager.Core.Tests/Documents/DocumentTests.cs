@@ -121,6 +121,7 @@ public sealed class DocumentTests
     [InlineData(DocumentKind.CharacterSheet)]
     [InlineData(DocumentKind.Statblock)]
     [InlineData(DocumentKind.EncounterState)]
+    [InlineData(DocumentKind.InvestigatorDraft)]
     public void Upgrader_HasStepForEveryVersionBelowCurrent(DocumentKind kind)
     {
         for (var version = DocumentUpgrader.FirstVersion; version < DocumentUpgrader.CurrentVersion(kind); version++)

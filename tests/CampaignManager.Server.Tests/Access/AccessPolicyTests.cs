@@ -231,6 +231,30 @@ public sealed class AccessPolicyTests(AccessWorld world) : IClassFixture<AccessW
         Assert.True(await world.PolicyFor("keeper").CanCreateCharacterAsync(CharacterKind.Npc, world.Campaign, Cancellation));
     }
 
+    // Черновик помощника в кампании: пишет только сам игрок, Хранитель кампании и администратор читают.
+    [Theory]
+    [InlineData("player", "RED")]
+    [InlineData("keeper", "R")]
+    [InlineData("admin", "RD")]
+    [InlineData("otherKeeper", "-")]
+    [InlineData("outsider", "-")]
+    public async Task Investigator_draft_is_written_by_its_player_and_read_by_campaign_keeper(string user, string expected)
+    {
+        TestDatabase.SkipIfMissing();
+        Assert.Equal(expected, Flags(await world.PolicyFor(user).ForCharacterDraftAsync(world.Campaign, world.User("player").Id, Cancellation)));
+    }
+
+    [Fact]
+    public async Task Only_campaign_members_write_their_draft_and_a_missing_draft_is_invisible()
+    {
+        TestDatabase.SkipIfMissing();
+        Assert.True(await world.PolicyFor("player").CanWriteCharacterDraftAsync(world.Campaign, Cancellation));
+        Assert.True(await world.PolicyFor("keeper").CanWriteCharacterDraftAsync(world.Campaign, Cancellation));
+        Assert.False(await world.PolicyFor("outsider").CanWriteCharacterDraftAsync(world.Campaign, Cancellation));
+        Assert.False(await world.PolicyFor("admin").CanWriteCharacterDraftAsync(world.Campaign, Cancellation));
+        Assert.Equal("-", Flags(await world.PolicyFor("admin").ForCharacterDraftAsync(world.Campaign, world.User("keeper").Id, Cancellation)));
+    }
+
     // Библиотека НПС и прегенов (/npcs, T2.4) — Хранителю; что в ней видно, решает правило листа по строке.
     [Theory]
     [InlineData("player", false)]

@@ -1,13 +1,15 @@
 @page "/character/wizard"
 @attribute [Authorize]
-@using System.Text.Json
 @using CampaignManager.Contracts.Characters
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
 @using CampaignManager.Core.Dice
 @using CampaignManager.Core.Documents
 @using CampaignManager.UI.Platform
+@implements IDisposable
 @inject ICharactersApi Api
+@inject ICharacterDraftsApi Drafts
+@inject TimeProvider Time
 @inject ICatalogApi<SkillDto> SkillsApi
 @inject ICatalogApi<OccupationDto> OccupationsApi
 @inject BrowserStorage Storage
@@ -17,7 +19,8 @@
 @inject ToastService Toasts
 
 @* Помощник создания сыщика (T2.4): способ и пять шагов главы 3 плюс «Итог». Черновик — InvestigatorDraft в
-   localStorage (переживает перезагрузку и уход со страницы), правила — Core: правки шагов — методы черновика,
+   localStorage (переживает перезагрузку и уход со страницы), у сыщика игрока в кампании — ещё и на сервере (WizardDraftStore:
+   продолжить с другого устройства, Хранитель видит шаг), правила — Core: правки шагов — методы черновика,
    профессия, слоты, бюджеты и проверки шагов — CreationPlan (слоты собирает он, шаги только показывают), лист —
    SheetBuilder.FromDraft, тот же, что у быстрого НПС и импорта. «Случайный сыщик» (?random=1 или ссылка на первом
    шаге) — тот же помощник с SheetBuilder.RandomDraft, открытый на «Итоге» (D6.4). Любой бросок можно вписать
@@ -68,6 +71,20 @@
                 var validation = plan.Validate(step);
                 var summaryInvalid = step == CreationStep.Summary ? plan.FirstInvalidStep() : null;
                 var soft = validation is null && summaryInvalid is null ? SoftHint(plan, step) : null;
+
+                @if (_store is { Conflict: true })
+                {
+                    @* Черновик записали (или стёрли) на другом устройстве: запись на сервер стоит, пока игрок не выберет. *@
+                    <Alert Tone="Tone.Warning" ShowIcon="true" Title="Черновик изменили на другом устройстве" data-testid="draft-conflict">
+                        <ChildContent>Здесь — своя версия. Какую оставить?</ChildContent>
+                        <Actions>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-cloud-arrow-down" OnClick="TakeServerAsync"
+                                    data-testid="draft-take-server">Взять с другого устройства</Button>
+                            <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-cloud-arrow-up" OnClick="KeepMineAsync"
+                                    data-testid="draft-keep-mine">Оставить эту</Button>
+                        </Actions>
+                    </Alert>
+                }
 
                 <p class="mb-1 text-[0.8125rem] text-primary-700 sm:hidden" data-testid="wizard-step-caption">Шаг @((int)step + 1) из @((int)CreationStep.Summary + 1) — @Steps[step].Title</p>
                 <nav class="wizard-steps mb-3" aria-label="Шаги создания сыщика" data-testid="wizard-steps">
@@ -189,16 +206,12 @@
     /// <summary>Шаг: подпись в степпере и, если есть что сказать, строка-правило над содержимым (пересказ интерфейса не пишем).</summary>
     private sealed record StepInfo(string Title, string? Hint = null);
 
-    private static readonly Dictionary<CreationStep, StepInfo> Steps = new()
+    private static readonly Dictionary<CreationStep, StepInfo> Steps = Enum.GetValues<CreationStep>().ToDictionary(step => step, step => step switch
     {
-        [CreationStep.Method] = new("Способ"),
-        [CreationStep.Characteristics] = new("Характеристики"),
-        [CreationStep.Occupation] = new("Профессия"),
-        [CreationStep.Skills] = new("Навыки", "Личные очки — в любые навыки, кроме Мифов Ктулху."),
-        [CreationStep.Biography] = new("Биография"),
-        [CreationStep.Gear] = new("Снаряжение"),
-        [CreationStep.Summary] = new("Итог", "Проверьте и создайте. Всё это можно править на листе."),
-    };
+        CreationStep.Skills => new StepInfo(CreationLinks.StepTitle(step), "Личные очки — в любые навыки, кроме Мифов Ктулху."),
+        CreationStep.Summary => new StepInfo(CreationLinks.StepTitle(step), "Проверьте и создайте. Всё это можно править на листе."),
+        _ => new StepInfo(CreationLinks.StepTitle(step)),
+    });
 
     private CreationContextDto? _context;
     private InvestigatorDraft _draft = new();
@@ -210,6 +223,7 @@
     private Era _era = Era.Classic;
     private TaskCompletionSource<bool>? _unspent;
     private string _unspentText = "";
+    private WizardDraftStore? _store;
 
     [SupplyParameterFromQuery(Name = "campaignId")] public Guid? CampaignId { get; set; }
 
@@ -262,6 +276,7 @@
             return context;
 
         _era = context.Era;
+        StartStore();
         var skills = SkillsApi.ListAsync(cancellationToken);
         var occupations = OccupationsApi.ListAsync(cancellationToken);
         _catalog = SkillCatalogs.From((await skills).Items);
@@ -270,6 +285,8 @@
 
         if (Random is "1" or "true")
         {
+            // Прежний черновик тоже читается: новый ляжет на сервер поверх его версии, а не получит отказ.
+            await _store!.LoadAsync(cancellationToken);
             _draft = SheetBuilder.RandomDraft(_catalog, _occupations, _era, Dice);
             await SaveDraftAsync();
             // Адрес без random: перезагрузка не бросает заново, а открывает этот же черновик.
@@ -277,7 +294,7 @@
         }
         else
         {
-            _draft = await RestoreDraftAsync() ?? new InvestigatorDraft();
+            _draft = await _store!.LoadAsync(cancellationToken) ?? new InvestigatorDraft();
         }
 
         _draft.Era = _era;
@@ -288,23 +305,60 @@
         return context;
     }
 
-    private async Task<InvestigatorDraft?> RestoreDraftAsync()
+    /// <summary>Хранилище черновика этого места: сыщик игрока в кампании — и на сервере, остальные — только в localStorage.</summary>
+    private void StartStore()
     {
-        if (await Storage.GetAsync(DraftKey) is not { } json)
-            return null;
+        if (_store is not null)
+        {
+            _store.Changed -= OnStoreChanged;
+            _store.Dispose();
+        }
 
+        _store = new WizardDraftStore(Storage, Drafts, Time, DraftKey, CreationKind is CharacterKind.Player ? CampaignOrNull : null);
+        _store.Changed += OnStoreChanged;
+    }
+
+    private void OnStoreChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private Task SaveDraftAsync() => _store?.SaveAsync(_draft) ?? Task.CompletedTask;
+
+    /// <summary>Конфликт: взять черновик, записанный на другом устройстве (там его стёрли — начать с пустого).</summary>
+    private async Task TakeServerAsync()
+    {
         try
         {
-            return CmJson.DeserializeDraft(json);
+            _draft = await _store!.TakeServerAsync() ?? new InvestigatorDraft();
+            _draft.Era = _era;
+            _error = null;
+            Plan.SyncSlots();
         }
-        catch (JsonException)
+        catch (HttpRequestException ex)
         {
-            await Storage.RemoveAsync(DraftKey);
-            return null;
+            _error = ApiErrors.Describe(ex);
         }
     }
 
-    private Task SaveDraftAsync() => Storage.SetAsync(DraftKey, CmJson.Serialize(_draft));
+    /// <summary>Конфликт: оставить черновик этого устройства — записать его поверх.</summary>
+    private async Task KeepMineAsync()
+    {
+        try
+        {
+            await _store!.KeepMineAsync(_draft);
+            _error = null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_store is null)
+            return;
+        _store.Changed -= OnStoreChanged;
+        _store.Dispose();
+    }
 
     private async Task ChangedAsync()
     {
@@ -387,13 +441,16 @@
 
     private async Task RestartAsync()
     {
+        var where = _store is { UsesServer: true } ? "Черновик помощника сотрётся — и здесь, и на других устройствах." : "Черновик помощника на этом устройстве сотрётся.";
         if (!IsDraftEmpty
-            && !await Dialogs.ConfirmAsync(new ConfirmRequest("Начать заново?", "Черновик помощника на этом устройстве сотрётся.") { ConfirmText = "Начать заново", Details = null }))
+            && !await Dialogs.ConfirmAsync(new ConfirmRequest("Начать заново?", where) { ConfirmText = "Начать заново", Details = null }))
             return;
 
+        // Пустой черновик не пишется: Хранитель увидит «создаёт сыщика», когда игрок начнёт вводить, а не от открытой страницы.
         _draft = new InvestigatorDraft { Era = _era };
         _error = null;
-        await SaveDraftAsync();
+        if (_store is not null)
+            await _store.ClearAsync();
     }
 
     /// <summary>
@@ -403,9 +460,17 @@
     private async Task ExitAsync()
     {
         if (!IsDraftEmpty)
-            Toasts.Info($"Черновик сохранён — продолжить можно {CreationLinks.ResumeHint(CreationKind, ScenarioId)}.");
-        else
-            await Storage.RemoveAsync(DraftKey);
+        {
+            var server = _store is { UsesServer: true, Conflict: false };
+            if (server)
+                await _store!.FlushAsync();
+            Toasts.Info($"Черновик сохранён — продолжить можно {CreationLinks.ResumeHint(CreationKind, ScenarioId)}"
+                        + (server ? " — и с другого устройства." : "."));
+        }
+        else if (_store is not null)
+        {
+            await _store.ClearAsync();
+        }
 
         Navigation.NavigateTo(CreationLinks.Back(CreationKind, ScenarioId));
     }
@@ -448,7 +513,9 @@
                 Cast = CreationKind is CharacterKind.Npc && ScenarioId is { } scenario ? new NpcCastRequest(scenario) : null,
                 Sheet = sheet,
             });
-            await Storage.RemoveAsync(DraftKey);
+            // Сервер стёр свой черновик той же записью, что создала лист.
+            if (_store is not null)
+                await _store.ForgetAsync();
             Toasts.Success(string.IsNullOrWhiteSpace(sheet.Personal.Name) ? "Лист создан." : $"Лист создан: {sheet.Personal.Name}.");
             Navigation.NavigateTo($"character/{created.Id}", replace: true);
         }

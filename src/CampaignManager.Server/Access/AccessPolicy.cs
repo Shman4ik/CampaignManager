@@ -359,6 +359,55 @@ public sealed class AccessPolicy(CmDbContext dbContext, CurrentUser currentUser)
         };
     }
 
+    // ── Черновик сыщика ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Черновик помощника игрока в кампании (<c>character_drafts</c>): читают сам игрок, Хранитель кампании и администратор;
+    /// пишет и стирает только сам игрок (администратор — стирает). Остальным, как и несуществующий, — 404.
+    /// </summary>
+    public async Task<Access> ForCharacterDraftAsync(Guid campaignId, Guid ownerId, CancellationToken cancellationToken = default)
+    {
+        if (await currentUser.GetAsync(cancellationToken) is not { } user)
+        {
+            return Access.None;
+        }
+
+        if (!await dbContext.CharacterDrafts.AnyAsync(d => d.CampaignId == campaignId && d.OwnerId == ownerId, cancellationToken))
+        {
+            return Access.None;
+        }
+
+        var keepsCampaign = ownerId != user.Id && await KeepsCampaignAsync(campaignId, user.Id, cancellationToken);
+        return ForCharacterDraft(user, ownerId, keepsCampaign);
+    }
+
+    /// <summary>
+    /// То же правило, что <see cref="ForCharacterDraftAsync"/>, для прочитанной строки — главная и страница кампании
+    /// показывают шаг черновика без запроса на строку. <paramref name="keepsCampaign"/> — пользователь Хранитель кампании.
+    /// </summary>
+    public static Access ForCharacterDraft(SignedInUser user, Guid ownerId, bool keepsCampaign)
+    {
+        if (ownerId == user.Id)
+        {
+            return Access.Full;
+        }
+
+        if (user.IsAdmin)
+        {
+            return new Access(CanRead: true, CanEdit: false, CanDelete: true);
+        }
+
+        return keepsCampaign ? Access.ReadOnly : Access.None;
+    }
+
+    /// <summary>
+    /// Записать свой черновик в кампании — её участник (черновик — строка участия: <c>ON DELETE CASCADE</c> от
+    /// <c>campaign_members</c>). Администратор без участия своего черновика в чужой кампании не заводит.
+    /// </summary>
+    public async Task<bool> CanWriteCharacterDraftAsync(Guid campaignId, CancellationToken cancellationToken = default) =>
+        await currentUser.GetAsync(cancellationToken) is { } user
+        && await dbContext.CampaignMembers.AnyAsync(m => m.CampaignId == campaignId && m.UserId == user.Id, cancellationToken);
+
     // ── Справочники и фонотека ──────────────────────────────────────
 
     /// <summary>

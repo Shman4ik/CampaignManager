@@ -1,4 +1,5 @@
 using CampaignManager.Contracts.Campaigns;
+using CampaignManager.Contracts.Characters;
 using CampaignManager.Core;
 using CampaignManager.Core.Campaigns;
 using CampaignManager.Core.Characters;
@@ -73,6 +74,12 @@ public sealed class CampaignService(
             .OrderBy(ch => ch.CreatedAt)
             .Select(ch => new { ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status, ch.OwnerId })
             .ToListAsync(cancellationToken);
+        // Черновики помощника — шаг и время, без документа: правящему — всех участников, остальным — свой
+        // (AccessPolicy.ForCharacterDraft).
+        var drafts = await dbContext.CharacterDrafts
+            .Where(d => d.CampaignId == campaignId && (canEdit || d.OwnerId == user.Id))
+            .Select(d => new { d.OwnerId, d.Step, d.UpdatedAt })
+            .ToListAsync(cancellationToken);
         static HomeCharacterDto Sheet(Guid id, string? name, string? occupation, CharacterKind kind, CharacterStatus status) =>
             HomeService.Character(id, name, occupation, kind, status);
 
@@ -87,7 +94,8 @@ public sealed class CampaignService(
                     [
                         .. sheets.Where(ch => ch.Kind == CharacterKind.Player && ch.OwnerId == m.UserId)
                             .Select(ch => Sheet(ch.Id, ch.Name, ch.Occupation, ch.Kind, ch.Status)),
-                    ]);
+                    ],
+                    drafts.FirstOrDefault(d => d.OwnerId == m.UserId) is { } draft ? new CharacterDraftSummaryDto(draft.Step, draft.UpdatedAt) : null);
             }),
         ];
 
