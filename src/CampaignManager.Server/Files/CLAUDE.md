@@ -90,9 +90,9 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 - **Ветка Neon `dev` и beta-стенд — бакет `campaign-manager-dev`** на том же MinIO (`s3.dmnet.dev`), заведён в
   T1.3. Строки `files` ветки `dev` — перенос v1: объекты скопированы туда из боевого бакета под теми же ключами
   (`images/beasts/…`, `music/…`), новые загрузки ложатся туда же (`images|music/<sha256>…`). Локальная разработка
-  на ветке `dev` — `"BucketName": "campaign-manager-dev"` в `Server/appsettings.Development.json`, ключи — те же,
-  что у v1 в `CampaignManager.Web/appsettings.Development.json` основного чекаута (копировать скриптом, не печатая).
-  Отдельного ключа только на этот бакет пока нет: заводит администратор MinIO (команды — в PR T1.3).
+  на ветке `dev` — `"BucketName": "campaign-manager-dev"` в `Server/appsettings.Development.json` с ключом пользователя
+  MinIO только на этот бакет (копировать файл скриптом, не печатая). Прод — бакет `campain-manager`, ключ — в его
+  SealedSecret.
 - Строка `files` переноса — `sha256` пуст (объект не скачивался, копия шла внутри MinIO): повторная загрузка того
   же файла заведёт новую строку, а не найдёт перенесённую. Размер и тип — из хранилища и расширения.
 - Свой MinIO в wslc — для тестов адаптера и работы без сети:

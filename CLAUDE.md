@@ -1,89 +1,46 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-CampaignManager is a tabletop RPG (Call of Cthulhu 7e) management system built with .NET 10 Blazor Server. It manages
-campaigns, characters, scenarios, and game assets (creatures, items, weapons, spells, skills). Uses PostgreSQL with
-Entity Framework Core and Auth0 (OpenID Connect) authentication.
+CampaignManager — менеджер игр Call of Cthulhu 7e: кампании и журнал, лист сыщика, помощник создания, сценарии с режимом
+игры, бой и погоня, ширма, фонотека, справочники. **.NET 10, Blazor WebAssembly поверх HTTP API (`/api/v1`), PostgreSQL
+(Neon) через EF Core, Auth0.** Прод — https://cthulhu.dmnet.dev, бета — https://beta.cthulhu.dmnet.dev.
 
-## CampaignManager 2.0
+Это «2.0»: первая версия (Blazor Server, `CampaignManager.Web`) работала до 2026-10-04 и удалена из репозитория в T3.3
+(история — в git и `docs/v2/`). Схемы v1 в базе (`games`, `identity`) ещё живы — их снимает владелец отдельным шагом.
 
-**Прод на 2.0 с 2026-10-04** (T3.2): https://cthulhu.dmnet.dev — `src/CampaignManager.Server`, схема `cm` на Neon
-`main`, деплой — `.github/workflows/v2-deploy.yml` (прод и бета одним push). v1 (`CampaignManager.Web`) больше не
-выкатывается и ждёт удаления в T3.3 (после 2026-10-18); правила ниже про v1 — только для его кода до удаления.
-
-Готовится переписывание с новой схемой базы, API и мобильным приложением на Avalonia. Документы:
-
-- [docs/v2/README.md](docs/v2/README.md) — цели, решения, архитектура;
-- [docs/v2/TASKS.md](docs/v2/TASKS.md) — карточки задач для сессий;
-- [docs/v2/SCHEMA.md](docs/v2/SCHEMA.md) — схема и перенос данных;
-- [docs/v2/AUDIT.md](docs/v2/AUDIT.md) — что не так в v1, с доказательствами.
-
-Сессия, которая берёт задачу 2.0, начинает с README: там же статус решений D1–D7. **v1 заморожен**
-(D2): в нём только исправления того, что мешает играть; новое делается сразу в 2.0.
-
-Код 2.0 — `src/`, `tests/CampaignManager.{Core,Server}.Tests`, `tools/`; правила работы с ним —
-[src/CLAUDE.md](src/CLAUDE.md). **Дизайн 2.0** — [docs/design-system.md](docs/design-system.md) (композиция и
-обязательное ревью по скриншоту) и скилл `campaign-manager-design`; раздел «UI Patterns» ниже — про v1. Всё ниже про `CampaignManager.Web` — это v1. Корневые
-`Directory.Build.props`/`Directory.Packages.props` относятся только к 2.0: проекты v1 исключены
-по имени, их csproj по-прежнему держат версии пакетов сами.
+Где что:
+- **Правила кода** — [src/CLAUDE.md](src/CLAUDE.md) (проекты, база, тесты, вход под ролями, запуск, деплой, памятка
+  исполнителя) и `CLAUDE.md` каждого модуля (`src/CampaignManager.{Server,UI}/<Модуль>/CLAUDE.md`, `Core`, `tools/…`).
+- **Дизайн** — [docs/design-system.md](docs/design-system.md) (композиция, ревью по скриншоту, правила после аудита) и
+  скилл `campaign-manager-design`; UI-кит и раскладки — [src/CampaignManager.UI/CLAUDE.md](src/CampaignManager.UI/CLAUDE.md).
+- **План и история 2.0** — [docs/v2/README.md](docs/v2/README.md), [TASKS.md](docs/v2/TASKS.md),
+  [ORCHESTRATOR.md](docs/v2/ORCHESTRATOR.md) (как вести карточки через исполнителей), [CUTOVER.md](docs/v2/CUTOVER.md).
 
 ## Development Commands
 
 ```bash
-# Run the web application (preferred)
-dotnet run --project CampaignManager.Web
-
-
-# Build
-dotnet build
-
-# Database migrations (two separate contexts)
-dotnet ef migrations add <Name> --project CampaignManager.Web --context AppDbContext
-dotnet ef migrations add <Name> --project CampaignManager.Web --context AppIdentityDbContext
-dotnet ef database update --project CampaignManager.Web --context AppDbContext
-dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
+dotnet run --project src/CampaignManager.Server                # https://localhost:8080 (launch.json: "v2")
+dotnet build CampaignManager.slnx -c Release -warnaserror        # как в CI
+dotnet test                                                      # тесты с базой — при заданной CM_TEST_DB (src/CLAUDE.md, «Тесты»)
+dotnet ef migrations add <Name> --project src/CampaignManager.Data
+dotnet ef database update --project src/CampaignManager.Data     # строка — из CM_DB
 ```
 
-История миграций `AppDb` схлопнута в одну `20260910142150_InitialCreate` — сорок шесть
-прежних миграций занимали 34 664 строки, две трети всего C# в проекте. Схема приложения
-при этом не менялась, кроме одного намеренного удаления: вместе с выпиленной
-LLM-валидацией персонажа ушла таблица `LlmKnowledgeEntries`.
+Tailwind собирается MSBuild-таргетом `UI` (`npm ci` + `npx`), поэтому сборке нужен Node.js. Вход без Auth0 в
+Development — `/dev/login?as=player|keeper|admin` (src/CLAUDE.md, «Проверка под ролями»).
 
-Единственная существующая база на новый журнал **уже переведена**, разовые скрипты переноса
-удалены за ненадобностью. Новой базе ничего не нужно: обычный `database update` создаст схему
-из `InitialCreate`.
+## Данные и деплой
 
-- **Журнал миграций общий у обеих моделей.** `AppDbContext` и `AppIdentityDbContext` пишут
-  в одну `public."__EFMigrationsHistory"` — отдельной таблицы у схемы `identity` нет. Значит
-  «удалить из журнала всё, кроме своей миграции» — всегда ошибка: заодно уходит строка
-  `20250314173627_InitialMigration`, и следующий `database update --context AppIdentityDbContext`
-  пытается создать `AspNetRoles` заново и падает с `42P07: relation already exists`. Схема при
-  этом цела, чинится возвратом строки в журнал. На этом ровно один раз и обожглись при переносе.
-- Трогая журнал руками, проверяй потом **оба** контекста, а не только `AppDbContext`.
-- Миграции нигде не применяются автоматически — ни в `Program.cs`, ни в Dockerfile, ни в CI,
-  так что момент накатывания выбирается вручную.
-- Прежние миграции содержали только `UPDATE` существующих строк (backfill'ы оружия и
-  бестиария), без `InsertData`, поэтому на новой базе схлопывание ничего не теряет.
-
-**Tailwind CSS** is built automatically by the `Tailwind` MSBuild target in the csproj:
-- Debug: `npx tailwindcss@3 -i ./Styles/tailwind.css -o ./wwwroot/styles.css`
-- Release: same with `--minify`
-
-`wwwroot/styles.css` is a build artifact and is **not** tracked in git — it is regenerated on
-every build, so the deployed CSS always matches the current markup. Two things keep that working,
-don't undo either:
-- The target is hooked `BeforeTargets="ResolveProjectStaticWebAssets"`, and it adds the file to
-  `@(Content)` itself. MSBuild expands the `wwwroot/**` glob at evaluation time, so a file created
-  during the build is invisible to static web assets — without the explicit `Content Include` the
-  build and the deploy both succeed and the site serves 404 for `/styles.css`.
-- Building therefore requires `npx` (and network access on the first run). The Dockerfile copies
-  Node into the SDK stage for exactly this reason.
-
-Tests: `tests/CampaignManager.Rules.Tests` pins v1 book rules (T0.2); the 2.0 test projects are
-described in [src/CLAUDE.md](src/CLAUDE.md). `dotnet test` from the root runs all of them.
+- **Neon:** проект `old-wood-199224`; ветка `main` — прод, `dev` — локальная разработка и бета. В прод не писать из
+  разработки; проверять на своей копии `dev` (`pg_dump --schema=cm` в контейнер `wslc`).
+- **Push в `master`, задевший `src/**`,** выкатывает **прод и бету сразу** (`.github/workflows/v2-deploy.yml` → тег в
+  `Shman4ik/dmnet-gitops` → Argo CD). Миграции сервер не применяет: новую миграцию накатить **до слияния на `dev` и
+  `main`**. Подробности и откат — src/CLAUDE.md, «Деплой и beta-стенд».
+- Кластер k3s на VPS: `ssh vps` — через Windows OpenSSH (`C:\Windows\System32\OpenSSH\ssh.exe`), `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`.
+  Секреты — SealedSecret (`kubeseal --raw` на VPS), значения не печатать.
 
 ## Pull requests
 
@@ -101,202 +58,15 @@ GitHub: каждый слой — своя ветка и свой PR повер�
   ветка ниже, поэтому фильтра по базе у воркфлоу нет), гоняет
   `dotnet build CampaignManager.slnx -c Release -warnaserror` с включённым NuGet Audit и
   `dotnet test`. Новый тестовый проект достаточно добавить в `.slnx` — воркфлоу не трогать.
-  В job поднят `postgres:17`, строка подключения — в `CM_TEST_DB` (решение D7 плана 2.0).
-- CI проверяет только сборку и тесты: изменения UI перед PR всё так же проверяются в браузере
-  на iPad-вьюпортах, итог — в описании PR.
-
-## Работа в контейнере Claude Code on the web
-
-В удалённом контейнере .NET SDK по умолчанию нет, а `dot.net` / `builds.dotnet.microsoft.com`
-закрыты egress-политикой (`curl` получает 403 от прокси) — скрипт `dotnet-install.sh` там не качается.
-Ставить надо из репозитория Ubuntu, где .NET 10 уже есть:
-
-```bash
-apt-get update                                  # без этого dotnet-sdk-10.0 не виден
-DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-10.0
-dotnet --version                                # 10.0.111 на noble-updates
-```
-
-`apt-get update` ругается на недоступные PPA (deadsnakes, ondrej) — это не мешает,
-нужные индексы (`archive.ubuntu.com`, `packages.microsoft.com`) забираются.
-`nuget.org` доступен, поэтому `dotnet restore` и `dotnet tool install` работают.
-
-Дальше всё как обычно, с двумя оговорками:
-
-```bash
-dotnet build                                    # Tailwind собирается тем же таргетом, npx доступен
-
-# EF: design-time поднимает Program.cs целиком, поэтому без строки подключения
-# падает с «Value cannot be null. (Parameter 'Host')» — достаточно любой валидной
-dotnet tool install --global dotnet-ef && export PATH="$PATH:/root/.dotnet/tools"
-export ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=campaignmanager;Username=postgres;Password=postgres"
-dotnet ef migrations has-pending-model-changes --project CampaignManager.Web --context AppDbContext
-```
-
-PostgreSQL 16 в контейнере уже установлен, только не запущен — на нём можно прогнать миграции
-на живой базе и проверить перенос данных:
-
-```bash
-service postgresql start
-su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres';\""
-su postgres -c "createdb campaignmanager"
-dotnet ef database update --project CampaignManager.Web --context AppDbContext
-dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
-```
-
-Запуск приложения: без настроек Auth0 **каждый** запрос отдаёт 500 (`ArgumentException` про
-пустой `ClientId` из middleware аутентификации, ещё до роутинга) — это не поломка кода, а пустая
-конфигурация. Хватает пустышек — метаданные Auth0 запрашиваются только при входе:
-
-```bash
-export Authentication__Auth0__Domain=dummy.auth0.com
-export Authentication__Auth0__ClientId=dummy-client-id
-export Authentication__Auth0__ClientSecret=dummy-client-secret
-dotnet CampaignManager.Web/bin/Debug/net10.0/CampaignManager.Web.dll --urls http://127.0.0.1:5199
-```
-
-`dotnet run` берёт URL из `launchSettings.json` (https://localhost:8080) и игнорирует
-`ASPNETCORE_URLS`, поэтому для смоук-теста удобнее запускать собранную dll с `--urls`.
-Страницы под `[Authorize]` без залогиненного пользователя отдают 302 на логин — это
-ожидаемо; для проверки рендера годится `/`.
-
-## Architecture
-
-### Solution Structure
-
-Solution file is `CampaignManager.slnx` (new XML format).
-
-### Feature-Based Vertical Slicing
-
-Each domain lives in `CampaignManager.Web/Components/Features/{FeatureName}/` with subdirectories:
-- `Components/` — Feature-specific UI components
-- `Model/` (or `Models/`) — Domain models and DTOs
-- `Pages/` — Full Razor page views
-- `Services/` — Business logic and data access
-
-Each feature folder has its own `CLAUDE.md` with that feature's services, models, and gotchas (entity relationships, cross-feature dependencies, deviations from the patterns below) — see "Documentation Conventions" below.
-
-### Data Architecture
-
-- **Two DbContexts**: `AppDbContext` (schema: "games") for app data, `AppIdentityDbContext` (schema: "identity") for auth
-- **Base Entity**: All entities inherit `BaseDataBaseEntity` with `Id` (Guid v7), `CreatedAt`, `LastUpdated` — call `.Init()` on creation
-- **JSONB heavily used**: Character stats, creature characteristics, scenario data stored as JSONB columns. Be careful when changing model shapes — JSONB serialization is sensitive to schema changes.
-  Правка коллекции **на месте** (`entity.SomeDictionary[key] = value`) трекеру изменений не видна:
-  ссылка не поменялась, а компаратора у jsonb-колонки нет. `SaveChanges` тогда отправляет UPDATE
-  только по остальным полям, и запись молча теряется — первая (INSERT новой строки) проходит, вторая
-  нет. Либо присваивать новый экземпляр, либо помечать свойство вручную:
-  `db.Entry(e).Property(x => x.SomeDictionary).IsModified = true` (пример — `UserPreferencesService`).
-- **Factory pattern**: Always use `IDbContextFactory<AppDbContext>` with `await using var dbContext = await dbContextFactory.CreateDbContextAsync()` — DbContext is NOT thread-safe
-
-### API Endpoints
-
-Uses minimal APIs (not controllers), mapped in `Utilities/Api/`:
-- `AccountEndpoints.cs` — `/api/account/login`, `/api/account/logout`
-- `MinioApi.cs` — File storage
-
-Swagger available at `/swagger`.
-
-## Code Patterns
-
-### Service Pattern (Required)
-
-All services must be `sealed`, use primary constructors, and follow this template:
-
-```csharp
-public sealed class FeatureService(
-    IDbContextFactory<AppDbContext> dbContextFactory,
-    IdentityService identityService,
-    ILogger<FeatureService> logger)
-{
-    public async Task<List<Entity>> GetAllAsync()
-    {
-        await using var dbContext = await dbContextFactory.CreateDbContextAsync();
-        var userId = identityService.GetCurrentUserId();
-        return await dbContext.Entities
-            .Where(e => e.UserId == userId)
-            .ToListAsync();
-    }
-}
-```
-
-Register as scoped in `Program.cs`: `builder.Services.AddScoped<FeatureService>();`
-
-Reference-data services (catalog features like Items, Skills, Spells, Weapons, Books, Bestiary) additionally inject `IMemoryCache cache` for read caching — follow that convention for new catalog-style services. Runtime resolution engines (`Combat/Services/CombatService`, `Chase/Services/ChaseService`) deliberately break this pattern — they're stateful, non-DI session services, not persistence CRUD; see their feature `CLAUDE.md` files before copying their shape elsewhere.
-
-### C# Conventions
-
-- **Primary constructors** for dependency injection (no traditional constructor + field pattern)
-- **Collection expressions**: `return [];` instead of `new List<T>()`
-- **Pattern matching**: `if (x is null)`, `if (x is not null)`
-- **Nullable reference types** enabled throughout
-- **Structured logging**: `logger.LogError(ex, "Error loading {SkillId}", id)` — never string interpolation
-- **`TreatWarningsAsErrors`** is enabled (except CS1591 for missing XML docs)
-
-### UI Patterns (v1)
-
-Только `CampaignManager.Web`. Для 2.0 — [docs/design-system.md](docs/design-system.md) и
-[src/CampaignManager.UI/CLAUDE.md](src/CampaignManager.UI/CLAUDE.md); общие для обоих — «Целевые устройства» ниже.
-
-- All interactive components use `@rendermode InteractiveServer`
-- **CSS isolation**: Always use `*.razor.css` files for component-scoped styles, never inline `<style>` blocks
-- Tailwind CSS with custom design system in `wwwroot/css/design-system.css`
-- Design system guide (in Russian) at `docs/design-system-v1.md`
-- Shared components in `Components/Shared/`: Badge, Button, Modal, ConfirmationModal, NotificationAlert, Pagination, FilterPanel, LoadingIndicator, EmptyState, Tabs, etc.
-  Страница-список собирается из них в одном порядке (FilterPanel → LoadingIndicator/EmptyState →
-  список → Pagination), вкладки — только `<Tabs>`, диалог — только `<Modal>`, свои спиннеры,
-  пустые состояния и `fixed inset-0`-оверлеи не заводить. Подробности — в `docs/design-system-v1.md`.
-
-#### Уведомления — только `<Alert>`
-
-Любое сообщение пользователю (ошибка сохранения, предупреждение по правилам, успех
-операции) — это `<Alert Type="error|warning|success|info">`, а не свой `<div>` с
-`bg-red-50`. Свои блоки расползлись по семи тонам: где-то `red-*` вместо `error-*`,
-где-то `rounded-xl border-2`, где-то вообще бутстраповский `alert alert-danger`,
-которого в сборке нет. Параметры: `ShowIcon`, `Icon="fa-skull"`, `Small` (для
-плотных панелей листа сыщика), `Actions`, `OnClose`.
-
-- Алерт несёт **собственный** нижний отступ (`mb-3`, `mb-2` у `Small`). Если он не
-  нужен — `class="!mb-0"`; просто `mb-0` проиграет, у обоих классов одинаковая
-  специфичность. Свой `class` подмешивается к классам компонента, не затирает их.
-- **`<ValidationSummary>` классы игнорирует** — Blazor дописывает свой
-  `class="validation-errors"` после splat'а переданных атрибутов. Оформление живёт
-  в `.validation-errors` в `design-system.css` и повторяет `<Alert Type="error">`.
-  Передавать туда утилиты Tailwind бесполезно, это уже проверено пятью формами.
-- Панели правил в `Combat/` и `Chase/` (`AttackResultDisplay`, `ChaseActionPanel`)
-  тонированные блоки рисуют сами — это содержимое экрана с контролами внутри,
-  а не уведомления; на `<Alert>` их не переводили.
-
-#### Page shell — the same on every page
-
-Every routable page is `<PageHeader Title="…">` (with page-level actions in its `Actions` slot)
-followed by one `<div class="cm-page">`. `Components/Pages/Home.razor` is the reference; the info
-pages, the character sheet and the scenario detail page all use it too. Inside, group with
-`cm-section` + `cm-section-title` and `cm-card` + `cm-card-header`/`-body`/`-footer`.
-
-- **One card level, never two.** A `cm-card` inside a `cm-card`, or a grey inset around a table
-  that already sits in a card, reads as clutter rather than structure. Separate blocks in one card
-  with a rule (`cm-stack`), and render list items as rows
-  (`border-t border-t-gray-200 first:border-t-0`), not as mini-cards. A component that always
-  renders inside a card must not draw its own — say so in a comment at the top of the file.
-- **Never** wrap page content in `max-w-*` + `mx-auto`. `page-with-sidebar` is a column flex
-  container, so `mx-auto` on a flex item disables stretch and collapses the page to its content
-  width — that is why sparse pages used to render as a narrow centred column.
-- Buttons carry meaning by colour: `primary` = the one main action, `secondary` = neutral,
-  `outline-primary`/`outline-error` = row edit/delete, `error` = destructive confirmation in a
-  dialog, `success` = approving someone's request. `cm-btn-info` is not for buttons.
-- Header actions are always `cm-btn-sm` — the topbar is 56px tall.
-- `PageHeader` itself appends the Keeper's «Ширма» button (hidden from players) — one more reason
-  never to hand-roll a `page-topbar`: such a header would lose the button.
-  See `Features/KeeperScreen/CLAUDE.md`.
-- Status colours (`--color-success-*`, `--color-warning-*`, `--color-error-*`) are defined in
-  **both** `tailwind.config.js` and `:root` in `design-system.css`; keep them in sync, otherwise
-  `cm-btn-error` and `<Button Variant="error">` render different reds.
-- Full details and the class inventory: `docs/design-system-v1.md`.
+  В job поднят `postgres:17`, строка подключения — в `CM_TEST_DB`.
+- CI проверяет только сборку и тесты: изменения UI перед PR проверяются в браузере на вьюпортах ниже, по чек-листу
+  «Ревью по скриншоту» (`docs/design-system.md`), итог — в описании PR.
+- Ветку, которая checked out в worktree, не сливать с `--delete-branch` из основного чекаута: `gh` пытается удалить
+  этот worktree и сносит его файлы.
 
 ### Целевые устройства: iPad Pro 11" и iPhone (решение владельца 2026-10-03)
 
-**Все страницы оптимизируются под устройства владельца** — их замерил он сам (whatismyviewport.com). Прежняя цель
-1366×1024 (iPad Pro 12.9") — не его устройство; записи «проверено на 1366×1024» в истории задач — история, не правило.
+**Все страницы оптимизируются под устройства владельца** — их замерил он сам (whatismyviewport.com).
 
 | Устройство | Экран, CSS px | Вьюпорт браузера (что проверять) | Колонка страницы с рельсом |
 |---|---|---|---|
@@ -310,187 +80,77 @@ pages, the character sheet and the scenario detail page all use it too. Inside, 
   по-разному. Опорные ширины — последний столбец таблицы.
 - Высота мала: в ландшафте под шапкой ~620px. Частые действия не должны уезжать за низ экрана.
 - **Тап-цели — правило владельца 2026-10-03:** кнопка, поле, отметка — **от 32px**; строка плотного списка, которая
-  целиком кнопка (навык в «Игре»), — **от 28px**. Прежнее «44px везде» отменено. Кит (`cm-btn` 44px) пока прежний:
-  страницы переходят на новый пол по мере переработки (первым — лист сыщика, `Styles/sheet.css`).
+  целиком кнопка (навык в «Игре»), — **от 28px**.
 - Never rely on `title=` tooltips to carry information: there's no hover on a touch screen.
 - Wide content (tracks, tables, timelines) scrolls inside its own `overflow-x-auto` container so the page
   body never scrolls sideways.
 - Prefer `flex-wrap` on button rows — an unwrapped row of six actions overflows in portrait.
+- **Каждый список и выбор — целиком:** пролистать до последней записи и сверить число строк с источником (вопрос 13
+  чек-листа «Ревью по скриншоту»).
 
 Проверка — `mcp__Claude_Browser__resize_window` на `{width: 1194, height: 696}`, затем `834×1056` и (страницы игрока)
 `393×651`; в эмуляции Chromium рисует полосу прокрутки (−15px ширины), на iPad её нет. В конце — `preset: "desktop"`.
-
-## Circuit State Persistence
-
-Blazor Server keeps page state in a server-side circuit, so a dropped connection, a backgrounded
-iPad tab, or a deployment would otherwise wipe whatever the Keeper had on screen. The app opts into
-the .NET 10 circuit persistence stack:
-
-- `[PersistentState]` on a **public** property is what gets saved and restored — **и больше ничего**.
-  Возобновление не «оживляет» страницу: она собирается заново, `OnInitializedAsync` отрабатывает
-  снова, все приватные поля возвращаются к значениям по умолчанию. Любое состояние, которое обязано
-  пережить паузу, либо помечено этим атрибутом, либо лежит в адресе (см. ниже) — третьего нет.
-  A service opts in by being registered with
-  `RegisterPersistentService<T>(RenderMode.InteractiveServer)` in `Program.cs`
-  (`CombatService` and `ChaseService` today); компонент — просто публичным свойством с атрибутом
-  (`CharacterPage.PersistedDraft`). The getter runs when the circuit is paused, the setter
-  when it resumes — expose **one snapshot property** per service rather than marking every field.
-- The persisted value must be JSON-serializable: plain POCOs, no cycles, no lazy EF navigations.
-- Retention is configured on `CircuitOptions` (`PersistedCircuitInMemoryMaxRetained`,
-  `PersistedCircuitInMemoryRetentionPeriod`). That state lives in the server's memory and does **not**
-  survive a process restart.
-- Surviving a restart relies on pausing circuits *before* shutdown: `ActiveCircuitTracker` asks every
-  connected tab to call `Blazor.pauseCircuit()`, which moves the state into the browser. Data
-  Protection keys are stored in PostgreSQL, so the new instance can unprotect what the browser sends
-  back. .NET 11 replaces this with `Circuit.RequestCircuitPauseAsync`.
-- **Подписка на остановку висит на `ApplicationStopping` и оформляется лениво, при первом
-  подключившемся circuit — не трогай ни то, ни другое.** Из `IHostedService.StopAsync` просить
-  вкладки о паузе поздно: SignalR закрывает все соединения своим обработчиком `ApplicationStopping`
-  (`HttpConnectionManager.CloseAllConnections`), который отрабатывает раньше любого `StopAsync`, и
-  трекер к тому моменту пуст. Обработчики `CancellationToken` идут в обратном порядке регистрации,
-  поэтому наш обязан быть зарегистрирован позже сигналровского — отсюда лень: на момент первого
-  `OnConnectionUpAsync` `HttpConnectionManager` уже подписан. Механизм ровно по этой причине
-  простоял мёртвым: в логе не появлялось ни строчки, а после деплоя терялось всё.
-  Подробности — в комментарии к `ActiveCircuitTracker.EnsureShutdownHook`.
-- Client side: `wwwroot/js/circuit-persistence.js` pauses the circuit when the tab has been hidden for
-  `PAUSE_AFTER_HIDDEN_MS` (30 с) — или сразу, по `freeze`/`pagehide`, если браузер вот-вот остановит
-  на странице JS, — и возобновляет с нарастающей паузой. Порог не опускать обратно к секундам: пауза
-  рвёт соединение и поднимает диалог, а заглянуть в соседнюю вкладку и вернуться — обычное дело.
-  The (Russian) reconnect dialog is `#components-reconnect-modal` in `App.razor` plus
-  `wwwroot/css/reconnect.css` — the `components-reconnect-*` class names come from the framework,
-  don't rename them.
-- Adding a field to a persisted service's state? Add it to that service's snapshot type as well,
-  otherwise it silently disappears on resume.
-- **Лог.** Жизнь circuit'ов пишет `ActiveCircuitTracker` (Information, строка на событие): открыт,
-  потерял соединение, снова на связи, пауза, закрыт — со временем жизни. Своего события «пауза»
-  у `CircuitHandler` нет: её ловит колбэк `RegisterOnPersisting`, который
-  `ShutdownPauseCircuitHandler` вешает в области circuit (пререндер живёт в области HTTP-запроса
-  и туда не попадает). Категория `Microsoft.AspNetCore.Components.Server.Circuits` остаётся
-  заглушённой до Critical. Путь, статус и время каждого запроса — `Microsoft.AspNetCore.Hosting.Diagnostics`
-  на Information (по две строки на запрос: начало и конец); по ним видно, какая страница медленная.
-- **Приватные поля компонента паузу не переживают** — восстанавливается только `[PersistentState]`,
-  а страница собирается заново. Поэтому «что сейчас открыто» (режим просмотра, выбранный элемент,
-  активная вкладка) держим в query-строке через `[SupplyParameterFromQuery]`, а не в поле: адрес
-  переживает и паузу, и F5, и на него можно дать ссылку. Пример — `ScenarioDetailPage` (`?mode=play`).
-
-### Данные пререндера
-
-Интерактивная страница рендерится дважды: статически (пререндер) и заново в circuit, и
-`OnInitializedAsync` без мер читает базу оба раза. Тяжёлые страницы (главная — `HomeCampaignsPanel`,
-`ScenarioDetailPage`, `CharacterPage` и её `FellowInvestigatorsPanel`) передают прочитанное в
-пререндере тем же `[PersistentState]`, но **с `RestoreBehavior = RestoreBehavior.SkipLastSnapshot`**:
-снимок поднимается при старте circuit и **не** поднимается при возобновлении после паузы — за паузу
-данные могли устареть, там страница честно перечитывает базу.
-
-- Геттер отдаёт снимок только из статического рендера (`RendererInfo.IsInteractive ? null : …`):
-  иначе на каждой паузе в браузер уезжала бы копия, которую всё равно никто не поднимет.
-- Снимок — отдельное свойство, не то, что держит правки на паузу: у `CharacterPage` черновик
-  (`PersistedDraft`, `SkipInitialValue`) и лист из пререндера (`PrerenderedSheet`) разведены.
-- Граф — без циклов EF: плоский DTO (`HomeCampaigns`) или сущности без обратных навигаций
-  (`ScenarioPagePrerender`, см. `Scenarios/CLAUDE.md`). Цикл роняет пререндер исключением JSON.
-- Снимок едет в HTML страницы (зашифрованным) и обратно по SignalR при старте circuit — в пределах
-  `MaximumReceiveMessageSize` (2 МБ). Кандидат в снимок — страница с десятком запросов, а не любая.
-- Берётся один раз и только если он от той же сущности (`Id` в снимке сверяется с параметром).
-
-### Design System Colors
-
-- **Primary**: Slate/graphite gray (#64748B) — headings, nav, buttons
-- **Secondary**: Warm stone brown (#78716C) — backgrounds, accents
-- **Accent**: Muted steel blue (#4B7FAF) — highlights, badges, info
-- **Status**: Success (#2C9D49), Warning (#D97706), Error (#C71D20)
-- **Fonts**: Inter (primary), Bitter (serif headings), JetBrains Mono (code)
-
-### Naming Conventions
-
-- Pages: `{Entity}Page.razor`, `{Entity}EditPage.razor`
-- Components: `{Entity}Card.razor`, `{Entity}Form.razor`, `{Entity}List.razor`
-- Modals: `Add{Entity}Modal.razor`, `Edit{Entity}Modal.razor`
+При нескольких параллельных агентах встроенная панель часто не отдаёт скриншоты — тогда свой headless Chrome через
+`puppeteer-core` (`executablePath` — установленный Chrome); сервер открывать по `127.0.0.1`, не `localhost`.
 
 ## Authentication (Auth0)
 
-Вход — OIDC (code flow) через Auth0, сессия — своя кука `.CampaignManager.Auth`; к Auth0 приложение
-ходит только при входе и выходе. Способы входа — коннекшены тенанта: `google-oauth2` (со своими
-ключами Google, не dev-ключами Auth0) и `Username-Password-Authentication` с **выключенной**
-регистрацией — такие учётки заводит администратор через `auth0` CLI. Тенант один на dev и прод
-(база у них общая, пользователи тоже), приложений в нём два: dev (`https://localhost:8080`) и прод
-(`https://cthulhu.dmnet.dev`). У каждого в Allowed Callback URLs — `/signin-oidc`, в Allowed Logout
-URLs — `/signout-callback-oidc`.
+Вход — OIDC (code flow) через Auth0, сессия — своя кука `.CampaignManager.Auth`; к Auth0 приложение ходит только при
+входе и выходе. Как это устроено в коде — [src/CampaignManager.Server/Identity/CLAUDE.md](src/CampaignManager.Server/Identity/CLAUDE.md).
 
-Домен входа — кастомный `auth.cthulhu.dmnet.dev` (CNAME в DNS dmnet.dev на Porkbun, сертификат
-выпускает Auth0, в тенанте он домен по умолчанию); его и пишем в `Authentication:Auth0:Domain`.
-Каноничный `cthulhu-dmnet.eu.auth0.com` остаётся за CLI. Google-клиент «Campaign manager» живёт в
-проекте `dnd-project-371311`: в его redirect URIs — `/login/callback` обоих доменов Auth0, а само
-приложение Google обязано быть **In production** — в Testing через Google входят только test users.
-Redirect URI и публикацию Google меняют только в консоли: у `gcloud` для обычных OAuth-клиентов
-команд нет (`gcloud iam oauth-clients` — это Workforce Identity, другое).
+- **Тенант один** на dev и прод, приложений в нём два: dev (`https://localhost:8080` и бета) и прод
+  (`https://cthulhu.dmnet.dev`). У каждого в Allowed Callback URLs — `/signin-oidc`, в Allowed Logout URLs —
+  `/signout-callback-oidc`. Коннекшены: `google-oauth2` (со своими ключами Google) и `Username-Password-Authentication`
+  с **выключенной** регистрацией — такие учётки заводит администратор через `auth0` CLI.
+- **Домен входа** — кастомный `auth.cthulhu.dmnet.dev` (CNAME в DNS dmnet.dev на Porkbun, сертификат выпускает Auth0); его
+  и пишем в `Authentication:Auth0:Domain`. Каноничный `cthulhu-dmnet.eu.auth0.com` остаётся за CLI.
+- **Google-клиент** «Campaign manager» — проект `dnd-project-371311`: в redirect URIs — `/login/callback` обоих доменов
+  Auth0; приложение Google обязано быть **In production** (в Testing входят только test users). Redirect URI и публикацию
+  меняют только в консоли.
+- **Все права держатся на почте** (белый список, `Authorization:AdminEmails`), поэтому проверку `email_verified` не
+  убирать никогда: учётка с паролем на чужой адрес иначе унаследует чужие кампании.
+- **Страница входа Auth0 — в репозитории, `tools/auth0/`**: шаблон, тема, тексты и `apply.sh`, который приводит тенант к
+  этим файлам (правка в дашборде затрётся). Картинка и знак — `src/CampaignManager.Server/wwwroot/img/auth/`, страница
+  Auth0 берёт их с домена прода. Тенант общий: `apply.sh` меняет страницу входа dev и прода разом.
+- На `localhost` Auth0 всегда спрашивает согласие («Authorize App → Accept») — это его правило для локальных адресов.
+- Страница входа Auth0 — внешний сайт: агент в браузере пароли туда не вводит. Проверки под ролями — `/dev/login`.
 
-- **Все права держатся на почте** (белый список, `AdminEmails`, `KeeperEmail`, `PlayerEmail`…),
-  поэтому проверку `email_verified` в `OnTokenValidated` не убирать никогда: учётка с паролем на
-  чужой адрес иначе унаследует чужие кампании. Тестовым пользователям `email_verified: true`
-  ставится при создании.
-- `OnTokenValidated` пересобирает принципал из `ClaimTypes.Email`/`Name`/`NameIdentifier`
-  (`MapInboundClaims = false`): так же были устроены куки прямого входа через Google, и они
-  продолжают работать без перелогина. Новый claim из ID token в куку сам не попадёт — его надо
-  добавить там же.
-- `ResponseMode = Query`, а не `form_post` по умолчанию: куки корреляции и nonce — `Lax`, а
-  `form_post` — кросс-сайтовый POST с домена Auth0, на который браузер их не отправит.
-- **Автовход идёт через Google, а не через `prompt=none`.** Тихий вход Auth0 проверяет только
-  сессию самого Auth0 (три дня без активности) и к Google за ней не ходит — после переезда он почти
-  всегда кончался кнопкой «Войти». Браузер помнит способ прошлого входа (кука
-  `.CampaignManager.LastLogin` на год: способ и почта, не сессия), и загрузку страницы без сессии
-  middleware `UseAutoLogin` уводит в Auth0 с `connection=google-oauth2` и `login_hint` — Google
-  возвращает обратно без единого клика. Попытка одна на сессию браузера (`.CampaignManager.AutoLogin`),
-  выход куку забывает. Подробности — `Utilities/Authorization/AutoLogin.cs`.
-- `prompt` не шлём вовсе: сменить учётку позволяет выход, он гасит и сессию Auth0.
-  `/api/account/login` всегда ведёт на страницу Auth0 (`ui_locales=ru`): способ входа — Google,
-  passkey, почта с паролем — человек выбирает там, у приложения одна кнопка «Войти». `connection`
-  ставит только автовход; `login_hint` — почта прошлого входа, если это была учётка с паролем
-  (почта Google в поле повела бы к паролю). Оба кладёт `OnRedirectToIdentityProvider`.
-- **Страница входа Auth0 — в репозитории, `tools/auth0/`**: шаблон (`login-page.liquid`: слева
-  виджет, справа иллюстрация; шаблоны работают только с кастомным доменом), тема, тексты и
-  `apply.sh`, который приводит тенант к этим файлам (identifier first, passkey на
-  `Username-Password-Authentication` с `challenge_ui: button` — без автопредложения при открытии
-  страницы, предложение завести passkey после входа по паролю). Правка в дашборде затрётся
-  следующим запуском. Картинка и знак — `wwwroot/img/auth/` обоих приложений, страница Auth0 берёт
-  их с домена прода. Тенант общий: `apply.sh` меняет страницу входа dev и прода разом.
-  - Passkey — только у учёток с паролем (их заводит администратор, регистрация закрыта), Google
-    их не касается. Слово «passkey» не переводим: у Auth0 по-русски «код доступа», это путает.
-  - Свой «мобильный» вид виджет Auth0 включает только внутри своей раскладки
-    (`_widget-auto-layout`); у нас своя сетка, поэтому на телефоне ширину виджета задаёт правило
-    через публичный хук `._prompt-box-outer`. Внутренние классы виджета (хеши) не трогать.
-- На `localhost` Auth0 всегда спрашивает согласие («Authorize App → Accept») — это его правило для
-  локальных адресов, на проде экрана нет.
-- Выход гасит и сессию Auth0 (`/oidc/logout` с `client_id`), иначе следующий вход молча пускает
-  под прежней учёткой и переключиться между тестовыми пользователями нельзя.
-- Страница входа Auth0 — внешний сайт: агент в браузере пароли туда не вводит. Проверки под
-  разными пользователями делает человек или уже залогиненная вкладка.
+## Работа в контейнере Claude Code on the web
 
-## Configuration
+В удалённом контейнере .NET SDK по умолчанию нет, а `dot.net` / `builds.dotnet.microsoft.com`
+закрыты egress-политикой (`curl` получает 403 от прокси) — скрипт `dotnet-install.sh` там не качается.
+Ставить надо из репозитория Ubuntu, где .NET 10 уже есть:
 
-- `ConnectionStrings:DefaultConnection` — PostgreSQL
-- `Authentication:Auth0:Domain` / `ClientId` / `ClientSecret` — Auth0 (see "Authentication" above)
-- Npgsql configured with dynamic JSON support and legacy timestamp behavior
-- SignalR: 2MB message size limit, 15-buffer capacity, 30s handshake timeout
-- Blazor Server: 20 max buffered render batches
+```bash
+apt-get update                                  # без этого dotnet-sdk-10.0 не виден
+DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-10.0
+dotnet --version
+```
 
-## External Services
+`apt-get update` ругается на недоступные PPA (deadsnakes, ondrej) — это не мешает. `nuget.org` доступен, поэтому
+`dotnet restore` и `dotnet tool install` работают; `npm` для Tailwind — тоже.
 
-- **Russian localization**: `EnumExtensions.ToRussianString()` for weapon types, creature types, skill categories
+PostgreSQL 16 в контейнере уже установлен, только не запущен — для тестов с базой:
 
-## Key Files
+```bash
+service postgresql start
+su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres';\""
+export CM_TEST_DB="Host=localhost;Port=5432;Database=cm_test;Username=postgres;Password=postgres"
+dotnet test
+```
 
-- `CampaignManager.Web/Program.cs` — DI, auth, middleware, SignalR config
-- `CampaignManager.Web/Utilities/DataBase/AppDbContext.cs` — Entity configuration, JSONB mappings
-- `CampaignManager.Web/Utilities/DataBase/AppIdentityDbContext.cs` — Identity schema
-- `CampaignManager.Web/Model/BaseDataBaseEntity.cs` — Base entity with Guid v7
-- `CampaignManager.Web/Components/_Imports.razor` — Global using directives
-- `CampaignManager.Web/Components/Features/` — All feature vertical slices
+Запуск сервера без Auth0: в Development он стартует и без его настроек (схем OIDC нет, вход — `/dev/login`):
+
+```bash
+ASPNETCORE_ENVIRONMENT=Development ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=cm;Username=postgres;Password=postgres" \
+  dotnet run --project src/CampaignManager.Server --no-launch-profile --urls https://127.0.0.1:5199
+```
 
 ## Documentation Conventions
 
-This file is for conventions and patterns that apply across the whole app. **Feature-specific knowledge (a feature's services, models, entity relationships, cross-feature dependencies, or deviations from the patterns above) belongs in that feature's own `Components/Features/{FeatureName}/CLAUDE.md`, not here.**
+Этот файл — для общего по всему репозиторию. **Знание модуля (его сервисы, модели, связи, отступления от общих правил)
+живёт в `CLAUDE.md` этого модуля**, общие правила кода — в [src/CLAUDE.md](src/CLAUDE.md).
 
-- Every feature under `Components/Features/` has a `CLAUDE.md` — it loads automatically only when you're working with files under that feature's directory.
-- Adding a feature-specific gotcha, model, or service to this root file instead of the feature's own file is the failure mode this rule exists to prevent — it bloats every session's context regardless of which feature is being touched.
-- When a feature gains a new service, model, or non-obvious relationship, update that feature's `CLAUDE.md`, not this one. Create the feature's `CLAUDE.md` if it doesn't exist yet.
-- When adding a brand-new feature folder, give it a `CLAUDE.md` from the start.
+- У каждого модуля сервера и UI есть свой `CLAUDE.md` — он подгружается, только когда работа идёт в его папке.
+- Новый модуль получает `CLAUDE.md` сразу; новое правило модуля пишется туда, а не сюда.
+- Общие документы плана (`docs/v2/TASKS.md`, `README.md`) правит оркестратор после слияния (`docs/v2/ORCHESTRATOR.md`).

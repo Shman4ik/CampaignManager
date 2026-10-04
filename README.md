@@ -1,87 +1,51 @@
 # CampaignManager
 
-Веб-приложение для управления кампаниями настольной ролевой игры **Call of Cthulhu 7e**. Позволяет вести кампании, создавать и редактировать персонажей, сценарии, существ, предметы, оружие, заклинания и навыки.
+Веб-приложение для ведения игр **Call of Cthulhu 7e**: кампании и журнал встреч, лист сыщика с проверками по правилам
+книги, помощник создания сыщика, сценарии с режимом игры, бой и погоня, ширма Хранителя, фонотека и справочники
+(бестиарий, оружие, предметы, заклинания, книги, навыки, профессии). Работает на https://cthulhu.dmnet.dev и
+рассчитан на iPad за игровым столом и телефон игрока.
 
 ## Технологии
 
-- **.NET 10** — Blazor Server с InteractiveServer render mode
-- **PostgreSQL** — база данных, EF Core с JSONB для хранения сложных структур
-- **Tailwind CSS 3** — стилизация с кастомной дизайн-системой
-- **Auth0** (OpenID Connect) — аутентификация: Google-аккаунт или почта с паролем
-- **Minio** — S3-совместимое хранилище файлов
-- **OpenTelemetry** — observability
-
-## Возможности
-
-- **Кампании** — создание и управление игровыми кампаниями
-- **Персонажи** — полное создание и редактирование по правилам CoC 7e
-- **Бестиарий** — каталог существ с характеристиками и способностями
-- **Сценарии** — дизайн и организация сценариев
-- **Боевая система** — трекинг боевых столкновений
-- **Погони** — механика сцен преследования
-- **Предметы, Оружие, Заклинания, Навыки** — справочники игровых сущностей
-- **NPC** — управление неигровыми персонажами
-
-## CampaignManager 2.0
-
-Приложение переписывается: новая схема базы, Blazor WebAssembly поверх HTTP API, позже — мобильное
-приложение на Avalonia. Текущая версия (v1) заморожена до переключения. План, решения и задачи —
-[docs/v2/README.md](docs/v2/README.md).
+- **.NET 10** — Blazor WebAssembly поверх HTTP API (`/api/v1`), ASP.NET Core minimal APIs
+- **PostgreSQL** (Neon) — EF Core, схема `cm`; документы листа, статблоков и сцен — JSONB с версией
+- **Tailwind CSS 4** — дизайн-система [docs/design-system.md](docs/design-system.md)
+- **Auth0** (OpenID Connect) — вход через Google, passkey или почту с паролем
+- **MinIO** — S3-совместимое хранилище картинок и музыки
 
 ## Структура репозитория
 
 | Папка | Что там |
 |---|---|
-| `CampaignManager.Web/` | v1 — Blazor Server приложение; фичи в `Components/Features/{Feature}/` |
-| `CampaignManager.ServiceDefaults/` | OpenTelemetry и health checks для v1 (в 2.0 уходит) |
-| `src/` | проекты 2.0 (появятся с задачи T1.1) |
-| `tests/` | тесты: `CampaignManager.Rules.Tests` — правила книги на коде v1 |
-| `docs/` | план 2.0 (`v2/`), дизайн-система 2.0 (`design-system.md`; v1 — `design-system-v1.md`), исходники логотипа (`assets/`) |
-| `scripts/` | вспомогательные скрипты v1 |
+| `src/` | приложение: `Core` (правила книги, документы), `Contracts`, `ApiClient`, `Data` (EF, схема `cm`), `Server` (API и хост), `UI` (Razor-компоненты), `Web.Client` (хост WebAssembly) |
+| `tests/` | `Core.Tests` (правила книги), `Server.Tests` (API на Postgres), `UI.Tests` (bUnit), `Migrate.Tests` |
+| `tools/` | `CampaignManager.Migrate` — перенос данных первой версии в схему `cm`; `auth0/` — страница входа Auth0 |
+| `docs/` | дизайн-система (`design-system.md`), план и история 2.0 (`v2/`), исходники логотипа (`assets/`) |
+
+Правила работы с кодом — [src/CLAUDE.md](src/CLAUDE.md) и `CLAUDE.md` модулей.
 
 ## Запуск
 
-### Требования
+Нужны .NET 10 SDK, Node.js (Tailwind собирается при сборке) и PostgreSQL 15+.
 
-- .NET 10 SDK
-- Node.js (для Tailwind CSS)
-- PostgreSQL
-
-### Конфигурация
-
-Задайте переменные окружения или используйте `appsettings.json`:
-
-- `ConnectionStrings:DefaultConnection` — строка подключения к PostgreSQL
-- `Authentication:Auth0:Domain` / `ClientId` / `ClientSecret` — приложение Auth0 (Regular Web Application)
-
-### Команды
+Настройки — `src/CampaignManager.Server/appsettings.Development.json` (не в git) или переменные окружения:
+`ConnectionStrings:DefaultConnection`, `Authentication:Auth0:{Domain,ClientId,ClientSecret}`,
+`Minio:{Endpoint,AccessKey,SecretKey,BucketName}`.
 
 ```bash
-# Запуск приложения
-dotnet run --project CampaignManager.Web
-
-# Сборка и тесты
-dotnet build
-dotnet test
-
-# Миграции базы данных
-dotnet ef migrations add <Name> --project CampaignManager.Web --context AppDbContext
-dotnet ef database update --project CampaignManager.Web --context AppDbContext
-
-dotnet ef migrations add <Name> --project CampaignManager.Web --context AppIdentityDbContext
-dotnet ef database update --project CampaignManager.Web --context AppIdentityDbContext
+dotnet run --project src/CampaignManager.Server                 # https://localhost:8080; /dev/login?as=keeper — вход без Auth0 в Development
+dotnet build CampaignManager.slnx -c Release -warnaserror
+dotnet test                                                     # тесты с базой — при заданной CM_TEST_DB
+dotnet ef migrations add <Name> --project src/CampaignManager.Data
+dotnet ef database update --project src/CampaignManager.Data   # строка — из CM_DB
 ```
-
-Tailwind CSS компилируется автоматически при сборке.
 
 ## Деплой
 
-На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). При push в `master`, задевшем `src/**`, образ 2.0 публикуется в GitHub Container Registry, а тег коммитится в GitOps-репозиторий — сразу для прода и беты (`.github/workflows/v2-deploy.yml`).
-
-```bash
-docker pull ghcr.io/shman4ik/campaign-manager:latest
-docker run -p 8080:8080 ghcr.io/shman4ik/campaign-manager:latest
-```
+На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). Push в `master`, задевший `src/**`,
+собирает образ `ghcr.io/shman4ik/campaign-manager-v2` и коммитит тег в GitOps-репозиторий — сразу для прода
+(https://cthulhu.dmnet.dev) и беты (https://beta.cthulhu.dmnet.dev): `.github/workflows/v2-deploy.yml`. Миграции
+применяются вручную до слияния — см. [src/CLAUDE.md](src/CLAUDE.md), «Деплой и beta-стенд».
 
 ## Правовая информация
 
