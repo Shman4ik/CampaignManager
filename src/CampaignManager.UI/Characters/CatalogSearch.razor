@@ -4,7 +4,7 @@
 @* Поиск по справочнику для листа — один на оружие, заклинания, книги, предметы и тварей привыкания (в v1 —
    шесть копий). Список грузится целиком (справочник маленький), поиск — без регистра, «ё» и лишних пробелов.
    Выбор строки отдаёт запись; «Добавить «текст»» — то, что вписано, когда в справочнике такого нет.
-   Пустой запрос показывает первые записи (панель открыли ради выбора — пустая рамка ничего не говорила), запрос без
+   Пустой запрос показывает весь список (панель открыли ради выбора — пустая рамка ничего не говорила), запрос без
    совпадений — строку «Не найдено.» (g3, 84). «×» в поле стирает запрос; своя «Отмена» — только у панели листа, которую
    нечем закрыть, кроме неё: в окне (быстрый НПС) подвал закрывает сам, второй «Отмены» там не ставят (OnCancel не передают). *@
 <div class="catalog-search" data-testid="catalog-search">
@@ -41,7 +41,14 @@
         }
         else if (found.Count > 0 || canAddOwn)
         {
-            <div class="@(Compact ? "catalog-search-results catalog-search-compact" : "catalog-search-results")">
+            @* Список целиком: обрезка до первых десяти (или пяти в окне) прятала остальное — из ста фобий были видны десять,
+               и никак не было сказано, что есть ещё (владелец 2026-10-04). Рамка листается сама; полосы прокрутки на iPad не
+               видно, поэтому при длинном списке над ним — сколько в нём записей. *@
+            @if (found.Count > ScrollHintFrom)
+            {
+                <p class="catalog-search-count" data-testid="catalog-search-count">@CountText(found.Count) — листайте список</p>
+            }
+            <div class="@(Compact ? "catalog-search-results catalog-search-compact" : "catalog-search-results")" data-testid="catalog-search-results">
                 @foreach (var item in found)
                 {
                     <button type="button" class="catalog-search-row" @onclick="() => OnSelect.InvokeAsync(item)">
@@ -88,12 +95,15 @@
     [Parameter] public bool ShowOnEmpty { get; set; } = true;
 
     /// <summary>
-    /// Плотный вид для окна: пять строк в одну линию (название и мета рядом), список без своей прокрутки — в окне прокрутка одна,
-    /// у тела (правило 3). Панель листа остаётся прежней: десять строк в рамке с прокруткой.
+    /// Плотный вид для окна: строка — название и мета в одну линию, рамка ниже. Список и здесь целиком, в рамке с прокруткой:
+    /// недоступная запись хуже второй прокрутки в окне.
     /// </summary>
     [Parameter] public bool Compact { get; set; }
 
-    private int Limit => Compact ? 5 : 10;
+    /// <summary>С какого числа записей над списком пишется, сколько их: в рамку их влезает около семи.</summary>
+    private const int ScrollHintFrom = 7;
+
+    private static string CountText(int count) => $"{(count % 10 == 1 && count % 100 != 11 ? "Запись" : "Записей")}: {count}";
 
     [Parameter] public EventCallback<TItem> OnSelect { get; set; }
 
@@ -121,11 +131,11 @@
             return [];
 
         if (query.Length == 0)
-            return ShowOnEmpty ? [.. _items.Take(Limit)] : [];
+            return ShowOnEmpty ? [.. _items] : [];
 
         bool Matches(string text) => CatalogCodeTable.NormalizeName(text).Contains(query, StringComparison.Ordinal);
 
-        return [.. _items.Where(i => Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false)).Take(Limit)];
+        return [.. _items.Where(i => Matches(Name(i)) || (Also?.Invoke(i).Any(Matches) ?? false))];
     }
 
     private Task CustomAsync() => OnCustom.InvokeAsync(_query.Trim());
