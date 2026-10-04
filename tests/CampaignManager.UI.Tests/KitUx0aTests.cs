@@ -130,6 +130,26 @@ public sealed class KitUx0aTests : KitContext
     }
 
     [Fact]
+    public void Leaving_the_page_drops_undo_toasts_but_a_query_change_keeps_them()
+    {
+        var toasts = Services.GetRequiredService<ToastService>();
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/character/1?mode=sheet");
+        var host = Render<ToastHost>();
+        toasts.Removed("Кольт .45", () => Task.CompletedTask);
+        toasts.Success("Сохранено.");
+
+        // Та же страница, другой режим — «Отменить» ещё в силе.
+        nav.NavigateTo("/character/1?mode=play");
+        host.WaitForAssertion(() => Assert.Single(host.FindAll("[data-testid='toast-action']")));
+
+        // Другая страница — «Отменить» правило бы ушедший лист: тост с действием снят, остальные остаются.
+        nav.NavigateTo("/campaigns");
+        host.WaitForAssertion(() => Assert.Empty(host.FindAll("[data-testid='toast-action']")));
+        Assert.Single(toasts.Messages);
+    }
+
+    [Fact]
     public void Toast_host_renders_undo_button_that_runs_the_action()
     {
         var toasts = Services.GetRequiredService<ToastService>();

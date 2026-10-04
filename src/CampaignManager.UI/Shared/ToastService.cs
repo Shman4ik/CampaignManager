@@ -89,6 +89,18 @@ public sealed class ToastService(TimeProvider time)
         }
     }
 
+    /// <summary>
+    /// Убрать тосты с действием — при уходе на другую страницу (<see cref="ToastHost"/>): «Отменить» правит объект страницы,
+    /// которой уже нет, и вернуть убранное некуда — после перехода кнопка молча ничего не сохраняла (оружие пропадало).
+    /// </summary>
+    public void DropActions()
+    {
+        if (_messages.RemoveAll(m => m.Action is not null) > 0)
+        {
+            Changed?.Invoke();
+        }
+    }
+
     public void Dismiss(long id)
     {
         if (_messages.RemoveAll(m => m.Id == id) > 0)

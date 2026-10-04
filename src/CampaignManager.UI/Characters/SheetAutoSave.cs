@@ -45,6 +45,9 @@ public sealed class SheetAutoSave(ICharactersApi api, BrowserStorage storage)
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(3);
 
     private string _saved = "";
+
+    /// <summary>Идущая запись — её дожидается <see cref="FlushAsync"/>.</summary>
+    private Task<bool>? _inflight;
     private Guid _id;
 
     public SheetSaveState State { get; private set; } = SheetSaveState.Saved;
@@ -82,6 +85,34 @@ public sealed class SheetAutoSave(ICharactersApi api, BrowserStorage storage)
         if (State is SheetSaveState.Saving or SheetSaveState.Conflict or SheetSaveState.Rejected)
             return false;
 
+        var run = SaveCoreAsync(sheet, cancellationToken);
+        _inflight = run;
+        try
+        {
+            return await run;
+        }
+        finally
+        {
+            if (ReferenceEquals(_inflight, run))
+                _inflight = null;
+        }
+    }
+
+    /// <summary>
+    /// Перед уходом со страницы: дождаться идущей записи и дописать то, что поправили за это время. Без этого «Отменить»
+    /// сразу после «Убрать» терялось: тик ещё писал удаление, запись при уходе пропускалась («уже сохраняю»), а страница
+    /// закрывалась раньше следующего тика.
+    /// </summary>
+    public async Task FlushAsync(CharacterSheet sheet)
+    {
+        if (_inflight is { } inflight)
+            await inflight;
+
+        await SaveIfChangedAsync(sheet);
+    }
+
+    private async Task<bool> SaveCoreAsync(CharacterSheet sheet, CancellationToken cancellationToken)
+    {
         var snapshot = CmJson.Serialize(sheet);
         if (snapshot == _saved)
         {
@@ -106,7 +137,10 @@ public sealed class SheetAutoSave(ICharactersApi api, BrowserStorage storage)
             }
             else
             {
+                // Черновик — уже на новой версии: правка во время записи иначе оставалась только в памяти, а старый черновик
+                // на прежней версии при возврате требовал выбора.
                 State = SheetSaveState.Dirty;
+                await storage.SetAsync(DraftKey(_id), Draft(Version, CmJson.Serialize(sheet)));
             }
         }
         catch (ApiException error) when (error.IsStale)
@@ -137,6 +171,10 @@ public sealed class SheetAutoSave(ICharactersApi api, BrowserStorage storage)
         var snapshot = CmJson.Serialize(sheet);
         if (snapshot != _saved)
             await storage.SetAsync(DraftKey(_id), Draft(Version, snapshot));
+        else
+            // Лист вернулся к сохранённому («Отменить» сразу после «Убрать»): прежний черновик устарел. Оставленный, он при
+            // возврате на страницу восстанавливался сам и записывал в базу состояние без отменённого — оружие пропадало.
+            await storage.RemoveAsync(DraftKey(_id));
     }
 
     /// <summary>Несохранённый черновик этого листа: на какой версии его начали и сам лист.</summary>

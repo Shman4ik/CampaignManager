@@ -20,13 +20,22 @@ public sealed class SheetAutoSaveTests : KitContext
 
         public Exception? Fail { get; set; }
 
-        public Task<CharacterSavedDto> SaveSheetAsync(Guid characterId, CharacterSheet sheet, uint version, CancellationToken cancellationToken = default)
+        /// <summary>Задержать ответ сервера: запись «идёт», пока ворота не открыты.</summary>
+        public TaskCompletionSource? Gate { get; set; }
+
+        public async Task<CharacterSavedDto> SaveSheetAsync(Guid characterId, CharacterSheet sheet, uint version, CancellationToken cancellationToken = default)
         {
             if (Fail is not null)
-                return Task.FromException<CharacterSavedDto>(Fail);
+                throw Fail;
 
             Saves.Add((version, sheet.Personal.Name));
-            return Task.FromResult(new CharacterSavedDto(version + 1, DateTimeOffset.UnixEpoch));
+            if (Gate is { } gate)
+            {
+                Gate = null;
+                await gate.Task;
+            }
+
+            return new CharacterSavedDto(version + 1, DateTimeOffset.UnixEpoch);
         }
 
         public Task<CharacterDto> GetAsync(Guid characterId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -73,6 +82,42 @@ public sealed class SheetAutoSaveTests : KitContext
         Assert.Equal([(7u, "Харви Уолтерс"), (8u, "Харви Уолтерс")], _api.Saves);
         Assert.Equal(9u, saver.Version);
         Assert.Equal(SheetSaveState.Saved, saver.State);
+    }
+
+    [Fact]
+    public async Task Flush_waits_for_the_running_save_and_writes_what_changed_meanwhile()
+    {
+        var (saver, character) = Start();
+        var gate = new TaskCompletionSource();
+        _api.Gate = gate;
+
+        character.Sheet.Personal.Name = "Убрано";
+        var tick = saver.SaveIfChangedAsync(character.Sheet, TestContext.Current.CancellationToken); // запись идёт
+        character.Sheet.Personal.Name = "Отменено";                                                    // «Отменить» во время записи
+        var flush = saver.FlushAsync(character.Sheet);                                                 // уход со страницы
+
+        gate.SetResult();
+        await tick;
+        await flush;
+
+        // Без FlushAsync вторая запись не случалась: тик видел «уже сохраняю», а страница закрывалась раньше следующего.
+        Assert.Equal([(7u, "Убрано"), (8u, "Отменено")], _api.Saves);
+        Assert.Equal(SheetSaveState.Saved, saver.State);
+    }
+
+    [Fact]
+    public async Task Draft_is_dropped_when_the_sheet_returns_to_the_saved_state()
+    {
+        var (saver, character) = Start();
+
+        character.Sheet.Personal.Name = "Убрано";
+        await saver.KeepDraftAsync(character.Sheet);                // «Убрать» — черновик без оружия
+        character.Sheet.Personal.Name = "Харви";
+        await saver.KeepDraftAsync(character.Sheet);                // «Отменить» — лист снова как в базе
+
+        // Черновик удалён: иначе при возврате он восстановился бы сам и записал «Убрано».
+        Assert.Contains(JSInterop.Invocations, i => i.Arguments.Any(a => a?.ToString() == SheetAutoSave.DraftKey(character.Id))
+            && i.Identifier.Contains("remove", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

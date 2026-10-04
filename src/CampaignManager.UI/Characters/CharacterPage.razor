@@ -69,6 +69,7 @@
 </PageHeader>
 
 <div class="cm-page">
+    <NavigationLock OnBeforeInternalNavigation="FlushBeforeLeaveAsync" />
     <AsyncContent @ref="_content" Key="CharacterId" Load="LoadAsync" LoadingMessage="Загружаю лист…" Context="loaded"
                   ErrorTitle="Лист недоступен">
         <Empty>
@@ -405,7 +406,18 @@
     private void OnSheetChanged()
     {
         _unsaved = true;
+        // Черновик — и для правок блоков (убрать оружие, «Отменить», ±), а не только полей ввода (@onchange листа): уйди со
+        // страницы раньше тика автосохранения — правка иначе не оставалась нигде.
+        if (_context is { ReadOnly: false } context)
+            _ = _saver.KeepDraftAsync(context.Sheet);
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Переход внутри приложения: сначала дописать лист (и дождаться идущей записи), не дожидаясь тика (до 3 с).</summary>
+    private async Task FlushBeforeLeaveAsync(LocationChangingContext _)
+    {
+        if (_context is { ReadOnly: false } context)
+            await _saver.FlushAsync(context.Sheet);
     }
 
     /// <summary>Одно уведомление на серию ошибок: тик раз в три секунды иначе завалил бы экран тостами.</summary>
