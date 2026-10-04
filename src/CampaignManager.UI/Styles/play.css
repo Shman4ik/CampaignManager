@@ -554,71 +554,85 @@
   }
 
   /* ── Навыки и бой ── */
+  /* Две колонки ландшафта — play-main (навыки, «При себе») и play-side (оружие, заклинания), разметка — PlaySheet; заметки —
+     после них, во всю ширину. Уже ландшафта обёрток как бы нет (display: contents): карточки — ячейки одной сетки, порядок
+     задаёт order.
+     Телефон: оружие, заклинания, «при себе» — и только потом навыки (g2 1.1: в одну колонку 46 строк навыков уносили оружие
+     на ~1900px ниже состояния). */
   .play-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    align-items: start; /* карточки по своей высоте: короткая не тянется пустотой за длинной соседкой */
     gap: 0.625rem;
   }
 
+  .play-main,
   .play-side {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-content: start;
-    align-items: start; /* карточки по своей высоте: короткие «Заклинания» рядом с длинным «При себе» не тянутся пустотой */
-    gap: 0.625rem;
-    min-width: 0;
+    display: contents;
   }
 
-  .play-side-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
-    min-width: 0;
+  .play-body [data-testid="play-weapons"] {
+    order: 1;
   }
 
-  .play-side-stack:empty {
-    display: none;
+  .play-body [data-testid="play-spells"] {
+    order: 2;
   }
 
-  /* Уже ландшафта (телефон и портрет): оружие, заклинания, «при себе» и заметки — между характеристиками и навыками, а не
-     после сорока шести навыков (g2 1.1: на телефоне оружие стояло на ~1900px ниже состояния). Пустая колонка не занимает ни
-     места, ни зазора. */
-  @container play (max-width: 999.98px) {
+  .play-body [data-testid="play-gear"] {
+    order: 3;
+  }
+
+  .play-body [data-testid="play-skills"] {
+    order: 4;
+  }
+
+  /* Портрет iPad (владелец 2026-10-04: «навыки выше оружия и вещей», страница — «два экрана»): навыки сразу под
+     характеристиками и во всю ширину, ниже оружие, затем заклинания и «при себе» рядом. Первый экран — состояние,
+     характеристики, «Частые» и начало алфавита; второй — конец алфавита, оружие, вещи, заметки. Одна из пары «заклинания ·
+     при себе» — во всю ширину. */
+  @container play (min-width: 600px) and (max-width: 999.98px) {
     .play-body {
-      display: flex;
-      flex-direction: column;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .play-body [data-testid="play-skills"] {
+      order: 0;
+    }
+
+    .play-body [data-testid="play-skills"],
+    .play-body [data-testid="play-weapons"],
+    .play-body:not(:has([data-testid="play-gear"])) [data-testid="play-spells"],
+    .play-body:not(:has([data-testid="play-spells"])) [data-testid="play-gear"] {
+      grid-column: 1 / -1;
+    }
+  }
+
+  /* Ландшафт: слева навыки и «При себе», справа оружие и заклинания — колонки независимы по высоте, ни одна не тянется
+     пустотой за другой; «При себе» слева, потому что так высоты колонок ближе всего (справа под ним оставалось ~270px пустоты
+     под навыками). Правая — 19rem: при 21rem навыкам оставалось ~700px, и в трёх
+     колонках переносились «Работа в библиотеке» и «Стрельба (пистолет)». Пустая правая колонка места не занимает — тогда
+     навыки во всю ширину и в четыре колонки. */
+  @container play (min-width: 1000px) {
+    .play-body:has(.play-side .play-card) {
+      grid-template-columns: minmax(0, 1fr) 19rem;
+    }
+
+    .play-main,
     .play-side {
-      order: -1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.625rem;
+      min-width: 0;
     }
 
     .play-side:not(:has(.play-card)) {
       display: none;
     }
-  }
 
-  /* Портрет iPad: оружие — во всю ширину, под ним заклинания и «при себе» рядом, заметки снова во всю ширину. */
-  @container play (min-width: 600px) and (max-width: 999.98px) {
-    .play-side {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .play-side > [data-testid="play-weapons"],
-    .play-side > [data-testid="play-notes"] {
-      grid-column: 1 / -1;
-    }
-
-    .play-side-stack {
-      display: contents;
-    }
-  }
-
-  /* Ландшафт: оружие, заклинания и вещи — колонкой справа от навыков, но только если в ней что-то есть; иначе навыки
-     занимают всю ширину и встают в четыре колонки (12 строк вместо 16 — на ~700px высоты это и есть «один экран»). */
-  @container play (min-width: 1000px) {
-    .play-body:has(.play-side .play-card) {
-      grid-template-columns: minmax(0, 1fr) 19rem;
+    .play-body .play-main > *,
+    .play-body .play-side > * {
+      order: 0;
     }
   }
 
@@ -971,6 +985,21 @@
 
   .play-notes-body {
     padding: 0 0.875rem 0.625rem;
+  }
+
+  /* Заметки — в самом низу и с большим полем (владелец 2026-10-04: их пишут всю игру, они бывают длинными): поле растёт по
+     тексту (field-sizing), без его поддержки — высокое поле с прокруткой и ручкой высоты. */
+  .play-notes-field {
+    min-height: 12rem;
+    field-sizing: content;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  @container play (min-width: 600px) {
+    .play-notes-field {
+      min-height: 16rem;
+    }
   }
 
   .play-notes-text .cm-markdown {

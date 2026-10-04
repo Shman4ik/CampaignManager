@@ -1,0 +1,80 @@
+@using System.Text.RegularExpressions
+@using CampaignManager.Core.Characters
+
+@* Заклинания режима «Игра» — только чтение. Пустая секция не рисуется (правило пустых состояний); правка — в режиме «Лист».
+   Заклинание — строка-кнопка (g2 1.12, решение оркестратора): касание раскрывает время сотворения и описание, цена
+   («10 ПМ, 1d3 рассудка») видна сразу; применения (списать ПМ и Рассудок) здесь нет — их вычитают шагом в плитках. *@
+@if (Sheet.Spells.Count > 0)
+{
+    <section class="cm-card play-card" aria-label="Заклинания" data-testid="play-spells">
+        <div class="play-card-head"><h2 class="cm-section-title">Заклинания</h2></div>
+        @foreach (var spell in Sheet.Spells)
+        {
+            var detailed = Detailed(spell);
+            var open = detailed && _open.Contains(spell);
+            @* Записи-record равны по значению: открытые строки — по ссылке, @key на них не ставим (CLAUDE.md модуля). *@
+            <div class="play-spell" data-testid="play-spell">
+                @if (detailed)
+                {
+                    <button type="button" class="play-row play-row-button" aria-expanded="@(open ? "true" : "false")" data-testid="play-spell-toggle"
+                            @onclick="() => Toggle(spell)">
+                        <i class="fa-solid fa-chevron-right play-row-chevron" aria-hidden="true"></i>
+                        <span class="play-row-name min-w-0 flex-1">@spell.Name</span>
+                        @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                        {
+                            <span class="play-row-meta text-right">@CostText(spell.Cost)</span>
+                        }
+                    </button>
+                }
+                else
+                {
+                    <div class="play-row">
+                        <span class="play-row-name min-w-0 flex-1">@spell.Name</span>
+                        @if (!string.IsNullOrWhiteSpace(spell.Cost))
+                        {
+                            <span class="play-row-meta text-right">@CostText(spell.Cost)</span>
+                        }
+                    </div>
+                }
+                @if (open)
+                {
+                    <div class="play-spell-detail" data-testid="play-spell-detail">
+                        @if (!string.IsNullOrWhiteSpace(spell.CastingTime))
+                        {
+                            <p class="play-spell-time">Время сотворения: @spell.CastingTime</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(spell.Description))
+                        {
+                            <Markdown Text="@spell.Description" />
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    private readonly HashSet<SheetSpell> _open = new(ReferenceEqualityComparer.Instance);
+
+    [CascadingParameter] public SheetContext Context { get; set; } = null!;
+
+    private CharacterSheet Sheet => Context.Sheet;
+
+    private static bool Detailed(SheetSpell spell) =>
+        !string.IsNullOrWhiteSpace(spell.Description) || !string.IsNullOrWhiteSpace(spell.CastingTime);
+
+    private void Toggle(SheetSpell spell)
+    {
+        if (!_open.Remove(spell))
+            _open.Add(spell);
+    }
+
+    /// <summary>
+    /// Цена из данных одним словарём (правило 11): «1d6 магии» → «1d6 ПМ» — единица пунктов магии одна на весь список, —
+    /// и «Рассудка» с заглавной (у НПС) — строчной.
+    /// </summary>
+    internal static string CostText(string cost) =>
+        Regex.Replace(Regex.Replace(cost.Trim(), @"(?<=\d)\s*магии", " ПМ", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase),
+            "Рассудка", "рассудка", RegexOptions.CultureInvariant);
+}
