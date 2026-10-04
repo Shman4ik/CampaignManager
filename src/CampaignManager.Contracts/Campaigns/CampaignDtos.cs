@@ -172,11 +172,13 @@ public sealed record HomeCharacterDto(Guid Id, string Name, string? Occupation, 
 
 public sealed record HomeAvailableCampaignDto(Guid Id, string Name, CampaignKind Kind, CampaignStatus Status, DateTimeOffset CreatedAt, string? KeeperName);
 
+/// <param name="CampaignName">Название игры, под которым её объявил Хранитель (кампания прохождения), — заголовок анонса.</param>
 /// <param name="IsMine">Я веду это прохождение (Хранитель его кампании).</param>
 /// <param name="CanReserve">Мне можно забронировать свободного прегена: я не веду игру и брони у меня в ней ещё нет (T2.5c).</param>
 public sealed record HomeOneShotDto(
     Guid RunId,
     Guid CampaignId,
+    string CampaignName,
     Guid ScenarioId,
     string ScenarioName,
     DateTimeOffset? ScheduledAt,

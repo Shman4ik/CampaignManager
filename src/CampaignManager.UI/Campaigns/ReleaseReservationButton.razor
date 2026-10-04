@@ -1,0 +1,53 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.UI.Platform
+@inject IRunsApi Runs
+@inject DialogService Dialogs
+@inject ToastService Toasts
+
+@* «Снять запись» на место готового сыщика — с подтверждением («копия листа уйдёт в архив»). Одна кнопка на карточку анонса
+   (ведущий снимает любую) и на карточку своей кампании-ваншота (игрок снимает свою, когда анонса на главной уже нет). *@
+<Button Small="true" Variant="ButtonVariant.OutlineError" Icon="fa-user-xmark" Busy="_busy" Disabled="_busy"
+        data-testid="release" OnClick="ReleaseAsync">Снять запись</Button>
+
+@code {
+    private bool _busy;
+
+    [Parameter, EditorRequired] public Guid RunId { get; set; }
+
+    [Parameter, EditorRequired] public HomePregenDto Pregen { get; set; } = null!;
+
+    /// <summary>Запись снята — главной перечитать себя.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private async Task ReleaseAsync()
+    {
+        var whose = Pregen.IsMine ? "Ваша копия листа" : $"Копия листа у игрока{(Pregen.ReservedBy is { } by ? $" {by}" : "")}";
+        if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Снять запись?",
+                $"Готовый сыщик снова свободен. {whose} уйдёт в архив.")
+            {
+                Subject = Pregen.Name,
+                ConfirmText = "Снять запись",
+                Details = null,
+            }))
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await Runs.ReleaseAsync(RunId, Pregen.Id);
+            Toasts.Success("Запись снята:", subject: Pregen.Name);
+            await OnChanged.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

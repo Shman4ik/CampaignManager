@@ -146,6 +146,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
             {
                 r.Id,
                 r.CampaignId,
+                CampaignName = dbContext.Campaigns.Where(c => c.Id == r.CampaignId).Select(c => c.Name).First(),
                 r.ScenarioId,
                 ScenarioName = dbContext.Scenarios.Where(s => s.Id == r.ScenarioId).Select(s => s.Name).First(),
                 r.ScheduledAt,
@@ -200,6 +201,7 @@ public sealed class HomeService(CmDbContext dbContext, CurrentUser currentUser)
                 return new HomeOneShotDto(
                     r.Id,
                     r.CampaignId,
+                    r.CampaignName,
                     r.ScenarioId,
                     r.ScenarioName,
                     r.ScheduledAt,

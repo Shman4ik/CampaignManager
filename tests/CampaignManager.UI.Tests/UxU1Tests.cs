@@ -143,25 +143,24 @@ public sealed class UxU1Tests : KitContext
     }
 
     private static HomeOneShotDto OneShot() =>
-        new(Guid.Parse("0199b000-0000-7000-8000-000000000302"), Guid.Empty, Guid.Empty, "Эликсир жизни", null, "Длинный анонс", "Хранитель",
+        new(Guid.Parse("0199b000-0000-7000-8000-000000000302"), Guid.Empty, "Вечер поэзии", Guid.Empty, "Эликсир жизни", null, "Длинный анонс", "Хранитель",
             IsMine: false,
             [new HomePregenDto(Guid.Parse("0199b000-0000-7000-8000-000000000303"), "Доктор", null, false, null, false, null, false)],
             CanReserve: true);
 
     [Fact]
-    public void Collapsed_one_shot_shows_the_announcement_in_three_lines_and_hides_pregens_until_asked()
+    public void One_shot_shows_pregens_at_once_and_clamps_the_announcement_only_on_the_phone()
     {
         Services.AddSingleton(Fake.Of<IRunsApi>(new()));
-        var cut = Render<OneShotCard>(p => p.Add(c => c.Run, OneShot()).Add(c => c.StartCollapsed, true));
+        Services.AddSingleton(Fake.Of<ICampaignsApi>(new()));
+        var cut = Render<OneShotCard>(p => p.Add(c => c.Run, OneShot()));
 
-        Assert.Empty(cut.FindAll("[data-testid=reserve]"));
-        Assert.Contains("line-clamp-3", cut.Markup, StringComparison.Ordinal);
+        Assert.Single(cut.FindAll("[data-testid=reserve]"));
+        Assert.Contains("max-md:line-clamp-4", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("md:hidden", cut.Find("[data-testid=announcement-toggle]").ClassName, StringComparison.Ordinal);
 
         cut.Find("[data-testid=announcement-toggle]").Click();
-        Assert.DoesNotContain("line-clamp-3", cut.Markup, StringComparison.Ordinal);
-
-        cut.Find("[data-testid=pregens-open]").Click();
-        Assert.Single(cut.FindAll("[data-testid=reserve]"));
+        Assert.DoesNotContain("line-clamp", cut.Markup, StringComparison.Ordinal);
     }
 
     // ── Журнал ──────────────────────────────────────────────────────────────
