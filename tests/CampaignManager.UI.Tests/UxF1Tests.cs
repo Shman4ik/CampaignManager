@@ -157,9 +157,10 @@ public sealed class UxF1Tests : KitContext
                 return Task.FromResult(new ReservationDto(Guid.Empty, reserved, Guid.Empty, Guid.Empty));
             },
         }));
+        Services.AddSingleton(Fake.Of<ICampaignsApi>(new()));
         var pregen = Guid.NewGuid();
         var card = Render<OneShotCard>(p => p.Add(c => c.Run,
-            new HomeOneShotDto(Guid.NewGuid(), Guid.Empty, Guid.Empty, "Эликсир жизни", null, null, "Хранитель", false,
+            new HomeOneShotDto(Guid.NewGuid(), Guid.Empty, "Вечер поэзии", Guid.Empty, "Эликсир жизни", null, null, "Хранитель", false,
                 [new HomePregenDto(pregen, "Доктор", null, false, null, false, null, false)], CanReserve: true)));
 
         var button = card.Find("[data-testid=reserve]");
