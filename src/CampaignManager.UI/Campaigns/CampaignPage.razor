@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using CampaignManager.Contracts.Campaigns
 @using CampaignManager.Core.Campaigns
+@using CampaignManager.Core.Characters
 @using CampaignManager.UI.Platform
 @using CampaignManager.UI.Scenarios
 @inject ICampaignsApi Api
@@ -110,7 +111,22 @@
                                                 }
                                             </div>
                                         }
-                                        else if (campaign.CanEdit || member.IsMe)
+                                        @if (member.Draft is { } draft)
+                                        {
+                                            @* Черновик помощника: Хранителю — где игрок остановился, самому игроку — продолжить. *@
+                                            @if (member.IsMe && member.Characters.Count == 0)
+                                            {
+                                                <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-wand-magic-sparkles" class="mt-2"
+                                                        Href="@CreationLinks.Wizard(CharacterKind.Player, CampaignId, null)" data-testid="continue-draft">
+                                                    Продолжить создание (шаг @(Math.Clamp(draft.Step, 0, CreationLinks.StepCount - 1) + 1) из @CreationLinks.StepCount)
+                                                </Button>
+                                            }
+                                            else if (!member.IsMe)
+                                            {
+                                                <div class="mt-1"><DraftProgress Draft="draft" /></div>
+                                            }
+                                        }
+                                        else if (member.Characters.Count == 0 && (campaign.CanEdit || member.IsMe))
                                         {
                                             <div class="mt-1 text-sm text-primary-500">Листа пока нет</div>
                                         }

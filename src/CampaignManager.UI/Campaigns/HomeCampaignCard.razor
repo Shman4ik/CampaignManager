@@ -2,6 +2,8 @@
 @using CampaignManager.Core.Campaigns
 @using CampaignManager.Core.Characters
 @using CampaignManager.UI.Characters.Creation
+@using CampaignManager.UI.Platform
+@inject TimeProvider Time
 
 @* Кампания на главной. Игроку — одно главное действие: открыть своего сыщика или завести его.
    Хранителю — игроки со всеми листами (в v1 это была отдельная таблица-аккордеон «Персонажи в
@@ -74,6 +76,16 @@ else
                         <Button Href="@($"character/{mine.Id}")" Icon="fa-id-card">Открыть лист</Button>
                     </div>
                 }
+                else if (Campaign.MyDraft is { } draft)
+                {
+                    @* Черновик помощника на сервере: продолжить можно с любого устройства, с того же шага. *@
+                    <p class="cm-text-muted mb-3" data-testid="my-draft">Сыщик создаётся в помощнике · @LocalTime.Ago(draft.UpdatedAt, Time.GetUtcNow())</p>
+                    <div class="cm-btn-row">
+                        <Button Href="@CreationLinks.Wizard(CharacterKind.Player, Campaign.Id, null)" Icon="fa-wand-magic-sparkles"
+                                data-testid="continue-draft">Продолжить создание (шаг @(Math.Clamp(draft.Step, 0, CreationLinks.StepCount - 1) + 1) из @CreationLinks.StepCount)</Button>
+                        <Button Variant="ButtonVariant.Secondary" Href="@CreationLinks.Blank(Campaign.Id)">Пустой лист</Button>
+                    </div>
+                }
                 else
                 {
                     <p class="cm-text-muted mb-3">Своего сыщика в этой кампании у вас пока нет.</p>
@@ -98,11 +110,15 @@ else
                         {
                             <li class="border-t border-primary-200 py-2 first:border-t-0" @key="player.UserId">
                                 <div class="text-sm font-semibold text-primary-700">@CampaignLabels.Person(player.Name)</div>
-                                @if (player.Characters.Count == 0)
+                                @if (player.Draft is { } playerDraft)
+                                {
+                                    <DraftProgress Draft="playerDraft" />
+                                }
+                                @if (player.Characters.Count == 0 && player.Draft is null)
                                 {
                                     <div class="text-sm text-primary-500">Листа пока нет</div>
                                 }
-                                else
+                                @if (player.Characters.Count > 0)
                                 {
                                     <div class="mt-1 flex flex-wrap gap-2">
                                         @foreach (var character in player.Characters)

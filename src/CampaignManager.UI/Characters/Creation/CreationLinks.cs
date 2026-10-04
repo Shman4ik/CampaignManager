@@ -43,6 +43,28 @@ public static class CreationLinks
         ? Scenarios.ScenarioLinks.Workspace(scenario, kind is CharacterKind.Pregen ? Scenarios.ScenarioLinks.Tabs.Pregens : Scenarios.ScenarioLinks.Tabs.Npcs)
         : kind is CharacterKind.Player ? "" : "npcs";
 
+    /// <summary>Шагов в помощнике: способ, пять шагов главы 3 и «Итог».</summary>
+    public const int StepCount = (int)CreationStep.Summary + 1;
+
+    /// <summary>Подпись шага — в степпере помощника, у Хранителя («шаг 4 из 7 — Навыки») и на кнопке «Продолжить создание».</summary>
+    public static string StepTitle(CreationStep step) => step switch
+    {
+        CreationStep.Method => "Способ",
+        CreationStep.Characteristics => "Характеристики",
+        CreationStep.Occupation => "Профессия",
+        CreationStep.Skills => "Навыки",
+        CreationStep.Biography => "Биография",
+        CreationStep.Gear => "Снаряжение",
+        _ => "Итог",
+    };
+
+    /// <summary>«шаг 4 из 7 — Навыки» по номеру шага черновика (0–6).</summary>
+    public static string StepText(int step)
+    {
+        var clamped = (CreationStep)Math.Clamp(step, 0, StepCount - 1);
+        return $"шаг {(int)clamped + 1} из {StepCount} — {StepTitle(clamped)}";
+    }
+
     /// <summary>Черновик помощника в <c>localStorage</c>: свой на каждое место (кампания, сценарий, библиотека).</summary>
     public static string DraftKey(CharacterKind kind, Guid? campaignId, Guid? scenarioId) =>
         $"cm.investigator-draft:{kind}:{campaignId?.ToString() ?? scenarioId?.ToString() ?? "library"}";
