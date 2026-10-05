@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CampaignManager — менеджер игр Call of Cthulhu 7e: кампании и журнал, лист сыщика, помощник создания, сценарии с режимом
 игры, бой и погоня, ширма, фонотека, справочники. **.NET 10, Blazor WebAssembly поверх HTTP API (`/api/v1`), PostgreSQL
-(Neon) через EF Core, Auth0.** Прод — https://cthulhu.dmnet.dev, бета — https://beta.cthulhu.dmnet.dev.
+(Neon) через EF Core, Auth0.** Прод — https://cthulhu.dmnet.dev (отдельного beta-стенда нет — погашен 2026-10-05).
 
 Это «2.0»: первая версия (Blazor Server, `CampaignManager.Web`) работала до 2026-10-04 и удалена из репозитория в T3.3
 (история — в git и `docs/v2/`). Схем v1 (`games`, `identity`) в нынешней базе нет: в
@@ -36,12 +36,12 @@ Development — `/dev/login?as=player|keeper|admin` (src/CLAUDE.md, «Прове
 ## Данные и деплой
 
 - **Neon:** проект `CampaignManager` (`jolly-hill-30043612`, PostgreSQL 17, aws-eu-central-1, с 2026-10-04); ветка
-  `main` — прод, `dev` — локальная разработка и бета (пароль роли на ветках разный). В прод не писать из разработки;
+  `main` — прод, `dev` — локальная разработка (пароль роли на ветках разный). В прод не писать из разработки;
   проверять на своей копии `dev` (`pg_dump --schema=cm` в контейнер `wslc`). Старый проект `old-wood-199224` (PG 15) —
   только откат до 2026-10-18 (`docs/v2/TASKS.md`, T3.4).
-- **Push в `master`, задевший `src/**`,** выкатывает **прод и бету сразу** (`.github/workflows/v2-deploy.yml` → тег в
+- **Push в `master`, задевший `src/**`,** выкатывает **прод** (`.github/workflows/v2-deploy.yml` → тег в
   `Shman4ik/dmnet-gitops` → Argo CD). Миграции сервер не применяет: новую миграцию накатить **до слияния на `dev` и
-  `main`**. Подробности и откат — src/CLAUDE.md, «Деплой и beta-стенд».
+  `main`**. Подробности и откат — src/CLAUDE.md, «Деплой». Бета-стенда нет: проверять до слияния — локально и на своей копии `dev`.
 - Кластер k3s на VPS: `ssh vps` — через Windows OpenSSH (`C:\Windows\System32\OpenSSH\ssh.exe`), `KUBECONFIG=/etc/rancher/k3s/k3s.yaml`.
   Секреты — SealedSecret (`kubeseal --raw` на VPS), значения не печатать.
 
@@ -101,7 +101,7 @@ GitHub: каждый слой — своя ветка и свой PR повер�
 Вход — OIDC (code flow) через Auth0, сессия — своя кука `.CampaignManager.Auth`; к Auth0 приложение ходит только при
 входе и выходе. Как это устроено в коде — [src/CampaignManager.Server/Identity/CLAUDE.md](src/CampaignManager.Server/Identity/CLAUDE.md).
 
-- **Тенант один** на dev и прод, приложений в нём два: dev (`https://localhost:8080` и бета) и прод
+- **Тенант один** на dev и прод, приложений в нём два: dev (`https://localhost:8080`) и прод
   (`https://cthulhu.dmnet.dev`). У каждого в Allowed Callback URLs — `/signin-oidc`, в Allowed Logout URLs —
   `/signout-callback-oidc`. Коннекшены: `google-oauth2` (со своими ключами Google) и `Username-Password-Authentication`
   с **выключенной** регистрацией — такие учётки заводит администратор через `auth0` CLI.

@@ -3,12 +3,12 @@
 #
 #   wslc build -f src/Dockerfile -t campaign-manager-v2 .
 #
-# Выкатывается на beta-стенд воркфлоу .github/workflows/v2-beta-deploy.yml (src/CLAUDE.md,
-# «Beta-стенд») — но из цели `prebuilt`, см. в конце. Корневой Dockerfile — это v1, его не трогать.
+# Выкатывается воркфлоу .github/workflows/v2-deploy.yml (src/CLAUDE.md, «Деплой») — но из цели `prebuilt`,
+# см. в конце. Корневой Dockerfile — это v1, его не трогать.
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS base
 LABEL org.opencontainers.image.source="https://github.com/Shman4ik/CampaignManager" \
-      org.opencontainers.image.description="CampaignManager 2.0 (beta)"
+      org.opencontainers.image.description="CampaignManager 2.0"
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080

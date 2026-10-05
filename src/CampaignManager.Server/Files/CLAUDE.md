@@ -87,7 +87,7 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 `BucketName`, плюс необязательный `Region`. В `appsettings.json` их нет намеренно: дефолт привёл бы разработку
 в боевой бакет `campain-manager` (v1 и прод).
 
-- **Ветка Neon `dev` и beta-стенд — бакет `campaign-manager-dev`** на том же MinIO (`s3.dmnet.dev`), заведён в
+- **Ветка Neon `dev` (локальная разработка) — бакет `campaign-manager-dev`** на том же MinIO (`s3.dmnet.dev`), заведён в
   T1.3. Строки `files` ветки `dev` — перенос v1: объекты скопированы туда из боевого бакета под теми же ключами
   (`images/beasts/…`, `music/…`), новые загрузки ложатся туда же (`images|music/<sha256>…`). Локальная разработка
   на ветке `dev` — `"BucketName": "campaign-manager-dev"` в `Server/appsettings.Development.json` с ключом пользователя

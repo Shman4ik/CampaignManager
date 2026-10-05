@@ -1,7 +1,7 @@
-# Деплой 2.0: образ из src/Dockerfile и коммит тега в dmnet-gitops — сразу в workloads/campaign-manager
-# (прод, https://cthulhu.dmnet.dev, Neon main) и workloads/campaign-manager-beta (https://beta.cthulhu.dmnet.dev,
-# Neon dev). Дальше Argo CD сам катит его в k3s. Прод на 2.0 с 2026-10-04 (T3.2, docs/v2/CUTOVER.md); v1 не деплоится.
-# Устройство, секреты и откат — src/CLAUDE.md, «Деплой и beta-стенд».
+# Деплой 2.0: образ из src/Dockerfile и коммит тега в dmnet-gitops, workloads/campaign-manager (прод,
+# https://cthulhu.dmnet.dev, Neon main). Дальше Argo CD сам катит его в k3s. Прод на 2.0 с 2026-10-04 (T3.2,
+# docs/v2/CUTOVER.md); v1 не деплоится; beta-стенд погашен 2026-10-05.
+# Устройство, секреты и откат — src/CLAUDE.md, «Деплой».
 name: v2 deploy
 
 on:
@@ -59,7 +59,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # 0.3.N — счётчик воркфлоу v2-deploy (с T3.2 катит и прод): 0.1.N — v1, 0.2.N — прежний v2-beta-deploy.
+      # 0.3.N — счётчик воркфлоу v2-deploy: 0.1.N — v1, 0.2.N — прежний v2-beta-deploy.
       # После переименования счётчик начался заново — 0.2.N повторил бы старые теги.
       - name: Set version
         run: echo "VERSION=0.3.${{ github.run_number }}" >> "$GITHUB_ENV"
@@ -90,16 +90,13 @@ jobs:
           path: gitops
 
       # Деплой = коммит тега в dmnet-gitops; Argo CD применяет его за ~90 с. К VPS никто не ходит.
-      # Один образ — и на бету (ветка Neon dev), и на прод (main) одним коммитом (T3.2, 2026-10-04).
       - name: Point dmnet-gitops at the new image
         working-directory: gitops/workloads
         run: |
-          for dir in campaign-manager-beta campaign-manager; do
-            yq -i '(.images[] | select(.name == strenv(IMAGE))).newTag = strenv(VERSION)' "$dir/kustomization.yaml"
-          done
+          yq -i '(.images[] | select(.name == strenv(IMAGE))).newTag = strenv(VERSION)' campaign-manager/kustomization.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "campaign-manager ${VERSION} (prod and beta)" -m "Built from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+          git commit -am "campaign-manager ${VERSION}" -m "Built from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
           for attempt in 1 2 3; do git push && exit 0; git pull --rebase; done
           exit 1
 
