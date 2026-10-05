@@ -21,6 +21,9 @@ public sealed class AccessListOptions
 
     /// <summary>Кто становится администратором при входе (первый админ появляется отсюда).</summary>
     public string[] AdminEmails { get; set; } = [];
+
+    /// <summary>Приложения M2M (агенты), допущенные к API, и от чьего имени они работают (<see cref="MachineAccess"/>).</summary>
+    public MachineClient[] MachineClients { get; set; } = [];
 }
 
 /// <summary>Claims сессии 2.0. Остальные — те же, что у кук v1: <c>ClaimTypes.Email/Name/NameIdentifier</c>.</summary>
@@ -28,6 +31,12 @@ public static class CmClaims
 {
     /// <summary>Id строки <c>cm.users</c>. У кук, выданных v1, его нет — там поиск по sub и почте.</summary>
     public const string UserId = "cm_uid";
+
+    /// <summary>client_id агента: сессия по токену client credentials (<see cref="MachineAccess"/>).</summary>
+    public const string Machine = "cm_machine";
+
+    /// <summary>Scope токена агента — по claim на каждый.</summary>
+    public const string Scope = "cm_scope";
 }
 
 /// <summary>Кто вошёл через Auth0: sub, подтверждённая почта и имя из токена.</summary>
@@ -141,6 +150,12 @@ public sealed class UserDirectory(
 
         var subject = principal.FindFirstValue(ClaimTypes.NameIdentifier);
         var email = principal.FindFirstValue(ClaimTypes.Email);
+
+        // Агент работает от имени человека из конфигурации: только поиск по почте — ни новой строки, ни привязки sub.
+        if (MachineAccess.IsMachine(principal))
+        {
+            return email is null ? null : (await Find(u => u.Email == email))?.User;
+        }
 
         var found = (subject is null ? null : await Find(u => u.Auth0Sub == subject))
                     ?? (email is null ? null : await Find(u => u.Email == email));

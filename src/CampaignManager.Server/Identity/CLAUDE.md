@@ -100,12 +100,45 @@ https://localhost:8086/dev/login?as=keeper&returnUrl=/scenarios   ← так а�
 
 ## JWT для мобильного приложения
 
-`Authentication:Auth0:Audience` — идентификатор API в тенанте. **Без него ни один токен не
-проходит** (проверка audience), это нормальное состояние до M4. Access token Auth0 почты не несёт;
+`Authentication:Auth0:Audience` — идентификатор API в тенанте, `https://cthulhu.dmnet.dev/api` (API «CampaignManager
+API», заведено 2026-10-05 для токенов агентов). **Без него ни один токен не проходит** (проверка audience). Access token Auth0 почты не несёт;
 её и `email_verified` (и, по желанию, `name`) кладёт Action тенанта под пространство имён
 `https://cthulhu.dmnet.dev/` (`IdentityModule.ClaimsNamespace`). Токен без них годится только тому,
 кто уже входил через веб (поиск по sub). Первый запрос с токеном и подтверждённой почтой — это и есть
 вход: `ResolveAsync` заводит или привязывает пользователя, белый список проверяется на каждом токене.
+
+## Токены агентов (M2M)
+
+Агенты (Claude и скрипты) ходят в API без браузера: токен Auth0 **client credentials** приложения M2M
+«CampaignManager agents», та же схема JWT. Код — `MachineAccess`.
+
+- **Узнаётся по `gty: client-credentials`** в `OnTokenValidated`. Приложение (`azp`) должно быть в
+  `Authorization:MachineClients` (`[{ "ClientId": "…", "ActAs": "почта" }]`, env —
+  `Authorization__MachineClients__0__ClientId`/`__ActAs`); нет — токен отклонён (401). Сессия: claims `cm_machine`
+  (client_id), `Email` = `ActAs`, `NameIdentifier` = sub токена, по `cm_scope` на каждый scope.
+- **От имени человека, без входа.** `ResolveAsync` для такой сессии ищет только по почте `ActAs`: строку не заводит, sub
+  не привязывает (у перенесённого из v1 sub так и остаётся пустым). Роль и права — его, автор импорта — он.
+- **Запрет по умолчанию.** `UseMachineScopes` стоит сразу за `UseAuthentication`: токен агента проходит только на
+  эндпоинт с метаданными `AllowMachine(scope)` и нужным scope в токене, иначе 403 — и API, и страницы. Открыто сейчас:
+  `/api/v1/me` (любой токен агента), всё в модуле сценариев, кроме прохождений и броней (`scenarios:write`), загрузка,
+  внешний адрес и содержимое файла (`files:write`). Scope'ы — `Contracts/Identity/MachineScopes`, они же — scope'ы API в
+  тенанте. Новый адрес для агентов — `.AllowMachine(MachineScopes.…)` в его модуле, и тест в `MachineAccessApiTests`.
+- **Тенант:** API `https://cthulhu.dmnet.dev/api` (scope'ы `scenarios:write`, `files:write`, токен живёт 24 ч), приложение
+  M2M «CampaignManager agents» с грантом на оба scope'а. Секрет — только у владельца (не в репозитории и не в SealedSecret:
+  серверу он не нужен); client_id и `ActAs` — в `deployment.yaml` гитопса открытым текстом.
+- **Токен** — с кастомного домена входа (с канонического `cthulhu-dmnet.eu.auth0.com` в `iss` будет он, и сервер
+  отклонит токен — 401); секрет из переменной окружения, не печатать:
+
+  ```bash
+  curl -s https://auth.cthulhu.dmnet.dev/oauth/token -H 'content-type: application/json' \
+    -d "{\"grant_type\":\"client_credentials\",\"client_id\":\"$CM_AGENT_CLIENT_ID\",\"client_secret\":\"$CM_AGENT_CLIENT_SECRET\",\"audience\":\"https://cthulhu.dmnet.dev/api\"}"
+  ```
+
+  Потом `Authorization: Bearer <access_token>`: `GET /api/v1/me` — от чьего имени; импорт —
+  `POST /api/v1/scenarios/import?dryRun=true`, замена своего — `PUT /api/v1/scenarios/{id}/import`
+  (`Scenarios/CLAUDE.md`, «Импорт и экспорт файлом»). Токен кэшировать до `expires_in`: у тенанта квота на выдачу M2M.
+- Тесты — `MachinePrincipalTests` (разбор токена) и `MachineAccessApiTests` (`TestAuth.AsMachine`: тот же
+  `CreatePrincipal`, допущен клиент из заголовка): от чьего имени, без привязки и новых строк, 403 вне scope'ов.
 
 Заводит API и Action владелец (решение по тенанту); код к ним готов.
 

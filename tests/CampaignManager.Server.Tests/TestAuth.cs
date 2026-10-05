@@ -13,7 +13,8 @@ namespace CampaignManager.Server.Tests;
 
 /// <summary>
 /// Сессия в тестах — заголовками вместо куки или JWT: <see cref="UserIdHeader"/> — как кука 2.0,
-/// <see cref="SubjectHeader"/> + <see cref="EmailHeader"/> — как токен приложения или кука v1.
+/// <see cref="SubjectHeader"/> + <see cref="EmailHeader"/> — как токен приложения или кука v1,
+/// <see cref="MachineHeader"/> (+ <see cref="ScopeHeader"/>, почта — от чьего имени) — как токен агента (M2M).
 /// Без заголовков запрос идёт настоящей схемой (кука), так что ответы анониму — настоящие.
 /// Метаданные Auth0 заданы руками: вход и выход строят адрес Auth0, не ходя в сеть.
 /// </summary>
@@ -23,6 +24,8 @@ public static class TestAuth
     public const string UserIdHeader = "X-Test-UserId";
     public const string SubjectHeader = "X-Test-Sub";
     public const string EmailHeader = "X-Test-Email";
+    public const string MachineHeader = "X-Test-Machine";
+    public const string ScopeHeader = "X-Test-Scope";
 
     public static void Add(IServiceCollection services)
     {
@@ -32,6 +35,7 @@ public static class TestAuth
             var real = options.ForwardDefaultSelector;
             options.ForwardDefaultSelector = context =>
                 context.Request.Headers.ContainsKey(UserIdHeader) || context.Request.Headers.ContainsKey(SubjectHeader)
+                || context.Request.Headers.ContainsKey(MachineHeader)
                     ? Scheme
                     : real?.Invoke(context);
         });
@@ -61,11 +65,37 @@ public static class TestAuth
         return client;
     }
 
+    /// <summary>Токен агента <paramref name="clientId"/> от имени <paramref name="actAs"/> со scope'ами через пробел.</summary>
+    public static HttpClient AsMachine(this HttpClient client, string clientId, string actAs, string scopes)
+    {
+        client.DefaultRequestHeaders.Add(MachineHeader, clientId);
+        client.DefaultRequestHeaders.Add(EmailHeader, actAs);
+        client.DefaultRequestHeaders.Add(ScopeHeader, scopes);
+        return client;
+    }
+
     private sealed class Handler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
+            if (Request.Headers[MachineHeader].ToString() is { Length: > 0 } clientId)
+            {
+                // Тот же разбор, что у настоящего токена client credentials; допущен ровно этот клиент от имени почты из заголовка.
+                var token = new ClaimsPrincipal(new ClaimsIdentity(
+                [
+                    new Claim("gty", MachineAccess.GrantType),
+                    new Claim("azp", clientId),
+                    new Claim("sub", $"{clientId}@clients"),
+                    new Claim("scope", Request.Headers[ScopeHeader].ToString()),
+                ]));
+                var (machine, failure) = MachineAccess.CreatePrincipal(token,
+                    [new MachineClient { ClientId = clientId, ActAs = Request.Headers[EmailHeader].ToString() }], TestAuth.Scheme);
+                return Task.FromResult(machine is null
+                    ? AuthenticateResult.Fail(failure!)
+                    : AuthenticateResult.Success(new AuthenticationTicket(machine, TestAuth.Scheme)));
+            }
+
             List<Claim> claims = [];
             if (Request.Headers[UserIdHeader].ToString() is { Length: > 0 } userId)
             {

@@ -15,6 +15,7 @@ using CampaignManager.Server.Access;
 using CampaignManager.Server.Characters;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CampaignManager.Server.Scenarios;
 
@@ -231,6 +232,56 @@ public sealed class ScenarioExchangeService(
         var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
 
         var scenario = new Scenario { Name = "", AuthorId = user.Id };
+        var report = NewReport(file, scenario, name, dryRun);
+        var sameName = scenario.Name.ToLower();
+        if (await dbContext.Scenarios.AsNoTracking().AnyAsync(x => x.Name.ToLower() == sameName, cancellationToken))
+        {
+            report.Warnings.Add($"Сценарий «{scenario.Name}» в библиотеке уже есть — запишется второй с тем же названием. Чтобы их различать, допишите «(копия)» в поле «Название копии».");
+        }
+
+        var lookup = await ImportLookup.LoadAsync(dbContext, file, cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        dbContext.Scenarios.Add(scenario);
+        return await WritePartsAsync(file, scenario, user, lookup, report, transaction, new HashSet<Guid>(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Заменить содержимое сценария файлом: id, автор и прохождения остаются, шапка, текст и все части — из файла (старые
+    /// части удаляются, прегены уходят в архив, как при «Убрать»). Лист НПС, который заведён вошедшим и занят только в этом
+    /// сценарии, обновляется из файла (<see cref="ScenarioImportOutcome.Updated"/>), а не занимается как есть. Та же одна
+    /// транзакция и тот же пробный прогон, что у <see cref="ImportAsync"/>. Право — как у удаления (автор или админ);
+    /// забронированные прегены — 409 до записи.
+    /// </summary>
+    public async Task<ScenarioImportReport> ReplaceAsync(Guid scenarioId, ScenarioFile file, bool dryRun, string? name,
+        CancellationToken cancellationToken)
+    {
+        // Замена стирает всё содержимое разом — право как у удаления (автор или админ), а не как у правки по строке.
+        await access.ForScenarioAsync(scenarioId, cancellationToken).Demand(Operation.Delete);
+        var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
+        if ((await ScenarioService.ReservedPregensAsync(dbContext, scenarioId, cancellationToken)).Count > 0)
+        {
+            throw ApiProblemException.Conflict("Готовых сыщиков этого сценария заняли игроки — сначала снимите записи, потом заменяйте.");
+        }
+
+        var scenario = await dbContext.Scenarios.SingleAsync(s => s.Id == scenarioId, cancellationToken);
+        var report = NewReport(file, scenario, name, dryRun);
+        report.Replaced = true;
+        var sameName = scenario.Name.ToLower();
+        if (await dbContext.Scenarios.AsNoTracking().AnyAsync(x => x.Id != scenarioId && x.Name.ToLower() == sameName, cancellationToken))
+        {
+            report.Warnings.Add($"В библиотеке есть другой сценарий «{scenario.Name}» — названия совпадут.");
+        }
+
+        var lookup = await ImportLookup.LoadAsync(dbContext, file, cancellationToken);
+        var ownSheets = await OwnNpcSheetsAsync(scenarioId, user, cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await ClearPartsAsync(scenarioId, cancellationToken);
+        return await WritePartsAsync(file, scenario, user, lookup, report, transaction, ownSheets, cancellationToken);
+    }
+
+    /// <summary>Шапка и текст из файла — в строку сценария, и пустой отчёт; ошибка шапки — 400 целиком.</summary>
+    private static ScenarioImportReport NewReport(ScenarioFile file, Scenario scenario, string? name, bool dryRun)
+    {
         try
         {
             ScenarioService.ApplyHeader(scenario, new ScenarioInput(
@@ -252,29 +303,31 @@ public sealed class ScenarioExchangeService(
             report.Warnings.Add("Поля анонса v1 (isTemplate, isPublished, scheduledDate, announcementText) пропущены: анонс теперь у прохождения.");
         }
 
-        var sameName = scenario.Name.ToLower();
-        if (await dbContext.Scenarios.AsNoTracking().AnyAsync(x => x.Name.ToLower() == sameName, cancellationToken))
-        {
-            report.Warnings.Add($"Сценарий «{scenario.Name}» в библиотеке уже есть — запишется второй с тем же названием. Чтобы их различать, допишите «(копия)» в поле «Название копии».");
-        }
+        return report;
+    }
 
-        var lookup = await ImportLookup.LoadAsync(dbContext, file, cancellationToken);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        dbContext.Scenarios.Add(scenario);
-
+    /// <summary>Части файла — в сценарий, затем откат (пробный прогон или ошибки строк) или запись.</summary>
+    private async Task<ScenarioImportReport> WritePartsAsync(ScenarioFile file, Scenario scenario, SignedInUser user, ImportLookup lookup,
+        ScenarioImportReport report, IDbContextTransaction transaction, IReadOnlySet<Guid> ownSheets, CancellationToken cancellationToken)
+    {
         ImportLocations(file, scenario, lookup, report);
         ImportFacts(file, scenario, report);
         ImportHandouts(file, scenario, lookup, report);
         ImportCreatures(file, scenario, lookup, report);
         ImportItems(file, scenario, lookup, report);
+        if (report.Replaced)
+        {
+            MarkPartsAdded();
+        }
+
         await SaveAsync(cancellationToken);
 
-        await ImportCastAsync(file, scenario, user, lookup, report, cancellationToken);
+        await ImportCastAsync(file, scenario, user, lookup, report, ownSheets, cancellationToken);
         await ImportPregensAsync(file, scenario, user, lookup, report, cancellationToken);
         await SaveAsync(cancellationToken);
 
         report.Failed = report.Lines.Count(l => l.Outcome is ScenarioImportOutcome.Failed);
-        if (dryRun || report.Failed > 0)
+        if (report.DryRun || report.Failed > 0)
         {
             await transaction.RollbackAsync(cancellationToken);
             dbContext.ChangeTracker.Clear();
@@ -284,9 +337,64 @@ public sealed class ScenarioExchangeService(
         await transaction.CommitAsync(cancellationToken);
         report.Imported = true;
         report.ScenarioId = scenario.Id;
-        logger.LogInformation("Импорт сценария {ScenarioId}: {Locations} локаций, {Checks} проверок, {Npcs} новых НПС, {Reused} занятых, {Pregens} прегенов",
-            scenario.Id, report.Locations, report.Checks, report.NpcsCreated, report.NpcsReused, report.Pregens);
+        logger.LogInformation(
+            "{Kind} сценария {ScenarioId}: {Locations} локаций, {Checks} проверок, {Npcs} новых НПС, {Updated} обновлённых, {Reused} занятых, {Pregens} прегенов",
+            report.Replaced ? "Замена" : "Импорт", scenario.Id, report.Locations, report.Checks, report.NpcsCreated, report.NpcsUpdated,
+            report.NpcsReused, report.Pregens);
         return report;
+    }
+
+    /// <summary>
+    /// Замена: все части — новые строки (старые удалены <see cref="ClearPartsAsync"/>). Но сценарий уже отслеживается, и EF,
+    /// найдя части по его навигациям с готовым Guid-ключом, считает часть из них существующими (Modified) — правим на Added.
+    /// </summary>
+    private void MarkPartsAdded()
+    {
+        dbContext.ChangeTracker.DetectChanges();
+        foreach (var entry in dbContext.ChangeTracker.Entries()
+                     .Where(e => e.State != EntityState.Added && e.Entity is ScenarioLocation or ScenarioCheck or ScenarioKeyFact
+                         or ScenarioHandout or ScenarioCreature or ScenarioItem)
+                     .ToList())
+        {
+            entry.State = EntityState.Added;
+        }
+    }
+
+    /// <summary>
+    /// Листы НПС, которые замена вправе переписать: в составе этого сценария, заведены вошедшим, без кампании и ни в каком
+    /// другом сценарии не заняты. Чужие и общие листы замена занимает как есть, как и импорт.
+    /// </summary>
+    private async Task<HashSet<Guid>> OwnNpcSheetsAsync(Guid scenarioId, SignedInUser user, CancellationToken cancellationToken) =>
+    [
+        .. await dbContext.ScenarioNpcs.AsNoTracking().Where(n => n.ScenarioId == scenarioId)
+            .Join(dbContext.Characters, n => n.CharacterId, c => c.Id, (n, c) => c)
+            .Where(c => c.Kind == CharacterKind.Npc && c.CreatedById == user.Id && c.CampaignId == null
+                        && !dbContext.ScenarioNpcs.Any(o => o.CharacterId == c.Id && o.ScenarioId != scenarioId))
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken),
+    ];
+
+    /// <summary>
+    /// Замена: старые части — прочь (проверки и треки локаций уходят каскадом), состав снимается, прегены — в архив без
+    /// сценария, как у «Убрать» (<see cref="ScenarioCastService.RemovePregenAsync"/>). Всё — в транзакции замены.
+    /// </summary>
+    private async Task ClearPartsAsync(Guid scenarioId, CancellationToken cancellationToken)
+    {
+        await dbContext.ScenarioLocations.Where(l => l.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ScenarioKeyFacts.Where(f => f.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ScenarioHandouts.Where(h => h.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ScenarioCreatures.Where(c => c.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ScenarioItems.Where(i => i.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ScenarioNpcs.Where(n => n.ScenarioId == scenarioId).ExecuteDeleteAsync(cancellationToken);
+
+        var pregens = await dbContext.Characters
+            .Where(c => c.ScenarioId == scenarioId && c.Kind == CharacterKind.Pregen)
+            .ToListAsync(cancellationToken);
+        foreach (var pregen in pregens)
+        {
+            pregen.ScenarioId = null;
+            pregen.Status = CharacterStatus.Archived;
+        }
     }
 
     private async Task SaveAsync(CancellationToken cancellationToken)
@@ -586,7 +694,7 @@ public sealed class ScenarioExchangeService(
     }
 
     private async Task ImportCastAsync(ScenarioFile file, Scenario scenario, SignedInUser user, ImportLookup lookup,
-        ScenarioImportReport report, CancellationToken cancellationToken)
+        ScenarioImportReport report, IReadOnlySet<Guid> ownSheets, CancellationToken cancellationToken)
     {
         var library = await NpcLibraryAsync(user, cancellationToken);
         var cast = new HashSet<Guid>();
@@ -610,10 +718,17 @@ public sealed class ScenarioExchangeService(
                 string? message = null;
                 Guid characterId;
                 var outcome = ScenarioImportOutcome.Reused;
-                if (Find(library, source.Name) is { } existing)
+                if (Find(library, source.Name) is { } existing && ownSheets.Contains(existing))
+                {
+                    // Замена: свой лист этого сценария переписывается из файла — иначе правку статов в файле не донести.
+                    characterId = existing;
+                    message = await UpdateSheetAsync(existing, source, lookup, cancellationToken);
+                    outcome = ScenarioImportOutcome.Updated;
+                }
+                else if (Find(library, source.Name) is { } shared)
                 {
                     // Что параметры из файла к занятому листу не применяются, отчёт пишет один раз, а не в каждой строке.
-                    characterId = existing;
+                    characterId = shared;
                 }
                 else
                 {
@@ -633,13 +748,17 @@ public sealed class ScenarioExchangeService(
                 {
                     ScenarioId = scenario.Id, CharacterId = characterId, Role = source.Role, Count = source.Count, Notes = notes,
                 });
-                if (outcome is ScenarioImportOutcome.Created)
+                switch (outcome)
                 {
-                    report.NpcsCreated++;
-                }
-                else
-                {
-                    report.NpcsReused++;
+                    case ScenarioImportOutcome.Created:
+                        report.NpcsCreated++;
+                        break;
+                    case ScenarioImportOutcome.Updated:
+                        report.NpcsUpdated++;
+                        break;
+                    default:
+                        report.NpcsReused++;
+                        break;
                 }
 
                 report.Lines.Add(new ScenarioImportLine(ScenarioImportPart.Npc, label, outcome, message));
@@ -697,8 +816,25 @@ public sealed class ScenarioExchangeService(
             CreatedById = user.Id,
         };
         dbContext.Characters.Add(character);
+        return (character, SheetNotes(own, portrait, source, []));
+    }
 
-        List<string> notes = [];
+    /// <summary>Замена: свой лист НПС сценария — заново из файла (лист, портрет), с той же проверкой, что новый.</summary>
+    private async Task<string?> UpdateSheetAsync(Guid characterId, ScenarioFileCharacter source, ImportLookup lookup,
+        CancellationToken cancellationToken)
+    {
+        var (sheet, own) = SheetBuilder.FromImport(ImportedOf(source, lookup), lookup.Catalog);
+        await CharacterService.ValidateAsync(dbContext, sheet, cancellationToken);
+        var portrait = lookup.FileOf(source.PortraitUrl);
+        var character = await dbContext.Characters.SingleAsync(c => c.Id == characterId, cancellationToken);
+        character.Sheet = CmJson.Write(sheet);
+        character.SheetVersion = CharacterSheet.CurrentVersion;
+        character.PortraitFileId = portrait;
+        return SheetNotes(own, portrait, source, ["лист обновлён из файла"]);
+    }
+
+    private static string? SheetNotes(IReadOnlyList<string> own, Guid? portrait, ScenarioFileCharacter source, List<string> notes)
+    {
         if (own.Count > 0)
         {
             notes.Add($"нет в справочнике — свои навыки: {string.Join(", ", own)}");
@@ -709,7 +845,7 @@ public sealed class ScenarioExchangeService(
             notes.Add("портрета нет в этой базе — загрузите его заново");
         }
 
-        return (character, Join(notes));
+        return Join(notes);
     }
 
     private static ImportedCharacter ImportedOf(ScenarioFileCharacter source, ImportLookup lookup) => new()

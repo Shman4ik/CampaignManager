@@ -1,6 +1,7 @@
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Server.Files.Storage;
+using CampaignManager.Server.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -33,6 +34,7 @@ public static class FilesModule
         // Читать и загружать — любой вошедший; права на сирот проверяет и FileService (AccessPolicy).
         app.MapPost(FilesRoutes.Upload, UploadAsync)
             .RequireAuthorization()
+            .AllowMachine(MachineScopes.Files)
             .WithName("UploadFile")
             .WithTags("Files")
             // Kestrel по умолчанию режет тело на 30 МБ, а трек бывает до 50.
@@ -44,11 +46,13 @@ public static class FilesModule
 
         app.MapPost(FilesRoutes.External, AddExternalAsync)
             .RequireAuthorization()
+            .AllowMachine(MachineScopes.Files)
             .WithName("AddExternalFile")
             .WithTags("Files");
 
         app.MapMethods(FilesRoutes.ContentPattern, [HttpMethods.Get, HttpMethods.Head], FileContentEndpoint.HandleAsync)
             .RequireAuthorization()
+            .AllowMachine(MachineScopes.Files)
             .WithName("GetFileContent")
             .WithTags("Files");
 

@@ -311,6 +311,101 @@ public sealed class ScenarioExchangeApiTests(CampaignsApp app) : IClassFixture<C
         Assert.True(Assert.Single(copy.Creatures, c => c.CreatureId is null).HasOwnStatblock);
     }
 
+    private const string Characteristics =
+        """{ "str": 50, "con": 50, "siz": 50, "dex": 50, "int": 50, "app": 50, "pow": 50, "edu": 50 }""";
+
+    /// <summary>Файл v1 с прегеном и правкой агента: другой корень дерева и Рассудок НПС 10 вместо 30.</summary>
+    private static string Revised(string name, string npcName, string pregen = "Преген") =>
+        V1File(name, npcName)
+            .Replace("Особняк", "Маяк", StringComparison.Ordinal)
+            .Replace("\"особняк\"", "\"маяк\"", StringComparison.Ordinal)
+            .Replace("\"sanity\": 30", "\"sanity\": 10", StringComparison.Ordinal)
+            .Replace("\"npcs\": [", $$"""
+                "pregens": [ { "name": "{{pregen}}", "characteristics": {{Characteristics}} } ], "npcs": [
+                """, StringComparison.Ordinal);
+
+    private async Task<int> SanityAsync(Guid characterId)
+    {
+        await using var db = app.Database.CreateContext();
+        var row = await db.Characters.SingleAsync(c => c.Id == characterId, Cancellation);
+        return CmJson.ReadSheet(row.Sheet, row.SheetVersion).Current.Sanity;
+    }
+
+    [Fact]
+    public async Task Replace_keeps_the_scenario_and_rewrites_its_parts_and_own_npc_sheet()
+    {
+        TestDatabase.SkipIfMissing();
+        await SkillsAsync();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var exchange = Exchange(keeper);
+        var name = Unique("Маяк");
+        var npcName = Unique("Смотритель");
+        var id = (await exchange.ImportAsync(Body(V1File(name, npcName)), dryRun: false, cancellationToken: Cancellation)).ScenarioId!.Value;
+        var npcId = Assert.Single((await Scenarios(keeper).GetAsync(id, Cancellation)).Npcs).Character.Id;
+
+        var dry = await exchange.ReplaceAsync(id, Body(Revised(name, npcName)), dryRun: true, cancellationToken: Cancellation);
+        Assert.Equal((true, true, false, 0, 1, 1), (dry.Replaced, dry.DryRun, dry.Imported, dry.Failed, dry.NpcsUpdated, dry.Pregens));
+        Assert.Equal("Особняк", (await Scenarios(keeper).GetAsync(id, Cancellation)).Locations[0].Name);
+        Assert.Equal(30, await SanityAsync(npcId));
+
+        var report = await exchange.ReplaceAsync(id, Body(Revised(name, npcName)), dryRun: false, cancellationToken: Cancellation);
+        Assert.True(report.Imported);
+        Assert.Equal(id, report.ScenarioId);
+        Assert.Contains(report.Lines, l => l is { Part: ScenarioImportPart.Npc, Outcome: ScenarioImportOutcome.Updated });
+        Assert.DoesNotContain(report.Warnings, w => w.Contains(name, StringComparison.Ordinal)); // своё же название — не повтор
+
+        var scenario = await Scenarios(keeper).GetAsync(id, Cancellation);
+        Assert.Equal(["Маяк", "Подвал", "Сад"], scenario.Locations.Select(l => l.Name));
+        Assert.Equal(scenario.Locations[0].Id, scenario.Locations[1].ParentId);
+        Assert.Equal(npcId, Assert.Single(scenario.Npcs).Character.Id);
+        Assert.Single(scenario.Pregens);
+        Assert.Equal(10, await SanityAsync(npcId));
+        await using var db = app.Database.CreateContext();
+        Assert.Equal(1, await db.Scenarios.CountAsync(s => s.Name == name, Cancellation));
+        Assert.Single(await db.ScenarioKeyFacts.Where(f => f.ScenarioId == id).ToListAsync(Cancellation));
+    }
+
+    [Fact]
+    public async Task Replace_reuses_shared_npc_archives_old_pregens_and_refuses_others()
+    {
+        TestDatabase.SkipIfMissing();
+        await SkillsAsync();
+        var keeper = await app.AddUserAsync(UserRole.Keeper);
+        var stranger = await app.AddUserAsync(UserRole.Keeper);
+        var player = await app.AddUserAsync();
+        var exchange = Exchange(keeper);
+        var name = Unique("Маяк");
+        var npcName = Unique("Смотритель");
+        var id = (await exchange.ImportAsync(Body(Revised(name, npcName, "Старый преген")), dryRun: false, cancellationToken: Cancellation))
+            .ScenarioId!.Value;
+        var scenario = await Scenarios(keeper).GetAsync(id, Cancellation);
+        var (npcId, oldPregen) = (Assert.Single(scenario.Npcs).Character.Id, Assert.Single(scenario.Pregens).Character.Id);
+        // Тот же лист занят вторым сценарием — замена первого его не трогает.
+        await exchange.ImportAsync(Body(V1File(Unique("Другой"), npcName)), dryRun: false, cancellationToken: Cancellation);
+
+        var report = await exchange.ReplaceAsync(id, Body(Revised(name, npcName, "Новый преген").Replace("\"sanity\": 10", "\"sanity\": 5", StringComparison.Ordinal)),
+            dryRun: false, cancellationToken: Cancellation);
+
+        Assert.True(report.Imported);
+        Assert.Equal((0, 1), (report.NpcsUpdated, report.NpcsReused));
+        Assert.Equal(10, await SanityAsync(npcId));
+        await using (var db = app.Database.CreateContext())
+        {
+            var archived = await db.Characters.SingleAsync(c => c.Id == oldPregen, Cancellation);
+            Assert.Equal(((Guid?)null, CharacterStatus.Archived), (archived.ScenarioId, archived.Status));
+        }
+
+        Assert.Equal("Новый преген", Assert.Single((await Scenarios(keeper).GetAsync(id, Cancellation)).Pregens).Character.Name);
+
+        // Замена стирает всё — право как у удаления: чужой Хранитель видит сценарий (403), игрок — нет (404).
+        foreach (var (other, status) in new[] { (stranger, HttpStatusCode.Forbidden), (player, HttpStatusCode.NotFound) })
+        {
+            var refused = await Assert.ThrowsAsync<ApiException>(() =>
+                Exchange(other).ReplaceAsync(id, Body(V1File(name, npcName)), dryRun: true, cancellationToken: Cancellation));
+            Assert.Equal(status, refused.StatusCode);
+        }
+    }
+
     private sealed record RichNames(string Track);
 
     private async Task<(Guid ScenarioId, RichNames Names)> RichScenarioAsync(User keeper, Dictionary<string, Guid> skills)
