@@ -43,9 +43,9 @@ dotnet ef database update --project src/CampaignManager.Data   # строка �
 ## Деплой
 
 На каждый PR CI собирает решение и гоняет тесты (`.github/workflows/ci.yml`). Push в `master`, задевший `src/**`,
-собирает образ `ghcr.io/shman4ik/campaign-manager-v2` и коммитит тег в GitOps-репозиторий — сразу для прода
-(https://cthulhu.dmnet.dev) и беты (https://beta.cthulhu.dmnet.dev): `.github/workflows/v2-deploy.yml`. Миграции
-применяются вручную до слияния — см. [src/CLAUDE.md](src/CLAUDE.md), «Деплой и beta-стенд».
+собирает образ `ghcr.io/shman4ik/campaign-manager-v2` и коммитит тег в GitOps-репозиторий — на прод
+(https://cthulhu.dmnet.dev): `.github/workflows/v2-deploy.yml`. Миграции
+применяются вручную до слияния — см. [src/CLAUDE.md](src/CLAUDE.md), «Деплой».
 
 ## Правовая информация
 

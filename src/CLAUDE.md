@@ -201,7 +201,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 `RouteHandlerOptions.ThrowOnBadRequest` во всех окружениях (по умолчанию его бросает только Development — там было 500, #194).
 Перехватчики `SaveChanges` модулей — `ISaveChangesInterceptor` в DI, `AddCmData` их подключает.
 
-Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` (и beta-стенд на ней) смотрит
+Настройки MinIO (`Minio:*`) в `appsettings.json` не лежат. Ветка Neon `dev` смотрит
 в бакет **`campaign-manager-dev`**: туда перенос (T1.3) копирует объекты v1, на которые ссылаются строки
 `files` ветки `dev`; боевой `campain-manager` (v1 и прод) разработка не трогает. Локально — `Minio:BucketName`
 в `Server/appsettings.Development.json`. Без настроек сервер стартует, а файлы отвечают ошибкой с именем
@@ -253,7 +253,7 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   Тестовый Postgres — `wslc run -d --rm --name <контейнер> -p <порт>:5432 …` (команда — «Тесты»).
   Windows резервирует диапазоны портов, и они меняются (было 54369–54468 и 55339–55438): при
   `WSAEACCES` взять соседний свободный и написать об этом в отчёте.
-- **Данные.** Ветка Neon `dev` — общая: на ней beta и перенос (`--reset` стирает всё, что завели
+- **Данные.** Ветка Neon `dev` — общая: на ней перенос (`--reset` стирает всё, что завели
   агенты). Проверять на своей копии: `pg_dump --schema=cm` с `dev` (только чтение) в свой контейнер.
   Писать в `dev` — только миграции и перенос, если задача этого требует. Прод (`main`) не трогать никак.
   Копию обычно готовит оркестратор (проверка прав исполнителя `pg_dump` с `dev` отклоняет): дамп
@@ -282,58 +282,44 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 - **Обязательные правила продукта:** любой бросок можно вписать (`RollInput`/`DiceInput`); время —
   в поясе браузера (`LocalTime`); числа в `style` — инвариантной культурой; «одна копия формулы» в Core.
 
-## Деплой и beta-стенд
+## Деплой
 
 **Прод — https://cthulhu.dmnet.dev — на 2.0 с 2026-10-04** (T3.2, [CUTOVER.md](../docs/v2/CUTOVER.md)): namespace
-`campaign-manager`, тот же SealedSecret `campaign-manager-env`, что был у v1 (2.0 читает те же ключи), Neon `main`, бакет
-`campain-manager`. **Beta — https://beta.cthulhu.dmnet.dev** — тот же образ на Neon `dev` (T0.4). Один push катит обоих:
-проверять до слияния — на своей копии `dev`, бета уже не «до прода».
+`campaign-manager`, SealedSecret `campaign-manager-env`, Neon `main`, бакет `campain-manager`. **Beta-стенда нет:**
+он жил 2026-10-01…10-05 (T0.4) на ветке `dev` и погашен — проверять изменения надо до слияния, локально и на своей копии
+`dev` (см. «Данные»). Push в `master` выкатывает прод сразу.
 
 - **Выкатка.** Push в `master`, задевший `src/**`, `Directory.*.props`, `global.json`, `NuGet.config` или сам
   воркфлоу (и ручной `workflow_dispatch`) → `.github/workflows/v2-deploy.yml` делает
   `dotnet publish` прямо на раннере (в `artifacts/v2`, без анализаторов — их уже прогнал CI), упаковывает
-  его стадией `prebuilt` из `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.2.N, latest}` и коммитит тег в приватный
-  `Shman4ik/dmnet-gitops`, `workloads/campaign-manager/kustomization.yaml` и `workloads/campaign-manager-beta/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`,
-  тот же, что у v1). Argo CD (Application `campaign-manager-beta`, namespace `campaign-manager-beta`)
-  катит его за ~90 с. Старые версии пакета чистятся, последние 10 остаются.
+  его стадией `prebuilt` из `src/Dockerfile` в `ghcr.io/shman4ik/campaign-manager-v2:{0.3.N, latest}` и коммитит тег в приватный
+  `Shman4ik/dmnet-gitops`, `workloads/campaign-manager/kustomization.yaml` (ключ `GITOPS_DEPLOY_KEY`).
+  Argo CD (Application `campaign-manager`) катит его за ~90 с. Старые версии пакета чистятся, последние 10 остаются.
 - **Образ** собирается из корня: `wslc build -f src/Dockerfile -t campaign-manager-v2 .` (цель по
   умолчанию, `final`, публикует сама внутри образа; `prebuilt` — для деплоя, ей нужен готовый `artifacts/v2`). Внутри — только
   `src/`; Node скопирован в SDK-стадию ради Tailwind (MSBuild-таргет `UI` сам делает `npm ci`).
   Рантайм — `aspnet:10.0-noble-chiseled-extra`, порт 8080, без shell. Проверка локально:
   `wslc run --rm -p 58080:8080 --env-file <файл> campaign-manager-v2` и `curl localhost:58080/health`.
-- **Окружение — `Production`**, отдельного `Beta` нет: стенд должен вести себя как будущий прод
-  (страница ошибки, HSTS, без отладки WebAssembly), а страницы `/dev/*` — обычные страницы UI и
-  открываются в любом окружении. `appsettings.<Env>.json` всё равно в `.gitignore`, так что настройки —
-  только переменными окружения.
+- **Окружение — `Production`**; страницы `/dev/*` — обычные страницы UI и открываются в любом окружении.
+  `appsettings.<Env>.json` всё равно в `.gitignore`, так что настройки — только переменными окружения.
 - **Прокси.** TLS снимает Traefik, поэтому в Deployment `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`:
   без него `UseForwardedHeaders` доверяет только loopback, и `redirect_uri` в Auth0 уходит с `http://`.
   Пробы — `httpGet /health` (без проверки базы: холодный старт Neon не должен убивать под).
-- **Секреты** — SealedSecret `campaign-manager-beta-env` в dmnet-gitops (зашифрован ключом кластера под
-  namespace `campaign-manager-beta`): `ConnectionStrings__DefaultConnection` — **ветка Neon `dev`**,
-  `Authentication__Auth0__{Domain,ClientId,ClientSecret}` — **dev-приложение Auth0** (в нём разрешены
-  `https://beta.cthulhu.dmnet.dev/signin-oidc` и `/signout-callback-oidc`). Значения копируются
-  скриптом из `src/CampaignManager.Server/appsettings.Development.json` основного чекаута и шифруются
-  `kubeseal --raw` на VPS, не попадая ни в вывод, ни в git. Добавить ключ, не расшифровывая остальные:
+- **Секреты** — SealedSecret `campaign-manager-env` в dmnet-gitops (зашифрован ключом кластера под namespace
+  `campaign-manager`). Добавить ключ, не расшифровывая остальные — `kubeseal --raw` на VPS, значение не попадает
+  ни в вывод, ни в git:
 
   ```bash
-  printf '%s' "$VALUE" | ssh vps 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubeseal --raw \
-    --namespace campaign-manager-beta --name campaign-manager-beta-env --from-file=/dev/stdin'
+  printf '%s' "$VALUE" | ssh vps 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubeseal --raw     --namespace campaign-manager --name campaign-manager-env --from-file=/dev/stdin'
   ```
 
-  и вывод — строкой под `encryptedData` в `workloads/campaign-manager-beta/campaign-manager-beta-env.sealed.yaml`
+  и вывод — строкой под `encryptedData` в `workloads/campaign-manager/campaign-manager-env.sealed.yaml`
   (PR в dmnet-gitops). Несекретное (`Minio__Endpoint`, `Minio__BucketName`…) — в `env` Deployment.
-- **Файлы** — бакет `campaign-manager-dev` на `s3.dmnet.dev` (заводит T1.3), не боевой `campain-manager`.
-  `Minio__AccessKey`/`Minio__SecretKey` в секрет ещё не положены: до них сервер работает, а запросы к
-  файлам отвечают ошибкой с именем недостающей настройки. Ключ — отдельный пользователь MinIO с правами
-  только на этот бакет, а не корневой.
-- **Базы.** Neon-проект `jolly-hill-30043612` (PostgreSQL 17). Прод — ветка `main` (настоящие данные), бета — `dev`,
-  та же, что у локальной разработки (её можно сбросить от `main`: `neonctl branches reset dev --parent --project-id
-  jolly-hill-30043612` — после этого в `dev` сразу прод-данные, схема `cm` уже есть). Пароль роли `shman4ik` на `dev` свой, не как у `main`: после сброса проверить, что строка из
-  `appsettings.Development.json` подходит, а если пароль вернулся к прод-паролю — сменить его на `dev` и перезапечатать
-  `campaign-manager-beta-env`.
+- **Базы.** Прод — ветка Neon `main` (настоящие данные), разработка — `dev` (её можно сбросить от `main`:
+  `neonctl branches reset dev --parent` — после этого в `dev` сразу прод-данные, схема `cm` уже есть).
   **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её **до слияния** своего PR
-  **на обе ветки — `dev` и `main`**: выкатка идёт на прод и бету одновременно, и без миграции прод упадёт на первом
-  запросе к новой таблице. Миграция должна быть совместимой с кодом до неё (под старой версии живёт до замены):
+  **на обе ветки — `dev` и `main`**: без миграции прод упадёт на первом запросе к новой таблице. Миграция должна
+  быть совместимой с кодом до неё (под старой версии живёт до замены):
 
   ```bash
   CM_DB="<строка ветки dev из appsettings.Development.json>" dotnet ef database update --project src/CampaignManager.Data
@@ -343,13 +329,10 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   Строку `main` взять из секрета прода в переменную, не выводя (`kubectl get secret campaign-manager-env` на VPS через
   `ssh vps`, ключ `ConnectionStrings__DefaultConnection`, base64). Перенос T1.3 на `main` больше не запускать: он стирает
   данные игры (`--reset`).
-- **Откат** — revert коммита `campaign-manager 0.2.N` в dmnet-gitops (или ручной `newTag` на прежнюю версию, PR в
-  dmnet-gitops): Argo вернёт прежний образ прода и беты. Миграцию откат не отменяет. Откат прода на v1 — revert
-  dmnet-gitops#3: образ v1 хранится в ghcr, схемы `games`/`identity` живы, пока их не снимет владелец (код v1 — в git
-  до T3.3, PR удаления).
-- **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан, как и у прода:
-  войти может любой с подтверждённой почтой и станет игроком на данных `dev`. Первые админы —
-  `Authorization__AdminEmails__0` в секрет тем же `kubeseal --raw`, если роли из переноса не хватит.
+- **Откат** — revert коммита `campaign-manager 0.3.N` в dmnet-gitops (или ручной `newTag` на прежнюю версию, PR в
+  dmnet-gitops): Argo вернёт прежний образ прода. Миграцию откат не отменяет.
+- **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан: войти может любой с
+  подтверждённой почтой и станет игроком. Админы — `Authorization__AdminEmails__*` в секрете прода.
 
 ### Бэкапы
 
