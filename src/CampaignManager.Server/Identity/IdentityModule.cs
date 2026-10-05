@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace CampaignManager.Server.Identity;
@@ -18,7 +19,8 @@ namespace CampaignManager.Server.Identity;
 /// Вход через Auth0 и пользователи. Две схемы под одной политикой:
 /// <list type="bullet">
 /// <item>веб — OIDC (code flow) и своя кука <c>.CampaignManager.Auth</c>, к Auth0 ходим только при входе и выходе;</item>
-/// <item>мобильное приложение — JWT Bearer (Auth0, PKCE на стороне приложения).</item>
+/// <item>мобильное приложение — JWT Bearer (Auth0, PKCE на стороне приложения);</item>
+/// <item>агенты — JWT Bearer по client credentials (M2M), от имени человека и только по scope'ам (<see cref="MachineAccess"/>).</item>
 /// </list>
 /// Схема выбирается по заголовку <c>Authorization: Bearer</c>, политики принимают обе.
 /// Знание v1 — <c>Server/Identity/CLAUDE.md</c>.
@@ -101,6 +103,8 @@ public static class IdentityModule
     public static WebApplication UseIdentity(this WebApplication app)
     {
         app.UseAuthentication();
+        // Токен агента (M2M) — только на адреса, открытые агентам: запрет по умолчанию, до автовхода и авторизации.
+        app.UseMachineScopes();
         if (IsAuth0Configured(app.Configuration))
         {
             // Между ними: страница под [Authorize] без сессии сначала пробует автовход через Google.
@@ -287,6 +291,22 @@ public static class IdentityModule
             OnTokenValidated = context =>
             {
                 var token = context.Principal!;
+                if (MachineAccess.IsMachineToken(token))
+                {
+                    var clients = context.HttpContext.RequestServices.GetRequiredService<IOptions<AccessListOptions>>().Value.MachineClients;
+                    var (machine, failure) = MachineAccess.CreatePrincipal(token, clients, context.Scheme.Name);
+                    if (machine is null)
+                    {
+                        context.Fail(failure!);
+                    }
+                    else
+                    {
+                        context.Principal = machine;
+                    }
+
+                    return Task.CompletedTask;
+                }
+
                 var identity = new ClaimsIdentity(context.Scheme.Name, ClaimTypes.Name, ClaimTypes.Role);
                 if (token.FindFirstValue("sub") is { } subject)
                 {

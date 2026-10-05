@@ -18,6 +18,7 @@ public static class AccountEndpoints
     {
         app.MapGet(IdentityRoutes.Me, GetMeAsync)
             .RequireAuthorization()
+            .AllowMachine() // агент проверяет, от чьего имени он работает
             .WithName("GetMe")
             .WithTags("Identity");
 

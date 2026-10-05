@@ -117,6 +117,11 @@ GitHub: каждый слой — своя ветка и свой PR повер�
   Auth0 берёт их с домена прода. Тенант общий: `apply.sh` меняет страницу входа dev и прода разом.
 - На `localhost` Auth0 всегда спрашивает согласие («Authorize App → Accept») — это его правило для локальных адресов.
 - Страница входа Auth0 — внешний сайт: агент в браузере пароли туда не вводит. Проверки под ролями — `/dev/login`.
+- **Агенты ходят в API токеном M2M** (client credentials): API тенанта `https://cthulhu.dmnet.dev/api`, приложение
+  «CampaignManager agents», токен — с домена входа `auth.cthulhu.dmnet.dev` (иначе `iss` не совпадёт). Работает от имени
+  почты из `Authorization:MachineClients`, только по scope'ам (`scenarios:write`, `files:write`), остальное — 403.
+  Секрет — у владельца в `~/.config/campaign-manager/agent.env`. Подробно —
+  [src/CampaignManager.Server/Identity/CLAUDE.md](src/CampaignManager.Server/Identity/CLAUDE.md), «Токены агентов».
 
 ## Работа в контейнере Claude Code on the web
 

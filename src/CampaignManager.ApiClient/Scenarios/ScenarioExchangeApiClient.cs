@@ -9,15 +9,16 @@ public sealed class ScenarioExchangeApiClient(HttpClient http) : IScenarioExchan
 {
     public async Task<ScenarioImportReport> ImportAsync(Stream file, bool dryRun, string? name = null, CancellationToken cancellationToken = default)
     {
-        using var content = new StreamContent(file);
-        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        var url = $"{ScenarioExchangeRoutes.Import}?{ScenarioExchangeRoutes.DryRunQuery}={(dryRun ? "true" : "false")}";
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            url += $"&{ScenarioExchangeRoutes.NameQuery}={Uri.EscapeDataString(name.Trim())}";
-        }
+        using var content = FileContent(file);
+        using var response = await http.PostAsync(WithQuery(ScenarioExchangeRoutes.Import, dryRun, name), content, cancellationToken);
+        return await ApiResponses.ReadAsync(response, ContractsJsonContext.Default.ScenarioImportReport, cancellationToken, withCode: true);
+    }
 
-        using var response = await http.PostAsync(url, content, cancellationToken);
+    public async Task<ScenarioImportReport> ReplaceAsync(Guid scenarioId, Stream file, bool dryRun, string? name = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = FileContent(file);
+        using var response = await http.PutAsync(WithQuery(ScenarioExchangeRoutes.Replace(scenarioId), dryRun, name), content, cancellationToken);
         return await ApiResponses.ReadAsync(response, ContractsJsonContext.Default.ScenarioImportReport, cancellationToken, withCode: true);
     }
 
@@ -26,5 +27,23 @@ public sealed class ScenarioExchangeApiClient(HttpClient http) : IScenarioExchan
         using var response = await http.GetAsync(ScenarioExchangeRoutes.Export(scenarioId), cancellationToken);
         await ApiResponses.EnsureSuccessAsync(response, cancellationToken, withCode: true);
         return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    private static StreamContent FileContent(Stream file)
+    {
+        var content = new StreamContent(file);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        return content;
+    }
+
+    private static string WithQuery(string route, bool dryRun, string? name)
+    {
+        var url = $"{route}?{ScenarioExchangeRoutes.DryRunQuery}={(dryRun ? "true" : "false")}";
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            url += $"&{ScenarioExchangeRoutes.NameQuery}={Uri.EscapeDataString(name.Trim())}";
+        }
+
+        return url;
     }
 }

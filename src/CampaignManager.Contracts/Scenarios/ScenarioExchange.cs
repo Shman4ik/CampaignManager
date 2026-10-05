@@ -23,11 +23,19 @@ public static class ScenarioExchangeRoutes
     /// <summary><c>GET</c> — файл сценария (<c>Content-Disposition: attachment</c>).</summary>
     public const string ExportPattern = ScenariosRoutes.ScenarioPattern + "/export";
 
+    /// <summary>
+    /// <c>PUT</c> — заменить содержимое сценария файлом: тот же id, автор и прохождения, части — из файла. Те же
+    /// <c>?dryRun=</c> и <c>?name=</c>.
+    /// </summary>
+    public const string ReplacePattern = ScenariosRoutes.ScenarioPattern + "/import";
+
     public const string DryRunQuery = "dryRun";
 
     public const string NameQuery = "name";
 
     public static string Export(Guid scenarioId) => $"{ScenariosRoutes.Scenario(scenarioId)}/export";
+
+    public static string Replace(Guid scenarioId) => $"{ScenariosRoutes.Scenario(scenarioId)}/import";
 }
 
 /// <summary>Файл сценария. Имена полей v1 сохранены: <c>description</c> — кратко, <c>location</c> — место, <c>era</c> — время действия текстом, <c>journal</c> — основной текст.</summary>
@@ -295,6 +303,9 @@ public enum ScenarioImportOutcome
 
     /// <summary>Не записана; из-за неё не записывается весь файл.</summary>
     Failed,
+
+    /// <summary>Замена: лист НПС этого сценария обновлён из файла (лист больше нигде не занят и заведён вами).</summary>
+    Updated,
 }
 
 /// <param name="Message">Почему не записано или что сделано не так, как в файле (предупреждение).</param>
@@ -310,8 +321,11 @@ public sealed class ScenarioImportReport
 
     public bool Imported { get; set; }
 
-    /// <summary>Новый сценарий — только если записан.</summary>
+    /// <summary>Записанный сценарий (новый или заменённый) — только если записан.</summary>
     public Guid? ScenarioId { get; set; }
+
+    /// <summary>Замена содержимого существующего сценария, а не новый сценарий.</summary>
+    public bool Replaced { get; set; }
 
     public string ScenarioName { get; set; } = "";
 
@@ -331,6 +345,9 @@ public sealed class ScenarioImportReport
 
     public int NpcsReused { get; set; }
 
+    /// <summary>Замена: листы НПС сценария, обновлённые из файла.</summary>
+    public int NpcsUpdated { get; set; }
+
     public int Pregens { get; set; }
 
     public int Failed { get; set; }
@@ -347,6 +364,9 @@ public interface IScenarioExchangeApi
 {
     /// <param name="name">Название копии вместо названия из файла; пусто — из файла.</param>
     Task<ScenarioImportReport> ImportAsync(Stream file, bool dryRun, string? name = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Заменить содержимое сценария <paramref name="scenarioId"/> файлом: автор или админ; брони прегенов — 409.</summary>
+    Task<ScenarioImportReport> ReplaceAsync(Guid scenarioId, Stream file, bool dryRun, string? name = null, CancellationToken cancellationToken = default);
 
     /// <summary>Файл сценария — тем же форматом, что принимает импорт.</summary>
     Task<string> ExportAsync(Guid scenarioId, CancellationToken cancellationToken = default);
