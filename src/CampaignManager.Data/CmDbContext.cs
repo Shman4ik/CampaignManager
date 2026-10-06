@@ -48,6 +48,7 @@ public sealed class CmDbContext(DbContextOptions<CmDbContext> options) : DbConte
     public DbSet<CreatureImage> CreatureImages => Set<CreatureImage>();
     public DbSet<WeaponImage> WeaponImages => Set<WeaponImage>();
     public DbSet<OccupationImage> OccupationImages => Set<OccupationImage>();
+    public DbSet<SpellImage> SpellImages => Set<SpellImage>();
 
     public DbSet<MusicTrack> MusicTracks => Set<MusicTrack>();
 

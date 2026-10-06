@@ -129,6 +129,9 @@ public sealed class Spell : CatalogEntry
 
     public string? CastingTime { get; set; }
     public string Description { get; set; } = "";
+
+    /// <summary>Первая по <see cref="SpellImage.Ord"/> — обложка в строке справочника.</summary>
+    public List<SpellImage> Images { get; set; } = [];
 }
 
 public sealed class Book : CatalogEntry
@@ -213,6 +216,14 @@ public sealed class WeaponImage : ICatalogImage
 public sealed class OccupationImage : ICatalogImage
 {
     public Guid OccupationId { get; set; }
+    public int Ord { get; set; }
+    public Guid FileId { get; set; }
+    public string? Caption { get; set; }
+}
+
+public sealed class SpellImage : ICatalogImage
+{
+    public Guid SpellId { get; set; }
     public int Ord { get; set; }
     public Guid FileId { get; set; }
     public string? Caption { get; set; }
@@ -401,6 +412,18 @@ internal sealed class OccupationImageConfiguration : IEntityTypeConfiguration<Oc
         entity.ToTable("occupation_images");
         entity.HasKey(i => new { i.OccupationId, i.Ord });
         entity.HasOne<Occupation>().WithMany(o => o.Images).HasForeignKey(i => i.OccupationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class SpellImageConfiguration : IEntityTypeConfiguration<SpellImage>
+{
+    public void Configure(EntityTypeBuilder<SpellImage> entity)
+    {
+        entity.ToTable("spell_images");
+        entity.HasKey(i => new { i.SpellId, i.Ord });
+        entity.HasOne<Spell>().WithMany(s => s.Images).HasForeignKey(i => i.SpellId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
     }
