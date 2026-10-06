@@ -446,15 +446,17 @@ public sealed class KitUx0bTests : KitContext
     }
 
     [Fact]
-    public void Player_strip_playing_has_two_labelled_main_buttons_and_the_rest_in_the_menu()
+    public void Player_strip_playing_has_pause_and_roll_icons_seek_and_the_rest_in_the_menu()
     {
         var player = Services.GetRequiredService<MusicPlayer>();
         player.SetLibrary([Track("Погоня"), Track("Бой")]);
         player.PlayTag("бой");
         var cut = Render<PlayerStrip>();
 
-        var labelled = cut.FindAll(".cm-music-controls > button.cm-btn").Select(b => b.TextContent.Trim()).Where(t => t.Length > 0).ToArray();
+        var labelled = cut.FindAll(".cm-music-controls > button.cm-btn").Select(b => b.GetAttribute("aria-label")).ToArray();
         Assert.Equal(["Пауза", "Другой трек"], labelled);
+        // Перемотка — в самой полосе, а не за «⋯».
+        Assert.NotNull(cut.Find("#cm-music-seek"));
         Assert.DoesNotContain("Остановить", cut.Markup, StringComparison.Ordinal);
 
         cut.Find("button[aria-haspopup=menu]").Click();

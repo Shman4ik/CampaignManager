@@ -11,29 +11,18 @@
     @foreach (var item in Items)
     {
         var active = item.Key == ActiveKey;
-        <button type="button" role="tab" class="cm-tab" aria-selected="@(active ? "true" : "false")"
-                @onclick="() => SelectAsync(item.Key)">
-            @if (item.Icon is not null)
-            {
-                <i class="fa-solid @item.Icon" aria-hidden="true"></i>
-            }
-            <span>@item.Label</span>
-            @if (item.Count is > 0)
-            {
-                @* Число без подписи — загадка («1» у «Ран»: чего?): значок и слово для чтения с экрана. *@
-                <span class="cm-tab-count">
-                    @if (item.CountIcon is not null)
-                    {
-                        <i class="fa-solid @item.CountIcon" aria-hidden="true"></i>
-                    }
-                    @item.Count
-                    @if (item.CountLabel is not null)
-                    {
-                        <span class="sr-only">@item.CountLabel</span>
-                    }
-                </span>
-            }
-        </button>
+        @if (Href is not null)
+        {
+            @* Вкладка в адресе — ссылка: средний клик и Ctrl+клик открывают её в новой вкладке. Обычный клик заменяет запись
+               в истории (Layout/ReplaceLinks): «Назад» уводит со страницы, а не по вкладкам. *@
+            <a href="@Href(item.Key)" role="tab" class="cm-tab" aria-selected="@(active ? "true" : "false")"
+               data-replace="@(Replace ? "" : null)">@TabContent(item)</a>
+        }
+        else
+        {
+            <button type="button" role="tab" class="cm-tab" aria-selected="@(active ? "true" : "false")"
+                    @onclick="() => SelectAsync(item.Key)">@TabContent(item)</button>
+        }
     }
 </div>
 
@@ -49,6 +38,15 @@
     [Parameter] public string ActiveKey { get; set; } = "";
 
     [Parameter] public EventCallback<string> ActiveKeyChanged { get; set; }
+
+    /// <summary>
+    /// Адрес вкладки по ключу — вкладка, которая живёт в адресе (<c>?tab=</c>), становится ссылкой; <see cref="ActiveKeyChanged"/>
+    /// тогда не зовётся, открытую вкладку страница читает из адреса.
+    /// </summary>
+    [Parameter] public Func<string, string>? Href { get; set; }
+
+    /// <summary>Переход по вкладке-ссылке заменяет запись в истории (по умолчанию), а не добавляет.</summary>
+    [Parameter] public bool Replace { get; set; } = true;
 
     [Parameter] public string? AriaLabel { get; set; }
 
@@ -94,4 +92,28 @@
 
     private Task SelectAsync(string key) =>
         key == ActiveKey ? Task.CompletedTask : ActiveKeyChanged.InvokeAsync(key);
+
+    private static RenderFragment TabContent(Item item) => __builder =>
+    {
+        @if (item.Icon is not null)
+        {
+            <i class="fa-solid @item.Icon" aria-hidden="true"></i>
+        }
+        <span>@item.Label</span>
+        @if (item.Count is > 0)
+        {
+            @* Число без подписи — загадка («1» у «Ран»: чего?): значок и слово для чтения с экрана. *@
+            <span class="cm-tab-count">
+                @if (item.CountIcon is not null)
+                {
+                    <i class="fa-solid @item.CountIcon" aria-hidden="true"></i>
+                }
+                @item.Count
+                @if (item.CountLabel is not null)
+                {
+                    <span class="sr-only">@item.CountLabel</span>
+                }
+            </span>
+        }
+    };
 }

@@ -243,10 +243,14 @@ public sealed class ScenarioReviewG4Tests : KitContext
             Id = ScenarioId, Name = "Дом",
             Handouts = [new(Guid.NewGuid(), 0, "Письмо тётушки", "Дорогой племянник", "выдать ночью", null, null)],
         };
-        var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario));
+        var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario).Add(c => c.ShowHref, id => $"play?handout={id}"));
 
         var button = cut.Find("[data-testid=show-handout]");
         Assert.Equal("Показать", button.TextContent.Trim());
+        // Ссылка, а не кнопка: средний клик открывает показ в новой вкладке.
+        Assert.Equal("A", button.TagName);
+        Assert.Equal($"play?handout={scenario.Handouts[0].Id}", button.GetAttribute("href"));
+        Assert.True(button.HasAttribute("data-replace"));
         Assert.Equal("Показать игрокам: Письмо тётушки", button.GetAttribute("aria-label"));
         Assert.Contains("Хранителю: выдать ночью", cut.Markup, StringComparison.Ordinal);
     }

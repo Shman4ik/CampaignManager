@@ -32,43 +32,35 @@
 
         @if (_expanded)
         {
-            @if (Player.Current is { } playing)
-            {
-                @* Разметка полосы неизменная: значения полосы и подписей ставит модуль напрямую четыре раза в секунду, а
-                   C# эти элементы после первой отрисовки не патчит. Не привязывать к ним @bind и value с меняющимся
-                   значением — ползунок начнёт вырываться из-под пальца. Громкость — в той же строке справа (отдельная
-                   строка с одним ползунком съедала 44px, M7); у ролика YouTube её нет вовсе: iPad громкость чужого
-                   iframe не слушает, ползунок был бы обманом. *@
-                <div class="cm-music-seek">
-                    <span class="cm-music-time" id="cm-music-elapsed">0:00</span>
-                    <input type="range" id="cm-music-seek" min="0" max="1000" step="1" value="0" aria-label="Позиция в треке" disabled />
-                    <span class="cm-music-time" id="cm-music-duration">--:--</span>
-                    @if (!playing.IsYouTube)
+            @* Позиция — в полосе (PlayerStrip). Здесь громкость и настроения одной строкой (M7: панель ≤ 150px из 696):
+               громкость слева не листается, настроения листаются вбок. У ролика YouTube громкости нет вовсе: iPad громкость
+               чужого iframe не слушает, ползунок был бы обманом. *@
+            <div class="cm-music-row cm-music-mixer">
+                @if (Player.Current is { IsYouTube: false })
+                {
+                    <div class="cm-music-volume">
+                        <Button Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
+                                AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
+                        <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
+                    </div>
+                }
+
+                <div class="cm-music-moods">
+                    <span class="cm-music-pool">Включить настроение</span>
+                    @foreach (var tag in Player.PinnedTags)
                     {
-                        <div class="cm-music-volume">
-                            <Button Variant="ButtonVariant.Ghost" Icon="@(Player.Muted || Player.Volume == 0 ? "fa-volume-xmark" : "fa-volume-low")"
-                                    AriaLabel="@(Player.Muted ? "Включить звук" : "Приглушить")" OnClick="Player.ToggleMuted" />
-                            <input type="range" min="0" max="100" step="1" aria-label="Громкость" value="@Player.Volume" @oninput="OnVolumeInput" />
-                        </div>
+                        var current = tag;
+                        var count = Player.Resolve(MusicPool.Of([current])).Count;
+                        <Button class="cm-music-start" Disabled="count == 0"
+                                Variant="@(IsCurrentPool(current) ? ButtonVariant.Primary : ButtonVariant.Secondary)"
+                                OnClick="() => Player.PlayTag(current)">@current</Button>
+                    }
+                    @if (!OnLibraryPage)
+                    {
+                        @* На самой фонотеке ссылка вела бы на неё же. *@
+                        <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-up-right-from-square" class="ml-auto" Href="music">@Terms.Library</Button>
                     }
                 </div>
-            }
-
-            <div class="cm-music-row cm-music-moods">
-                <span class="cm-music-pool">Включить настроение</span>
-                @foreach (var tag in Player.PinnedTags)
-                {
-                    var current = tag;
-                    var count = Player.Resolve(MusicPool.Of([current])).Count;
-                    <Button class="cm-music-start" Disabled="count == 0"
-                            Variant="@(IsCurrentPool(current) ? ButtonVariant.Primary : ButtonVariant.Secondary)"
-                            OnClick="() => Player.PlayTag(current)">@current</Button>
-                }
-                @if (!OnLibraryPage)
-                {
-                    @* На самой фонотеке ссылка вела бы на неё же. *@
-                    <Button Variant="ButtonVariant.Ghost" Icon="fa-arrow-up-right-from-square" class="ml-auto" Href="music">@Terms.Library</Button>
-                }
             </div>
         }
 
