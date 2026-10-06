@@ -347,6 +347,14 @@ create table cm.occupation_images (
     primary key (occupation_id, ord)
 );
 
+create table cm.spell_images (              -- картинки заклинаний — так же, первая — обложка в строке справочника
+    spell_id     uuid not null references cm.spells on delete cascade,
+    ord          int not null,
+    file_id      uuid not null references cm.files on delete restrict,
+    caption      text,
+    primary key (spell_id, ord)
+);
+
 create table cm.music_tracks (
     id             uuid primary key,
     name           text not null,
@@ -772,6 +780,7 @@ where not exists (select 1 from cm.characters        where portrait_file_id = f.
   and not exists (select 1 from cm.creature_images   where file_id = f.id)
   and not exists (select 1 from cm.weapon_images     where file_id = f.id)
   and not exists (select 1 from cm.occupation_images where file_id = f.id)
+  and not exists (select 1 from cm.spell_images      where file_id = f.id)
   and not exists (select 1 from cm.scenario_handouts where file_id = f.id)
   and not exists (select 1 from cm.music_tracks      where file_id = f.id);
 ```

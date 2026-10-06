@@ -189,6 +189,9 @@ public sealed class SpellDto : CatalogItemDto
     public string? CastingTime { get; set; }
 
     public string Description { get; set; } = "";
+
+    /// <summary>Иллюстрации, как у оружия: первая — обложка в строке справочника.</summary>
+    public List<CatalogImageDto> Images { get; set; } = [];
 }
 
 public sealed class BookDto : CatalogItemDto
@@ -269,7 +272,7 @@ public sealed class CreatureDto : CatalogItemDto
     public List<CatalogImageDto> Images { get; set; } = [];
 }
 
-/// <summary>Картинка записи справочника (тварь, оружие, профессия) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
+/// <summary>Картинка записи справочника (тварь, оружие, профессия, заклинание) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
 public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 

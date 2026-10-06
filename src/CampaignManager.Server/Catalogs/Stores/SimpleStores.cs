@@ -22,6 +22,8 @@ public sealed class SpellStore : CatalogStore<Spell, SpellDto>
 
     public override DbSet<Spell> Set(CmDbContext db) => db.Spells;
 
+    public override IQueryable<Spell> Query(CmDbContext db) => db.Spells.Include(s => s.Images);
+
     public override Spell New() => new() { Name = "", SpellType = "" };
 
     public override Task<IReadOnlyList<SpellDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<Spell> rows, CancellationToken cancellationToken) =>
@@ -37,9 +39,10 @@ public sealed class SpellStore : CatalogStore<Spell, SpellDto>
             Cost = s.Cost,
             CastingTime = s.CastingTime,
             Description = s.Description,
+            Images = CatalogImages.ToDtos(s.Images),
         }).ToList());
 
-    public override Task ApplyAsync(CmDbContext db, SpellDto dto, Spell entity, CatalogWrite write, CancellationToken cancellationToken)
+    public override async Task ApplyAsync(CmDbContext db, SpellDto dto, Spell entity, CatalogWrite write, CancellationToken cancellationToken)
     {
         var type = dto.SpellType?.Trim() ?? "";
         if (type.Length == 0)
@@ -54,7 +57,8 @@ public sealed class SpellStore : CatalogStore<Spell, SpellDto>
         entity.Cost = Text(dto.Cost);
         entity.CastingTime = Text(dto.CastingTime);
         entity.Description = dto.Description?.Trim() ?? "";
-        return Task.CompletedTask;
+        var images = await CatalogImages.CheckAsync(db, dto.Images, write, cancellationToken);
+        CatalogImages.Apply(db, entity.Images, images, ord => new SpellImage { SpellId = entity.Id, Ord = ord });
     }
 }
 

@@ -290,6 +290,40 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
     }
 
     [Fact]
+    public async Task Spell_images_keep_order_and_captions_like_weapons()
+    {
+        TestDatabase.SkipIfMissing();
+        Guid sign, gate;
+        await using (var db = app.Database.CreateContext())
+        {
+            var files = new[] { new StoredFile { ExternalUrl = "https://example.test/sign.webp" }, new StoredFile { ExternalUrl = "https://example.test/gate.webp" } };
+            db.Files.AddRange(files);
+            await db.SaveChangesAsync(Cancellation);
+            (sign, gate) = (files[0].Id, files[1].Id);
+        }
+
+        var created = await app.Spells().CreateAsync(new SpellDto
+        {
+            Name = Unique("Знак Старших богов"), SpellType = "Защита",
+            Images = [new CatalogImageDto(sign, null, " На камне "), new CatalogImageDto(gate, null, null)],
+        }, Cancellation);
+
+        Assert.Equal([sign, gate], created.Images.Select(i => i.FileId));
+        Assert.Equal("На камне", created.Images[0].Caption);
+        Assert.Equal(FilesRoutes.Content(sign), created.Images[0].Url);
+
+        // Переставили картинки — правка только детей тоже сдвигает версию записи.
+        created.Images = [created.Images[1], created.Images[0]];
+        var updated = await app.Spells().UpdateAsync(created, Cancellation);
+        Assert.Equal([gate, sign], updated.Images.Select(i => i.FileId));
+        Assert.NotEqual(created.Version, updated.Version);
+
+        updated.Images = [new CatalogImageDto(Guid.NewGuid(), null, null)];
+        var missing = await Assert.ThrowsAsync<ApiException>(() => app.Spells().UpdateAsync(updated, Cancellation));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+    }
+
+    [Fact]
     public async Task Book_spells_are_matched_to_catalog_on_write()
     {
         TestDatabase.SkipIfMissing();
