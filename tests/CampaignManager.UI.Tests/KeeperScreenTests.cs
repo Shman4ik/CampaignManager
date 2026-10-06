@@ -106,16 +106,18 @@ public sealed class KeeperScreenTests : KitContext
     }
 
     [Fact]
-    public void Reference_page_tab_changes_address()
+    public void Reference_page_tabs_are_replace_links_to_the_address()
     {
         AddAuthorization().SetAuthorized("Хранитель").SetPolicies(Policies.Keeper);
         var navigation = Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo("reference?block=checks");
         var cut = Render<KeeperReferencePage>();
 
-        cut.FindAll("[role='tab']").Single(t => t.TextContent.Contains("Рассудок")).Click();
-
-        Assert.EndsWith("reference?block=sanity", navigation.Uri);
+        // Ссылка: средний клик открывает раздел в новой вкладке; обычный — заменяет запись в истории (Layout/ReplaceLinks).
+        var tab = cut.FindAll("[role='tab']").Single(t => t.TextContent.Contains("Рассудок"));
+        Assert.Equal("A", tab.TagName);
+        Assert.True(tab.HasAttribute("data-replace"));
+        Assert.EndsWith("reference?block=sanity", tab.GetAttribute("href"));
     }
 
     [Fact]

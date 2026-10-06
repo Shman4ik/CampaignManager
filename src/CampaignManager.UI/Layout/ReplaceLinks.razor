@@ -1,0 +1,44 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Ссылки с заменой записи в истории. Переход кнопкой — ссылка (<a href>), иначе средний клик и Ctrl+клик не откроют его в
+   новой вкладке (владелец 2026-10-06). Часть переходов — внутри страницы (локация режима игры, показ раздатки, вкладка):
+   их делали NavigateTo(…, replace: true), чтобы «Назад» уводил со страницы, а не по вкладкам. Ссылка Blazor так не умеет —
+   её обычный клик кладёт запись в историю. Атрибут data-replace на <a> (Button Replace="true", Tabs с Href) отдаёт такой
+   клик модулю: он сам ведёт с replaceHistoryEntry, а клик с модификатором и средний оставляет браузеру. Ставится один раз
+   в MainLayout. *@
+
+@code {
+    private IJSObjectReference? _module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Layout/ReplaceLinks.razor.js");
+            await _module.InvokeVoidAsync("install");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

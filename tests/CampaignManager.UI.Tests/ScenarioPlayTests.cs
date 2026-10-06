@@ -71,17 +71,16 @@ public sealed class ScenarioPlayTests : KitContext
             .Add(c => c.HandoutId, handout));
 
     [Fact]
-    public void Location_change_goes_to_the_address_with_replace_and_closes_the_showcase()
+    public void Location_is_a_replace_link_to_the_address_without_the_showcase()
     {
-        var navigation = Services.GetRequiredService<BunitNavigationManager>();
         var cut = Play(HouseId, HandoutId);
 
         Assert.Contains("Дом", cut.Find("[data-testid=play-location-detail]").TextContent);
-        cut.FindAll("[data-testid=play-location]").Single(b => b.TextContent.Contains("Подвал")).Click();
-
-        var last = navigation.History.First();
-        Assert.True(last.Options.ReplaceHistoryEntry);
-        Assert.EndsWith($"scenarios/{ScenarioId}?mode=play&location={CellarId}", last.Uri);
+        // Ссылка (средний клик — новая вкладка) с заменой записи в истории (Layout/ReplaceLinks); показ раздатки закрывается.
+        var cellar = cut.FindAll("[data-testid=play-location]").Single(b => b.TextContent.Contains("Подвал"));
+        Assert.Equal("A", cellar.TagName);
+        Assert.True(cellar.HasAttribute("data-replace"));
+        Assert.EndsWith($"scenarios/{ScenarioId}?mode=play&location={CellarId}", cellar.GetAttribute("href"));
     }
 
     [Fact]
@@ -136,7 +135,7 @@ public sealed class ScenarioPlayTests : KitContext
     {
         var scenario = Scenario();
         scenario.KeyFacts = [new(Guid.NewGuid(), 0, KeyFactType.Backstory, "Что было", "Старый дом.")];
-        var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario));
+        var cut = Render<PlayFactsPanel>(p => p.Add(c => c.Scenario, scenario).Add(c => c.ShowHref, id => $"play?handout={id}"));
 
         // Раздатки первыми: «Показать» — на первом экране, без прокрутки через факты.
         Assert.Single(cut.FindAll("[data-testid=show-handout]"));

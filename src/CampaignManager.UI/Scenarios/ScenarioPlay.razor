@@ -38,14 +38,16 @@ else
     <aside class="cm-play-side hidden w-56 border-r border-primary-200 lg:flex xl:w-64" aria-label="Локации" data-testid="play-locations">
         <p class="cm-section-title px-4 pb-1 pt-3">Локации</p>
         <nav class="flex flex-col gap-0.5 p-2">
-            <button type="button" class="@NavClass(null, 0)" aria-current="@(Location is null ? "true" : null)" @onclick="() => GoLocation(null)">
+            @* Локации — ссылки (средний клик — локация в новой вкладке); обычный клик заменяет запись в истории (data-replace,
+               Layout/ReplaceLinks): «Назад» уводит со сценария, а не по локациям. *@
+            <a href="@LocationHref(null)" data-replace class="@NavClass(null, 0)" aria-current="@(Location is null ? "page" : null)">
                 <span class="min-w-0 flex-1 font-medium">Обзор</span>
-            </button>
+            </a>
             @foreach (var (location, depth) in LocationTree.WithDepth(Scenario.Locations))
             {
                 var id = location.Id;
-                <button type="button" class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "true" : null)" @key="id"
-                        data-testid="play-location" @onclick="() => GoLocation(id)">
+                <a href="@LocationHref(id)" data-replace class="@NavClass(id, depth)" aria-current="@(Location?.Id == id ? "page" : null)" @key="id"
+                   data-testid="play-location">
                     @* Названия — без значка-пина перед каждым (все одинаковые): вложенность видна по отступу.
                        Целиком, с переносом: на планшете наведения нет, а обрезанное «День 2. Утёс Юджина Кле…» не прочесть. *@
                     <span class="@(depth == 0 ? "font-medium" : null) min-w-0 flex-1 break-words">@location.Name</span>
@@ -57,7 +59,7 @@ else
                     {
                         <i class="fa-solid fa-music text-xs text-primary-500" aria-hidden="true"></i><span class="sr-only">есть музыка</span>
                     }
-                </button>
+                </a>
             }
         </nav>
     </aside>
@@ -92,12 +94,12 @@ else
        не держим. На lg колонки уже (локации 224, факты 320), центру остаётся ~560px — строка текста локации. В портрете
        (уже lg) дерева и этой колонки нет: локации — выпадающий список, раздатки и факты — выдвижная панель. *@
     <aside class="cm-play-side hidden w-80 border-l border-primary-200 p-4 lg:flex xl:w-96" aria-label="Раздатки и факты">
-        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+        <PlayFactsPanel Scenario="Scenario" ShowHref="HandoutHref" />
     </aside>
 
     @* w-[30rem]: шире строки текста раздаток уходили за 100 знаков. *@
     <Modal Open="_factsOpen" OnClose="() => _factsOpen = false" Title="Раздатки и факты" Placement="ModalPlacement.Drawer" class="w-[30rem]" data-testid="facts-drawer">
-        <PlayFactsPanel Scenario="Scenario" OnShowHandout="ShowHandout" />
+        <PlayFactsPanel Scenario="Scenario" ShowHref="HandoutHref" />
     </Modal>
 }
 
@@ -154,6 +156,7 @@ else
     // партии один сыщик, — он и предвыбран (SoleInvestigatorId): окно открывается сразу со значением навыка, а не с «вписать вручную».
     private Guid? _checkInvestigatorId;
     private bool _factsOpen;
+    private Guid? _shownHandoutId;
     private bool _musicOpen;
 
     [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
@@ -193,6 +196,11 @@ else
     {
         if (LocationId is { } opened)
             _visited.Add(opened);
+
+        // Показ раздатки открыт («Показать» — ссылка) — выдвижная панель раздаток под ним больше не нужна.
+        if (HandoutId is not null && HandoutId != _shownHandoutId)
+            _factsOpen = false;
+        _shownHandoutId = HandoutId;
 
         if (_runs is null && _runsError is null)
         {
@@ -275,9 +283,9 @@ else
                 {
                     @* Бой с этой партией (T2.6d): сцена стартует сразу в кампании партии, окно участника предложит её сценарий. *@
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-hand-fist" data-testid="play-combat"
-                            OnClick="() => Navigation.NavigateTo(ScenarioLinks.Combat(combatRun))">Бой</Button>
+                            Href="@ScenarioLinks.Combat(combatRun)">Бой</Button>
                     <Button Variant="ButtonVariant.Secondary" Icon="fa-person-running" data-testid="play-chase"
-                            OnClick="() => Navigation.NavigateTo(ScenarioLinks.Chase(combatRun))">Погоня</Button>
+                            Href="@ScenarioLinks.Chase(combatRun)">Погоня</Button>
                 }
                 @if (_partyError is not null)
                 {
@@ -437,7 +445,7 @@ else
                         @foreach (var child in children)
                         {
                             var id = child.Id;
-                            <Button Variant="ButtonVariant.Secondary" Icon="fa-angle-right" OnClick="() => GoLocation(id)">@child.Name</Button>
+                            <Button Variant="ButtonVariant.Secondary" Icon="fa-angle-right" Href="@LocationHref(id)" Replace="true">@child.Name</Button>
                         }
                     </div>
                 </div>
@@ -480,20 +488,17 @@ else
     }
 
     /// <summary>Другая локация — показ раздатки закрывается (v1, <c>GoTo</c>); партия остаётся.</summary>
-    private void GoLocation(Guid? locationId) =>
-        Navigation.NavigateTo(ScenarioLinks.Play(Scenario.Id, locationId, null, RunId), replace: true);
+    private void GoLocation(Guid? locationId) => Navigation.NavigateTo(LocationHref(locationId), replace: true);
+
+    private string LocationHref(Guid? locationId) => ScenarioLinks.Play(Scenario.Id, locationId, null, RunId);
+
+    private string HandoutHref(Guid handoutId) => ScenarioLinks.Play(Scenario.Id, LocationId, handoutId, RunId);
 
     private void SelectLocation(ChangeEventArgs e) => GoLocation(Guid.TryParse(e.Value?.ToString(), out var id) ? id : null);
 
     private void SelectRun(ChangeEventArgs e) =>
         Navigation.NavigateTo(ScenarioLinks.Play(Scenario.Id, LocationId, HandoutId, Guid.TryParse(e.Value?.ToString(), out var id) ? id : null),
             replace: true);
-
-    private void ShowHandout(Guid handoutId)
-    {
-        _factsOpen = false;
-        Navigation.NavigateTo(ScenarioLinks.Play(Scenario.Id, LocationId, handoutId, RunId), replace: true);
-    }
 
     private void HideHandout() => Navigation.NavigateTo(ScenarioLinks.Play(Scenario.Id, LocationId, null, RunId), replace: true);
 
