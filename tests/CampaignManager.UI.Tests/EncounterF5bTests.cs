@@ -232,7 +232,7 @@ public sealed class EncounterF5bTests : KitContext
     }
 
     [Fact]
-    public void Expanded_player_puts_volume_in_the_seek_row_for_files_only_and_hides_the_library_link_on_the_library_page()
+    public void Expanded_player_puts_volume_next_to_moods_for_files_only_and_hides_the_library_link_on_the_library_page()
     {
         Services.AddSingleton(Fake.Of<ICatalogApi<MusicTrackDto>>(new()
         {
@@ -253,14 +253,14 @@ public sealed class EncounterF5bTests : KitContext
         cut.Find("button[aria-haspopup=menu]").Click();
         cut.FindAll("[role=menuitem]").Single(i => i.TextContent.Contains("Громкость", StringComparison.Ordinal)).Click();
 
-        Assert.NotEmpty(cut.FindAll(".cm-music-seek input[aria-label=Громкость]"));
+        Assert.NotEmpty(cut.FindAll(".cm-music-mixer input[aria-label=Громкость]"));
         Assert.NotEmpty(cut.FindAll("a[href$='music']"));
 
         Services.GetRequiredService<NavigationManager>().NavigateTo("music");
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("a[href$='music']")));
 
         player.PlayTrack(video);
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".cm-music-seek input[aria-label=Громкость]")));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".cm-music-mixer input[aria-label=Громкость]")));
     }
 
     [Fact]
