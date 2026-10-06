@@ -1,11 +1,6 @@
 using CampaignManager.Server.Files.Storage;
 using Microsoft.Extensions.Primitives;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace CampaignManager.Server.Files;
 
@@ -25,6 +20,9 @@ internal static class Thumbnails
     /// <summary>Оригиналы больше этого не разбираем: картинка в десятки мегапикселей съест память ради миниатюры.</summary>
     private const long MaxSourceBytes = 25 * 1024 * 1024;
 
+    /// <summary>Сжатый файл бывает мал, а распакованный — огромен (PNG-бомба): размер в пикселях проверяется до разбора.</summary>
+    private const long MaxSourcePixels = 50_000_000;
+
     public static bool Requested(StringValues value, string? contentType) =>
         int.TryParse(value.ToString(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var width)
         && width is >= MinWidth and <= MaxWidth
@@ -32,38 +30,45 @@ internal static class Thumbnails
 
     public static async Task<byte[]?> TryCreateAsync(IObjectStorage storage, string key, string contentType, int width, CancellationToken cancellationToken)
     {
-        try
+        await using var source = await storage.OpenReadAsync(key, null, cancellationToken);
+        using var buffer = new MemoryStream();
+        await source.CopyToAsync(buffer, cancellationToken);
+        if (buffer.Length > MaxSourceBytes)
         {
-            await using var source = await storage.OpenReadAsync(key, null, cancellationToken);
-            using var buffer = new MemoryStream();
-            await source.CopyToAsync(buffer, cancellationToken);
-            if (buffer.Length > MaxSourceBytes)
-            {
-                return null;
-            }
-
-            buffer.Position = 0;
-            using var image = await Image.LoadAsync(buffer, cancellationToken);
-            if (image.Width <= width)
-            {
-                return null;
-            }
-
-            image.Mutate(x => x.Resize(width, 0));
-            using var output = new MemoryStream();
-            await image.SaveAsync(output, Encoder(contentType), cancellationToken);
-            return output.ToArray();
+            return null;
         }
-        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or ImageFormatException)
+
+        using var data = SKData.CreateCopy(buffer.GetBuffer(), (ulong)buffer.Length);
+        using var codec = SKCodec.Create(data);
+        if (codec is null) // не картинка (или битая) — отдаём оригинал как есть
         {
-            return null; // не картинка (или битая) — отдаём оригинал как есть
+            return null;
         }
+
+        var info = codec.Info;
+        if (info.Width <= width || (long)info.Width * info.Height > MaxSourcePixels)
+        {
+            return null;
+        }
+
+        // Не SKBitmap.Decode: обрезанный файл он «декодирует» частично, и миниатюрой стала бы пустая картинка.
+        var alpha = info.AlphaType == SKAlphaType.Opaque ? SKAlphaType.Opaque : SKAlphaType.Premul;
+        using var image = new SKBitmap(info.WithColorType(SKImageInfo.PlatformColorType).WithAlphaType(alpha));
+        if (codec.GetPixels(image.Info, image.GetPixels()) != SKCodecResult.Success) // битая картинка
+        {
+            return null;
+        }
+
+        var height = Math.Max(1, (int)Math.Round(image.Height * (double)width / image.Width));
+        using var thumbnail = image.Resize(image.Info.WithSize(width, height), new SKSamplingOptions(SKCubicResampler.Mitchell));
+        using var encoded = thumbnail?.Encode(Format(contentType), 80);
+        return encoded?.ToArray();
     }
 
-    private static IImageEncoder Encoder(string contentType) => contentType switch
+    private static SKEncodedImageFormat Format(string contentType) => contentType switch
     {
-        "image/png" => new PngEncoder(),
-        "image/webp" => new WebpEncoder { Quality = 80 },
-        _ => new JpegEncoder { Quality = 80 },
+        "image/png" => SKEncodedImageFormat.Png,
+        "image/webp" => SKEncodedImageFormat.Webp,
+        _ => SKEncodedImageFormat.Jpeg,
     };
 }

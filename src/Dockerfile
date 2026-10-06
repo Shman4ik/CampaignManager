@@ -40,14 +40,15 @@ COPY src/CampaignManager.UI/CampaignManager.UI.csproj src/CampaignManager.UI/
 COPY src/CampaignManager.Web.Client/CampaignManager.Web.Client.csproj src/CampaignManager.Web.Client/
 COPY src/CampaignManager.Server/CampaignManager.Server.csproj src/CampaignManager.Server/
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet restore src/CampaignManager.Server/CampaignManager.Server.csproj
+    dotnet restore src/CampaignManager.Server/CampaignManager.Server.csproj -r linux-x64
 
 # Только src/: v1, тесты и инструменты в образ не нужны. bin/obj/node_modules отсекает .dockerignore.
+# -r linux-x64 — как в v2-deploy.yml: без RID SkiaSharp кладёт нативные библиотеки всех платформ (~450 МБ).
 COPY src/ src/
 RUN --mount=type=cache,target=/root/.nuget/packages \
     --mount=type=cache,target=/root/.npm \
     dotnet publish src/CampaignManager.Server/CampaignManager.Server.csproj \
-        -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+        -c $BUILD_CONFIGURATION -o /app/publish -r linux-x64 --no-self-contained /p:UseAppHost=false
 
 # Деплой публикует на раннере GitHub в artifacts/v2 и только упаковывает готовое
 # (`--target prebuilt`): SDK там уже стоит, а сборка внутри образа стоила лишнюю минуту — SDK-образ

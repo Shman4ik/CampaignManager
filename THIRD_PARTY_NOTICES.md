@@ -22,6 +22,7 @@ This project uses the following open-source libraries:
 | [HtmlSanitizer](https://github.com/mganss/HtmlSanitizer) | MIT |
 | [Minio .NET SDK](https://github.com/minio/minio-dotnet) | Apache-2.0 |
 | [Npgsql](https://www.npgsql.org) | PostgreSQL License |
+| [SkiaSharp](https://github.com/mono/SkiaSharp) | MIT (Skia — BSD-3-Clause) |
 | [Flowbite](https://flowbite.com) | MIT |
 | [Font Awesome](https://fontawesome.com) | CC BY 4.0 (Icons), SIL OFL 1.1 (Fonts), MIT (Code) |
 | [Inter Font](https://rsms.me/inter/) | SIL Open Font License 1.1 |

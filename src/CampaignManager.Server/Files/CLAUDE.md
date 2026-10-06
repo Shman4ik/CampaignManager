@@ -44,10 +44,14 @@ MinIO (`storage_key`) или внешний адрес (`external_url`), ров�
 
 ## Миниатюры — `GET /api/v1/files/{id}?w=480`
 
-`Thumbnails` (ImageSharp): JPEG, PNG и WebP уменьшаются до ширины `w` (64–1600), формат тот же, ответ с `immutable` и
+`Thumbnails` (SkiaSharp): JPEG, PNG и WebP уменьшаются до ширины `w` (64–1600), формат тот же, ответ с `immutable` и
 своим ETag `"{id}-w480"` (304 для миниатюры не принимается за оригинал). Не хранится — один расчёт на браузер. Оригинал не
 шире просимого, GIF/AVIF, битая картинка, `w` вне диапазона, `Range` и `HEAD` — оригинал как есть. Сделано ради плиток
 бестиария (20 плиток ≈ 6 МБ оригиналов); UI просит миниатюру через `Catalogs/ImageUrls.Thumb`.
+
+SkiaSharp, а не ImageSharp: с 4.x ImageSharp без ключа лицензии Six Labors не собирается (PR #266 закрыт). Нативная
+`libSkiaSharp` для Linux — пакет `SkiaSharp.NativeAssets.Linux.NoDependencies`: образ на `chiseled`, fontconfig там нет,
+текст не рисуем. Версии `SkiaSharp` и нативного пакета обновлять только вместе. Оригинал больше 50 Мпикс не разбирается.
 
 ## Отдача — не трогать
 
