@@ -342,7 +342,7 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
 
         using var thumb = await client.GetAsync($"{wideFile.Url}?w=200", Cancellation);
         var thumbBytes = await thumb.Content.ReadAsByteArrayAsync(Cancellation);
-        using var image = SixLabors.ImageSharp.Image.Load(thumbBytes);
+        using var image = SkiaSharp.SKBitmap.Decode(thumbBytes);
         Assert.Equal(200, image.Width);
         Assert.Equal(160, image.Height);
         Assert.Equal("image/png", thumb.Content.Headers.ContentType?.MediaType);
@@ -360,14 +360,20 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
         Assert.Equal($"\"{smallFile.Id:N}\"", asIs.Headers.ETag?.Tag);
         using var tooWide = await client.GetAsync($"{wideFile.Url}?w=100000", Cancellation);
         Assert.Equal(wide, await tooWide.Content.ReadAsByteArrayAsync(Cancellation));
+
+        // Битая картинка (заголовок PNG цел, данных нет) — тоже оригинал, а не 500.
+        var broken = wide[..64];
+        var brokenFile = await app.Api().UploadAsync(new MemoryStream(broken), "Битая.png", Cancellation);
+        using var brokenThumb = await client.GetAsync($"{brokenFile.Url}?w=200", Cancellation);
+        Assert.Equal(broken, await brokenThumb.Content.ReadAsByteArrayAsync(Cancellation));
     }
 
     private static byte[] Png(int width, int height)
     {
-        using var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(width, height);
-        using var stream = new MemoryStream();
-        SixLabors.ImageSharp.ImageExtensions.SaveAsPng(image, stream);
-        return stream.ToArray();
+        using var image = new SkiaSharp.SKBitmap(width, height);
+        image.Erase(SkiaSharp.SKColors.DarkSlateGray);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     private static byte[] RandomBytes(int length)
