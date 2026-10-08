@@ -76,9 +76,12 @@ public sealed class CharactersApiTests(CampaignsApp app) : IClassFixture<Campaig
         Assert.Equal(campaignId, mine.CampaignId);
         Assert.Equal(Era.Classic, mine.Era);
         Assert.True(mine.CanEdit);
+        Assert.True(mine.IsMine); // нового сыщика вместо выбывшего заводит игрок
         Assert.NotEqual(0u, mine.Version);
 
-        Assert.True((await Api(keeper).GetAsync(sheetId, Cancellation)).CanEdit);
+        var keepers = await Api(keeper).GetAsync(sheetId, Cancellation);
+        Assert.True(keepers.CanEdit);
+        Assert.False(keepers.IsMine);
 
         // «Нет листа» и «чужой лист» неразличимы — и для соседа по столу тоже
         await Fails(HttpStatusCode.NotFound, () => Api(neighbour).GetAsync(sheetId, Cancellation));

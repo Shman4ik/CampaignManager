@@ -250,6 +250,12 @@ public sealed record Biography : DocumentPart
     /// <summary>Ключевая связь (стр. 43); пусто — связь потеряна.</summary>
     public string KeyConnection { get; set; } = "";
 
+    /// <summary>
+    /// Эпилог (стр. 210–211): пара фраз о том, что стало с сыщиком, когда он выбыл — погиб, сошёл с ума или история кончилась.
+    /// Добавлен без смены версии: в старом документе его нет — значит, пусто.
+    /// </summary>
+    public string Epilogue { get; set; } = "";
+
     public string Notes { get; set; } = "";
 }
 

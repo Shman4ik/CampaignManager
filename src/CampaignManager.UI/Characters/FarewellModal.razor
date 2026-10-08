@@ -1,0 +1,82 @@
+@using CampaignManager.Contracts.Campaigns
+@using CampaignManager.Core.Characters
+@inject ICampaignsApi Campaigns
+
+@* «Проводить сыщика» (гл. 10, стр. 210–211): погибший или навсегда безумный сыщик выбывает — лист получит статус «Выбыл», и место
+   игрока в кампании освободится для нового сыщика (один активный лист). Эпилог — пара фраз о том, что с ним стало: в лист
+   (Biography.Epilogue) и, если журнал можно править (Хранитель), абзацем в хронику последней встречи. Пишет страница листа:
+   статус — колонка строки с версией, перед ней уходит документ с эпилогом. *@
+<Modal Open="Open" OnClose="() => OnClose.InvokeAsync()" Title="Проводить сыщика" data-testid="farewell-modal">
+    <ChildContent>
+        <div class="flex flex-col gap-3">
+            <p class="text-sm text-primary-700">
+                @Names.Strong(Name) @(Fate == InvestigatorFate.Insane ? "навсегда потерял рассудок" : "погиб") и выбывает из игры. Лист получит статус
+                «Выбыл» — игрок сможет завести нового сыщика.
+            </p>
+            <Field Label="Эпилог" Note="Что стало с сыщиком — пара фраз, без бросков.">
+                <textarea class="cm-input" rows="4" placeholder="Тело так и не нашли, а в Аркхеме ещё долго говорили…" data-testid="farewell-epilogue"
+                          @bind="_epilogue" @bind:event="oninput"></textarea>
+            </Field>
+            @if (_session is { } session)
+            {
+                <label class="cm-tap-row text-sm">
+                    <input type="checkbox" class="cm-checkbox" @bind="_toJournal" data-testid="farewell-journal" />
+                    <span>Дописать эпилог в журнал — встреча №@session.Number@(string.IsNullOrWhiteSpace(session.Title) ? "" : $" «{session.Title}»")</span>
+                </label>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="() => OnClose.InvokeAsync()">Отмена</Button>
+        <Button Icon="fa-cross" Busy="Busy" data-testid="farewell-confirm"
+                OnClick="() => OnConfirm.InvokeAsync(new FarewellRequest(_epilogue.Trim(), _toJournal ? _session : null))">Сыщик выбыл</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private string _epilogue = "";
+    private bool _toJournal = true;
+    private CampaignSessionDto? _session;
+    private bool _wasOpen;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback<FarewellRequest> OnConfirm { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    [Parameter] public InvestigatorFate Fate { get; set; }
+
+    [Parameter] public string? Epilogue { get; set; }
+
+    /// <summary>Кампания листа: её журнал — последняя встреча для эпилога (если журнал можно править).</summary>
+    [Parameter] public Guid? CampaignId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opening = Open && !_wasOpen;
+        _wasOpen = Open;
+        if (!opening)
+            return;
+
+        _epilogue = Epilogue ?? "";
+        _toJournal = true;
+        _session = null;
+        if (CampaignId is not { } campaignId)
+            return;
+
+        try
+        {
+            var journal = await Campaigns.GetJournalAsync(campaignId);
+            _session = journal.CanEdit ? journal.Sessions.MaxBy(s => s.Number) : null;
+        }
+        catch (HttpRequestException)
+        {
+            // Журнал не прочитать (игрок без прав, нет связи) — эпилог останется в листе.
+        }
+    }
+}
