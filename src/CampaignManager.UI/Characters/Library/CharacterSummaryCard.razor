@@ -16,20 +16,23 @@
     @* Карточка библиотеки с портретом (2026-10-08): портрет 4:5 слева от имени, занятия и «ПЗ · бой» — это «кто»; предыстория
        и сценарии — под ними во всю ширину карточки (рядом с портретом, в ~220px, чипы рвались на две строки). Ссылка на лист —
        имя, растянутое на весь верхний блок (::after): касание портрета тоже открывает лист. Без портрета — заглушка того же
-       размера, чтобы имена стояли на одной линии. *@
+       размера, чтобы имена стояли на одной линии (PortraitSlot). *@
     <article class="cm-card flex flex-col" data-testid="character-summary" data-character-id="@Character.Id">
         <div class="cm-card-body flex flex-1 flex-col gap-3">
             <div class="group relative flex items-start gap-3">
-                <span class="sc-portrait" aria-hidden="true">
-                    @if (Thumb is { } src)
-                    {
-                        <img src="@src" alt="" loading="lazy" decoding="async" />
-                    }
-                    else
-                    {
-                        <i class="fa-solid fa-user"></i>
-                    }
-                </span>
+                @if (Thumb is not null || PortraitSlot)
+                {
+                    <span class="sc-portrait" aria-hidden="true">
+                        @if (Thumb is { } src)
+                        {
+                            <img src="@src" alt="" loading="lazy" decoding="async" />
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-user"></i>
+                        }
+                    </span>
+                }
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
                     <a class="cm-card-title break-words after:absolute after:inset-0 after:content-[''] group-hover:underline"
                        href="@($"character/{Character.Id}")" data-testid="character-link">@Character.Name</a>
@@ -101,6 +104,12 @@ else
 
     /// <summary>Что показать под карточкой: роль и количество НПС в сценарии (T2.5a).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Место под портрет и у листа без него — заглушка того же размера: в списке, где портреты есть хоть у кого-то, имена
+    /// стоят на одной линии. Где их нет ни у кого (готовые сыщики), страница рамку не просит — пустые рамки были бы шумом.
+    /// </summary>
+    [Parameter] public bool PortraitSlot { get; set; } = true;
 
     /// <summary>Миниатюра портрета: исходник гравюры ~370 КБ, на карточку хватает 240px по ширине (80px при плотности 3).</summary>
     private string? Thumb => ImageUrls.Thumb(Character.PortraitUrl, 240);
@@ -189,8 +198,8 @@ else
                 }
                 @if (HasMenu)
                 {
-                    @* «⋯» — в подвале справа, а не у имени: там он отнимал у занятия и «ПЗ · бой» колонку в 40px. *@
-                    <div class="-mr-2 ml-auto">@Menu</div>
+                    @* «⋯» — в подвале справа, а не у имени: там он отнимал у занятия и «ПЗ · бой» колонку в 40px. 32px, как кнопка рядом. *@
+                    <div class="cm-compact -mr-2.5 ml-auto">@Menu</div>
                 }
             </div>
         }

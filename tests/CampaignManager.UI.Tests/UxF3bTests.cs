@@ -115,6 +115,10 @@ public sealed class UxF3bTests : KitContext
         var without = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Нора")));
         Assert.Empty(without.FindAll(".sc-portrait img"));
         Assert.Single(without.FindAll(".sc-portrait .fa-user"));
+
+        // В списке, где портретов нет ни у кого (готовые сыщики), рамок-заглушек нет.
+        var noSlot = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Нора")).Add(c => c.PortraitSlot, false));
+        Assert.Empty(noSlot.FindAll(".sc-portrait"));
     }
 
     [Fact]
