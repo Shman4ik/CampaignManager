@@ -361,7 +361,7 @@ create table cm.artifacts (                 -- артефакты главы 13:
     name         text not null,
     kind         text not null,                -- Device | Weapon | Armor | Substance | Relic | Place | Other
     used_by      text[] not null default '{}', -- «ми-го», «йитиане», «кто угодно»
-    usage        text,                         -- как с ним управится сыщик
+    rule         text,                         -- главное правило одной строкой («В игре»)
     description  text not null default '',
     source       text,
     created_by_id uuid references cm.users on delete set null,

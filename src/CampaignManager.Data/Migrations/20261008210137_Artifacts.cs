@@ -22,7 +22,7 @@ namespace CampaignManager.Data.Migrations
                     name = table.Column<string>(type: "text", nullable: false),
                     kind = table.Column<string>(type: "text", nullable: false),
                     used_by = table.Column<List<string>>(type: "text[]", nullable: false, defaultValueSql: "'{}'"),
-                    usage = table.Column<string>(type: "text", nullable: true),
+                    rule = table.Column<string>(type: "text", nullable: true),
                     description = table.Column<string>(type: "text", nullable: false, defaultValue: ""),
                     source = table.Column<string>(type: "text", nullable: true),
                     created_by_id = table.Column<Guid>(type: "uuid", nullable: true),

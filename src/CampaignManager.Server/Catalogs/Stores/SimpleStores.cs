@@ -90,7 +90,7 @@ public sealed class ArtifactStore : CatalogStore<Artifact, ArtifactDto>
             Source = a.Source,
             Kind = a.Kind,
             UsedBy = a.UsedBy,
-            Usage = a.Usage,
+            Rule = a.Rule,
             Description = a.Description,
             Images = CatalogImages.ToDtos(a.Images),
         }).ToList());
@@ -106,7 +106,7 @@ public sealed class ArtifactStore : CatalogStore<Artifact, ArtifactDto>
 
         entity.Kind = dto.Kind;
         entity.UsedBy = Strings(dto.UsedBy);
-        entity.Usage = Text(dto.Usage);
+        entity.Rule = Text(dto.Rule);
         entity.Description = dto.Description?.Trim() ?? "";
         CatalogImages.Apply(db, entity.Images, images, ord => new ArtifactImage { ArtifactId = entity.Id, Ord = ord });
     }

@@ -283,8 +283,8 @@ public sealed class ArtifactDto : CatalogItemDto
     /// <summary>Кто им пользуется: «ми-го», «йитиане», «кто угодно».</summary>
     public List<string> UsedBy { get; set; } = [];
 
-    /// <summary>Как с ним управится сыщик: проверка, навык, база; null — не сказано.</summary>
-    public string? Usage { get; set; }
+    /// <summary>Главное правило одной строкой («В игре»): проверка, урон, цена; null — не сказано.</summary>
+    public string? Rule { get; set; }
 
     public string Description { get; set; } = "";
 

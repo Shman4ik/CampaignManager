@@ -81,6 +81,8 @@ public sealed class CatalogsApp : IAsyncLifetime
 
     public ItemsApiClient Items(User? user = null) => new(CreateClient(user));
 
+    public ArtifactsApiClient Artifacts(User? user = null) => new(CreateClient(user));
+
     public async ValueTask DisposeAsync()
     {
         if (_factory is not null)

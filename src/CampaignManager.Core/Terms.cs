@@ -21,6 +21,8 @@ public static partial class Terms
     public const string AnyCategory = "Любая категория";
     public const string AnySkillPoints = "Любые очки навыков";
     public const string AnyEra = "Любая эпоха";
+    public const string AnyKind = "Любой вид";
+    public const string AnyOwner = "Любые владельцы";
 
     /// <summary>Возраст с правильным склонением: «1 год», «22 года», «42 года», «11 лет».</summary>
     public static string Years(int age) => $"{age} " + (age % 100 is >= 11 and <= 14 ? 0 : age % 10) switch

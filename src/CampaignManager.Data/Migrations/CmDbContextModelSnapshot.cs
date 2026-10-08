@@ -387,6 +387,10 @@ namespace CampaignManager.Data.Migrations
                         .HasColumnName("name")
                         .HasColumnOrder(2);
 
+                    b.Property<string>("Rule")
+                        .HasColumnType("text")
+                        .HasColumnName("rule");
+
                     b.Property<string>("Source")
                         .HasColumnType("text")
                         .HasColumnName("source");
@@ -395,10 +399,6 @@ namespace CampaignManager.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at")
                         .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Usage")
-                        .HasColumnType("text")
-                        .HasColumnName("usage");
 
                     b.PrimitiveCollection<List<string>>("UsedBy")
                         .IsRequired()

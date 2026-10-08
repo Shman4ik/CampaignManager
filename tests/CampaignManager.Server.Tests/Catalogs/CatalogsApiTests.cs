@@ -323,6 +323,46 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
     }
 
+    /// <summary>Артефакты главы 13: вид и «используют» без повторов, картинки как у заклинаний, файл обмена — по коду.</summary>
+    [Fact]
+    public async Task Artifact_keeps_kind_owners_and_rule_and_imports_by_code()
+    {
+        TestDatabase.SkipIfMissing();
+        Guid art;
+        await using (var db = app.Database.CreateContext())
+        {
+            var stored = new StoredFile { ExternalUrl = "https://example.test/cube.webp" };
+            db.Files.Add(stored);
+            await db.SaveChangesAsync(Cancellation);
+            art = stored.Id;
+        }
+
+        var created = await app.Artifacts().CreateAsync(new ArtifactDto
+        {
+            Name = Unique("Стазисный куб"), Kind = ArtifactKind.Device, UsedBy = [" йитиане ", "Йитиане", ""], Rule = "  ",
+            Description = " Замедляет время. ", Images = [new CatalogImageDto(art, null, "Куб")],
+        }, Cancellation);
+
+        Assert.Equal(ArtifactKind.Device, created.Kind);
+        Assert.Equal(["йитиане"], created.UsedBy);
+        Assert.Null(created.Rule);
+        Assert.Equal("Замедляет время.", created.Description);
+        Assert.Equal([art], created.Images.Select(i => i.FileId));
+
+        var name = Unique("Сияющий трапецоэдр");
+        var file = $$"""{"catalog":"artifacts","items":[{"code":"artifact.shining-trapezohedron","name":"{{name}}","kind":"Relic","usedBy":["культисты Ньярлатхотепа"],"rule":"Закрыть ларец — явится Скиталец Тьмы"}]}""";
+        var first = await app.Artifacts().ImportAsync(Json(file), overwrite: true, dryRun: false, Cancellation);
+        var again = await app.Artifacts().ImportAsync(Json(file.Replace("Relic", "Device", StringComparison.Ordinal)), overwrite: true, dryRun: false, Cancellation);
+
+        Assert.Equal((1, 0), (first.Created, first.Updated));
+        Assert.Equal((0, 1), (again.Created, again.Updated));
+        var stone = Assert.Single((await app.Artifacts(app.Player).ListAsync(Cancellation)).Items, a => a.Code == "artifact.shining-trapezohedron");
+        Assert.Equal((ArtifactKind.Device, "Закрыть ларец — явится Скиталец Тьмы"), (stone.Kind, stone.Rule));
+
+        var wrong = await Assert.ThrowsAsync<ApiException>(() => app.Artifacts(app.Player).CreateAsync(new ArtifactDto { Name = Unique("Лампа") }, Cancellation));
+        Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
+    }
+
     [Fact]
     public async Task Book_spells_are_matched_to_catalog_on_write()
     {

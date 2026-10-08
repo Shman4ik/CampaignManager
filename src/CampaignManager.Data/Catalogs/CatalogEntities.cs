@@ -190,7 +190,7 @@ public sealed class Creature : CatalogEntry
 }
 
 /// <summary>
-/// Артефакт главы 13: вид, кто им пользуется, как с ним управится сыщик, описание. Оружие-артефакт стреляет в бою записью
+/// Артефакт главы 13: вид, кто им пользуется, главное правило, описание. Оружие-артефакт стреляет в бою записью
 /// справочника оружия с тем же названием — связи по ключу нет, её находит страница.
 /// </summary>
 public sealed class Artifact : CatalogEntry
@@ -200,8 +200,8 @@ public sealed class Artifact : CatalogEntry
     /// <summary>«Используют» книги: «ми-го», «йитиане», «кто угодно».</summary>
     public List<string> UsedBy { get; set; } = [];
 
-    /// <summary>Как с ним управится сыщик: «проверка ИНТ — разобраться; Стрельба (молниемёт) 10%»; null — не сказано.</summary>
-    public string? Usage { get; set; }
+    /// <summary>Главное правило одной строкой — «В игре»: «броня 8; снять — −1 ПЗ»; null — не сказано.</summary>
+    public string? Rule { get; set; }
 
     public string Description { get; set; } = "";
 
