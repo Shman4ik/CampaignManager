@@ -63,6 +63,55 @@ public sealed class CombatPanelTests : KitContext
         Assert.Equal(0, investigator.Combat.AttacksIn(session.State.Round));
     }
 
+    /// <summary>Залп очереди (стр. 115): «Пуль в залпе» и урон каждой пули — со стола по порядку; попадает половина залпа.</summary>
+    [Fact]
+    public void Volley_takes_bullet_damage_from_the_table()
+    {
+        var (session, investigator, _) = Scene();
+        investigator.Profile.Attacks.Add(new CombatAttack
+        {
+            Key = "smg", Name = "Томпсон", Skill = 50, Damage = "1D10+2", Kind = CombatAttackKind.Ranged, Automatic = true, Impaling = true,
+            AmmoCapacity = 20, Malfunction = 96,
+        });
+        var cut = RenderPanel(session);
+
+        cut.Find("[data-testid=attack-weapon]").Change("smg");
+        Assert.Empty(cut.FindAll("[data-testid=attack-volley-size]")); // одиночный выстрел — пуль не спрашивают
+        cut.FindAll("button.cm-segment").Single(b => b.TextContent.Trim() == "Очередь").Click();
+        cut.Find("[data-testid=attack-volley-size]").Change("4");
+        cut.Find("[data-testid=attack-bullet-damage]").Change("5, 6");
+        Dice.Enqueue(0, 3, 0, 1); // атака 30 против 50 — обычный успех; 11 урона — серьёзная рана, ВЫН гуля 10
+        cut.Find("[data-testid=attack-resolve]").Click();
+
+        var pending = Assert.IsType<EncounterResolution>(session.State.Pending);
+        Assert.StartsWith("Харви попадает: 2 из 4.", pending.Title, StringComparison.Ordinal);
+        Assert.Contains(pending.Lines, l => l.StartsWith("Пуля 1. Урон: 1d10 + 2 = 5", StringComparison.Ordinal));
+        Assert.Contains(pending.Lines, l => l.StartsWith("Пуля 2. Урон: 1d10 + 2 = 6", StringComparison.Ordinal));
+    }
+
+    /// <summary>От метательного уклоняются (стр. 106): цель начеку бросает Уклонение.</summary>
+    [Fact]
+    public void Thrown_weapon_is_dodged_by_a_ready_target()
+    {
+        var (session, investigator, ghoul) = Scene();
+        ghoul.Stats.Dodge = 30;
+        investigator.Profile.Attacks.Add(new CombatAttack
+        {
+            Key = "knife", Name = "Метательный нож", Skill = 50, Damage = "1D4+½БкУ", Kind = CombatAttackKind.Ranged, Thrown = true,
+            DamageBonus = CreatureDamageBonusMode.Half,
+        });
+        var cut = RenderPanel(session);
+
+        cut.Find("[data-testid=attack-weapon]").Change("knife");
+        Assert.Contains("Гуль начеку — уклоняется", cut.Find("[data-testid=attack-thrown-dodge]").TextContent, StringComparison.Ordinal);
+        Dice.Enqueue(0, 2, 0, 1); // атака 20 — трудный успех; уклонение 10 — тоже трудный: ничья — уклонившемуся
+        cut.Find("[data-testid=attack-resolve]").Click();
+
+        var pending = Assert.IsType<EncounterResolution>(session.State.Pending);
+        Assert.Contains("уклонился", pending.Title, StringComparison.Ordinal);
+        Assert.Contains(pending.Lines, l => l.StartsWith("Гуль (уклонение)", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Dying_participant_gets_con_check_plaque_next_round()
     {

@@ -47,5 +47,22 @@ public sealed class SheetContext(
     public bool IntCheckPending { get; set; }
 
     /// <summary>Открыть диалог проверки с целью (<c>skill:{id}</c>, <c>char:STR</c>, <c>luck</c>; null — выбрать в окне).</summary>
-    public void Check(string? key) => check(key);
+    public void Check(string? key)
+    {
+        CheckMalfunction = null;
+        check(key);
+    }
+
+    /// <summary>
+    /// Проверка навыка оружия (касание оружия в «Игре»): бросок не ниже порога — осечка, её не выкупить Удачей и отметки за неё
+    /// нет (стр. 97, 117). Без порога — обычная проверка навыка.
+    /// </summary>
+    public void CheckWeapon(string key, int? malfunction)
+    {
+        CheckMalfunction = malfunction;
+        check(key);
+    }
+
+    /// <summary>Порог осечки оружия, из которого открыта последняя проверка (<see cref="CheckWeapon"/>); null — не оружие.</summary>
+    public int? CheckMalfunction { get; private set; }
 }

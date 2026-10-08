@@ -95,7 +95,7 @@ public static class CheckRules
     /// критический выше некуда — у него <see cref="LuckOptions"/> пуст.
     /// </para>
     /// </summary>
-    public static string? LuckBlockReason(CheckSubject subject, CheckOutcome outcome, bool isPushed)
+    public static string? LuckBlockReason(CheckSubject subject, CheckOutcome outcome, bool isPushed, int? malfunction = null)
     {
         if (subject.Kind is CheckSubjectKind.Luck)
             return "На проверку Удачи пункты Удачи не тратят.";
@@ -103,8 +103,16 @@ public static class CheckRules
             return "На повторную проверку Удачу не тратят: либо повтор, либо Удача.";
         if (outcome.Level is SuccessLevel.Fumble)
             return "Крах вступает в силу в любом случае — выкупить его нельзя.";
+        if (IsMalfunction(outcome.Roll, malfunction))
+            return "Осечка вступает в силу в любом случае — выкупить её нельзя.";
         return null;
     }
+
+    /// <summary>
+    /// Осечка (стр. 117): на проверке оружия выпало не меньше его порога — оно не выстрелило, какой бы ни был уровень успеха.
+    /// Удачей её не выкупают (стр. 97), отметки за неё нет. <paramref name="threshold"/> null — не оружие или порога нет.
+    /// </summary>
+    public static bool IsMalfunction(int roll, int? threshold) => threshold is { } t && roll >= t;
 
     /// <summary>
     /// Что записать в лист, когда за этот бросок платят Удачей. <paramref name="markedThisRoll"/> — диалог уже
@@ -131,7 +139,7 @@ public static class CheckRules
     /// Почему успех не даёт отметки для фазы развития (стр. 92, 97); null — даёт. Отмечают только навыки, и
     /// не Мифы Ктулху со Средствами (<see cref="DevelopmentPhaseRules.CanBeChecked(string?)"/>).
     /// </summary>
-    public static string? MarkBlockReason(CheckSubject subject, int netDice, bool luckSpent)
+    public static string? MarkBlockReason(CheckSubject subject, int netDice, bool luckSpent, bool malfunction = false)
     {
         if (subject.Kind is CheckSubjectKind.Characteristic or CheckSubjectKind.Luck)
             return "Отметку для развития ставят только навыкам, не характеристикам и не Удаче.";
@@ -141,6 +149,8 @@ public static class CheckRules
             return "Проверка шла с бонусной костью — навык не отмечают.";
         if (luckSpent)
             return "Успех куплен Удачей — отметки за него нет.";
+        if (malfunction)
+            return "Осечка — оружие не выстрелило, отметки нет.";
         if (subject.Kind is CheckSubjectKind.Manual)
             return "Значение вписано вручную: если это был навык сыщика, отметку ставят на его листе.";
         return null;

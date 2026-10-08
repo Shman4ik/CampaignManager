@@ -75,13 +75,24 @@
             <Field Label="Дальность" Group="true" Note="Сложность, а не урезанный навык">
                 <Segmented TValue="RangeBand" Options="Ranges" Value="_range" ValueChanged="v => _range = v" Label="Дальность" />
             </Field>
-            <Field Label="Режим" Group="true">
-                <Segmented TValue="FiringMode" Options="@(Attack.Automatic ? ModesAuto : Modes)" Value="_mode" ValueChanged="SetMode" Label="Режим" />
-            </Field>
-            <Field Label="Патронов" class="w-24">
-                <input type="number" inputmode="numeric" min="1" class="cm-input" value="@_shots" @onchange="SetShots" />
-            </Field>
+            @if (!Attack.Thrown)
+            {
+                <Field Label="Режим" Group="true">
+                    <Segmented TValue="FiringMode" Options="@(Attack.Automatic ? ModesAuto : Modes)" Value="_mode" ValueChanged="SetMode" Label="Режим" />
+                </Field>
+            }
+            @* Выстрел и серия — одна пуля на проверку (каждый выстрел серии проверяют отдельно, стр. 111–112); пуль — только у залпа. *@
+            @if (_mode == FiringMode.Volley)
+            {
+                <Field Label="Пуль в залпе" class="w-28">
+                    <input type="number" inputmode="numeric" min="1" class="cm-input" value="@_shots" @onchange="SetShots" data-testid="attack-volley-size" />
+                </Field>
+            }
         </div>
+        @if (Target is { } dodger && CombatRules.DodgesThrown(Attack, dodger, _surprise))
+        {
+            <p class="cm-meta" data-testid="attack-thrown-dodge">@dodger.Name начеку — уклоняется (Уклонение @dodger.Stats.Dodge).</p>
+        }
     }
 
     @if (Ready && AttackDiceNow() is { } diceNow && (diceNow.Reasons.Count > 0 || !string.IsNullOrEmpty(RequirementText)))
@@ -168,6 +179,12 @@
                     <RollInput Label="Атака" Value="@Skill" Difficulty="@AttackDifficulty" BonusDice="@d.BonusDice" PenaltyDice="@d.PenaltyDice"
                                Roll="_attackRoll" RollChanged="r => _attackRoll = r" />
                 </Field>
+                @if (Attack is { IsRanged: true } thrownWith && Target is { } thrownAt && CombatRules.DodgesThrown(thrownWith, thrownAt, _surprise))
+                {
+                    <Field Label="Уклонение цели" Group="true">
+                        <RollInput Label="Уклонение" Value="@thrownAt.Stats.Dodge" Roll="_defenseRoll" RollChanged="r => _defenseRoll = r" />
+                    </Field>
+                }
                 @if (Attack is { IsRanged: false } && _surprise == SurpriseMode.TargetReady && Target is { } t)
                 {
                     <Field Label="@(_reaction == DefenseReaction.Dodge ? "Уклонение цели" : "Контратака цели")" Group="true">
@@ -176,9 +193,20 @@
                 }
             }
             <div class="flex flex-wrap gap-3">
-                <Field Label="Урон оружия"><EnteredNumber Label="Урон оружия" Value="_damage" ValueChanged="v => _damage = v" /></Field>
-                <Field Label="Бонус к урону"><EnteredNumber Label="Бонус к урону" Value="_bonus" ValueChanged="v => _bonus = v" /></Field>
-                <Field Label="Проникающая"><EnteredNumber Label="Проникающая" Value="_extra" ValueChanged="v => _extra = v" /></Field>
+                @if (Attack is { IsRanged: true } && _mode == FiringMode.Volley)
+                {
+                    @* Залп — урон каждой пули (стр. 115): числа с костей по порядку, у проникающей пули — её добавочный бросок. *@
+                    <Field Label="Урон пуль по порядку" Note="Через запятую: 5, 7, 3" class="w-56">
+                        <input type="text" inputmode="numeric" class="cm-input" value="@_bulletsText" placeholder="бросит само" data-testid="attack-bullet-damage"
+                               @onchange="e => _bulletsText = e.Value?.ToString() ?? string.Empty" />
+                    </Field>
+                }
+                else
+                {
+                    <Field Label="Урон оружия"><EnteredNumber Label="Урон оружия" Value="_damage" ValueChanged="v => _damage = v" /></Field>
+                    <Field Label="Бонус к урону"><EnteredNumber Label="Бонус к урону" Value="_bonus" ValueChanged="v => _bonus = v" /></Field>
+                    <Field Label="Проникающая"><EnteredNumber Label="Проникающая" Value="_extra" ValueChanged="v => _extra = v" /></Field>
+                }
                 @if (Attack is { IsRanged: true })
                 {
                     <Field Label="Починка при осечке, 1d6"><EnteredNumber Label="Раунды починки" Value="_jamRounds" ValueChanged="v => _jamRounds = v" /></Field>
@@ -220,6 +248,7 @@
     private bool _ignoresArmor, _pointBlank, _aiming, _takingCover, _behindCover, _fastMoving, _intoMelee, _reloadAndFire;
     private D100Roll? _attackRoll, _defenseRoll, _conRoll, _counterConRoll;
     private int? _damage, _bonus, _extra, _jamRounds, _counterDamage, _counterBonus;
+    private string _bulletsText = string.Empty;
 
     private IReadOnlyList<CombatAttack> Attacks => Actor?.Profile.Attacks.Where(a => a.Kind is CombatAttackKind.Melee or CombatAttackKind.Ranged).ToList() ?? [];
 
@@ -418,8 +447,20 @@
             KeeperBonusDice = bonus, KeeperPenaltyDice = penalty, PointBlank = _pointBlank, Aiming = _aiming, TargetTakingCover = _takingCover,
             TargetBehindCover = _behindCover, TargetFastMoving = _fastMoving, FiringIntoMelee = _intoMelee, ReloadAndFire = _reloadAndFire,
             FiringMode = _mode, ShotsFired = _shots, CoverArmor = _coverArmor, IgnoresArmor = _ignoresArmor,
-            AttackRoll = _attackRoll, DamageRoll = _damage, DamageBonusRoll = _bonus, ExtraImpaleRoll = _extra, ConRoll = _conRoll, JamRounds = _jamRounds,
+            AttackRoll = _attackRoll, DefenseRoll = _defenseRoll, DamageRoll = _damage, DamageBonusRoll = _bonus, ExtraImpaleRoll = _extra,
+            DamageRolls = BulletRolls(_bulletsText), ConRoll = _conRoll, JamRounds = _jamRounds,
         };
+    }
+
+    /// <summary>«5, 7, 3» → числа по порядку; на первом не числе список кончается — остальное бросит правило.</summary>
+    internal static IReadOnlyList<int>? BulletRolls(string text)
+    {
+        var rolls = text.Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => int.TryParse(part, out var value) && value >= 0 ? value : (int?)null)
+            .TakeWhile(value => value is not null)
+            .Select(value => value!.Value)
+            .ToList();
+        return rolls.Count > 0 ? rolls : null;
     }
 
     private async Task ResolveAsync()
@@ -431,10 +472,16 @@
         await ProposeAsync(outcome.Resolution);
         _attackRoll = _defenseRoll = _conRoll = _counterConRoll = null;
         _damage = _bonus = _extra = _jamRounds = _counterDamage = _counterBonus = null;
+        _bulletsText = string.Empty;
         _aiming = _takingCover = false;
     }
 
-    private static string KindText(CombatAttack attack) => attack.Kind == CombatAttackKind.Ranged ? "стрельба" : "ближний бой";
+    private static string KindText(CombatAttack attack) => attack switch
+    {
+        { Thrown: true } => "метание",
+        { Kind: CombatAttackKind.Ranged } => "стрельба",
+        _ => "ближний бой",
+    };
 
     private static readonly IReadOnlyList<SegmentOption<RangeBand>> Ranges = [new(RangeBand.Base, "Базовая"), new(RangeBand.Long, "Большая"), new(RangeBand.Extreme, "Сверхдальняя")];
     private static readonly IReadOnlyList<SegmentOption<FiringMode>> Modes = [new(FiringMode.Single, "Выстрел"), new(FiringMode.PistolBurst, "Серия")];

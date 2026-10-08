@@ -87,5 +87,15 @@ public sealed class DamageInfo
     /// <summary>Формула для расчёта: основная, а у дробовика — ближняя дальность.</summary>
     public DamageExpression? GetDefaultDamage() => Primary ?? RangeDamages?.FirstOrDefault()?.Damage;
 
+    /// <summary>Урон дроби (стр. 407): заряд разлетается, и урон зависит от дальности.</summary>
+    public bool IsByRange => Primary is null && RangeDamages is { Count: > 0 };
+
+    /// <summary>
+    /// Формула на полосе дальности: у дробовика 0 — ближняя, 1 — средняя, 2 — большая (дальше последней — последняя, у обреза
+    /// их две); у остального оружия — основная.
+    /// </summary>
+    public DamageExpression? At(int band) =>
+        IsByRange ? RangeDamages![Math.Clamp(band, 0, RangeDamages.Count - 1)].Damage : GetDefaultDamage();
+
     public override string ToString() => RawText;
 }

@@ -91,8 +91,11 @@ public sealed record CombatAttack : DocumentPart
     /// <summary>Как добавляется бонус к урону: ближний бой — полный, стрельба — нет, если оружие не сказало иное (стр. 106).</summary>
     public CreatureDamageBonusMode DamageBonus { get; set; }
 
-    /// <summary>Проникающее: при чрезвычайном успехе — ещё бросок урона (стр. 101). Огнестрел — всегда.</summary>
+    /// <summary>Проникающее: при чрезвычайном успехе — ещё бросок урона (стр. 101). Огнестрел — всегда, кроме дроби (стр. 407).</summary>
     public bool Impaling { get; set; }
+
+    /// <summary>Метательное (навык Метание): от него уклоняются, как от удара (стр. 106), а не только укрываются.</summary>
+    public bool Thrown { get; set; }
 
     public int? AmmoCapacity { get; set; }
 

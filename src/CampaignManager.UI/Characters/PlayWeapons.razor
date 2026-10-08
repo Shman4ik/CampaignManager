@@ -62,7 +62,7 @@
                 @if (skill is { SkillId: { } skillId })
                 {
                     <button type="button" class="play-roll" aria-label="@($"Проверка: {skill.Name}, {skill.Value}")" data-testid="play-weapon-check"
-                            @onclick="() => Context.Check(SkillKey(skillId))">
+                            @onclick="() => Context.CheckWeapon(SkillKey(skillId), MalfunctionOf(weapon))">
                         <span class="play-roll-value">@skill.Value</span>
                         <span class="play-roll-parts">@CharacteristicMath.Half(skill.Value) · @CharacteristicMath.Fifth(skill.Value)</span>
                     </button>
@@ -122,6 +122,9 @@
         var text = WeaponStatsReader.AttacksDisplay(attacks);
         return text is { Length: > 0 } and not "1" ? $"атаки {text}" : null;
     }
+
+    /// <summary>Порог осечки для окна проверки: на нём оружие не стреляет, и Удачей это не выкупить (стр. 97).</summary>
+    private static int? MalfunctionOf(SheetWeapon weapon) => WeaponStatsReader.TryMalfunctionThreshold(weapon, out var threshold) ? threshold : null;
 
     /// <summary>«осечка 96–100»: порог — первый бросок, на котором оружие клинит (до 100); «00» и нечисло не показываются.</summary>
     internal static string? MalfunctionText(SheetWeapon weapon) =>

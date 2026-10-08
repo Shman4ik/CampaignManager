@@ -49,6 +49,46 @@ public sealed class ChecksTests : KitContext
     private static void Enter(IRenderedComponent<SkillCheckPanel> cut, string step, int roll) =>
         cut.Find($"[data-testid='check-roll-{step}'] input").Change(roll.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+    /// <summary>Осечка (стр. 97, 117): бросок не ниже порога оружия — оно не выстрелило; Удачей не выкупить, отметки нет.</summary>
+    [Theory]
+    [InlineData(70, 97)] // провал: Удача дотянула бы до успеха — но осечку не выкупают
+    [InlineData(99, 97)] // успех по уровню — оружие всё равно не выстрелило
+    public void Malfunction_of_the_weapon_cannot_be_bought_with_luck_and_gives_no_mark(int skill, int roll)
+    {
+        var sheet = Sheet(luck: 99);
+        sheet.Skills[1].Value = skill;
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, sheet)
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Handgun.Id}")
+            .Add(c => c.Malfunction, 96)
+            .Add(c => c.OnSheetChange, _ => { }));
+
+        Enter(cut, "first", roll);
+
+        Assert.Contains("Осечка (96–100): оружие не выстрелило.", cut.Markup);
+        Assert.Empty(cut.FindAll("[data-testid='check-luck']"));
+        Assert.Empty(cut.FindAll("[data-testid='check-mark-skill']"));
+    }
+
+    [Fact]
+    public void Below_the_malfunction_threshold_luck_is_offered_as_usual()
+    {
+        var sheet = Sheet(luck: 99);
+        sheet.Skills[1].Value = 70;
+        var cut = Render<SkillCheckPanel>(p => p
+            .Add(c => c.Sheet, sheet)
+            .Add(c => c.Catalog, Catalog)
+            .Add(c => c.InitialKey, $"skill:{Handgun.Id}")
+            .Add(c => c.Malfunction, 96)
+            .Add(c => c.OnSheetChange, _ => { }));
+
+        Enter(cut, "first", 80);
+
+        Assert.DoesNotContain("Осечка", cut.Markup, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("[data-testid='check-luck']"));
+    }
+
     [Fact]
     public void Entered_roll_shows_level_and_locks_conditions()
     {

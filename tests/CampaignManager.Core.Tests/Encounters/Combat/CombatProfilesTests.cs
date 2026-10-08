@@ -218,4 +218,25 @@ public sealed class CombatProfilesTests
 
         Assert.Equal("1D4+1d4", CombatProfiles.DamageWithBonus(attack, "+1D4"));
     }
+
+    /// <summary>Дробь не проникает, даже если справочник отметил дробовик проникающим (стр. 407); метание узнаётся по навыку.</summary>
+    [Fact]
+    [Trait("page", "407")]
+    public void Shotgun_NotImpaling_ThrowingKnife_Thrown()
+    {
+        var catalog = CombatCatalog();
+        var shotgun = new SheetWeapon
+        {
+            Name = "Дробовик", SkillId = catalog.FindByCode("skill.firearms.rifle-shotgun")!.Id, Damage = "4d6/2d6/1d6", Range = "10/20/50 м", Impaling = true,
+        };
+        var slug = new SheetWeapon { Name = "Дробовик (пуля)", SkillId = shotgun.SkillId, Damage = "1d10+6", Range = "50 м" };
+        var knife = new SheetWeapon { Name = "Нож", SkillId = catalog.FindByCode("skill.throw")!.Id, Damage = "1d4 + 1/2 БкУ", Range = "СИЛ/5м", Impaling = true };
+
+        Assert.False(CombatProfiles.FromWeapon(shotgun, 40, 50, catalog).Impaling);
+        Assert.True(CombatProfiles.FromWeapon(slug, 40, 50, catalog).Impaling);
+        var thrown = CombatProfiles.FromWeapon(knife, 40, 50, catalog);
+        Assert.True(thrown.Thrown);
+        Assert.Equal(CombatAttackKind.Ranged, thrown.Kind);
+        Assert.False(CombatProfiles.FromWeapon(shotgun, 40, 50, catalog).Thrown);
+    }
 }

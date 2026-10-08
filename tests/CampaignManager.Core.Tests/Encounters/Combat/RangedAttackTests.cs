@@ -1,3 +1,4 @@
+using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Dice;
 using CampaignManager.Core.Encounters;
 using CampaignManager.Core.Tests.Infrastructure;
@@ -169,13 +170,13 @@ public sealed class RangedAttackTests
     [Trait("page", "114")]
     public void Volley_CountsCheckOnApply_NextCheckGetsPenalty()
     {
-        var first = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 4 });
+        var first = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 4, DamageRolls = [3, 4] });
         Apply(_state, first);
 
         Assert.Equal(1, _shooter.Combat.AutofireIn(_state.Round));
         Assert.Equal(2, CombatRules.AmmoLeft(_shooter, _shooter.Profile.Attacks[0]));
 
-        var second = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 2 });
+        var second = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 2, DamageRolls = [3] });
         Assert.Contains("−1 проверка №2 при автоматической стрельбе", second.Modifiers.Reasons);
     }
 
@@ -210,7 +211,7 @@ public sealed class RangedAttackTests
     {
         Malfunction(null);
 
-        var outcome = Resolve(Setup(1) with { FiringMode = FiringMode.Volley, AutofireCheckIndex = checkIndex });
+        var outcome = Resolve(Setup(1) with { FiringMode = FiringMode.Volley, AutofireCheckIndex = checkIndex, DamageRolls = [3] });
 
         Assert.Equal(impossible, outcome.Impossible);
         // Даже 01 не попадает, когда сложность выше критической
@@ -341,5 +342,174 @@ public sealed class RangedAttackTests
         var outcome = Resolve(Setup(40) with { TargetTakingCover = true });
 
         Assert.Single(outcome.Modifiers.Reasons, r => r.Contains("укрылась", StringComparison.Ordinal));
+    }
+
+    // ── Метание: от него уклоняются (стр. 106) ─────────────────────────────
+
+    private static CombatAttack Knife() => new()
+    {
+        Key = "knife", Name = "Метательный нож", Damage = "1D4+½БкУ", Skill = 60, Kind = CombatAttackKind.Ranged, Thrown = true,
+        DamageBonus = CreatureDamageBonusMode.Half, Impaling = true,
+    };
+
+    private RangedAttackSetup Throw(int roll, int? dodge, SurpriseMode surprise = SurpriseMode.TargetReady) => new()
+    {
+        AttackerId = _shooter.Id, DefenderId = _target.Id, AttackKey = "knife", Surprise = surprise,
+        AttackRoll = Rolled(roll), DefenseRoll = dodge is { } d ? Rolled(d) : null, DamageRoll = 3, DamageBonusRoll = 0, ExtraImpaleRoll = 2, ConRoll = Rolled(10),
+    };
+
+    [Theory]
+    [Trait("page", "106")]
+    [Trait("finding", "F-C10")]
+    [InlineData(40, 10, false)] // обычный успех против трудного уклонения — промах
+    [InlineData(40, 20, false)] // ничья обычных — уклонившемуся
+    [InlineData(10, 20, true)]  // чрезвычайный против обычного — попадание
+    [InlineData(40, 90, true)]  // уклонение провалено
+    public void Thrown_TargetDodges_AsInMelee(int attack, int dodge, bool hits)
+    {
+        _shooter.Profile.Attacks.Add(Knife());
+
+        var outcome = Resolve(Throw(attack, dodge));
+
+        Assert.Equal(hits, outcome.Hit);
+        Assert.NotNull(outcome.DefenseRoll);
+        Assert.Contains(outcome.Resolution.Effects, e => e.Kind == EncounterEffectKind.Defense && e.ParticipantId == _target.Id);
+        if (!hits)
+            Assert.Contains("уклонился", outcome.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("page", "106")]
+    public void Thrown_TargetNotReady_DoesNotDodge()
+    {
+        _shooter.Profile.Attacks.Add(Knife());
+
+        var outcome = Resolve(Throw(40, dodge: null, SurpriseMode.BonusDie));
+
+        Assert.True(outcome.Hit);
+        Assert.Null(outcome.DefenseRoll);
+    }
+
+    [Fact]
+    [Trait("page", "106")]
+    public void Thrown_TargetWithoutDodge_DoesNotRoll()
+    {
+        _shooter.Profile.Attacks.Add(Knife());
+        _target.Stats.Dodge = 0;
+
+        var outcome = Resolve(Throw(40, dodge: 1));
+
+        Assert.True(outcome.Hit);
+        Assert.Null(outcome.DefenseRoll);
+    }
+
+    [Fact]
+    [Trait("page", "110")]
+    public void Firearm_IsNotDodged()
+    {
+        var outcome = Resolve(Setup(40) with { DefenseRoll = Rolled(1) });
+
+        Assert.True(outcome.Hit);
+        Assert.Null(outcome.DefenseRoll);
+    }
+
+    // ── Залп очереди: половина пуль, урон каждой (стр. 115) ──────────────────
+
+    [Fact]
+    [Trait("page", "115")]
+    [Trait("finding", "F-C11")]
+    public void Volley_Success_HalfTheBulletsHit_ArmorFromEach()
+    {
+        _target.Stats.Armor = 1;
+
+        var outcome = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 5, DamageRolls = [3, 7] });
+
+        Assert.True(outcome.Hit);
+        Assert.Equal([2, 6], outcome.Bullets.Select(b => b.Total));
+        Assert.Equal(8, outcome.Damage!.Total);
+        Assert.Equal(2, outcome.Damage.Armor);
+        Assert.Contains(outcome.Resolution.Effects, e => e.Kind == EncounterEffectKind.Damage && e.ParticipantId == _target.Id && e.Amount == 8);
+        Assert.StartsWith("Стрелок попадает: 2 из 5.", outcome.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("page", "115")]
+    public void Volley_OneBullet_StillHits()
+    {
+        var outcome = Resolve(Setup(40) with { FiringMode = FiringMode.Volley, ShotsFired = 1, DamageRolls = [4] });
+
+        Assert.Single(outcome.Bullets);
+        Assert.Equal(4, outcome.Damage!.Total);
+    }
+
+    /// <summary>Пример с Сесилом (стр. 115): чрезвычайный успех — все пули, половина проникающие (максимум и бросок).</summary>
+    [Fact]
+    [Trait("page", "115")]
+    [Trait("finding", "F-C11")]
+    public void Volley_Extreme_AllHit_FirstHalfImpale()
+    {
+        var outcome = Resolve(Setup(10) with { FiringMode = FiringMode.Volley, ShotsFired = 4, DamageRolls = [2, 3, 4, 5] });
+
+        Assert.Equal(4, outcome.Bullets.Count);
+        Assert.Equal([12, 13, 4, 5], outcome.Bullets.Select(b => b.Total));
+        Assert.True(outcome.Bullets[0].Impaling);
+        Assert.False(outcome.Bullets[2].Impaling);
+        Assert.Equal(34, outcome.Damage!.Total);
+    }
+
+    [Fact]
+    [Trait("page", "115")]
+    public void Volley_ExtremeDifficulty_BestIsPlainSuccess()
+    {
+        var outcome = Resolve(Setup(5, RangeBand.Extreme) with { FiringMode = FiringMode.Volley, ShotsFired = 4, DamageRolls = [3, 3] });
+
+        Assert.Equal(SuccessLevel.Extreme, outcome.Level);
+        Assert.Equal(2, outcome.Bullets.Count);
+        Assert.All(outcome.Bullets, b => Assert.False(b.Impaling));
+    }
+
+    [Fact]
+    [Trait("page", "111")]
+    public void PistolBurst_OneBulletPerCheck()
+    {
+        Apply(_state, Resolve(Setup(40) with { FiringMode = FiringMode.PistolBurst, ShotsFired = 3 }));
+
+        Assert.Equal(5, CombatRules.AmmoLeft(_shooter, _shooter.Profile.Attacks[0]));
+    }
+
+    // ── Дробовик: урон по дальности, дробь не проникает (стр. 407) ──────────
+
+    private static CombatAttack Shotgun() => new()
+    {
+        Key = "shotgun", Name = "Дробовик 12-го калибра", Damage = "4d6/2d6/1d6", Skill = 60, Kind = CombatAttackKind.Ranged,
+        AmmoCapacity = 2, Malfunction = 100,
+    };
+
+    [Theory]
+    [Trait("page", "407")]
+    [Trait("finding", "F-C12")]
+    [InlineData(RangeBand.Base, "4d6")]
+    [InlineData(RangeBand.Long, "2d6")]
+    [InlineData(RangeBand.Extreme, "1d6")]
+    public void Shotgun_DamageByRange(RangeBand range, string formula)
+    {
+        _shooter.Profile.Attacks.Add(Shotgun());
+
+        var outcome = Resolve(Setup(5, range) with { AttackKey = "shotgun" });
+
+        Assert.True(outcome.Hit);
+        Assert.Equal(formula, outcome.Damage!.Formula);
+    }
+
+    [Fact]
+    [Trait("page", "407")]
+    public void Shotgun_ExtremeAtCloseRange_MaxWithoutImpale()
+    {
+        _shooter.Profile.Attacks.Add(Shotgun());
+
+        var outcome = Resolve(Setup(10) with { AttackKey = "shotgun" });
+
+        Assert.Equal(24, outcome.Damage!.Total);
+        Assert.Equal(0, outcome.Damage.Extra);
     }
 }

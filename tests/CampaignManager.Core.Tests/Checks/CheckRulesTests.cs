@@ -132,6 +132,24 @@ public sealed class CheckRulesTests
         Assert.Null(CheckRules.PushBlockReason(Manual, Failed(), false));
     }
 
+    /// <summary>Осечка вступает в силу в любом случае (стр. 97): ни Удачей не выкупить, ни отметку не получить.</summary>
+    [Theory]
+    [Trait("page", "97")]
+    [Trait("finding", "F-C13")]
+    [InlineData(97, 96, true)]
+    [InlineData(96, 96, true)]
+    [InlineData(95, 96, false)]
+    [InlineData(100, null, false)]
+    public void Malfunction_ByWeaponThreshold(int roll, int? threshold, bool malfunction)
+    {
+        var outcome = CheckRules.Evaluate(roll, 70, Difficulty.Regular);
+
+        Assert.Equal(malfunction, CheckRules.IsMalfunction(roll, threshold));
+        Assert.Equal(malfunction ? "Осечка вступает в силу в любом случае — выкупить её нельзя." : null,
+            outcome.Level == SuccessLevel.Fumble ? null : CheckRules.LuckBlockReason(Library, outcome, false, threshold));
+        Assert.Equal(malfunction, CheckRules.MarkBlockReason(Library, 0, false, malfunction) is not null);
+    }
+
     [Fact]
     [Trait("page", "97")]
     public void LuckBlockReason_Order()
