@@ -1,0 +1,309 @@
+@using CampaignManager.Contracts.Characters
+@using CampaignManager.Core.Catalogs
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Dice
+@using CampaignManager.Core.Documents
+@using CampaignManager.UI.Characters
+@inject IDiceRoller Dice
+@inject ICharactersApi Characters
+@inject ToastService Toasts
+
+@* Итоги сценария для партии (гл. 8, 15): одна награда — всем сыщикам сразу, а не шагом фазы развития в каждом листе. Три вида —
+   как в итогах сценариев книги: прибавка Рассудка (каждый бросает сам, стр. 165), проверка Рассудка с потерей «1/1d6» (за
+   проваленную цель, стр. 359, 379) и деньги. Любой бросок можно вписать со стола или бросить; «Бросить за всех» дописывает
+   невписанное. У каждого сыщика — «было → станет» тем же правилом Core на копии листа (RewardRules), в лист пишется решённое число
+   через API листа с версией (SheetEdits: 409 — перечитать и применить поверх). Что сценарий обещает — его факты «Награды». *@
+<Modal Open="Open" OnClose="CloseAsync" Title="Итоги сценария" Size="ModalSize.Large" class="cm-modal-top" data-testid="rewards-modal">
+    <ChildContent>
+        <div class="flex flex-col gap-4">
+            @if (Rewards.Count > 0)
+            {
+                <details class="rounded-md border border-primary-200 px-3" data-testid="rewards-facts">
+                    <summary class="cm-tap-row cursor-pointer text-sm font-medium text-primary-800">Что обещает сценарий</summary>
+                    <div class="flex flex-col gap-2 pb-3">
+                        @foreach (var fact in Rewards)
+                        {
+                            <div>
+                                <p class="text-sm font-semibold text-primary-800">@fact.Title</p>
+                                @if (!string.IsNullOrWhiteSpace(fact.Content))
+                                {
+                                    <Markdown Text="@fact.Content" class="max-w-prose text-sm" />
+                                }
+                            </div>
+                        }
+                    </div>
+                </details>
+            }
+
+            <div class="flex flex-wrap items-end gap-4">
+                <Field Label="Что" Group="true">
+                    <Segmented TValue="RewardKind" Options="Kinds" Value="_kind" ValueChanged="SetKind" Label="Что по итогам" />
+                </Field>
+                @if (_kind == RewardKind.Money)
+                {
+                    <Field Label="Каждому, $" class="w-32">
+                        <input type="number" inputmode="decimal" min="0" class="cm-input" value="@_money" data-testid="rewards-money"
+                               @onchange="e => _money = decimal.TryParse(e.Value?.ToString(), out var v) && v > 0 ? v : null" />
+                    </Field>
+                }
+                else
+                {
+                    <Field Label="@(_kind == RewardKind.SanityGain ? "Прибавка" : "Потеря: успех/провал")" class="w-36">
+                        <input type="text" class="cm-input" value="@_formula" data-testid="rewards-formula" @onchange="SetFormula" />
+                    </Field>
+                }
+            </div>
+
+            <ul class="flex flex-col" data-testid="rewards-party">
+                @foreach (var row in _rows)
+                {
+                    var sheet = row.Investigator.Sheet;
+                    <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-primary-200 py-2 first:border-t-0" @key="row.Investigator.Id" data-testid="rewards-row">
+                        <label class="cm-tap-row min-w-40 flex-1">
+                            <input type="checkbox" class="cm-checkbox" checked="@row.Included" @onchange="e => row.Included = e.Value is true" />
+                            <span class="font-medium text-primary-900">@row.Investigator.Name</span>
+                            <span class="text-sm text-primary-600">@(_kind == RewardKind.Money ? $"наличные {Terms.Dollars(sheet.Finances.Cash ?? 0)}" : $"Рассудок {sheet.Current.Sanity}")</span>
+                        </label>
+                        @if (row.Included && _kind == RewardKind.SanityGain)
+                        {
+                            @Points(row, _formula)
+                        }
+                        else if (row.Included && _kind == RewardKind.SanityCheck)
+                        {
+                            <RollInput Label="@($"Рассудок: {row.Investigator.Name}")" Value="@sheet.Current.Sanity" Roll="row.Check" RollChanged="r => SetCheck(row, r)" />
+                            @if (row.Check is not null)
+                            {
+                                var (formula, maximum) = LossOf(row);
+                                @if (maximum)
+                                {
+                                    <span class="text-sm text-error-700">крах — потеря максимум: @formula.Max</span>
+                                }
+                                else if (formula.HasDice)
+                                {
+                                    @Points(row, formula.Text)
+                                }
+                            }
+                        }
+                        @if (row.Included && Amount(row) is { } amount)
+                        {
+                            <span class="text-sm text-primary-700" data-testid="rewards-preview">→ @Preview(row, amount)</span>
+                        }
+                        @if (row.Result is { } result)
+                        {
+                            <span class="basis-full text-sm @(row.Failed ? "text-error-700" : "text-success-700")" data-testid="rewards-result">@result</span>
+                        }
+                    </li>
+                }
+            </ul>
+
+            @if (_kind != RewardKind.Money)
+            {
+                <div>
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" data-testid="rewards-roll-all" OnClick="RollAll">Бросить за всех</Button>
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <FooterHint>
+        @if (MissingReason is { } reason)
+        {
+            <span>@reason</span>
+        }
+    </FooterHint>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">Отмена</Button>
+        <Button Icon="fa-check" Disabled="@(MissingReason is not null)" Busy="_busy" data-testid="rewards-apply" OnClick="ApplyAsync">Записать в листы</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private static readonly IReadOnlyList<SegmentOption<RewardKind>> Kinds =
+    [
+        new(RewardKind.SanityGain, "Рассудок +"),
+        new(RewardKind.SanityCheck, "Проверка Рассудка"),
+        new(RewardKind.Money, "Деньги"),
+    ];
+
+    private RewardKind _kind;
+    private string _formula = "1d6";
+    private decimal? _money;
+    private bool _busy;
+    private bool _wasOpen;
+    private List<Row> _rows = [];
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<CheckInvestigator> Party { get; set; } = [];
+
+    [Parameter, EditorRequired] public SkillCatalog Catalog { get; set; } = null!;
+
+    /// <summary>Факты сценария «Награды» — что он обещает; в лист их не переводит никто, их читает Хранитель.</summary>
+    [Parameter] public IReadOnlyList<KeyFactDto> Rewards { get; set; } = [];
+
+    /// <summary>Хоть один лист записан — партия перечитает листы.</summary>
+    [Parameter] public EventCallback OnApplied { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        // Сыщики и броски — один раз на открытие: пока бросают кости, состав строк не меняется под руками.
+        if (Open && !_wasOpen)
+        {
+            _kind = RewardKind.SanityGain;
+            _formula = "1d6";
+            _money = null;
+            _rows = [.. Party.Select(i => new Row(i) { Included = !i.Sheet.Condition.Dead })];
+        }
+
+        _wasOpen = Open;
+    }
+
+    private void SetKind(RewardKind kind)
+    {
+        _kind = kind;
+        _formula = kind == RewardKind.SanityCheck ? "1/1d6" : "1d6";
+        ClearRolls();
+    }
+
+    private void SetFormula(ChangeEventArgs e)
+    {
+        _formula = e.Value?.ToString()?.Trim() ?? string.Empty;
+        ClearRolls();
+    }
+
+    private void ClearRolls()
+    {
+        foreach (var row in _rows)
+        {
+            row.Check = null;
+            row.Points = null;
+            row.Result = null;
+        }
+    }
+
+    private static void SetCheck(Row row, D100Roll? roll)
+    {
+        row.Check = roll;
+        row.Points = null;
+    }
+
+    /// <summary>Чем считать потерю у этого сыщика: часть «успех/провал» по уровню его проверки, у краха — максимум.</summary>
+    private (DiceFormula Formula, bool Maximum) LossOf(Row row)
+    {
+        var parts = SanityLossFormula.Parse(_formula);
+        var level = Check.Evaluate(row.Check!.Result, row.Investigator.Sheet.Current.Sanity);
+        return SanityRules.LossFor(level, parts.OnSuccess.Text, parts.OnFailure.Text);
+    }
+
+    /// <summary>Решённое число для листа; null — ещё не брошено.</summary>
+    private decimal? Amount(Row row)
+    {
+        switch (_kind)
+        {
+            case RewardKind.Money:
+                return _money;
+            case RewardKind.SanityGain:
+                var gain = DiceFormula.Parse(_formula);
+                return gain.HasDice ? row.Points : Math.Max(0, gain.Constant);
+            default:
+                if (row.Check is null)
+                    return null;
+                var (formula, maximum) = LossOf(row);
+                return maximum ? Math.Max(0, formula.Max) : formula.HasDice ? row.Points : Math.Max(0, formula.Constant);
+        }
+    }
+
+    private string Preview(Row row, decimal amount) =>
+        RewardRules.Apply(CmJson.Clone(row.Investigator.Sheet), Catalog, _kind, amount);
+
+    private string? MissingReason
+    {
+        get
+        {
+            var included = _rows.Where(r => r.Included).ToList();
+            if (included.Count == 0)
+                return "Отметьте сыщиков.";
+            if (_kind == RewardKind.Money)
+                return _money is null ? "Впишите сумму." : null;
+            if (_kind == RewardKind.SanityGain && !DiceFormula.Parse(_formula).IsValid
+                || _kind == RewardKind.SanityCheck && !SanityLossFormula.Parse(_formula).OnFailure.IsValid)
+                return "Формула не разобрана: «1d6», «1/1d6».";
+            return included.Any(r => Amount(r) is null) ? "Впишите или бросьте кости у всех отмеченных." : null;
+        }
+    }
+
+    /// <summary>Невписанное бросает правило: d100 проверки и кости прибавки или потери.</summary>
+    private void RollAll()
+    {
+        foreach (var row in _rows.Where(r => r.Included))
+        {
+            if (_kind == RewardKind.SanityCheck)
+            {
+                row.Check ??= D100.Roll(Dice);
+                var (formula, maximum) = LossOf(row);
+                if (!maximum && formula.HasDice)
+                    row.Points ??= Math.Max(0, formula.Roll(Dice));
+            }
+            else if (DiceFormula.Parse(_formula) is { HasDice: true } gain)
+            {
+                row.Points ??= Math.Max(0, gain.Roll(Dice));
+            }
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (MissingReason is not null)
+            return;
+
+        _busy = true;
+        var written = 0;
+        foreach (var row in _rows.Where(r => r.Included && r.Result is null || r.Included && r.Failed))
+        {
+            var amount = Amount(row)!.Value;
+            string? text = null;
+            var (_, error) = await SheetEdits.EditAsync(Characters, row.Investigator.Id, sheet => text = RewardRules.Apply(sheet, Catalog, _kind, amount));
+            row.Failed = error is not null;
+            row.Result = error ?? $"Записано: {text}.";
+            if (error is null)
+                written++;
+        }
+
+        _busy = false;
+        if (written > 0)
+            await OnApplied.InvokeAsync();
+
+        if (_rows.Any(r => r.Included && r.Failed))
+            return;
+
+        Toasts.Success($"Итоги записаны в листы: {written}.");
+        await CloseAsync();
+    }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    /// <summary>Кости одного сыщика: вписать со стола или бросить формулу.</summary>
+    private RenderFragment Points(Row row, string formula) =>
+        @<span class="flex items-center gap-2">
+            <input type="number" inputmode="numeric" min="0" class="cm-input w-20" value="@row.Points" placeholder="@DiceText.Format(formula)"
+                   aria-label="@($"{DiceText.Format(formula)}: {row.Investigator.Name}")" data-testid="rewards-points"
+                   @onchange="e => row.Points = int.TryParse(e.Value?.ToString(), out var v) && v >= 0 ? v : null" />
+            <Button Variant="ButtonVariant.Secondary" Icon="fa-dice" OnClick="() => row.Points = Math.Max(0, DiceFormula.Parse(formula).Roll(Dice))">Бросить</Button>
+        </span>;
+
+    private sealed class Row(CheckInvestigator investigator)
+    {
+        public CheckInvestigator Investigator { get; } = investigator;
+
+        public bool Included { get; set; }
+
+        public D100Roll? Check { get; set; }
+
+        public int? Points { get; set; }
+
+        public string? Result { get; set; }
+
+        public bool Failed { get; set; }
+    }
+}

@@ -41,8 +41,7 @@ public static partial class CombatRules
         var creature = setup.CreatureParticipantId is { } creatureId ? state.Find(creatureId) : null;
         var roll = setup.Roll ?? D100.Roll(dice);
         var level = Check.Evaluate(roll.Result, sanity);
-        var fumble = level == SuccessLevel.Fumble;
-        var formula = DiceFormula.Parse(level.IsSuccess() ? setup.SuccessLoss : setup.FailureLoss);
+        var (formula, fumble) = SanityRules.LossFor(level, setup.SuccessLoss, setup.FailureLoss);
         var loss = Math.Max(0, fumble ? formula.Max : setup.LossRoll ?? formula.Roll(dice));
 
         List<string> lines =

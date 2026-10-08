@@ -102,6 +102,13 @@ public static class FinanceRules
         return true;
     }
 
+    /// <summary>Крупная сумма (вознаграждение по итогам) — к наличным (стр. 94): оставить её на будущее, в активах, решает игрок.</summary>
+    public static void Receive(Finances finances, decimal amount)
+    {
+        if (amount > 0)
+            finances.Cash = (finances.Cash ?? 0) + amount;
+    }
+
     /// <summary>Целые суммы без копеек, полдоллара нищего — с ними.</summary>
     public static string Format(decimal value) => value == decimal.Truncate(value)
         ? ((long)value).ToString(CultureInfo.InvariantCulture)
