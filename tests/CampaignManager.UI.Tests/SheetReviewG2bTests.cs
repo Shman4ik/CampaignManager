@@ -139,6 +139,31 @@ public sealed class SheetReviewG2bTests : KitContext
         AngleSharp.Dom.IElement Button(string text) => cut.FindAll("button").First(b => b.TextContent.Trim() == text);
     }
 
+    /// <summary>«Я богат!» бросают снова, пока достаток не догонит активы; другие варианты после него — нет.</summary>
+    [Fact]
+    public void Rich_is_rolled_again_until_money_is_recalculated()
+    {
+        var sheet = new CharacterSheet { Current = new CurrentValues { Sanity = 50, Luck = 40 } };
+        var cut = Render<DevelopmentPhaseModal>(sheet, p => p.Add(m => m.Open, true));
+        cut.Find("[data-testid='dev-step-3']").Click();
+
+        cut.FindAll("input[name='credit-change']")[0].Change(true); // «Я богат!»
+        Dice.Enqueue(4);
+        Button("Применить").Click();
+        Dice.Enqueue(3);
+        Button("Бросить ещё").Click();
+        Assert.False(Button("Бросить ещё").HasAttribute("disabled"));
+
+        cut.FindAll("input[name='credit-change']")[1].Change(true); // «Дела идут на лад» после «Я богат!» — уже нет
+        Assert.True(Button("Бросить ещё").HasAttribute("disabled"));
+
+        Button("Пересчитать деньги").Click();
+        cut.FindAll("input[name='credit-change']")[0].Change(true);
+        Assert.True(Button("Бросить ещё").HasAttribute("disabled"));
+
+        AngleSharp.Dom.IElement Button(string text) => cut.FindAll("button").First(b => b.TextContent.Trim() == text);
+    }
+
     [Fact]
     public void Weapon_damage_is_shown_and_stored_in_the_dice_notation_of_the_rules()
     {
