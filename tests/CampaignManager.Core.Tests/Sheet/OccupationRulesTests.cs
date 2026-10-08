@@ -217,6 +217,36 @@ public sealed class OccupationRulesTests
         Assert.Equal(1, OccupationRules.NewSpecialization(parent.Id, "дирижабль", catalog).Value);
     }
 
+    /// <summary>
+    /// База своей специализации — общая у большинства соседних (Наука — 1%, хотя у математики 10%); у Ближнего боя базы разные
+    /// (стр. 56) — число первой соседней остаётся заготовкой, но лист его не показывает.
+    /// </summary>
+    [Fact]
+    [Trait("page", "56")]
+    public void SpecializationBase_CommonOrUnknown()
+    {
+        var science = new SkillDefinition(Guid.NewGuid(), "Наука");
+        var fighting = new SkillDefinition(Guid.NewGuid(), "Ближний бой");
+        var catalog = new SkillCatalog(
+        [
+            science,
+            new SkillDefinition(Guid.NewGuid(), "Наука (математика)") { ParentId = science.Id, BaseValue = 10 },
+            new SkillDefinition(Guid.NewGuid(), "Наука (химия)") { ParentId = science.Id, BaseValue = 1 },
+            new SkillDefinition(Guid.NewGuid(), "Наука (физика)") { ParentId = science.Id, BaseValue = 1 },
+            fighting,
+            new SkillDefinition(Guid.NewGuid(), "Ближний бой (драка)") { ParentId = fighting.Id, BaseValue = 25 },
+            new SkillDefinition(Guid.NewGuid(), "Ближний бой (хлыст)") { ParentId = fighting.Id, BaseValue = 5 },
+        ]);
+
+        Assert.Equal((1, true), catalog.SpecializationBase(science.Id));
+        Assert.Equal((25, false), catalog.SpecializationBase(fighting.Id));
+
+        var chainsaw = new SheetSkill { ParentSkillId = fighting.Id, Name = "бензопила", Value = 14 };
+        var line = SheetSkillLayout.Line(new CharacterSheet(), catalog, chainsaw);
+        Assert.False(line.BaseKnown);
+        Assert.True(SheetSkillLayout.Line(new CharacterSheet(), catalog, new SheetSkill { ParentSkillId = science.Id, Name = "астрономия", Value = 1 }).BaseKnown);
+    }
+
     private static OccupationSlotDefinition SkillSlot(string name) => new(OccupationSlotKind.Skill) { SkillId = Id(name) };
 
     private static OccupationSlotDefinition Social() => new(OccupationSlotKind.Social);

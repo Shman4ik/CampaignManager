@@ -95,6 +95,12 @@
     .play-vital[data-k="san"] .play-vital-label {
       min-height: 2.5rem;
     }
+
+    /* С «новым днём» пояснение Рассудка — три строки: подписи обеих плиток растут вместе, числа остаются на одной линии. */
+    .play-vital-grid:has(.play-vital-link) .play-vital[data-k="hp"] .play-vital-label,
+    .play-vital-grid:has(.play-vital-link) .play-vital[data-k="san"] .play-vital-label {
+      min-height: 3.75rem;
+    }
   }
 
   /* Подпись Удачи — кнопка проверки: тот же вид, что у подписи, и значок кости. */
@@ -120,6 +126,22 @@
     content: "";
     position: absolute;
     inset: -0.5rem -0.5rem;
+  }
+
+  /* Действие в строке пояснения («новый день» у Рассудка): ссылка тем же 13px, касание расширено невидимо до ~32px — строка
+     подписей от этого не растёт. */
+  .play-vital-link {
+    position: relative;
+    font: inherit;
+    color: var(--color-accent-700);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .play-vital-link::after {
+    content: "";
+    position: absolute;
+    inset: -0.5rem -0.375rem;
   }
 
   .play-vital-value {
@@ -269,7 +291,9 @@
       padding-inline: 0.625rem;
     }
 
-    .play-flag-group-end {
+    /* Специфичнее базового правила ниже по файлу: с той же специфичностью оно побеждало, и на телефоне линейка висела
+       обрубком слева от «Мёртв». */
+    .play-flags .play-flag-group-end {
       padding-inline-start: 0;
       border-inline-start: 0;
     }
@@ -519,20 +543,45 @@
     color: var(--color-primary-500);
   }
 
-  /* Производные отделены от характеристик линейкой потолще, а не другим фоном: числа обеих групп стоят на одной линии
-     (у производной без ½ и ⅕ — пустая третья строка, PlayStats). */
-  .play-stat-derived-first {
-    border-left: 2px solid var(--color-primary-200);
+  /* Производные — своим рядом под характеристиками, ряд отделён линейкой потолще, а не другим фоном: числа обеих групп стоят
+     на одной линии (у производной без ½ и ⅕ — пустая третья строка, PlayStats). Последний ряд и правый столбец своих линеек не
+     рисуют — их несёт рамка карточки. Телефон — 4 × 3: характеристики двумя рядами, производные третьим. */
+  .play-stat-derived {
+    border-top: 2px solid var(--color-primary-200);
+    border-bottom: 0;
   }
 
-  /* Портрет iPad (~704px) — два ряда по шесть, а не три по четыре. */
+  .play-stat:nth-child(4n) {
+    border-right: 0;
+  }
+
+  /* Портрет iPad (~704px): восемь характеристик рядом, под ними четыре производные по две колонки — швы рядов совпадают.
+     Было 6 × 2: производные начинались с середины второго ряда, и их линейка стояла ступенькой посреди полосы. */
   @container play (min-width: 600px) {
     .play-stats {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+
+    .play-stat-derived {
+      grid-column: span 2;
+    }
+
+    .play-stat:nth-child(4n) {
+      border-right: 1px solid var(--color-primary-200);
+    }
+
+    .play-stat:nth-child(8),
+    .play-stat:last-child {
+      border-right: 0;
+    }
+
+    /* Подпись производной в плитке ~170px помещается в строку: перенос сдвигал бы число ниже соседних. */
+    .play-stat-label {
+      white-space: nowrap;
     }
   }
 
-  /* Восемь характеристик и четыре производных — одной строкой; производным шире: подписи словами. */
+  /* Восемь характеристик и четыре производные — одной строкой; производным шире: подписи словами. Группы делит линейка слева. */
   @container play (min-width: 860px) {
     .play-stats {
       grid-template-columns: repeat(8, minmax(0, 1fr)) repeat(4, minmax(0, 1.6fr));
@@ -542,14 +591,17 @@
       border-bottom: 0;
     }
 
-    .play-stat:last-child {
-      border-right: 0;
+    .play-stat-derived {
+      grid-column: auto;
+      border-top: 0;
     }
 
-    /* Одной строкой подпись не переносится: «БОНУС К УРОНУ» в плитке ~120px на iPad иначе уходило на две строки и
-       сдвигало число ниже соседних. В плитках телефона и портрета перенос нужен — там подпись шире плитки. */
-    .play-stat-label {
-      white-space: nowrap;
+    .play-stat:nth-child(8) {
+      border-right: 1px solid var(--color-primary-200);
+    }
+
+    .play-stat-derived-first {
+      border-left: 2px solid var(--color-primary-200);
     }
   }
 
@@ -1010,10 +1062,24 @@
     font-size: 0.8125rem;
   }
 
+  /* Деньги и «[сумма] Потратить» — одной строкой, на узкой карточке трата переносится под деньги. */
   .play-money {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.75rem;
     padding: 0 0.875rem 0.625rem;
     font-size: 0.8125rem;
     color: var(--color-primary-500);
+  }
+
+  .play-money p {
+    margin: 0;
+  }
+
+  /* Суммы бывают в тысячи долларов — поле шире, чем у урона. */
+  .play-money .play-pill input {
+    width: 4.5rem;
   }
 
   .play-money strong {

@@ -184,22 +184,27 @@ public static class DevelopmentPhaseRules
     }
 
     /// <summary>
-    /// Деньги после смены Средств (стр. 94): к оставшимся наличным прибавляется столбец «Наличные» новой
-    /// строки таблицы II, карманные и активы приводятся к новому достатку.
+    /// Деньги в фазу развития (стр. 94): к оставшимся наличным — столбец «Наличные» строки таблицы II по нынешним Средствам,
+    /// раз за фазу. Карманные и активы приводятся к достатку, только если он сменился (<paramref name="creditRatingBefore"/> —
+    /// Средства до шага) или они не заполнены: по умолчанию все остаются при своём, и «дом в Аркхеме» числом таблицы не затирается.
     /// </summary>
-    public static FinancesUpdateResult RecalculateFinances(CharacterSheet sheet, SkillCatalog catalog, Era era)
+    public static FinancesUpdateResult RecalculateFinances(CharacterSheet sheet, SkillCatalog catalog, Era era, int creditRatingBefore)
     {
         var creditRating = sheet.Value(catalog, SkillCodes.CreditRating);
         var tier = FinanceRules.GetTier(creditRating, era);
+        var tierChanged = FinanceRules.GetTier(creditRatingBefore, era).Name != tier.Name;
 
         var remaining = sheet.Finances.Cash;
         var cash = (remaining ?? 0) + tier.Cash;
 
         sheet.Finances.Cash = cash;
-        sheet.Finances.PocketMoney = tier.PocketMoney;
-        sheet.Finances.Assets = tier.AssetsText;
+        if (tierChanged || sheet.Finances.PocketMoney is null)
+            sheet.Finances.PocketMoney = tier.PocketMoney;
+        if (tierChanged || string.IsNullOrWhiteSpace(sheet.Finances.Assets))
+            sheet.Finances.Assets = tier.AssetsText;
 
-        return new FinancesUpdateResult(tier.Name, creditRating, remaining, tier.Cash, cash, tier.AssetsText, tier.PocketMoney);
+        return new FinancesUpdateResult(tier.Name, creditRating, remaining, tier.Cash, cash, sheet.Finances.Assets,
+            sheet.Finances.PocketMoney ?? tier.PocketMoney, tierChanged);
     }
 
     /// <summary>«Время лечит» (стр. 167): накопленное привыкание к каждому виду снижается на 1.</summary>
@@ -265,7 +270,8 @@ public sealed record FinancesUpdateResult(
     decimal TierCash,
     decimal NewCash,
     string Assets,
-    decimal PocketMoney);
+    decimal PocketMoney,
+    bool TierChanged);
 
 /// <summary>Кости правила: <c>Count</c>d<c>Sides</c> («2d6») — окно по ним предлагает вписать сумму.</summary>
 public sealed record DiceSpec(int Count, int Sides)

@@ -22,7 +22,6 @@
         <div class="play-vital-grid">
             <PlayVital Key="hp" Title="ПЗ" Kind="StatKind.HitPoints" Value="Sheet.Current.HitPoints" Max="derived.MaxHitPoints" ReadOnly="!edit"
                        Note="@($"серьёзная от {WoundRules.MajorWoundThreshold(derived.MaxHitPoints)} · смерть от {Math.Max(1, derived.MaxHitPoints)}")"
-                       HideNoteOnPhone="true"
                        OnStep="d => SetHitPoints(Sheet.Current.HitPoints + d, derived.MaxHitPoints)">
                 <Extra>
                     @* Одна атака — один бросок урона: серьёзная рана считается по нему, а не по сумме за бой. *@
@@ -36,6 +35,7 @@
             </PlayVital>
             <PlayVital Key="san" Title="Рассудок" Kind="StatKind.Sanity" Value="Sheet.Current.Sanity" Max="derived.MaxSanity" ReadOnly="!edit"
                        Note="@($"за день {(sanity.LostToday > 0 ? $"−{sanity.LostToday}" : "0")} из {sanity.IndefiniteThreshold}")"
+                       NoteAction="@(sanity.LostToday > 0 || sanity.LastLoss > 0 ? NewDayLink : null)"
                        OnStep="d => Set(v => Sheet.Current.Sanity = v, Sheet.Current.Sanity + d, derived.MaxSanity)">
                 <Extra>
                     <div class="play-pill">
@@ -175,6 +175,18 @@
             return;
 
         SanityRules.ApplyLoss(Sheet, Context.Catalog, _sanityLoss);
+        Context.Changed();
+    }
+
+    /// <summary>Порог «за день» считается от начала игрового дня — день начинают здесь же, а не уходя в «Лист».</summary>
+    private RenderFragment NewDayLink => @<button type="button" class="play-vital-link" data-testid="play-new-day" @onclick="NewDayAsync">новый день</button>;
+
+    private async Task NewDayAsync()
+    {
+        if (!await Dialogs.ConfirmAsync(SanityPanel.NewDayRequest(Sheet.Condition)))
+            return;
+
+        SanityRules.StartNewDay(Sheet);
         Context.Changed();
     }
 

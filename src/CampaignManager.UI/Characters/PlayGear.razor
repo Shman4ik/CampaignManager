@@ -1,10 +1,13 @@
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
+@inject ToastService Toasts
 
-@* «При себе» режима «Игра» — только чтение; пустая секция не рисуется (правило пустых состояний), правка — в режиме «Лист».
+@* «При себе» режима «Игра»; пустая секция не рисуется (правило пустых состояний), правка вещей — в режиме «Лист».
    Простой список через « · », а не «таблетки» (g2 1.9): те нажимаются (отметки состояния), предметы — нет. Отдельно от
-   заклинаний: в портрете они стоят рядом, а одна без другой — во всю ширину (play.css). *@
-@if (Sheet.Equipment.Count > 0 || Sheet.Finances.Cash is not null)
+   заклинаний: в портрете они стоят рядом, а одна без другой — во всю ширину (play.css).
+   Деньги: наличные и карманные в день — карманными за столом тратят не считая, а трату больше них вся сумма списывает с
+   наличных (стр. 93): «[сумма] Потратить» — FinanceRules.Spend, с «Отменить» в тосте; не хватает — лист не меняется. *@
+@if (Sheet.Equipment.Count > 0 || Sheet.Finances.Cash is not null || Sheet.Finances.PocketMoney is not null)
 {
     <section class="cm-card play-card" aria-label="При себе" data-testid="play-gear">
         <div class="play-card-head"><h2 class="cm-section-title">При себе</h2></div>
@@ -21,15 +24,62 @@
                 }
             </p>
         }
-        @if (Sheet.Finances.Cash is { } cash)
+        @if (Sheet.Finances.Cash is not null || Sheet.Finances.PocketMoney is not null)
         {
-            <p class="play-money">Наличные <strong>@Terms.Dollars(cash)</strong></p>
+            <div class="play-money" data-testid="play-money">
+                <p>
+                    @if (Sheet.Finances.Cash is { } cash)
+                    {
+                        <span>Наличные <strong data-testid="play-cash">@Terms.Dollars(cash)</strong></span>
+                    }
+                    @if (Sheet.Finances.Cash is not null && Sheet.Finances.PocketMoney is not null)
+                    {
+                        <span class="play-gear-sep" aria-hidden="true"> · </span>
+                    }
+                    @if (Sheet.Finances.PocketMoney is { } pocket)
+                    {
+                        <span>карманные <strong>@Terms.Dollars(pocket)</strong> в день</span>
+                    }
+                </p>
+                @if (!Context.ReadOnly && Sheet.Finances.Cash is not null)
+                {
+                    <div class="play-pill">
+                        <input type="number" inputmode="decimal" min="0" step="any" placeholder="$" aria-label="Сколько потратить из наличных"
+                               data-testid="play-spend-amount" @bind="_spend" />
+                        <button type="button" class="play-pill-stone" data-testid="play-spend" @onclick="Spend">Потратить</button>
+                    </div>
+                }
+            </div>
         }
     </section>
 }
 
 @code {
+    private decimal? _spend;
+
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
     private CharacterSheet Sheet => Context.Sheet;
+
+    private void Spend()
+    {
+        if (_spend is not { } amount || amount <= 0)
+            return;
+
+        var finances = Sheet.Finances;
+        if (!FinanceRules.Spend(finances, amount))
+        {
+            Toasts.Warning($"Не хватает наличных: есть {Terms.Dollars(finances.Cash ?? 0)}.");
+            return;
+        }
+
+        _spend = null;
+        Context.Changed();
+        Toasts.Undo($"Потрачено из наличных: {Terms.Dollars(amount)}, осталось {Terms.Dollars(finances.Cash ?? 0)}.", () =>
+        {
+            finances.Cash = (finances.Cash ?? 0) + amount;
+            Context.Changed();
+            return Task.CompletedTask;
+        });
+    }
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
+using CampaignManager.Core.Dice;
 
 namespace CampaignManager.Core.Encounters;
 
@@ -17,21 +18,21 @@ public static class CombatProfiles
 
     public const string BrawlDamage = "1D3";
 
+    /// <summary>Безоружная атака — есть у каждого листа: Ближний бой (драка), 1D3 + полный БкУ (стр. 66).</summary>
+    public static CombatAttack Unarmed(int skill) => new()
+    {
+        Key = BrawlKey,
+        Name = "Драка (без оружия)",
+        Skill = skill,
+        Damage = BrawlDamage,
+        Kind = CombatAttackKind.Melee,
+        DamageBonus = CreatureDamageBonusMode.Full,
+    };
+
     public static CombatProfile FromSheet(CharacterSheet sheet, SkillCatalog catalog)
     {
         var brawl = sheet.Value(catalog, SkillCodes.Fighting + ".brawl");
-        List<CombatAttack> attacks =
-        [
-            new()
-            {
-                Key = BrawlKey,
-                Name = "Драка (без оружия)",
-                Skill = brawl,
-                Damage = BrawlDamage,
-                Kind = CombatAttackKind.Melee,
-                DamageBonus = CreatureDamageBonusMode.Full,
-            },
-        ];
+        List<CombatAttack> attacks = [Unarmed(brawl)];
 
         foreach (var weapon in sheet.Weapons)
         {
@@ -189,6 +190,44 @@ public static class CombatProfiles
         DamageBonusType.Half => CreatureDamageBonusMode.Half,
         _ => melee ? CreatureDamageBonusMode.Full : CreatureDamageBonusMode.None,
     };
+
+    /// <summary>
+    /// Урон атаки так, как его бросит бой (<see cref="CombatRules.RollDamage"/>): вместо отметки — бонус к урону бойца.
+    /// «1D3 + БкУ» при +1D4 — «1D3+1d4», при 0 — «1D3»; ближнему оружию без отметки бонус полный (<see cref="DamageBonusOf"/>),
+    /// дальнему — нет. Половина: число делится сразу, у костей — «½ от 1d4» (бой бросает их и делит пополам). Бонус не
+    /// формулой («нет» из книги) — текст оружия как есть.
+    /// </summary>
+    public static string DamageWithBonus(CombatAttack attack, string? damageBonus)
+    {
+        var text = string.IsNullOrWhiteSpace(attack.Damage) ? BrawlDamage : attack.Damage.Trim();
+        if (attack.DamageBonus == CreatureDamageBonusMode.None)
+            return text;
+
+        var bonus = DiceFormula.Parse(string.IsNullOrWhiteSpace(damageBonus) ? "0" : damageBonus);
+        if (!bonus.IsValid)
+            return text;
+
+        var damage = DamageFormulaParser.WithoutDamageBonus(text);
+        if (attack.DamageBonus == CreatureDamageBonusMode.Half)
+        {
+            if (bonus.HasDice)
+                return $"{damage} + ½ от {string.Join("+", bonus.Dice)}";
+
+            return WithTerms(damage, [], bonus.Constant / 2);
+        }
+
+        return WithTerms(damage, bonus.Dice, bonus.Constant);
+
+        static string WithTerms(string damage, IEnumerable<DiceTerm> dice, int constant)
+        {
+            List<string> terms = [.. dice.Select(d => d.ToString())];
+            if (constant != 0)
+                terms.Add(constant.ToString(CultureInfo.InvariantCulture));
+
+            var tail = string.Concat(terms.Select(t => t.StartsWith('-') ? t : "+" + t));
+            return damage.Length == 0 ? tail.TrimStart('+') : damage + tail;
+        }
+    }
 
     public static CombatProfile FromStatblock(Statblock statblock)
     {

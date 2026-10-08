@@ -150,6 +150,51 @@ public sealed class PlaySheetTests : KitContext
         Assert.NotNull(cut.Find("[data-testid='play-san']"));
     }
 
+    /// <summary>«Новый день» — в плитке Рассудка, только когда есть что обнулять, и с тем же вопросом, что в «Листе».</summary>
+    [Fact]
+    public async Task New_day_is_in_the_sanity_tile_and_asks_first()
+    {
+        var sheet = Sheet();
+        var dialogs = Services.GetRequiredService<DialogService>();
+        var cut = Render<PlayVitals>(sheet);
+        Assert.Empty(cut.FindAll("[data-testid='play-new-day']"));
+
+        cut.Find("[data-testid='play-sanity-amount']").Change("3");
+        cut.Find("[data-testid='play-sanity-lose']").Click();
+        Assert.Equal(3, sheet.Condition.SanityLostToday);
+
+        await cut.InvokeAsync(() => cut.Find("[data-testid='play-new-day']").Click());
+        Assert.Equal("Начать новый игровой день?", dialogs.Current?.Title);
+        await cut.InvokeAsync(() => dialogs.Complete(true));
+        await Task.Delay(100, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, sheet.Condition.SanityLostToday);
+        Assert.Equal(0, sheet.Condition.LastSanityLoss);
+        Assert.Equal(47, sheet.Current.Sanity);
+        Assert.Empty(cut.FindAll("[data-testid='play-new-day']"));
+    }
+
+    /// <summary>Трата больше карманных — из наличных (стр. 93); больше наличных — лист не меняется.</summary>
+    [Fact]
+    public void Spending_takes_cash_and_refuses_more_than_there_is()
+    {
+        var sheet = Sheet();
+        sheet.Finances.Cash = 30;
+        sheet.Finances.PocketMoney = 10;
+        var cut = Render<PlayGear>(sheet);
+        Assert.Contains("карманные $10 в день", cut.Find("[data-testid='play-money']").TextContent);
+
+        cut.Find("[data-testid='play-spend-amount']").Change("12");
+        cut.Find("[data-testid='play-spend']").Click();
+        Assert.Equal(18m, sheet.Finances.Cash);
+
+        cut.Find("[data-testid='play-spend-amount']").Change("50");
+        cut.Find("[data-testid='play-spend']").Click();
+        Assert.Equal(18m, sheet.Finances.Cash);
+
+        Assert.Empty(Render<PlayGear>(sheet, canEdit: false).FindAll("[data-testid='play-spend']"));
+    }
+
     [Fact]
     public async Task Marking_dead_asks_first_and_clearing_does_not()
     {
@@ -278,6 +323,29 @@ public sealed class PlaySheetTests : KitContext
         Assert.Contains("1d3", row.TextContent);
         cut.Find("[data-testid='play-weapon-unarmed-check']").Click();
         Assert.Equal($"skill:{brawl.Id}", Assert.Single(_checks));
+    }
+
+    /// <summary>Урон в «Игре» — с бонусом к урону сыщика, как его бросит бой: ближнему полный, огнестрелу — нет (стр. 106).</summary>
+    [Fact]
+    public void Weapon_damage_shows_the_damage_bonus_of_the_sheet()
+    {
+        var brawl = new SkillDefinition(Guid.NewGuid(), "Ближний бой (драка)") { Code = "skill.fighting.brawl", BaseValue = 25, Category = SkillCategory.CombatGeneral };
+        var handgun = new SkillDefinition(Guid.NewGuid(), "Стрельба (пистолет)") { Code = "skill.firearms.handgun", BaseValue = 20, Category = SkillCategory.CombatGeneral };
+        var catalog = new SkillCatalog([Spot, brawl, handgun]);
+        var sheet = Sheet();
+        sheet.Characteristics.Str = 80;
+        sheet.Characteristics.Siz = 80; // 160 — +1D4
+        sheet.Weapons.Add(new SheetWeapon { Name = "Нож", SkillId = brawl.Id, Damage = "1D4+БкУ" });
+        sheet.Weapons.Add(new SheetWeapon { Name = "Кольт", SkillId = handgun.Id, Damage = "1D10" });
+        var context = new SheetContext(new CharacterDto { Sheet = sheet, CanEdit = true }, catalog, [], null!, () => { }, _checks.Add);
+        var cut = Render<CascadingValue<SheetContext>>(p => p.Add(c => c.Value, context).AddChildContent<PlayWeapons>());
+
+        Assert.Contains("1d3 + 1d4", cut.Find("[data-testid='play-weapon-unarmed']").TextContent);
+        var rows = cut.FindAll("[data-testid='play-weapon']");
+        Assert.Contains("1d4 + 1d4", rows[0].TextContent);
+        Assert.DoesNotContain("бонус", rows[0].TextContent);
+        Assert.Contains("1d10", rows[1].TextContent);
+        Assert.DoesNotContain("1d4", rows[1].TextContent);
     }
 
     [Fact]

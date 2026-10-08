@@ -249,7 +249,7 @@ public sealed class CreationPlan
 
     /// <summary>
     /// База навыка: справочник (с формулой — <c>DEX/2</c> у Уклонения, <c>EDU</c> у родного языка, стр. 57, 77); у своей
-    /// специализации — база первой соседней (<see cref="OccupationRules.NewSpecialization"/>).
+    /// специализации — база соседних (<see cref="OccupationRules.NewSpecialization"/>).
     /// </summary>
     public int BaseOf(string key)
     {
