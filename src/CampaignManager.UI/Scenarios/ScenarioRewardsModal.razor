@@ -58,39 +58,51 @@
                 @foreach (var row in _rows)
                 {
                     var sheet = row.Investigator.Sheet;
-                    <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-primary-200 py-2 first:border-t-0" @key="row.Investigator.Id" data-testid="rewards-row">
-                        <label class="cm-tap-row min-w-40 flex-1">
-                            <input type="checkbox" class="cm-checkbox" checked="@row.Included" @onchange="e => row.Included = e.Value is true" />
-                            <span class="font-medium text-primary-900">@row.Investigator.Name</span>
-                            <span class="text-sm text-primary-600">@(_kind == RewardKind.Money ? $"наличные {Terms.Dollars(sheet.Finances.Cash ?? 0)}" : $"Рассудок {sheet.Current.Sanity}")</span>
-                        </label>
-                        @if (row.Included && _kind == RewardKind.SanityGain)
-                        {
-                            @Points(row, _formula)
-                        }
-                        else if (row.Included && _kind == RewardKind.SanityCheck)
-                        {
-                            <RollInput Label="@($"Рассудок: {row.Investigator.Name}")" Value="@sheet.Current.Sanity" Roll="row.Check" RollChanged="r => SetCheck(row, r)" />
-                            @if (row.Check is not null)
+                    @* Строка сыщика: имя и «было → станет» справа, под ними — броски (у денег их нет). *@
+                    <li class="border-t border-primary-200 py-2 first:border-t-0" @key="row.Investigator.Id" data-testid="rewards-row">
+                        <div class="flex flex-wrap items-center justify-between gap-x-4">
+                            <label class="cm-tap-row">
+                                <input type="checkbox" class="cm-checkbox" checked="@row.Included" @onchange="e => row.Included = e.Value is true" />
+                                <span class="font-medium text-primary-900">@row.Investigator.Name</span>
+                                <span class="text-sm text-primary-600">@(_kind == RewardKind.Money ? $"наличные {Terms.Dollars(sheet.Finances.Cash ?? 0)}" : $"Рассудок {sheet.Current.Sanity}")</span>
+                            </label>
+                            @if (row.Included && Amount(row) is { } amount)
                             {
-                                var (formula, maximum) = LossOf(row);
-                                @if (maximum)
-                                {
-                                    <span class="text-sm text-error-700">крах — потеря максимум: @formula.Max</span>
-                                }
-                                else if (formula.HasDice)
-                                {
-                                    @Points(row, formula.Text)
-                                }
+                                <span class="text-sm font-medium text-primary-800" data-testid="rewards-preview">→ @Preview(row, amount)</span>
                             }
-                        }
-                        @if (row.Included && Amount(row) is { } amount)
+                        </div>
+                        @if (row.Included && _kind != RewardKind.Money)
                         {
-                            <span class="text-sm text-primary-700" data-testid="rewards-preview">→ @Preview(row, amount)</span>
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
+                                @if (_kind == RewardKind.SanityGain)
+                                {
+                                    @Points(row, _formula)
+                                }
+                                else
+                                {
+                                    <RollInput Label="@($"Рассудок: {row.Investigator.Name}")" Value="@sheet.Current.Sanity" Roll="row.Check" RollChanged="r => SetCheck(row, r)" />
+                                    @if (row.Check is not null)
+                                    {
+                                        var (formula, maximum) = LossOf(row);
+                                        @if (maximum)
+                                        {
+                                            <span class="text-sm text-error-700">крах — потеря максимум: @formula.Max</span>
+                                        }
+                                        else if (formula.HasDice)
+                                        {
+                                            @* Подпись и её поле — одной группой: перенос не отрывает «потерю» от числа. *@
+                                            <span class="flex items-center gap-2">
+                                                <span class="text-sm text-primary-600">потеря</span>
+                                                @Points(row, formula.Text)
+                                            </span>
+                                        }
+                                    }
+                                }
+                            </div>
                         }
                         @if (row.Result is { } result)
                         {
-                            <span class="basis-full text-sm @(row.Failed ? "text-error-700" : "text-success-700")" data-testid="rewards-result">@result</span>
+                            <p class="pl-8 text-sm @(row.Failed ? "text-error-700" : "text-success-700")" data-testid="rewards-result">@result</p>
                         }
                     </li>
                 }
