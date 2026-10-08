@@ -57,8 +57,9 @@ public sealed class UxF3bTests : KitContext
     {
         var cut = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Август")));
 
-        Assert.Equal("ПЗ 11 · Ближний бой (драка) 40%", cut.Find("[data-testid=summary-stats]").TextContent.Trim());
-        Assert.Equal("Бандит · 32 года", cut.Find("[data-testid=summary-who]").TextContent.Trim());
+        // «40%», «ПЗ» и «года» держатся за своё слово неразрывным пробелом: рядом с портретом строка переносится.
+        Assert.Equal("ПЗ\u00A011 · Ближний бой (драка)\u00A040%", cut.Find("[data-testid=summary-stats]").TextContent.Trim());
+        Assert.Equal("Бандит · 32\u00A0года", cut.Find("[data-testid=summary-who]").TextContent.Trim());
         Assert.DoesNotContain("Мужской", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("Бостон", cut.Markup, StringComparison.Ordinal);
     }
@@ -67,7 +68,7 @@ public sealed class UxF3bTests : KitContext
     public void Card_without_combat_skill_shows_hit_points_only_and_a_blank_sheet_shows_no_stats()
     {
         var withHp = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Нора", d => d.CombatSkill = null)));
-        Assert.Equal("ПЗ 11", withHp.Find("[data-testid=summary-stats]").TextContent.Trim());
+        Assert.Equal("ПЗ\u00A011", withHp.Find("[data-testid=summary-stats]").TextContent.Trim());
 
         var blank = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Пустой", d => { d.CombatSkill = null; d.HitPoints = 0; })));
         Assert.Empty(blank.FindAll("[data-testid=summary-stats]"));
@@ -102,6 +103,43 @@ public sealed class UxF3bTests : KitContext
         Assert.Empty(cut.FindAll("[data-testid=summary-cast-action]"));
         cut.Find("[data-testid=summary-restore-action]").Click();
         Assert.Equal([npc.Id], restored);
+    }
+
+    [Fact]
+    public void Card_portrait_is_a_thumbnail_and_a_card_without_one_keeps_a_placeholder_of_the_same_size()
+    {
+        // Исходник гравюры ~370 КБ на миниатюру 80px грузить незачем; без портрета — заглушка, чтобы имена стояли на одной линии.
+        var with = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Август", d => d.PortraitUrl = "/api/v1/files/abc")));
+        Assert.Equal("/api/v1/files/abc?w=240", with.Find(".sc-portrait img").GetAttribute("src"));
+
+        var without = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Нора")));
+        Assert.Empty(without.FindAll(".sc-portrait img"));
+        Assert.Single(without.FindAll(".sc-portrait .fa-user"));
+
+        // В списке, где портретов нет ни у кого (готовые сыщики), рамок-заглушек нет.
+        var noSlot = Render<CharacterSummaryCard>(p => p.Add(c => c.Character, Npc("Нора")).Add(c => c.PortraitSlot, false));
+        Assert.Empty(noSlot.FindAll(".sc-portrait"));
+    }
+
+    [Fact]
+    public void Card_menu_sits_in_the_footer_next_to_the_main_action_and_at_the_top_without_one()
+    {
+        var archive = EventCallback.Factory.Create<CharacterSummaryDto>(this, _ => { });
+
+        // «⋯» у имени отнимал колонку у занятия и «ПЗ · бой» — в подвале он справа от «Занять в сценарии».
+        var npc = Render<CharacterSummaryCard>(p => p
+            .Add(c => c.Character, Npc("Август"))
+            .Add(c => c.OnCast, EventCallback.Factory.Create<CharacterSummaryDto>(this, _ => { }))
+            .Add(c => c.OnArchive, archive));
+        Assert.Single(npc.FindAll(".cm-card-footer .cm-menu"));
+        Assert.Single(npc.FindAll(".cm-menu"));
+
+        // Готовому сыщику занимать в сценарии нечего — подвала нет, «⋯» остаётся наверху.
+        var pregen = Render<CharacterSummaryCard>(p => p
+            .Add(c => c.Character, Npc("Элизабет", d => d.Kind = CharacterKind.Pregen))
+            .Add(c => c.OnArchive, archive));
+        Assert.Empty(pregen.FindAll(".cm-card-footer"));
+        Assert.Single(pregen.FindAll(".cm-menu"));
     }
 
     // ── Поиск по справочнику ────────────────────────────────────────────────

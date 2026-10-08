@@ -1,102 +1,82 @@
 @using CampaignManager.Contracts.Characters
 @using CampaignManager.Core.Characters
+@using CampaignManager.UI.Catalogs
 @using CampaignManager.UI.Characters.Creation
 
 @* Карточка листа НПС или прегена — одна в библиотеке (/npcs) и в сценарии (T2.5a: состав НПС, прегены). Что она
    умеет, решают переданные обработчики, а не варианты компонента; роль и количество в сценарии — содержимое
    (ChildContent), их рисует сценарий. Framed="false" — строка без своей рамки для места в чужой карточке: карточка
    в карточке читалась мусором (знание v1); строки разделяет родитель (cm-stack).
-   F3b (ревью g3, 68–71): вся шапка карточки — ссылка на лист (кнопки «Открыть» на каждой из двадцати четырёх больше нет);
-   главное действие библиотеки — «Занять в сценарии» (у архивной — «Вернуть из архива») в подвале, в одной линии у всех
-   карточек; «⋯» — «В архив». Тело для стола: занятие и возраст, «ПЗ 11 · Ближний бой 40%», две строки предыстории;
-   пол и «Живёт» не выводятся. *@
-<article class="@(Framed ? "cm-card flex flex-col" : "flex flex-col")" data-testid="character-summary" data-character-id="@Character.Id">
-    <div class="@(Framed ? "flex flex-nowrap items-center border-b border-primary-200" : "mb-2 flex flex-nowrap items-center justify-between gap-2")">
-        @* Шапка целиком ссылка (≥48px): имя 48×21px как цель было ниже пола 32px. *@
-        <a class="@(Framed ? "flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-tl-lg px-4 py-2 hover:bg-primary-50" : "flex min-h-11 min-w-0 flex-1 items-center gap-3 hover:underline")"
-           href="@($"character/{Character.Id}")" data-testid="character-link">
-            @if (Character.PortraitUrl is { } portrait)
-            {
-                <img src="@portrait" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
-            }
-            <span class="cm-card-title min-w-0 break-words">@Character.Name</span>
-        </a>
-        @if (HasMenu)
-        {
-            @* «В архив» — в меню: опасное действие не стоит рядом с частым (правило 7). *@
-            <div class="shrink-0 pr-2">
-                <RowMenu AriaLabel="@($"Действия: {Character.Name}")">
-                    <ChildContent>
-                        @if (!Framed && CanCast)
-                        {
-                            <RowMenuItem Icon="fa-scroll" OnClick="() => OnCast.InvokeAsync(Character)">Занять в сценарии</RowMenuItem>
-                        }
-                        @if (!Framed && CanRestore)
-                        {
-                            <RowMenuItem Icon="fa-rotate-left" OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть из архива</RowMenuItem>
-                        }
-                    </ChildContent>
-                    <Danger>
-                        @if (CanArchive)
-                        {
-                            <RowMenuItem Danger="true" Icon="fa-box-archive" OnClick="() => OnArchive.InvokeAsync(Character)">@ArchiveLabel</RowMenuItem>
-                        }
-                    </Danger>
-                </RowMenu>
-            </div>
-        }
-    </div>
-    <div class="@(Framed ? "cm-card-body flex flex-1 flex-col gap-2" : "flex flex-col gap-2")">
-        @if (Who is { } who)
-        {
-            <p class="text-sm text-primary-800" data-testid="summary-who">@who</p>
-        }
-        @if (Stats is { } stats)
-        {
-            <p class="text-sm font-semibold text-primary-800" data-testid="summary-stats">@stats</p>
-        }
-        @if (Character.Backstory is { } backstory)
-        {
-            <p class="line-clamp-2 whitespace-pre-line text-sm text-primary-700">@Terms.Normalize(backstory)</p>
-        }
-        @if ((ShowPlace && Place is not null) || Character.Status is CharacterStatus.Archived || Character.Casts.Count > 0)
-        {
-            <div class="flex flex-wrap gap-1.5">
-                @if (ShowPlace && Place is { } place)
+   F3b (ревью g3, 68–71): ссылка на лист — имя (кнопки «Открыть» на каждой из двадцати четырёх больше нет); главное действие
+   библиотеки — «Занять в сценарии» (у архивной — «Вернуть из архива») в подвале, в одной линии у всех карточек; «⋯» —
+   «В архив». Тело для стола: занятие и возраст, «ПЗ 11 · Ближний бой 40%», две строки предыстории; пол и «Живёт» не
+   выводятся. *@
+@if (Framed)
+{
+    @* Карточка библиотеки с портретом (2026-10-08): портрет 4:5 слева от имени, занятия и «ПЗ · бой» — это «кто»; предыстория
+       и сценарии — под ними во всю ширину карточки (рядом с портретом, в ~220px, чипы рвались на две строки). Ссылка на лист —
+       имя, растянутое на весь верхний блок (::after): касание портрета тоже открывает лист. Без портрета — заглушка того же
+       размера, чтобы имена стояли на одной линии (PortraitSlot). *@
+    <article class="cm-card flex flex-col" data-testid="character-summary" data-character-id="@Character.Id">
+        <div class="cm-card-body flex flex-1 flex-col gap-3">
+            <div class="group relative flex items-start gap-3">
+                @if (Thumb is not null || PortraitSlot)
                 {
-                    <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">@place</Badge>
+                    <span class="sc-portrait" aria-hidden="true">
+                        @if (Thumb is { } src)
+                        {
+                            <img src="@src" alt="" loading="lazy" decoding="async" />
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-user"></i>
+                        }
+                    </span>
                 }
-                @if (Character.Status is CharacterStatus.Archived)
+                <div class="flex min-w-0 flex-1 flex-col gap-1">
+                    <a class="cm-card-title break-words after:absolute after:inset-0 after:content-[''] group-hover:underline"
+                       href="@($"character/{Character.Id}")" data-testid="character-link">@Character.Name</a>
+                    @Facts
+                </div>
+                @if (HasMenu && !HasFooterAction)
                 {
-                    <Badge Tone="Tone.Warning">Архив</Badge>
-                }
-                @foreach (var cast in Character.Casts)
-                {
-                    <Badge Tone="Tone.Success" Icon="fa-scroll" class="max-w-full whitespace-normal" data-testid="summary-cast">@CastText(cast)</Badge>
+                    @* «⋯» наверху — только у карточки без действия в подвале (готовый сыщик); позиционирован после ссылки —
+                       лежит над её ::after. *@
+                    <div class="relative -mr-2 -mt-1.5 shrink-0">@Menu</div>
                 }
             </div>
-        }
-        @ChildContent
-    </div>
-    @if (Framed && (CanCast || CanRestore))
-    {
-        <div class="cm-card-footer">
-            @* Главное действие карточки; 32px, а не 44px кита: двадцать четыре плиты подряд были стеной (ревью g3, 68). *@
-            @if (CanCast)
+            @BackstoryLine
+            @Marks
+            @ChildContent
+        </div>
+        @Footer
+    </article>
+}
+else
+{
+    <article class="flex flex-col" data-testid="character-summary" data-character-id="@Character.Id">
+        <div class="mb-2 flex flex-nowrap items-center justify-between gap-2">
+            @* Строка целиком ссылка (≥44px): имя 48×21px как цель было ниже пола 32px. *@
+            <a class="flex min-h-11 min-w-0 flex-1 items-center gap-3 hover:underline" href="@($"character/{Character.Id}")" data-testid="character-link">
+                @if (ImageUrls.Thumb(Character.PortraitUrl, 160) is { } portrait)
+                {
+                    <img src="@portrait" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" loading="lazy" />
+                }
+                <span class="cm-card-title min-w-0 break-words">@Character.Name</span>
+            </a>
+            @if (HasMenu)
             {
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" class="h-8 min-h-8 px-3 text-sm" Busy="Busy"
-                        AriaLabel="@($"Занять в сценарии: {Character.Name}")" data-testid="summary-cast-action"
-                        OnClick="() => OnCast.InvokeAsync(Character)">Занять в сценарии</Button>
-            }
-            else
-            {
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" class="h-8 min-h-8 px-3 text-sm" Busy="Busy"
-                        AriaLabel="@($"Вернуть из архива: {Character.Name}")" data-testid="summary-restore-action"
-                        OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть из архива</Button>
+                <div class="shrink-0">@Menu</div>
             }
         </div>
-    }
-</article>
+        <div class="flex flex-col gap-2">
+            @Facts
+            @BackstoryLine
+            @Marks
+            @ChildContent
+        </div>
+    </article>
+}
 
 @code {
     [Parameter, EditorRequired] public CharacterSummaryDto Character { get; set; } = null!;
@@ -125,11 +105,114 @@
     /// <summary>Что показать под карточкой: роль и количество НПС в сценарии (T2.5a).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
+    /// <summary>
+    /// Место под портрет и у листа без него — заглушка того же размера: в списке, где портреты есть хоть у кого-то, имена
+    /// стоят на одной линии. Где их нет ни у кого (готовые сыщики), страница рамку не просит — пустые рамки были бы шумом.
+    /// </summary>
+    [Parameter] public bool PortraitSlot { get; set; } = true;
+
+    /// <summary>Миниатюра портрета: исходник гравюры ~370 КБ, на карточку хватает 240px по ширине (80px при плотности 3).</summary>
+    private string? Thumb => ImageUrls.Thumb(Character.PortraitUrl, 240);
+
+    private RenderFragment Facts => __builder =>
+    {
+        @if (Who is { } who)
+        {
+            <p class="text-sm text-primary-800" data-testid="summary-who">@who</p>
+        }
+        @if (Stats is { } stats)
+        {
+            <p class="text-sm font-semibold text-primary-800" data-testid="summary-stats">@stats</p>
+        }
+    };
+
+    private RenderFragment BackstoryLine => __builder =>
+    {
+        @if (Character.Backstory is { } backstory)
+        {
+            <p class="line-clamp-2 whitespace-pre-line text-sm text-primary-700">@Terms.Normalize(backstory)</p>
+        }
+    };
+
+    private RenderFragment Marks => __builder =>
+    {
+        @if ((ShowPlace && Place is not null) || Character.Status is CharacterStatus.Archived || Character.Casts.Count > 0)
+        {
+            <div class="flex flex-wrap gap-1.5">
+                @if (ShowPlace && Place is { } place)
+                {
+                    <Badge Tone="Tone.Neutral" class="max-w-full whitespace-normal">@place</Badge>
+                }
+                @if (Character.Status is CharacterStatus.Archived)
+                {
+                    <Badge Tone="Tone.Warning">Архив</Badge>
+                }
+                @foreach (var cast in Character.Casts)
+                {
+                    <Badge Tone="Tone.Success" Icon="fa-scroll" class="max-w-full whitespace-normal" data-testid="summary-cast">@CastText(cast)</Badge>
+                }
+            </div>
+        }
+    };
+
+    /// <summary>«⋯»: «В архив» — в меню, опасное действие не стоит рядом с частым (правило 7); у строки без рамки — все действия.</summary>
+    private RenderFragment Menu => __builder =>
+    {
+        <RowMenu AriaLabel="@($"Действия: {Character.Name}")">
+            <ChildContent>
+                @if (!Framed && CanCast)
+                {
+                    <RowMenuItem Icon="fa-scroll" OnClick="() => OnCast.InvokeAsync(Character)">Занять в сценарии</RowMenuItem>
+                }
+                @if (!Framed && CanRestore)
+                {
+                    <RowMenuItem Icon="fa-rotate-left" OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть из архива</RowMenuItem>
+                }
+            </ChildContent>
+            <Danger>
+                @if (CanArchive)
+                {
+                    <RowMenuItem Danger="true" Icon="fa-box-archive" OnClick="() => OnArchive.InvokeAsync(Character)">@ArchiveLabel</RowMenuItem>
+                }
+            </Danger>
+        </RowMenu>
+    };
+
+    /// <summary>Главное действие карточки; 32px, а не 44px кита: двадцать четыре плиты подряд были стеной (ревью g3, 68).</summary>
+    private RenderFragment Footer => __builder =>
+    {
+        @if (HasFooterAction)
+        {
+            <div class="cm-card-footer">
+                @if (CanCast)
+                {
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-scroll" class="h-8 min-h-8 px-3 text-sm" Busy="Busy"
+                            AriaLabel="@($"Занять в сценарии: {Character.Name}")" data-testid="summary-cast-action"
+                            OnClick="() => OnCast.InvokeAsync(Character)">Занять в сценарии</Button>
+                }
+                else
+                {
+                    <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" class="h-8 min-h-8 px-3 text-sm" Busy="Busy"
+                            AriaLabel="@($"Вернуть из архива: {Character.Name}")" data-testid="summary-restore-action"
+                            OnClick="() => OnRestore.InvokeAsync(Character)">Вернуть из архива</Button>
+                }
+                @if (HasMenu)
+                {
+                    @* «⋯» — в подвале справа, а не у имени: там он отнимал у занятия и «ПЗ · бой» колонку в 40px. 32px, как кнопка рядом. *@
+                    <div class="cm-compact -mr-2.5 ml-auto">@Menu</div>
+                }
+            </div>
+        }
+    };
+
     private bool CanArchive => Character.CanEdit && OnArchive.HasDelegate && Character.Status is not CharacterStatus.Archived;
 
     private bool CanRestore => Character.CanEdit && OnRestore.HasDelegate && Character.Status is CharacterStatus.Archived;
 
     private bool CanCast => OnCast.HasDelegate && Character.Kind is CharacterKind.Npc && Character.Status is not CharacterStatus.Archived;
+
+    /// <summary>Главное действие в подвале рамки: «Занять в сценарии» у НПС, «Вернуть из архива» у архивного.</summary>
+    private bool HasFooterAction => Framed && (CanCast || CanRestore);
 
     /// <summary>
     /// В рамке главное действие стоит в подвале, в «⋯» — только «В архив». Строка без рамки (сценарий) подвала не имеет:
@@ -137,16 +220,24 @@
     /// </summary>
     private bool HasMenu => CanArchive || (!Framed && (CanRestore || CanCast));
 
-    /// <summary>«Сыщик · 42 года»: занятие и возраст одной строкой — отдельные чипы на каждую мелочь были шумом.</summary>
+    /// <summary>
+    /// «Сыщик · 42 года»: занятие и возраст одной строкой — отдельные чипы на каждую мелочь были шумом. Число и «года» — через
+    /// неразрывный пробел: в колонке рядом с портретом «лет» иначе уходило на строку одно.
+    /// </summary>
     private string? Who => (Character.Occupation, Character.Age) switch
     {
-        ({ } occupation, > 0) => $"{occupation} · {Terms.Years(Character.Age)}",
+        ({ } occupation, > 0) => $"{occupation} · {Age}",
         ({ } occupation, _) => occupation,
-        (_, > 0) => Terms.Years(Character.Age),
+        (_, > 0) => Age,
         _ => null,
     };
 
-    /// <summary>«ПЗ 11 · Ближний бой 40%» — то, что нужно за столом, пока лист не открыт.</summary>
+    private string Age => Terms.Years(Character.Age).Replace(' ', '\u00A0');
+
+    /// <summary>
+    /// «ПЗ 11 · Ближний бой 40%» — то, что нужно за столом, пока лист не открыт. Процент и «ПЗ» держатся за своё слово
+    /// неразрывным пробелом: «40%» одно на второй строке читалось отдельно от навыка.
+    /// </summary>
     private string? Stats
     {
         get
@@ -154,12 +245,12 @@
             List<string> parts = [];
             if (Character.HitPoints > 0)
             {
-                parts.Add($"ПЗ {Character.HitPoints}");
+                parts.Add($"ПЗ\u00A0{Character.HitPoints}");
             }
 
             if (Character.CombatSkill is { } skill)
             {
-                parts.Add($"{skill} {Character.CombatValue}%");
+                parts.Add($"{skill}\u00A0{Character.CombatValue}%");
             }
 
             return parts.Count == 0 ? null : string.Join(" · ", parts);
