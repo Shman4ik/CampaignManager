@@ -1,4 +1,5 @@
 using CampaignManager.Core.Catalogs;
+using CampaignManager.Core.Dice;
 
 namespace CampaignManager.Core.Characters;
 
@@ -79,6 +80,13 @@ public static class SanityRules
     /// сыщик уже безумен, флаг нового приступа — в затаённом безумии его вызывает даже один пункт.
     /// </summary>
     /// <returns>Сколько списано на самом деле — ниже нуля Рассудок не падает.</returns>
+    /// <summary>
+    /// Чем считать потерю после проверки Рассудка (стр. 152–153): успех — успешная часть записи «успех/провал», иначе провальная;
+    /// крах — её максимум (<c>Maximum</c>), без броска. Одна копия для боя и итогов сценария.
+    /// </summary>
+    public static (DiceFormula Formula, bool Maximum) LossFor(SuccessLevel level, string? successLoss, string? failureLoss) =>
+        (DiceFormula.Parse(level.IsSuccess() ? successLoss : failureLoss), level == SuccessLevel.Fumble);
+
     public static int ApplyLoss(CharacterSheet sheet, SkillCatalog catalog, int amount)
     {
         var current = Math.Clamp(sheet.Current.Sanity, 0, MaxSanity(sheet, catalog));

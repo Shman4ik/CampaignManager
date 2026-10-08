@@ -3,6 +3,7 @@ using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Encounters;
+using CampaignManager.UI.Characters;
 using CampaignManager.UI.Platform;
 
 namespace CampaignManager.UI.Encounters;
@@ -66,29 +67,8 @@ public sealed class EncounterSheetSync(ICharactersApi characters)
     /// запись с <c>If-Match</c>; 409 — перечитать и повторить. Возвращает записанный лист (по нему обновляется снимок) или
     /// текст ошибки.
     /// </summary>
-    public async Task<(CharacterSheet? Sheet, string? Error)> EditAsync(Guid characterId, Action<CharacterSheet> edit, CancellationToken cancellationToken = default)
-    {
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
-        {
-            try
-            {
-                var character = await characters.GetAsync(characterId, cancellationToken);
-                edit(character.Sheet);
-                await characters.SaveSheetAsync(characterId, character.Sheet, character.Version, cancellationToken);
-                return (character.Sheet, null);
-            }
-            catch (ApiException error) when (error.IsStale && attempt < MaxAttempts)
-            {
-                // Лист записали между чтением и записью — правка ляжет поверх свежей версии.
-            }
-            catch (HttpRequestException error)
-            {
-                return (null, ApiErrors.Describe(error));
-            }
-        }
-
-        return (null, "Лист всё время меняется на другом устройстве — попробуйте ещё раз.");
-    }
+    public Task<(CharacterSheet? Sheet, string? Error)> EditAsync(Guid characterId, Action<CharacterSheet> edit, CancellationToken cancellationToken = default) =>
+        SheetEdits.EditAsync(characters, characterId, edit, cancellationToken);
 
     /// <summary>
     /// Пишет всё из очереди сцены: записанное снимается с очереди (снимок участника — из записанного листа), остальное

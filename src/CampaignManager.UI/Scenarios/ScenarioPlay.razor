@@ -80,7 +80,7 @@ else
             @RunBar
             @if (_party is { Count: > 0 } party && _catalog is { } catalog)
             {
-                <PlayParty Party="party" Catalog="catalog" OnIdea="OpenIdea" OnRefresh="RefreshPartyAsync" />
+                <PlayParty Party="party" Catalog="catalog" OnIdea="OpenIdea" OnRefresh="RefreshPartyAsync" OnRewards="() => _rewardsOpen = true" />
             }
 
             @if (Location is null)
@@ -156,6 +156,12 @@ else
 
 <HandoutShowcase Handout="ShownHandout" OnClose="HideHandout" />
 
+@if (_party is { Count: > 0 } rewarded && _catalog is { } rewardCatalog)
+{
+    <ScenarioRewardsModal Open="_rewardsOpen" OnClose="() => _rewardsOpen = false" Party="rewarded" Catalog="rewardCatalog"
+                          Rewards="@([.. Scenario.KeyFacts.Where(f => f.Type == KeyFactType.Reward)])" OnApplied="RefreshPartyAsync" />
+}
+
 <LocationMusicModal Open="_musicOpen" ScenarioId="Scenario.Id" Location="Location" OnClose="() => _musicOpen = false" OnSaved="MusicSavedAsync" />
 
 @code {
@@ -169,6 +175,7 @@ else
     private string? _partyError;
     private ScenarioCheckDto? _check;
     private IdeaClue? _idea;
+    private bool _rewardsOpen;
 
     // Сыщик, которого проверяли в прошлый раз: между проверками локации его не выбирают заново. Пока никого не выбирали, а в
     // партии один сыщик, — он и предвыбран (SoleInvestigatorId): окно открывается сразу со значением навыка, а не с «вписать вручную».
