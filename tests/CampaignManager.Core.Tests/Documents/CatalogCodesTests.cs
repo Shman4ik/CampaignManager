@@ -14,11 +14,12 @@ public sealed partial class CatalogCodesTests
     {
         // Современная эпоха убрана владельцем 2026-10-02: её записей в таблицах нет
         { OccupationCodes.Prefix, 30 }, // 31 минус «Хакер»
-        { WeaponCodes.Prefix, 69 }, // 108 минус 39 только современных (с ними «РПГ*»)
+        { WeaponCodes.Prefix, 71 }, // 108 минус 39 только современных (с ними «РПГ*») плюс молниемёт и электропушка главы 13
         { SpellCodes.Prefix, 92 },
         { BookCodes.Prefix, 106 },
         { ItemCodes.Prefix, 257 }, // 317 минус 4 реквизита сценария, 3 повтора и 53 несверенных современных
         { CreatureCodes.Prefix, 86 }, // 87 минус «Гончая Шаб-Ниггурат»
+        { ArtifactCodes.Prefix, 20 }, // глава 13 книги Хранителя целиком
     };
 
     [GeneratedRegex(@"^[a-z]+\.[a-z0-9]+(-[a-z0-9]+)*$")]
@@ -32,6 +33,7 @@ public sealed partial class CatalogCodesTests
         BookCodes.Prefix => BookCodes.Table,
         ItemCodes.Prefix => ItemCodes.Table,
         CreatureCodes.Prefix => CreatureCodes.Table,
+        ArtifactCodes.Prefix => ArtifactCodes.Table,
         _ => throw new ArgumentOutOfRangeException(nameof(prefix), prefix, null),
     };
 
@@ -71,6 +73,9 @@ public sealed partial class CatalogCodesTests
     [InlineData("creature.", "Глубоководный", "creature.deep-one")]
     [InlineData("creature.", "Гла'аки", "creature.glaaki")]
     [InlineData("creature.", "Шагнер Фан", "creature.chaugnar-faugn")]
+    [InlineData("artifact.", "сияющий трапецоэдр", "artifact.shining-trapezohedron")]
+    [InlineData("artifact.", "Звездный камень Мнара", "artifact.star-stones-of-mnar")]
+    [InlineData("weapon.", "Молниемёт", "weapon.lightning-gun")]
     public void FromName_FindsBookEntry(string prefix, string name, string expected) =>
         Assert.Equal(expected, TableOf(prefix).FromName(name));
 

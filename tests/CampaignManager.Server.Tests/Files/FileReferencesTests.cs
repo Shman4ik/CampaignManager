@@ -20,6 +20,7 @@ public sealed class FileReferencesTests
 
         Assert.Equal(
         [
+            ("cm.artifact_images", "file_id"),
             ("cm.books", "image_file_id"),
             ("cm.characters", "portrait_file_id"),
             ("cm.creature_images", "file_id"),

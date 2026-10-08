@@ -355,6 +355,29 @@ create table cm.spell_images (              -- картинки заклинан
     primary key (spell_id, ord)
 );
 
+create table cm.artifacts (                 -- артефакты главы 13: оружие стреляет записью cm.weapons с тем же названием
+    id           uuid primary key,
+    code         text unique,                  -- artifact.shining-trapezohedron
+    name         text not null,
+    kind         text not null,                -- Device | Weapon | Armor | Substance | Relic | Place | Other
+    used_by      text[] not null default '{}', -- «ми-го», «йитиане», «кто угодно»
+    usage        text,                         -- как с ним управится сыщик
+    description  text not null default '',
+    source       text,
+    created_by_id uuid references cm.users on delete set null,
+    created_at   timestamptz not null default now(),
+    updated_at   timestamptz not null default now()
+);
+create unique index artifacts_name on cm.artifacts (lower(name));
+
+create table cm.artifact_images (           -- картинки артефактов — как у заклинаний
+    artifact_id  uuid not null references cm.artifacts on delete cascade,
+    ord          int not null,
+    file_id      uuid not null references cm.files on delete restrict,
+    caption      text,
+    primary key (artifact_id, ord)
+);
+
 create table cm.music_tracks (
     id             uuid primary key,
     name           text not null,
@@ -781,6 +804,7 @@ where not exists (select 1 from cm.characters        where portrait_file_id = f.
   and not exists (select 1 from cm.weapon_images     where file_id = f.id)
   and not exists (select 1 from cm.occupation_images where file_id = f.id)
   and not exists (select 1 from cm.spell_images      where file_id = f.id)
+  and not exists (select 1 from cm.artifact_images   where file_id = f.id)
   and not exists (select 1 from cm.scenario_handouts where file_id = f.id)
   and not exists (select 1 from cm.music_tracks      where file_id = f.id);
 ```

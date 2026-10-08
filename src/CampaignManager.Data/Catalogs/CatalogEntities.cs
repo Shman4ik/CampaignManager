@@ -189,6 +189,26 @@ public sealed class Creature : CatalogEntry
     public List<CreatureImage> Images { get; set; } = [];
 }
 
+/// <summary>
+/// Артефакт главы 13: вид, кто им пользуется, как с ним управится сыщик, описание. Оружие-артефакт стреляет в бою записью
+/// справочника оружия с тем же названием — связи по ключу нет, её находит страница.
+/// </summary>
+public sealed class Artifact : CatalogEntry
+{
+    public ArtifactKind Kind { get; set; }
+
+    /// <summary>«Используют» книги: «ми-го», «йитиане», «кто угодно».</summary>
+    public List<string> UsedBy { get; set; } = [];
+
+    /// <summary>Как с ним управится сыщик: «проверка ИНТ — разобраться; Стрельба (молниемёт) 10%»; null — не сказано.</summary>
+    public string? Usage { get; set; }
+
+    public string Description { get; set; } = "";
+
+    /// <summary>Первая по <see cref="ArtifactImage.Ord"/> — обложка в строке справочника.</summary>
+    public List<ArtifactImage> Images { get; set; } = [];
+}
+
 /// <summary>Картинка записи справочника: у каждого справочника своя таблица, ключ — (запись, порядок).</summary>
 public interface ICatalogImage
 {
@@ -224,6 +244,14 @@ public sealed class OccupationImage : ICatalogImage
 public sealed class SpellImage : ICatalogImage
 {
     public Guid SpellId { get; set; }
+    public int Ord { get; set; }
+    public Guid FileId { get; set; }
+    public string? Caption { get; set; }
+}
+
+public sealed class ArtifactImage : ICatalogImage
+{
+    public Guid ArtifactId { get; set; }
     public int Ord { get; set; }
     public Guid FileId { get; set; }
     public string? Caption { get; set; }
@@ -424,6 +452,28 @@ internal sealed class SpellImageConfiguration : IEntityTypeConfiguration<SpellIm
         entity.ToTable("spell_images");
         entity.HasKey(i => new { i.SpellId, i.Ord });
         entity.HasOne<Spell>().WithMany(s => s.Images).HasForeignKey(i => i.SpellId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class ArtifactConfiguration : IEntityTypeConfiguration<Artifact>
+{
+    public void Configure(EntityTypeBuilder<Artifact> entity)
+    {
+        entity.ToCatalogTable("artifacts");
+        entity.PrimitiveCollection(a => a.UsedBy).HasDbDefaultSql(SchemaConventions.EmptyArray);
+        entity.Property(a => a.Description).HasDbDefault("");
+    }
+}
+
+internal sealed class ArtifactImageConfiguration : IEntityTypeConfiguration<ArtifactImage>
+{
+    public void Configure(EntityTypeBuilder<ArtifactImage> entity)
+    {
+        entity.ToTable("artifact_images");
+        entity.HasKey(i => new { i.ArtifactId, i.Ord });
+        entity.HasOne<Artifact>().WithMany(a => a.Images).HasForeignKey(i => i.ArtifactId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
     }

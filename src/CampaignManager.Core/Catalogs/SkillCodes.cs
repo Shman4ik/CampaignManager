@@ -61,6 +61,8 @@ public static class SkillCodes
         new("skill.firearms.submachine-gun", "Стрельба (пистолет-пулемёт)", ["Автомат"]),
         new("skill.firearms.machine-gun", "Стрельба (пулемёт)"),
         new("skill.firearms.heavy-weapons", "Стрельба (тяжёлое вооружение)"),
+        new("skill.firearms.lightning-gun", "Стрельба (молниемёт)"), // гл. 13, стр. 269: оружие йитиан, база 10%
+        new("skill.firearms.electric-gun", "Стрельба (электропушка)"), // гл. 13, стр. 273: оружие ми-го, база 10%
 
         // Сражение (общее)
         new(Fighting, "Ближний бой"),

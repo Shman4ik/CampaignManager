@@ -61,6 +61,17 @@ public static class CatalogText
         _ => "Другое",
     };
 
+    public static string Of(ArtifactKind kind) => kind switch
+    {
+        ArtifactKind.Device => "Устройство",
+        ArtifactKind.Weapon => "Оружие",
+        ArtifactKind.Armor => "Броня",
+        ArtifactKind.Substance => "Снадобье",
+        ArtifactKind.Relic => "Магический предмет",
+        ArtifactKind.Place => "Место",
+        _ => "Другое",
+    };
+
     public static string Of(BookType type) => type == BookType.MythosBook ? "Книга Мифов" : "Оккультная книга";
 
     /// <summary>Метка категории в строке: полная подпись съедала половину колонки названия.</summary>

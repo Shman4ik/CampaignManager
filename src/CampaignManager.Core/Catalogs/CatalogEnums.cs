@@ -76,3 +76,27 @@ public enum CreatureType
     Monsters,
     Beast,
 }
+
+/// <summary>Вид артефакта (<c>cm.artifacts.kind</c>, гл. 13): фильтр справочника и подпись в строке.</summary>
+public enum ArtifactKind
+{
+    /// <summary>Устройство: коммуникатор, мозговой цилиндр, стазисный куб.</summary>
+    Device,
+
+    /// <summary>Оружие: стреляет в бою записью справочника оружия с тем же названием.</summary>
+    Weapon,
+
+    /// <summary>Защита: биопаутинная броня.</summary>
+    Armor,
+
+    /// <summary>Яд, наркотик, сыворотка.</summary>
+    Substance,
+
+    /// <summary>Магический предмет: лампа, камень, кристалл.</summary>
+    Relic,
+
+    /// <summary>Место или иное измерение.</summary>
+    Place,
+
+    Other,
+}

@@ -62,6 +62,56 @@ public sealed class SpellStore : CatalogStore<Spell, SpellDto>
     }
 }
 
+/// <summary>
+/// Артефакты главы 13. Вид — обязательный выбор, «кто использует» — свободные метки без повторов, картинки — как у
+/// заклинаний. Оружие-артефакт стреляет записью справочника оружия с тем же названием: связи по ключу нет.
+/// </summary>
+public sealed class ArtifactStore : CatalogStore<Artifact, ArtifactDto>
+{
+    public override CatalogRoute Route => CatalogsRoutes.Artifacts;
+
+    public override CatalogCodeTable Codes => ArtifactCodes.Table;
+
+    public override string Noun => "Артефакт";
+
+    public override DbSet<Artifact> Set(CmDbContext db) => db.Artifacts;
+
+    public override IQueryable<Artifact> Query(CmDbContext db) => db.Artifacts.Include(a => a.Images);
+
+    public override Artifact New() => new() { Name = "" };
+
+    public override Task<IReadOnlyList<ArtifactDto>> ToDtosAsync(CmDbContext db, IReadOnlyList<Artifact> rows, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ArtifactDto>>(rows.Select(a => new ArtifactDto
+        {
+            Id = a.Id,
+            Version = a.Version,
+            Code = a.Code,
+            Name = a.Name,
+            Source = a.Source,
+            Kind = a.Kind,
+            UsedBy = a.UsedBy,
+            Usage = a.Usage,
+            Description = a.Description,
+            Images = CatalogImages.ToDtos(a.Images),
+        }).ToList());
+
+    public override async Task ApplyAsync(CmDbContext db, ArtifactDto dto, Artifact entity, CatalogWrite write, CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(dto.Kind))
+        {
+            throw ApiProblemException.Invalid("Неизвестный вид артефакта.");
+        }
+
+        var images = await CatalogImages.CheckAsync(db, dto.Images, write, cancellationToken);
+
+        entity.Kind = dto.Kind;
+        entity.UsedBy = Strings(dto.UsedBy);
+        entity.Usage = Text(dto.Usage);
+        entity.Description = dto.Description?.Trim() ?? "";
+        CatalogImages.Apply(db, entity.Images, images, ord => new ArtifactImage { ArtifactId = entity.Id, Ord = ord });
+    }
+}
+
 /// <summary>Предметы: тип — свободный текст, картинка — файл.</summary>
 public sealed class ItemStore : CatalogStore<Item, ItemDto>
 {
