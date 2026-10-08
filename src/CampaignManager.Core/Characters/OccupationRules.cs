@@ -204,14 +204,14 @@ public static class OccupationRules
     }
 
     /// <summary>
-    /// Новая специализация для листа, которой ещё нет: база — у первой соседней специализации того же
-    /// родителя в справочнике, иначе 1% (стр. 52).
+    /// Новая специализация для листа, которой ещё нет: база — <see cref="SkillCatalog.SpecializationBase"/> (общая у соседних,
+    /// иначе у первой соседней; соседних нет — 1%, стр. 52).
     /// </summary>
     public static SheetSkill NewSpecialization(Guid parentId, string specialization, SkillCatalog catalog) => new()
     {
         ParentSkillId = parentId,
         Name = specialization.Trim(),
-        Value = catalog.Children(parentId).FirstOrDefault()?.BaseValue ?? 1,
+        Value = catalog.SpecializationBase(parentId).Value,
     };
 
     private static bool IsNotProfessional(string? code) => code is SkillCodes.CreditRating or SkillCodes.Mythos;

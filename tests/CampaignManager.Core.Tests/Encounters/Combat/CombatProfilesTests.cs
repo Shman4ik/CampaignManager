@@ -1,6 +1,7 @@
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Core.Characters;
 using CampaignManager.Core.Encounters;
+using CampaignManager.Core.Dice;
 using static CampaignManager.Core.Tests.Encounters.Combat.Fighters;
 using static CampaignManager.Core.Tests.Sheet.Sheets;
 
@@ -188,5 +189,33 @@ public sealed class CombatProfilesTests
         var investigator = EncounterParticipants.FromSheet(Guid.NewGuid(), CharacterKind.Player, NewSheet(), Catalog);
 
         Assert.True(CombatProfiles.PickedWeaponGoesToSheet(investigator));
+    }
+
+    /// <summary>Строка оружия листа показывает урон с бонусом бойца — тем же видом бонуса, что бросает бой.</summary>
+    [Theory]
+    [Trait("page", "106")]
+    [InlineData("1D3+БкУ", CreatureDamageBonusMode.Full, "0", "1d3")]
+    [InlineData("1D3+БкУ", CreatureDamageBonusMode.Full, "+1D4", "1d3 + 1d4")]
+    [InlineData("1D3+БкУ", CreatureDamageBonusMode.Full, "-1", "1d3 - 1")]
+    [InlineData("1D8", CreatureDamageBonusMode.Full, "+2D6", "1d8 + 2d6")]
+    [InlineData("1D10", CreatureDamageBonusMode.None, "+1D4", "1d10")]
+    [InlineData("1D4+½БкУ", CreatureDamageBonusMode.Half, "+1D4", "1d4 + ½ от 1d4")]
+    [InlineData("1D4+½БкУ", CreatureDamageBonusMode.Half, "-2", "1d4 - 1")]
+    [InlineData("1D4+½БкУ", CreatureDamageBonusMode.Half, "-1", "1d4")]
+    [InlineData("1D6+БкУ", CreatureDamageBonusMode.Full, "нет", "1d6 + бонус к урону")]
+    public void DamageWithBonus_SubstitutesFighterBonus(string damage, CreatureDamageBonusMode mode, string bonus, string expected)
+    {
+        var attack = new CombatAttack { Damage = damage, DamageBonus = mode };
+
+        Assert.Equal(expected, Terms.Normalize(DiceNotation.Format(CombatProfiles.DamageWithBonus(attack, bonus))));
+    }
+
+    [Fact]
+    public void DamageWithBonus_WeaponOfSheet_AsCombatRollsIt()
+    {
+        var knife = new SheetWeapon { Name = "Нож", SkillId = Id(Fighting), Damage = "1D4" };
+        var attack = CombatProfiles.FromWeapon(knife, 40, 60, Catalog);
+
+        Assert.Equal("1D4+1d4", CombatProfiles.DamageWithBonus(attack, "+1D4"));
     }
 }

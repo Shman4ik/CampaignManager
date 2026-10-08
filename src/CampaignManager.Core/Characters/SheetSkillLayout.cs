@@ -21,6 +21,9 @@ public sealed record SkillLine(string Key, string Name, int Value, int BaseValue
 
     public bool Checked => Entry?.Checked ?? false;
 
+    /// <summary>База известна: у специализации вне справочника её нет, если у соседних базы разные (<see cref="SkillCatalog.SpecializationBase"/>).</summary>
+    public bool BaseKnown { get; init; } = true;
+
     /// <summary>+10 от смежной специализации, перешедшей порог (стр. 76–77); 0 — нет.</summary>
     public int SpecializationBonus { get; init; }
 
@@ -200,9 +203,9 @@ public static class SheetSkillLayout
     {
         var definition = catalog.Find(entry.SkillId);
         var parentId = entry.ParentOf(catalog);
-        var baseValue = definition is not null
-            ? SkillCatalog.BaseValueOf(definition, sheet.Characteristics)
-            : parentId is { } parent ? catalog.Children(parent).FirstOrDefault()?.BaseValue ?? 1 : 0;
+        var (baseValue, baseKnown) = definition is not null
+            ? (SkillCatalog.BaseValueOf(definition, sheet.Characteristics), true)
+            : parentId is { } parent ? catalog.SpecializationBase(parent) : (0, true);
 
         return new SkillLine(definition is not null ? $"skill:{definition.Id}" : $"own:{entry.DisplayName(catalog)}",
             entry.DisplayName(catalog), entry.Value, baseValue)
@@ -210,6 +213,7 @@ public static class SheetSkillLayout
             Definition = definition,
             Entry = entry,
             ParentId = parentId,
+            BaseKnown = baseKnown,
             CanBeChecked = DevelopmentPhaseRules.CanBeChecked(entry, catalog),
             SpecializationBonus = SpecializationRules.BonusFor(sheet, catalog, entry),
         };

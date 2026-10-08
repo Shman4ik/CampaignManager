@@ -53,6 +53,21 @@ public sealed class SkillCatalog
     /// <summary>Специализации навыка-родителя.</summary>
     public IEnumerable<SkillDefinition> Children(Guid parentId) => Skills.Where(s => s.ParentId == parentId);
 
+    /// <summary>
+    /// База специализации, которой нет в справочнике: та, что у большинства соседних (Наука — 1% кроме математики, Искусство —
+    /// 5%). У Ближнего боя и Стрельбы базы разные (стр. 56), своей книга не даёт — тогда база первой соседней, но
+    /// <c>Known</c> ложно, и лист числа не показывает. Соседних нет — 1%, тоже без показа.
+    /// </summary>
+    public (int Value, bool Known) SpecializationBase(Guid parentId)
+    {
+        var bases = Children(parentId).Select(c => c.BaseValue).ToList();
+        if (bases.Count == 0)
+            return (1, false);
+
+        var common = bases.GroupBy(b => b).MaxBy(g => g.Count())!;
+        return common.Count() * 2 > bases.Count ? (common.Key, true) : (bases[0], false);
+    }
+
     /// <summary>У навыка есть специализации: его нельзя взять «вообще», только конкретную (стр. 52).</summary>
     public bool IsParent(Guid id) => Skills.Any(s => s.ParentId == id);
 

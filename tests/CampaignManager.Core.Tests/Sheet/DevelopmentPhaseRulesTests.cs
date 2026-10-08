@@ -325,7 +325,7 @@ public sealed class DevelopmentPhaseRulesTests
         var sheet = NewSheet(50, Skill(CreditRating, 20));
         sheet.Finances.Cash = 148;
 
-        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic);
+        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic, creditRatingBefore: 20);
 
         Assert.Equal("Среднего класса", result.TierName);
         Assert.Equal(148m, result.PreviousCash);
@@ -342,7 +342,7 @@ public sealed class DevelopmentPhaseRulesTests
     {
         var sheet = NewSheet(50, Skill(CreditRating, 0));
 
-        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic);
+        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic, creditRatingBefore: 0);
 
         Assert.Null(result.PreviousCash);
         Assert.Equal(0.5m, sheet.Finances.Cash);
@@ -356,7 +356,7 @@ public sealed class DevelopmentPhaseRulesTests
     {
         var sheet = NewSheet(50, Skill(CreditRating, 99));
 
-        DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Modern);
+        DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Modern, creditRatingBefore: 99);
 
         Assert.Equal(1000000m, sheet.Finances.Cash);
         Assert.Equal("100000000+", sheet.Finances.Assets);
@@ -374,9 +374,47 @@ public sealed class DevelopmentPhaseRulesTests
         var sheet = NewSheet(50, Skill(CreditRating, 20));
         sheet.Finances.Cash = 1500;
 
-        DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic);
+        DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic, creditRatingBefore: 20);
 
         Assert.Equal(1540m, sheet.Finances.Cash);
+    }
+
+    /// <summary>
+    /// Пример с Харви (стр. 94): Средства 41 → 34, достаток тот же — к 80 долларам прибавляется 68, активы остаются 50.
+    /// До 2.0.x пересчёт всегда ставил активы и карманные из таблицы и затирал «дом в Аркхеме».
+    /// </summary>
+    [Fact]
+    [Trait("page", "94")]
+    public void RecalculateFinances_SameTier_KeepsAssetsAndPocketMoney()
+    {
+        var sheet = NewSheet(50, Skill(CreditRating, 34));
+        sheet.Finances.Cash = 80;
+        sheet.Finances.Assets = "50";
+        sheet.Finances.PocketMoney = 12;
+
+        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic, creditRatingBefore: 41);
+
+        Assert.False(result.TierChanged);
+        Assert.Equal(148m, sheet.Finances.Cash);
+        Assert.Equal("50", sheet.Finances.Assets);
+        Assert.Equal(12m, sheet.Finances.PocketMoney);
+    }
+
+    /// <summary>Достаток сменился (41 → 57, «Я богат!») — активы и карманные по новой строке таблицы.</summary>
+    [Fact]
+    [Trait("page", "94")]
+    public void RecalculateFinances_TierChanged_RecalculatesAssets()
+    {
+        var sheet = NewSheet(50, Skill(CreditRating, 57));
+        sheet.Finances.Assets = "дом в Аркхеме";
+        sheet.Finances.PocketMoney = 10;
+        var tier = FinanceRules.GetTier(57, Era.Classic);
+
+        var result = DevelopmentPhaseRules.RecalculateFinances(sheet, Catalog, Era.Classic, creditRatingBefore: 41);
+
+        Assert.True(result.TierChanged);
+        Assert.Equal(tier.AssetsText, sheet.Finances.Assets);
+        Assert.Equal(tier.PocketMoney, sheet.Finances.PocketMoney);
     }
 
     // ── Привыкание ──────────────────────────────────────────────────────────

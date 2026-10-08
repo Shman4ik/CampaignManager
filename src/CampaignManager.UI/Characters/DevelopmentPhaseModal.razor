@@ -116,7 +116,9 @@
     private int? _healingGain;
     private int? _creditRoll;
     private CreditRatingChange _credit = CreditRatingChange.BusinessAsUsual;
-    private bool _recalculate = true;
+    private int _creditBefore;
+    private CreditRatingChange? _creditApplied;
+    private bool _moneyDone;
     private readonly List<string> _creditLog = [];
     private string? _habituationLog;
     private bool _cleared;
@@ -190,6 +192,9 @@
         _healingField = HealingOptions.FirstOrDefault()?.Key ?? "";
         _useKeyConnection = HasKeyConnection;
         _credit = CreditRatingChange.BusinessAsUsual;
+        _creditBefore = CreditRating;
+        _creditApplied = null;
+        _moneyDone = false;
         _creditLog.Clear();
         _habituationLog = null;
         _cleared = false;
@@ -303,12 +308,28 @@
             ? $"{option.Title}: Средства остались {result.NewValue}%."
             : $"{option.Title} ({option.DiceLabel}): выпало {result.Roll}, Средства {result.OldValue}% → {result.NewValue}%.");
 
-        if (_recalculate)
-        {
-            var money = DevelopmentPhaseRules.RecalculateFinances(Sheet, Context.Catalog, Context.Era);
-            _creditLog.Add($"Достаток {money.TierName}: наличные {FinanceRules.Format(money.PreviousCash ?? 0)} + {FinanceRules.Format(money.TierCash)} = ${FinanceRules.Format(money.NewCash)}, активы {money.Assets}, карманные ${FinanceRules.Format(money.PocketMoney)}.");
-        }
+        _creditApplied = _credit;
+        Context.Changed();
+    }
 
+    /// <summary>
+    /// Средства меняются один раз за фазу; «Я богат!» бросают снова, пока достаток не догонит активы (стр. 94). После денег —
+    /// не меняются: наличные уже посчитаны по ним. Раньше «Применить» можно было жать сколько угодно, и каждое нажатие снова
+    /// прибавляло наличные.
+    /// </summary>
+    private bool CanApplyCredit =>
+        !_moneyDone && (_creditApplied is null || (_creditApplied == CreditRatingChange.Rich && _credit == CreditRatingChange.Rich));
+
+    private string? CreditDisabledReason => _moneyDone ? "Деньги уже пересчитаны." : CanApplyCredit ? null : "Средства в эту фазу уже изменены.";
+
+    /// <summary>Деньги — раз за фазу, по Средствам на этот момент; активы и карманные — только при смене достатка.</summary>
+    private void ApplyMoney()
+    {
+        var money = DevelopmentPhaseRules.RecalculateFinances(Sheet, Context.Catalog, Context.Era, _creditBefore);
+        _moneyDone = true;
+        _creditLog.Add(money.TierChanged
+            ? $"Достаток {money.TierName}: наличные {FinanceRules.Format(money.PreviousCash ?? 0)} + {FinanceRules.Format(money.TierCash)} = ${FinanceRules.Format(money.NewCash)}, активы {money.Assets}, карманные ${FinanceRules.Format(money.PocketMoney)}."
+            : $"Достаток {money.TierName}: наличные {FinanceRules.Format(money.PreviousCash ?? 0)} + {FinanceRules.Format(money.TierCash)} = ${FinanceRules.Format(money.NewCash)}; активы и карманные — как были.");
         Context.Changed();
     }
 
@@ -562,8 +583,9 @@
                         <DiceInput Label="Средства" Count="creditDice.Count" Sides="creditDice.Sides" RollText="Бросить" @bind-Value="_creditRoll" />
                     </Field>
                 }
-                <Button Variant="ButtonVariant.Secondary" Icon="fa-check" OnClick="ApplyCredit">Применить</Button>
-                <label class="flex min-h-8 items-center gap-2 text-sm"><input type="checkbox" class="cm-checkbox size-5" @bind="_recalculate" /> Пересчитать деньги</label>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-check" OnClick="ApplyCredit" Disabled="!CanApplyCredit"
+                        DisabledReason="@CreditDisabledReason">@(_creditApplied == CreditRatingChange.Rich ? "Бросить ещё" : "Применить")</Button>
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-dollar-sign" OnClick="ApplyMoney" Disabled="_moneyDone">Пересчитать деньги</Button>
             </div>
             @foreach (var line in _creditLog)
             {

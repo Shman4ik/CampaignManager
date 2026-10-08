@@ -25,9 +25,12 @@ public static partial class DamageFormulaParser
     [GeneratedRegex(@"([+-]\s*\d+)(?![dDдД])", RegexOptions.IgnoreCase)]
     private static partial Regex FlatModRegex();
 
-    /// <summary>Написания бонуса к урону из реальных данных.</summary>
-    [GeneratedRegex(@"(?<half>1/2\s*|½\s*)?\+?\s*(?<db>Бку|БкУ|БП|Б\.К\.У\.|бонус\s+к\s+урон)", RegexOptions.IgnoreCase)]
+    /// <summary>Написания бонуса к урону из реальных данных; «урону» — целым словом, чтобы снятая отметка не оставляла хвост.</summary>
+    [GeneratedRegex(@"(?<half>1/2\s*|½\s*)?\+?\s*(?<db>Бку|БкУ|БП|Б\.К\.У\.|бонус\s+к\s+урон\w*)", RegexOptions.IgnoreCase)]
     private static partial Regex DbMarkerRegex();
+
+    [GeneratedRegex(@"\+\s*\+")]
+    private static partial Regex DoublePlusRegex();
 
     [GeneratedRegex(@"(\d+)\s*метр", RegexOptions.IgnoreCase)]
     private static partial Regex BlastRadiusRegex();
@@ -61,6 +64,20 @@ public static partial class DamageFormulaParser
         }
 
         return result;
+    }
+
+    /// <summary>Текст урона без отметки бонуса к урону: «1d3+БкУ» → «1d3», «1d6 + ½ БкУ» → «1d6»; без отметки — как есть.</summary>
+    public static string WithoutDamageBonus(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        var marker = DbMarkerRegex().Match(raw);
+        if (!marker.Success)
+            return raw.Trim();
+
+        var rest = DoublePlusRegex().Replace(raw.Remove(marker.Index, marker.Length), "+");
+        return rest.Trim().Trim('+').Trim();
     }
 
     /// <summary>«4d10 / 3 метра»: справа от «/» — метры.</summary>

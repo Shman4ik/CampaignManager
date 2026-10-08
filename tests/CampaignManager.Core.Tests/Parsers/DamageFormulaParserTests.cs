@@ -217,6 +217,17 @@ public sealed class DamageFormulaParserTests
         Assert.Equal(expected, DamageFormulaParser.Parse(raw).Primary!.ToString());
 
     [Theory]
+    [InlineData("1D3+БкУ", "1D3")]
+    [InlineData("1d6 + ½ БкУ", "1d6")]
+    [InlineData("1d4+1/2 БкУ", "1d4")]
+    [InlineData("1d6 + бонус к урону", "1d6")]
+    [InlineData("1d6+БкУ+горение", "1d6+горение")]
+    [InlineData("1D10", "1D10")]
+    [InlineData(" ", "")]
+    public void WithoutDamageBonus_DropsMarkerOnly(string raw, string expected) =>
+        Assert.Equal(expected, DamageFormulaParser.WithoutDamageBonus(raw));
+
+    [Theory]
     [InlineData(2, 6, false, 12)]
     [InlineData(1, 4, true, -4)]
     public void DiceTerm_Max(int count, int sides, bool negative, int expected) =>

@@ -110,6 +110,35 @@ public sealed class SheetReviewG2bTests : KitContext
         Assert.Null(dialogs.Current);
     }
 
+    /// <summary>
+    /// Средства — один раз за фазу, деньги — тоже один раз (стр. 94): раньше каждое «Применить» снова прибавляло наличные, а
+    /// пересчёт затирал «дом в Аркхеме» числом таблицы даже без смены достатка.
+    /// </summary>
+    [Fact]
+    public void Credit_step_applies_once_and_adds_cash_once_keeping_assets_of_the_same_tier()
+    {
+        var sheet = new CharacterSheet
+        {
+            Current = new CurrentValues { Sanity = 50, Luck = 40 },
+            Finances = new Finances { Cash = 80, Assets = "дом в Аркхеме", PocketMoney = 10 },
+        };
+        var cut = Render<DevelopmentPhaseModal>(sheet, p => p.Add(m => m.Open, true));
+        cut.Find("[data-testid='dev-step-3']").Click();
+        Assert.Contains("Средства и занятия", cut.Find("[data-testid='dev-step-title']").TextContent);
+
+        Button("Применить").Click();
+        Assert.True(Button("Применить").HasAttribute("disabled"));
+
+        Button("Пересчитать деньги").Click();
+        var cash = sheet.Finances.Cash;
+        Assert.True(cash > 80);
+        Assert.True(Button("Пересчитать деньги").HasAttribute("disabled"));
+        Assert.Equal("дом в Аркхеме", sheet.Finances.Assets);
+        Assert.Equal(10m, sheet.Finances.PocketMoney);
+
+        AngleSharp.Dom.IElement Button(string text) => cut.FindAll("button").First(b => b.TextContent.Trim() == text);
+    }
+
     [Fact]
     public void Weapon_damage_is_shown_and_stored_in_the_dice_notation_of_the_rules()
     {
