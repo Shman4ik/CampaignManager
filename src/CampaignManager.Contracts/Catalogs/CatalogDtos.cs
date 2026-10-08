@@ -272,7 +272,27 @@ public sealed class CreatureDto : CatalogItemDto
     public List<CatalogImageDto> Images { get; set; } = [];
 }
 
-/// <summary>Картинка записи справочника (тварь, оружие, профессия, заклинание) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
+/// <summary>
+/// Артефакт главы 13. Оружие-артефакт стреляет в бою записью справочника оружия с тем же названием (молниемёт, электропушка):
+/// связи по id нет, её находит страница.
+/// </summary>
+public sealed class ArtifactDto : CatalogItemDto
+{
+    public ArtifactKind Kind { get; set; } = ArtifactKind.Device;
+
+    /// <summary>Кто им пользуется: «ми-го», «йитиане», «кто угодно».</summary>
+    public List<string> UsedBy { get; set; } = [];
+
+    /// <summary>Главное правило одной строкой («В игре»): проверка, урон, цена; null — не сказано.</summary>
+    public string? Rule { get; set; }
+
+    public string Description { get; set; } = "";
+
+    /// <summary>Иллюстрации, как у заклинаний: первая — обложка в строке справочника.</summary>
+    public List<CatalogImageDto> Images { get; set; } = [];
+}
+
+/// <summary>Картинка записи справочника (тварь, оружие, профессия, заклинание, артефакт) — файл <c>cm.files</c>; порядок — порядок в списке.</summary>
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
 public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 

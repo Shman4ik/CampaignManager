@@ -9,7 +9,7 @@ namespace CampaignManager.Server.Catalogs.Stores;
 
 /// <summary>
 /// Картинки записи справочника — одна логика на бестиарий, оружие, профессии и заклинания: файлы <c>cm.files</c> по порядку, первая — обложка.
-/// Таблицы разные (<c>creature_images</c>, <c>weapon_images</c>, <c>occupation_images</c>, <c>spell_images</c>), ключ — (запись, порядок).
+/// Таблицы разные (<c>creature_images</c>, <c>weapon_images</c>, <c>occupation_images</c>, <c>spell_images</c>, <c>artifact_images</c>), ключ — (запись, порядок).
 /// </summary>
 internal static class CatalogImages
 {

@@ -31,6 +31,7 @@ public static class CatalogsRoutes
     public static readonly CatalogRoute Books = new("books");
     public static readonly CatalogRoute Items = new("items");
     public static readonly CatalogRoute Creatures = new("creatures");
+    public static readonly CatalogRoute Artifacts = new("artifacts");
 
     /// <summary>Параметры импорта в адресе: тело — сам файл обмена.</summary>
     public const string OverwriteQuery = "overwrite";

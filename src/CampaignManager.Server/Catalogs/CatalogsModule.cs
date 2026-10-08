@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace CampaignManager.Server.Catalogs;
 
 /// <summary>
-/// Справочники: навыки, профессии, оружие, заклинания, книги, предметы, бестиарий. Один набор
+/// Справочники: навыки, профессии, оружие, заклинания, книги, предметы, бестиарий, артефакты. Один набор
 /// эндпоинтов и один сервис на все (<see cref="CatalogService{TEntity, TDto}"/>), своё у справочника —
 /// <see cref="CatalogStore{TEntity, TDto}"/>. Знание модуля — <c>Catalogs/CLAUDE.md</c>.
 /// </summary>
@@ -28,6 +28,7 @@ public static class CatalogsModule
         AddCatalog<Book, BookDto, BookStore>(services);
         AddCatalog<Item, ItemDto, ItemStore>(services);
         AddCatalog<Creature, CreatureDto, CreatureStore>(services);
+        AddCatalog<Artifact, ArtifactDto, ArtifactStore>(services);
         return builder;
     }
 
@@ -41,6 +42,7 @@ public static class CatalogsModule
         MapCatalog<Book, BookDto>(app, json.CatalogFileBookDto);
         MapCatalog<Item, ItemDto>(app, json.CatalogFileItemDto);
         MapCatalog<Creature, CreatureDto>(app, json.CatalogFileCreatureDto);
+        MapCatalog<Artifact, ArtifactDto>(app, json.CatalogFileArtifactDto);
         return app;
     }
 

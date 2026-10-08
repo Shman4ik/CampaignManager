@@ -94,3 +94,6 @@ public sealed class ItemsApiClient(HttpClient http)
 
 public sealed class CreaturesApiClient(HttpClient http)
     : CatalogApiClient<CreatureDto>(http, CatalogsRoutes.Creatures, ContractsJsonContext.Default.CreatureDto, ContractsJsonContext.Default.CatalogListCreatureDto);
+
+public sealed class ArtifactsApiClient(HttpClient http)
+    : CatalogApiClient<ArtifactDto>(http, CatalogsRoutes.Artifacts, ContractsJsonContext.Default.ArtifactDto, ContractsJsonContext.Default.CatalogListArtifactDto);

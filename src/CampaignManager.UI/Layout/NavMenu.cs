@@ -31,6 +31,7 @@ public static class NavMenu
         new("skills", "fa-brain", "Навыки", NavGroup.Reference, NavAudience.SignedIn),
         new("spells", "fa-hat-wizard", "Заклинания", NavGroup.Reference, NavAudience.SignedIn),
         new("books", "fa-book-open", "Книги", NavGroup.Reference, NavAudience.SignedIn),
+        new("artifacts", "fa-gem", "Артефакты", NavGroup.Reference, NavAudience.SignedIn),
 
         new("admin/users", "fa-users", "Пользователи", NavGroup.System, NavAudience.Admin),
         new("admin/applications", "fa-inbox", "Заявки", NavGroup.System, NavAudience.Admin),

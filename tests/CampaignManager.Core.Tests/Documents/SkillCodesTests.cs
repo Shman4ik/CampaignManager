@@ -37,6 +37,11 @@ public sealed partial class SkillCodesTests
         "Тайные знания (сновидения)",
     ];
 
+    /// <summary>Специализации Стрельбы для инопланетного оружия главы 13 (стр. 269, 273): в справочнике v1 их не было.</summary>
+    private static readonly string[] ArtifactWeaponSkills = ["Стрельба (молниемёт)", "Стрельба (электропушка)"];
+
+    private static IEnumerable<string> BookSkillNames => V1CatalogNames.Concat(ArtifactWeaponSkills);
+
     [GeneratedRegex(@"^skill\.[a-z]+(-[a-z]+)*(\.[a-z]+(-[a-z]+)*)?$")]
     private static partial Regex CodeFormat();
 
@@ -44,12 +49,12 @@ public sealed partial class SkillCodesTests
     public void EveryBookSkill_HasCode_AndCodesAreUnique()
     {
         Assert.Equal(90, V1CatalogNames.Length);
-        var codes = V1CatalogNames.Select(name => SkillCodes.FromName(name)
+        var codes = BookSkillNames.Select(name => SkillCodes.FromName(name)
             ?? throw new Xunit.Sdk.XunitException($"Нет кода у книжного навыка «{name}»")).ToList();
 
         Assert.Equal(codes.Count, codes.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(V1CatalogNames.Length, SkillCodes.BookNames.Count);
-        Assert.Equal(V1CatalogNames.Order(StringComparer.Ordinal), SkillCodes.BookNames.Values.Order(StringComparer.Ordinal));
+        Assert.Equal(codes.Count, SkillCodes.BookNames.Count);
+        Assert.Equal(BookSkillNames.Order(StringComparer.Ordinal), SkillCodes.BookNames.Values.Order(StringComparer.Ordinal));
     }
 
     [Fact]

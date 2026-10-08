@@ -1,0 +1,172 @@
+@page "/artifacts"
+@attribute [Authorize]
+@using CampaignManager.Core.Catalogs
+@inject ICatalogApi<WeaponDto> WeaponsApi
+
+@* Артефакты главы 13: Название · Вид · Используют · В игре. За столом Хранитель ищет, что есть у ми-го или йитиан и что вещь
+   делает по правилам, — поэтому фильтры по виду и владельцам, а главное правило одной строкой — колонкой «В игре» (не
+   обрезается: ради неё и открывают справочник; ширина отдана ей). Таблица — с lg: в портрете iPad (~700px) «В игре» сжималась
+   до 150px и строки росли до четырёх строк текста, карточка даёт правилу всю ширину. Оружие-артефакт стреляет
+   в бою записью справочника оружия с тем же названием: раскрытие ведёт к ней (`weapons?open=`), в бою его берут через
+   «Подобрать оружие…». Картинки — как у заклинаний; пока ни у одного артефакта их нет, слота обложки нет вовсе (двадцать
+   одинаковых заглушек ничего не различают). *@
+<CatalogPage TItem="ArtifactDto" Title="Артефакты" Icon="fa-gem" AddLabel="Добавить артефакт" Noun="артефакт" Plural="артефактов"
+             Filters="_filters" SearchAlso="a => a.UsedBy" TableFrom="TableBreakpoint.Lg" OnLoaded="Loaded" State="_state"
+             New="() => new ArtifactDto()" RowDetail="Detail" Form="Form">
+    <Columns Context="view">
+        <DataColumn TItem="ArtifactDto" Title="Название" SortBy="a => a.Name" DefaultSort="false" HeaderClass="w-[24%]" Context="a">
+            <div class="flex items-center gap-3">
+                @Cover(a, "h-10 w-8")
+                <span class="min-w-0 font-medium text-primary-800">@a.Name</span>
+            </div>
+        </DataColumn>
+        @if (!view.IsFixed("kind"))
+        {
+            <DataColumn TItem="ArtifactDto" Title="Вид" SortBy="a => CatalogText.Of(a.Kind)" HeaderClass="w-[17%]" Context="a">@CatalogText.Of(a.Kind)</DataColumn>
+        }
+        @if (!view.IsFixed("owner"))
+        {
+            <DataColumn TItem="ArtifactDto" Title="Используют" SortBy="a => Owners(a)" HeaderClass="w-[14%]" Context="a">@Owners(a)</DataColumn>
+        }
+        <DataColumn TItem="ArtifactDto" Title="В игре" Context="a">@(a.Rule ?? Terms.None)</DataColumn>
+    </Columns>
+    <CardTemplate Context="a">
+        <div class="flex items-start gap-3">
+            @Cover(a, "h-15 w-12")
+            <div class="min-w-0">
+                <p class="font-medium text-primary-800">@a.Name</p>
+                <p class="cm-meta">@CatalogText.Of(a.Kind)@(a.UsedBy.Count > 0 ? $" · {Owners(a)}" : "")</p>
+                @if (a.Rule is { } rule)
+                {
+                    <p class="mt-1 text-sm text-primary-600">@rule</p>
+                }
+            </div>
+        </div>
+    </CardTemplate>
+</CatalogPage>
+
+@code {
+    private IReadOnlyList<CatalogFilter<ArtifactDto>> _filters = [];
+    private IReadOnlyList<string> _owners = [];
+    private IReadOnlyList<WeaponDto> _weapons = [];
+    private bool _anyImages;
+
+    private readonly CatalogFormState _state = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _weapons = (await WeaponsApi.ListAsync()).Items;
+        }
+        catch (HttpRequestException)
+        {
+            // Без справочника оружия раскрытие обходится без строки «В бою».
+        }
+    }
+
+    private void Loaded(IReadOnlyList<ArtifactDto> artifacts)
+    {
+        _anyImages = artifacts.Any(a => a.Images.Count > 0);
+        _owners = [.. artifacts.SelectMany(a => a.UsedBy).Distinct(StringComparer.CurrentCultureIgnoreCase).Order(StringComparer.CurrentCulture)];
+        _filters =
+        [
+            CatalogFilter<ArtifactDto>.ForEnum("kind", Terms.AnyKind, CatalogText.Of, a => a.Kind),
+            new("owner", Terms.AnyOwner, [.. _owners.Select(o => new CatalogOption(o, Capitalized(o)))],
+                (artifact, owner) => artifact.UsedBy.Contains(owner, StringComparer.CurrentCultureIgnoreCase)),
+        ];
+    }
+
+    private static string Owners(ArtifactDto a) => a.UsedBy.Count == 0 ? Terms.None : Capitalized(string.Join(", ", a.UsedBy));
+
+    // «Используют» книги пишется со строчной («ми-го», «кто угодно»); в начале ячейки и пункта выбора — с заглавной.
+    private static string Capitalized(string text) => text.Length == 0 ? text : char.ToUpper(text[0], System.Globalization.CultureInfo.CurrentCulture) + text[1..];
+
+    // Оружие для боя — запись справочника оружия с тем же названием (без регистра и «ё»), только у вида «Оружие».
+    private WeaponDto? WeaponOf(ArtifactDto a) =>
+        a.Kind == ArtifactKind.Weapon
+            ? _weapons.FirstOrDefault(w => CatalogCodeTable.NormalizeName(w.Name) == CatalogCodeTable.NormalizeName(a.Name))
+            : null;
+
+    private RenderFragment Cover(ArtifactDto a, string size) => __builder =>
+    {
+        @if (!_anyImages)
+        {
+        }
+        else if (a.Images.FirstOrDefault() is { } cover)
+        {
+            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
+                <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="size-full object-cover" loading="lazy" decoding="async" />
+            </span>
+        }
+        else
+        {
+            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
+                <i class="fa-solid fa-gem"></i>
+            </span>
+        }
+    };
+
+    private RenderFragment<ArtifactDto> Detail => a => __builder =>
+    {
+        var weapon = WeaponOf(a);
+        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
+            @if (a.Images.Count > 0)
+            {
+                <div class="w-full max-w-56">
+                    <CatalogImageGallery @key="a.Id" Images="a.Images" Alt="@a.Name" />
+                </div>
+            }
+            <div class="grid min-w-0 flex-1 basis-80 content-start gap-2 text-sm">
+                @if (weapon is not null)
+                {
+                    <p>
+                        <span class="cm-meta-label">В бою: </span>оружие
+                        <a class="text-accent-700 underline" href="@($"weapons?open={weapon.Id}")">@weapon.Name</a>
+                        — урон <DiceText Value="@weapon.Damage" />, навык @(weapon.SkillName ?? Terms.None); выбирается в атаке через «Подобрать оружие…».
+                    </p>
+                }
+                @if (!string.IsNullOrWhiteSpace(a.Description))
+                {
+                    <p class="max-w-prose whitespace-pre-line text-primary-700">@a.Description</p>
+                }
+                else
+                {
+                    <p class="cm-text-muted">Описания нет.</p>
+                }
+                @if (a.Source is not null)
+                {
+                    <p class="cm-meta">Источник: @a.Source</p>
+                }
+            </div>
+        </div>
+    };
+
+    private RenderFragment<ArtifactDto> Form => a => __builder =>
+    {
+        <div class="grid gap-4 sm:grid-cols-2">
+            <Field Label="Название" Required="true" Error="@_state.For("name")" class="sm:col-span-2">
+                <input class="cm-input" aria-invalid="@_state.Invalid("name")" @bind="a.Name" />
+            </Field>
+            <Field Label="Вид">
+                <select class="cm-input" value="@a.Kind" @onchange="e => a.Kind = Enum.Parse<ArtifactKind>(e.Value?.ToString() ?? nameof(ArtifactKind.Other))">
+                    @foreach (var kind in Enum.GetValues<ArtifactKind>())
+                    {
+                        <option value="@kind">@CatalogText.Of(kind)</option>
+                    }
+                </select>
+            </Field>
+            <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="a.Source" /></Field>
+            <Field Label="Используют" Group="true" class="sm:col-span-2" Note="Кто создаёт и применяет: ми-го, йитиане, кто угодно.">
+                <StringListEditor Values="a.UsedBy" ValuesChanged="v => a.UsedBy = [.. v]" Chips="true" ItemLabel="Владелец" Placeholder="Например, ми-го" />
+            </Field>
+            <Field Label="В игре" class="sm:col-span-2" Note="Главное правило одной строкой: проверка, урон, цена.">
+                <input class="cm-input" placeholder="Броня 8; снять — −1 ПЗ" @bind="a.Rule" />
+            </Field>
+            <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="8" @bind="a.Description"></textarea></Field>
+            <Field Label="Иллюстрации" Group="true" class="sm:col-span-2">
+                <CatalogImagesEditor Images="a.Images" Hint="Первая картинка — обложка в строке справочника." />
+            </Field>
+        </div>
+    };
+}

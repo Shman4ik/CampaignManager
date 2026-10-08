@@ -53,6 +53,7 @@ public static class ApiClientServiceCollectionExtensions
         services.AddHttpClient<ICatalogApi<BookDto>, BooksApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICatalogApi<ItemDto>, ItemsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<ICatalogApi<CreatureDto>, CreaturesApiClient>(http => http.BaseAddress = baseAddress);
+        services.AddHttpClient<ICatalogApi<ArtifactDto>, ArtifactsApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IProfileApi, ProfileApiClient>(http => http.BaseAddress = baseAddress);
         services.AddHttpClient<IAdminApi, AdminApiClient>(http => http.BaseAddress = baseAddress);
 
