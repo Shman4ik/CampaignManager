@@ -381,10 +381,11 @@ public sealed class DevelopmentPhaseRulesTests
 
     /// <summary>
     /// Пример с Харви (стр. 94): Средства 41 → 34, достаток тот же — к 80 долларам прибавляется 68, активы остаются 50.
-    /// До 2.0.x пересчёт всегда ставил активы и карманные из таблицы и затирал «дом в Аркхеме».
+    /// Раньше пересчёт всегда ставил активы и карманные из таблицы и затирал «дом в Аркхеме» (F-S08).
     /// </summary>
     [Fact]
     [Trait("page", "94")]
+    [Trait("finding", "F-S08")]
     public void RecalculateFinances_SameTier_KeepsAssetsAndPocketMoney()
     {
         var sheet = NewSheet(50, Skill(CreditRating, 34));
