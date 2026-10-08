@@ -78,6 +78,10 @@ else
                         OnClick="() => _factsOpen = true">Раздатки и факты</Button>
             </div>
             @RunBar
+            @if (_party is { Count: > 0 } party && _catalog is { } catalog)
+            {
+                <PlayParty Party="party" Catalog="catalog" OnIdea="OpenIdea" OnRefresh="RefreshPartyAsync" />
+            }
 
             @if (Location is null)
             {
@@ -103,14 +107,27 @@ else
     </Modal>
 }
 
-<SkillCheckModal Open="@(_check is not null)" OpenChanged="CheckOpenChanged"
-                 Title="@(_check is null ? "Проверка" : $"Проверка: {ScenarioLabels.Target(_check)}")"
+<SkillCheckModal Open="@(_check is not null || _idea is not null)" OpenChanged="CheckOpenChanged"
+                 Title="@(_idea is not null ? "Проверка Идеи" : _check is null ? "Проверка" : $"Проверка: {ScenarioLabels.Target(_check)}")"
                  Party="@_party" Catalog="@_catalog"
-                 InitialKey="@(_check is null ? null : CheckSubjects.KeyFor(_check.TargetKind, _check.SkillId, _check.Characteristic))"
-                 InitialName="@(_check is null ? null : ScenarioLabels.Target(_check))"
-                 InitialDifficulty="@(_check?.Difficulty ?? Difficulty.Regular)"
-                 InitialInvestigatorId="@(_checkInvestigatorId ?? SoleInvestigatorId)" OnInvestigatorChanged="id => _checkInvestigatorId = id">
+                 InitialKey="@(_idea is not null ? IdeaCheck.SubjectKey : _check is null ? null : CheckSubjects.KeyFor(_check.TargetKind, _check.SkillId, _check.Characteristic))"
+                 InitialName="@(_check is null || _idea is not null ? null : ScenarioLabels.Target(_check))"
+                 InitialDifficulty="@(_idea is { } clue ? IdeaCheck.DifficultyOf(clue) : _check?.Difficulty ?? Difficulty.Regular)"
+                 InitialInvestigatorId="@(_idea is not null ? IdeaRollerId : _checkInvestigatorId ?? SoleInvestigatorId)"
+                 OnInvestigatorChanged="id => { if (_idea is null) _checkInvestigatorId = id; }">
     <Details>
+        @if (_idea is not null)
+        {
+            @* Проверка Идеи (стр. 197–198): зацепку сыщики получат при любом исходе — решается, как. *@
+            <div class="@(context ? "border-success-300 bg-success-50" : "border-error-300 bg-error-50") rounded-md border px-3 py-2" data-testid="idea-outcome">
+                <p class="@(context ? "text-success-700" : "text-error-700") text-sm font-semibold uppercase">@(context ? "Успех" : "Провал — в гущу событий")</p>
+                <p class="text-sm">
+                    @(context
+                        ? "Выдайте пропущенную зацепку, вплетя её в сюжет. Сыщиков можно перенести в нужное время и место — не подвергая опасности."
+                        : "Зацепку сыщики всё равно получат, но в самой жуткой ситуации: бросьте любого из них в гущу событий. Время потрачено впустую.")
+                </p>
+            </div>
+        }
         @* Выпавший исход — сразу под броском, цветным блоком; второй не мешает читать первый: он свёрнут. *@
         @if (_check is not null && (_check.OnSuccess is not null || _check.OnFailure is not null))
         {
@@ -151,6 +168,7 @@ else
     private SkillCatalog? _catalog;
     private string? _partyError;
     private ScenarioCheckDto? _check;
+    private IdeaClue? _idea;
 
     // Сыщик, которого проверяли в прошлый раз: между проверками локации его не выбирают заново. Пока никого не выбирали, а в
     // партии один сыщик, — он и предвыбран (SoleInvestigatorId): окно открывается сразу со значением навыка, а не с «вписать вручную».
@@ -218,13 +236,15 @@ else
     }
 
     /// <summary>Сыщики кампании партии с листами (только чтение) и справочник навыков — для диалога проверки.</summary>
-    private async Task LoadPartyAsync(Guid? campaignId)
+    private async Task LoadPartyAsync(Guid? campaignId, bool force = false)
     {
-        if (campaignId == _partyCampaignId && (_party is not null || _partyError is not null || campaignId is null))
+        if (!force && campaignId == _partyCampaignId && (_party is not null || _partyError is not null || campaignId is null))
             return;
 
+        // Перечитывание той же партии («Обновить») не прячет список на время запроса: блок сыщиков не мигает и остаётся раскрытым.
+        if (campaignId != _partyCampaignId)
+            _party = null;
         _partyCampaignId = campaignId;
-        _party = null;
         _partyError = null;
         if (campaignId is not { } id)
             return;
@@ -473,9 +493,24 @@ else
 
     private void CheckOpenChanged(bool open)
     {
-        if (!open)
-            _check = null;
+        if (open)
+            return;
+
+        _check = null;
+        _idea = null;
     }
+
+    /// <summary>Проверка Идеи с выбранной подачей зацепки: ИНТ, сложность по зацепке, бросает сыщик с наибольшим ИНТ.</summary>
+    private void OpenIdea(IdeaClue clue)
+    {
+        _check = null;
+        _idea = clue;
+    }
+
+    private Guid? IdeaRollerId => _party is { } party ? IdeaCheck.Roller(party, m => m.Sheet)?.Id : null;
+
+    /// <summary>«Обновить» у партии: листы сыщиков перечитываются (игрок мог поправить свой лист с телефона).</summary>
+    private Task RefreshPartyAsync() => LoadPartyAsync(ActiveRun?.CampaignId, force: true);
 
     // Исходы раскрыты сразу у единственной проверки локации (её и играют): _openChecks хранит отступление от умолчания.
     private bool IsCheckOpen(ScenarioCheckDto check, ScenarioLocationDto location) =>
