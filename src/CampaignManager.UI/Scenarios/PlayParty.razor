@@ -10,28 +10,38 @@
    выбирает, как подавал пропущенную зацепку, бросает сыщик с наибольшим ИНТ (IdeaCheck). Листы — снимок на момент загрузки
    («Обновить» перечитывает; живые обновления — M3). Раскрыт ли блок — помнит браузер (cm.play-party-open). *@
 <section class="cm-play-party" aria-label="Сыщики партии" data-testid="play-party">
-    <button type="button" class="cm-play-party-toggle" aria-expanded="@(_open ? "true" : "false")" data-testid="play-party-toggle" @onclick="ToggleAsync">
-        <i class="fa-solid @(_open ? "fa-chevron-down" : "fa-chevron-right") w-3 shrink-0 text-xs text-primary-500" aria-hidden="true"></i>
-        <span class="font-medium text-primary-800">Сыщики</span>
-        @if (!_open)
-        {
-            <span class="cm-play-party-summary" data-testid="play-party-summary">
-                @for (var i = 0; i < Party.Count; i++)
-                {
-                    var member = Party[i];
-                    var trouble = States(member.Sheet).FirstOrDefault();
-                    if (i > 0)
+    <div class="cm-play-party-head">
+        <button type="button" class="cm-play-party-toggle" aria-expanded="@(_open ? "true" : "false")" data-testid="play-party-toggle" @onclick="ToggleAsync">
+            <i class="fa-solid @(_open ? "fa-chevron-down" : "fa-chevron-right") w-3 shrink-0 text-xs text-primary-500" aria-hidden="true"></i>
+            <span class="font-medium text-primary-800">Сыщики</span>
+            @if (!_open)
+            {
+                <span class="cm-play-party-summary" data-testid="play-party-summary">
+                    @for (var i = 0; i < Party.Count; i++)
                     {
-                        <span class="text-primary-400" aria-hidden="true"> · </span>
-                    }
-                    <span>@member.Name@if (trouble.Text is { } text)
+                        var member = Party[i];
+                        var trouble = States(member.Sheet).FirstOrDefault();
+                        if (i > 0)
                         {
-                            <span class="@(trouble.Danger ? "text-error-700" : "text-secondary-700")"> — @text.ToLowerInvariant()</span>
-                        }</span>
-                }
-            </span>
+                            <span class="text-primary-400" aria-hidden="true"> · </span>
+                        }
+                        @* Переносится между сыщиками (у « · » пробелы), а не посреди имени. *@
+                        <span class="whitespace-nowrap">@member.Name@if (trouble.Text is { } text)
+                            {
+                                <span class="@(trouble.Danger ? "text-error-700" : "text-secondary-700")"> — @text.ToLowerInvariant()</span>
+                            }</span>
+                    }
+                </span>
+            }
+        </button>
+        @if (_open)
+        {
+            @* Листы — снимок на загрузку: игрок мог поправить свой лист с телефона. *@
+            <button type="button" class="cm-link-btn shrink-0 text-sm" data-testid="play-party-refresh" @onclick="OnRefresh">
+                <i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>Обновить
+            </button>
         }
-    </button>
+    </div>
 
     @if (_open)
     {
@@ -74,7 +84,6 @@
                 <Button Variant="ButtonVariant.Secondary" Icon="fa-lightbulb" data-testid="play-idea-check" OnClick="() => OnIdea.InvokeAsync(_clue)">
                     Проверить · @CheckRules.DifficultyLabel(IdeaCheck.DifficultyOf(_clue)).ToLowerInvariant()
                 </Button>
-                <Button Variant="ButtonVariant.Ghost" Icon="fa-rotate" data-testid="play-party-refresh" OnClick="OnRefresh">Обновить</Button>
             </div>
         </div>
     }
