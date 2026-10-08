@@ -82,7 +82,10 @@ public sealed record RangedAttackSetup
 
     public FiringMode FiringMode { get; init; }
 
-    /// <summary>Выстрелов (патронов) за эту проверку: серия, очередь.</summary>
+    /// <summary>
+    /// Пуль в залпе очереди (<see cref="FiringMode.Volley"/>). Выстрел и серия из пистолета — одна пуля на проверку: каждый
+    /// выстрел серии проверяют отдельно (стр. 111–112), поэтому вне очереди поле не читается.
+    /// </summary>
     public int ShotsFired { get; init; } = 1;
 
     /// <summary>Номер проверки очереди в раунде с нуля; null — по счёту стрелка в этом раунде.</summary>
@@ -92,9 +95,20 @@ public sealed record RangedAttackSetup
     public bool IgnoresArmor { get; init; }
 
     public D100Roll? AttackRoll { get; init; }
+
+    /// <summary>Уклонение цели от метательного оружия (стр. 106) — вписывается, как любой бросок.</summary>
+    public D100Roll? DefenseRoll { get; init; }
+
     public int? DamageRoll { get; init; }
     public int? DamageBonusRoll { get; init; }
     public int? ExtraImpaleRoll { get; init; }
+
+    /// <summary>
+    /// Кости урона залпа очереди по порядку бросков: у обычной пули — её урон, у проникающей — добавочный бросок (максимум
+    /// берётся сам). Не хватило — остальное бросит правило.
+    /// </summary>
+    public IReadOnlyList<int>? DamageRolls { get; init; }
+
     public D100Roll? ConRoll { get; init; }
 
     /// <summary>Раунды починки при осечке (1d6, стр. 113) — вписываются тоже.</summary>
@@ -148,6 +162,9 @@ public sealed record AttackOutcome
     public int? JamRounds { get; init; }
     public bool HitAllyOnFumble { get; init; }
     public Guid? HitAllyId { get; init; }
+
+    /// <summary>Урон каждой попавшей пули залпа (стр. 115); у одиночного выстрела пусто — урон в <see cref="Damage"/>.</summary>
+    public IReadOnlyList<DamageRoll> Bullets { get; init; } = [];
 
     /// <summary>Атака невозможна (Комплекция, заклинило, пустой магазин): ход не тратится, применять нечего.</summary>
     public string? Blocked { get; init; }
@@ -293,9 +310,10 @@ public static partial class CombatRules
 
         // Ход, патроны и проверка очереди тратятся при любом исходе (стр. 111–114) — но только при «Применить».
         List<EncounterEffect> effects = [Effect(EncounterEffectKind.Attack, attacker.Id, 1, flag: true)];
+        var bullets = setup.FiringMode == FiringMode.Volley ? Math.Max(1, setup.ShotsFired) : 1;
         if (AmmoLeft(attacker, attack) is { } loaded)
         {
-            var left = Math.Max(0, loaded - Math.Max(1, setup.ShotsFired));
+            var left = Math.Max(0, loaded - bullets);
             effects.Add(new EncounterEffect { Kind = EncounterEffectKind.Ammo, ParticipantId = attacker.Id, Key = attack.Key, Amount = left });
         }
 
@@ -339,13 +357,95 @@ public static partial class CombatRules
             return Miss($"{attacker.Name} промахивается. Цель: {defender.Name} ({N(roll.Result)}, {needed}).");
         }
 
+        // От метательного оружия уклоняются, как от удара (стр. 106): встречная проверка, ничья — уклонившемуся. Контратака —
+        // только вплотную, а это уже ближний бой. Не начеку — не уклоняется.
+        D100Roll? dodgeRoll = null;
+        var dodgeLevel = SuccessLevel.Failure;
+        if (attack.Thrown && setup.Surprise == SurpriseMode.TargetReady)
+        {
+            var dodge = Test(setup.DefenseRoll, defender.Stats.Dodge, dice);
+            (dodgeRoll, dodgeLevel) = (dodge.Roll, dodge.Level);
+            lines.Add(RollText($"{defender.Name} (уклонение)", dodge.Roll, defender.Stats.Dodge, dodge.Level));
+            effects.Add(Effect(EncounterEffectKind.Defense, defender.Id));
+            if (dodgeLevel > SuccessLevel.Failure && !AttackerWinsOpposed(level, dodgeLevel, DefenseReaction.Dodge))
+                return Miss($"{attacker.Name}: промах — {defender.Name} уклонился ({N(dodge.Roll.Result)} против {N(defender.Stats.Dodge)}).") with
+                {
+                    DefenseRoll = dodgeRoll, DefenseLevel = dodgeLevel,
+                };
+        }
+
+        var armor = ArmorOf(defender, setup.CoverArmor, setup.IgnoresArmor);
+        if (setup.FiringMode == FiringMode.Volley)
+            return Volley(attacker, defender, attack, setup, bullets, level, required, armor, dice, lines, effects) with
+            {
+                Modifiers = modifiers, Roll = roll, Level = level, Required = required,
+            };
+
         // На сверхбольшой дальности проникающая рана — только при критическом успехе (стр. 110).
         var impaling = attack.Impaling && (setup.Range != RangeBand.Extreme || level == SuccessLevel.Critical);
         var damage = RollDamage(attack, attacker.Stats.DamageBonus, level, canBeExtreme: true, impaling,
-            setup.DamageRoll, setup.DamageBonusRoll, setup.ExtraImpaleRoll, ArmorOf(defender, setup.CoverArmor, setup.IgnoresArmor), dice);
+            setup.DamageRoll, setup.DamageBonusRoll, setup.ExtraImpaleRoll, armor, dice, (int)setup.Range);
         return Hit(attacker, defender, attack, damage, setup.ConRoll, dice, lines, effects) with
         {
-            Modifiers = modifiers, Roll = roll, Level = level, Required = required,
+            Modifiers = modifiers, Roll = roll, Level = level, Required = required, DefenseRoll = dodgeRoll, DefenseLevel = dodgeLevel,
+        };
+    }
+
+    /// <summary>
+    /// Попавший залп очереди (стр. 115): успех — в цель попадает половина пуль (с округлением вниз, не меньше одной);
+    /// чрезвычайный успех — все, и первая половина проникающие (максимум и добавочный бросок; у непроникающего оружия — максимум).
+    /// При чрезвычайной сложности лучшее, что бывает, — успех без проникающих. Урон каждой пули бросается отдельно, броня
+    /// вычитается из каждой; ранит залп одной суммой — как одна атака.
+    /// </summary>
+    private static AttackOutcome Volley(EncounterParticipant attacker, EncounterParticipant defender, CombatAttack attack,
+        RangedAttackSetup setup, int bullets, SuccessLevel level, SuccessLevel required, int armor, IDiceRoller dice,
+        List<string> lines, List<EncounterEffect> effects)
+    {
+        var allHit = level >= SuccessLevel.Extreme && required < SuccessLevel.Extreme;
+        var hits = allHit ? bullets : Math.Max(1, bullets / 2);
+        var extreme = allHit ? Math.Max(1, bullets / 2) : 0;
+        lines.Add(allHit
+            ? $"Попали все {N(bullets)} пуль залпа, проникающих — {N(extreme)} (чрезвычайный успех)."
+            : $"Попала половина залпа: {N(hits)} из {N(bullets)}.");
+
+        var entered = setup.DamageRolls ?? [];
+        var next = 0;
+        int? Entered() => next < entered.Count ? entered[next++] : null;
+
+        List<DamageRoll> rolls = [];
+        for (var i = 0; i < hits; i++)
+        {
+            var roll = i < extreme
+                ? RollDamage(attack, attacker.Stats.DamageBonus, SuccessLevel.Extreme, canBeExtreme: true, attack.Impaling,
+                    damageRoll: null, bonusRoll: null, extraRoll: attack.Impaling ? Entered() : null, armor, dice, (int)setup.Range)
+                : RollDamage(attack, attacker.Stats.DamageBonus, SuccessLevel.Regular, canBeExtreme: false, impaling: false,
+                    damageRoll: Entered(), bonusRoll: null, extraRoll: null, armor, dice, (int)setup.Range);
+            rolls.Add(roll);
+            lines.Add($"Пуля {N(i + 1)}. {roll.Describe()}");
+        }
+
+        var total = new DamageRoll(rolls[0].Formula, rolls.Sum(r => r.Rolled), rolls.Sum(r => r.Bonus), rolls.Sum(r => r.Extra),
+            rolls.Sum(r => r.Raw), rolls.Sum(r => r.Armor), rolls.Sum(r => r.Total), extreme > 0, false, extreme > 0 && attack.Impaling);
+        DamageOutcome? wound = null;
+        if (total.Total > 0)
+        {
+            var (effect, outcome, conLine) = DamageEffect(defender, total.Total, setup.ConRoll, dice,
+                $"{attack.Name}: {N(hits)} × {DiceNotation.Format(total.Formula)}");
+            effects.Add(effect);
+            wound = outcome;
+            if (conLine is not null)
+                lines.Add(conLine);
+        }
+
+        return new AttackOutcome
+        {
+            Resolution = Resolution(EncounterLogKind.Attack, attacker.Id,
+                $"{attacker.Name} попадает: {N(hits)} из {N(bullets)}. Цель: {defender.Name} ({attack.Name})" + WoundTitle(total.Total, wound),
+                lines, effects),
+            Hit = true,
+            Damage = total,
+            Bullets = rolls,
+            Wound = wound,
         };
     }
 
@@ -411,10 +511,14 @@ public static partial class CombatRules
     /// вниз), нет. Броня цели и преграды снимает урон, но не ниже нуля.
     /// </summary>
     public static DamageRoll RollDamage(CombatAttack attack, string damageBonus, SuccessLevel level, bool canBeExtreme, bool impaling,
-        int? damageRoll, int? bonusRoll, int? extraRoll, int armor, IDiceRoller dice)
+        int? damageRoll, int? bonusRoll, int? extraRoll, int armor, IDiceRoller dice, int rangeBand = 0)
     {
         var text = string.IsNullOrWhiteSpace(attack.Damage) ? CombatProfiles.BrawlDamage : attack.Damage.Trim();
-        var expression = DamageFormulaParser.Parse(text).GetDefaultDamage();
+        // Дробовик бьёт по полосе дальности (стр. 407): 0 — ближняя, 1 — средняя, 2 — большая; в описании — её формула.
+        var info = DamageFormulaParser.Parse(text);
+        var expression = info.At(rangeBand);
+        if (info.IsByRange && expression is { RawText.Length: > 0 } band)
+            text = band.RawText.Trim();
         var formula = DiceFormula.Parse(text);
         int Roll() => expression is { IsParsed: true } e ? e.Roll(dice) : formula.Roll(dice);
         int Max() => expression is { IsParsed: true } e ? e.Max : formula.Max;

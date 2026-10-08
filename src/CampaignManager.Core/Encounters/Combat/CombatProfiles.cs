@@ -154,7 +154,8 @@ public static class CombatProfiles
         var ranged = firearm || thrown
                      || (code is null && range.Kind is WeaponRangeKind.Meters or WeaponRangeKind.RangeBands or WeaponRangeKind.StrengthThrow);
 
-        var expression = WeaponStatsReader.Damage(weapon).GetDefaultDamage();
+        var damage = WeaponStatsReader.Damage(weapon);
+        var expression = damage.GetDefaultDamage();
         var attacks = WeaponStatsReader.Attacks(weapon);
 
         return new CombatAttack
@@ -165,8 +166,10 @@ public static class CombatProfiles
             Damage = weapon.Damage,
             Kind = ranged ? CombatAttackKind.Ranged : CombatAttackKind.Melee,
             DamageBonus = DamageBonusOf(!ranged, expression),
-            // Огнестрел — всегда проникающий (стр. 101); холодное и метательное — по отметке справочника.
-            Impaling = firearm || weapon.Impaling,
+            // Огнестрел — всегда проникающий (стр. 101), кроме дроби: урон по дальностям не проникает (стр. 407; пулевой патрон
+            // для дробовика — своя строка справочника с одной формулой); холодное и метательное — по отметке справочника.
+            Impaling = !damage.IsByRange && (firearm || weapon.Impaling),
+            Thrown = thrown,
             AmmoCapacity = WeaponStatsReader.AmmoCapacity(weapon),
             Malfunction = WeaponStatsReader.TryMalfunctionThreshold(weapon, out var malfunction) ? malfunction : null,
             BaseRangeMeters = WeaponStatsReader.BaseRangeMeters(weapon)
