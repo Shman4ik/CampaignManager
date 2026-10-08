@@ -360,6 +360,7 @@ public sealed class RangedAttackTests
 
     [Theory]
     [Trait("page", "106")]
+    [Trait("finding", "F-C10")]
     [InlineData(40, 10, false)] // обычный успех против трудного уклонения — промах
     [InlineData(40, 20, false)] // ничья обычных — уклонившемуся
     [InlineData(10, 20, true)]  // чрезвычайный против обычного — попадание
@@ -390,6 +391,19 @@ public sealed class RangedAttackTests
     }
 
     [Fact]
+    [Trait("page", "106")]
+    public void Thrown_TargetWithoutDodge_DoesNotRoll()
+    {
+        _shooter.Profile.Attacks.Add(Knife());
+        _target.Stats.Dodge = 0;
+
+        var outcome = Resolve(Throw(40, dodge: 1));
+
+        Assert.True(outcome.Hit);
+        Assert.Null(outcome.DefenseRoll);
+    }
+
+    [Fact]
     [Trait("page", "110")]
     public void Firearm_IsNotDodged()
     {
@@ -403,6 +417,7 @@ public sealed class RangedAttackTests
 
     [Fact]
     [Trait("page", "115")]
+    [Trait("finding", "F-C11")]
     public void Volley_Success_HalfTheBulletsHit_ArmorFromEach()
     {
         _target.Stats.Armor = 1;
@@ -430,6 +445,7 @@ public sealed class RangedAttackTests
     /// <summary>Пример с Сесилом (стр. 115): чрезвычайный успех — все пули, половина проникающие (максимум и бросок).</summary>
     [Fact]
     [Trait("page", "115")]
+    [Trait("finding", "F-C11")]
     public void Volley_Extreme_AllHit_FirstHalfImpale()
     {
         var outcome = Resolve(Setup(10) with { FiringMode = FiringMode.Volley, ShotsFired = 4, DamageRolls = [2, 3, 4, 5] });
@@ -471,6 +487,7 @@ public sealed class RangedAttackTests
 
     [Theory]
     [Trait("page", "407")]
+    [Trait("finding", "F-C12")]
     [InlineData(RangeBand.Base, "4d6")]
     [InlineData(RangeBand.Long, "2d6")]
     [InlineData(RangeBand.Extreme, "1d6")]

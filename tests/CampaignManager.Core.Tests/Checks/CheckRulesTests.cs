@@ -135,6 +135,7 @@ public sealed class CheckRulesTests
     /// <summary>Осечка вступает в силу в любом случае (стр. 97): ни Удачей не выкупить, ни отметку не получить.</summary>
     [Theory]
     [Trait("page", "97")]
+    [Trait("finding", "F-C13")]
     [InlineData(97, 96, true)]
     [InlineData(96, 96, true)]
     [InlineData(95, 96, false)]

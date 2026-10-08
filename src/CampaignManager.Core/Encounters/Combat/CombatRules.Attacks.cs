@@ -358,10 +358,10 @@ public static partial class CombatRules
         }
 
         // От метательного оружия уклоняются, как от удара (стр. 106): встречная проверка, ничья — уклонившемуся. Контратака —
-        // только вплотную, а это уже ближний бой. Не начеку — не уклоняется.
+        // только вплотную, а это уже ближний бой. Не начеку или без Уклонения (у божеств его нет) — не уклоняется.
         D100Roll? dodgeRoll = null;
         var dodgeLevel = SuccessLevel.Failure;
-        if (attack.Thrown && setup.Surprise == SurpriseMode.TargetReady)
+        if (DodgesThrown(attack, defender, setup.Surprise))
         {
             var dodge = Test(setup.DefenseRoll, defender.Stats.Dodge, dice);
             (dodgeRoll, dodgeLevel) = (dodge.Roll, dodge.Level);
@@ -390,6 +390,10 @@ public static partial class CombatRules
             Modifiers = modifiers, Roll = roll, Level = level, Required = required, DefenseRoll = dodgeRoll, DefenseLevel = dodgeLevel,
         };
     }
+
+    /// <summary>Цель уклоняется от метательного (стр. 106): она начеку и у неё есть Уклонение — нулевым не бросают (01 был бы успехом).</summary>
+    public static bool DodgesThrown(CombatAttack attack, EncounterParticipant defender, SurpriseMode surprise) =>
+        attack.Thrown && surprise == SurpriseMode.TargetReady && defender.Stats.Dodge > 0;
 
     /// <summary>
     /// Попавший залп очереди (стр. 115): успех — в цель попадает половина пуль (с округлением вниз, не меньше одной);
