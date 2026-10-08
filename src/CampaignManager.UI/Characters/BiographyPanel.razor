@@ -16,7 +16,7 @@
             </Field>
         }
     </div>
-    @foreach (var field in BiographyFields.Long)
+    @foreach (var field in LongFields)
     {
         var preview = _preview.Contains(field.Key);
         <div class="mt-3" @key="field.Key">
@@ -45,6 +45,12 @@
     [CascadingParameter] public SheetContext Context { get; set; } = null!;
 
     private Biography Bio => Context.Sheet.Biography;
+
+    /// <summary>«Эпилог» — последней графой, только у выбывшего (погиб, безумен, статус «Выбыл») или если он уже написан.</summary>
+    private IEnumerable<BiographyField> LongFields =>
+        Bio.Epilogue.Length > 0 || FateRules.Of(Context.Sheet) != InvestigatorFate.InPlay || Context.Character.Status == CharacterStatus.Retired
+            ? [.. BiographyFields.Long, BiographyFields.Epilogue]
+            : BiographyFields.Long;
 
     private void Set(BiographyField field, ChangeEventArgs e)
     {

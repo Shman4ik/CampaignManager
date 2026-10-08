@@ -108,6 +108,12 @@ public sealed class CharacterDto
 
     public bool CanDelete { get; set; }
 
+    /// <summary>
+    /// Лист вошедшего (он владелец строки): нового сыщика вместо выбывшего заводит игрок, а не Хранитель, хотя править лист
+    /// могут оба.
+    /// </summary>
+    public bool IsMine { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

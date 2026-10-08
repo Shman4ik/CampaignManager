@@ -55,6 +55,7 @@ public sealed class CharacterPageTests : KitContext
         Services.AddSingleton(Fake.Of<ICatalogApi<CreatureDto>>(new()));
         Services.AddSingleton(Fake.Of<ICatalogApi<ItemDto>>(new()));
         Services.AddSingleton(Fake.Of<CampaignManager.Contracts.Files.IFilesApi>(new()));
+        Services.AddSingleton(Fake.Of<CampaignManager.Contracts.Campaigns.ICampaignsApi>(new()));
         return character;
     }
 

@@ -6,7 +6,9 @@
 @using CampaignManager.Core
 @using CampaignManager.Core.Characters
 @using CampaignManager.Core.Checks
+@using CampaignManager.Contracts.Campaigns
 @using CampaignManager.UI.Campaigns
+@using CampaignManager.UI.Characters.Creation
 @using CampaignManager.UI.Platform
 @inject ICharactersApi Api
 @inject ICatalogApi<SkillDto> SkillsApi
@@ -17,6 +19,7 @@
 @inject ICatalogApi<ItemDto> ItemsApi
 @inject BrowserStorage Storage
 @inject ToastService Toasts
+@inject ICampaignsApi CampaignsApi
 
 @* Лист сыщика (T2.3). Документ правят блоки секций прямо в объекте листа (каскадный SheetContext); в базу
    правку уносит автосохранение (SheetAutoSave: слепок раз в 3 с, If-Match, черновик в localStorage).
@@ -154,6 +157,28 @@
                 <Alert Tone="Tone.Info" ShowIcon="true" Small="true">Лист только для чтения — править его может Хранитель.</Alert>
             }
 
+            @* Гибель и выбывание (гл. 10, стр. 210): активный сыщик игрока погиб или навсегда безумен — проводить его (статус «Выбыл»,
+               эпилог). Выбывший лист своему игроку предлагает завести нового — место в кампании свободно. *@
+            @if (FarewellDue(context) is { } fate)
+            {
+                <Alert Tone="Tone.Warning" ShowIcon="true" Small="true" data-testid="sheet-farewell">
+                    <ChildContent>@(fate == InvestigatorFate.Insane ? "Сыщик навсегда потерял рассудок" : "Сыщик погиб") — он выбывает из игры, пока игрок не введёт нового.</ChildContent>
+                    <Actions>
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-cross" data-testid="sheet-farewell-open" OnClick="() => _farewellOpen = true">Проводить сыщика</Button>
+                    </Actions>
+                </Alert>
+            }
+            else if (context.Character is { Kind: CharacterKind.Player, Status: CharacterStatus.Retired, IsMine: true, CampaignId: { } retiredFrom })
+            {
+                <Alert Tone="Tone.Info" ShowIcon="true" Small="true" data-testid="sheet-retired">
+                    <ChildContent>Сыщик выбыл — в кампании можно завести нового.</ChildContent>
+                    <Actions>
+                        <Button Small="true" Variant="ButtonVariant.Secondary" Icon="fa-wand-magic-sparkles"
+                                Href="@CreationLinks.Wizard(CharacterKind.Player, retiredFrom, null)">Создать сыщика</Button>
+                    </Actions>
+                </Alert>
+            }
+
             <CascadingValue Value="context">
                 @* change всплывает от любого поля листа: черновик пишется сразу, а не на тике автосохранения. *@
                 <div class="sheet" @onchange="KeepDraftAsync">
@@ -223,6 +248,10 @@
                 <DevelopmentPhaseModal @bind-Open="_developmentOpen" />
             </CascadingValue>
 
+            <FarewellModal Open="_farewellOpen" OnClose="() => _farewellOpen = false" OnConfirm="FarewellAsync" Busy="_farewellBusy"
+                           Name="@context.Sheet.Personal.Name" Fate="FateRules.Of(context.Sheet)" Epilogue="@context.Sheet.Biography.Epilogue"
+                           CampaignId="context.Character.CampaignId" />
+
             <SkillCheckModal Open="_checkOpen" OpenChanged="CheckOpenChanged" OnResolution="@(r => _resolution = r)" Title="@($"Проверка — {context.Sheet.Personal.Name}")" Sheet="@context.Sheet"
                              Catalog="@context.Catalog" InitialKey="@_checkKey" Malfunction="@context.CheckMalfunction" Help="@SkillHelp"
                              OnSheetChange="@(context.ReadOnly ? default(EventCallback<CheckSheetChange>) : EventCallback.Factory.Create<CheckSheetChange>(this, ApplyCheck))" />
@@ -241,6 +270,8 @@
     private readonly HashSet<string> _collapsed = [];
     private CancellationTokenSource? _loop;
     private bool _developmentOpen;
+    private bool _farewellOpen;
+    private bool _farewellBusy;
     private bool _checkOpen;
     private string? _checkKey;
     private bool _failureShown;
@@ -483,6 +514,51 @@
         {
             Toasts.Error(ApiErrors.Describe(error));
         }
+    }
+
+    /// <summary>Пора проводить: активный сыщик игрока (не НПС и не преген) погиб или навсегда безумен, а лист можно править.</summary>
+    private static InvestigatorFate? FarewellDue(SheetContext context) =>
+        context.Character is { Kind: CharacterKind.Player, Status: CharacterStatus.Active, CanEdit: true }
+        && FateRules.Of(context.Sheet) is not InvestigatorFate.InPlay and var fate
+            ? fate
+            : null;
+
+    /// <summary>
+    /// Сыщик выбыл: эпилог — в документ, статус «Выбыл» — колонкой с версией (перед ней уходит документ с эпилогом), и только потом
+    /// эпилог в хронику встречи: если статус не записался, повтор не допишет абзац дважды.
+    /// </summary>
+    private async Task FarewellAsync(FarewellRequest request)
+    {
+        if (_context is not { } context)
+            return;
+
+        _farewellBusy = true;
+        context.Sheet.Biography.Epilogue = request.Epilogue;
+        OnSheetChanged();
+        await WriteColumnAsync(() => Api.SetStatusAsync(CharacterId, CharacterStatus.Retired, _saver.Version),
+            () => context.Character.Status = CharacterStatus.Retired);
+
+        if (context.Character.Status == CharacterStatus.Retired)
+        {
+            if (request.Session is { } session && request.Epilogue.Length > 0 && context.Character.CampaignId is { } campaignId)
+            {
+                try
+                {
+                    await CampaignsApi.UpdateSessionAsync(campaignId, session.Id, new CampaignSessionInput(session.SessionDate, session.Number,
+                        session.Title, FateRules.AppendEpilogue(session.Summary, context.Sheet.Personal.Name, request.Epilogue), session.KeeperNotes,
+                        session.RunId, session.ScenarioCompleted));
+                }
+                catch (HttpRequestException error)
+                {
+                    Toasts.Error($"Эпилог не дописан в журнал: {ApiErrors.Describe(error)}");
+                }
+            }
+
+            _farewellOpen = false;
+            Toasts.Success("Сыщик выбыл:", subject: context.Sheet.Personal.Name);
+        }
+
+        _farewellBusy = false;
     }
 
     private async Task SetStatusAsync(ChangeEventArgs args)

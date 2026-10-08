@@ -35,6 +35,10 @@ public static class BiographyFields
         new("injuries", "Травмы и шрамы", "Пуля в левом плече…", b => b.Injuries, (b, v) => b.Injuries = v),
     ];
 
+    /// <summary>Эпилог (стр. 210–211) — что стало с выбывшим сыщиком; у живого в игре графы нет (BiographyPanel).</summary>
+    public static BiographyField Epilogue { get; } = new("epilogue", "Эпилог", "Что стало с сыщиком после истории",
+        b => b.Epilogue, (b, v) => b.Epilogue = v) { IsLong = true };
+
     /// <summary>«Заметки» — первыми: их пишут по ходу игры чаще, чем предысторию (g2 6.1). Оба поля понимают Markdown.</summary>
     public static IReadOnlyList<BiographyField> Long { get; } =
     [

@@ -23,7 +23,7 @@ namespace CampaignManager.Server.Characters;
 /// Устаревшая версия — 409 <c>stale</c> до записи, гонка — <c>xmin</c> в самой записи (тоже 409).
 /// </para>
 /// </summary>
-public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access, ILogger<CharacterService> logger)
+public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access, CurrentUser currentUser, ILogger<CharacterService> logger)
 {
     public async Task<CharacterDto> GetAsync(Guid characterId, CancellationToken cancellationToken)
     {
@@ -43,6 +43,7 @@ public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access,
             .SingleAsync(cancellationToken);
 
         var character = row.Character;
+        var me = await currentUser.GetAsync(cancellationToken);
         return new CharacterDto
         {
             Id = character.Id,
@@ -60,6 +61,7 @@ public sealed class CharacterService(CmDbContext dbContext, AccessPolicy access,
             ScenarioName = row.ScenarioName,
             CanEdit = rights.CanEdit,
             CanDelete = rights.CanDelete,
+            IsMine = me is not null && character.OwnerId == me.Id,
             UpdatedAt = character.UpdatedAt,
         };
     }
