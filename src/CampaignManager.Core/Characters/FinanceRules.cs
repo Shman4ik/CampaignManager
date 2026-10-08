@@ -89,6 +89,19 @@ public static class FinanceRules
         return new Finances { Cash = tier.Cash, PocketMoney = tier.PocketMoney, Assets = tier.AssetsText };
     }
 
+    /// <summary>
+    /// Трата больше карманных денег — вся сумма из наличных (стр. 93). Наличных не хватает — лист не меняется (false): активы
+    /// обналичивают не сразу, это решает Хранитель.
+    /// </summary>
+    public static bool Spend(Finances finances, decimal amount)
+    {
+        if (amount <= 0 || finances.Cash is not { } cash || amount > cash)
+            return false;
+
+        finances.Cash = cash - amount;
+        return true;
+    }
+
     /// <summary>Целые суммы без копеек, полдоллара нищего — с ними.</summary>
     public static string Format(decimal value) => value == decimal.Truncate(value)
         ? ((long)value).ToString(CultureInfo.InvariantCulture)

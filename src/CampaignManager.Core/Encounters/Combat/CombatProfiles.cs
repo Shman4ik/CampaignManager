@@ -18,21 +18,21 @@ public static class CombatProfiles
 
     public const string BrawlDamage = "1D3";
 
+    /// <summary>Безоружная атака — есть у каждого листа: Ближний бой (драка), 1D3 + полный БкУ (стр. 66).</summary>
+    public static CombatAttack Unarmed(int skill) => new()
+    {
+        Key = BrawlKey,
+        Name = "Драка (без оружия)",
+        Skill = skill,
+        Damage = BrawlDamage,
+        Kind = CombatAttackKind.Melee,
+        DamageBonus = CreatureDamageBonusMode.Full,
+    };
+
     public static CombatProfile FromSheet(CharacterSheet sheet, SkillCatalog catalog)
     {
         var brawl = sheet.Value(catalog, SkillCodes.Fighting + ".brawl");
-        List<CombatAttack> attacks =
-        [
-            new()
-            {
-                Key = BrawlKey,
-                Name = "Драка (без оружия)",
-                Skill = brawl,
-                Damage = BrawlDamage,
-                Kind = CombatAttackKind.Melee,
-                DamageBonus = CreatureDamageBonusMode.Full,
-            },
-        ];
+        List<CombatAttack> attacks = [Unarmed(brawl)];
 
         foreach (var weapon in sheet.Weapons)
         {

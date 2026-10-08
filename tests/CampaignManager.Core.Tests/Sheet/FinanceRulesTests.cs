@@ -108,4 +108,27 @@ public sealed class FinanceRulesTests
         Assert.Equal((decimal)pocket, tier.PocketMoney);
         Assert.Equal(assetsAreMinimum, tier.AssetsAreMinimum);
     }
+
+    [Theory]
+    [Trait("page", "93")]
+    [InlineData(30, 12, true, 18)]
+    [InlineData(30, 30, true, 0)]
+    [InlineData(30, 31, false, 30)]
+    [InlineData(30, 0, false, 30)]
+    public void Spend_TakesFromCash_NotMoreThanThereIs(int cash, int amount, bool spent, int left)
+    {
+        var finances = new Finances { Cash = cash };
+
+        Assert.Equal(spent, FinanceRules.Spend(finances, amount));
+        Assert.Equal(left, finances.Cash);
+    }
+
+    [Fact]
+    public void Spend_WithoutCash_ChangesNothing()
+    {
+        var finances = new Finances();
+
+        Assert.False(FinanceRules.Spend(finances, 5));
+        Assert.Null(finances.Cash);
+    }
 }

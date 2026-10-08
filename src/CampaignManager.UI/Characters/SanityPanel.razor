@@ -201,17 +201,19 @@
     /// <summary>Новый день стирает оба счётчика потерь — спрашиваем с итогом, а не молча.</summary>
     private async Task NewDayAsync()
     {
-        var condition = Sheet.Condition;
-        var confirmed = await Dialogs.ConfirmAsync(new ConfirmRequest("Начать новый игровой день?",
+        if (await Dialogs.ConfirmAsync(NewDayRequest(Sheet.Condition)))
+            Do(() => SanityRules.StartNewDay(Sheet));
+    }
+
+    /// <summary>Вопрос «Новый день» — один на «Лист» и плитку Рассудка в «Игре».</summary>
+    internal static ConfirmRequest NewDayRequest(SheetCondition condition) =>
+        new("Начать новый игровой день?",
             $"Счётчики потерь обнулятся: за день {condition.SanityLostToday} → 0, по последней причине {condition.LastSanityLoss} → 0.")
         {
             ConfirmText = "Начать новый день",
             ConfirmVariant = ButtonVariant.Primary,
             Details = "Сам Рассудок не меняется.",
-        });
-        if (confirmed)
-            Do(() => SanityRules.StartNewDay(Sheet));
-    }
+        };
 
     private void SetTemporary(bool value) => Do(() => SanityRules.SetTemporaryInsanity(Sheet, value));
 

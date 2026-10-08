@@ -13,8 +13,11 @@
    Оружие без навыка (Булавка) не остаётся без броска (g2 1.11): проверка идёт по «Ближний бой (драка)», навык назван в строке.
    Первая строка — «Драка (без оружия)», 1d3 + бонус к урону (стр. 66): эта атака есть у каждого листа, как в бою
    (CombatProfiles); без неё у НПС без оружия колонка «Игры» оставалась пустой, а драться ему нечем (владелец 2026-10-04).
-   Строка оружия «Драка…» с навыком драки — та же атака: тогда отдельной строки нет. *@
+   Строка оружия «Драка…» с навыком драки — та же атака: тогда отдельной строки нет.
+   Урон — с бонусом к урону сыщика, как его бросит бой (CombatProfiles.DamageWithBonus): «1d3 + 1d4», а не «1d3 + бонус к
+   урону», значение которого пришлось бы искать в полосе характеристик. *@
 @{
+    var damageBonus = DerivedAttributeRules.Compute(Sheet, Context.Catalog).DamageBonus;
     var brawl = Context.Catalog.FindByCode(BrawlCode);
     var unarmed = brawl is not null && !Sheet.Weapons.Any(w => CombatProfiles.IsBrawlDuplicate(w, Context.Catalog))
         ? CheckSubjects.CatalogSkill(Sheet, Context.Catalog, brawl.Id)
@@ -29,7 +32,7 @@
             <div class="play-row" data-testid="play-weapon-unarmed">
                 <div class="play-row-main">
                     <div class="play-row-name">Драка (без оружия)</div>
-                    <div class="play-row-meta"><DiceText Value="@UnarmedDamage" /></div>
+                    <div class="play-row-meta"><DiceText Value="@CombatProfiles.DamageWithBonus(CombatProfiles.Unarmed(unarmed.Value), damageBonus)" /></div>
                 </div>
                 <button type="button" class="play-roll" aria-label="@($"Проверка: {unarmed.Name}, {unarmed.Value}")" data-testid="play-weapon-unarmed-check"
                         @onclick="() => Context.Check(SkillKey(unarmedId))">
@@ -45,7 +48,7 @@
                 <div class="play-row-main">
                     <div class="play-row-name">@weapon.Name</div>
                     <div class="play-row-meta">
-                        <DiceText Value="@weapon.Damage" />
+                        <DiceText Value="@Damage(weapon, damageBonus)" />
                         @foreach (var part in Details(weapon))
                         {
                             <span> · @part</span>
@@ -92,7 +95,9 @@
 
     private const string BrawlCode = "skill.fighting.brawl";
 
-    private const string UnarmedDamage = CombatProfiles.BrawlDamage + "+БкУ";
+    /// <summary>Пустой урон остаётся тире (DiceText), а не превращается в урон драки.</summary>
+    private string Damage(SheetWeapon weapon, string damageBonus) =>
+        string.IsNullOrWhiteSpace(weapon.Damage) ? "" : CombatProfiles.DamageWithBonus(CombatProfiles.FromWeapon(weapon, Sheet, Context.Catalog), damageBonus);
 
     /// <summary>Что из книги заполнено — подписями и с единицами: числа без подписи за столом не читаются.</summary>
     internal static IEnumerable<string> Details(SheetWeapon weapon)
