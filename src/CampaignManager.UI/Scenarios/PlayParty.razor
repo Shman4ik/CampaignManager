@@ -1,0 +1,152 @@
+@using CampaignManager.Core.Characters
+@using CampaignManager.Core.Checks
+@using CampaignManager.UI.Characters
+@using CampaignManager.UI.Platform
+@inject BrowserStorage Storage
+
+@* Сыщики партии в режиме игры (гл. 10: Хранитель держит в голове, кто ранен и кто на грани). Свёрнуто — одна строка: имена, а
+   у кого беда — состояние словом; так локация с проверками не уезжает вниз (в ландшафте под шапкой ~620px). Раскрыто — строка на
+   сыщика: ПЗ, Рассудок, ПМ, Удача, отметки (имя — ссылка на лист в новой вкладке), и проверка Идеи (стр. 197–198): Хранитель
+   выбирает, как подавал пропущенную зацепку, бросает сыщик с наибольшим ИНТ (IdeaCheck). Листы — снимок на момент загрузки
+   («Обновить» перечитывает; живые обновления — M3). Раскрыт ли блок — помнит браузер (cm.play-party-open). *@
+<section class="cm-play-party" aria-label="Сыщики партии" data-testid="play-party">
+    <div class="cm-play-party-head">
+        <button type="button" class="cm-play-party-toggle" aria-expanded="@(_open ? "true" : "false")" data-testid="play-party-toggle" @onclick="ToggleAsync">
+            <i class="fa-solid @(_open ? "fa-chevron-down" : "fa-chevron-right") w-3 shrink-0 text-xs text-primary-500" aria-hidden="true"></i>
+            <span class="font-medium text-primary-800">Сыщики</span>
+            @if (!_open)
+            {
+                <span class="cm-play-party-summary" data-testid="play-party-summary">
+                    @for (var i = 0; i < Party.Count; i++)
+                    {
+                        var member = Party[i];
+                        var trouble = States(member.Sheet).FirstOrDefault();
+                        if (i > 0)
+                        {
+                            <span class="text-primary-400" aria-hidden="true"> · </span>
+                        }
+                        @* Переносится между сыщиками (у « · » пробелы), а не посреди имени. *@
+                        <span class="whitespace-nowrap">@member.Name@if (trouble.Text is { } text)
+                            {
+                                <span class="@(trouble.Danger ? "text-error-700" : "text-secondary-700")"> — @text.ToLowerInvariant()</span>
+                            }</span>
+                    }
+                </span>
+            }
+        </button>
+        @if (_open)
+        {
+            @* Листы — снимок на загрузку: игрок мог поправить свой лист с телефона. *@
+            <button type="button" class="cm-link-btn shrink-0 text-sm" data-testid="play-party-refresh" @onclick="OnRefresh">
+                <i class="fa-solid fa-rotate mr-1" aria-hidden="true"></i>Обновить
+            </button>
+        }
+    </div>
+
+    @if (_open)
+    {
+        <ul class="cm-play-party-list" data-testid="play-party-list">
+            @foreach (var member in Party)
+            {
+                var derived = DerivedAttributeRules.Compute(member.Sheet, Catalog);
+                var current = member.Sheet.Current;
+                <li class="cm-play-party-row" @key="member.Id" data-testid="play-party-member">
+                    <a class="cm-play-party-name" href="@($"character/{member.Id}")" target="_blank" rel="noopener">@member.Name</a>
+                    <span class="cm-play-party-stats">
+                        <span>ПЗ <strong class="@(Low(current.HitPoints, derived.MaxHitPoints) ? "text-error-700" : null)">@current.HitPoints</strong>/@derived.MaxHitPoints</span>
+                        <span>Рассудок <strong class="@(Low(current.Sanity, derived.MaxSanity) ? "text-error-700" : null)">@current.Sanity</strong>/@derived.MaxSanity</span>
+                        <span>ПМ <strong>@current.MagicPoints</strong>/@derived.MaxMagicPoints</span>
+                        <span>Удача <strong>@current.Luck</strong></span>
+                    </span>
+                    @if (States(member.Sheet) is { Count: > 0 } states)
+                    {
+                        <span class="cm-play-party-states">
+                            @foreach (var (text, danger) in states)
+                            {
+                                <Badge Tone="@(danger ? Tone.Error : Tone.Warning)">@text</Badge>
+                            }
+                        </span>
+                    }
+                </li>
+            }
+        </ul>
+
+        <div class="cm-play-party-idea" data-testid="play-idea">
+            <p class="text-sm text-primary-700">
+                <span class="font-semibold">Проверка Идеи</span>
+                @if (IdeaCheck.Roller(Party, m => m.Sheet) is { } roller)
+                {
+                    <span> — бросает @roller.Name, ИНТ @roller.Sheet.Characteristics.Int</span>
+                }
+            </p>
+            <div class="flex flex-wrap items-center gap-2">
+                <Segmented TValue="IdeaClue" Options="Clues" Value="_clue" ValueChanged="v => _clue = v" Label="Пропущенную зацепку" />
+                <Button Variant="ButtonVariant.Secondary" Icon="fa-lightbulb" data-testid="play-idea-check" OnClick="() => OnIdea.InvokeAsync(_clue)">
+                    Проверить · @CheckRules.DifficultyLabel(IdeaCheck.DifficultyOf(_clue)).ToLowerInvariant()
+                </Button>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private const string OpenKey = "cm.play-party-open";
+
+    private bool _open;
+    private IdeaClue _clue = IdeaClue.Mentioned;
+
+    private static readonly IReadOnlyList<SegmentOption<IdeaClue>> Clues =
+    [
+        new(IdeaClue.NotMentioned, "Не упоминали"),
+        new(IdeaClue.Mentioned, "Упоминали"),
+        new(IdeaClue.Emphasized, "Подчёркивали"),
+    ];
+
+    [Parameter, EditorRequired] public IReadOnlyList<CheckInvestigator> Party { get; set; } = [];
+
+    [Parameter, EditorRequired] public SkillCatalog Catalog { get; set; } = null!;
+
+    /// <summary>Проверка Идеи — открыть окно проверки ИНТ со сложностью по зацепке.</summary>
+    [Parameter] public EventCallback<IdeaClue> OnIdea { get; set; }
+
+    /// <summary>Перечитать листы сыщиков.</summary>
+    [Parameter] public EventCallback OnRefresh { get; set; }
+
+    protected override async Task OnInitializedAsync() => _open = await Storage.GetAsync(OpenKey) == "1";
+
+    private async Task ToggleAsync()
+    {
+        _open = !_open;
+        if (_open)
+            await Storage.SetAsync(OpenKey, "1");
+        else
+            await Storage.RemoveAsync(OpenKey);
+    }
+
+    /// <summary>ПЗ и Рассудок на четверти и ниже — красным, как в плитках «Игры» листа.</summary>
+    private static bool Low(int value, int max) => StatBar.Percent(value, max) <= 25;
+
+    /// <summary>Что с сыщиком не так — от худшего: смерть и тело (опасно), затем безумие.</summary>
+    private List<(string Text, bool Danger)> States(CharacterSheet sheet)
+    {
+        var condition = sheet.Condition;
+        List<(string, bool)> states = [];
+        foreach (var flag in ConditionFlags.Body.Where(f => f.Key != "stabilized" && f.Get(condition)).Reverse())
+            states.Add((flag.Label, true));
+        if (condition.Dead)
+            return [states[0]];
+
+        var sanity = SanityRules.Status(sheet, Catalog);
+        if (sanity.PermanentlyInsane)
+            states.Add(("Неизлечимо безумен", true));
+        else
+        {
+            if (condition.TemporaryInsanity)
+                states.Add(("Временное безумие", false));
+            if (condition.IndefiniteInsanity)
+                states.Add(("Бессрочное безумие", false));
+        }
+
+        return states;
+    }
+}

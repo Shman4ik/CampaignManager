@@ -115,6 +115,33 @@ public sealed class ScenarioPlayTests : KitContext
         Assert.Empty(cut.FindAll("[data-testid=check-details]"));
     }
 
+    /// <summary>
+    /// Сыщики партии (гл. 10): свёрнуто — строка имён; раскрыто — строка на сыщика и проверка Идеи (стр. 197–198): подача
+    /// зацепки задаёт сложность, бросает сыщик с наибольшим ИНТ, после броска — что значит исход.
+    /// </summary>
+    [Fact]
+    public void Party_shows_investigators_and_runs_an_idea_check()
+    {
+        var cut = Play(HouseId);
+        cut.WaitForAssertion(() => Assert.Contains("Нора Флинн", cut.Find("[data-testid=play-party-summary]").TextContent));
+        Assert.Empty(cut.FindAll("[data-testid=play-party-list]"));
+
+        cut.Find("[data-testid=play-party-toggle]").Click();
+        Assert.Equal(2, cut.FindAll("[data-testid=play-party-member]").Count);
+        Assert.Contains("бросает Харви Уолтерс", cut.Find("[data-testid=play-idea]").TextContent);
+
+        cut.FindAll("[data-testid=play-idea] button.cm-segment").Single(b => b.TextContent.Trim() == "Подчёркивали").Click();
+        cut.Find("[data-testid=play-idea-check]").Click();
+
+        var dialog = cut.Find("[data-testid=skill-check-modal]");
+        Assert.Contains("Проверка Идеи", dialog.TextContent);
+        Assert.Equal("true", cut.Find("[data-testid=check-difficulty-Extreme]").GetAttribute("aria-checked"));
+        Assert.Contains("Харви Уолтерс", cut.Find("[data-testid=check-subject] option[selected]").TextContent);
+
+        cut.Find("[data-testid=check-roll-first] input").Change("90");
+        Assert.Contains("в гущу событий", cut.Find("[data-testid=idea-outcome]").TextContent);
+    }
+
     [Fact]
     public void Showcase_shows_what_players_see_and_never_keeper_notes()
     {
