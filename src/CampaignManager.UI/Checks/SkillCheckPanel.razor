@@ -186,6 +186,12 @@
     /// <summary>Цель по ключу <see cref="CheckSubject.Key"/>: <c>skill:{id}</c>, <c>char:STR</c>, <c>luck</c>.</summary>
     [Parameter] public string? InitialKey { get; set; }
 
+    /// <summary>
+    /// Порог осечки оружия, из которого стреляют (проверка открыта касанием оружия в «Игре»): бросок не ниже — осечка, Удачей
+    /// её не выкупить и отметки нет (стр. 97, 117). Относится только к цели <see cref="InitialKey"/>: другой навык — без осечки.
+    /// </summary>
+    [Parameter] public int? Malfunction { get; set; }
+
     /// <summary>Подпись цели для ручного ввода — «Внимание» из локации, если сыщик не выбран.</summary>
     [Parameter] public string? InitialName { get; set; }
 
@@ -272,6 +278,8 @@
         }
     }
 
+    private int? MalfunctionOf(CheckSubject subject) => subject.Key == InitialKey ? Malfunction : null;
+
     private CheckOutcome? FinalOutcome =>
         _second?.Outcome
         ?? (_luckSpent is { } spent ? new CheckOutcome(spent.ResultingRoll, spent.Level, true) : _first?.Outcome);
@@ -282,7 +290,7 @@
     /// </summary>
     private bool CanRaiseByLuck => CanChangeSheet
         && _first is { Outcome.Passed: true } first
-        && CheckRules.LuckBlockReason(_rolledSubject!, first.Outcome, isPushed: false) is null
+        && CheckRules.LuckBlockReason(_rolledSubject!, first.Outcome, isPushed: false, MalfunctionOf(_rolledSubject!)) is null
         && CheckRules.LuckOptions(first.Outcome, _rolledSubject!.Value, _difficulty, Sheet!.Current.Luck).Count > 0;
 
     private string LuckAfterText => CanChangeSheet ? $" Удача на листе — {Sheet!.Current.Luck}." : "";
@@ -388,6 +396,8 @@
     /// <summary>Пояснение к итогу. Обычный успех и провал уже сказаны значком уровня — повторять их нечего.</summary>
     private string? Verdict(CheckOutcome outcome) => outcome switch
     {
+        _ when _rolledSubject is { } rolled && MalfunctionOf(rolled) is { } jam && CheckRules.IsMalfunction(outcome.Roll, jam) =>
+            $"Осечка ({jam}–100): оружие не выстрелило.",
         { Level: SuccessLevel.Critical } => "Цель достигнута, и сверх того случается что-то хорошее.",
         { Level: SuccessLevel.Fumble } => "Хуже простого провала: последствия наступают сразу.",
         { Passed: true } => null,
@@ -456,7 +466,7 @@
         var outcome = _first!.Outcome;
         // Невозможное не рисуется (правило 8, g4 13.11): «пункты Удачи на проверку Удачи не тратят» и «Удачей не дотянуть» —
         // объяснение того, чего нельзя сделать, а не действие.
-        if (CheckRules.LuckBlockReason(subject, outcome, isPushed: false) is not null)
+        if (CheckRules.LuckBlockReason(subject, outcome, isPushed: false, MalfunctionOf(subject)) is not null)
             return;
 
         var luck = CurrentSheet?.Current.Luck;
@@ -566,7 +576,8 @@
             return;
         }
 
-        var reason = CheckRules.MarkBlockReason(subject, _netDice, _luckSpent is not null);
+        var reason = CheckRules.MarkBlockReason(subject, _netDice, _luckSpent is not null,
+            _first is { } rolled && CheckRules.IsMalfunction(rolled.Outcome.Roll, MalfunctionOf(subject)));
         <div class="mt-4" data-testid="check-mark">
             <h3 class="mb-2 text-sm font-semibold text-primary-700">Отметка для фазы развития</h3>
             @if (reason is not null)
