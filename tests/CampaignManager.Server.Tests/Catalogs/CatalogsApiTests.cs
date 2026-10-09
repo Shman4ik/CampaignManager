@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Files;
+using CampaignManager.Contracts.Identity;
 using CampaignManager.Contracts.Platform;
 using CampaignManager.Core;
 using CampaignManager.Core.Admin;
@@ -208,6 +209,85 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         updated.Images = [new CatalogImageDto(Guid.NewGuid(), null, null)];
         var missing = await Assert.ThrowsAsync<ApiException>(() => app.Weapons().UpdateAsync(updated, Cancellation));
         Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+    }
+
+    private async Task<Guid[]> FilesAsync(int count)
+    {
+        await using var db = app.Database.CreateContext();
+        var files = Enumerable.Range(0, count).Select(_ => new StoredFile { ExternalUrl = $"https://example.test/{Guid.NewGuid():N}.webp" }).ToArray();
+        db.Files.AddRange(files);
+        await db.SaveChangesAsync(Cancellation);
+        return [.. files.Select(f => f.Id)];
+    }
+
+    // Картинки пачкой: обложка ставится одним PUT …/cover, без формы и If-Match; есть — только с «заменить».
+    [Fact]
+    public async Task Item_cover_is_set_once_and_replaced_only_on_request()
+    {
+        TestDatabase.SkipIfMissing();
+        var files = await FilesAsync(2);
+        var item = await app.Items().CreateAsync(new ItemDto { Name = Unique("Замок") }, Cancellation);
+
+        var covered = await app.Items().SetCoverAsync(item.Id, files[0], replace: false, Cancellation);
+        Assert.Equal(files[0], covered.ImageFileId);
+        Assert.Equal(FilesRoutes.Content(files[0]), covered.ImageUrl);
+        Assert.NotEqual(item.Version, covered.Version); // открытая на другом устройстве форма получит 409, а не затрёт обложку
+
+        var taken = await Assert.ThrowsAsync<ApiException>(() => app.Items().SetCoverAsync(item.Id, files[1], replace: false, Cancellation));
+        Assert.Equal(HttpStatusCode.Conflict, taken.StatusCode);
+        Assert.Equal(ApiProblemCodes.Conflict, taken.Code);
+
+        var same = await app.Items().SetCoverAsync(item.Id, files[0], replace: false, Cancellation); // та же картинка — не отказ
+        Assert.Equal(covered.Version, same.Version);
+
+        var replaced = await app.Items().SetCoverAsync(item.Id, files[1], replace: true, Cancellation);
+        Assert.Equal(files[1], replaced.ImageFileId);
+
+        var missing = await Assert.ThrowsAsync<ApiException>(() => app.Items().SetCoverAsync(item.Id, Guid.NewGuid(), replace: true, Cancellation));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        var player = await Assert.ThrowsAsync<ApiException>(() => app.Items(app.Player).SetCoverAsync(item.Id, files[0], replace: true, Cancellation));
+        Assert.Equal(HttpStatusCode.Forbidden, player.StatusCode);
+    }
+
+    [Fact]
+    public async Task Cover_of_image_list_replaces_the_first_and_keeps_the_rest()
+    {
+        TestDatabase.SkipIfMissing();
+        var files = await FilesAsync(3);
+        var (side, drum, fresh) = (files[0], files[1], files[2]);
+        var bare = await app.Weapons().CreateAsync(Weapon(Unique("Кольт")), Cancellation);
+        Assert.Equal([side], (await app.Weapons().SetCoverAsync(bare.Id, side, replace: false, Cancellation)).Images.Select(i => i.FileId));
+
+        var weapon = Weapon(Unique("Томпсон"));
+        weapon.Images = [new CatalogImageDto(side, null, "Вид сбоку"), new CatalogImageDto(drum, null, "Барабан")];
+        var created = await app.Weapons().CreateAsync(weapon, Cancellation);
+
+        var replaced = await app.Weapons().SetCoverAsync(created.Id, fresh, replace: true, Cancellation);
+        Assert.Equal([fresh, drum], replaced.Images.Select(i => i.FileId));
+        Assert.Equal([null, "Барабан"], replaced.Images.Select(i => i.Caption)); // подпись ушла с прежней обложкой
+
+        // Обложкой — картинка, что стояла второй: в списке она не повторяется.
+        Assert.Equal([drum], (await app.Weapons().SetCoverAsync(created.Id, drum, replace: true, Cancellation)).Images.Select(i => i.FileId));
+    }
+
+    // Токен агента со scope catalogs:images находит запись по коду и ставит обложку; поля и справочники без картинок — 403.
+    [Fact]
+    public async Task Agent_with_catalog_images_scope_sets_covers_and_nothing_else()
+    {
+        TestDatabase.SkipIfMissing();
+        var file = (await FilesAsync(1))[0];
+        var item = await app.Items().CreateAsync(new ItemDto { Name = Unique("Фонарь") }, Cancellation);
+        var agent = app.CreateClient(anonymous: true).AsMachine("agents", app.Keeper.Email, MachineScopes.CatalogImages);
+        var items = new ApiClient.Catalogs.ItemsApiClient(agent);
+
+        Assert.Contains((await items.ListAsync(Cancellation)).Items, i => i.Id == item.Id);
+        Assert.Equal(file, (await items.SetCoverAsync(item.Id, file, replace: false, Cancellation)).ImageFileId);
+
+        var edit = await Assert.ThrowsAsync<ApiException>(() => items.UpdateAsync(item, Cancellation));
+        Assert.Equal(HttpStatusCode.Forbidden, edit.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await agent.GetAsync(CatalogsRoutes.Skills.Base, Cancellation)).StatusCode);
+        var filesOnly = app.CreateClient(anonymous: true).AsMachine("agents", app.Keeper.Email, MachineScopes.Files);
+        Assert.Equal(HttpStatusCode.Forbidden, (await filesOnly.GetAsync(CatalogsRoutes.Items.Base, Cancellation)).StatusCode);
     }
 
     [Fact]
