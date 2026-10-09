@@ -95,8 +95,12 @@
             @if (_canEdit)
             {
                 @* Импорт, экспорт и «С правилами» — редкие действия: одно «⋯», а не ряд из трёх кнопок (на телефоне он рвался). *@
-                <RowMenu AriaLabel="@(Sync ? "Ещё: импорт, экспорт, сверка с книгой правил" : "Ещё: импорт, экспорт")">
+                <RowMenu AriaLabel="@MenuLabel">
                     @MenuItems
+                    @if (CoverOf is not null)
+                    {
+                        <RowMenuItem Icon="fa-images" OnClick="() => _coversOpen = true">Загрузить картинки</RowMenuItem>
+                    }
                     <RowMenuItem Icon="fa-file-import" OnClick="() => _importOpen = true">Импорт</RowMenuItem>
                     <RowMenuItem Icon="fa-file-export" OnClick="ExportAsync">Экспорт</RowMenuItem>
                     @if (Sync)
@@ -216,6 +220,12 @@
     </Modal>
 }
 
+@if (CoverOf is not null)
+{
+    <CatalogImagesBulkModal TItem="TItem" Open="_coversOpen" Items="_items" CoverOf="CoverOf" OnSaved="ReplaceItem"
+                            OnClose="() => _coversOpen = false" />
+}
+
 <CatalogImportModal TItem="TItem" Open="_importOpen" Title="@($"Импорт: {Title.ToLowerInvariant()}")"
                     OnClose="() => _importOpen = false" OnImported="ReloadAsync" />
 
@@ -250,6 +260,7 @@
     private CatalogUsage? _formUsage; // отказ в удалении: держатели рисуются с жирными именами и ссылкой «ещё N» (S5)
     private bool _stale;
     private bool _importOpen;
+    private bool _coversOpen;
     private string? _initialJson;
     private UnsavedChangesGuard? _guard;
     private bool _syncing;
@@ -323,6 +334,12 @@
 
     /// <summary>Кнопка шапки рядом с «Добавить» (фонотека — «Загрузить файлы»).</summary>
     [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>
+    /// Обложка записи (адрес) — у справочника с картинками: в «⋯» появляется «Загрузить картинки» (пачка рисунков, файл → запись
+    /// по коду или названию, <see cref="CatalogImagesBulkModal{TItem}"/>).
+    /// </summary>
+    [Parameter] public Func<TItem, string?>? CoverOf { get; set; }
 
     /// <summary>Свои пункты в меню «⋯» панели фильтров, перед «Импорт» и «Экспорт» (фонотека — «Настроения плеера»).</summary>
     [Parameter] public RenderFragment? MenuItems { get; set; }
@@ -479,6 +496,16 @@
         return list;
     }
 
+    /// <summary>Запись сохранили мимо формы (обложка из пачки картинок) — заменить её в списке, не перечитывая весь.</summary>
+    private void ReplaceItem(TItem saved)
+    {
+        var index = _items.FindIndex(i => i.Id == saved.Id);
+        if (index >= 0)
+        {
+            _items[index] = saved;
+        }
+    }
+
     /// <summary>Перечитать список (после того, что страница записала мимо формы: пачка файлов).</summary>
     public Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
 
@@ -578,6 +605,8 @@
     private bool HasFilters => _search.Length > 0 || _filters.Count > 0 || _toggles.Count > 0 || _era is not null;
 
     private string ColumnsKey => $"{_era}|{string.Join(",", _filters.OrderBy(f => f.Key).Select(f => $"{f.Key}={f.Value}"))}";
+
+    private string MenuLabel => "Ещё: " + string.Join(", ", new[] { CoverOf is null ? null : "картинки", "импорт", "экспорт", Sync ? "сверка с книгой правил" : null }.OfType<string>());
 
     private bool HasExtraFilters => Filters.Count > 0 || Toggles.Count > 0 || Sorts.Count > 1 || ErasVary || _era is not null;
 

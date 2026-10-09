@@ -38,7 +38,7 @@ public sealed class CatalogPageTests : KitContext
         Assert.DoesNotContain("Добавить предмет", page.Markup, StringComparison.Ordinal);
         Assert.Empty(page.FindAll("[aria-label^='Изменить:']"));
         Assert.Empty(page.FindAll("[aria-label^='Удалить:']"));
-        Assert.Empty(page.FindAll("[aria-label^='Ещё: импорт']"));
+        Assert.Empty(page.FindAll("[aria-label^='Ещё:']"));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class CatalogPageTests : KitContext
         page.WaitForAssertion(() => Assert.Contains("Добавить предмет", page.Markup, StringComparison.Ordinal));
         Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']"));
         // Импорт, экспорт и «С правилами» — в одном меню «⋯», а не рядом кнопок
-        page.Find("[aria-label^='Ещё: импорт']").Click();
+        page.Find("[aria-label^='Ещё:']").Click();
         Assert.Contains("Импорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
         Assert.Contains("Экспорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
     }
