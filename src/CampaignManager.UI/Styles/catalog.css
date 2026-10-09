@@ -1,0 +1,331 @@
+/* Иллюстрации справочников — одна система на восемь справочников (выбор владельца 2026-10-09: «галерея везде», плитка бестиария
+   как у всех, профессии — карточкой артефактов). До неё у каждого справочника были свои размеры: миниатюры 32×40, 40×27, 72×48,
+   72×90, 112×140, плитки 1:1 с именем поверх и 3:2 с подписью, картинка раскрытия на 14, 18, 20, 24rem и 40%.
+
+   Две рамки по тому, как нарисованы гравюры: 4:5 (cm-art-portrait — существа, люди, страницы: навыки, профессии, заклинания,
+   книги, бестиарий, артефакты) и 3:2 (cm-art-landscape — вещи: оружие, предметы). Части:
+   • миниатюра в таблице и карточке телефона (cm-thumb) — одной высоты 40px (56px в карточке телефона);
+   • плитка галереи (cm-tile) — рисунок, под ним название и строки сведений; «Изменить» — в шапке раскрытой записи;
+   • карточка «обложка слева» (cm-wide) — профессии и артефакты: в карточке правило или навыки, а не одна строка;
+   • раскрытая запись (cm-record) — во всю ширину сетки: картинка слева одной ширины на рамку, сведения справа.
+   Раскладку собирает CatalogPage; знание — Catalogs/CLAUDE.md, «Иллюстрации». Классы здесь, а не в *.razor.css: разметку
+   плитки рисует CatalogPage, а строки сведений в ней — страница справочника, изолированный CSS до них не достаёт. */
+@layer components {
+  /* Рамка: тёплый фон под гравюру (пока она грузится) и под заглушку с иконкой справочника; радиус один на всё. */
+  .cm-art {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background: var(--color-secondary-100);
+    color: var(--color-secondary-400);
+  }
+
+  .cm-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cm-art-portrait {
+    aspect-ratio: 4 / 5;
+  }
+
+  .cm-art-landscape {
+    aspect-ratio: 3 / 2;
+  }
+
+  /* Миниатюра у названия в таблице — высотой 40px при любой рамке (32×40 и 60×40): строки таблиц одной высоты. */
+  .cm-thumb {
+    flex-shrink: 0;
+    height: 2.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  /* В карточке телефона — 56px (45×56 и 84×56): там миниатюра — единственный рисунок до раскрытия. */
+  .cm-thumb-lg {
+    height: 3.5rem;
+    font-size: 1.125rem;
+  }
+
+  /* Поля «бумаги» портретной гравюры в миниатюре срезаны увеличением: иначе сюжет в 32×40 не разглядеть. Вещь 3:2 занимает
+     рисунок почти во всю ширину — её не режем. */
+  .cm-thumb.cm-art-portrait img {
+    transform: scale(1.3);
+  }
+
+  /* ── Галерея ──
+     Плитки одного размера в портрете и альбоме: 4:5 — четыре колонки в портрете iPad (~164px), шесть в альбоме (колонка ~1064px);
+     3:2 — четыре и пять (~200px). На телефоне — две. dense — плитки после раскрытой записи заполняют дыру в её ряду. */
+  .cm-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row dense;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 768px) {
+    .cm-tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .cm-tiles-portrait {
+      grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    }
+
+    .cm-tiles-landscape {
+      grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    }
+  }
+
+  .cm-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Вся плитка — кнопка раскрытия (X7). */
+  .cm-tile-button {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    text-align: left;
+  }
+
+  .cm-tile-media {
+    position: relative;
+    width: 100%;
+    border-radius: 0;
+    font-size: 2rem;
+  }
+
+  /* Название не обрезается (правило 17); сведения — 13px, строкой каждое. */
+  .cm-tile-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.5rem 0.75rem 0.625rem;
+  }
+
+  .cm-tile-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-primary-800);
+    overflow-wrap: break-word;
+  }
+
+  .cm-tile-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--color-primary-600);
+  }
+
+  .cm-tile-meta:empty {
+    display: none;
+  }
+
+  /* Картинок у записи несколько — счётчик в углу рисунка. */
+  .cm-tile-count {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    border-radius: 9999px;
+    background: rgb(0 0 0 / 0.55);
+    padding: 0.125rem 0.5rem;
+    font-size: 0.8125rem;
+    color: var(--color-white);
+  }
+
+  /* ── Карточки «обложка слева» (профессии, артефакты) ──
+     Одна колонка на телефоне и в портрете (в две по ~340px правило и навыки переносились на четыре-пять строк), две с lg. */
+  .cm-wide-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row dense;
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 1024px) {
+    .cm-wide-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+  }
+
+  /* Поле 16px — как у панели фильтров: обложка на одной линии с полем поиска. */
+  .cm-wide {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.875rem;
+    padding: 1rem;
+  }
+
+  /* Обложка 4:5: 72px на телефоне, 88 в портрете, 112 в альбоме. */
+  .cm-wide-cover {
+    width: 4.5rem;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .cm-wide-cover {
+      width: 5.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .cm-wide-cover {
+      width: 7rem;
+    }
+  }
+
+  .cm-wide-text {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+
+  /* Справа в строке названия — место под «Изменить» (32px в углу карточки). */
+  .cm-wide-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .cm-wide-editable .cm-wide-head {
+    padding-right: 2.5rem;
+  }
+
+  /* Раскрывает касание в любом месте карточки (X7): ::after кнопки-названия растянут на всю карточку. Свою кнопку внутри
+     (расшифровка «ОБР» по касанию, ссылка) поднимает z-index — вложить кнопку в кнопку нельзя. */
+  .cm-wide-toggle {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 0%;
+    align-items: flex-start;
+    gap: 0.5rem;
+    text-align: left;
+  }
+
+  .cm-wide-toggle::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .cm-wide .cm-pop-trigger,
+  .cm-wide a {
+    position: relative;
+    z-index: 1;
+  }
+
+  .cm-wide-edit {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    z-index: 1;
+  }
+
+  /* ── Раскрытая запись ──
+     Во всю ширину сетки (своим рядом, dense подтягивает соседей); в таблице — то же тело в раскрытой строке. Картинка слева
+     одной ширины на рамку, сведения справа; на телефоне картинка сверху. */
+  .cm-record {
+    grid-column: 1 / -1;
+  }
+
+  .cm-record-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .cm-record-text {
+    min-width: 0;
+    flex: 1 1 0%;
+  }
+
+  @media (min-width: 768px) {
+    .cm-record-body {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 1.5rem;
+    }
+  }
+
+  /* Хранителю на телефоне первым нужен статблок, а не картинка на весь экран (бестиарий, B5). */
+  @media (max-width: 767px) {
+    .cm-record-details-first .cm-figure {
+      order: 1;
+    }
+  }
+
+  /* Картинка раскрытой записи: 4:5 — 14rem на телефоне и в портрете, 18rem в альбоме (288×360 укладывается под шапку, фильтры
+     и шапку карточки в 620px); 3:2 — до 24rem на телефоне, 20rem в портрете, 26rem в альбоме. Место под картинку занято сразу:
+     сведения не съезжают, когда она догрузится; чужие пропорции (загруженная руками картинка) вписываются целиком. */
+  .cm-figure {
+    width: 100%;
+    align-self: center;
+  }
+
+  .cm-figure-portrait {
+    max-width: 14rem;
+  }
+
+  .cm-figure-landscape {
+    max-width: 24rem;
+  }
+
+  @media (min-width: 768px) {
+    .cm-figure {
+      flex-shrink: 0;
+      align-self: flex-start;
+    }
+
+    .cm-figure-portrait {
+      width: 14rem;
+    }
+
+    .cm-figure-landscape {
+      width: 20rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .cm-figure-portrait {
+      width: 18rem;
+      max-width: 18rem;
+    }
+
+    .cm-figure-landscape {
+      width: 26rem;
+      max-width: 26rem;
+    }
+  }
+
+  .cm-figure-image {
+    display: block;
+    width: 100%;
+    border-radius: 0.375rem;
+    background: var(--color-secondary-100);
+    object-fit: contain;
+  }
+
+  .cm-figure-portrait .cm-figure-image {
+    aspect-ratio: 4 / 5;
+  }
+
+  .cm-figure-landscape .cm-figure-image {
+    aspect-ratio: 3 / 2;
+  }
+}

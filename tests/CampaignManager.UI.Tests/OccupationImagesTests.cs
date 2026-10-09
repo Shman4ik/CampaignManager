@@ -40,24 +40,24 @@ public sealed class OccupationImagesTests : KitContext
         page.WaitForAssertion(() => Assert.Contains("Охотник на ведьм", page.Markup, StringComparison.Ordinal));
         var thumbs = page.FindAll("img[src*='/api/v1/files/']").Select(i => i.GetAttribute("src")).Distinct().ToList();
         Assert.Equal([$"/api/v1/files/{Cover}?w=240"], thumbs);
-        Assert.Single(page.FindAll(".oc-cover-empty"));
+        // Обложка у каждой карточки: без картинок — заглушка того же места.
+        Assert.Equal(2, page.FindAll(".cm-wide-cover").Count);
+        Assert.NotNull(page.FindAll(".cm-wide").Single(c => c.TextContent.Contains("Охотник", StringComparison.Ordinal))
+            .QuerySelector(".cm-wide-cover .fa-user-tie"));
         Assert.Empty(page.FindAll("figure")); // свёрнутые карточки галерею не рисуют
-        // Без картинок раскрывать нечего — у такой профессии название не кнопка.
-        Assert.Single(page.FindAll("button[aria-expanded]"), b => b.TextContent.Contains("Антиквар", StringComparison.Ordinal));
-        Assert.DoesNotContain(page.FindAll("button[aria-expanded]"), b => b.TextContent.Contains("Охотник", StringComparison.Ordinal));
     }
 
     [Fact]
     public void Tapping_cover_opens_gallery_and_thumbnails_switch_image()
     {
         var page = Render<OccupationsPage>();
-        page.WaitForAssertion(() => Assert.NotNull(page.Find("button.oc-cover")));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".cm-wide-toggle")));
 
-        page.Find("button.oc-cover").Click();
+        page.FindAll(".cm-wide-toggle").Single(b => b.TextContent.Contains("Антиквар", StringComparison.Ordinal)).Click();
 
         page.WaitForAssertion(() => Assert.NotNull(page.Find("figure > img")));
         Assert.Equal($"/api/v1/files/{Cover}", page.Find("figure > img").GetAttribute("src"));
-        Assert.Contains("col-span-full", page.Find($"#occupation-{_antiquarian.Id}").ClassName, StringComparison.Ordinal);
+        Assert.Contains("cm-record", page.Find($"#record-{_antiquarian.Id}").ClassName, StringComparison.Ordinal);
         Assert.Contains($"open={_antiquarian.Id}", Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri, StringComparison.Ordinal);
 
         page.Find("button[aria-label='Картинка 2']").Click();

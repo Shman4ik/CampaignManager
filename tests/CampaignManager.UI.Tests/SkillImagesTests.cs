@@ -63,29 +63,47 @@ public sealed class SkillImagesTests : KitContext
         Services.AddSingleton<ICatalogApi<SkillDto>>(new FakeCatalog(canEdit, [Fighting, Brawl, Sword, Accounting]));
 
     [Fact]
-    public void Row_shows_own_thumbnail_and_skill_without_one_gets_placeholder()
+    public void Gallery_groups_tiles_by_category_with_own_cover_or_placeholder()
     {
         UseCatalog();
 
         var page = Render<SkillsPage>();
 
         page.WaitForAssertion(() => Assert.Contains("Бухгалтерское дело", page.Markup, StringComparison.Ordinal));
-        var thumbs = page.FindAll("img[src*='/api/v1/files/']").Select(i => i.GetAttribute("src")).Distinct().Order().ToList();
-        Assert.Equal(new[] { $"/api/v1/files/{FightingImage}?w=240", $"/api/v1/files/{BrawlImage}?w=240" }.Order(), thumbs);
-        Assert.NotEmpty(page.FindAll("td .fa-brain, .cm-card .fa-brain")); // меч и бухгалтерия — заглушка того же места
+        Assert.Empty(page.FindAll("table"));
+        Assert.Equal(2, page.FindAll("section h2").Count); // «Знания» и «Сражение (общее)»
+        var covers = page.FindAll(".cm-tile-media img").Select(i => i.GetAttribute("src")).Order().ToList();
+        Assert.Equal(new[] { $"/api/v1/files/{FightingImage}?w=480", $"/api/v1/files/{BrawlImage}?w=480" }.Order(), covers);
+        Assert.Equal(2, page.FindAll(".cm-tile-media .fa-brain").Count); // меч и бухгалтерия — заглушка того же места
     }
 
     [Fact]
-    public void Open_row_shows_illustration_next_to_description()
+    public void Table_row_shows_own_thumbnail_and_skill_without_one_gets_placeholder()
     {
         UseCatalog();
-        Services.GetRequiredService<NavigationManager>().NavigateTo($"skills?open={Brawl.Id}");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("skills?view=table");
 
         var page = Render<SkillsPage>();
 
-        // Таблица и карточки телефона рисуются обе (выбирает CSS) — раскрытие есть в каждой.
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("[data-testid=skill-image]")));
-        Assert.All(page.FindAll("[data-testid=skill-image]"), i => Assert.Equal($"/api/v1/files/{BrawlImage}?w=480", i.GetAttribute("src")));
+        page.WaitForAssertion(() => Assert.Contains("Бухгалтерское дело", page.Markup, StringComparison.Ordinal));
+        var thumbs = page.FindAll("img[src*='/api/v1/files/']").Select(i => i.GetAttribute("src")).Distinct().Order().ToList();
+        Assert.Equal(new[] { $"/api/v1/files/{FightingImage}?w=240", $"/api/v1/files/{BrawlImage}?w=240" }.Order(), thumbs);
+        Assert.NotEmpty(page.FindAll(".cm-thumb .fa-brain"));
+    }
+
+    [Fact]
+    public void Open_skill_shows_illustration_left_of_details_and_specialization_falls_back_to_parent()
+    {
+        UseCatalog();
+        Services.GetRequiredService<NavigationManager>().NavigateTo($"skills?open={Sword.Id}");
+
+        var page = Render<SkillsPage>();
+
+        // Картинку рисует каркас раскрытой записи слева; своей у SkillDetails в справочнике нет.
+        page.WaitForAssertion(() => Assert.NotNull(page.Find(".cm-record figure > img")));
+        Assert.Equal($"/api/v1/files/{FightingImage}", page.Find(".cm-record figure > img").GetAttribute("src"));
+        Assert.Empty(page.FindAll("[data-testid=skill-image]"));
+        Assert.Contains("Клинок длиннее 60 см.", page.Find(".cm-record").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -8,8 +8,8 @@ using Xunit;
 namespace CampaignManager.UI.Tests;
 
 /// <summary>
-/// Предметы — галерея по умолчанию (выбор владельца 2026-10-09): карточки с рисунком группами по типу в алфавитном порядке, без
-/// типа — последней группой; касание раскрывает карточку с рисунком целиком; таблица — по переключателю, вид в адресе.
+/// Предметы — галерея общей системы справочников (выбор владельца 2026-10-09): плитки с рисунком группами по типу в алфавитном
+/// порядке, без типа — последней группой; касание раскрывает запись с рисунком; таблица — по переключателю, вид в адресе.
 /// </summary>
 public sealed class ItemsPageTests : KitContext
 {
@@ -32,11 +32,11 @@ public sealed class ItemsPageTests : KitContext
 
         page.WaitForAssertion(() => Assert.Equal(3, page.FindAll("section h2").Count));
         Assert.Equal(["Боеприпасы · 2", "Транспорт · 1", "Без типа · 1"], page.FindAll("section h2").Select(h => h.TextContent.Trim()));
-        Assert.Equal($"/api/v1/files/{Picture}?w=480", page.Find(".it-card-media img").GetAttribute("src"));
+        Assert.Equal($"/api/v1/files/{Picture}?w=480", page.Find(".cm-tile-media img").GetAttribute("src"));
         // Без цены — прочерк, а не пустая строка; без картинки — заглушка того же места.
-        var candle = page.FindAll(".it-card").Single(c => c.TextContent.Contains("Свеча", StringComparison.Ordinal));
-        Assert.Contains("—", candle.QuerySelector(".it-card-price")!.TextContent, StringComparison.Ordinal);
-        Assert.NotNull(candle.QuerySelector(".it-card-media .fa-box"));
+        var candle = page.FindAll(".cm-tile").Single(c => c.TextContent.Contains("Свеча", StringComparison.Ordinal));
+        Assert.Contains("—", candle.QuerySelector(".cm-tile-meta")!.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(candle.QuerySelector(".cm-tile-media .fa-box"));
         Assert.Empty(page.FindAll("table"));
     }
 
@@ -44,24 +44,24 @@ public sealed class ItemsPageTests : KitContext
     public void Tapping_card_opens_it_with_full_picture_and_price()
     {
         var page = Render<ItemsPage>();
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".it-card")));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".cm-tile")));
 
-        page.FindAll(".it-card-button").Single(b => b.TextContent.Contains("Форд", StringComparison.Ordinal)).Click();
+        page.FindAll(".cm-tile-button").Single(b => b.TextContent.Contains("Форд", StringComparison.Ordinal)).Click();
 
         Assert.Contains($"open={_ford.Id}", Navigation.Uri, StringComparison.Ordinal);
         page.WaitForAssertion(() => Assert.Equal($"/api/v1/files/{Picture}", page.Find("img[alt='«Форд» модели T']").GetAttribute("src")));
-        Assert.Contains("$360 · Транспорт", page.Find(".it-open").TextContent, StringComparison.Ordinal);
+        Assert.Contains("$360 · Транспорт", page.Find(".cm-record").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Price_order_works_inside_groups()
     {
         var page = Render<ItemsPage>();
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".it-card")));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".cm-tile")));
 
         page.Find("select[aria-label='Сортировка']").Change("price");
 
-        var ammo = page.FindAll("section")[0].QuerySelectorAll(".it-card-name").Select(n => n.TextContent).ToList();
+        var ammo = page.FindAll("section")[0].QuerySelectorAll(".cm-tile-name").Select(n => n.TextContent).ToList();
         Assert.Equal(["Патроны .45 ACP", "Ружейные патроны"], ammo);
     }
 
@@ -69,16 +69,16 @@ public sealed class ItemsPageTests : KitContext
     public void Table_is_one_switch_away_and_lives_in_the_address()
     {
         var page = Render<ItemsPage>();
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".it-card")));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll(".cm-tile")));
 
-        page.Find("[data-testid=items-view-table]").Click();
+        page.Find("[data-testid=catalog-view-table]").Click();
 
         Assert.Contains("view=table", Navigation.Uri, StringComparison.Ordinal);
         page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("table th")));
-        Assert.Empty(page.FindAll(".it-card"));
-        Assert.Equal($"/api/v1/files/{Picture}?w=240", page.Find(".it-thumb img").GetAttribute("src"));
+        Assert.Empty(page.FindAll(".cm-tile"));
+        Assert.Equal($"/api/v1/files/{Picture}?w=240", page.Find(".cm-thumb img").GetAttribute("src"));
 
-        page.Find("[data-testid=items-view-gallery]").Click();
+        page.Find("[data-testid=catalog-view-gallery]").Click();
         Assert.DoesNotContain("view=", Navigation.Uri, StringComparison.Ordinal);
     }
 

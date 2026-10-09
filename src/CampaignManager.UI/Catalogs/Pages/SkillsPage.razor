@@ -2,17 +2,18 @@
 @attribute [Authorize]
 @using CampaignManager.Core.Catalogs
 
-@* Навыки: Название · Категория · База. В v1 — карточки по шесть на страницу и отдельные страницы
-   деталей и правки; здесь таблица, как у остальных справочников, раскрытая строка — детали навыка
-   (тот же SkillDetails, что в справке листа), правка — окно. Раскрытый навык держится в адресе
-   (?open=): на него можно дать ссылку, старые /skills/detail/{id} ведут сюда же. *@
+@* Навыки: галерея общей системы справочников (CatalogPage, Styles/catalog.css) — гравюры 4:5 «сыщик за делом» группами по
+   категории, плитка — база; таблица — вторым видом (?view=table): Название · База · Категория. Раскрытый навык — иллюстрация
+   слева (у специализации без своей — родителя), справа детали (тот же SkillDetails, что в справке листа, без своей картинки);
+   правка — окно. Раскрытый навык держится в адресе (?open=): на него можно дать ссылку, старые /skills/detail/{id} ведут сюда же. *@
 <CatalogPage TItem="SkillDto" CoverOf="s => s.ImageUrl" Title="Навыки" Icon="fa-brain" AddLabel="Добавить навык" Noun="навык" Plural="навыков"
              Filters="Filters" Toggles="Toggles" ErasOf="s => s.Eras" SearchAlso="s => [ParentName(s)]" TableFrom="TableBreakpoint.Md"
-             State="_state" New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
+             Art="CatalogArt.Portrait" ImagesOf="Images" GroupOf="s => CatalogText.Of(s.Category)" Tile="Tile" Details="Detail"
+             State="_state" New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[56%]" Context="s">
             <div class="flex items-center gap-3">
-                @Cover(s, "h-10 w-8")
+                <CatalogThumb Url="@s.ImageUrl" Art="CatalogArt.Portrait" Icon="fa-brain" />
                 <span class="min-w-0">
                     <span class="font-medium text-primary-800">@s.Name</span>
                     @if (s.IsUncommon)
@@ -35,7 +36,7 @@
     </Columns>
     <CardTemplate Context="s">
         <div class="flex items-start gap-3">
-            @Cover(s, "h-15 w-12")
+            <CatalogThumb Url="@s.ImageUrl" Art="CatalogArt.Portrait" Icon="fa-brain" Large="true" />
             <div class="min-w-0">
                 <p class="font-medium text-primary-800">@s.Name</p>
                 <p class="cm-meta">@CatalogText.Of(s.Category) · база @SkillDetails.BaseOf(s)</p>
@@ -57,34 +58,28 @@
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<SkillDto> _skills = [];
 
-    [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
-
     private void Loaded(IReadOnlyList<SkillDto> skills) => _skills = [.. skills];
 
     private string? ParentName(SkillDto skill) =>
         skill.ParentId is { } id ? _skills.FirstOrDefault(s => s.Id == id)?.Name : null;
 
-    // Миниатюра — своя картинка навыка (у специализаций без своей — заглушка: семь одинаковых «Стрельб» подряд ничего не
-    // различают); поля «бумаги» гравюры срезаны увеличением, как у заклинаний.
-    private static RenderFragment Cover(SkillDto s, string size) => __builder =>
+    // Плитка и миниатюра — своя картинка навыка (у специализаций без своей — заглушка: семь одинаковых «Стрельб» подряд ничего
+    // не различают); раскрытие — своя или родителя.
+    private IReadOnlyList<CatalogImageDto> Images(SkillDto s) =>
+        s.ImageUrl is not null
+            ? CatalogImages.Single(s.ImageFileId, s.ImageUrl)
+            : _skills.FirstOrDefault(p => p.Id == s.ParentId) is { ImageUrl: { } url } parent ? CatalogImages.Single(parent.ImageFileId, url) : [];
+
+    // Плитка: база (категория — заголовок группы) и «необычный».
+    private static RenderFragment<SkillDto> Tile => s => __builder =>
     {
-        @if (s.ImageUrl is { } url)
-        {
-            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
-                <img src="@ImageUrls.Thumb(url, 240)" alt="" class="size-full scale-130 object-cover" loading="lazy" decoding="async" />
-            </span>
-        }
-        else
-        {
-            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
-                <i class="fa-solid fa-brain"></i>
-            </span>
-        }
+        <span>База @SkillDetails.BaseOf(s)@(s.IsUncommon ? " · необычный" : "")</span>
     };
 
-    private RenderFragment<SkillDto> Detail => s => __builder =>
+    // В раскрытой строке таблицы база, категория и «необычный» уже в колонках (InRow); в галерее SkillDetails показывает их сам.
+    private RenderFragment<CatalogDetails<SkillDto>> Detail => d => __builder =>
     {
-        <SkillDetails Skill="s" Catalog="_skills" InRow="true" ShowEra="_skills.Any(o => !o.Eras.SequenceEqual(s.Eras))" />
+        <SkillDetails Skill="d.Item" Catalog="_skills" InRow="d.InTable" ShowImage="false" ShowEra="_skills.Any(o => !o.Eras.SequenceEqual(d.Item.Eras))" />
     };
 
     // Родителем может быть только навык без родителя: у специализаций одна ступень.

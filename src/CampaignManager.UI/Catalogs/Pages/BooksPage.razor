@@ -6,16 +6,18 @@
 @* Книги: Название · Язык · Автор · Потеря Рассудка · Мифы. Таблица с md (K7): колонки уложены в ~690px портрета iPad Pro
    11" (язык там — строкой под автором), карточки остались телефону. Фильтр категории убирает чужие колонки: у оккультных книг числа Мифов пусты
    всегда, у книг Мифов — «+Оккультизм»; метка категории — только у меньшинства («Оккультизм», 10 книг из 106):
-   «Мифы» у каждой строки ничего не различает (K1). Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка.
-   Обложка — как у заклинаний: миниатюра 4:5 у названия, без обложки — заглушка того же размера; в раскрытии — картинка
-   до 14rem слева, сведения справа, на узком экране — под ней. *@
+   «Мифы» у каждой строки ничего не различает (K1). Язык и автор в раскрытой строке не повторяются.
+   Обложки — общая система справочников (CatalogPage, Styles/catalog.css): справочник открывается галереей обложек 4:5
+   группами по категории (плитка — автор), таблица — вторым видом (?view=table) с миниатюрой у названия.
+   Раскрытая книга — обложка слева, сведения справа (вне таблицы — с языком, автором и числами Мифов). *@
 <CatalogPage TItem="BookDto" CoverOf="b => b.ImageUrl" Title="Книги" Icon="fa-book-open" AddLabel="Добавить книгу" Noun="книгу" Plural="книг"
              Filters="Filters" SearchAlso="b => b.AltNames.Append(b.Author)" TableFrom="TableBreakpoint.Md" State="_state"
-             New="() => new BookDto()" OnFormOpening="EnsureSpellsAsync" RowDetail="Detail" Form="Form">
+             Art="CatalogArt.Portrait" ImagesOf="b => CatalogImages.Single(b.ImageFileId, b.ImageUrl)" GroupOf="b => CatalogText.Of(b.BookType)"
+             Tile="Tile" Badges="Badges" Details="Detail" New="() => new BookDto()" OnFormOpening="EnsureSpellsAsync" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="BookDto" Title="Название" SortBy="b => b.Name" DefaultSort="false" HeaderClass="w-[30%]" Context="b">
             <div class="flex items-center gap-3">
-                @Cover(b, "h-10 w-8")
+                <CatalogThumb Url="@b.ImageUrl" Art="CatalogArt.Portrait" Icon="fa-book-open" />
                 <span class="min-w-0">
                     <span class="font-medium text-primary-800">@b.Name</span>
                     @if (!view.IsFixed("type") && b.BookType == BookType.OccultBook)
@@ -45,7 +47,7 @@
     </Columns>
     <CardTemplate Context="b">
         <div class="flex items-start gap-3">
-            @Cover(b, "h-15 w-12")
+            <CatalogThumb Url="@b.ImageUrl" Art="CatalogArt.Portrait" Icon="fa-book-open" Large="true" />
             <div class="min-w-0">
                 <p class="font-medium text-primary-800">@b.Name @if (b.BookType == BookType.OccultBook) { <Badge Tone="Tone.Stone" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge> }</p>
                 <p class="cm-meta">@string.Join(" · ", new[] { b.Language, b.Author }.Where(x => !string.IsNullOrEmpty(x)))</p>
@@ -139,36 +141,46 @@
 
     private static string? Plus(int? value) => value is { } v ? $"+{v}" : null;
 
-    // Обложка у названия — как у заклинаний; без обложки — заглушка того же размера, чтобы названия стояли ровно.
-    // Рисунки серии — гравюры с полями «бумаги»: в миниатюре поля срезаны увеличением, иначе книгу в 32×40 не разглядеть.
-    private static RenderFragment Cover(BookDto b, string size) => __builder =>
+    // Плитка: автор; категория — заголовок группы. Потеря Рассудка и числа Мифов — в раскрытии и столбцами таблицы:
+    // «Потеря Рассудка 1d4» в плитку 164px не входит одной строкой.
+    private static RenderFragment<BookDto> Tile => b => __builder =>
     {
-        @if (b.ImageUrl is { } url)
+        @if (!string.IsNullOrWhiteSpace(b.Author))
         {
-            @* Фон — пока миниатюра грузится, слот не выглядит дырой. *@
-            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
-                <img src="@ImageUrls.Thumb(url, 240)" alt="" class="size-full scale-130 object-cover" loading="lazy" decoding="async" />
-            </span>
-        }
-        else
-        {
-            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
-                <i class="fa-solid fa-book-open"></i>
-            </span>
+            <span>@b.Author</span>
         }
     };
 
-    private RenderFragment<BookDto> Detail => b => __builder =>
+    private static RenderFragment<BookDto> Badges => b => __builder =>
     {
-        <div class="flex flex-wrap items-start gap-x-6 gap-y-3 text-sm">
-            @if (b.ImageUrl is not null)
-            {
-                @* Место под обложку 4:5 занято сразу: иначе сведения встают наверх и съезжают, когда картинка догрузится. *@
-                <div class="w-full max-w-56">
-                    <img src="@b.ImageUrl" alt="@b.Name" class="aspect-[4/5] w-full rounded-md bg-primary-100 object-cover" loading="lazy" />
-                </div>
-            }
-            <dl class="grid min-w-0 flex-1 basis-80 content-start gap-1">
+        @if (b.BookType == BookType.OccultBook)
+        {
+            <Badge Tone="Tone.Stone">@CatalogText.Short(b.BookType)</Badge>
+        }
+    };
+
+    // Справа от обложки. В раскрытой строке таблицы язык, автор, потеря Рассудка и числа Мифов — в колонках; в галерее — здесь.
+    private RenderFragment<CatalogDetails<BookDto>> Detail => d => __builder =>
+    {
+        var b = d.Item;
+        <div class="text-sm">
+            <dl class="grid content-start gap-1">
+                @if (!d.InTable)
+                {
+                    @if (!string.IsNullOrWhiteSpace(b.Author))
+                    {
+                        <div><dt class="cm-meta-label inline">Автор: </dt><dd class="inline">@b.Author</dd></div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(b.Language))
+                    {
+                        <div><dt class="cm-meta-label inline">Язык: </dt><dd class="inline">@b.Language</dd></div>
+                    }
+                    <div><dt class="cm-meta-label inline">@Terms.SanityLoss: </dt><dd class="inline"><DiceText Value="@b.SanityLoss" /></dd></div>
+                    @if (b.OccultismBonus is not null)
+                    {
+                        <div><dt class="cm-meta-label inline">Оккультизм: </dt><dd class="inline">@Plus(b.OccultismBonus)</dd></div>
+                    }
+                }
                 @if (b.Year is not null)
                 {
                     <div><dt class="cm-meta-label inline">Год: </dt><dd class="inline">@b.Year</dd></div>

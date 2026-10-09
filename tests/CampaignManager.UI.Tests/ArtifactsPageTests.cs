@@ -50,11 +50,11 @@ public sealed class ArtifactsPageTests : KitContext
     {
         var page = Render<ArtifactsPage>();
 
-        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-card").Count));
-        var armor = page.FindAll(".ar-card").Single(c => c.TextContent.Contains("Биопаутинная броня", StringComparison.Ordinal));
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".cm-wide").Count));
+        var armor = page.FindAll(".cm-wide").Single(c => c.TextContent.Contains("Биопаутинная броня", StringComparison.Ordinal));
         Assert.Contains("Броня · Ми-го", armor.TextContent, StringComparison.Ordinal);
         Assert.Contains("Броня 8", armor.TextContent, StringComparison.Ordinal);
-        Assert.Empty(page.FindAll(".ar-cover"));
+        Assert.Empty(page.FindAll(".cm-wide-cover"));
     }
 
     [Fact]
@@ -65,23 +65,23 @@ public sealed class ArtifactsPageTests : KitContext
 
         var page = Render<ArtifactsPage>();
 
-        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-cover").Count));
-        Assert.Equal($"/api/v1/files/{file}?w=240", page.Find(".ar-cover img").GetAttribute("src"));
-        var gun = page.FindAll(".ar-card").Single(c => c.TextContent.Contains("Молниемёт", StringComparison.Ordinal));
-        Assert.NotNull(gun.QuerySelector(".ar-cover .fa-gem"));
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".cm-wide-cover").Count));
+        Assert.Equal($"/api/v1/files/{file}?w=240", page.Find(".cm-wide-cover img").GetAttribute("src"));
+        var gun = page.FindAll(".cm-wide").Single(c => c.TextContent.Contains("Молниемёт", StringComparison.Ordinal));
+        Assert.NotNull(gun.QuerySelector(".cm-wide-cover .fa-gem"));
     }
 
     [Fact]
     public void Sort_select_orders_cards_by_owner()
     {
         var page = Render<ArtifactsPage>();
-        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-card").Count));
-        Assert.StartsWith("Биопаутинная броня", page.FindAll(".ar-card")[0].TextContent.Trim(), StringComparison.Ordinal);
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".cm-wide").Count));
+        Assert.StartsWith("Биопаутинная броня", page.FindAll(".cm-wide")[0].TextContent.Trim(), StringComparison.Ordinal);
 
         page.FindAll("select").Single(s => s.GetAttribute("aria-label") == "Сортировка").Change("owner");
 
         // «Йитиане» раньше «Ми-го».
-        page.WaitForAssertion(() => Assert.StartsWith("Молниемёт", page.FindAll(".ar-card")[0].TextContent.Trim(), StringComparison.Ordinal));
+        page.WaitForAssertion(() => Assert.StartsWith("Молниемёт", page.FindAll(".cm-wide")[0].TextContent.Trim(), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -107,11 +107,11 @@ public sealed class ArtifactsPageTests : KitContext
         var page = Render<ArtifactsPage>();
 
         page.WaitForAssertion(() => Assert.NotNull(page.Find($"a[href='weapons?open={GunWeapon}']")));
-        var open = page.Find(".ar-open");
+        var open = page.Find(".cm-record");
         Assert.Contains("В игре: Стрельба (молниемёт) 10%", open.TextContent, StringComparison.Ordinal);
         Assert.Contains("Подобрать оружие", open.TextContent, StringComparison.Ordinal);
         Assert.Contains("Стреляет разрядами.", open.TextContent, StringComparison.Ordinal);
-        Assert.Single(page.FindAll(".ar-card"));
+        Assert.Single(page.FindAll(".cm-wide"));
     }
 
     private sealed class FakeCatalog<T>(CatalogRoute route, IReadOnlyList<T> items) : ICatalogApi<T>
