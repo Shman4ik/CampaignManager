@@ -121,10 +121,12 @@ API», заведено 2026-10-05 для токенов агентов). **Бе
 - **Запрет по умолчанию.** `UseMachineScopes` стоит сразу за `UseAuthentication`: токен агента проходит только на
   эндпоинт с метаданными `AllowMachine(scope)` и нужным scope в токене, иначе 403 — и API, и страницы. Открыто сейчас:
   `/api/v1/me` (любой токен агента), всё в модуле сценариев, кроме прохождений и броней (`scenarios:write`), загрузка,
-  внешний адрес и содержимое файла (`files:write`). Scope'ы — `Contracts/Identity/MachineScopes`, они же — scope'ы API в
-  тенанте. Новый адрес для агентов — `.AllowMachine(MachineScopes.…)` в его модуле, и тест в `MachineAccessApiTests`.
-- **Тенант:** API `https://cthulhu.dmnet.dev/api` (scope'ы `scenarios:write`, `files:write`, токен живёт 24 ч), приложение
-  M2M «CampaignManager agents» с грантом на оба scope'а. Секрет — только у владельца (не в репозитории и не в SealedSecret:
+  внешний адрес и содержимое файла (`files:write`), список справочника с картинками и обложка записи `PUT …/{id}/cover`
+  (`catalogs:images`, 2026-10-09: скрипт `*-art` сам ставит рисунки; правка полей справочника токену закрыта). Scope'ы —
+  `Contracts/Identity/MachineScopes`, они же — scope'ы API в тенанте. Новый адрес для агентов — `.AllowMachine(MachineScopes.…)`
+  в его модуле и тест (`MachineAccessApiTests`; у справочников — `CatalogsApiTests`, им нужна своя база).
+- **Тенант:** API `https://cthulhu.dmnet.dev/api` (scope'ы `scenarios:write`, `files:write`, `catalogs:images`, токен живёт
+  24 ч), приложение M2M «CampaignManager agents» с грантом на все три. Секрет — только у владельца (не в репозитории и не в SealedSecret:
   серверу он не нужен); client_id и `ActAs` — в `deployment.yaml` гитопса открытым текстом.
 - **Токен** — с кастомного домена входа (с канонического `cthulhu-dmnet.eu.auth0.com` в `iss` будет он, и сервер
   отклонит токен — 401); секрет из переменной окружения, не печатать:

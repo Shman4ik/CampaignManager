@@ -68,7 +68,8 @@ public sealed class CatalogImagesBulkTests : KitContext
         cut.Find("[data-testid=covers-start]").Click();
 
         cut.WaitForAssertion(() => Assert.StartsWith("Готово: загружено 2, пропущено 2.", cut.Find("[data-testid=covers-summary]").TextContent, StringComparison.Ordinal));
-        Assert.Equal([(_padlock.Id, false), (_umbrella.Id, false)], _api.Covers.Select(c => (c.Id, c.Replace)).Order());
+        Assert.Equal(new[] { _padlock.Id, _umbrella.Id }.Order(), _api.Covers.Select(c => c.Id).Order());
+        Assert.All(_api.Covers, c => Assert.False(c.Replace));
         Assert.Equal(["padlock.png", "Зонтик.png"], _files.WebpUploads.Order(StringComparer.Ordinal));
         Assert.Equal(2, saved.Count);
     }
