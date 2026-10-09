@@ -71,7 +71,10 @@ user-invocable: true
 
 - Знак и логотип — `src/CampaignManager.UI/wwwroot/logo-mark.svg`, `logo.svg` (исходники — `docs/assets/`).
 - Иллюстрация витрины — `src/CampaignManager.Server/wwwroot/img/auth/login-art.webp`: её берёт страница входа Auth0 с домена
-  прода. В рабочих экранах иллюстраций нет.
+  прода.
+- Гравюры справочников — пользовательские файлы записей (не ассеты приложения); показывает их одна система на все справочники
+  (`Styles/catalog.css`, `UI/Catalogs/CLAUDE.md`, «Иллюстрации»): рамка 4:5 или 3:2, плитка, карточка, раскрытие. Свои размеры
+  картинок на странице справочника не заводить — так справочники и разошлись (шесть размеров миниатюр к 2026-10-09).
 - Иконки — Font Awesome 6.7.2 из `src/CampaignManager.UI/wwwroot/lib/fontawesome/` (`fa-solid fa-…`), эмодзи нет.
 - Шрифты — свои, `wwwroot/fonts/`: Inter (интерфейс), Bitter (книжное: имя сыщика, сценарий, раздатка, витрина),
   JetBrains Mono (кости).
