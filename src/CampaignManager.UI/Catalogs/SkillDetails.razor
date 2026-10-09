@@ -3,94 +3,105 @@
 
 @* Детали навыка — один компонент на справочник и справку на листе (в v1 их рисовали трижды:
    SkillCard, SkillDetailPage, SkillInfoPopover). Своей карточки не рисует: стоит в раскрытой строке
-   справочника или в окне листа. База — по правилу Core (Уклонение — ½ ЛВК, родной язык — ОБР). *@
-<div class="grid gap-3 text-sm">
-    @* В строке справочника база, категория и «необычный» уже в колонках и у названия — не повторяем (UX-0b, п. «Раскрытая
-       строка»); в справке на листе их нет, там они нужны. Эпоху — только когда в справочнике больше одной. *@
-    @if (!InRow || Parent is not null || ShowEra)
-    {
-        <div class="cm-meta">
-            @if (!InRow)
+   справочника или в окне листа. База — по правилу Core (Уклонение — ½ ЛВК, родной язык — ОБР).
+   Иллюстрация — своя или, у специализации без своей, родителя; раскладка с ней — от ширины самого блока (SkillDetails.razor.css). *@
+<div class="skill-details text-sm">
+    <div class="skill-details-body">
+        @if (Image is { } image)
+        {
+            @* Место 4:5 занято сразу: иначе текст встаёт на место картинки и съезжает, когда она догрузится. *@
+            <img src="@ImageUrls.Thumb(image)" alt="" data-testid="skill-image" class="skill-image aspect-[4/5] rounded-md bg-primary-100 object-cover"
+                 loading="lazy" decoding="async" />
+        }
+        <div class="skill-details-text space-y-3">
+            @* В строке справочника база, категория и «необычный» уже в колонках и у названия — не повторяем (UX-0b, п. «Раскрытая
+               строка»); в справке на листе их нет, там они нужны. Эпоху — только когда в справочнике больше одной. *@
+            @if (!InRow || Parent is not null || ShowEra)
             {
-                <span><span class="cm-meta-label">База:</span> @BaseText</span>
-                <span><span class="cm-meta-label">Категория:</span> @CatalogText.Of(Skill.Category)</span>
+                <div class="cm-meta">
+                    @if (!InRow)
+                    {
+                        <span><span class="cm-meta-label">База:</span> @BaseText</span>
+                        <span><span class="cm-meta-label">Категория:</span> @CatalogText.Of(Skill.Category)</span>
+                    }
+                    @if (Parent is not null)
+                    {
+                        <span><span class="cm-meta-label">Специализация навыка</span> «@Parent.Name»</span>
+                    }
+                    @if (!InRow && Skill.IsUncommon)
+                    {
+                        <Badge Tone="Tone.Warning">Необычный</Badge>
+                    }
+                    @if (ShowEra)
+                    {
+                        <span><span class="cm-meta-label">Эпоха:</span> @CatalogText.Of(Skill.Eras)</span>
+                    }
+                </div>
             }
-            @if (Parent is not null)
+
+            @if (!string.IsNullOrWhiteSpace(Skill.Description))
             {
-                <span><span class="cm-meta-label">Специализация навыка</span> «@Parent.Name»</span>
+                <p class="max-w-prose whitespace-pre-line text-primary-700">@Skill.Description</p>
             }
-            @if (!InRow && Skill.IsUncommon)
+
+            @* «Против чего и сколько времени» — то, за чем смотрят навык за столом, поэтому сразу под описанием, а не после
+               примеров и последствий (S2: на телефоне это было на 829px страницы). *@
+            @if (Skill.OpposingSkills.Count > 0 || Skill.TimeRequired is not null || Skill.CanRetry)
             {
-                <Badge Tone="Tone.Warning">Необычный</Badge>
+                <div class="cm-meta">
+                    @if (Skill.OpposingSkills.Count > 0)
+                    {
+                        <span><span class="cm-meta-label">Встречная проверка:</span> @string.Join(", ", Skill.OpposingSkills)</span>
+                    }
+                    @if (Skill.TimeRequired is not null)
+                    {
+                        <span><span class="cm-meta-label">Время:</span> @Skill.TimeRequired</span>
+                    }
+                    @if (Skill.CanRetry)
+                    {
+                        <span>Проверку можно повторить</span>
+                    }
+                </div>
             }
-            @if (ShowEra)
+
+            @if (Children.Count > 0)
             {
-                <span><span class="cm-meta-label">Эпоха:</span> @CatalogText.Of(Skill.Eras)</span>
+                <p><span class="cm-meta-label">Специализации: </span>@string.Join(", ", Children.Select(c => c.Name))</p>
+            }
+
+            <div class="skill-lists">
+                @if (Skill.UsageExamples.Count > 0)
+                {
+                    <div>
+                        <h4 class="cm-section-title mb-1">Примеры применения</h4>
+                        <ul class="list-disc pl-5 text-primary-700">
+                            @foreach (var example in Skill.UsageExamples)
+                            {
+                                <li>@example</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (Skill.FailureConsequences.Count > 0)
+                {
+                    <div>
+                        <h4 class="cm-section-title mb-1">Последствия провала</h4>
+                        <ul class="list-disc pl-5 text-primary-700">
+                            @foreach (var consequence in Skill.FailureConsequences)
+                            {
+                                <li>@consequence</li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+
+            @if (Skill.Source is not null)
+            {
+                <p class="cm-meta">Источник: @Skill.Source</p>
             }
         </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Skill.Description))
-    {
-        <p class="max-w-prose whitespace-pre-line text-primary-700">@Skill.Description</p>
-    }
-
-    @* «Против чего и сколько времени» — то, за чем смотрят навык за столом, поэтому сразу под описанием, а не после
-       примеров и последствий (S2: на телефоне это было на 829px страницы). *@
-    @if (Skill.OpposingSkills.Count > 0 || Skill.TimeRequired is not null || Skill.CanRetry)
-    {
-        <div class="cm-meta">
-            @if (Skill.OpposingSkills.Count > 0)
-            {
-                <span><span class="cm-meta-label">Встречная проверка:</span> @string.Join(", ", Skill.OpposingSkills)</span>
-            }
-            @if (Skill.TimeRequired is not null)
-            {
-                <span><span class="cm-meta-label">Время:</span> @Skill.TimeRequired</span>
-            }
-            @if (Skill.CanRetry)
-            {
-                <span>Проверку можно повторить</span>
-            }
-        </div>
-    }
-
-    @if (Children.Count > 0)
-    {
-        <p><span class="cm-meta-label">Специализации: </span>@string.Join(", ", Children.Select(c => c.Name))</p>
-    }
-
-    <div class="grid gap-3 sm:grid-cols-2">
-        @if (Skill.UsageExamples.Count > 0)
-        {
-            <div>
-                <h4 class="cm-section-title mb-1">Примеры применения</h4>
-                <ul class="list-disc pl-5 text-primary-700">
-                    @foreach (var example in Skill.UsageExamples)
-                    {
-                        <li>@example</li>
-                    }
-                </ul>
-            </div>
-        }
-        @if (Skill.FailureConsequences.Count > 0)
-        {
-            <div>
-                <h4 class="cm-section-title mb-1">Последствия провала</h4>
-                <ul class="list-disc pl-5 text-primary-700">
-                    @foreach (var consequence in Skill.FailureConsequences)
-                    {
-                        <li>@consequence</li>
-                    }
-                </ul>
-            </div>
-        }
     </div>
-
-    @if (Skill.Source is not null)
-    {
-        <p class="cm-meta">Источник: @Skill.Source</p>
-    }
 </div>
 
 @code {
@@ -106,6 +117,9 @@
     [Parameter] public IReadOnlyList<SkillDto> Catalog { get; set; } = [];
 
     private SkillDto? Parent => Skill.ParentId is { } id ? Catalog.FirstOrDefault(s => s.Id == id) : null;
+
+    /// <summary>Своя иллюстрация, иначе родителя: «Стрельба (винтовка)» без рисунка показывает «Стрельбу».</summary>
+    private string? Image => Skill.ImageUrl ?? Parent?.ImageUrl;
 
     private IReadOnlyList<SkillDto> Children => [.. Catalog.Where(s => s.ParentId == Skill.Id).OrderBy(s => s.Name)];
 

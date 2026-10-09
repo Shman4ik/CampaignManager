@@ -249,6 +249,43 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
         Assert.Equal(HttpStatusCode.Forbidden, player.StatusCode);
     }
 
+    // Иллюстрация навыка — одна, как у предмета: поле формы, обложка пачкой; картинка из файла другой базы не найдётся —
+    // запись без неё и предупреждение, а перезапись своей картинкой называет поле в отчёте.
+    [Fact]
+    public async Task Skill_has_one_image_like_item()
+    {
+        TestDatabase.SkipIfMissing();
+        var files = await FilesAsync(2);
+        var skills = app.SkillsApi();
+        var skill = await skills.CreateAsync(new SkillDto { Name = Unique("Гипноз"), Category = SkillCategory.Social, ImageFileId = files[0] }, Cancellation);
+        Assert.Equal(files[0], skill.ImageFileId);
+        Assert.Equal(FilesRoutes.Content(files[0]), skill.ImageUrl);
+
+        var taken = await Assert.ThrowsAsync<ApiException>(() => skills.SetCoverAsync(skill.Id, files[1], replace: false, Cancellation));
+        Assert.Equal(HttpStatusCode.Conflict, taken.StatusCode);
+        var replaced = await skills.SetCoverAsync(skill.Id, files[1], replace: true, Cancellation);
+        Assert.Equal(files[1], replaced.ImageFileId);
+
+        replaced.ImageFileId = null;
+        Assert.Null((await skills.UpdateAsync(replaced, Cancellation)).ImageUrl);
+        var missing = await Assert.ThrowsAsync<ApiException>(() =>
+            skills.CreateAsync(new SkillDto { Name = Unique("Чревовещание"), ImageFileId = Guid.NewGuid() }, Cancellation));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+
+        var foreign = Unique("Чревовещание");
+        var report = await skills.ImportAsync(Json($$"""
+            {"catalog":"skills","items":[
+              {"name":"{{foreign}}","category":"Social","imageFileId":"{{Guid.NewGuid()}}"},
+              {"name":"{{skill.Name}}","category":"Social","imageFileId":"{{files[0]}}"}]}
+            """), overwrite: true, dryRun: false, Cancellation);
+        Assert.Equal((1, 1), (report.Created, report.Updated));
+        Assert.Contains(report.Warnings, w => w.StartsWith($"{foreign}: картинки из файла нет", StringComparison.Ordinal));
+        Assert.Contains("изменено: картинка", report.Lines.Single(l => l.Name == skill.Name).Message, StringComparison.Ordinal);
+        var list = (await skills.ListAsync(Cancellation)).Items;
+        Assert.Null(list.Single(s => s.Name == foreign).ImageFileId);
+        Assert.Equal(files[0], list.Single(s => s.Id == skill.Id).ImageFileId);
+    }
+
     [Fact]
     public async Task Cover_of_image_list_replaces_the_first_and_keeps_the_rest()
     {
@@ -285,7 +322,7 @@ public sealed class CatalogsApiTests(CatalogsApp app) : IClassFixture<CatalogsAp
 
         var edit = await Assert.ThrowsAsync<ApiException>(() => items.UpdateAsync(item, Cancellation));
         Assert.Equal(HttpStatusCode.Forbidden, edit.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await agent.GetAsync(CatalogsRoutes.Skills.Base, Cancellation)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await agent.GetAsync(Contracts.Music.MusicRoutes.Tracks.Base, Cancellation)).StatusCode);
         var filesOnly = app.CreateClient(anonymous: true).AsMachine("agents", app.Keeper.Email, MachineScopes.Files);
         Assert.Equal(HttpStatusCode.Forbidden, (await filesOnly.GetAsync(CatalogsRoutes.Items.Base, Cancellation)).StatusCode);
     }

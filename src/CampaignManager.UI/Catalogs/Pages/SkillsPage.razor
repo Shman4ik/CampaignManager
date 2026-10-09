@@ -6,20 +6,25 @@
    деталей и правки; здесь таблица, как у остальных справочников, раскрытая строка — детали навыка
    (тот же SkillDetails, что в справке листа), правка — окно. Раскрытый навык держится в адресе
    (?open=): на него можно дать ссылку, старые /skills/detail/{id} ведут сюда же. *@
-<CatalogPage TItem="SkillDto" Title="Навыки" Icon="fa-brain" AddLabel="Добавить навык" Noun="навык" Plural="навыков"
+<CatalogPage TItem="SkillDto" CoverOf="s => s.ImageUrl" Title="Навыки" Icon="fa-brain" AddLabel="Добавить навык" Noun="навык" Plural="навыков"
              Filters="Filters" Toggles="Toggles" ErasOf="s => s.Eras" SearchAlso="s => [ParentName(s)]" TableFrom="TableBreakpoint.Md"
              State="_state" New="() => new SkillDto { BaseValue = 1 }" OnLoaded="Loaded" Open="Open" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="SkillDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[56%]" Context="s">
-            <span class="font-medium text-primary-800">@s.Name</span>
-            @if (s.IsUncommon)
-            {
-                <Badge Tone="Tone.Warning" class="ml-1.5 align-middle">Необычный</Badge>
-            }
-            @if (view.ShowEra)
-            {
-                <EraBadges Values="s.Eras" />
-            }
+            <div class="flex items-center gap-3">
+                @Cover(s, "h-10 w-8")
+                <span class="min-w-0">
+                    <span class="font-medium text-primary-800">@s.Name</span>
+                    @if (s.IsUncommon)
+                    {
+                        <Badge Tone="Tone.Warning" class="ml-1.5 align-middle">Необычный</Badge>
+                    }
+                    @if (view.ShowEra)
+                    {
+                        <EraBadges Values="s.Eras" />
+                    }
+                </span>
+            </div>
         </DataColumn>
         <DataColumn TItem="SkillDto" Title="База" SortBy="s => s.BaseValue" HeaderClass="w-[12%]" CellClass="whitespace-nowrap" Context="s">@SkillDetails.BaseOf(s)</DataColumn>
         @if (!view.IsFixed("category"))
@@ -29,8 +34,13 @@
         }
     </Columns>
     <CardTemplate Context="s">
-        <p class="font-medium text-primary-800">@s.Name</p>
-        <p class="cm-meta">@CatalogText.Of(s.Category) · база @SkillDetails.BaseOf(s)</p>
+        <div class="flex items-start gap-3">
+            @Cover(s, "h-15 w-12")
+            <div class="min-w-0">
+                <p class="font-medium text-primary-800">@s.Name</p>
+                <p class="cm-meta">@CatalogText.Of(s.Category) · база @SkillDetails.BaseOf(s)</p>
+            </div>
+        </div>
     </CardTemplate>
 </CatalogPage>
 
@@ -53,6 +63,24 @@
 
     private string? ParentName(SkillDto skill) =>
         skill.ParentId is { } id ? _skills.FirstOrDefault(s => s.Id == id)?.Name : null;
+
+    // Миниатюра — своя картинка навыка (у специализаций без своей — заглушка: семь одинаковых «Стрельб» подряд ничего не
+    // различают); поля «бумаги» гравюры срезаны увеличением, как у заклинаний.
+    private static RenderFragment Cover(SkillDto s, string size) => __builder =>
+    {
+        @if (s.ImageUrl is { } url)
+        {
+            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
+                <img src="@ImageUrls.Thumb(url, 240)" alt="" class="size-full scale-130 object-cover" loading="lazy" decoding="async" />
+            </span>
+        }
+        else
+        {
+            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
+                <i class="fa-solid fa-brain"></i>
+            </span>
+        }
+    };
 
     private RenderFragment<SkillDto> Detail => s => __builder =>
     {
@@ -121,6 +149,9 @@
                 </Field>
                 <Field Label="Источник" Note="Книга и страница."><input class="cm-input" @bind="s.Source" /></Field>
             </div>
+            <Field Label="Иллюстрация" Group="true" class="sm:col-span-2" Note="@(ParentName(s) is { } parent ? $"Пусто — показывается иллюстрация навыка «{parent}»." : null)">
+                <ImagePicker Webp="true" FileId="s.ImageFileId" Url="@s.ImageUrl" OnChanged="file => { s.ImageFileId = file?.Id; s.ImageUrl = file?.Url; }" />
+            </Field>
         </div>
     };
 }
