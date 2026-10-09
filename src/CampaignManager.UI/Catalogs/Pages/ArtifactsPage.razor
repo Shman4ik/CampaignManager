@@ -5,21 +5,26 @@
 @inject ICatalogApi<WeaponDto> WeaponsApi
 @inject IJSRuntime JS
 
-@* ВРЕМЕННО: два варианта раскладки с иллюстрациями для выбора владельцем — ?layout=tiles (плитки) и без флага (карточки). *@
+@* Артефакты главы 13 — карточки с иллюстрацией (выбор владельца 2026-10-09 из двух вариантов: карточки и плитки-галерея;
+   таблица с миниатюрой 32×40 прятала рисунки). За столом Хранитель ищет, что есть у ми-го или йитиан и что вещь делает по
+   правилам, — поэтому фильтры по виду и владельцам, а главное правило («В игре») — на карточке целиком, не обрезается: ради
+   него справочник и открывают. Карточка: обложка 4:5 слева (72px на телефоне, 88 в портрете, 112 в альбоме), название, вид и
+   владельцы, правило; вся карточка — кнопка раскрытия (X7), «Изменить» — иконка рядом. Колонок две с lg; в портрете одна —
+   в двух правило переносилось на четыре-пять строк по 190px. Заголовков столбцов нет, поэтому порядок — выбором в панели.
+   Раскрытая — во всю ширину сетки (dense подтягивает соседей в дыру): картинка слева (на телефоне сверху), правило, «В бою»,
+   описание, источник; одна, в адресе (?open=), страница прокручивает к ней. Оружие-артефакт стреляет в бою записью
+   справочника оружия с тем же названием: раскрытие ведёт к ней (`weapons?open=`), в бою его берут через «Подобрать оружие…».
+   Пока ни у одного артефакта нет картинок, слота обложки нет (двадцать одинаковых заглушек ничего не различают). *@
 <CatalogPage TItem="ArtifactDto" Title="Артефакты" Icon="fa-gem" AddLabel="Добавить артефакт" Noun="артефакт" Plural="артефактов"
              Filters="_filters" Sorts="Sorts" SearchAlso="a => a.UsedBy" OnLoaded="Loaded" State="_state" Open="Open"
              New="() => new ArtifactDto()" Form="Form">
     <Body Context="view">
-        <div class="@(Tiles ? "ar-tiles" : "ar-cards")">
+        <div class="ar-cards">
             @foreach (var a in view.Page)
             {
                 @if (view.Open == a.Id)
                 {
                     @Opened(view, a)
-                }
-                else if (Tiles)
-                {
-                    @Tile(view, a)
                 }
                 else
                 {
@@ -49,10 +54,6 @@
 
     [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
 
-    [SupplyParameterFromQuery(Name = "layout")] public string? Layout { get; set; }
-
-    private bool Tiles => Layout == "tiles";
-
     protected override async Task OnInitializedAsync()
     {
         try
@@ -65,10 +66,17 @@
         }
     }
 
-    // Раскрытая карточка встаёт во всю ширину сетки отдельным рядом — прокрутить к ней, когда она уже в разметке.
+    // Раскрытая карточка встаёт во всю ширину сетки отдельным рядом — прокрутить к ней (модуль дождётся её в разметке).
+    // Свернули — забыть: та же карточка, раскрытая снова, опять встанет не там, где её коснулись.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Open is not { } open || open == _revealed)
+        if (Open is not { } open)
+        {
+            _revealed = null;
+            return;
+        }
+
+        if (open == _revealed)
         {
             return;
         }
@@ -125,15 +133,20 @@
             ? _weapons.FirstOrDefault(w => CatalogCodeTable.NormalizeName(w.Name) == CatalogCodeTable.NormalizeName(a.Name))
             : null;
 
+    // Обложка — первая картинка; у артефакта без картинок — заглушка того же размера (сведения карточек стоят на одной линии).
+    // Пока картинок нет ни у кого, слота нет вовсе. Миниатюра 240px — обложка не шире 112px при плотности 2.
     private RenderFragment Cover(ArtifactDto a) => __builder =>
     {
-        @if (a.Images.FirstOrDefault() is { } cover)
+        @if (!_anyImages)
         {
-            <img src="@ImageUrls.Thumb(cover.Url)" alt="" loading="lazy" decoding="async" />
+        }
+        else if (a.Images.FirstOrDefault() is { } cover)
+        {
+            <span class="ar-cover"><img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" loading="lazy" decoding="async" /></span>
         }
         else
         {
-            <i class="fa-solid fa-gem" aria-hidden="true"></i>
+            <span class="ar-cover" aria-hidden="true"><i class="fa-solid fa-gem"></i></span>
         }
     };
 
@@ -148,15 +161,12 @@
         }
     };
 
-    // Вариант «Карточки»: обложка 4:5 слева, название, вид и владельцы, правило; вся карточка — кнопка раскрытия.
+    // Карточка: обложка, название, вид и владельцы, правило — одна кнопка раскрытия; «Изменить» рядом, раскрытия не вызывает.
     private RenderFragment Card(CatalogView<ArtifactDto> view, ArtifactDto a) => __builder =>
     {
         <article id="@($"artifact-{a.Id}")" class="cm-card ar-card" @key="a.Id">
             <button type="button" class="ar-card-button" aria-expanded="false" @onclick="() => view.ToggleOpen(a)">
-                @if (_anyImages)
-                {
-                    <span class="ar-cover">@Cover(a)</span>
-                }
+                @Cover(a)
                 <span class="min-w-0 flex-1">
                     <span class="flex items-start gap-2">
                         <span class="min-w-0 flex-1 font-semibold text-primary-800">@a.Name</span>
@@ -170,24 +180,6 @@
                 </span>
             </button>
             @EditButton(view, a)
-        </article>
-    };
-
-    // Вариант «Плитки»: картинка 4:5 сверху во всю ширину плитки, под ней название, вид и владельцы, правило.
-    private RenderFragment Tile(CatalogView<ArtifactDto> view, ArtifactDto a) => __builder =>
-    {
-        <article id="@($"artifact-{a.Id}")" class="cm-card ar-tile" @key="a.Id">
-            <button type="button" class="ar-tile-button" aria-expanded="false" @onclick="() => view.ToggleOpen(a)">
-                <span class="ar-tile-media">@Cover(a)</span>
-                <span class="ar-tile-text">
-                    <span class="block font-semibold text-primary-800">@a.Name</span>
-                    <span class="cm-meta mt-0.5 block">@Meta(a)</span>
-                    @if (a.Rule is { } rule)
-                    {
-                        <span class="mt-2 block text-sm text-primary-700">@rule</span>
-                    }
-                </span>
-            </button>
         </article>
     };
 
@@ -265,7 +257,7 @@
             </Field>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="8" @bind="a.Description"></textarea></Field>
             <Field Label="Иллюстрации" Group="true" class="sm:col-span-2">
-                <CatalogImagesEditor Images="a.Images" Hint="Первая картинка — обложка в строке справочника." />
+                <CatalogImagesEditor Images="a.Images" Hint="Первая картинка — обложка карточки." />
             </Field>
         </div>
     };

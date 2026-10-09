@@ -9,8 +9,9 @@ using Xunit;
 namespace CampaignManager.UI.Tests;
 
 /// <summary>
-/// Справочник артефактов (гл. 13): «В игре» колонкой, фильтр по владельцам из самих записей, оружие-артефакт ведёт к записи
-/// справочника оружия с тем же названием, слота обложки нет, пока картинок нет ни у кого.
+/// Справочник артефактов (гл. 13) — карточки: вид, владельцы и «В игре» на карточке, фильтр по владельцам из самих записей,
+/// порядок выбором, оружие-артефакт ведёт к записи справочника оружия с тем же названием; слота обложки нет, пока картинок
+/// нет ни у кого, а с первой картинкой у остальных — заглушка.
 /// </summary>
 public sealed class ArtifactsPageTests : KitContext
 {
@@ -45,14 +46,42 @@ public sealed class ArtifactsPageTests : KitContext
     }
 
     [Fact]
-    public void Rows_show_kind_owners_and_rule_without_cover_slot()
+    public void Cards_show_kind_owners_and_rule_without_cover_slot()
     {
         var page = Render<ArtifactsPage>();
 
-        page.WaitForAssertion(() => Assert.Contains("Биопаутинная броня", page.Markup, StringComparison.Ordinal));
-        Assert.Contains("Броня 8", page.Markup, StringComparison.Ordinal);
-        Assert.Contains("Ми-го", page.Markup, StringComparison.Ordinal);
-        Assert.Empty(page.FindAll(".fa-gem"));
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-card").Count));
+        var armor = page.FindAll(".ar-card").Single(c => c.TextContent.Contains("Биопаутинная броня", StringComparison.Ordinal));
+        Assert.Contains("Броня · Ми-го", armor.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Броня 8", armor.TextContent, StringComparison.Ordinal);
+        Assert.Empty(page.FindAll(".ar-cover"));
+    }
+
+    [Fact]
+    public void First_image_adds_covers_and_placeholders_for_the_rest()
+    {
+        var file = Guid.NewGuid();
+        _armor.Images = [new CatalogImageDto(file, $"/api/v1/files/{file}", null)];
+
+        var page = Render<ArtifactsPage>();
+
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-cover").Count));
+        Assert.Equal($"/api/v1/files/{file}?w=240", page.Find(".ar-cover img").GetAttribute("src"));
+        var gun = page.FindAll(".ar-card").Single(c => c.TextContent.Contains("Молниемёт", StringComparison.Ordinal));
+        Assert.NotNull(gun.QuerySelector(".ar-cover .fa-gem"));
+    }
+
+    [Fact]
+    public void Sort_select_orders_cards_by_owner()
+    {
+        var page = Render<ArtifactsPage>();
+        page.WaitForAssertion(() => Assert.Equal(2, page.FindAll(".ar-card").Count));
+        Assert.StartsWith("Биопаутинная броня", page.FindAll(".ar-card")[0].TextContent.Trim(), StringComparison.Ordinal);
+
+        page.FindAll("select").Single(s => s.GetAttribute("aria-label") == "Сортировка").Change("owner");
+
+        // «Йитиане» раньше «Ми-го».
+        page.WaitForAssertion(() => Assert.StartsWith("Молниемёт", page.FindAll(".ar-card")[0].TextContent.Trim(), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -78,8 +107,11 @@ public sealed class ArtifactsPageTests : KitContext
         var page = Render<ArtifactsPage>();
 
         page.WaitForAssertion(() => Assert.NotNull(page.Find($"a[href='weapons?open={GunWeapon}']")));
-        Assert.Contains("Подобрать оружие", page.Markup, StringComparison.Ordinal);
-        Assert.Contains("Стреляет разрядами.", page.Markup, StringComparison.Ordinal);
+        var open = page.Find(".ar-open");
+        Assert.Contains("В игре: Стрельба (молниемёт) 10%", open.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Подобрать оружие", open.TextContent, StringComparison.Ordinal);
+        Assert.Contains("Стреляет разрядами.", open.TextContent, StringComparison.Ordinal);
+        Assert.Single(page.FindAll(".ar-card"));
     }
 
     private sealed class FakeCatalog<T>(CatalogRoute route, IReadOnlyList<T> items) : ICatalogApi<T>
