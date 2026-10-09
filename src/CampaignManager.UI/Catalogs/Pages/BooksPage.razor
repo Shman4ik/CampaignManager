@@ -4,22 +4,37 @@
 @inject ICatalogApi<SpellDto> SpellsApi
 
 @* Книги: Название · Язык · Автор · Потеря Рассудка · Мифы. Таблица с md (K7): колонки уложены в ~690px портрета iPad Pro
-   11", карточки остались телефону. Фильтр категории убирает чужие колонки: у оккультных книг числа Мифов пусты
+   11" (язык там — строкой под автором), карточки остались телефону. Фильтр категории убирает чужие колонки: у оккультных книг числа Мифов пусты
    всегда, у книг Мифов — «+Оккультизм»; метка категории — только у меньшинства («Оккультизм», 10 книг из 106):
-   «Мифы» у каждой строки ничего не различает (K1). Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка. *@
+   «Мифы» у каждой строки ничего не различает (K1). Язык и автор в раскрытии не повторяются — с ячеек снимается обрезка.
+   Обложка — как у заклинаний: миниатюра 4:5 у названия, без обложки — заглушка того же размера; в раскрытии — картинка
+   до 14rem слева, сведения справа, на узком экране — под ней. *@
 <CatalogPage TItem="BookDto" Title="Книги" Icon="fa-book-open" AddLabel="Добавить книгу" Noun="книгу" Plural="книг"
              Filters="Filters" SearchAlso="b => b.AltNames.Append(b.Author)" TableFrom="TableBreakpoint.Md" State="_state"
              New="() => new BookDto()" OnFormOpening="EnsureSpellsAsync" RowDetail="Detail" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="BookDto" Title="Название" SortBy="b => b.Name" DefaultSort="false" HeaderClass="w-[30%]" Context="b">
-            <span class="font-medium text-primary-800">@b.Name</span>
-            @if (!view.IsFixed("type") && b.BookType == BookType.OccultBook)
+            <div class="flex items-center gap-3">
+                @Cover(b, "h-10 w-8")
+                <span class="min-w-0">
+                    <span class="font-medium text-primary-800">@b.Name</span>
+                    @if (!view.IsFixed("type") && b.BookType == BookType.OccultBook)
+                    {
+                        <Badge Tone="Tone.Stone" class="ml-1.5 align-middle">@CatalogText.Short(b.BookType)</Badge>
+                    }
+                </span>
+            </div>
+        </DataColumn>
+        @* Язык — столбцом только с lg, в портрете строкой под автором (как тип оружия): миниатюра обложки отняла у названия
+           44px, и худшая страница сжималась до 720px при колонке ~700. *@
+        <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[14%] max-lg:hidden" CellClass="max-lg:hidden" Context="b">@Dash(b.Language)</DataColumn>
+        <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[22%]" Context="b">
+            @Dash(b.Author)
+            @if (!string.IsNullOrWhiteSpace(b.Language))
             {
-                <Badge Tone="Tone.Stone" class="ml-1.5 align-middle">@CatalogText.Short(b.BookType)</Badge>
+                <p class="cm-meta lg:hidden">@b.Language</p>
             }
         </DataColumn>
-        <DataColumn TItem="BookDto" Title="Язык" SortBy="b => b.Language" HeaderClass="w-[14%]" Context="b">@Dash(b.Language)</DataColumn>
-        <DataColumn TItem="BookDto" Title="Автор" SortBy="b => b.Author" HeaderClass="w-[22%]" Context="b">@Dash(b.Author)</DataColumn>
         <DataColumn TItem="BookDto" Title="@Terms.SanityLoss" HeaderClass="whitespace-normal" Context="b"><DiceText Value="@b.SanityLoss" /></DataColumn>
         @* Четыре числовых столбца были пусты у 70–90% книг: один «Мифы» — «+1 / +3 · 12» (чтение / полное изучение ·
            значение), расшифровка — в раскрытии (K2). *@
@@ -29,17 +44,22 @@
         }
     </Columns>
     <CardTemplate Context="b">
-        <p class="font-medium text-primary-800">@b.Name @if (b.BookType == BookType.OccultBook) { <Badge Tone="Tone.Stone" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge> }</p>
-        <p class="cm-meta">@string.Join(" · ", new[] { b.Language, b.Author }.Where(x => !string.IsNullOrEmpty(x)))</p>
-        <p class="mt-1 text-sm text-primary-600">
-            Потеря Рассудка: @(b.SanityLoss ?? Terms.None)
-            @* Пустое не рисуем: у большинства книг Мифов этих чисел нет, прочерк в каждой карточке ничего не говорит.
-               «+1 / +3 · 12» — как в столбце таблицы, расшифровка — в раскрытии. *@
-            @if (Numbers(b) != Terms.None)
-            {
-                <text> · @(b.BookType == BookType.MythosBook ? "Мифы " : "")@Numbers(b)</text>
-            }
-        </p>
+        <div class="flex items-start gap-3">
+            @Cover(b, "h-15 w-12")
+            <div class="min-w-0">
+                <p class="font-medium text-primary-800">@b.Name @if (b.BookType == BookType.OccultBook) { <Badge Tone="Tone.Stone" class="ml-1 align-middle">@CatalogText.Short(b.BookType)</Badge> }</p>
+                <p class="cm-meta">@string.Join(" · ", new[] { b.Language, b.Author }.Where(x => !string.IsNullOrEmpty(x)))</p>
+                <p class="mt-1 text-sm text-primary-600">
+                    Потеря Рассудка: @(b.SanityLoss ?? Terms.None)
+                    @* Пустое не рисуем: у большинства книг Мифов этих чисел нет, прочерк в каждой карточке ничего не говорит.
+                       «+1 / +3 · 12» — как в столбце таблицы, расшифровка — в раскрытии. *@
+                    @if (Numbers(b) != Terms.None)
+                    {
+                        <text> · @(b.BookType == BookType.MythosBook ? "Мифы " : "")@Numbers(b)</text>
+                    }
+                </p>
+            </div>
+        </div>
     </CardTemplate>
 </CatalogPage>
 
@@ -119,14 +139,36 @@
 
     private static string? Plus(int? value) => value is { } v ? $"+{v}" : null;
 
+    // Обложка у названия — как у заклинаний; без обложки — заглушка того же размера, чтобы названия стояли ровно.
+    // Рисунки серии — гравюры с полями «бумаги»: в миниатюре поля срезаны увеличением, иначе книгу в 32×40 не разглядеть.
+    private static RenderFragment Cover(BookDto b, string size) => __builder =>
+    {
+        @if (b.ImageUrl is { } url)
+        {
+            @* Фон — пока миниатюра грузится, слот не выглядит дырой. *@
+            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
+                <img src="@ImageUrls.Thumb(url, 240)" alt="" class="size-full scale-130 object-cover" loading="lazy" decoding="async" />
+            </span>
+        }
+        else
+        {
+            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
+                <i class="fa-solid fa-book-open"></i>
+            </span>
+        }
+    };
+
     private RenderFragment<BookDto> Detail => b => __builder =>
     {
-        <div class="flex flex-wrap items-start gap-4 text-sm">
+        <div class="flex flex-wrap items-start gap-x-6 gap-y-3 text-sm">
             @if (b.ImageUrl is not null)
             {
-                <img src="@b.ImageUrl" alt="@b.Name" class="max-h-48 rounded-md" loading="lazy" />
+                @* Место под обложку 4:5 занято сразу: иначе сведения встают наверх и съезжают, когда картинка догрузится. *@
+                <div class="w-full max-w-56">
+                    <img src="@b.ImageUrl" alt="@b.Name" class="aspect-[4/5] w-full rounded-md bg-primary-100 object-cover" loading="lazy" />
+                </div>
             }
-            <dl class="grid min-w-0 flex-1 gap-1">
+            <dl class="grid min-w-0 flex-1 basis-80 content-start gap-1">
                 @if (b.Year is not null)
                 {
                     <div><dt class="cm-meta-label inline">Год: </dt><dd class="inline">@b.Year</dd></div>
