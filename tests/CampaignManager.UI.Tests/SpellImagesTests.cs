@@ -31,14 +31,28 @@ public sealed class SpellImagesTests : KitContext
     }
 
     [Fact]
-    public void Row_shows_cover_thumbnail_and_spell_without_images_gets_placeholder()
+    public void Gallery_tile_shows_cover_and_record_without_images_gets_placeholder()
     {
+        var page = Render<SpellsPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Сглаз", page.Markup, StringComparison.Ordinal));
+        Assert.Empty(page.FindAll("table"));
+        var covers = page.FindAll(".cm-tile-media img").Select(i => i.GetAttribute("src")).ToList();
+        Assert.Equal([$"/api/v1/files/{Cover}?w=480"], covers);
+        Assert.Single(page.FindAll(".cm-tile-media .fa-hat-wizard"));
+    }
+
+    [Fact]
+    public void Table_row_shows_cover_thumbnail_and_record_without_images_gets_placeholder()
+    {
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("spells?view=table");
+
         var page = Render<SpellsPage>();
 
         page.WaitForAssertion(() => Assert.Contains("Сглаз", page.Markup, StringComparison.Ordinal));
         var thumbs = page.FindAll("img[src*='/api/v1/files/']").Select(i => i.GetAttribute("src")).Distinct().ToList();
         Assert.Equal([$"/api/v1/files/{Cover}?w=240"], thumbs);
-        Assert.NotEmpty(page.FindAll("td .fa-hat-wizard, .cm-card .fa-hat-wizard"));
+        Assert.NotEmpty(page.FindAll(".cm-thumb .fa-hat-wizard"));
     }
 
     [Fact]

@@ -1,160 +1,60 @@
 @page "/bestiary"
 @attribute [Authorize]
 @using CampaignManager.Core.Catalogs
-@implements IAsyncDisposable
-@inject IJSRuntime JS
 
-@* Бестиарий — вид «галерея» того же справочника. Плитка ~190×260 (B1): обложка 10:11, имя поверх, под ней ПЗ /
-   броня / потеря рассудка; пять колонок в альбоме iPad Pro 11", четыре в портрете, две на телефоне; 20 тварей на
-   странице — четыре ряда в альбоме и пять в портрете. Касание плитки раскрывает полный статблок во всю
-   ширину сетки (dense подтягивает следующие плитки в дыру), раскрытая тварь одна и держится в адресе
-   (?open=). После раскрытия страница прокручивает к карточке; отступ под липкие шапку и фильтры даёт
-   scroll-margin-top карточки. Правка — своя страница: статблок в окно не помещается.
-   Раскрытая тварь: шапка — шеврон-название, тип и одна иконка «Изменить» (B7: «Свернуть» дублировал шеврон); на
-   телефоне у Хранителя статблок идёт раньше картинки (B5), игроку — картинки: больше показать нечего.
-   Игроку (CanEdit = false) сервер статблок не отдаёт вовсе (#175): плитка без ПЗ/брони/рассудка, раскрытая
-   карточка — картинки и «Описание». *@
-<CatalogPage TItem="CreatureDto" CoverOf="c => c.Images.FirstOrDefault()?.Url" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо" Plural="существ"
-             Filters="Filters" SearchAlso="c => [c.Description]" PageSize="20" Open="Open"
-             New="() => new CreatureDto()" EditHref="EditHref">
-    <Body Context="view">
-        <div class="cr-grid">
-            @foreach (var creature in view.Page)
-            {
-                var image = creature.Images.FirstOrDefault();
-                @if (view.Open == creature.Id)
-                {
-                    <article id="@($"creature-{creature.Id}")" class="cm-card cr-open col-span-full" @key="creature.Id">
-                        <div class="cm-card-header flex-wrap gap-y-2">
-                            @* Название и тип — свой ряд, кнопки — ниже (на телефоне бейдж наезжал на «Изменить», а название
-                               обрезалось); название переносится, не обрезается (правило 17). *@
-                            <div class="flex min-w-0 flex-1 basis-60 flex-wrap items-center gap-x-2 gap-y-1">
-                                <button type="button" class="flex min-h-9 min-w-0 items-center gap-2 text-left" aria-expanded="true"
-                                        @onclick="() => view.ToggleOpen(creature)">
-                                    <i class="fa-solid fa-chevron-up text-sm text-primary-400" aria-hidden="true"></i>
-                                    <span class="cm-title-serif min-w-0 break-words text-lg">@creature.Name</span>
-                                </button>
-                                <Badge Tone="Tone.Info">@CatalogText.Of(creature.Type)</Badge>
-                            </div>
-                            @if (view.CanEdit)
-                            {
-                                @* Одна иконка, как в таблицах справочников; «Свернуть» не нужен — шеврон слева делает то же (B7). *@
-                                <div class="cm-compact shrink-0">
-                                    <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(creature.Name)}")"
-                                            OnClick="() => view.Edit(creature)" />
-                                </div>
-                            }
-                        </div>
-                        <div class="cm-card-body flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
-                            @if (creature.Images.Count > 0)
-                            {
-                                @* На телефоне Хранителю первым нужен статблок, а не картинка на весь экран (B5). *@
-                                <div class="@("cr-open-media" + (view.CanEdit ? " order-last md:order-none" : ""))">
-                                    <CatalogImageGallery Images="creature.Images" Alt="@creature.Name" />
-                                </div>
-                            }
-                            <div class="min-w-0 flex-1">
-                                @if (view.CanEdit)
-                                {
-                                    <StatblockView Statblock="creature.Statblock" />
-                                }
-                                <section class="@(view.CanEdit ? "mt-4 text-sm" : "text-sm")">
-                                    <h3 class="cm-section-title mb-1">Описание</h3>
-                                    <p class="cm-text-muted whitespace-pre-line">@(string.IsNullOrWhiteSpace(creature.Description) ? "Описания нет." : creature.Description)</p>
-                                    @if (creature.Source is not null)
-                                    {
-                                        <p class="cm-meta mt-2">Источник: @creature.Source</p>
-                                    }
-                                </section>
-                            </div>
-                        </div>
-                    </article>
-                }
-                else
-                {
-                    <div class="cm-card cr-tile overflow-hidden" @key="creature.Id">
-                        <button type="button" class="cr-tile-button" aria-expanded="false" aria-label="@($"{creature.Name}: раскрыть")"
-                                @onclick="() => OpenAsync(view, creature)">
-                            <div class="cr-tile-media">
-                                @if (image is not null)
-                                {
-                                    <img src="@ImageUrls.Thumb(image.Url)" alt="" loading="lazy" decoding="async" />
-                                }
-                                else
-                                {
-                                    <div class="cr-tile-placeholder"><i class="fa-solid fa-skull" aria-hidden="true"></i></div>
-                                }
-                                @if (creature.Images.Count > 1)
-                                {
-                                    <span class="cr-tile-count"><i class="fa-solid fa-images" aria-hidden="true"></i> @creature.Images.Count</span>
-                                }
-                                <div class="cr-tile-caption">
-                                    <span class="cr-tile-name">@creature.Name</span>
-                                    <span class="cr-tile-type">@CatalogText.Of(creature.Type)</span>
-                                </div>
-                            </div>
-                            @if (view.CanEdit && !StatblockView.IsBlank(creature.Statblock))
-                            {
-                                <dl class="cr-tile-stats">
-                                    <div><dt>ПЗ</dt><dd>@(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</dd></div>
-                                    <div><dt>Броня</dt><dd>@StatblockView.TileArmor(creature.Statblock)</dd></div>
-                                    <div><dt>Рассудок</dt><dd>@(StatblockView.SanityOf(creature.Statblock) ?? "—")</dd></div>
-                                </dl>
-                            }
-                        </button>
-                    </div>
-                }
-            }
-        </div>
-    </Body>
-</CatalogPage>
+@* Бестиарий — галерея общей системы справочников (CatalogPage, Styles/catalog.css; выбор владельца 2026-10-09 — плитка как у
+   всех): рисунок 4:5 целиком (раньше его резали в квадрат и писали имя поверх затемнения), под ним имя и у Хранителя — ПЗ, броня
+   и потеря Рассудка; группы по типу, без страниц. Касание раскрывает полный статблок во всю ширину сетки: картинки слева (на
+   телефоне у Хранителя — после статблока, B5), статблок и описание справа. Правка — своя страница: статблок в окно не помещается.
+   Игроку (CanEdit = false) сервер статблок не отдаёт вовсе (#175): на плитке только имя, в раскрытии — картинки и «Описание».
+   Пустой статблок за «нулевую» тварь не принимать — смотреть на права. *@
+<CatalogPage @ref="_catalog" TItem="CreatureDto" Title="Бестиарий" Icon="fa-skull" AddLabel="Добавить существо" Noun="существо" Plural="существ"
+             Filters="Filters" SearchAlso="c => [c.Description]" CoverOf="c => c.Images.FirstOrDefault()?.Url"
+             Art="CatalogArt.Portrait" ImagesOf="c => c.Images" GroupOf="c => CatalogText.Of(c.Type)" Tile="Tile" Badges="Badges"
+             Details="Details" DetailsFirstOnPhone="true" New="() => new CreatureDto()" EditHref="EditHref" />
 
 @code {
     private static readonly IReadOnlyList<CatalogFilter<CreatureDto>> Filters =
         [CatalogFilter<CreatureDto>.ForEnum<CreatureType>("type", Terms.AnyType, CatalogText.Of, c => c.Type)];
 
-    private IJSObjectReference? _module;
-    private Guid? _revealed;
+    private CatalogPage<CreatureDto>? _catalog;
 
-    [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
+    private bool Keeper => _catalog?.CanEdit == true;
 
     private static string EditHref(CreatureDto? creature) =>
         creature is null ? "bestiary/creatures/edit" : $"bestiary/creatures/edit/{creature.Id}";
 
-    private static Task OpenAsync(CatalogView<CreatureDto> view, CreatureDto creature) => view.ToggleOpen(creature);
-
-    // Прокрутка — только в рендере, где раскрытая карточка уже есть: адрес меняется не сразу.
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // Сводка под рисунком — то, за чем Хранитель открывает бестиарий: ПЗ, броня, потеря Рассудка — по строке на показатель
+    // («ПЗ 90 · Броня особая» в плитку 164px не входит, и сводки соседних плиток вставали то в две строки, то в три).
+    private RenderFragment<CreatureDto> Tile => creature => __builder =>
     {
-        if (Open is not { } open || open == _revealed)
+        @if (Keeper && !StatblockView.IsBlank(creature.Statblock))
         {
-            return;
+            <span>ПЗ @(creature.Statblock.HitPoints > 0 ? creature.Statblock.HitPoints : "—")</span>
+            <span>Броня @StatblockView.TileArmor(creature.Statblock)</span>
+            <span>Рассудок @(StatblockView.SanityOf(creature.Statblock) ?? "—")</span>
         }
+    };
 
-        try
-        {
-            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Catalogs/Pages/BestiaryPage.razor.js");
-            if (await _module.InvokeAsync<bool>("reveal", $"creature-{open}"))
-            {
-                _revealed = open;
-            }
-        }
-        catch (JSDisconnectedException)
-        {
-        }
-    }
-
-    public async ValueTask DisposeAsync()
+    private static RenderFragment<CreatureDto> Badges => creature => __builder =>
     {
-        if (_module is not null)
+        <Badge Tone="Tone.Info">@CatalogText.Of(creature.Type)</Badge>
+    };
+
+    private RenderFragment<CatalogDetails<CreatureDto>> Details => d => __builder =>
+    {
+        var creature = d.Item;
+        @if (Keeper)
         {
-            try
-            {
-                await _module.DisposeAsync();
-            }
-            catch (JSDisconnectedException)
-            {
-            }
+            <StatblockView Statblock="creature.Statblock" />
         }
-    }
+        <section class="@(Keeper ? "mt-4 text-sm" : "text-sm")">
+            <h3 class="cm-section-title mb-1">Описание</h3>
+            <p class="cm-text-muted whitespace-pre-line">@(string.IsNullOrWhiteSpace(creature.Description) ? "Описания нет." : creature.Description)</p>
+            @if (creature.Source is not null)
+            {
+                <p class="cm-meta mt-2">Источник: @creature.Source</p>
+            }
+        </section>
+    };
 }

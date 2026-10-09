@@ -162,9 +162,9 @@ public sealed class CatalogsF6bTests : KitContext
 
         var page = Render<BestiaryPage>();
 
-        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("article.cr-open")));
+        page.WaitForAssertion(() => Assert.NotEmpty(page.FindAll("article.cm-record")));
         Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Глубоководный']"));
-        Assert.DoesNotContain("Свернуть", page.Find("article.cr-open").TextContent, StringComparison.Ordinal); // B7
+        Assert.DoesNotContain("Свернуть", page.Find("article.cm-record").TextContent, StringComparison.Ordinal); // B7
     }
 
     // ── Профессии: слоты ──

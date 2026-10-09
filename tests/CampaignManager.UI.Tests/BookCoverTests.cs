@@ -32,14 +32,28 @@ public sealed class BookCoverTests : KitContext
     }
 
     [Fact]
-    public void Row_shows_cover_thumbnail_and_book_without_cover_gets_placeholder()
+    public void Gallery_tile_shows_cover_and_record_without_images_gets_placeholder()
     {
+        var page = Render<BooksPage>();
+
+        page.WaitForAssertion(() => Assert.Contains("Золотая ветвь", page.Markup, StringComparison.Ordinal));
+        Assert.Empty(page.FindAll("table"));
+        var covers = page.FindAll(".cm-tile-media img").Select(i => i.GetAttribute("src")).ToList();
+        Assert.Equal([$"/api/v1/files/{Cover}?w=480"], covers);
+        Assert.Single(page.FindAll(".cm-tile-media .fa-book-open"));
+    }
+
+    [Fact]
+    public void Table_row_shows_cover_thumbnail_and_record_without_images_gets_placeholder()
+    {
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("books?view=table");
+
         var page = Render<BooksPage>();
 
         page.WaitForAssertion(() => Assert.Contains("Золотая ветвь", page.Markup, StringComparison.Ordinal));
         var thumbs = page.FindAll("img[src*='/api/v1/files/']").Select(i => i.GetAttribute("src")).Distinct().ToList();
         Assert.Equal([$"/api/v1/files/{Cover}?w=240"], thumbs);
-        Assert.NotEmpty(page.FindAll("td .fa-book-open, .cm-card .fa-book-open"));
+        Assert.NotEmpty(page.FindAll(".cm-thumb .fa-book-open"));
     }
 
     [Fact]

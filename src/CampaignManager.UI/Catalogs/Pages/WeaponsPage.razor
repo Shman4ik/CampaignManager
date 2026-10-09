@@ -9,14 +9,18 @@
    строкой под названием, как в карточке. Миниатюра 40×27: на текст остаётся 260px, а не 134 (W1). В портрет
    (~690px) таблица не влезает — там карточки: «Урон · Дальность» первой строкой, остальное мельче (W8). Навык уехал
    в раскрытие: тип его почти дублирует. Показ значений — `WeaponText`: «Нет», «метр», «Только 1» приведены к
-   словарю (W3); форма правки показывает записанное. Раскрытая строка не повторяет колонки и подпись карточки. *@
+   словарю (W3); форма правки показывает записанное. Раскрытая строка не повторяет колонки и подпись карточки.
+   Иллюстрации — общая система справочников (CatalogPage, Styles/catalog.css): справочник открывается галереей гравюр 3:2
+   группами по типу (плитка — урон и дальность), таблица книги — вторым видом (?view=table) с миниатюрой 60×40 у названия.
+   Раскрытое оружие — картинки слева, сведения справа (вне таблицы — все числа таблицы XVII и навык). *@
 <CatalogPage TItem="WeaponDto" CoverOf="w => w.Images.FirstOrDefault()?.Url" Title="Оружие" Icon="fa-gun" AddLabel="Добавить оружие" Noun="оружие" Plural="оружия"
              Filters="Filters" Toggles="Toggles" ErasOf="w => w.Eras" SearchAlso="w => [w.SkillName, w.Notes]"
-             TableFrom="TableBreakpoint.Lg" State="_state" Validate="Validate" New="NewWeapon" OnFormOpening="EnsureSkillsAsync" RowDetail="Detail" Form="Form">
+             Art="CatalogArt.Landscape" ImagesOf="w => w.Images" GroupOf="w => CatalogText.Of(w.Type)" Tile="Tile" Badges="Badges" Details="Detail"
+             TableFrom="TableBreakpoint.Lg" State="_state" Validate="Validate" New="NewWeapon" OnFormOpening="EnsureSkillsAsync" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="WeaponDto" Title="Название" SortBy="w => w.Name" DefaultSort="false" HeaderClass="w-[34%]" Context="w">
             <div class="flex items-center gap-3">
-                @Cover(w, "h-[27px] w-10")
+                <CatalogThumb Url="@w.Images.FirstOrDefault()?.Url" Art="CatalogArt.Landscape" Icon="fa-gun" />
                 <div class="min-w-0">
                     <span class="font-medium text-primary-800">@w.Name</span>
                     @if (view.ShowEra)
@@ -55,7 +59,7 @@
     </Columns>
     <CardTemplate Context="w">
         <div class="flex items-center gap-3">
-            @Cover(w, "h-12 w-[4.5rem]")
+            <CatalogThumb Url="@w.Images.FirstOrDefault()?.Url" Art="CatalogArt.Landscape" Icon="fa-gun" Large="true" />
             <div class="min-w-0">
                 <p class="font-medium text-primary-800">@w.Name<WeaponMarks Weapon="w" /></p>
                 <p class="cm-meta">@CatalogText.Of(w.Type) · @w.SkillName</p>
@@ -211,36 +215,46 @@
         { } value => value.ToString(System.Globalization.CultureInfo.CurrentCulture),
     };
 
-    // Обложка — первая картинка, как плитка бестиария; без картинок — заглушка того же размера, чтобы названия стояли ровно.
-    private static RenderFragment Cover(WeaponDto w, string size) => __builder =>
+    // Плитка: урон и дальность — «чем бьёт» (W8); метки «редк.» и «не пронз.» — строкой ниже; тип — заголовок группы.
+    private static RenderFragment<WeaponDto> Tile => w => __builder =>
     {
-        @if (w.Images.FirstOrDefault() is { } cover)
+        <span>
+            <DiceText Value="@WeaponText.Damage(w.Damage)" class="font-medium text-primary-800" />
+            @if (WeaponText.Range(w.Range) is { } range)
+            {
+                @* «СИЛ / 5 м» не рвётся посреди: переносится целиком. *@
+                <text> · </text><span class="whitespace-nowrap">@range</span>
+            }
+        </span>
+        @if (w.IsRare || !w.IsImpaling)
         {
-            @* Фон — пока миниатюра грузится, слот не выглядит дырой. *@
-            <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="@($"{size} shrink-0 rounded-xs bg-primary-100 object-cover")" loading="lazy" decoding="async" />
-        }
-        else
-        {
-            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
-                <i class="fa-solid fa-gun"></i>
-            </span>
+            <span class="-ml-1.5"><WeaponMarks Weapon="w" /></span>
         }
     };
 
-    // Картинки слева (галерея бестиария: большая и миниатюры по касанию), сведения справа; на узком экране — под ней.
-    // Только то, чего нет в строке: «Источник» без значения, «Пронзающее: да» (у 56 из 69 — шум; «нет» — отличие),
-    // навык на карточке (он в её подписи) и варианты магазина, равные «Боезапасу», не пишутся (W2).
-    private static RenderFragment<WeaponDto> Detail => w => __builder =>
+    private static RenderFragment<WeaponDto> Badges => w => __builder =>
     {
-        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
-        @if (w.Images.Count > 0)
-        {
-            <div class="w-full max-w-56">
-                <CatalogImageGallery @key="w.Id" Images="w.Images" Alt="@w.Name" />
-            </div>
-        }
-        <dl class="grid min-w-0 flex-1 basis-80 content-start gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-            <div class="max-lg:hidden"><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? Terms.None)</dd></div>
+        <WeaponMarks Weapon="w" />
+    };
+
+    // Справа от картинок (слева их рисует каркас: большая и миниатюры по касанию). В раскрытой строке — только то, чего нет в
+    // строке: «Источник» без значения, «Пронзающее: да» (у 56 из 69 — шум; «нет» — отличие), навык на карточке (он в её подписи)
+    // и варианты магазина, равные «Боезапасу», не пишутся (W2). В галерее колонок нет — числа таблицы XVII здесь.
+    private static RenderFragment<CatalogDetails<WeaponDto>> Detail => d => __builder =>
+    {
+        var w = d.Item;
+        <dl class="grid content-start gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+            @if (!d.InTable)
+            {
+                <div><dt class="cm-meta-label inline">Тип: </dt><dd class="inline">@CatalogText.Of(w.Type)</dd></div>
+                <div><dt class="cm-meta-label inline">Урон: </dt><dd class="inline"><DiceText Value="@WeaponText.Damage(w.Damage)" /></dd></div>
+                <div><dt class="cm-meta-label inline">@Terms.Range: </dt><dd class="inline">@(WeaponText.Range(w.Range) ?? Terms.None)</dd></div>
+                <div><dt class="cm-meta-label inline">@Terms.AttacksPerRound: </dt><dd class="inline">@(WeaponText.Attacks(w.Attacks) ?? Terms.None)</dd></div>
+                <div><dt class="cm-meta-label inline">Боезапас: </dt><dd class="inline">@(WeaponText.Ammo(w.Ammo) ?? Terms.None)</dd></div>
+                <div><dt class="cm-meta-label inline">Осечка: </dt><dd class="inline">@Malfunction(w)</dd></div>
+                <div><dt class="cm-meta-label inline">Цена: </dt><dd class="inline">@(WeaponText.Cost(w.Cost) ?? Terms.None)</dd></div>
+            }
+            <div class="@(d.InTable ? "max-lg:hidden" : null)"><dt class="cm-meta-label inline">Навык: </dt><dd class="inline">@(w.SkillName ?? Terms.None)</dd></div>
             @if (w.DamageByRange is { Count: > 0 } byRange)
             {
                 <div><dt class="cm-meta-label inline">Урон по дистанциям: </dt><dd class="inline cm-dice">@string.Join(" / ", byRange.Select(r => $"{r.Range} {r.Damage}"))</dd></div>
@@ -262,7 +276,6 @@
                 <div><dt class="cm-meta-label inline">Источник: </dt><dd class="inline">@w.Source</dd></div>
             }
         </dl>
-        </div>
     };
 
     private RenderFragment<WeaponDto> Form => w => __builder =>

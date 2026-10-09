@@ -72,3 +72,10 @@ public sealed class CatalogView<T>
     /// <summary>Эпоху в строке показывать, только когда записи из разных эпох и фильтр по эпохе не задан.</summary>
     public bool ShowEra => ErasVary && Era is null;
 }
+
+/// <summary>
+/// Раскрытая запись для сведений справочника (<c>CatalogPage.Details</c>). <see cref="InTable"/> — раскрытая строка таблицы или
+/// карточка телефона: то, что стоит в колонках, там уже видно и не повторяется; в галерее и карточках колонок нет — сведения
+/// полные.
+/// </summary>
+public sealed record CatalogDetails<T>(T Item, bool InTable);

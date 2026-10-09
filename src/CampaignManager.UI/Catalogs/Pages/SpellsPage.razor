@@ -9,15 +9,17 @@
    разворачиваются на месте; в раскрытии — только то, чего в колонках нет (другие названия, описание).
    При фильтре по типу колонка типа уходит, её ширина достаётся стоимости. В раскрытии — «В книгах: …» ссылками на
    раскрытую книгу (P4): за столом нужно знать, где искать заклинание.
-   Картинки — как у оружия: первая — миниатюра 4:5 у названия (рисунки серии портретные), без картинок — заглушка того
-   же размера; в раскрытии — галерея слева, сведения справа, на узком экране — под ней. *@
+   Иллюстрации — общая система справочников (CatalogPage, Styles/catalog.css): справочник открывается галереей гравюр 4:5
+   группами по типу (плитка — стоимость), таблица — вторым видом (?view=table) с миниатюрой у названия. Раскрытое заклинание —
+   картинки слева, сведения справа (вне таблицы — с типом, стоимостью и временем). *@
 <CatalogPage TItem="SpellDto" CoverOf="s => s.Images.FirstOrDefault()?.Url" Title="Заклинания" Icon="fa-hat-wizard" AddLabel="Добавить заклинание" Noun="заклинание" Plural="заклинаний"
              Filters="_filters" SearchAlso="s => s.AltNames" TableFrom="TableBreakpoint.Md" OnLoaded="Loaded" State="_state" Validate="Validate"
-             New="() => new SpellDto()" OnFormOpening="OnOpening" RowDetail="Detail" Form="Form">
+             Art="CatalogArt.Portrait" ImagesOf="s => s.Images" GroupOf="s => Tags(s.SpellType).FirstOrDefault()" Tile="Tile" Details="Detail"
+             New="() => new SpellDto()" OnFormOpening="OnOpening" Form="Form">
     <Columns Context="view">
         <DataColumn TItem="SpellDto" Title="Название" SortBy="s => s.Name" DefaultSort="false" HeaderClass="w-[28%]" Context="s">
             <div class="flex items-center gap-3">
-                @Cover(s, "h-10 w-8")
+                <CatalogThumb Url="@s.Images.FirstOrDefault()?.Url" Art="CatalogArt.Portrait" Icon="fa-hat-wizard" />
                 <span class="min-w-0 font-medium text-primary-800">@s.Name</span>
             </div>
         </DataColumn>
@@ -30,7 +32,7 @@
     </Columns>
     <CardTemplate Context="s">
         <div class="flex items-start gap-3">
-            @Cover(s, "h-15 w-12")
+            <CatalogThumb Url="@s.Images.FirstOrDefault()?.Url" Art="CatalogArt.Portrait" Icon="fa-hat-wizard" Large="true" />
             <div class="min-w-0">
                 <p class="font-medium text-primary-800">@s.Name</p>
                 <p class="cm-meta">@s.SpellType · Время: @s.CastingTime</p>
@@ -134,37 +136,34 @@
         return match.Success ? (text[..match.Index].TrimEnd(), match.Groups["also"].Value) : (text, null);
     }
 
-    // Обложка — первая картинка, как у оружия; без картинок — заглушка того же размера, чтобы названия стояли ровно.
-    // Рисунки серии — гравюры с полями «бумаги»: в миниатюре поля срезаны увеличением, иначе сюжет в 32×40 не разглядеть.
-    private static RenderFragment Cover(SpellDto s, string size) => __builder =>
+    // Плитка: стоимость — то, что спрашивают за столом раньше всего; тип — заголовок группы. Длинная — в две строки, целиком в раскрытии.
+    private static RenderFragment<SpellDto> Tile => s => __builder =>
     {
-        @if (s.Images.FirstOrDefault() is { } cover)
+        @if (!string.IsNullOrWhiteSpace(s.Cost))
         {
-            @* Фон — пока миниатюра грузится, слот не выглядит дырой. *@
-            <span class="@($"{size} shrink-0 overflow-hidden rounded-xs bg-primary-100")">
-                <img src="@ImageUrls.Thumb(cover.Url, 240)" alt="" class="size-full scale-130 object-cover" loading="lazy" decoding="async" />
-            </span>
-        }
-        else
-        {
-            <span class="@($"{size} flex shrink-0 items-center justify-center rounded-xs bg-primary-50 text-primary-300")" aria-hidden="true">
-                <i class="fa-solid fa-hat-wizard"></i>
-            </span>
+            <span class="line-clamp-2">@Cost(s.Cost)</span>
         }
     };
 
-    private RenderFragment<SpellDto> Detail => s => __builder =>
+    // Справа от картинок. В раскрытой строке таблицы тип, стоимость и время — в колонках; в галерее — здесь.
+    private RenderFragment<CatalogDetails<SpellDto>> Detail => d => __builder =>
     {
+        var s = d.Item;
         var (description, also) = SplitAlso(s.Description);
         var books = _booksBySpell.GetValueOrDefault(s.Id) ?? [];
-        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
-        @if (s.Images.Count > 0)
-        {
-            <div class="w-full max-w-56">
-                <CatalogImageGallery @key="s.Id" Images="s.Images" Alt="@s.Name" />
-            </div>
-        }
-        <div class="grid min-w-0 flex-1 basis-80 content-start gap-2 text-sm">
+        <div class="grid content-start gap-2 text-sm">
+            @if (!d.InTable)
+            {
+                <p><span class="cm-meta-label">Тип: </span>@s.SpellType</p>
+                @if (!string.IsNullOrWhiteSpace(s.Cost))
+                {
+                    <p><span class="cm-meta-label">Стоимость: </span>@Cost(s.Cost)</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(s.CastingTime))
+                {
+                    <p><span class="cm-meta-label">Время сотворения: </span>@s.CastingTime</p>
+                }
+            }
             @if (s.AltNames.Count > 0)
             {
                 <p><span class="cm-meta-label">Другие названия: </span>@string.Join(", ", s.AltNames)</p>
@@ -196,7 +195,6 @@
             {
                 <p class="cm-meta">Источник: @s.Source</p>
             }
-        </div>
         </div>
     };
 

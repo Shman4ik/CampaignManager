@@ -10,7 +10,7 @@
 
 | Папка | Что |
 |---|---|
-| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `wizard.css` (помощник создания сыщика), `play.css` (режим «Игра» листа), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки), `kit.css` (подсказки по касанию, меню «⋯», выбор файла, сводка ошибок, липкая колонка, полоса страниц, пустая строка), `music.css` (плеер: панель и полоса) |
+| `Styles/` | Tailwind v4: `theme.css` (токены), `base.css`, `components.css` (классы `cm-*`), `shell.css` (оболочка), `sheet.css` (лист сыщика), `wizard.css` (помощник создания сыщика), `play.css` (режим «Игра» листа), `encounter.css` (сцена), `scenario.css` (режим игры и показ раздатки), `kit.css` (подсказки по касанию, меню «⋯», выбор файла, сводка ошибок, липкая колонка, полоса страниц, пустая строка), `music.css` (плеер: панель и полоса), `catalog.css` (иллюстрации справочников: рамки, миниатюра, плитка, карточка, раскрытие) |
 | `Shared/` | UI-кит: `Button`, `Badge`, `Alert`, `Field`, `Modal`, `DialogService`, `ToastService`, `DataTable`, `StringListEditor`, `AsyncContent`, `RollInput`, `DiceInput`, `StatBar`, `Markdown`, `PageHeader`, `Tabs`, `FilterPanel`, `Pagination`, `EmptyState`, `LoadingIndicator`; волна UX-0b — `RowMenu`/`RowMenuItem`, `BookRef`, `Abbr`, `FilePicker`, `SectionHeader`, `FormErrors`/`ValidationScroll`, `UnsavedChangesGuard`, `StickyPane`, `DiceText`, `Names` (см. «Компоненты UX-0b») |
 | `Layout/` | `MainLayout`, `BareLayout` (колонка без рельса — только `/login`), `NavMenu` (единый список пунктов), `NavRail`, `BottomNav`, `ConnectionIndicator` |
 | `Identity/` | `/login` (в Development — ещё «Войти как …», тестовый вход), `RedirectToLogin`, `UserMenu` — подвал рельса и листа «Ещё» (вход — T1.4); `RoleLabels` — роли и статусы заявок по-русски; `IUserSession` — перечитать `/me` без перезагрузки; `InfoLinks` — ссылки на `/about` и `/legal` (страница входа, лист «Ещё»); сами страницы — статические, их рендерит сервер (`Server/Components/Pages/About.razor`, `Legal.razor`, `[ExcludeFromInteractiveRouting]`, каркас `Server/Components/InfoShell`: те же поля, что у остальных страниц (колонка `cm-main` отступает на рельс — в нём знак), «← На главную» слева в шапке — вошедшему на `/`, гостю на `/login` (главная для гостя — страница Auth0), заголовок вкладки «О сайте — Campaign Manager»; бот Google и Auth0 читают HTML без JS), текст — `Pages/AboutContent`, `LegalContent` (адреса v1, на `/legal` ссылаются Google-клиент и Auth0; тест `Info_pages_are_open_without_sign_in_with_text_in_html`) |
@@ -317,7 +317,7 @@ HTML строит `MarkdownText` (Markdig): **сырой HTML выводится
 ## Списки
 
 - Порядок страницы-списка: `FilterPanel` → загрузка/пусто → список → `Pagination` (**под карточкой, вне её**: полоса
-    `cm-pagination`, кнопки 32px; не подвал карточки; `PageSize` 0 — без страниц, полосы нет: галерея предметов).
+    `cm-pagination`, кнопки 32px; не подвал карточки; `PageSize` 0 — без страниц, полосы нет; галереи справочников — без страниц всегда).
   Загрузка, ошибка с «Повторить» и пусто — `AsyncContent` (без `@if (_isLoading)` и своих try/catch); `Key` — id из
   адреса. Любой обработчик фильтра сбрасывает страницу на первую.
 - `FilterPanel` (F6b): `CompactReset` — «Сбросить фильтры» значком до `xl` (профессии: поиск, очки навыков, порядок и флажок с

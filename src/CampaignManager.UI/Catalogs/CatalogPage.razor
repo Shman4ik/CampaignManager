@@ -10,13 +10,20 @@
 @inject DialogService Dialogs
 @inject ToastService Toasts
 @inject NavigationManager Navigation
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @* Страница справочника — одна на все семь (в v1 четыре плотных каталога совпадали на 83–88%).
    Список приходит целиком (справочники маленькие), поиск, фильтры, сортировка и страницы — здесь,
-   у всех справочников одинаково. Своё у справочника — колонки (Columns) или своя раскладка (Body:
-   карточки профессий, галерея бестиария), раскрытие, форма. Кнопки правки — только при CanEdit из
-   API; защищает сервер (403), здесь они просто не рисуются.
+   у всех справочников одинаково. Своё у справочника — колонки (Columns), строки плитки (Tile) или текст карточки
+   (Cards), сведения раскрытой записи (Details), форма. Кнопки правки — только при CanEdit из API; защищает сервер
+   (403), здесь они просто не рисуются.
+
+   Иллюстрации — одна система на все справочники (выбор владельца 2026-10-09, Styles/catalog.css): рамка 4:5 или 3:2 (Art),
+   справочник с плиткой открывается галереей по группам без страниц, таблица — вторым видом (?view=table, «Галерея / Таблица»
+   в панели фильтров); профессии и артефакты — карточки «обложка слева». Раскрытая запись одна на всех: во всю ширину сетки,
+   картинка слева (CatalogImageGallery), сведения справа; в таблице — то же тело в раскрытой строке. Страница прокручивает к
+   раскрытой карточке (CatalogPage.razor.js).
 
    Общий каркас (UX-0b, правила 4, 11, 12, 17): раскрытая запись всегда в адресе (?open=), у всех справочников;
    одна кнопка «Сбросить фильтры» (неактивна, пока фильтров нет); эпоха — только когда записи из разных эпох;
@@ -35,8 +42,8 @@
 </PageHeader>
 
 <div class="cm-page">
-    @* Липнет только у раскладки без своего скроллпорта (галерея, карточки профессий): таблица прокручивается сама. *@
-    <FilterPanel OnReset="ResetFilters" CanReset="HasFilters" Sticky="Body is not null" CompactReset="Sorts.Count > 1">
+    @* Липнет только у раскладки без своего скроллпорта (галерея, карточки): таблица прокручивается сама. *@
+    <FilterPanel OnReset="ResetFilters" CanReset="HasFilters" Sticky="!IsTable" CompactReset="HasViews || ShowSorts">
         <ChildContent>
             @* min-w-32 на телефоне: поиск, «Фильтры» и «⋯» помещаются в одну строку (393px − поля). *@
             <input class="cm-input min-w-32 flex-1 md:min-w-48" type="search" placeholder="@SearchPlaceholder" aria-label="Поиск"
@@ -71,7 +78,7 @@
                         }
                     </select>
                 }
-                @if (Sorts.Count > 1)
+                @if (ShowSorts)
                 {
                     <select class="cm-input w-full sm:w-48 shrink-0" aria-label="Сортировка" value="@SortKey" @onchange="e => { _sortKey = e.Value?.ToString(); SetPage(1); }">
                         @foreach (var sort in Sorts)
@@ -87,6 +94,12 @@
                         <input type="checkbox" class="cm-checkbox" checked="@_toggles.Contains(current.Key)" @onchange="e => SetToggle(current.Key, e.Value is true)" />
                         <span>@current.Label</span>
                     </label>
+                }
+                @if (HasViews)
+                {
+                    @* Вид — в адресе, как поиск и раскрытая запись; на телефоне — за кнопкой «Фильтры» (поиск, «Фильтры» и «⋯» —
+                       одной строкой). *@
+                    <Segmented TValue="bool" Options="ViewOptions" Value="IsTable" ValueChanged="SetTableView" Label="Вид" class="shrink-0" />
                 }
                 @FilterExtras
             </div>
@@ -136,9 +149,49 @@
                 <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">@Terms.ResetFilters</Button>
             </p>
         }
-        else if (Body is not null)
+        else if (IsGallery)
         {
-            @Body(view)
+            @* Галерея — без страниц: тип и поиск сужают её сами, весь справочник — одна прокрутка. Группы — по типу справочника. *@
+            <div class="grid gap-7">
+                @foreach (var group in Groups(view.Filtered))
+                {
+                    <section aria-label="@(group.Title ?? Title)" @key="group.Title">
+                        @if (group.Title is not null)
+                        {
+                            <h2 class="cm-section-title mb-3">@group.Title · @group.Items.Count</h2>
+                        }
+                        <div class="@CatalogArtCss.Tiles(Art)">
+                            @foreach (var item in group.Items)
+                            {
+                                @if (OpenId == item.Id)
+                                {
+                                    @RecordOf(item)
+                                }
+                                else
+                                {
+                                    @TileOf(item)
+                                }
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+        }
+        else if (IsCards)
+        {
+            <div class="cm-wide-grid">
+                @foreach (var item in view.Page)
+                {
+                    @if (OpenId == item.Id)
+                    {
+                        @RecordOf(item)
+                    }
+                    else
+                    {
+                        @WideOf(item)
+                    }
+                }
+            </div>
             <Pagination CurrentPage="_page" PageSize="PageSize" TotalItems="view.Filtered.Count" CurrentPageChanged="SetPage" />
         }
         else
@@ -147,7 +200,7 @@
                 @* Ключ — фильтры, которые прячут колонки и метки: ячейки DataColumn таблица рисует раньше, чем
                    колонки получат новый вид, и без пересоздания метка эпохи отставала бы на один рендер. *@
                 <DataTable @key="ColumnsKey" TItem="TItem" Items="view.Filtered" RowKey="i => i.Id" Page="_page" PageSize="PageSize"
-                           TableFrom="TableFrom" Scroll="Scroll" StickyHead="StickyHead" RowDetail="RowDetail" CanExpand="CanExpand"
+                           TableFrom="TableFrom" Scroll="Scroll" StickyHead="StickyHead" RowDetail="TableDetail" CanExpand="CanExpand"
                            OpenKey="(object?)OpenId" OpenKeyChanged="SetOpenKey"
                            CardTemplate="CardTemplate is null ? null : Card" AriaLabel="@Title">
                     <Columns>
@@ -318,8 +371,38 @@
     /// <summary>Колонки таблицы (DataColumn); получают вид — чтобы прятать то, что фиксирует фильтр.</summary>
     [Parameter] public RenderFragment<CatalogView<TItem>>? Columns { get; set; }
 
-    /// <summary>Своя раскладка вместо таблицы: карточки профессий, галерея бестиария.</summary>
-    [Parameter] public RenderFragment<CatalogView<TItem>>? Body { get; set; }
+    /// <summary>Рамка иллюстраций справочника: миниатюры, плитки, обложки карточек и картинка раскрытой записи (Styles/catalog.css).</summary>
+    [Parameter] public CatalogArt Art { get; set; }
+
+    /// <summary>
+    /// Строки сведений плитки под названием (цена, урон, база). Задана — справочник открывается галереей по группам без страниц,
+    /// а таблица (<see cref="Columns"/>) становится вторым видом: «Галерея / Таблица» в панели фильтров, <c>?view=table</c>.
+    /// </summary>
+    [Parameter] public RenderFragment<TItem>? Tile { get; set; }
+
+    /// <summary>Текст карточки «обложка слева» под названием (профессии — навыки, артефакты — правило): вместо таблицы.</summary>
+    [Parameter] public RenderFragment<TItem>? Cards { get; set; }
+
+    /// <summary>Группа записи в галерее (тип предмета, категория навыка): заголовок «Тип · N», группы по алфавиту, без группы — последней.</summary>
+    [Parameter] public Func<TItem, string?>? GroupOf { get; set; }
+
+    /// <summary>Заголовок группы записей без группы.</summary>
+    [Parameter] public string Ungrouped { get; set; } = "Без типа";
+
+    /// <summary>Картинки записи для раскрытия (первая — обложка); справочник с одной картинкой отдаёт список из неё.</summary>
+    [Parameter] public Func<TItem, IReadOnlyList<CatalogImageDto>>? ImagesOf { get; set; }
+
+    /// <summary>Метки у названия раскрытой записи галереи и карточек (необычный, редк., из Лавкрафта).</summary>
+    [Parameter] public RenderFragment<TItem>? Badges { get; set; }
+
+    /// <summary>
+    /// Сведения раскрытой записи — справа от картинки (картинку рисует каркас по <see cref="ImagesOf"/>). <c>InTable</c> —
+    /// раскрытая строка таблицы: колонки уже видны и не повторяются. Без него — <see cref="RowDetail"/> (фонотека: таблица без картинок).
+    /// </summary>
+    [Parameter] public RenderFragment<CatalogDetails<TItem>>? Details { get; set; }
+
+    /// <summary>У Хранителя на телефоне сведения раскрытой записи — выше картинки (статблок твари, B5).</summary>
+    [Parameter] public bool DetailsFirstOnPhone { get; set; }
 
     /// <summary>Строка-карточка на узком экране (кнопки правки страница добавит сама).</summary>
     [Parameter] public RenderFragment<TItem>? CardTemplate { get; set; }
@@ -383,12 +466,6 @@
     /// <summary>Есть сид книги — кнопка «С правилами».</summary>
     [Parameter] public bool Sync { get; set; }
 
-    /// <summary>
-    /// Раскрытая запись, если страница сама разбирает адрес. Не нужен: каркас читает <c>?open=</c> сам и следит за
-    /// его сменой — параметр остался для страниц, которым запись нужна и у себя (галерея бестиария).
-    /// </summary>
-    [Parameter] public Guid? Open { get; set; }
-
     /// <summary>Список загружен или изменился — странице, которой нужны имена (родители навыков).</summary>
     [Parameter] public EventCallback<IReadOnlyList<TItem>> OnLoaded { get; set; }
 
@@ -427,19 +504,55 @@
         InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
 
     private readonly HashSet<string> _written = [];
     private string? _intended;
     private Guid? _open;
 
-    /// <summary>Раскрытая запись: из адреса (<c>?open=</c>), иначе — переданная страницей.</summary>
-    private Guid? OpenId => _open ?? Open;
+    private bool _table;
+    private IJSObjectReference? _module;
+    private Guid? _revealed;
+
+    /// <summary>Раскрытая запись — из адреса (<c>?open=</c>).</summary>
+    private Guid? OpenId => _open;
+
+    /// <summary>Два вида одной выдачи: галерея (или карточки) и таблица.</summary>
+    private bool HasViews => Columns is not null && (Tile is not null || Cards is not null);
+
+    private bool IsTable => Columns is not null && (_table || (Tile is null && Cards is null));
+
+    private bool IsGallery => !IsTable && Tile is not null;
+
+    private bool IsCards => !IsTable && Tile is null && Cards is not null;
+
+    /// <summary>Порядок выбором — у раскладки без заголовков столбцов; у таблицы его задают заголовки.</summary>
+    private bool ShowSorts => Sorts.Count > 1 && !IsTable;
+
+    /// <summary>Галерея — без страниц (тип и поиск сужают её сами); таблица и карточки — по <see cref="PageSize"/>.</summary>
+    private int ActivePageSize => IsGallery ? 0 : PageSize;
+
+    private static readonly IReadOnlyList<SegmentOption<bool>> ViewOptions =
+        [new(false, "Галерея", TestId: "catalog-view-gallery"), new(true, "Таблица", TestId: "catalog-view-table")];
 
     private void ReadQuery()
     {
         var search = "";
         var page = 1;
+        var table = false;
         Guid? open = null;
         foreach (var part in new Uri(Navigation.Uri).Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -454,11 +567,15 @@
                 case ["open", var value] when Guid.TryParse(Uri.UnescapeDataString(value), out var id):
                     open = id;
                     break;
+                case ["view", "table"]:
+                    table = true;
+                    break;
             }
         }
 
         _search = search;
         _page = page;
+        _table = table;
         if (open != _open)
         {
             _open = open;
@@ -473,6 +590,7 @@
             ["q"] = _search.Length > 0 ? _search : null,
             ["page"] = _page > 1 ? _page : null,
             ["open"] = _open,
+            ["view"] = _table && HasViews ? "table" : null,
         });
         if (uri == (_intended ?? Navigation.Uri))
         {
@@ -482,6 +600,15 @@
         _intended = uri;
         _written.Add(uri);
         Navigation.NavigateTo(uri, replace: true);
+    }
+
+    // Вид — в адресе (F5 и «назад» возвращают туда же); у таблицы и галереи страницы свои — с первой.
+    private void SetTableView(bool table)
+    {
+        _table = table;
+        _page = 1;
+        _pagedTo = null;
+        WriteUrl();
     }
 
     private Task SetOpenKey(object? key)
@@ -514,6 +641,9 @@
         }
     }
 
+    /// <summary>Права из ответа API — шаблонам страницы, которым нужно знать их и в плитке (сводка статблока твари только Хранителю).</summary>
+    public bool CanEdit => _canEdit;
+
     /// <summary>Перечитать список (после того, что страница записала мимо формы: пачка файлов).</summary>
     public Task ReloadAsync() => _content?.ReloadAsync() ?? Task.CompletedTask;
 
@@ -521,12 +651,13 @@
     {
         var filtered = Order(_items.Where(Matches)).ToList();
         // Раскрытая по адресу запись — на своей странице, а не «где-то дальше».
-        if (OpenId is { } open && _pagedTo != open && PageSize > 0)
+        var pageSize = ActivePageSize;
+        if (OpenId is { } open && _pagedTo != open && pageSize > 0)
         {
             var index = filtered.FindIndex(i => i.Id == open);
             if (index >= 0)
             {
-                _page = index / PageSize + 1;
+                _page = index / pageSize + 1;
             }
 
             _pagedTo = open;
@@ -534,7 +665,7 @@
 
         // Страница из ссылки (?page=) могла устареть: записей стало меньше — последняя, а не пустота.
         _page = Math.Clamp(_page, 1, Math.Max(1, TotalPages(filtered.Count)));
-        var page = PageSize > 0 ? filtered.Skip((_page - 1) * PageSize).Take(PageSize).ToList() : filtered;
+        var page = pageSize > 0 ? filtered.Skip((_page - 1) * pageSize).Take(pageSize).ToList() : filtered;
         return new CatalogView<TItem>
         {
             All = _items,
@@ -616,7 +747,7 @@
 
     private string MenuLabel => "Ещё: " + string.Join(", ", new[] { CoverOf is null ? null : "картинки", "импорт", "экспорт", Sync ? "сверка с книгой правил" : null }.OfType<string>());
 
-    private bool HasExtraFilters => Filters.Count > 0 || Toggles.Count > 0 || Sorts.Count > 1 || ErasVary || _era is not null || FilterExtras is not null;
+    private bool HasExtraFilters => Filters.Count > 0 || Toggles.Count > 0 || ShowSorts || HasViews || ErasVary || _era is not null || FilterExtras is not null;
 
     /// <summary>Сколько из спрятанных на телефоне фильтров включено — на кнопке «Фильтры (2)».</summary>
     private int ActiveExtra => _filters.Count + _toggles.Count + (_era is null ? 0 : 1);
@@ -624,7 +755,7 @@
     // Экспорт — ссылка на API с «download»: из меню — переход, браузер скачивает и страницу не покидает.
     private void ExportAsync() => Navigation.NavigateTo(Api.Route.Export, forceLoad: true);
 
-    private int TotalPages(int count) => PageSize > 0 ? (count + PageSize - 1) / PageSize : 1;
+    private int TotalPages(int count) => ActivePageSize > 0 ? (count + ActivePageSize - 1) / ActivePageSize : 1;
 
     // Любой фильтр возвращает на первую страницу: иначе с пятой страницы поиск уводит в пустоту.
     private void OnSearch(ChangeEventArgs e)
@@ -708,7 +839,7 @@
     // справа; иконка «Изменить» стоит рядом и раскрытия не вызывает. Не раскрываемая запись — просто карточка.
     private RenderFragment<TItem> Card => item => __builder =>
     {
-        var expandable = RowDetail is not null && (CanExpand?.Invoke(item) ?? true);
+        var expandable = TableDetail is not null && (CanExpand?.Invoke(item) ?? true);
         var open = OpenId == item.Id;
         <div class="flex items-start gap-3">
             @if (expandable)
@@ -743,9 +874,194 @@
         </div>
         @if (expandable && open)
         {
-            <div class="mt-2 rounded-md bg-primary-50 p-3">@RowDetail!(item)</div>
+            <div class="mt-2 rounded-md bg-primary-50 p-3">@TableDetail!(item)</div>
         }
     };
+
+    // ── Иллюстрации: плитка, карточка, раскрытая запись ──
+
+    private static string RecordId(Guid id) => $"record-{id}";
+
+    // Группы галереи по алфавиту, без группы — последней; без GroupOf — одна группа без заголовка.
+    private IEnumerable<(string? Title, List<TItem> Items)> Groups(IReadOnlyList<TItem> items) =>
+        GroupOf is null
+            ? [(null, [.. items])]
+            : items.GroupBy(i => GroupOf(i) ?? "")
+                .OrderBy(g => g.Key.Length == 0)
+                .ThenBy(g => g.Key, StringComparer.CurrentCulture)
+                .Select(g => ((string?)(g.Key.Length == 0 ? Ungrouped : g.Key), g.ToList()));
+
+    /// <summary>Сведения раскрытой строки таблицы и карточки телефона — с картинкой слева, как в галерее.</summary>
+    private RenderFragment<TItem>? TableDetail =>
+        Details is null && ImagesOf is null ? RowDetail : item => RecordBody(item, inTable: true);
+
+    // Пока картинок нет ни у одной записи, у карточек нет и места под обложку: двадцать одинаковых заглушек ничего не различают.
+    private bool AnyCover => CoverOf is not null && _items.Any(i => CoverOf(i) is not null);
+
+    private RenderFragment Eras(TItem item) => __builder =>
+    {
+        @if (ErasOf is not null && ErasVary && _era is null)
+        {
+            <EraBadges Values="ErasOf(item)" />
+        }
+    };
+
+    // Одна иконка «Изменить» 32px — в углу карточки и в шапке раскрытой записи (правило 7); в строке таблицы — RowActions.
+    private RenderFragment EditButton(TItem item) => __builder =>
+    {
+        <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(item.Name)}")"
+                Href="@EditHref?.Invoke(item)" OnClick="() => EditAsync(item)" />
+    };
+
+    private RenderFragment Cover(TItem item, string css) => __builder =>
+    {
+        var cover = CoverOf?.Invoke(item);
+        <span class="@Css.Join(CatalogArtCss.Frame(Art), css)">
+            @if (cover is not null)
+            {
+                @* 240px — обложка не шире 112px при плотности 2. *@
+                <img src="@ImageUrls.Thumb(cover, 240)" alt="" loading="lazy" decoding="async" />
+            }
+            else
+            {
+                <i class="@($"fa-solid {Icon}")" aria-hidden="true"></i>
+            }
+        </span>
+    };
+
+    // Плитка — рисунок, название и строки сведений страницы; вся — кнопка раскрытия (X7). «Изменить» — в шапке раскрытой записи,
+    // как у бестиария: карандаш на каждой из 30 плиток экрана поверх рисунков — шум, а правят справочник реже, чем листают.
+    private RenderFragment TileOf(TItem item) => __builder =>
+    {
+        var count = ImagesOf?.Invoke(item).Count ?? 0;
+        <article id="@RecordId(item.Id)" class="cm-card cm-tile" @key="item.Id">
+            <button type="button" class="cm-tile-button" aria-expanded="false" @onclick="() => ToggleOpenAsync(item)">
+                <span class="@Css.Join(CatalogArtCss.Frame(Art), "cm-tile-media")">
+                    @if (CoverOf?.Invoke(item) is { } cover)
+                    {
+                        <img src="@ImageUrls.Thumb(cover)" alt="" loading="lazy" decoding="async" />
+                    }
+                    else
+                    {
+                        <i class="@($"fa-solid {Icon}")" aria-hidden="true"></i>
+                    }
+                    @if (count > 1)
+                    {
+                        <span class="cm-tile-count" aria-label="@($"Картинок: {count}")"><i class="fa-solid fa-images" aria-hidden="true"></i> @count</span>
+                    }
+                </span>
+                <span class="cm-tile-body">
+                    <span class="cm-tile-name">@item.Name</span>
+                    <span class="cm-tile-meta">@Tile!(item)@Eras(item)</span>
+                </span>
+            </button>
+        </article>
+    };
+
+    // Карточка — обложка слева, название с шевроном, текст страницы; раскрывает касание в любом месте (растянутая кнопка-название).
+    private RenderFragment WideOf(TItem item) => __builder =>
+    {
+        <article id="@RecordId(item.Id)" class="@Css.Join("cm-card cm-wide", _canEdit ? "cm-wide-editable" : null)" @key="item.Id">
+            @if (AnyCover)
+            {
+                @Cover(item, "cm-wide-cover")
+            }
+            <div class="cm-wide-text">
+                <div class="cm-wide-head">
+                    @* Название и метки переносятся между собой; шеврон остаётся в первой строке у правого края. *@
+                    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                        <button type="button" class="cm-wide-toggle" aria-expanded="false" @onclick="() => ToggleOpenAsync(item)">@item.Name</button>
+                        @Badges?.Invoke(item)
+                    </div>
+                    <i class="fa-solid fa-chevron-down mt-1 shrink-0 text-sm text-primary-400" aria-hidden="true"></i>
+                </div>
+                @Cards!(item)
+                @Eras(item)
+            </div>
+            @if (_canEdit)
+            {
+                <div class="cm-wide-edit cm-compact">@EditButton(item)</div>
+            }
+        </article>
+    };
+
+    // Раскрытая запись галереи и карточек — во всю ширину сетки: шапка (шеврон-название, метки, «Изменить»), картинка слева, сведения справа.
+    private RenderFragment RecordOf(TItem item) => __builder =>
+    {
+        <article id="@RecordId(item.Id)" class="cm-card cm-record" @key="item.Id">
+            <div class="cm-card-header gap-3">
+                <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                    <button type="button" class="flex min-h-9 min-w-0 items-center gap-2 text-left" aria-expanded="true"
+                            @onclick="() => ToggleOpenAsync(item)">
+                        <i class="fa-solid fa-chevron-up shrink-0 text-sm text-primary-400" aria-hidden="true"></i>
+                        <span class="cm-card-title min-w-0 break-words">@item.Name</span>
+                    </button>
+                    @Badges?.Invoke(item)
+                    @Eras(item)
+                </div>
+                @if (_canEdit)
+                {
+                    <div class="cm-compact shrink-0">@EditButton(item)</div>
+                }
+            </div>
+            <div class="cm-card-body">@RecordBody(item, inTable: false)</div>
+        </article>
+    };
+
+    private RenderFragment RecordBody(TItem item, bool inTable) => __builder =>
+    {
+        var images = ImagesOf?.Invoke(item) ?? [];
+        <div class="@Css.Join("cm-record-body", DetailsFirstOnPhone && _canEdit ? "cm-record-details-first" : null)">
+            @if (images.Count > 0)
+            {
+                <div class="@CatalogArtCss.Figure(Art)">
+                    <CatalogImageGallery @key="item.Id" Images="images" Alt="@item.Name" />
+                </div>
+            }
+            <div class="cm-record-text">
+                @if (Details is not null)
+                {
+                    @Details(new CatalogDetails<TItem>(item, inTable))
+                }
+                else
+                {
+                    @RowDetail?.Invoke(item)
+                }
+            </div>
+        </div>
+    };
+
+    // Раскрытая карточка встаёт во всю ширину сетки своим рядом и уезжает от места касания — прокрутить к ней. Свернули —
+    // забыть: та же запись, раскрытая снова, опять встанет не там, где её коснулись. Таблица показывает раскрытую строку сама.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsTable || OpenId is not { } open || _items.Count == 0)
+        {
+            if (OpenId is null)
+            {
+                _revealed = null;
+            }
+
+            return;
+        }
+
+        if (open == _revealed)
+        {
+            return;
+        }
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Catalogs/CatalogPage.razor.js");
+            if (await _module.InvokeAsync<bool>("reveal", RecordId(open)))
+            {
+                _revealed = open;
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
 
     // ── Правка ──
 
