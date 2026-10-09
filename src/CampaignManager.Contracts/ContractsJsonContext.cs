@@ -84,6 +84,7 @@ namespace CampaignManager.Contracts;
 [JsonSerializable(typeof(CatalogFile<ArtifactDto>))]
 [JsonSerializable(typeof(CatalogImportReport))]
 [JsonSerializable(typeof(CatalogUsage))]
+[JsonSerializable(typeof(CatalogCoverRequest))]
 [JsonSerializable(typeof(ProfileDto))]
 [JsonSerializable(typeof(UpdateDisplayNameRequest))]
 [JsonSerializable(typeof(SubmitKeeperApplicationRequest))]

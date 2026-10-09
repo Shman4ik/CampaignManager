@@ -85,6 +85,38 @@ public sealed class CatalogService<TEntity, TDto>(
         await SaveAsync(cancellationToken, id);
     }
 
+    /// <summary>
+    /// Обложка записи (<c>PUT …/{id}/cover</c>): файл уже загружен, меняется только обложка — поэтому без <c>If-Match</c>
+    /// (поля, которые правят на другом устройстве, она не затрёт), но версия корня сдвигается, и открытая там форма при
+    /// сохранении получит 409. Обложка уже есть, а заменять не велели, — 409 <c>conflict</c>: пачка картинок не должна молча
+    /// затереть рисунок, подобранный руками. Та же картинка второй раз — ничего не меняет.
+    /// </summary>
+    public async Task<TDto> SetCoverAsync(Guid id, CatalogCoverRequest request, CancellationToken cancellationToken)
+    {
+        await access.ForCatalogAsync(cancellationToken).Demand(Operation.Edit);
+        var entity = await store.Query(db).SingleOrDefaultAsync(e => e.Id == id, cancellationToken)
+            ?? throw AccessDeniedException.NotFound();
+        if (!await db.Files.AnyAsync(f => f.Id == request.FileId, cancellationToken))
+        {
+            throw ApiProblemException.Invalid("Картинка не найдена: загрузите её заново.");
+        }
+
+        var current = store.CoverOf(entity);
+        if (current != request.FileId)
+        {
+            if (current is not null && !request.Replace)
+            {
+                throw ApiProblemException.Conflict("Картинка уже есть — её заменяют только по флажку «Заменить».");
+            }
+
+            store.SetCover(db, entity, request.FileId);
+            db.Entry(entity).Property(e => e.Name).IsModified = true; // правка детей — версия корня тоже сдвигается
+            await SaveAsync(cancellationToken);
+        }
+
+        return await ReadAsync(id, cancellationToken);
+    }
+
     /// <summary>Кто держит запись — до удаления: подтверждение называет их, а не отказ после него.</summary>
     public async Task<CatalogUsage> UsageAsync(Guid id, CancellationToken cancellationToken)
     {

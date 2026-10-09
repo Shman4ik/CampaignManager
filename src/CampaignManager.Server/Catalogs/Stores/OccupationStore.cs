@@ -26,6 +26,13 @@ public sealed class OccupationStore : CatalogStore<Occupation, OccupationDto>
 
     public override DbSet<Occupation> Set(CmDbContext db) => db.Occupations;
 
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Occupation entity) => CatalogImages.Cover(entity.Images);
+
+    public override void SetCover(CmDbContext db, Occupation entity, Guid fileId) =>
+        CatalogImages.SetCover(db, entity.Images, fileId, ord => new OccupationImage { OccupationId = entity.Id, Ord = ord });
+
     public override IQueryable<Occupation> Query(CmDbContext db) =>
         db.Occupations.Include(o => o.Slots).ThenInclude(s => s.Options).Include(o => o.Images);
 

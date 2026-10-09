@@ -3,8 +3,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using CampaignManager.Contracts;
 using CampaignManager.Contracts.Catalogs;
+using CampaignManager.Contracts.Identity;
 using CampaignManager.Data.Catalogs;
 using CampaignManager.Server.Catalogs.Stores;
+using CampaignManager.Server.Identity;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -73,7 +75,7 @@ public static class CatalogsModule
         // Читать — любой вошедший; права на запись проверяет сервис (AccessPolicy → 403).
         var group = app.MapGroup(route.Base).RequireAuthorization().WithTags(tag);
 
-        group.MapGet("", async Task<IResult> (HttpContext http, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
+        var list = group.MapGet("", async Task<IResult> (HttpContext http, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
         {
             var (list, etag) = await catalog.ListAsync(cancellationToken);
             // no-cache: браузер хранит ответ, но каждый раз сверяет ETag — правка видна сразу,
@@ -87,6 +89,18 @@ public static class CatalogsModule
 
             return TypedResults.Ok(list);
         }).WithName($"List-{route.Name}");
+
+        if (store.HasImages)
+        {
+            // Картинки пачкой: файл уже загружен, запись получает его обложкой. Токену агента со scope catalogs:images открыты
+            // только этот адрес и список (найти запись по коду) — правка полей, импорт и удаление ему закрыты.
+            list.AllowMachine(MachineScopes.CatalogImages);
+            group.MapPut("{id:guid}/cover", async Task<IResult> (Guid id, HttpRequest request, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
+                    TypedResults.Ok(await catalog.SetCoverAsync(id, await BodyAsync(request, ContractsJsonContext.Default.CatalogCoverRequest, cancellationToken), cancellationToken)))
+                .AllowMachine(MachineScopes.CatalogImages)
+                .WithName($"Cover-{route.Name}")
+                .Accepts<CatalogCoverRequest>("application/json");
+        }
 
         group.MapPost("", async Task<IResult> (HttpRequest request, CatalogService<TEntity, TDto> catalog, CancellationToken cancellationToken) =>
                 TypedResults.Ok(await catalog.CreateAsync(await BodyAsync(request, itemType, cancellationToken), cancellationToken)))

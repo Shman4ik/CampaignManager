@@ -17,9 +17,14 @@ public sealed record CatalogRoute(string Name)
 
     public string Sync => Base + "/sync";
 
+    /// <summary><c>PUT</c> <see cref="CatalogCoverRequest"/>: обложка записи — у справочников с картинками.</summary>
+    public string CoverPattern => ItemPattern + "/cover";
+
     public string Item(Guid id) => $"{Base}/{id}";
 
     public string Usage(Guid id) => $"{Item(id)}/usage";
+
+    public string Cover(Guid id) => $"{Item(id)}/cover";
 }
 
 public static class CatalogsRoutes
@@ -74,6 +79,15 @@ public interface ICatalogApi<T>
     /// по имени) пропускается или перезаписывается; <paramref name="dryRun"/> — только отчёт.
     /// </summary>
     Task<CatalogImportReport> ImportAsync(Stream file, bool overwrite, bool dryRun, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Поставить обложку — файл, уже загруженный в <c>cm.files</c>: у предмета и книги это их единственная картинка, у
+    /// остальных — первая в списке (прежняя обложка заменяется, другие картинки остаются). Обложка уже есть, а
+    /// <paramref name="replace"/> не задан — 409 <c>conflict</c>. Версию записи не спрашивает: меняется одна обложка, а не
+    /// поля, которые правили в форме. Только у справочников с картинками (загрузка пачкой, скрипты с токеном агента).
+    /// </summary>
+    Task<T> SetCoverAsync(Guid id, Guid fileId, bool replace, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
 
     /// <summary>
     /// «Синхронизировать с правилами»: апсерт сида книги по коду. Самодельные записи (без кода) не

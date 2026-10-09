@@ -296,6 +296,9 @@ public sealed class ArtifactDto : CatalogItemDto
 /// <param name="Url">Адрес картинки (только чтение; при записи сервер берёт <paramref name="FileId"/>).</param>
 public sealed record CatalogImageDto(Guid FileId, string? Url, string? Caption);
 
+/// <summary>Обложка записи (<c>PUT …/{id}/cover</c>): файл и можно ли заменить ту, что уже стоит.</summary>
+public sealed record CatalogCoverRequest(Guid FileId, bool Replace);
+
 /// <summary>
 /// Кто держит запись справочника: <see cref="Count"/> держателей, имена первых — <see cref="Examples"/> («профессия
 /// Врач», «лист сыщика Артур Нельсон»). <see cref="Blocks"/> — держатель не даёт удалить запись (навык у оружия и

@@ -22,6 +22,13 @@ public sealed class SpellStore : CatalogStore<Spell, SpellDto>
 
     public override DbSet<Spell> Set(CmDbContext db) => db.Spells;
 
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Spell entity) => CatalogImages.Cover(entity.Images);
+
+    public override void SetCover(CmDbContext db, Spell entity, Guid fileId) =>
+        CatalogImages.SetCover(db, entity.Images, fileId, ord => new SpellImage { SpellId = entity.Id, Ord = ord });
+
     public override IQueryable<Spell> Query(CmDbContext db) => db.Spells.Include(s => s.Images);
 
     public override Spell New() => new() { Name = "", SpellType = "" };
@@ -76,6 +83,13 @@ public sealed class ArtifactStore : CatalogStore<Artifact, ArtifactDto>
 
     public override DbSet<Artifact> Set(CmDbContext db) => db.Artifacts;
 
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Artifact entity) => CatalogImages.Cover(entity.Images);
+
+    public override void SetCover(CmDbContext db, Artifact entity, Guid fileId) =>
+        CatalogImages.SetCover(db, entity.Images, fileId, ord => new ArtifactImage { ArtifactId = entity.Id, Ord = ord });
+
     public override IQueryable<Artifact> Query(CmDbContext db) => db.Artifacts.Include(a => a.Images);
 
     public override Artifact New() => new() { Name = "" };
@@ -124,6 +138,12 @@ public sealed class ItemStore : CatalogStore<Item, ItemDto>
     public override string UsedBy => "сценариями";
 
     public override DbSet<Item> Set(CmDbContext db) => db.Items;
+
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Item entity) => entity.ImageFileId;
+
+    public override void SetCover(CmDbContext db, Item entity, Guid fileId) => entity.ImageFileId = fileId;
 
     public override Item New() => new() { Name = "" };
 
@@ -204,6 +224,12 @@ public sealed class BookStore : CatalogStore<Book, BookDto>
     public override string Noun => "Книга";
 
     public override DbSet<Book> Set(CmDbContext db) => db.Books;
+
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Book entity) => entity.ImageFileId;
+
+    public override void SetCover(CmDbContext db, Book entity, Guid fileId) => entity.ImageFileId = fileId;
 
     public override IQueryable<Book> Query(CmDbContext db) => db.Books.Include(b => b.Spells);
 

@@ -56,6 +56,13 @@ public abstract class CatalogApiClient<T>(HttpClient http, CatalogRoute route, J
         return await ApiResponses.ReadAsync(response, Json.CatalogUsage, cancellationToken, withCode: true);
     }
 
+    public async Task<T> SetCoverAsync(Guid id, Guid fileId, bool replace, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PutAsJsonAsync(route.Cover(id), new CatalogCoverRequest(fileId, replace),
+            Json.CatalogCoverRequest, cancellationToken);
+        return await ApiResponses.ReadAsync(response, itemType, cancellationToken, withCode: true);
+    }
+
     public async Task<CatalogImportReport> ImportAsync(Stream file, bool overwrite, bool dryRun, CancellationToken cancellationToken = default)
     {
         using var content = new StreamContent(file);

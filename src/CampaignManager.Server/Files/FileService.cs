@@ -35,11 +35,16 @@ public sealed class FileService(
     /// одинаковых файлов упирается в уникальный <c>storage_key</c> и тоже получает одну строку.
     /// </summary>
     /// <param name="openRead">Поток файла; зовётся дважды — для хеша и для загрузки.</param>
+    /// <param name="webp">
+    /// PNG и JPEG перевести в WebP (<see cref="WebpConversion"/>): хранится и хешируется уже WebP, поэтому повторная загрузка
+    /// того же PNG находит прежнюю строку (кодек детерминирован). Не вышло — сохраняется оригинал.
+    /// </param>
     public async Task<StoredFileDto> UploadAsync(
         string fileName,
         long length,
         Func<Stream> openRead,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool webp = false)
     {
         await access.ForFilesAsync(cancellationToken).Demand(Operation.Edit);
         var name = CleanName(fileName);
@@ -54,6 +59,25 @@ public sealed class FileService(
         if (length > limit)
         {
             throw new FileRejectedException($"Файл больше {limit / (1024 * 1024)} МБ.");
+        }
+
+        if (webp && WebpConversion.Applies(type.ContentType))
+        {
+            byte[] original;
+            await using (var source = openRead())
+            using (var buffer = new MemoryStream((int)length))
+            {
+                await source.CopyToAsync(buffer, cancellationToken);
+                original = buffer.ToArray();
+            }
+
+            if (WebpConversion.TryConvert(original) is { } converted)
+            {
+                name = Path.ChangeExtension(name, ".webp");
+                type = FileTypes.Find(name)!;
+                length = converted.Length;
+                openRead = () => new MemoryStream(converted, writable: false);
+            }
         }
 
         string sha256;

@@ -71,6 +71,18 @@ public abstract class CatalogStore<TEntity, TDto>
     /// </summary>
     public abstract Task ApplyAsync(CmDbContext db, TDto dto, TEntity entity, CatalogWrite write, CancellationToken cancellationToken);
 
+    /// <summary>Есть ли у записей картинки — от этого зависит, маппится ли обложка (<c>PUT …/{id}/cover</c>).</summary>
+    public virtual bool HasImages => false;
+
+    /// <summary>Обложка записи: у предмета и книги — их единственная картинка, у остальных — первая в списке.</summary>
+    public virtual Guid? CoverOf(TEntity entity) => null;
+
+    /// <summary>
+    /// Поставить обложку (запись загружена <see cref="Query"/>, с картинками): прежняя заменяется, остальные картинки
+    /// остаются. Файл уже проверен сервисом.
+    /// </summary>
+    public virtual void SetCover(CmDbContext db, TEntity entity, Guid fileId) => throw new NotSupportedException();
+
     /// <summary>Сид книги для «Синхронизировать с правилами»; null — сида нет.</summary>
     public virtual Task<IReadOnlyList<TDto>?> SeedAsync(CmDbContext db, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TDto>?>(null);

@@ -17,6 +17,14 @@ public static class FilesRoutes
     /// <summary><c>POST</c> <see cref="DeleteOrphansRequest"/>: удалить сирот из отчёта.</summary>
     public const string DeleteOrphans = ApiRoutes.Prefix + "/admin/files/orphans/delete";
 
+    /// <summary>
+    /// Параметр загрузки <c>?format=webp</c>: картинку PNG или JPEG сервер переводит в WebP (качество 85, размер тот же).
+    /// Рисунки справочников по 2–3 МБ иначе тяжелы для iPad.
+    /// </summary>
+    public const string FormatQuery = "format";
+
+    public const string WebpFormat = "webp";
+
     /// <summary>Имя поля формы с файлом.</summary>
     public const string UploadField = "file";
 
