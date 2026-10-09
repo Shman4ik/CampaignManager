@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Server.Access;
 using Microsoft.AspNetCore.Authentication;
@@ -137,7 +139,11 @@ public static class AccountEndpoints
 /// <summary>Куда вернуться после входа и выхода — только на свой хост, иначе это открытый редирект.</summary>
 public static class ReturnUrl
 {
-    /// <summary>Относительный путь или абсолютный адрес своего <paramref name="host"/>; всё прочее — <c>/</c>.</summary>
+    /// <summary>
+    /// Относительный путь или абсолютный адрес своего <paramref name="host"/>; всё прочее — <c>/</c>.
+    /// Результат идёт в заголовок <c>Location</c> (тестовый вход, колбэки входа и выхода Auth0), поэтому он
+    /// закодирован (<see cref="EscapeForHeader"/>): <c>/skills?q=меч</c> → <c>/skills?q=%D0%BC%D0%B5%D1%87</c>.
+    /// </summary>
     public static string Normalize(string? returnUrl, string host)
     {
         if (string.IsNullOrWhiteSpace(returnUrl))
@@ -148,19 +154,58 @@ public static class ReturnUrl
         if (Uri.TryCreate(returnUrl, UriKind.Relative, out var relative))
         {
             var path = relative.OriginalString.StartsWith('/') ? relative.OriginalString : "/" + relative.OriginalString;
-            return IsSameHostPath(path) ? path : "/";
+            return SameHostOrRoot(path);
         }
 
         if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var absolute)
             && absolute.Scheme is "http" or "https"
             && string.Equals(absolute.Host, host, StringComparison.OrdinalIgnoreCase))
         {
-            var pathAndQuery = absolute.PathAndQuery + absolute.Fragment;
-            return IsSameHostPath(pathAndQuery) ? pathAndQuery : "/";
+            return SameHostOrRoot(absolute.PathAndQuery + absolute.Fragment);
         }
 
         return "/";
     }
+
+    private static string SameHostOrRoot(string path)
+    {
+        var escaped = EscapeForHeader(path);
+        return IsSameHostPath(escaped) ? escaped : "/";
+    }
+
+    /// <summary>
+    /// Kestrel не пускает в заголовок не-ASCII и управляющие символы — ответ 500. Их, как и пробел, — в
+    /// <c>%XX</c> байтов UTF-8, как браузер кодирует адрес; остальной ASCII и уже закодированное
+    /// (<c>%D0%BC</c>) — как есть. Табуляцию и перевод строки браузер из адреса выбросил бы, и «/\t/evil»
+    /// стал бы «//evil», а закодированные они — просто символы пути.
+    /// </summary>
+    private static string EscapeForHeader(string path)
+    {
+        if (!path.Any(NeedsEscape))
+        {
+            return path;
+        }
+
+        var builder = new StringBuilder(path.Length * 3);
+        Span<byte> utf8 = stackalloc byte[4];
+        foreach (var rune in path.EnumerateRunes())
+        {
+            if (rune.IsAscii && !NeedsEscape((char)rune.Value))
+            {
+                builder.Append((char)rune.Value);
+                continue;
+            }
+
+            foreach (var b in utf8[..rune.EncodeToUtf8(utf8)])
+            {
+                builder.Append('%').Append(b.ToString("X2", CultureInfo.InvariantCulture));
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool NeedsEscape(char c) => c is <= ' ' or >= '\x7F';
 
     /// <summary>
     /// «/foo» ведёт на свой хост, а «//evil.com» и «/\evil.com» браузер считает адресом с чужим хостом,

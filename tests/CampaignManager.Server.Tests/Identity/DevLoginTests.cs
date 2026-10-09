@@ -205,6 +205,18 @@ public sealed class DevLoginTests(DevLoginApp app) : IClassFixture<DevLoginApp>
         Assert.Equal("/", response.Headers.Location?.ToString());
     }
 
+    // Адрес с кириллицей (поиск справочника) — закодированный: сырой Kestrel в заголовок не пускал, был 500.
+    [Fact]
+    public async Task Dev_login_returns_to_encoded_address()
+    {
+        TestDatabase.SkipIfMissing();
+
+        var response = await app.Browser().GetAsync(IdentityRoutes.DevLoginUrl("keeper", "/skills?q=меч"), Cancellation);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal(AccountFlowTests.SearchReturnUrl, response.Headers.Location?.OriginalString);
+    }
+
     // Два сервера Development на одном localhost: у браузера одна банка кук на хост, порт её не делит.
     // С портом в имени кука входа одного сервера не перезаписывает куку соседа, и обе сессии живы.
     [Fact]

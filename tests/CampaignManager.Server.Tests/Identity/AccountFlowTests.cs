@@ -1,7 +1,10 @@
 using System.Net;
 using CampaignManager.Contracts.Identity;
 using CampaignManager.Server.Identity;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace CampaignManager.Server.Tests.Identity;
@@ -12,6 +15,9 @@ namespace CampaignManager.Server.Tests.Identity;
 /// </summary>
 public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
 {
+    /// <summary><c>/skills?q=меч</c> в виде, годном для заголовка <c>Location</c>.</summary>
+    internal const string SearchReturnUrl = "/skills?q=%D0%BC%D0%B5%D1%87";
+
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     private HttpClient Browser() => app.CreateClient(new WebApplicationFactoryClientOptions
@@ -141,6 +147,50 @@ public sealed class AccountFlowTests(CmApp app) : IClassFixture<CmApp>
     [InlineData("javascript:alert(1)", "/")]
     public void Return_url_stays_on_own_host(string? returnUrl, string expected) =>
         Assert.Equal(expected, ReturnUrl.Normalize(returnUrl, "localhost"));
+
+    // Адрес возврата уходит в заголовок Location, а Kestrel не пускает туда не-ASCII и управляющие символы (500):
+    // они кодируются как в URI, уже закодированное остаётся как есть.
+    [Theory]
+    [InlineData("/skills?q=меч", SearchReturnUrl)]
+    [InlineData(SearchReturnUrl, SearchReturnUrl)]
+    [InlineData("/items?q=фонарь%20и", "/items?q=%D1%84%D0%BE%D0%BD%D0%B0%D1%80%D1%8C%20%D0%B8")]
+    [InlineData("/ктулху#след", "/%D0%BA%D1%82%D1%83%D0%BB%D1%85%D1%83#%D1%81%D0%BB%D0%B5%D0%B4")]
+    [InlineData("https://localhost/skills?q=меч", SearchReturnUrl)]
+    [InlineData("/skills?q=a b", "/skills?q=a%20b")]
+    // Табуляцию браузер из Location выбрасывает, и «/\t/evil» стал бы «//evil» — в закодированном виде она безвредна.
+    [InlineData("/\t/evil.example", "/%09/evil.example")]
+    [InlineData("//злой.example", "/")]
+    public void Return_url_fits_location_header(string returnUrl, string expected) =>
+        Assert.Equal(expected, ReturnUrl.Normalize(returnUrl, "localhost"));
+
+    // Вход через Auth0 с адреса с кириллицей (поиск справочника): после колбэка /signin-oidc браузер уходит
+    // на RedirectUri из state — он уже годен для заголовка.
+    [Fact]
+    public async Task Auth0_login_returns_to_encoded_address()
+    {
+        var response = await Browser().GetAsync(IdentityRoutes.LoginUrl("/skills?q=меч"), Cancellation);
+
+        var properties = OpenIdConnect().StateDataFormat.Unprotect(AuthorizeQuery(response)["state"]);
+        Assert.Equal(SearchReturnUrl, properties?.RedirectUri);
+    }
+
+    // Выход через Auth0 целиком: /oidc/logout, затем /signout-callback-oidc возвращает на адрес с кириллицей.
+    [Fact]
+    public async Task Auth0_logout_returns_to_encoded_address()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{IdentityRoutes.Logout}?returnUrl={Uri.EscapeDataString("/skills?q=меч")}");
+        request.Headers.Add("Sec-Fetch-Site", "same-origin");
+        var logout = await Browser().SendAsync(request, Cancellation);
+        var state = System.Web.HttpUtility.ParseQueryString(logout.Headers.Location!.Query)["state"];
+
+        var callback = await Browser().GetAsync($"/signout-callback-oidc?state={Uri.EscapeDataString(state!)}", Cancellation);
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal(SearchReturnUrl, callback.Headers.Location?.OriginalString);
+    }
+
+    private OpenIdConnectOptions OpenIdConnect() =>
+        app.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get(OpenIdConnectDefaults.AuthenticationScheme);
 
     private static HttpRequestMessage PageLoad(string path, string? cookie)
     {
