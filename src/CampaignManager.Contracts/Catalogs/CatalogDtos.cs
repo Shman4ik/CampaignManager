@@ -59,6 +59,12 @@ public sealed class SkillDto : CatalogItemDto
     public string? TimeRequired { get; set; }
 
     public bool CanRetry { get; set; }
+
+    /// <summary>Иллюстрация — одна, как у предмета: сыщик за делом. У специализации без своей показывается родительская.</summary>
+    public Guid? ImageFileId { get; set; }
+
+    /// <summary>Адрес иллюстрации (только чтение).</summary>
+    public string? ImageUrl { get; set; }
 }
 
 public sealed class OccupationDto : CatalogItemDto

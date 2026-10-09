@@ -159,6 +159,7 @@ create table cm.skills (
     opposing_skills       text[] not null default '{}',
     time_required         text,
     can_retry             boolean not null default false,
+    image_file_id         uuid references cm.files on delete set null,  -- иллюстрация, одна (как у предмета)
     source                text,
     created_by_id         uuid references cm.users on delete set null,
     created_at            timestamptz not null default now(),
@@ -798,6 +799,7 @@ where (select count(*) from cm.campaign_members m where m.campaign_id = c.id and
 -- файлы, на которые никто не ссылается (после переноса — пусто)
 select f.id from cm.files f
 where not exists (select 1 from cm.characters        where portrait_file_id = f.id)
+  and not exists (select 1 from cm.skills            where image_file_id = f.id)
   and not exists (select 1 from cm.books             where image_file_id = f.id)
   and not exists (select 1 from cm.items             where image_file_id = f.id)
   and not exists (select 1 from cm.creature_images   where file_id = f.id)

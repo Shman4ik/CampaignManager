@@ -1,4 +1,5 @@
 using CampaignManager.Contracts.Catalogs;
+using CampaignManager.Contracts.Files;
 using CampaignManager.Core.Catalogs;
 using CampaignManager.Data;
 using CampaignManager.Data.Catalogs;
@@ -9,7 +10,8 @@ namespace CampaignManager.Server.Catalogs.Stores;
 
 /// <summary>
 /// Навыки. Специализация — запись с родителем (<c>parent_id</c>), одна ступень: «Стрельба (пистолет)» →
-/// «Стрельба». База — число или формула (<c>DEX/2</c> у Уклонения, <c>EDU</c> у родного языка).
+/// «Стрельба». База — число или формула (<c>DEX/2</c> у Уклонения, <c>EDU</c> у родного языка). Иллюстрация — одна,
+/// как у предмета (<c>image_file_id</c>): у навыка один рисунок «сыщик за делом», галереи нет.
 /// </summary>
 public sealed class SkillStore : CatalogStore<Skill, SkillDto>
 {
@@ -24,6 +26,12 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
     public override string UsedBy => "оружием, профессиями или специализациями";
 
     public override DbSet<Skill> Set(CmDbContext db) => db.Skills;
+
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Skill entity) => entity.ImageFileId;
+
+    public override void SetCover(CmDbContext db, Skill entity, Guid fileId) => entity.ImageFileId = fileId;
 
     public override async Task<IReadOnlyList<string>> UsersOfAsync(CmDbContext db, Guid id, CancellationToken cancellationToken)
     {
@@ -62,6 +70,8 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
             OpposingSkills = s.OpposingSkills,
             TimeRequired = s.TimeRequired,
             CanRetry = s.CanRetry,
+            ImageFileId = s.ImageFileId,
+            ImageUrl = s.ImageFileId is { } file ? FilesRoutes.Content(file) : null,
         }).ToList());
 
     public override async Task ApplyAsync(CmDbContext db, SkillDto dto, Skill entity, CatalogWrite write, CancellationToken cancellationToken)
@@ -100,6 +110,7 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
         }
 
         var eras = Eras(dto.Eras);
+        var image = await ItemStore.ImageAsync(db, dto.ImageFileId, write, cancellationToken);
 
         entity.ParentId = dto.ParentId;
         entity.BaseValue = baseValue;
@@ -113,5 +124,6 @@ public sealed class SkillStore : CatalogStore<Skill, SkillDto>
         entity.OpposingSkills = Strings(dto.OpposingSkills);
         entity.TimeRequired = Text(dto.TimeRequired);
         entity.CanRetry = dto.CanRetry;
+        entity.ImageFileId = image;
     }
 }

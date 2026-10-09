@@ -28,6 +28,9 @@ public sealed class Skill : CatalogEntry
     public List<string> OpposingSkills { get; set; } = [];
     public string? TimeRequired { get; set; }
     public bool CanRetry { get; set; }
+
+    /// <summary>Иллюстрация — одна, как у предмета и книги: сыщик за делом.</summary>
+    public Guid? ImageFileId { get; set; }
 }
 
 public sealed class Occupation : CatalogEntry
@@ -271,6 +274,7 @@ internal sealed class SkillConfiguration : IEntityTypeConfiguration<Skill>
         entity.PrimitiveCollection(s => s.FailureConsequences).HasDbDefaultSql(SchemaConventions.EmptyArray);
         entity.PrimitiveCollection(s => s.OpposingSkills).HasDbDefaultSql(SchemaConventions.EmptyArray);
         entity.Property(s => s.CanRetry).HasDbDefault(false);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(s => s.ImageFileId).OnDelete(DeleteBehavior.SetNull);
     }
 }
 
