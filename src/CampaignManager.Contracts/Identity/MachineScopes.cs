@@ -11,4 +11,10 @@ public static class MachineScopes
 
     /// <summary>Файлы: загрузка картинки и её содержимое — для раздаток и портретов.</summary>
     public const string Files = "files:write";
+
+    /// <summary>
+    /// Картинки справочников: списки справочников с картинками и обложка записи (<c>PUT …/{id}/cover</c>) — скрипт сам ставит
+    /// загруженные рисунки. Правка полей, импорт и удаление записей токену закрыты.
+    /// </summary>
+    public const string CatalogImages = "catalogs:images";
 }

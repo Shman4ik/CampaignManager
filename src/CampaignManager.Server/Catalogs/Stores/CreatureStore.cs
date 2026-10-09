@@ -27,6 +27,13 @@ public sealed class CreatureStore : CatalogStore<Creature, CreatureDto>
 
     public override DbSet<Creature> Set(CmDbContext db) => db.Creatures;
 
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Creature entity) => CatalogImages.Cover(entity.Images);
+
+    public override void SetCover(CmDbContext db, Creature entity, Guid fileId) =>
+        CatalogImages.SetCover(db, entity.Images, fileId, ord => new CreatureImage { CreatureId = entity.Id, Ord = ord });
+
     public override IQueryable<Creature> Query(CmDbContext db) => db.Creatures.Include(c => c.Images);
 
     public override Creature New() => new()

@@ -8,13 +8,19 @@ public sealed class FilesApiClient(HttpClient http) : IFilesApi
 {
     private static ContractsJsonContext Json => ContractsJsonContext.Default;
 
-    public async Task<StoredFileDto> UploadAsync(Stream content, string fileName, CancellationToken cancellationToken = default)
+    public Task<StoredFileDto> UploadAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
+        PostFileAsync(FilesRoutes.Upload, content, fileName, cancellationToken);
+
+    public Task<StoredFileDto> UploadWebpAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
+        PostFileAsync($"{FilesRoutes.Upload}?{FilesRoutes.FormatQuery}={FilesRoutes.WebpFormat}", content, fileName, cancellationToken);
+
+    private async Task<StoredFileDto> PostFileAsync(string url, Stream content, string fileName, CancellationToken cancellationToken)
     {
         // Тип содержимого сервер определяет сам, по расширению: заявленному клиентом не верит.
         using var form = new MultipartFormDataContent();
         form.Add(new StreamContent(content), FilesRoutes.UploadField, fileName);
 
-        using var response = await http.PostAsync(FilesRoutes.Upload, form, cancellationToken);
+        using var response = await http.PostAsync(url, form, cancellationToken);
         return await ReadAsync(response, Json.StoredFileDto, cancellationToken);
     }
 

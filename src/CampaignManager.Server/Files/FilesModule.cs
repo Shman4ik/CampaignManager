@@ -71,12 +71,14 @@ public static class FilesModule
 
     private static async Task<IResult> UploadAsync(
         [FromForm(Name = FilesRoutes.UploadField)] IFormFile file,
+        [FromQuery(Name = FilesRoutes.FormatQuery)] string? format,
         FileService files,
         CancellationToken cancellationToken)
     {
         try
         {
-            return TypedResults.Ok(await files.UploadAsync(file.FileName, file.Length, file.OpenReadStream, cancellationToken));
+            var webp = string.Equals(format, FilesRoutes.WebpFormat, StringComparison.OrdinalIgnoreCase);
+            return TypedResults.Ok(await files.UploadAsync(file.FileName, file.Length, file.OpenReadStream, cancellationToken, webp));
         }
         catch (FileRejectedException ex)
         {

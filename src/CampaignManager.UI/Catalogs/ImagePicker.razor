@@ -37,6 +37,9 @@
 
     [Parameter] public string? Url { get; set; }
 
+    /// <summary>PNG и JPEG сервер сохранит в WebP — рисунки справочников (2–3 МБ тяжелы для iPad); раздатки — как есть.</summary>
+    [Parameter] public bool Webp { get; set; }
+
     /// <summary>Выбрана новая картинка (или убрана — тогда null).</summary>
     [Parameter] public EventCallback<StoredFileDto?> OnChanged { get; set; }
 
@@ -47,7 +50,7 @@
         try
         {
             await using var stream = e.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
-            var file = await Files.UploadAsync(stream, e.File.Name);
+            var file = Webp ? await Files.UploadWebpAsync(stream, e.File.Name) : await Files.UploadAsync(stream, e.File.Name);
             await OnChanged.InvokeAsync(file);
         }
         catch (HttpRequestException ex)

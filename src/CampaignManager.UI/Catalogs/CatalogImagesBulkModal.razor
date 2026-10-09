@@ -1,0 +1,325 @@
+@typeparam TItem where TItem : CatalogItemDto
+@using CampaignManager.Contracts.Catalogs
+@using CampaignManager.Contracts.Files
+@using CampaignManager.UI.Platform
+@using Microsoft.AspNetCore.Components.Forms
+@inject ICatalogApi<TItem> Api
+@inject IFilesApi Files
+
+@* Картинки пачкой — одно окно на все справочники с картинками (рисунки генерируются вне сайта в папках *-art, и раньше их
+   ставили скриптом в обход сайта). Файл → запись по коду (padlock.png → item.padlock), иначе по названию
+   (CatalogImageMatcher). До загрузки — сверка: какие нашлись, каких записей нет, у каких картинка уже есть (флажок
+   «Заменить»). Каждая строка — загрузка файла (PNG и JPEG сервер хранит WebP: 2–3 МБ рисунка тяжелы для iPad) и обложка
+   записи (PUT …/cover: у предмета и книги — их картинка, у остальных — первая в списке). Ошибка строки не останавливает
+   пачку; по три файла сразу. Образец — MusicBulkUploadModal. *@
+<Modal Open="Open" Title="Загрузить картинки" Dismissible="!_running" OnClose="CloseAsync" FooterHint="@ReasonHint" class="cm-modal-top cm-modal-list">
+    <ChildContent>
+        <div class="cm-stack flex min-h-0 flex-1 flex-col">
+            <Field Label="Файлы" Group="true" Note="@Hint">
+                <div class="cm-btn-row">
+                    <label class="@Css.Join("relative cm-btn cm-btn-secondary w-fit", _running ? "pointer-events-none opacity-70" : null)">
+                        <i class="fa-solid fa-images" aria-hidden="true"></i><span>Выбрать файлы</span>
+                        <InputFile class="sr-only" accept="image/*" multiple OnChange="Pick" disabled="@_running" data-testid="covers-files" />
+                    </label>
+                    <label class="@Css.Join("relative cm-btn cm-btn-secondary w-fit", _running ? "pointer-events-none opacity-70" : null)">
+                        <i class="fa-solid fa-folder-open" aria-hidden="true"></i><span>Выбрать папку</span>
+                        <InputFile class="sr-only" webkitdirectory multiple OnChange="Pick" disabled="@_running" />
+                    </label>
+                </div>
+            </Field>
+
+            @if (_error is not null)
+            {
+                <Alert Tone="Tone.Error" ShowIcon="true" class="mb-0">@_error</Alert>
+            }
+
+            @if (_rows.Count > 0)
+            {
+                <div class="flex min-h-0 flex-col">
+                    <p class="cm-meta mb-2" data-testid="covers-summary">@Summary</p>
+                    @if (HasCover > 0 && !_running && !_finished)
+                    {
+                        <label class="cm-tap-row mb-2">
+                            <input type="checkbox" class="cm-checkbox" checked="@_replace" @onchange="e => _replace = e.Value is true" />
+                            <span>Заменить картинку, где она уже есть (@HasCover)</span>
+                        </label>
+                    }
+                    @if (_running)
+                    {
+                        <progress class="mb-2 w-full" max="@_total" value="@_done" aria-label="Ход загрузки"></progress>
+                    }
+                    @* Вся пачка — в своей рамке на остаток высоты окна (cm-modal-list): полосы прокрутки на iPad не видно, поэтому
+                       число файлов — над ней. *@
+                    <ul class="min-h-0 overflow-y-auto rounded-md border border-primary-200 px-3" data-testid="covers-rows">
+                        @foreach (var row in _rows)
+                        {
+                            <li class="flex items-center gap-2 border-t border-primary-200 py-1.5 text-sm first:border-t-0" @key="row">
+                                <i class="@RowIcon(row)" aria-hidden="true"></i>
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate font-medium text-primary-800">@(row.Target?.Name ?? row.File.Name)</p>
+                                    <p class="truncate cm-text-muted">@RowNote(row)</p>
+                                </div>
+                                @if (row.State == State.HasCover && row.Target is not null && CoverOf(row.Target) is { } current)
+                                {
+                                    @* Что заменится — видно рядом, а не по памяти. *@
+                                    <img src="@ImageUrls.Thumb(current, 120)" alt="" class="h-[27px] w-10 shrink-0 rounded-xs bg-primary-100 object-cover" loading="lazy" />
+                                }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        @if (_running)
+        {
+            <Button Variant="ButtonVariant.Secondary" Disabled="_stop" OnClick="() => _stop = true">Остановить</Button>
+        }
+        else
+        {
+            <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync">@(_finished ? "Закрыть" : "Отмена")</Button>
+        }
+        @if (!_finished)
+        {
+            <Button Icon="fa-upload" Busy="_running" Disabled="ToUpload == 0" OnClick="UploadAsync" data-testid="covers-start">
+                @(ToUpload > 0 ? $"Загрузить: {ToUpload}" : "Загрузить")
+            </Button>
+        }
+    </Footer>
+</Modal>
+
+@code {
+    /// <summary>Файлов за раз: справочники — до ~320 записей. Без предела Blazor роняет выбор на 11-м файле.</summary>
+    public const int MaxFiles = 600;
+
+    /// <summary>Как у любой загрузки (<c>Files:MaxUploadBytes</c>).</summary>
+    private const long MaxFileBytes = 50 * 1024 * 1024;
+
+    /// <summary>Сколько файлов идёт сразу: загрузка и перевод в WebP на сервере перекрываются, а сервер не тонет.</summary>
+    private const int Parallel = 3;
+
+    private List<Row> _rows = [];
+    private CatalogImageMatcher<TItem>? _matcher;
+    private bool _replace;
+    private bool _running;
+    private bool _stop;
+    private bool _finished;
+    private int _done;
+    private int _total;
+    private int _ignored;
+    private string? _error;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Справочник сейчас: по нему файл находит запись.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<TItem> Items { get; set; } = [];
+
+    /// <summary>Обложка записи (адрес) — есть ли что заменять.</summary>
+    [Parameter, EditorRequired] public Func<TItem, string?> CoverOf { get; set; } = null!;
+
+    /// <summary>Запись получила обложку — странице заменить её у себя (картинки появляются по ходу пачки).</summary>
+    [Parameter] public EventCallback<TItem> OnSaved { get; set; }
+
+    private CatalogImageMatcher<TItem> Matcher => _matcher ??= new(Items);
+
+    private string Hint => Matcher.Prefix is { } prefix
+        ? $"Имя файла — код записи без «{prefix}» или её название."
+        : "Имя файла — название записи.";
+
+    private int HasCover => _rows.Count(r => r.State == State.HasCover);
+
+    private int ToUpload => _running || _finished ? 0 : _rows.Count(Uploads);
+
+    /// <summary>Почему «Загрузить» выключена, когда файлы выбраны (правило 8): всё уже с картинкой или ничего не нашлось.</summary>
+    private string? DisabledReason => _rows.Count == 0 || _running || _finished || ToUpload > 0 ? null
+        : HasCover > 0 ? "Картинки у этих записей уже есть — отметьте «Заменить»."
+        : "Ни один файл не нашёл свою запись.";
+
+    // Строка над кнопками окна — только когда есть причина: пустая заняла бы ряд подвала.
+    private RenderFragment? ReasonHint => DisabledReason is { } reason ? builder => builder.AddContent(0, reason) : null;
+
+    private bool Uploads(Row row) => row.State == State.Ready || (row.State == State.HasCover && _replace);
+
+    private string Summary
+    {
+        get
+        {
+            if (_running)
+            {
+                return $"Загружено {_done} из {_total}…";
+            }
+
+            if (_finished)
+            {
+                var failed = _rows.Count(r => r.State == State.Failed);
+                return $"Готово: загружено {_rows.Count(r => r.State == State.Done)}, пропущено {_rows.Count - _rows.Count(r => r.State is State.Done or State.Failed)}"
+                    + (failed > 0 ? $", ошибок {failed}." : ".");
+            }
+
+            var notFound = _rows.Count(r => r.State == State.NotFound);
+            var text = $"Файлов: {_rows.Count}, записи нашлись у {_rows.Count(r => r.Target is not null)}";
+            text += notFound > 0 ? $", не нашлись у {notFound}" : "";
+            return text + (_ignored > 0 ? $". Не картинки ({_ignored}) пропущены." : ".");
+        }
+    }
+
+    private void Pick(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        _finished = false;
+        _rows = [];
+        _ignored = 0;
+        if (e.FileCount > MaxFiles)
+        {
+            _error = $"За раз — не больше {MaxFiles} файлов, выбрано {e.FileCount}.";
+            return;
+        }
+
+        _matcher = new(Items);
+        var taken = new HashSet<Guid>();
+        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        {
+            if (!CatalogImageMatcher<TItem>.IsImage(file.Name))
+            {
+                _ignored++;
+                continue;
+            }
+
+            var target = _matcher.Find(file.Name);
+            var row = new Row(file, target);
+            row.State = target is null ? State.NotFound
+                : !taken.Add(target.Id) ? State.Repeat
+                : CoverOf(target) is not null ? State.HasCover
+                : State.Ready;
+            _rows.Add(row);
+        }
+
+        // Сначала то, что требует внимания: файлы без записи, повторы, записи с картинкой; дальше — по названию.
+        _rows = [.. _rows.OrderBy(r => r.State switch { State.NotFound => 0, State.Repeat => 1, State.HasCover => 2, _ => 3 })
+            .ThenBy(r => r.Target?.Name ?? r.File.Name, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
+    private async Task UploadAsync()
+    {
+        var replace = _replace;
+        var queue = new Queue<Row>(_rows.Where(Uploads));
+        _total = queue.Count;
+        _done = 0;
+        _stop = false;
+        _running = true;
+
+        async Task WorkAsync()
+        {
+            while (!_stop && queue.TryDequeue(out var row))
+            {
+                await RunAsync(row, replace);
+                _done++;
+                StateHasChanged();
+            }
+        }
+
+        await Task.WhenAll(Enumerable.Range(0, Parallel).Select(_ => WorkAsync()));
+        foreach (var row in queue)
+        {
+            row.State = State.Skipped;
+            row.Message = "Не загружен: остановлено.";
+        }
+
+        _running = false;
+        _finished = true;
+        // Ошибки — наверх: среди двухсот строк красную иначе пришлось бы искать.
+        _rows = [.. _rows.OrderBy(r => r.State == State.Failed ? 0 : 1)];
+    }
+
+    private async Task RunAsync(Row row, bool replace)
+    {
+        row.State = State.Uploading;
+        StateHasChanged();
+        try
+        {
+            StoredFileDto stored;
+            await using (var stream = row.File.OpenReadStream(MaxFileBytes))
+            {
+                stored = await Files.UploadWebpAsync(stream, row.File.Name);
+            }
+
+            var saved = await Api.SetCoverAsync(row.Target!.Id, stored.Id, replace);
+            row.State = State.Done;
+            row.Message = null;
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (IOException)
+        {
+            row.Fail("Больше 50 МБ.");
+        }
+        catch (HttpRequestException ex)
+        {
+            row.Fail(ApiErrors.Describe(ex));
+        }
+    }
+
+    private Task CloseAsync()
+    {
+        if (_running)
+        {
+            return Task.CompletedTask;
+        }
+
+        _rows = [];
+        _error = null;
+        _finished = false;
+        _replace = false;
+        _ignored = 0;
+        return OnClose.InvokeAsync();
+    }
+
+    private string RowNote(Row row) => row.Message ?? row.State switch
+    {
+        State.NotFound => $"{row.File.Name}: нет записи с таким кодом или названием",
+        State.Repeat => $"{row.File.Name}: к этой записи уже есть файл выше",
+        State.HasCover => $"{row.File.Name}: картинка уже есть — {(_finished ? "оставлена" : _replace ? "заменится" : "останется")}",
+        _ => row.File.Name,
+    };
+
+    private static string RowIcon(Row row) => row.State switch
+    {
+        State.Done => "fa-solid fa-circle-check text-success-600",
+        State.NotFound or State.Repeat or State.Skipped => "fa-solid fa-circle-minus text-warning-600",
+        State.HasCover => "fa-solid fa-circle-half-stroke text-accent-600",
+        State.Failed => "fa-solid fa-circle-xmark text-error-600",
+        State.Uploading => "fa-solid fa-spinner fa-spin text-accent-600",
+        _ => "fa-regular fa-circle text-primary-500",
+    };
+
+    private enum State
+    {
+        Ready,
+        HasCover,
+        NotFound,
+        Repeat,
+        Uploading,
+        Done,
+        Skipped,
+        Failed,
+    }
+
+    private sealed class Row(IBrowserFile file, TItem? target)
+    {
+        public IBrowserFile File { get; } = file;
+
+        public TItem? Target { get; } = target;
+
+        public State State { get; set; }
+
+        public string? Message { get; set; }
+
+        public void Fail(string message)
+        {
+            State = State.Failed;
+            Message = $"{File.Name}: {message}";
+        }
+    }
+}

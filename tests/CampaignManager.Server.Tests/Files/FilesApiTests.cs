@@ -368,6 +368,47 @@ public sealed class FilesApiTests(FilesApp app) : IClassFixture<FilesApp>
         Assert.Equal(broken, await brokenThumb.Content.ReadAsByteArrayAsync(Cancellation));
     }
 
+    // Картинки справочника: ?format=webp — PNG хранится WebP (2–3 МБ рисунка тяжелы для iPad), тот же PNG второй раз — та же строка.
+    [Fact]
+    public async Task Webp_upload_converts_png_and_keeps_other_files_as_is()
+    {
+        TestDatabase.SkipIfMissing();
+        var png = Noise(160, 100); // тестовый сервер принимает до 64 КБ
+
+        var file = await app.Api().UploadWebpAsync(new MemoryStream(png), "Замок.png", Cancellation);
+        var again = await app.Api().UploadWebpAsync(new MemoryStream(png), "Замок (копия).png", Cancellation);
+
+        Assert.Equal("image/webp", file.ContentType);
+        Assert.Equal("Замок.webp", file.OriginalName);
+        Assert.True(file.SizeBytes < png.Length);
+        Assert.Equal(file.Id, again.Id);
+        using var content = await app.CreateClient().GetAsync(file.Url, Cancellation);
+        using var image = SkiaSharp.SKBitmap.Decode(await content.Content.ReadAsByteArrayAsync(Cancellation));
+        Assert.Equal((160, 100), (image.Width, image.Height));
+
+        // Не картинка и битая картинка — как есть.
+        var track = await app.Api().UploadWebpAsync(new MemoryStream(RandomBytes(500)), "Тема.mp3", Cancellation);
+        Assert.Equal("audio/mpeg", track.ContentType);
+        var broken = await app.Api().UploadWebpAsync(new MemoryStream(png[..64]), "Битая.png", Cancellation);
+        Assert.Equal("image/png", broken.ContentType);
+    }
+
+    /// <summary>Картинка с шумом: однотонную PNG сжимает лучше WebP, и перевод в WebP её бы не тронул.</summary>
+    private static byte[] Noise(int width, int height)
+    {
+        using var image = new SkiaSharp.SKBitmap(width, height);
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                image.SetPixel(x, y, new SkiaSharp.SKColor((byte)Random.Shared.Next(256), (byte)(x % 256), (byte)(y % 256)));
+            }
+        }
+
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
     private static byte[] Png(int width, int height)
     {
         using var image = new SkiaSharp.SKBitmap(width, height);

@@ -319,6 +319,9 @@ public sealed class CatalogsF6bTests : KitContext
         public Task<StoredFileDto> UploadAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<StoredFileDto> UploadWebpAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<StoredFileDto> AddExternalAsync(string url, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

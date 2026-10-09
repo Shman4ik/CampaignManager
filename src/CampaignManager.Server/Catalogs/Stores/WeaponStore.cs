@@ -23,6 +23,13 @@ public sealed class WeaponStore : CatalogStore<Weapon, WeaponDto>
 
     public override DbSet<Weapon> Set(CmDbContext db) => db.Weapons;
 
+    public override bool HasImages => true;
+
+    public override Guid? CoverOf(Weapon entity) => CatalogImages.Cover(entity.Images);
+
+    public override void SetCover(CmDbContext db, Weapon entity, Guid fileId) =>
+        CatalogImages.SetCover(db, entity.Images, fileId, ord => new WeaponImage { WeaponId = entity.Id, Ord = ord });
+
     public override IQueryable<Weapon> Query(CmDbContext db) => db.Weapons.Include(w => w.Images);
 
     // Лист хранит ссылку на оружие внутри документа (catalogWeaponId), а не внешним ключом: удалить можно, в листе

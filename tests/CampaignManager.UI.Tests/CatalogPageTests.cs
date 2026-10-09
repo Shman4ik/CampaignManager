@@ -24,6 +24,8 @@ public sealed class CatalogPageTests : KitContext
     {
         Services.AddSingleton<ICatalogApi<ItemDto>>(_api);
         Services.AddSingleton<IFilesApi>(new NoFiles());
+        // Каркас справочника проверяется на таблице предметов; по умолчанию у них галерея (ItemsPageTests).
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?view=table");
     }
 
     [Fact]
@@ -38,7 +40,7 @@ public sealed class CatalogPageTests : KitContext
         Assert.DoesNotContain("Добавить предмет", page.Markup, StringComparison.Ordinal);
         Assert.Empty(page.FindAll("[aria-label^='Изменить:']"));
         Assert.Empty(page.FindAll("[aria-label^='Удалить:']"));
-        Assert.Empty(page.FindAll("[aria-label^='Ещё: импорт']"));
+        Assert.Empty(page.FindAll("[aria-label^='Ещё:']"));
     }
 
     [Fact]
@@ -52,7 +54,7 @@ public sealed class CatalogPageTests : KitContext
         page.WaitForAssertion(() => Assert.Contains("Добавить предмет", page.Markup, StringComparison.Ordinal));
         Assert.NotEmpty(page.FindAll("[aria-label='Изменить: Фонарь']"));
         // Импорт, экспорт и «С правилами» — в одном меню «⋯», а не рядом кнопок
-        page.Find("[aria-label^='Ещё: импорт']").Click();
+        page.Find("[aria-label^='Ещё:']").Click();
         Assert.Contains("Импорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
         Assert.Contains("Экспорт", page.Find("[role='menu']").TextContent, StringComparison.Ordinal);
     }
@@ -134,7 +136,7 @@ public sealed class CatalogPageTests : KitContext
         var lamp = Described("Лампа");
         _api.Items = [Described("Бинокль"), lamp];
         var navigation = Services.GetRequiredService<NavigationManager>();
-        navigation.NavigateTo($"/items?open={lamp.Id}");
+        navigation.NavigateTo($"/items?view=table&open={lamp.Id}");
 
         var page = Render<ItemsPage>();
 
@@ -357,7 +359,7 @@ public sealed class CatalogPageTests : KitContext
     public void Page_and_search_are_read_from_the_address_on_reload()
     {
         _api.Items = [.. Enumerable.Range(1, 60).Select(i => Item($"Ящик {i:00}"))];
-        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?q=%D1%8F%D1%89%D0%B8%D0%BA%201&page=2");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?view=table&q=%D1%8F%D1%89%D0%B8%D0%BA%201&page=2");
 
         var page = Render<ItemsPage>();
 
@@ -370,7 +372,7 @@ public sealed class CatalogPageTests : KitContext
     public void Page_from_the_address_is_clamped_when_the_catalog_got_shorter()
     {
         _api.Items = [.. Enumerable.Range(1, 30).Select(i => Item($"Ящик {i:00}"))];
-        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?page=9");
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/items?view=table&page=9");
 
         var page = Render<ItemsPage>();
 
@@ -478,6 +480,9 @@ public sealed class CatalogPageTests : KitContext
     private sealed class NoFiles : IFilesApi
     {
         public Task<StoredFileDto> UploadAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<StoredFileDto> UploadWebpAsync(Stream content, string fileName, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public Task<StoredFileDto> AddExternalAsync(string url, CancellationToken cancellationToken = default) =>

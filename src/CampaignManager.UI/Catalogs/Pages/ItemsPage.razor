@@ -1,21 +1,30 @@
 @page "/items"
 @attribute [Authorize]
 @using CampaignManager.Core.Catalogs
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
-@* Предметы: Название · Тип · Цена; описание — строкой под названием. Таблица помещается и в портрет iPad (с md).
-   Раскрывается только строка, которой есть что показать: картинка или описание длиннее строки; колонки шеврона
-   нет, пока раскрывать нечего (у 256 из 257 — нечего). Картинка — миниатюрой 40×27 у названия, как у оружия. *@
+@* Предметы — прайс-лист 1920-х с рисунком у каждого (гравюры 3:2 из items-art, у всех 257). Два вида одной выдачи (поиск,
+   тип, раскрытие ?open= — общие), вид — в адресе; по умолчанию галерея, таблица — ?view=table (выбор владельца 2026-10-09):
+   • Таблица (цену найти и сравнить): Название · Тип · Цена, у названия миниатюра 72×48 (40×27 рисунок не различала); раскрытие — картинка до 24rem
+     слева, описание и источник справа (на телефоне картинка сверху). Описание — строкой под названием, длинное — в раскрытии.
+   • Галерея: карточки рисунок + название + цена, группами по типу (17 групп), без страниц — тип и поиск сужают её сами.
+     Колонки как у бестиария: две на телефоне, четыре в портрете, с lg — по 11.5rem (пять в альбоме iPad). Раскрытая карточка
+     — на три колонки с lg (на телефоне и в портрете — во всю ширину), рисунок крупно сверху; страница прокручивает к ней.
+   Картинку крупно открывает касание строки или карточки: наведения на iPad нет. *@
 <CatalogPage TItem="ItemDto" Title="Предметы" Icon="fa-box" AddLabel="Добавить предмет" Noun="предмет" Plural="предметов"
-             Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]"
-             New="() => new ItemDto()" OnLoaded="Loaded" OnFormOpening="OnOpening" RowDetail="Detail" CanExpand="HasMore" State="_state">
+             Filters="_filters" ErasOf="i => i.Eras" SearchAlso="i => [i.Type, i.Description]" CoverOf="i => i.ImageUrl"
+             New="() => new ItemDto()" OnLoaded="Loaded" OnFormOpening="OnOpening" RowDetail="Detail" CanExpand="HasMore" State="_state"
+             Body="@(IsGallery ? Gallery : null)" Sorts="@(IsGallery ? GallerySorts : [])" PageSize="@(IsGallery ? 0 : 25)">
+    <FilterExtras>
+        @* В строке фильтров; на телефоне — за кнопкой «Фильтры», чтобы поиск, «Фильтры» и «⋯» остались одной строкой. *@
+        <Segmented TValue="bool" Options="ViewOptions" Value="IsGallery" ValueChanged="SetGallery" Label="Вид" class="shrink-0" />
+    </FilterExtras>
     <Columns Context="view">
         <DataColumn TItem="ItemDto" Title="Название" SortBy="i => i.Name" DefaultSort="false" HeaderClass="w-[58%]" Context="item">
             <div class="flex items-center gap-3">
-                @if (item.ImageUrl is not null)
-                {
-                    @* Миниатюра, как у оружия (X15); без картинки места не занимаем — у 256 из 257 её нет. *@
-                    <img src="@ImageUrls.Thumb(item.ImageUrl, 240)" alt="" class="h-[27px] w-10 shrink-0 rounded-xs bg-primary-100 object-cover" loading="lazy" decoding="async" />
-                }
+                @Thumb(item, "it-thumb")
                 <div class="min-w-0">
                     <span class="font-medium text-primary-800">@item.Name</span>
                     @if (view.ShowEra)
@@ -37,12 +46,17 @@
         <DataColumn TItem="ItemDto" Title="Цена" SortBy="i => i.Price ?? decimal.MaxValue" HeaderClass="w-[14%] whitespace-nowrap" CellClass="whitespace-nowrap" AlignEnd="true" Context="item">@PriceText.Format(item.Price)</DataColumn>
     </Columns>
     <CardTemplate Context="item">
-        <p class="font-medium text-primary-800">@item.Name</p>
-        <p class="cm-meta">@item.Type@(item.Price is null ? "" : (string.IsNullOrEmpty(item.Type) ? "" : " · ") + PriceText.Format(item.Price))</p>
-        @if (!string.IsNullOrEmpty(item.Description))
-        {
-            <p class="mt-1 line-clamp-2 text-sm text-primary-600">@item.Description</p>
-        }
+        <span class="flex items-start gap-3">
+            @Thumb(item, "it-thumb")
+            <span class="min-w-0">
+                <span class="block font-medium text-primary-800">@item.Name</span>
+                <span class="cm-meta block">@item.Type@(item.Price is null ? "" : (string.IsNullOrEmpty(item.Type) ? "" : " · ") + PriceText.Format(item.Price))</span>
+                @if (!string.IsNullOrEmpty(item.Description))
+                {
+                    <span class="mt-1 line-clamp-2 block text-sm text-primary-600">@item.Description</span>
+                }
+            </span>
+        </span>
     </CardTemplate>
     <Form Context="item">
         <div class="grid gap-4 sm:grid-cols-2">
@@ -71,7 +85,7 @@
             <div class="sm:col-span-2"><EraPicker Show="_state.ErasVary" @bind-Values="item.Eras" /></div>
             <Field Label="Описание" class="sm:col-span-2"><textarea class="cm-input" rows="4" @bind="item.Description"></textarea></Field>
             <Field Label="Картинка" Group="true" class="sm:col-span-2">
-                <ImagePicker FileId="item.ImageFileId" Url="@item.ImageUrl"
+                <ImagePicker Webp="true" FileId="item.ImageFileId" Url="@item.ImageUrl"
                              OnChanged="file => { item.ImageFileId = file?.Id; item.ImageUrl = file?.Url; }" />
             </Field>
         </div>
@@ -82,15 +96,89 @@
     /// <summary>Столько описания входит под названием в две строки : длиннее — в раскрытие.</summary>
     private const int VisibleDescription = 80;
 
+    /// <summary>Значение <c>?view=</c> таблицы; без него — галерея.</summary>
+    private const string TableView = "table";
+
+    private static readonly IReadOnlyList<SegmentOption<bool>> ViewOptions =
+        [new(false, "Таблица", TestId: "items-view-table"), new(true, "Галерея", TestId: "items-view-gallery")];
+
+    // Заголовков столбцов у галереи нет — порядок выбором в панели. Без цены — в конце группы, а не в начале.
+    private static readonly IReadOnlyList<CatalogSort<ItemDto>> GallerySorts =
+    [
+        new("name", "По названию", i => i.Name),
+        new("price", "Дешевле", i => i.Price ?? decimal.MaxValue),
+        new("price-desc", "Дороже", i => i.Price ?? -1m, Descending: true),
+    ];
+
     private readonly CatalogFormState _state = new();
     private IReadOnlyList<CatalogFilter<ItemDto>> _filters = [];
     private IReadOnlyList<string> _types = [];
+    private bool _anyImages;
+    private IJSObjectReference? _module;
+    private Guid? _revealed;
+
+    [SupplyParameterFromQuery(Name = "view")] public string? View { get; set; }
+
+    [SupplyParameterFromQuery(Name = "open")] public Guid? Open { get; set; }
+
+    private bool IsGallery => View != TableView;
+
+    // Вид — в адресе, как поиск и раскрытая запись (F5 и «назад» возвращают туда же); страница таблицы галерее не нужна.
+    private void SetGallery(bool gallery) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["view"] = gallery ? null : TableView,
+            ["page"] = null,
+        }), replace: true);
 
     // Тип — свободный текст: варианты фильтра — те, что есть в справочнике.
     private void Loaded(IReadOnlyList<ItemDto> items)
     {
+        _anyImages = items.Any(i => i.ImageUrl is not null);
         _types = [.. items.Select(i => i.Type).OfType<string>().Distinct(StringComparer.CurrentCultureIgnoreCase).Order()];
         _filters = [new("type", Terms.AnyType, [.. _types.Select(t => new CatalogOption(t, t))], (item, type) => item.Type == type)];
+    }
+
+    // Раскрытая карточка галереи встаёт во всю ширину сетки отдельным рядом — прокрутить к ней (модуль дождётся её в разметке).
+    // В таблице раскрытую строку показывает сама DataTable.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsGallery || Open is not { } open)
+        {
+            _revealed = null;
+            return;
+        }
+
+        if (open == _revealed)
+        {
+            return;
+        }
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/CampaignManager.UI/Catalogs/Pages/ItemsPage.razor.js");
+            if (await _module.InvokeAsync<bool>("reveal", $"item-{open}"))
+            {
+                _revealed = open;
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
     }
 
     private const string OtherType = "other";
@@ -108,18 +196,144 @@
         item.Type = value is null or OtherType ? null : value;
     }
 
+    // Раскрыть есть что, когда есть картинка (крупно) или длинное описание.
     private static bool HasMore(ItemDto item) =>
         item.ImageUrl is not null || item.Description?.Length > VisibleDescription;
 
-    private static RenderFragment<ItemDto> Detail => item => __builder =>
+    // Миниатюра 3:2, как рисунки; у предмета без картинки — заглушка того же размера (названия стоят на одной линии). Пока
+    // картинок нет ни у кого, места не занимаем: сотня одинаковых заглушек ничего не различает. 240px — на 72px при плотности 2.
+    private RenderFragment Thumb(ItemDto item, string css) => __builder =>
     {
         @if (item.ImageUrl is not null)
         {
-            <img src="@item.ImageUrl" alt="@item.Name" class="max-h-72 max-w-full rounded-md" loading="lazy" />
+            <span class="@css"><img src="@ImageUrls.Thumb(item.ImageUrl, 240)" alt="" loading="lazy" decoding="async" /></span>
         }
-        @if (!string.IsNullOrWhiteSpace(item.Description))
+        else if (_anyImages)
         {
-            <p class="@(item.ImageUrl is not null ? "mt-2 " : "")max-w-prose whitespace-pre-line text-sm text-primary-700">@item.Description</p>
+            <span class="@css" aria-hidden="true"><i class="fa-solid fa-box"></i></span>
         }
+    };
+
+    // Раскрытая строка таблицы: картинка крупно слева (на телефоне сверху), справа — описание и источник. Тип и цена — в колонках.
+    private RenderFragment<ItemDto> Detail => item => __builder =>
+    {
+        <div class="flex flex-col gap-4 md:flex-row md:items-start md:gap-6">
+            @if (item.ImageUrl is not null)
+            {
+                <img src="@item.ImageUrl" alt="@item.Name" class="it-detail-image" />
+            }
+            @Facts(item, withPrice: false)
+        </div>
+    };
+
+    private RenderFragment Facts(ItemDto item, bool withPrice) => __builder =>
+    {
+        <div class="grid min-w-0 flex-1 content-start gap-2 text-sm">
+            @if (withPrice)
+            {
+                <p>
+                    <span class="font-semibold text-primary-800">@(PriceText.Format(item.Price) ?? "Цена не указана")</span>
+                    @if (item.Type is not null)
+                    {
+                        <span class="text-primary-600"> · @item.Type</span>
+                    }
+                </p>
+            }
+            @if (!string.IsNullOrWhiteSpace(item.Description))
+            {
+                <p class="max-w-prose whitespace-pre-line text-primary-700">@item.Description</p>
+            }
+            @if (item.Source is not null)
+            {
+                <p class="cm-meta">Источник: @item.Source</p>
+            }
+        </div>
+    };
+
+    // ── Галерея ──
+
+    // Группы по типу в порядке названий типов, без типа — последней; внутри — порядок, выбранный в панели. Фильтр по типу
+    // оставляет одну группу — её заголовок повторяет фильтр, но говорит, сколько в ней.
+    private RenderFragment<CatalogView<ItemDto>> Gallery => view => __builder =>
+    {
+        <div class="grid gap-7">
+            @foreach (var group in view.Page.GroupBy(i => i.Type ?? "").OrderBy(g => g.Key.Length == 0).ThenBy(g => g.Key, StringComparer.CurrentCulture))
+            {
+                <section aria-label="@(group.Key.Length == 0 ? "Без типа" : group.Key)">
+                    <h2 class="cm-section-title mb-3">@(group.Key.Length == 0 ? "Без типа" : group.Key) · @group.Count()</h2>
+                    <div class="it-grid">
+                        @foreach (var item in group)
+                        {
+                            @if (view.Open == item.Id)
+                            {
+                                @Opened(view, item)
+                            }
+                            else
+                            {
+                                @Card(view, item)
+                            }
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+    };
+
+    private RenderFragment EditButton(CatalogView<ItemDto> view, ItemDto item) => __builder =>
+    {
+        @if (view.CanEdit)
+        {
+            <div class="cm-compact shrink-0">
+                <Button Variant="ButtonVariant.OutlinePrimary" Small="true" Icon="fa-pen" AriaLabel="@($"Изменить: {Names.Plain(item.Name)}")"
+                        OnClick="() => view.Edit(item)" />
+            </div>
+        }
+    };
+
+    // Карточка — рисунок, название и цена; вся — кнопка раскрытия (X7), «Изменить» в углу у цены, раскрытия не вызывает.
+    private RenderFragment Card(CatalogView<ItemDto> view, ItemDto item) => __builder =>
+    {
+        <article id="@($"item-{item.Id}")" class="cm-card it-card" @key="item.Id">
+            <button type="button" class="it-card-button" aria-expanded="false" @onclick="() => view.ToggleOpen(item)">
+                <span class="it-card-media">
+                    @if (item.ImageUrl is not null)
+                    {
+                        <img src="@ImageUrls.Thumb(item.ImageUrl)" alt="" loading="lazy" decoding="async" />
+                    }
+                    else
+                    {
+                        <i class="fa-solid fa-box" aria-hidden="true"></i>
+                    }
+                </span>
+                <span class="it-card-name">@item.Name</span>
+                <span class="@Css.Join("it-card-price", view.CanEdit ? "it-card-price-edit" : null)">@(PriceText.Format(item.Price) ?? "—")</span>
+            </button>
+            @* «Изменить» — в углу строки цены, поверх кнопки раскрытия, но не внутри неё. *@
+            <div class="it-card-edit">@EditButton(view, item)</div>
+        </article>
+    };
+
+    // Раскрытая — рисунок крупно во всю ширину карточки, под ним цена, тип, описание, источник. С lg карточка на три колонки
+    // из пяти: во всю ширину справа от картинки пустовало бы больше половины (описания у предметов почти нет), а на три
+    // колонки рисунок крупнее (~630×420) и всё ещё под шапкой и фильтрами; соседние карточки встают рядом (dense).
+    private RenderFragment Opened(CatalogView<ItemDto> view, ItemDto item) => __builder =>
+    {
+        <article id="@($"item-{item.Id}")" class="cm-card it-open" @key="item.Id">
+            <div class="cm-card-header gap-3">
+                <button type="button" class="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left" aria-expanded="true"
+                        @onclick="() => view.ToggleOpen(item)">
+                    <i class="fa-solid fa-chevron-up shrink-0 text-sm text-primary-400" aria-hidden="true"></i>
+                    <span class="min-w-0 break-words font-semibold text-primary-800">@item.Name</span>
+                </button>
+                @EditButton(view, item)
+            </div>
+            <div class="cm-card-body grid gap-3">
+                @if (item.ImageUrl is not null)
+                {
+                    <img src="@item.ImageUrl" alt="@item.Name" class="it-open-image" />
+                }
+                @Facts(item, withPrice: true)
+            </div>
+        </article>
     };
 }
