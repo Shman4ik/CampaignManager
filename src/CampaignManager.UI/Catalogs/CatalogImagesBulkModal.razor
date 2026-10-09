@@ -12,7 +12,7 @@
    «Заменить»). Каждая строка — загрузка файла (PNG и JPEG сервер хранит WebP: 2–3 МБ рисунка тяжелы для iPad) и обложка
    записи (PUT …/cover: у предмета и книги — их картинка, у остальных — первая в списке). Ошибка строки не останавливает
    пачку; по три файла сразу. Образец — MusicBulkUploadModal. *@
-<Modal Open="Open" Title="Загрузить картинки" Dismissible="!_running" OnClose="CloseAsync" class="cm-modal-top cm-modal-list">
+<Modal Open="Open" Title="Загрузить картинки" Dismissible="!_running" OnClose="CloseAsync" FooterHint="@ReasonHint" class="cm-modal-top cm-modal-list">
     <ChildContent>
         <div class="cm-stack flex min-h-0 flex-1 flex-col">
             <Field Label="Файлы" Group="true" Note="@Hint">
@@ -132,6 +132,14 @@
     private int HasCover => _rows.Count(r => r.State == State.HasCover);
 
     private int ToUpload => _running || _finished ? 0 : _rows.Count(Uploads);
+
+    /// <summary>Почему «Загрузить» выключена, когда файлы выбраны (правило 8): всё уже с картинкой или ничего не нашлось.</summary>
+    private string? DisabledReason => _rows.Count == 0 || _running || _finished || ToUpload > 0 ? null
+        : HasCover > 0 ? "Картинки у этих записей уже есть — отметьте «Заменить»."
+        : "Ни один файл не нашёл свою запись.";
+
+    // Строка над кнопками окна — только когда есть причина: пустая заняла бы ряд подвала.
+    private RenderFragment? ReasonHint => DisabledReason is { } reason ? builder => builder.AddContent(0, reason) : null;
 
     private bool Uploads(Row row) => row.State == State.Ready || (row.State == State.HasCover && _replace);
 
