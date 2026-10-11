@@ -8,6 +8,7 @@ using CampaignManager.Data;
 using CampaignManager.Data.Scenarios;
 using CampaignManager.Server.Access;
 using CampaignManager.Server.Campaigns;
+using CampaignManager.Server.Catalogs.Stores;
 using CampaignManager.Server.Characters;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
@@ -125,6 +126,8 @@ public sealed class ScenarioService(
         var locations = await dbContext.ScenarioLocations.AsNoTracking()
             .Where(l => l.ScenarioId == scenarioId)
             .Include(l => l.Checks)
+            .Include(l => l.Images)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken);
         var locationIds = locations.Select(l => l.Id).ToList();
         var tracks = await dbContext.LocationTracks.AsNoTracking()
@@ -429,6 +432,7 @@ internal static class ScenarioParts
         MusicTags = [.. l.MusicTags],
         TrackIds = [.. tracks.Where(t => t.LocationId == l.Id).Select(t => t.TrackId)],
         Checks = [.. l.Checks.OrderBy(c => c.Ord).Select(c => Check(c, skills))],
+        Images = CatalogImages.ToDtos(l.Images),
     };
 
     public static ScenarioCheckDto Check(ScenarioCheck c, IReadOnlyDictionary<Guid, string> skills) => new()

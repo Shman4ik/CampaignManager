@@ -66,6 +66,21 @@ public sealed class ScenarioLocation
     public List<string> MusicTags { get; set; } = [];
 
     public List<ScenarioCheck> Checks { get; set; } = [];
+
+    /// <summary>Иллюстрации локации по <see cref="ScenarioLocationImage.Ord"/>; первая — обложка (как у справочников).</summary>
+    public List<ScenarioLocationImage> Images { get; set; } = [];
+}
+
+/// <summary>
+/// Иллюстрация локации — та же строка, что картинка записи справочника (<see cref="ICatalogImage"/>): ключ — (локация, порядок),
+/// первая — обложка. Общая логика записи — <c>Server/Catalogs/Stores/CatalogImages</c>.
+/// </summary>
+public sealed class ScenarioLocationImage : ICatalogImage
+{
+    public Guid LocationId { get; set; }
+    public int Ord { get; set; }
+    public Guid FileId { get; set; }
+    public string? Caption { get; set; }
 }
 
 /// <summary>Проверка в локации: навык (<see cref="SkillId"/>), характеристика или Удача.</summary>
@@ -292,6 +307,18 @@ internal sealed class ScenarioFavoriteConfiguration : IEntityTypeConfiguration<S
         entity.HasOne<Scenario>().WithMany().HasForeignKey(f => f.ScenarioId).OnDelete(DeleteBehavior.Cascade);
         // Первичный ключ ведёт от пользователя («мои звёздочки»); индекс по сценарию нужен каскаду удаления.
         entity.HasIndex(f => f.ScenarioId).HasDatabaseName("scenario_favorites_scenario");
+    }
+}
+
+internal sealed class ScenarioLocationImageConfiguration : IEntityTypeConfiguration<ScenarioLocationImage>
+{
+    public void Configure(EntityTypeBuilder<ScenarioLocationImage> entity)
+    {
+        entity.ToTable("scenario_location_images");
+        entity.HasKey(i => new { i.LocationId, i.Ord });
+        entity.HasOne<ScenarioLocation>().WithMany(l => l.Images).HasForeignKey(i => i.LocationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<StoredFile>().WithMany().HasForeignKey(i => i.FileId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

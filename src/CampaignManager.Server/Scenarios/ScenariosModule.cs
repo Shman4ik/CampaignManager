@@ -88,6 +88,18 @@ public static class ScenariosModule
             return TypedResults.NoContent();
         }).WithName("DeleteScenarioLocation");
 
+        // Иллюстрации локации; скрипт с токеном агента (scenarios:write + files:write) грузит файл и добавляет его через POST.
+        scenarios.MapPut(ScenariosRoutes.LocationImagesPattern, (Guid scenarioId, Guid locationId, LocationImagesInput input, ScenarioPartsService p,
+            CancellationToken ct) => p.SetLocationImagesAsync(scenarioId, locationId, input, ct)).WithName("SetScenarioLocationImages");
+        scenarios.MapPost(ScenariosRoutes.LocationImagesPattern, (Guid scenarioId, Guid locationId, LocationImageInput input, ScenarioPartsService p,
+            CancellationToken ct) => p.AddLocationImageAsync(scenarioId, locationId, input, ct)).WithName("AddScenarioLocationImage");
+        scenarios.MapDelete(ScenariosRoutes.LocationImagePattern, async (Guid scenarioId, Guid locationId, Guid fileId, ScenarioPartsService p,
+            CancellationToken ct) =>
+        {
+            await p.RemoveLocationImageAsync(scenarioId, locationId, fileId, ct);
+            return TypedResults.NoContent();
+        }).WithName("RemoveScenarioLocationImage");
+
         scenarios.MapPost(ScenariosRoutes.LocationChecksPattern, (Guid scenarioId, Guid locationId, CheckInput input, ScenarioPartsService p, CancellationToken ct) =>
             p.AddCheckAsync(scenarioId, locationId, input, ct)).WithName("AddScenarioCheck");
         scenarios.MapPut(ScenariosRoutes.CheckPattern, (Guid scenarioId, Guid checkId, CheckInput input, ScenarioPartsService p, CancellationToken ct) =>

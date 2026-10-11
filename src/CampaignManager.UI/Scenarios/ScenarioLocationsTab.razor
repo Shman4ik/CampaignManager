@@ -3,7 +3,10 @@
 @* «Локации» — дерево: вложенная локация с отступом под родителем. Касание имени раскрывает описание (Markdown) и
    проверки. «Добавить вложенную локацию» (в раскрытой строке) заводит локацию сразу внутри этой; «Изменить» — значок-карандаш,
    музыка — в «⋯» строки (ревью g4, 6.1, 6.3). Порядок — среди соседей («Порядок» → «Выше»/«Ниже»).
-   Удаление уносит вложенные локации и их проверки — диалог говорит об этом. *@
+   Удаление уносит вложенные локации и их проверки — диалог говорит об этом.
+   Иллюстрации — система справочников (UI/Catalogs, «Иллюстрации»): у названия миниатюра обложки 3:2 (CatalogThumb; пока картинок нет
+   ни у одной локации — места под неё нет), в раскрытой строке — галерея слева (CatalogImageGallery в cm-figure), текст справа;
+   правка — LocationImagesModal («⋯» → «Иллюстрации», у локации без картинок — ещё и кнопка в раскрытой строке). *@
 <section class="cm-section">
     @* Заголовка «Локации» над вкладкой «Локации» нет (правило 5): в строке действий вкладки — порядок и добавление. *@
     @if (CanEdit)
@@ -38,6 +41,10 @@
                         <button type="button" class="flex min-h-11 min-w-0 flex-1 items-start gap-2 text-left" aria-expanded="@(open ? "true" : "false")"
                                 @onclick="() => Toggle(location.Id)">
                             <i class="fa-solid @(open ? "fa-chevron-down" : "fa-chevron-right") mt-1 w-3 text-xs text-primary-400" aria-hidden="true"></i>
+                            @if (HasArt)
+                            {
+                                <CatalogThumb Url="@location.Images.FirstOrDefault()?.Url" Art="CatalogArt.Landscape" Icon="fa-location-dot" />
+                            }
                             <span class="flex min-w-0 flex-col">
                                 <span class="font-semibold text-primary-900">
                                     @location.Name
@@ -67,6 +74,7 @@
                                             OnEdit="() => Open(location, null)" OnDelete="() => RemoveAsync(location)" Name="@location.Name">
                                 <MenuItems>
                                     <RowMenuItem Icon="fa-sliders" Disabled="Busy" OnClick="() => _music = location">Изменить музыку</RowMenuItem>
+                                    <RowMenuItem Icon="fa-image" Disabled="Busy" OnClick="() => _images = location">Изменить иллюстрации</RowMenuItem>
                                 </MenuItems>
                             </PartRowActions>
                         </div>
@@ -74,57 +82,72 @@
                     @if (open)
                     {
                         <div class="mt-1 mb-2 flex flex-col gap-3 pl-5">
-                            @if (location.Description is { } description)
-                            {
-                                <Markdown Text="@description" class="max-w-prose" />
-                            }
-                            else
-                            {
-                                <p class="cm-text-muted">Описания нет.</p>
-                            }
-                            @if (location.MusicTags.Count > 0 || location.TrackIds.Count > 0)
-                            {
-                                <p class="text-sm text-primary-600">
-                                    <i class="fa-solid fa-music mr-1 text-primary-400" aria-hidden="true"></i>
-                                    @(location.MusicTags.Count > 0 ? string.Join(", ", location.MusicTags) : "без настроений")
-                                    @if (location.TrackIds.Count > 0)
+                            <div class="cm-record-body cm-location-record">
+                                @if (location.Images.Count > 0)
+                                {
+                                    <div class="cm-figure cm-figure-landscape" data-testid="location-gallery">
+                                        <CatalogImageGallery Images="location.Images" Alt="@location.Name" @key="location.Id" />
+                                    </div>
+                                }
+                                <div class="cm-record-text flex flex-col gap-3">
+                                    @if (location.Description is { } description)
                                     {
-                                        <span> · закреплено треков: @location.TrackIds.Count</span>
+                                        <Markdown Text="@description" class="max-w-prose" />
                                     }
-                                </p>
-                            }
-                            @if (location.Checks.Count > 0)
-                            {
-                                @* Подзаголовок внутри карточки — жирный без капса (правило 5); исход каждой проверки — две короткие строки. *@
-                                <div class="flex max-w-prose flex-col gap-2 text-sm">
-                                    <p class="font-semibold text-primary-900">Исходы проверок</p>
-                                    @foreach (var check in location.Checks)
+                                    else
                                     {
-                                        <div @key="check.Id" class="flex flex-col gap-0.5">
-                                            <span class="font-semibold text-primary-800">
-                                                @ScenarioLabels.Target(check)
-                                                @if (ScenarioLabels.Difficulty(check) is { } difficulty)
-                                                {
-                                                    <span class="font-normal text-warning-800"> · @difficulty</span>
-                                                }
-                                            </span>
-                                            @if (check.OnSuccess is { } success)
+                                        <p class="cm-text-muted">Описания нет.</p>
+                                    }
+                                    @if (location.MusicTags.Count > 0 || location.TrackIds.Count > 0)
+                                    {
+                                        <p class="text-sm text-primary-600">
+                                            <i class="fa-solid fa-music mr-1 text-primary-400" aria-hidden="true"></i>
+                                            @(location.MusicTags.Count > 0 ? string.Join(", ", location.MusicTags) : "без настроений")
+                                            @if (location.TrackIds.Count > 0)
                                             {
-                                                <span class="text-primary-700"><span class="font-medium text-success-700">Успех:</span> @success</span>
+                                                <span> · закреплено треков: @location.TrackIds.Count</span>
                                             }
-                                            @if (check.OnFailure is { } failure)
+                                        </p>
+                                    }
+                                    @if (location.Checks.Count > 0)
+                                    {
+                                        @* Подзаголовок внутри карточки — жирный без капса (правило 5); исход каждой проверки — две короткие строки. *@
+                                        <div class="flex max-w-prose flex-col gap-2 text-sm">
+                                            <p class="font-semibold text-primary-900">Исходы проверок</p>
+                                            @foreach (var check in location.Checks)
                                             {
-                                                <span class="text-primary-700"><span class="font-medium text-error-700">Провал:</span> @failure</span>
+                                                <div @key="check.Id" class="flex flex-col gap-0.5">
+                                                    <span class="font-semibold text-primary-800">
+                                                        @ScenarioLabels.Target(check)
+                                                        @if (ScenarioLabels.Difficulty(check) is { } difficulty)
+                                                        {
+                                                            <span class="font-normal text-warning-800"> · @difficulty</span>
+                                                        }
+                                                    </span>
+                                                    @if (check.OnSuccess is { } success)
+                                                    {
+                                                        <span class="text-primary-700"><span class="font-medium text-success-700">Успех:</span> @success</span>
+                                                    }
+                                                    @if (check.OnFailure is { } failure)
+                                                    {
+                                                        <span class="text-primary-700"><span class="font-medium text-error-700">Провал:</span> @failure</span>
+                                                    }
+                                                </div>
                                             }
                                         </div>
                                     }
                                 </div>
-                            }
+                            </div>
                             <div class="cm-btn-row">
                                 @if (CanEdit)
                                 {
                                     <Button Variant="ButtonVariant.Secondary" Icon="fa-plus" Disabled="Busy" data-testid="add-nested"
                                             OnClick="() => Open(null, location.Id)">Добавить вложенную локацию</Button>
+                                    @if (location.Images.Count == 0)
+                                    {
+                                        <Button Variant="ButtonVariant.Secondary" Icon="fa-image" Disabled="Busy" data-testid="add-location-images"
+                                                OnClick="() => _images = location">Добавить иллюстрацию</Button>
+                                    }
                                 }
                                 <Button Variant="ButtonVariant.Secondary" Icon="fa-play"
                                         Href="@ScenarioLinks.Play(Scenario.Id, location.Id)">Открыть в режиме игры</Button>
@@ -142,12 +165,24 @@
 
 <LocationMusicModal Open="@(_music is not null)" ScenarioId="Scenario.Id" Location="_music" OnClose="() => _music = null" OnSaved="MusicSavedAsync" />
 
+<LocationImagesModal Open="@(_images is not null)" ScenarioId="Scenario.Id" Location="_images" OnClose="() => _images = null" OnSaved="ImagesSavedAsync" />
+
 @code {
     private readonly HashSet<Guid> _open = [];
     private bool _formOpen;
     private ScenarioLocationDto? _editing;
     private Guid? _parentId;
     private ScenarioLocationDto? _music;
+    private ScenarioLocationDto? _images;
+
+    /// <summary>Есть ли иллюстрации хоть у одной локации: тогда у каждого названия место под миниатюру (названия на одной линии).</summary>
+    private bool HasArt => Scenario.Locations.Any(l => l.Images.Count > 0);
+
+    private async Task ImagesSavedAsync()
+    {
+        _images = null;
+        await SavedAsync("Иллюстрации локации сохранены.");
+    }
 
     private async Task MusicSavedAsync()
     {

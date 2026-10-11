@@ -1,3 +1,4 @@
+using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Contracts.Files;
 using CampaignManager.Contracts.Scenarios;
@@ -44,7 +45,7 @@ public sealed class ScenarioExchangeService(
         var catalog = await SkillCatalogAsync(cancellationToken);
 
         var locations = await dbContext.ScenarioLocations.AsNoTracking()
-            .Where(l => l.ScenarioId == scenarioId).Include(l => l.Checks).ToListAsync(cancellationToken);
+            .Where(l => l.ScenarioId == scenarioId).Include(l => l.Checks).Include(l => l.Images).AsSplitQuery().ToListAsync(cancellationToken);
         var locationIds = locations.Select(l => l.Id).ToList();
         var tracks = await dbContext.LocationTracks.AsNoTracking()
             .Where(t => locationIds.Contains(t.LocationId))
@@ -90,6 +91,9 @@ public sealed class ScenarioExchangeService(
                     SkillChecks = [.. l.Checks.OrderBy(c => c.Ord).Select(c => ExportCheck(c, catalog))],
                     MusicTags = NullIfEmpty(MusicTags.Normalize(l.MusicTags)),
                     Tracks = NullIfEmpty([.. tracks.Where(t => t.LocationId == l.Id).Select(t => t.Name).Order(StringComparer.Ordinal)]),
+                    Images = NullIfEmpty([
+                        .. l.Images.OrderBy(i => i.Ord).Select(i => new ScenarioFileImage { Url = FilesRoutes.Content(i.FileId), Caption = i.Caption }),
+                    ]),
                 }),
             ],
             Handouts =
@@ -352,8 +356,8 @@ public sealed class ScenarioExchangeService(
     {
         dbContext.ChangeTracker.DetectChanges();
         foreach (var entry in dbContext.ChangeTracker.Entries()
-                     .Where(e => e.State != EntityState.Added && e.Entity is ScenarioLocation or ScenarioCheck or ScenarioKeyFact
-                         or ScenarioHandout or ScenarioCreature or ScenarioItem)
+                     .Where(e => e.State != EntityState.Added && e.Entity is ScenarioLocation or ScenarioCheck or ScenarioLocationImage
+                         or ScenarioKeyFact or ScenarioHandout or ScenarioCreature or ScenarioItem)
                      .ToList())
         {
             entry.State = EntityState.Added;
@@ -425,6 +429,7 @@ public sealed class ScenarioExchangeService(
             {
                 ScenarioPartsService.ApplyLocationFields(location, new LocationInput(source.Name, source.Address, source.Description));
                 location.MusicTags = ScenarioPartsService.LocationMusicTags(source.MusicTags);
+                ImportLocationImages(source, location, lookup, notes[i]);
             }
             catch (ApiProblemException problem)
             {
@@ -499,6 +504,40 @@ public sealed class ScenarioExchangeService(
         foreach (var (locationId, trackId) in lookup.NewTracks)
         {
             lookup.Db.LocationTracks.Add(new LocationTrack { LocationId = locationId, TrackId = trackId });
+        }
+    }
+
+    /// <summary>
+    /// Иллюстрации локации — как файл раздатки: картинка этой базы ставится, чужой базы (или битый адрес) — пропускается с
+    /// предупреждением строки. Повторы, подписи и предел — та же проверка, что у правки (<see cref="ScenarioPartsService.LocationImages"/>).
+    /// </summary>
+    private static void ImportLocationImages(ScenarioFileLocation source, ScenarioLocation location, ImportLookup lookup, List<string> notes)
+    {
+        var found = new List<CatalogImageDto>();
+        var missing = 0;
+        foreach (var image in source.Images ?? [])
+        {
+            if (lookup.FileOf(image.Url) is { } fileId)
+            {
+                found.Add(new CatalogImageDto(fileId, null, image.Caption));
+            }
+            else if (!string.IsNullOrWhiteSpace(image.Url))
+            {
+                missing++;
+            }
+        }
+
+        var images = ScenarioPartsService.LocationImages(found);
+        for (var ord = 0; ord < images.Count; ord++)
+        {
+            location.Images.Add(new ScenarioLocationImage { LocationId = location.Id, Ord = ord, FileId = images[ord].FileId, Caption = images[ord].Caption });
+        }
+
+        if (missing > 0)
+        {
+            notes.Add(missing == 1
+                ? "картинки нет в этой базе — пропущена, загрузите её заново"
+                : $"картинок нет в этой базе ({missing}) — пропущены, загрузите их заново");
         }
     }
 
@@ -980,6 +1019,7 @@ public sealed class ScenarioExchangeService(
 
             List<ScenarioFileCharacter> characters = [.. file.Npcs, .. file.Pregens];
             var fileIds = file.Handouts.Select(h => h.FileUrl).Concat(characters.Select(c => c.PortraitUrl))
+                .Concat(file.Locations.SelectMany(l => l.Images ?? []).Select(i => i.Url))
                 .Select(FileIdOf).OfType<Guid>().Distinct().ToList();
 
             return new ImportLookup

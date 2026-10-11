@@ -56,6 +56,7 @@ public sealed class CmDbContext(DbContextOptions<CmDbContext> options) : DbConte
 
     public DbSet<Scenario> Scenarios => Set<Scenario>();
     public DbSet<ScenarioLocation> ScenarioLocations => Set<ScenarioLocation>();
+    public DbSet<ScenarioLocationImage> ScenarioLocationImages => Set<ScenarioLocationImage>();
     public DbSet<ScenarioCheck> ScenarioChecks => Set<ScenarioCheck>();
     public DbSet<ScenarioKeyFact> ScenarioKeyFacts => Set<ScenarioKeyFact>();
     public DbSet<ScenarioHandout> ScenarioHandouts => Set<ScenarioHandout>();

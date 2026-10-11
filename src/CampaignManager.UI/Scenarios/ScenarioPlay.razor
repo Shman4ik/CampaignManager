@@ -162,6 +162,8 @@ else
                           Rewards="@([.. Scenario.KeyFacts.Where(f => f.Type == KeyFactType.Reward)])" OnApplied="RefreshPartyAsync" />
 }
 
+<LocationGalleryShowcase Location="@(Location is { } shown && shown.Id == _galleryId ? shown : null)" OnClose="() => _galleryId = null" />
+
 <LocationMusicModal Open="_musicOpen" ScenarioId="Scenario.Id" Location="Location" OnClose="() => _musicOpen = false" OnSaved="MusicSavedAsync" />
 
 @code {
@@ -183,6 +185,9 @@ else
     private bool _factsOpen;
     private Guid? _shownHandoutId;
     private bool _musicOpen;
+
+    // Открытая галерея локации — только пока открыта та же локация: переход к другой её закрывает.
+    private Guid? _galleryId;
 
     [Parameter, EditorRequired] public ScenarioDto Scenario { get; set; } = null!;
 
@@ -371,8 +376,10 @@ else
         var pool = MusicPool.Of(location.MusicTags, location.TrackIds);
         var children = Scenario.Locations.Where(l => l.ParentId == location.Id).ToList();
         <section class="flex flex-col gap-4" data-testid="play-location-detail">
-            <div class="flex flex-wrap items-start gap-2">
-                <div class="min-w-0 flex-1 basis-56">
+            @* Обложка — сбоку от названия, а не над описанием: проверки и описание не уезжают за низ экрана (~620px под шапкой).
+               Касание раскрывает галерею во весь экран (LocationGalleryShowcase); у нескольких картинок — счётчик в углу. *@
+            <div class="flex items-start gap-3">
+                <div class="min-w-0 flex-1">
                     @if (location.ParentId is not null)
                     {
                         <p class="cm-text-muted text-sm">@LocationTree.Path(Scenario.Locations, location.ParentId.Value)</p>
@@ -383,6 +390,18 @@ else
                         <p class="cm-text-muted text-sm"><i class="fa-solid fa-map-pin mr-1" aria-hidden="true"></i>@address</p>
                     }
                 </div>
+                @if (location.Images.Count > 0)
+                {
+                    var cover = location.Images[0];
+                    <button type="button" class="cm-location-cover cm-art cm-art-landscape" data-testid="location-cover"
+                            aria-label="@($"Иллюстрации: {location.Name}")" @onclick="() => _galleryId = location.Id">
+                        <img src="@ImageUrls.Thumb(cover.Url, 480)" alt="" />
+                        @if (location.Images.Count > 1)
+                        {
+                            <span class="cm-tile-count" aria-hidden="true">@location.Images.Count</span>
+                        }
+                    </button>
+                }
             </div>
 
             @* Музыка — выше описания: атмосферу включают до того, как начинают зачитывать сцену (v1). «Музыка» (настройка) —
