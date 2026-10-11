@@ -545,6 +545,25 @@ create table cm.scenario_npcs (
     primary key (scenario_id, character_id)
 );
 
+-- Иллюстрации локации — как картинки справочников (creature_images): первая по ord — обложка.
+create table cm.scenario_location_images (
+    location_id  uuid not null references cm.scenario_locations on delete cascade,
+    ord          int not null,
+    file_id      uuid not null references cm.files on delete restrict,
+    caption      text,
+    primary key (location_id, ord)
+);
+create index ix_scenario_location_images_file_id on cm.scenario_location_images (file_id);
+
+-- Избранное библиотеки сценариев — личная звёздочка Хранителя.
+create table cm.scenario_favorites (
+    user_id      uuid not null references cm.users on delete cascade,
+    scenario_id  uuid not null references cm.scenarios on delete cascade,
+    created_at   timestamptz not null default now(),
+    primary key (user_id, scenario_id)
+);
+create index scenario_favorites_scenario on cm.scenario_favorites (scenario_id);
+
 -- Треки, прибитые к локации (настроение — music_tags в самой локации).
 -- Связей «НПС/тварь/предмет/раздатка ↔ локация» в 2.0.0 нет: в v1 их не пишет ни интерфейс, ни
 -- импорт (с коммита 4b6436f), в данных 0 из 52 локаций, а где стоит тварь или предмет, Хранители
@@ -808,6 +827,7 @@ where not exists (select 1 from cm.characters        where portrait_file_id = f.
   and not exists (select 1 from cm.spell_images      where file_id = f.id)
   and not exists (select 1 from cm.artifact_images   where file_id = f.id)
   and not exists (select 1 from cm.scenario_handouts where file_id = f.id)
+  and not exists (select 1 from cm.scenario_location_images where file_id = f.id)
   and not exists (select 1 from cm.music_tracks      where file_id = f.id);
 ```
 
