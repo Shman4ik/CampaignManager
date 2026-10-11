@@ -239,6 +239,15 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
 `/dev/ping` —
 сквозная проверка: страница → `ApiClient` → `GET /api/v1/ping` → `Data` → Postgres.
 
+Встроенный браузер Claude:
+- **`preview_start {name}` в сессии, перенесённой в worktree, читает `.claude/launch.json` основного чекаута**, а если
+  конфигурации там нет — молча запускает первую. Из worktree сервер запускать `dotnet run … --no-build` фоновой задачей,
+  а браузер открывать `preview_start {url}`; проверять `name` в ответе.
+- `navigate` на `https://localhost:8080/<путь>` отказывает («navigation … was denied») — переходить через
+  `javascript_tool` (`location.href = '/путь'`), дождавшись загрузки главной.
+- **Сервер гасить в конце задачи** (`preview_stop` или процесс `CampaignManager.Server.exe`): запущенный экземпляр держит
+  сборки в `bin/`, и следующий `dotnet build` падает с MSB3021/MSB3027.
+
 ## Памятка исполнителя
 
 Для сессии, которая делает задачу 2.0 в своём worktree параллельно с другими. Порядок работы
