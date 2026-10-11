@@ -1,0 +1,53 @@
+@using CampaignManager.Contracts.Scenarios
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+@inject ToastService Toasts
+
+@* Личная звёздочка Хранителя на сценарии (решение владельца 2026-10-11): одна кнопка на карточку библиотеки и на шапку
+   рабочего места. Состояние — у страницы (IsFavorite), кнопка пишет `PUT/DELETE …/favorite`, а страница получает новое
+   значение в OnChanged. Значок без подписи: смысл — в aria-label («Добавить в избранное: имя») и в заливке звезды
+   (заполненная — в избранном), на iPad наведения нет. Отказ — тостом, значок остаётся прежним. *@
+<Button Variant="@Variant" Small="@Small" Icon="@(IsFavorite ? "fa-star" : "fa-regular fa-star")" Busy="_busy"
+        AriaLabel="@(IsFavorite ? $"Убрать из избранного: {Name}" : $"Добавить в избранное: {Name}")"
+        class="@(IsFavorite ? "text-warning-600" : null)" data-testid="scenario-favorite" OnClick="ToggleAsync" />
+
+@code {
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    [Parameter] public bool IsFavorite { get; set; }
+
+    /// <summary>Звёздочка записана: новое значение (<c>true</c> — поставлена).</summary>
+    [Parameter] public EventCallback<bool> OnChanged { get; set; }
+
+    [Parameter] public ButtonVariant Variant { get; set; } = ButtonVariant.Ghost;
+
+    /// <summary>Шапка страницы (56px) — 36px; в карточке — те же 44px, что у «⋯».</summary>
+    [Parameter] public bool Small { get; set; }
+
+    private bool _busy;
+
+    private async Task ToggleAsync()
+    {
+        if (_busy)
+            return;
+
+        var favorite = !IsFavorite;
+        _busy = true;
+        try
+        {
+            await Api.SetFavoriteAsync(ScenarioId, favorite);
+            await OnChanged.InvokeAsync(favorite);
+            Toasts.Success(favorite ? "Добавлено в избранное:" : "Убрано из избранного:", subject: Name);
+        }
+        catch (HttpRequestException ex)
+        {
+            Toasts.Error(ApiErrors.Describe(ex));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

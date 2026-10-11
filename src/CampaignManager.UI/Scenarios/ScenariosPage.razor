@@ -28,12 +28,25 @@
 </PageHeader>
 
 <div class="cm-page">
-    @if (_list is { Items.Count: > SearchFrom })
+    @* «Избранное» — переключатель из одной кнопки, выбранный — светлый чип (kit.css). Рядом с поиском (сценариев больше шести) он
+       стоит в панели фильтров; пока поиска нет, панель была бы карточкой с одним чипом и пустотой справа — тогда чип просто строкой. *@
+    @{
+        RenderFragment favoritesChip =
+            @<Button Variant="ButtonVariant.Secondary" Icon="@(_onlyFavorites ? "fa-star" : "fa-regular fa-star")"
+                     class="@(_onlyFavorites ? "cm-chip-on" : null)" aria-pressed="@(_onlyFavorites ? "true" : "false")"
+                     data-testid="scenario-favorites-filter" OnClick="() => _onlyFavorites = !_onlyFavorites">Избранное</Button>;
+    }
+    @if (HasSearch)
     {
-        <FilterPanel OnReset="() => _search = string.Empty" CanReset="@(_search.Length > 0)">
+        <FilterPanel OnReset="ResetFilters" CanReset="@(_search.Length > 0 || _onlyFavorites)">
             <input type="search" class="cm-input min-w-48 flex-1" placeholder="Поиск по названию, месту, описанию…" aria-label="Поиск"
                    data-testid="scenario-search" @bind="_search" @bind:event="oninput" />
+            @favoritesChip
         </FilterPanel>
+    }
+    else if (ShowFilters)
+    {
+        <div class="cm-btn-row mb-3">@favoritesChip</div>
     }
 
 <AsyncContent @ref="_content" Load="LoadAsync" LoadingMessage="Загружаю сценарии…" Context="list"
@@ -47,7 +60,7 @@
             {
                 <EmptyState Icon="fa-magnifying-glass" Title="Нет сценариев по этим условиям.">
                     <Actions>
-                        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="() => _search = string.Empty">Сбросить фильтры</Button>
+                        <Button Variant="ButtonVariant.Secondary" Icon="fa-rotate-left" OnClick="ResetFilters">Сбросить фильтры</Button>
                     </Actions>
                 </EmptyState>
             }
@@ -70,6 +83,8 @@
                                         }
                                     </span>
                                 </a>
+                                <ScenarioFavoriteButton ScenarioId="scenario.Id" Name="@scenario.Name" IsFavorite="scenario.IsFavorite"
+                                                        OnChanged="isFavorite => scenario.IsFavorite = isFavorite" />
                                 @if (scenario.CanDelete)
                                 {
                                     <RowMenu AriaLabel="@($"Действия: {scenario.Name}")">
@@ -150,6 +165,7 @@
     private ScenarioListDto? _list;
     private string _search = "";
     private bool _importOpen;
+    private bool _onlyFavorites;
 
     /// <summary>Поиск появляется, когда сценариев больше этого числа.</summary>
     private const int SearchFrom = 6;
@@ -170,6 +186,21 @@
     /// </summary>
     private bool ErasVary => _list is not null && _list.Items.Select(i => i.Era).Distinct().Skip(1).Any();
 
+    /// <summary>
+    /// Панель фильтров: поиск — когда сценариев больше шести, «Избранное» — как только в библиотеке есть отмеченные (или фильтр
+    /// включён): без звёздочек он ничего бы не отсеивал.
+    /// </summary>
+    private bool ShowFilters => _list is not null
+        && (_list.Items.Count > SearchFrom || _onlyFavorites || _list.Items.Any(i => i.IsFavorite));
+
+    private bool HasSearch => _list is { Items.Count: > SearchFrom };
+
+    private void ResetFilters()
+    {
+        _search = string.Empty;
+        _onlyFavorites = false;
+    }
+
     private int SameNameCount(ScenarioSummaryDto scenario) =>
         _list?.Items.Count(i => string.Equals(i.Name, scenario.Name, StringComparison.CurrentCultureIgnoreCase)) ?? 0;
 
@@ -182,13 +213,15 @@
 
     private List<ScenarioSummaryDto> Filter(IReadOnlyList<ScenarioSummaryDto> items)
     {
+        // Отмеченные — первыми (звёздочка поставлена на странице — карточка поднимается сразу); порядок внутри групп прежний.
+        var ordered = items.OrderByDescending(s => s.IsFavorite).Where(s => !_onlyFavorites || s.IsFavorite);
         var needle = CatalogCodeTable.NormalizeName(_search);
         if (needle.Length == 0)
-            return [.. items];
+            return [.. ordered];
 
         return
         [
-            .. items.Where(s => new[] { s.Name, s.Setting, s.SettingDate, s.Summary }
+            .. ordered.Where(s => new[] { s.Name, s.Setting, s.SettingDate, s.Summary }
                 .Any(text => text is not null && CatalogCodeTable.NormalizeName(text).Contains(needle, StringComparison.Ordinal))),
         ];
     }

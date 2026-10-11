@@ -11,6 +11,7 @@ using CampaignManager.Server.Campaigns;
 using CampaignManager.Server.Characters;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CampaignManager.Server.Scenarios;
 
@@ -50,6 +51,7 @@ public sealed class ScenarioService(
                 Pregens = dbContext.Characters.Count(c => c.ScenarioId == s.Id && c.Kind == CharacterKind.Pregen
                                                           && c.Status != CharacterStatus.Archived),
                 Runs = dbContext.ScenarioRuns.Count(r => r.ScenarioId == s.Id),
+                IsFavorite = dbContext.ScenarioFavorites.Any(f => f.ScenarioId == s.Id && f.UserId == user.Id),
             })
             .ToListAsync(cancellationToken);
 
@@ -76,9 +78,11 @@ public sealed class ScenarioService(
                     UpdatedAt = r.UpdatedAt,
                     CanEdit = rights.CanEdit,
                     CanDelete = rights.CanDelete,
+                    IsFavorite = r.IsFavorite,
                 };
             })
-            .OrderBy(s => s.Name, StringComparer.CurrentCulture)
+            .OrderByDescending(s => s.IsFavorite)
+            .ThenBy(s => s.Name, StringComparer.CurrentCulture)
             .ThenBy(s => s.SourceScenarioName is not null)
             .ToList();
 
@@ -113,6 +117,7 @@ public sealed class ScenarioService(
                 Author = dbContext.Users.Where(u => u.Id == s.AuthorId).Select(u => u.DisplayName).FirstOrDefault(),
                 SourceName = dbContext.Scenarios.Where(x => x.Id == s.SourceScenarioId).Select(x => x.Name).FirstOrDefault(),
                 Runs = dbContext.ScenarioRuns.Count(r => r.ScenarioId == s.Id),
+                IsFavorite = dbContext.ScenarioFavorites.Any(f => f.ScenarioId == s.Id && f.UserId == user.Id),
             })
             .SingleAsync(cancellationToken);
         var s = scenario.Row;
@@ -167,6 +172,7 @@ public sealed class ScenarioService(
             UpdatedAt = s.UpdatedAt,
             CanEdit = rights.CanEdit,
             CanDelete = rights.CanDelete,
+            IsFavorite = scenario.IsFavorite,
             Locations = [.. OrderTree(locations).Select(l => ScenarioParts.Location(l, tracks, skills))],
             KeyFacts = [.. facts.Select(ScenarioParts.Fact)],
             Handouts = [.. handouts.Select(ScenarioParts.Handout)],
@@ -182,6 +188,39 @@ public sealed class ScenarioService(
             ],
             Pregens = [.. pregenSummaries.Select(p => new ScenarioPregenDto(p, reserved.Contains(p.Id)))],
         };
+    }
+
+    /// <summary>
+    /// Личная звёздочка: поставить или снять у вошедшего Хранителя. Право — чтение сценария (игроку и несуществующему — 404);
+    /// строка своя у каждого пользователя, другого не затронуть. Повтор ничего не меняет (идемпотентно, в том числе при гонке двух
+    /// вкладок — дубль ключа гасится). Сценарий при этом не пишется: версия корня и «Изменён» остаются прежними.
+    /// </summary>
+    public async Task SetFavoriteAsync(Guid scenarioId, bool favorite, CancellationToken cancellationToken)
+    {
+        await access.ForScenarioAsync(scenarioId, cancellationToken).Demand(Operation.Read);
+        var user = await currentUser.GetAsync(cancellationToken) ?? throw AccessDeniedException.Forbidden();
+
+        if (!favorite)
+        {
+            await dbContext.ScenarioFavorites.Where(f => f.UserId == user.Id && f.ScenarioId == scenarioId)
+                .ExecuteDeleteAsync(cancellationToken);
+            return;
+        }
+
+        if (await dbContext.ScenarioFavorites.AnyAsync(f => f.UserId == user.Id && f.ScenarioId == scenarioId, cancellationToken))
+        {
+            return;
+        }
+
+        dbContext.ScenarioFavorites.Add(new ScenarioFavorite { UserId = user.Id, ScenarioId = scenarioId });
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Вторая вкладка поставила звёздочку между проверкой и записью: результат тот же.
+        }
     }
 
     /// <summary>Шапка: название, описание, место, эпоха, время действия — с версией корня.</summary>

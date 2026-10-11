@@ -23,6 +23,10 @@ public static class ScenariosRoutes
     /// <summary><c>PUT</c> <see cref="ScenarioTextInput"/> с <c>If-Match</c> — основной текст Хранителя.</summary>
     public const string TextPattern = ScenarioPattern + "/text";
 
+    /// <summary><c>PUT</c> — поставить свою звёздочку на сценарий, <c>DELETE</c> — снять (оба идемпотентны, 204). Звёздочка личная:
+    /// другим Хранителям она не видна (<see cref="ScenarioSummaryDto.IsFavorite"/>, <see cref="ScenarioDto.IsFavorite"/>).</summary>
+    public const string FavoritePattern = ScenarioPattern + "/favorite";
+
     /// <summary><c>PUT</c> <see cref="ReorderRequest"/> — порядок строк одной части.</summary>
     public const string OrderPattern = ScenarioPattern + "/order";
 
@@ -85,6 +89,8 @@ public static class ScenariosRoutes
     public static string Scenario(Guid scenarioId) => $"{Scenarios}/{scenarioId}";
 
     public static string Text(Guid scenarioId) => $"{Scenario(scenarioId)}/text";
+
+    public static string Favorite(Guid scenarioId) => $"{Scenario(scenarioId)}/favorite";
 
     public static string Order(Guid scenarioId) => $"{Scenario(scenarioId)}/order";
 
@@ -183,6 +189,9 @@ public sealed class ScenarioSummaryDto
     public bool CanEdit { get; set; }
 
     public bool CanDelete { get; set; }
+
+    /// <summary>Сценарий в избранном у вошедшего (личная звёздочка); в списке такие стоят первыми.</summary>
+    public bool IsFavorite { get; set; }
 }
 
 /// <summary>Шапка сценария — одна форма на создание и правку.</summary>
@@ -233,6 +242,9 @@ public sealed class ScenarioDto
     public bool CanEdit { get; set; }
 
     public bool CanDelete { get; set; }
+
+    /// <summary>Сценарий в избранном у вошедшего (личная звёздочка).</summary>
+    public bool IsFavorite { get; set; }
 
     /// <summary>Все локации плоским списком по порядку; дерево — по <see cref="ScenarioLocationDto.ParentId"/>.</summary>
     public List<ScenarioLocationDto> Locations { get; set; } = [];
@@ -502,6 +514,12 @@ public interface IScenariosApi
     Task DeleteAsync(Guid scenarioId, CancellationToken cancellationToken = default);
 
     Task ReorderAsync(Guid scenarioId, ReorderRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Поставить (<c>true</c>) или снять свою звёздочку: личная отметка вошедшего Хранителя, повтор ничего не меняет.
+    /// Сценарий не виден (игроку — всегда) — 404.
+    /// </summary>
+    Task SetFavoriteAsync(Guid scenarioId, bool favorite, CancellationToken cancellationToken = default);
 
     /// <summary>Прохождения сценария в кампаниях, которые ведёт вошедший (администратору — все); незавершённые — первыми.</summary>
     Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default);
