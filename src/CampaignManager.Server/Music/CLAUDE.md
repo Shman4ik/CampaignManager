@@ -78,3 +78,14 @@
 дубль — 409, устаревшая версия — `stale`; смена источника и журнал правок; импорт с пропуском, новым и чужим
 файлом, экспорт; пул по тегу и прибитому; настроения по умолчанию → свои → по умолчанию, у каждого свои, форма v1
 через запятую, больше 30 — 400. Правила Core — `Core.Tests/Music/MusicRulesTests`.
+
+## Где брать треки (проверено 2026-09-16)
+
+- **incompetech.com** (Kevin MacLeod) — CC BY 4.0, прямые mp3 `https://incompetech.com/music/royalty-free/mp3-royaltyfree/<Название>.mp3`
+  (пробелы → `%20`); качается скриптом без капчи — самый удобный источник.
+- **archive.org, Great 78 Project** — граммофон 1920–1925, public domain в США. Имя mp3 — через
+  `https://archive.org/metadata/<id>`; 502 «kinda busy» — повторить, файл есть.
+- **tabletopaudio.com** — CC BY-NC-ND 4.0, лучшие тематические эмбиенсы; только кнопкой Save на сайте.
+- **pixabay.com/music** (атрибуция не нужна), **opengameart.org** (CC0).
+- Платно и в тему: cryochamber.bandcamp.com, michaelghelfi.bandcamp.com, Chaosium «Sense Impacts».
+- freepd.com закрылся в 2025 — ссылки из старых подборок мертвы.
