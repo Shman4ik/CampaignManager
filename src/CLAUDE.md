@@ -109,8 +109,8 @@ JWT, автовход) и [Server/Access/CLAUDE.md](CampaignManager.Server/Acces
   миграции, перенос с `--reset`. Id строк v1 сохранены — ссылки на листы и сценарии v1 ведут туда же.
 - **Схема `cm`** — `Data/<Модуль>/` (сущности и `IEntityTypeConfiguration` рядом), спецификация —
   [SCHEMA.md](../docs/v2/SCHEMA.md). Первая миграция — `InitialCmSchema`; применена на ветке `dev`.
-  Миграции не применяются при старте сервера: `dotnet ef database update --project src/CampaignManager.Data`
-  с `CM_DB`.
+  Миграции не применяются при старте сервера: на прод их накатывает Job хука Argo CD (см. «Деплой»), на `dev` —
+  `dotnet ef database update --project src/CampaignManager.Data` с `CM_DB`.
 - **Enum'ы колонок живут в `Core/<Модуль>`** (`CampaignStatus`, `CharacterKind`…) — их же возьмут
   `Contracts` и документы. В базе — текст с именем члена. Ни конвертер, ни CHECK руками не пишутся:
   `SchemaConventions.MapEnumsAsCheckedText` обходит модель и вешает на каждую enum-колонку
@@ -177,7 +177,7 @@ wslc run -d --rm --name cm-test-pg -p 55432:5432 -e POSTGRES_PASSWORD=postgres -
 
 | Модуль | Что | Знание |
 |---|---|---|
-| `Platform` | база, JSON, ошибки, health, OpenAPI, хост WebAssembly | этот файл |
+| `Platform` | база, JSON, ошибки, health, OpenAPI, хост WebAssembly; команда `migrate` для Job выкатки (`MigrateCommand`) | этот файл, «Деплой» |
 | `Identity` | вход через Auth0 (кука и JWT), автовход, `cm.users`, `/api/v1/me` | [Server/Identity/CLAUDE.md](CampaignManager.Server/Identity/CLAUDE.md) |
 | `Access` | `CurrentUser`, `AccessPolicy`, политики `[Authorize]` | [Server/Access/CLAUDE.md](CampaignManager.Server/Access/CLAUDE.md) |
 | `Files` | `cm.files` поверх MinIO: загрузка, отдача с Range, сироты | [Server/Files/CLAUDE.md](CampaignManager.Server/Files/CLAUDE.md) |
@@ -326,18 +326,23 @@ https://localhost:<порт>/dev/login?as=keeper&returnUrl=/scenarios
   (PR в dmnet-gitops). Несекретное (`Minio__Endpoint`, `Minio__BucketName`…) — в `env` Deployment.
 - **Базы.** Прод — ветка Neon `main` (настоящие данные), разработка — `dev` (её можно сбросить от `main`:
   `neonctl branches reset dev --parent` — после этого в `dev` сразу прод-данные, схема `cm` уже есть).
-  **Миграции сервер не применяет**, и выкатка тоже. Кто добавил миграцию, тот накатывает её **до слияния** своего PR
-  **на обе ветки — `dev` и `main`**: без миграции прод упадёт на первом запросе к новой таблице. Миграция должна
-  быть совместимой с кодом до неё (под старой версии живёт до замены):
+  Перенос T1.3 на `main` больше не запускать: он стирает данные игры (`--reset`).
+- **Миграции на прод накатывает выкатка** (с 2026-10-11). В dmnet-gitops (`workloads/campaign-manager/migrate-job.yaml`)
+  стоит Job `cm-migrate` с хуком Argo CD `PreSync`: на том же образе и с тем же секретом, что сервер, он запускает
+  `dotnet CampaignManager.Server.dll migrate` (`Platform/MigrateCommand`: накатить и выйти) **до** замены Deployment.
+  Упала миграция — синхронизация останавливается, прод остаётся на прежнем образе, Argo повторяет (до 5 раз); причина —
+  `kubectl -n campaign-manager logs job/cm-migrate` на VPS. Поэтому:
+  - **миграция обязана быть совместимой с кодом до неё**: под старой версии работает на новой схеме, пока не заменён
+    (переименование и удаление колонки — двумя PR: сначала код перестаёт её читать, потом миграция);
+  - **на `dev` миграцию накатывает её автор** до слияния — локальная разработка ходит в `dev`, а Job смотрит только в `main`:
 
-  ```bash
-  CM_DB="<строка ветки dev из appsettings.Development.json>" dotnet ef database update --project src/CampaignManager.Data
-  CM_DB="<строка main — из секрета прода, не печатая>" dotnet ef database update --project src/CampaignManager.Data
-  ```
+    ```bash
+    CM_DB="<строка ветки dev из appsettings.Development.json>" dotnet ef database update --project src/CampaignManager.Data
+    ```
 
-  Строку `main` взять из секрета прода в переменную, не выводя (`kubectl get secret campaign-manager-env` на VPS через
-  `ssh vps`, ключ `ConnectionStrings__DefaultConnection`, base64). Перенос T1.3 на `main` больше не запускать: он стирает
-  данные игры (`--reset`).
+  - накатить на `main` руками (Job сломан, срочно) — тем же `dotnet ef` со строкой из секрета прода в переменной, не
+    выводя (`kubectl get secret campaign-manager-env` на VPS через `ssh vps`, ключ `ConnectionStrings__DefaultConnection`,
+    base64). Два наката разом разводит блокировка миграций EF.
 - **Откат** — revert коммита `campaign-manager 0.3.N` в dmnet-gitops (или ручной `newTag` на прежнюю версию, PR в
   dmnet-gitops): Argo вернёт прежний образ прода. Миграцию откат не отменяет.
 - **Кто войдёт.** Белый список (`Authorization:AllowedEmails`/`AllowedDomains`) не задан: войти может любой с

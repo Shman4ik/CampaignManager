@@ -11,6 +11,13 @@ using CampaignManager.Server.Platform;
 using CampaignManager.Server.Profile;
 using CampaignManager.Server.Scenarios;
 
+// `dotnet CampaignManager.Server.dll migrate` — Job хука PreSync в Argo CD: накатить миграции и выйти (Platform/MigrateCommand).
+if (args is [MigrateCommand.Name, .. var rest])
+{
+    Environment.ExitCode = await MigrateCommand.RunAsync(WebApplication.CreateBuilder(rest).Configuration, Console.Out);
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddPlatformModule();
