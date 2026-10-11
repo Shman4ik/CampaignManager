@@ -257,7 +257,21 @@ public sealed class ScenarioReviewG4Tests : KitContext
 
     private static readonly Guid HouseId = Guid.Parse("0199b000-0000-7000-8000-000000000210");
 
-    private IRenderedComponent<ScenarioPlay> Play(IReadOnlyList<ScenarioRunDto> runs, IReadOnlyList<InvestigatorDto>? party = null)
+    [Fact]
+    public void Music_row_puts_both_buttons_before_the_mood_caption_and_names_them_differently()
+    {
+        var cut = Play([], musicTags: ["спокойствие", "эпоха"]);
+
+        var row = cut.Find("[data-testid=location-music-row]");
+        var settings = cut.Find("[data-testid=location-music]");
+        Assert.Equal("Настроить", settings.TextContent.Trim());
+        Assert.Equal("Изменить музыку локации", settings.GetAttribute("aria-label"));
+        Assert.Equal("location-music-tags", row.Children[^1].GetAttribute("data-testid"));
+        Assert.Equal("спокойствие, эпоха", row.Children[^1].TextContent.Trim());
+    }
+
+    private IRenderedComponent<ScenarioPlay> Play(IReadOnlyList<ScenarioRunDto> runs, IReadOnlyList<InvestigatorDto>? party = null,
+        List<string>? musicTags = null)
     {
         Services.AddSingleton(Fake.Of<IScenariosApi>(new()
         {
@@ -277,7 +291,7 @@ public sealed class ScenarioReviewG4Tests : KitContext
             [
                 new()
                 {
-                    Id = HouseId, Name = "Дом", Description = "Тёмный дом.",
+                    Id = HouseId, Name = "Дом", Description = "Тёмный дом.", MusicTags = musicTags ?? [],
                     Checks = [new() { Id = Guid.NewGuid(), LocationId = HouseId, TargetKind = CheckTarget.Skill, SkillId = TableFakes.SpotHidden.Id, SkillName = "Внимание" }],
                 },
                 new() { Id = Guid.NewGuid(), ParentId = HouseId, Name = "Подвал" },
