@@ -1,0 +1,74 @@
+@using CampaignManager.UI.Platform
+@inject IScenariosApi Api
+
+@* Иллюстрации локации: тот же редактор, что у записей справочника (CatalogImagesEditor — подпись, «Выше»/«Ниже», «убрать»,
+   загрузка в WebP), первая — обложка. Окно правит копию списка; «Сохранить» пишет его целиком (PUT …/locations/{id}/images),
+   правка локации и музыка его не трогают. Заголовок — «Глагол объект», локация — первой строкой тела (как у музыки). *@
+<Modal Open="Open" Title="Изменить иллюстрации" Size="ModalSize.Medium" OnClose="CloseAsync" data-testid="location-images">
+    <ChildContent>
+        <p class="mb-4 text-sm text-primary-600">Локация: <strong class="font-semibold text-primary-800">@Names.Plain(Location?.Name)</strong></p>
+        <CatalogImagesEditor Images="_images" ThumbClass="h-16 w-24" Hint="Первая — обложка: её видно в режиме игры." />
+    </ChildContent>
+    <FooterError>
+        @if (_error is not null)
+        {
+            <Alert Tone="Tone.Error" Small="true" ShowIcon="true" class="mb-0">@_error</Alert>
+        }
+    </FooterError>
+    <Footer>
+        <Button Variant="ButtonVariant.Secondary" OnClick="CloseAsync" Disabled="_saving">Отмена</Button>
+        <Button Busy="_saving" OnClick="SaveAsync" data-testid="location-images-save">Сохранить</Button>
+    </Footer>
+</Modal>
+
+@code {
+    private bool _wasOpen;
+    private List<CatalogImageDto> _images = [];
+    private string? _error;
+    private bool _saving;
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter, EditorRequired] public Guid ScenarioId { get; set; }
+
+    [Parameter] public ScenarioLocationDto? Location { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _images = [.. Location?.Images ?? []];
+            _error = null;
+        }
+
+        _wasOpen = Open;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (Location is null || _saving)
+            return;
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.SetLocationImagesAsync(ScenarioId, Location.Id, new LocationImagesInput([.. _images]));
+            await OnSaved.InvokeAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            _error = ApiErrors.Describe(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}
