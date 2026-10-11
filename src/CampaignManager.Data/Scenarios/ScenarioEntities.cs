@@ -158,6 +158,17 @@ public sealed class ScenarioNpc
     public string? Notes { get; set; }
 }
 
+/// <summary>
+/// Личная звёздочка Хранителя на сценарии библиотеки: у каждого пользователя своя, другим не видна. Удаление сценария
+/// или пользователя уносит строку каскадом.
+/// </summary>
+public sealed class ScenarioFavorite : ICreatedAt
+{
+    public Guid UserId { get; set; }
+    public Guid ScenarioId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 /// <summary>Трек, прибитый к локации.</summary>
 public sealed class LocationTrack
 {
@@ -268,6 +279,19 @@ internal sealed class ScenarioNpcConfiguration : IEntityTypeConfiguration<Scenar
         entity.HasOne<Scenario>().WithMany(s => s.Npcs).HasForeignKey(n => n.ScenarioId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasOne<Character>().WithMany().HasForeignKey(n => n.CharacterId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class ScenarioFavoriteConfiguration : IEntityTypeConfiguration<ScenarioFavorite>
+{
+    public void Configure(EntityTypeBuilder<ScenarioFavorite> entity)
+    {
+        entity.ToTable("scenario_favorites");
+        entity.HasKey(f => new { f.UserId, f.ScenarioId });
+        entity.HasOne<User>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne<Scenario>().WithMany().HasForeignKey(f => f.ScenarioId).OnDelete(DeleteBehavior.Cascade);
+        // Первичный ключ ведёт от пользователя («мои звёздочки»); индекс по сценарию нужен каскаду удаления.
+        entity.HasIndex(f => f.ScenarioId).HasDatabaseName("scenario_favorites_scenario");
     }
 }
 

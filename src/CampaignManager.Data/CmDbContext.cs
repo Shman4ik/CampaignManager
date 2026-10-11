@@ -62,6 +62,7 @@ public sealed class CmDbContext(DbContextOptions<CmDbContext> options) : DbConte
     public DbSet<ScenarioCreature> ScenarioCreatures => Set<ScenarioCreature>();
     public DbSet<ScenarioItem> ScenarioItems => Set<ScenarioItem>();
     public DbSet<ScenarioNpc> ScenarioNpcs => Set<ScenarioNpc>();
+    public DbSet<ScenarioFavorite> ScenarioFavorites => Set<ScenarioFavorite>();
     public DbSet<LocationTrack> LocationTracks => Set<LocationTrack>();
 
     public DbSet<Character> Characters => Set<Character>();
