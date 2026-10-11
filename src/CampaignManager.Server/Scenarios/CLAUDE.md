@@ -9,7 +9,7 @@
 `ApiClient/Scenarios`, страницы — [UI/Scenarios/CLAUDE.md](../../CampaignManager.UI/Scenarios/CLAUDE.md). Таблицы —
 `scenarios`, `scenario_locations`, `scenario_checks`, `scenario_key_facts`, `scenario_handouts`, `scenario_creatures`,
 `scenario_items`, `scenario_npcs`, `scenario_runs`, `run_reservations` (+ `location_tracks`, `characters`, а бронь и ваншот
-пишут `campaigns`/`campaign_members`) из T1.2; единственная миграция модуля — `ScenarioFavorites` (таблица `scenario_favorites`, ниже). Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
+пишут `campaigns`/`campaign_members`) из T1.2; миграции модуля — `ScenarioFavorites` (`scenario_favorites`) и `ScenarioLocationImages` (`scenario_location_images`), обе ниже. Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
 `IDbContextFactory`, снимок пререндера, глубокое копирование локаций в модалке, `@ref` + `Show()`) — нет.
 
 ## API
@@ -42,6 +42,9 @@
 | `POST /api/v1/runs/{runId}/reservations` | бронь прегена (`ReserveRequest`) → `ReservationDto` с копией листа | `CanReserveAsync` |
 | `DELETE /api/v1/runs/{runId}/reservations/{pregenId}` | снять бронь | `ForReservationAsync` Delete |
 | `PUT …/locations/{locationId}/music` | музыка локации: настроения и прибитые треки целиком (`LocationMusicInput`) | Edit |
+| `PUT …/locations/{locationId}/images` | иллюстрации локации целиком: порядок, подписи, убрать (`LocationImagesInput`) → `ScenarioLocationDto` | Edit |
+| `POST …/locations/{locationId}/images` | добавить одну загруженную картинку (`LocationImageInput`: `fileId`, `caption`, `cover`) → `ScenarioLocationDto` | Edit |
+| `DELETE …/locations/{locationId}/images/{fileId}` | убрать картинку из локации (файл остаётся) | Edit |
 | `GET …/handouts/{handoutId}/screen` | раздатка для показа игрокам (`HandoutScreenDto`, без пометки и заметки), `no-store` | `ForHandoutAsync` Read |
 | страница `/scenarios/{id}/handouts/{handoutId}` | второй экран — статическая страница сервера (`Components/Pages/HandoutScreen`), `[Authorize]` | `ForHandoutAsync` Read |
 
@@ -113,6 +116,36 @@
   вошедшему. Список отдаёт отмеченные **первыми**, внутри групп — по названию.
 - Миграция только добавляет таблицу (старый код её не читает), так что накатывать её можно до выкатки.
 
+## Иллюстрации локаций (2026-10-11)
+
+Решение владельца: **несколько картинок на локацию — галерея, как у справочников; первая — обложка.** Таблица
+`scenario_location_images (location_id, ord, file_id, caption)` — ключ (локация, порядок), каскад от локации, `file_id` →
+`files` `restrict` (миграция `ScenarioLocationImages`). Строка — `ICatalogImage`, запись — общий `Catalogs/Stores/CatalogImages`
+(`Apply` правит строки на месте по порядку, `ToDtos` — DTO): второй системы картинок нет. В DTO — `ScenarioLocationDto.Images`
+(`CatalogImageDto`: `fileId`, `url`, `caption`), и на рабочем месте, и в режиме игры (это один `GET /api/v1/scenarios/{id}`).
+
+- Правка локации (`LocationInput`) и музыка картинки не трогают — свои адреса. Права — Edit сценария (`ForScenarioAsync`): игроку 404,
+  чужому Хранителю можно (общая библиотека), локация чужого сценария по адресу этого — 404. Файла нет в `files` — 400.
+- Список — без повторов файла (остаётся первое место), подпись до 300 знаков (пустая — `null`), не больше
+  `ScenarioLimits.MaxLocationImages` (20) — одна проверка `ScenarioPartsService.LocationImages` на правку и импорт.
+- `POST` добавляет в конец, с `cover: true` — первой (прежняя обложка **сдвигается**, а не уходит — в отличие от `PUT …/cover`
+  справочника). Тот же файл второй раз не добавится (с `cover` — станет первым; подпись обновится, если задана): повторный прогон
+  скрипта ничего не размножит. `DELETE` картинки, которой нет в локации, — 404. Удаление локации уносит картинки каскадом,
+  файлы остаются — сироты чистит админка (`FileReferences` видит новую ссылку сам).
+
+**Заливка скриптом** (оркестратор, сгенерированные иллюстрации `X:\Knowledge\CallOfCthulhu\scenarios-art`): токен агента со
+scope **`scenarios:write` и `files:write`** (`Identity/CLAUDE.md`, «Токены агентов»; с одним из двух — 403 на другой шаг):
+
+1. `GET /api/v1/scenarios/{scenarioId}` — `locations[].id` и `name` (сопоставлять по названию: id на проде и копиях разные).
+2. `POST /api/v1/files?format=webp` — multipart, поле `file` (PNG 3 МБ → WebP ~0,3 МБ); ответ `StoredFileDto`, нужен `id`. Тот же
+   PNG второй раз — та же строка.
+3. `POST /api/v1/scenarios/{scenarioId}/locations/{locationId}/images` — `{ "fileId": "<id>", "caption": null, "cover": true }`
+   (первая картинка локации — `cover: true`, остальные — без него). Ответ — локация с `images`.
+
+Порядок и подписи целиком — `PUT …/locations/{locationId}/images` с `{ "images": [{ "fileId": "…", "caption": "…" }] }`. Проверено
+2026-10-11 на копии `dev` (5 иллюстраций «Вечера поэзии» через API, ещё две — через окно). Тест — `ScenarioLocationImagesApiTests.
+Agent_with_scenarios_and_files_scopes_uploads_and_binds_a_location_image`.
+
 ## Импорт и экспорт файлом (T2.5d)
 
 Формат — `Contracts/Scenarios/ScenarioExchange.cs` (`ScenarioFile`), читается и пишется **своим** контекстом
@@ -125,8 +158,9 @@
   `skillName`: имя справочника через `SkillNameResolver` (регистр, «ё», написания v1), характеристика («ИНТ» или
   «Интеллект») или «Удача» — как переносил v1 (T1.3). Сложность — пусто/`Hard`/`Extreme` (и по-русски).
   Тварь, предмет, трек, оружие и заклинание листа — по имени справочника (`CatalogCodeTable.NormalizeName`).
-  Файл раздатки и портрет — адрес `/api/v1/files/{id}`: есть в этой базе — ставится, нет — предупреждение (как картинки
-  в импорте справочников). Навыки своего статблока твари — по имени (экспорт выбрасывает `skillId`).
+  Файл раздатки, портрет и иллюстрации локации (`locations[].images`: `url`, `caption`; первая — обложка) — адрес
+  `/api/v1/files/{id}`: есть в этой базе — ставится, нет — пропускается с предупреждением строки (как картинки в импорте
+  справочников). Замена переписывает картинки локаций из файла (старые уходят каскадом с локациями). Навыки своего статблока твари — по имени (экспорт выбрасывает `skillId`).
 - **Сверх v1 экспорт отдаёт** тварей (бестиарий по имени + `name`, `count`, своя версия `statblock`; тварь без
   бестиария — имя и статблок), предметы (`item` справочника или свой реквизит), прегенов (листами), музыку локации
   (`musicTags` нормализованы, `tracks` — названия фонотеки), эпоху (`epoch`; нет — по году в `era`,
@@ -248,6 +282,11 @@
 пробный прогон ничего не трогает, запись — тот же id, новое дерево, свой лист НПС переписан; общий лист — `Reused`,
 старый преген — в архиве; чужому Хранителю 403, игроку 404.
 `Core.Tests/Sheet/SheetBuilderTests.ToImport_IsFixedPointOfFromImport_AndSkipsSkillsAtBase`.
+`ScenarioLocationImagesApiTests`: список целиком (порядок, повтор файла, пустая подпись), добавить в конец и обложкой, повтор не
+размножает, убрать (нет такой — 404), правка локации картинки не трогает; файла нет — 400, больше 20 — 400, игроку 404, чужой
+Хранитель правит, чужой сценарий 404, каскад при удалении локации; токен агента (`scenarios:write` + `files:write`) грузит PNG в
+WebP и привязывает, с одним scope — 403; экспорт → импорт копией (тот же порядок и подписи, экспорт копии совпадает), чужие
+картинки — предупреждение строки, замена.
 `ScenarioPlayApiTests` (T2.5b): прохождения только своих кампаний и незавершённые первыми, игроку 404; музыка локации
 (нормализация, повтор трека, чужой трек — 400, правка локации музыку не трогает, игроку и чужому сценарию 404); показ
 раздатки Хранителю и игроку кампании, постороннему 404, ни в JSON, ни в HTML второго экрана нет пометки и заметки

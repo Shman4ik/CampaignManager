@@ -18,7 +18,7 @@ description: "Переносит сценарий «Зова Ктулху» из
 | В файле | Таблица | Как ищется |
 |---|---|---|
 | `name`, `description`, `location`, `era`, `epoch`, `journal` | `scenarios` (`name`, `summary`, `setting`, `setting_date`, `era`, `body_md`) | — |
-| `locations[]` (+ `parent`, `musicTags`, `tracks`) | `scenario_locations`, `location_tracks` | родитель — по имени в файле, трек — по названию фонотеки |
+| `locations[]` (+ `parent`, `musicTags`, `tracks`, `images`) | `scenario_locations`, `location_tracks`, `scenario_location_images` | родитель — по имени в файле, трек — по названию фонотеки, картинка — адрес файла этой базы |
 | `locations[].skillChecks[]` | `scenario_checks` | навык — по имени справочника; «ИНТ»/«Интеллект» — характеристика; «Удача» |
 | `keyFacts[]` | `scenario_key_facts` | — |
 | `handouts[]` | `scenario_handouts` | картинка — адрес файла этой базы (`/api/v1/files/{id}`) |
@@ -53,6 +53,7 @@ description: "Переносит сценарий «Зова Ктулху» из
     "name": "День 1. Инструктаж", "address": "…", "description": "Markdown",
     "parent": "имя другой локации из этого же файла",
     "musicTags": ["тайна"], "tracks": ["Название трека фонотеки"],
+    "images": [{ "url": "/api/v1/files/{id}", "caption": "Подпись" }],
     "skillChecks": [
       { "skillName": "Внимание", "difficulty": "Hard", "successResult": "…", "failureResult": "…" },
       { "skillName": "ИНТ" }, { "skillName": "Удача", "difficulty": "Extreme" }
@@ -82,6 +83,10 @@ description: "Переносит сценарий «Зова Ктулху» из
 - Лист НПС собирает `SheetBuilder.FromImport` (как помощник): ПЗ/ПМ/БкУ/Комплекция/Скорость, **расходящиеся с формулой**,
   становятся поправками листа; `dodge` — значение навыка Уклонение; `sanity` — текущий Рассудок книги. Навык — имя
   справочника, старое написание v1 или «Родитель (уточнение)»; не нашёлся — свой навык (отчёт его назовёт).
+- `images` локации — иллюстрации по порядку, **первая — обложка** (видна в режиме игры). Как файл раздатки: адрес файла этой
+  базы — ставится, файла нет (другая база) — пропускается с предупреждением строки; не больше 20, подпись — до 300 знаков.
+  Новые картинки в файл не вписывают (их ещё нет в базе): после импорта их заливают API — `POST /api/v1/files?format=webp`,
+  затем `POST /api/v1/scenarios/{id}/locations/{locationId}/images` (`Scenarios/CLAUDE.md`, «Иллюстрации локаций»).
 - `parent` — **по имени**: опечатка не роняет импорт, локация уходит на верхний уровень с предупреждением.
 - Поля анонса v1 (`isTemplate`, `isPublished`, `scheduledDate`, `announcementText`) читаются и отбрасываются: анонс и
   запись игроков — у прохождения.
