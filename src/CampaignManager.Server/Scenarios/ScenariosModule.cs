@@ -49,6 +49,17 @@ public static class ScenariosModule
             await s.DeleteAsync(scenarioId, ct);
             return TypedResults.NoContent();
         }).WithName("DeleteScenario");
+        // Личная звёздочка — только человеку: у токена агента «избранного» нет, поэтому не в `scenarios` (AllowMachine), а в `group`.
+        group.MapPut(ScenariosRoutes.FavoritePattern, async (Guid scenarioId, ScenarioService s, CancellationToken ct) =>
+        {
+            await s.SetFavoriteAsync(scenarioId, true, ct);
+            return TypedResults.NoContent();
+        }).WithName("SetScenarioFavorite");
+        group.MapDelete(ScenariosRoutes.FavoritePattern, async (Guid scenarioId, ScenarioService s, CancellationToken ct) =>
+        {
+            await s.SetFavoriteAsync(scenarioId, false, ct);
+            return TypedResults.NoContent();
+        }).WithName("RemoveScenarioFavorite");
         scenarios.MapPut(ScenariosRoutes.TextPattern, (Guid scenarioId, ScenarioTextInput input, HttpRequest request, ScenarioService s, CancellationToken ct) =>
             s.SaveTextAsync(scenarioId, input, HttpIfMatch.Version(request), ct)).WithName("SaveScenarioText");
         scenarios.MapPut(ScenariosRoutes.OrderPattern, async (Guid scenarioId, ReorderRequest input, ScenarioService s, CancellationToken ct) =>

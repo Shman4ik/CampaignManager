@@ -44,6 +44,15 @@ public sealed class ScenariosApiClient(HttpClient http) : IScenariosApi
     public Task ReorderAsync(Guid scenarioId, ReorderRequest request, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Put, ScenariosRoutes.Order(scenarioId), request, Json.ReorderRequest, cancellationToken);
 
+    public async Task SetFavoriteAsync(Guid scenarioId, bool favorite, CancellationToken cancellationToken = default)
+    {
+        var url = ScenariosRoutes.Favorite(scenarioId);
+        using var response = favorite
+            ? await http.PutAsync(url, content: null, cancellationToken)
+            : await http.DeleteAsync(url, cancellationToken);
+        await ApiResponses.EnsureSuccessAsync(response, cancellationToken, withCode: true);
+    }
+
     public async Task<IReadOnlyList<ScenarioRunDto>> ListRunsAsync(Guid scenarioId, CancellationToken cancellationToken = default)
     {
         using var response = await http.GetAsync(ScenariosRoutes.Runs(scenarioId), cancellationToken);
