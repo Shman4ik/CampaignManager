@@ -9,7 +9,7 @@
 `ApiClient/Scenarios`, страницы — [UI/Scenarios/CLAUDE.md](../../CampaignManager.UI/Scenarios/CLAUDE.md). Таблицы —
 `scenarios`, `scenario_locations`, `scenario_checks`, `scenario_key_facts`, `scenario_handouts`, `scenario_creatures`,
 `scenario_items`, `scenario_npcs`, `scenario_runs`, `run_reservations` (+ `location_tracks`, `characters`, а бронь и ваншот
-пишут `campaigns`/`campaign_members`) из T1.2; миграций модуль не добавил. Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
+пишут `campaigns`/`campaign_members`) из T1.2; единственная миграция модуля — `ScenarioFavorites` (таблица `scenario_favorites`, ниже). Знание перенесено из `Features/Scenarios/CLAUDE.md` v1; обходы (кэши и их сбросы,
 `IDbContextFactory`, снимок пререндера, глубокое копирование локаций в модалке, `@ref` + `Show()`) — нет.
 
 ## API
@@ -22,6 +22,7 @@
 | `PUT /api/v1/scenarios/{id}` | шапка (название, кратко, место, эпоха, время действия), `If-Match` | `ForScenarioAsync` Edit |
 | `PUT /api/v1/scenarios/{id}/text` | основной текст Хранителя (Markdown), `If-Match` | `ForScenarioAsync` Edit |
 | `DELETE /api/v1/scenarios/{id}` | удалить; есть прохождения — 409 `in-use` | `ForScenarioAsync` Delete (автор, админ) |
+| `PUT/DELETE /api/v1/scenarios/{id}/favorite` | своя звёздочка вошедшего Хранителя: поставить / снять, оба 204 и идемпотентны | `ForScenarioAsync` Read |
 | `PUT /api/v1/scenarios/{id}/order` | порядок строк одной части (`ReorderRequest`) | Edit |
 | `POST …/locations`, `PUT/DELETE …/locations/{locationId}` | локация (дерево: `parentId`) | Edit |
 | `POST …/locations/{locationId}/checks`, `PUT/DELETE …/checks/{checkId}` | проверка в локации | Edit |
@@ -94,6 +95,23 @@
 - Пределы (`ScenarioLimits`): название 200, короткие поля 300, тексты 20 000, основной текст 100 000 (у «Безымянного
   тумана» — 16,5 тыс.). Пустая строка — `null`.
 - Список читается проекцией каждый раз (сценариев единицы) — кэшей v1 с их непоследовательными сбросами нет.
+
+## Избранное (личная звёздочка)
+
+Решение владельца 2026-10-11: «избранное» — **личная** отметка каждого Хранителя в библиотеке, а не общий признак сценария.
+
+- Таблица `scenario_favorites` (`Data/Scenarios`, миграция `ScenarioFavorites`): ключ `(user_id, scenario_id)`, `created_at`; FK на
+  `users` и `scenarios` — `ON DELETE CASCADE` (удалили сценарий или пользователя — отметки ушли), индекс по `scenario_id` под каскад.
+  Чужая звёздочка не видна и не трогается: каждый запрос — только по строке вошедшего (`CurrentUser`).
+- **Права — чтение сценария** (`ForScenarioAsync` Read, новой политики нет): Хранитель и админ ставят на любой сценарий, игроку и
+  несуществующему сценарию — 404 (на `PUT` и на `DELETE`). Токену агента (`scenarios:write`) адрес закрыт: эндпоинты в `group`, а
+  не во вложенной группе с `AllowMachine` — «избранное» у машины не имеет смысла.
+- **Идемпотентно**: повторный `PUT` и `DELETE` снятого — 204 без изменений; гонка двух вкладок (дубль ключа) гасится
+  (`UniqueViolation` → тот же результат). Сценарий звёздочка **не пишет**: версия корня (`xmin`), `updated_at` и «Изменён» прежние,
+  `If-Match` с другого устройства остаётся годным.
+- **Читается** флагом `IsFavorite` в `ScenarioSummaryDto` (строка списка) и `ScenarioDto` (рабочее место) — подзапросом `EXISTS` по
+  вошедшему. Список отдаёт отмеченные **первыми**, внутри групп — по названию.
+- Миграция только добавляет таблицу (старый код её не читает), так что накатывать её можно до выкатки.
 
 ## Импорт и экспорт файлом (T2.5d)
 
@@ -213,6 +231,10 @@
 - Время — UTC (`ToUniversalTime()` на входе), пояс — у клиента.
 
 ## Тесты
+
+`ScenarioFavoritesApiTests`: поставить и снять (список — отмеченные первыми, рабочее место), звёздочка личная (другой Хранитель и админ
+её не видят, ставят свою), идемпотентность и «сценарий не тронут» (версия и `updated_at`, старый `If-Match` годится), игроку и
+несуществующему сценарию — 404 на оба метода, удаление сценария и пользователя уносит отметки каскадом.
 
 `Server.Tests/Scenarios/ScenariosApiTests` на `CampaignsApp`: автор и флаги списка у другого Хранителя и админа; игрок —
 403 на список и создание, 404 на чтение и все записи; чужой Хранитель правит части, но не удаляет; **правка одной вкладки
