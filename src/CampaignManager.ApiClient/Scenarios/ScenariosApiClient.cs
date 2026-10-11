@@ -64,6 +64,19 @@ public sealed class ScenariosApiClient(HttpClient http) : IScenariosApi
         SendAsync(HttpMethod.Put, ScenariosRoutes.LocationMusic(scenarioId, locationId), input, Json.LocationMusicInput, Json.ScenarioLocationDto,
             cancellationToken);
 
+    public Task<ScenarioLocationDto> SetLocationImagesAsync(Guid scenarioId, Guid locationId, LocationImagesInput input,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Put, ScenariosRoutes.LocationImages(scenarioId, locationId), input, Json.LocationImagesInput, Json.ScenarioLocationDto,
+            cancellationToken);
+
+    public Task<ScenarioLocationDto> AddLocationImageAsync(Guid scenarioId, Guid locationId, LocationImageInput input,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, ScenariosRoutes.LocationImages(scenarioId, locationId), input, Json.LocationImageInput, Json.ScenarioLocationDto,
+            cancellationToken);
+
+    public Task RemoveLocationImageAsync(Guid scenarioId, Guid locationId, Guid fileId, CancellationToken cancellationToken = default) =>
+        DeleteUrlAsync(ScenariosRoutes.LocationImage(scenarioId, locationId, fileId), cancellationToken);
+
     public async Task<HandoutScreenDto> GetHandoutScreenAsync(Guid scenarioId, Guid handoutId, CancellationToken cancellationToken = default)
     {
         using var response = await http.GetAsync(ScenariosRoutes.HandoutScreen(scenarioId, handoutId), cancellationToken);

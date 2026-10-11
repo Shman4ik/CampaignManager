@@ -1,3 +1,4 @@
+using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Characters;
 using CampaignManager.Core;
 using CampaignManager.Core.Campaigns;
@@ -46,6 +47,16 @@ public static class ScenariosRoutes
 
     /// <summary><c>PUT</c> <see cref="LocationMusicInput"/> — музыка локации: настроения и прибитые треки (T2.5b).</summary>
     public const string LocationMusicPattern = LocationPattern + "/music";
+
+    /// <summary>
+    /// Иллюстрации локации (первая — обложка): <c>PUT</c> <see cref="LocationImagesInput"/> — список целиком (порядок, подписи,
+    /// убрать); <c>POST</c> <see cref="LocationImageInput"/> — добавить одну загруженную картинку (<c>cover</c> — первой). Ответ —
+    /// <see cref="ScenarioLocationDto"/>.
+    /// </summary>
+    public const string LocationImagesPattern = LocationPattern + "/images";
+
+    /// <summary><c>DELETE</c> — убрать картинку из локации (файл остаётся в <c>files</c>).</summary>
+    public const string LocationImagePattern = LocationImagesPattern + "/{fileId:guid}";
 
     /// <summary><c>POST</c> <see cref="CheckInput"/> — проверка в локации.</summary>
     public const string LocationChecksPattern = LocationPattern + "/checks";
@@ -104,6 +115,10 @@ public static class ScenariosRoutes
 
     public static string LocationMusic(Guid scenarioId, Guid locationId) => $"{Location(scenarioId, locationId)}/music";
 
+    public static string LocationImages(Guid scenarioId, Guid locationId) => $"{Location(scenarioId, locationId)}/images";
+
+    public static string LocationImage(Guid scenarioId, Guid locationId, Guid fileId) => $"{LocationImages(scenarioId, locationId)}/{fileId}";
+
     public static string LocationChecks(Guid scenarioId, Guid locationId) => $"{Location(scenarioId, locationId)}/checks";
 
     public static string Check(Guid scenarioId, Guid checkId) => $"{Scenario(scenarioId)}/checks/{checkId}";
@@ -144,6 +159,9 @@ public static class ScenarioLimits
     public const int BodyLength = 100000;
 
     public const int MaxCount = 99;
+
+    /// <summary>Иллюстраций у локации: галерея по касанию, а не альбом.</summary>
+    public const int MaxLocationImages = 20;
 }
 
 /// <summary>Список сценариев и можно ли завести новый (Хранитель по роли).</summary>
@@ -283,8 +301,23 @@ public sealed class ScenarioLocationDto
     /// <summary>Прибитые треки (<c>location_tracks</c>, T2.5b).</summary>
     public List<Guid> TrackIds { get; set; } = [];
 
+    /// <summary>Иллюстрации по порядку, первая — обложка (<c>scenario_location_images</c>); правка локации их не трогает.</summary>
+    public List<CatalogImageDto> Images { get; set; } = [];
+
     public List<ScenarioCheckDto> Checks { get; set; } = [];
 }
+
+/// <summary>
+/// Иллюстрации локации целиком: порядок — порядок списка (первая — обложка), подпись — у каждой; <see cref="CatalogImageDto.Url"/>
+/// сервер не читает. Файлы уже загружены (<c>POST /api/v1/files?format=webp</c>); повтор файла в списке не попадёт.
+/// </summary>
+public sealed record LocationImagesInput(IReadOnlyList<CatalogImageDto> Images);
+
+/// <summary>
+/// Добавить одну загруженную картинку к локации — для скрипта и загрузки по одной: в конец списка, с <see cref="Cover"/> — первой.
+/// Картинка уже есть — второй раз не добавится (с <see cref="Cover"/> — станет первой, подпись обновится, если задана).
+/// </summary>
+public sealed record LocationImageInput(Guid FileId, string? Caption = null, bool Cover = false);
 
 /// <summary>Локация: родитель — локация того же сценария; не она сама и не её потомок.</summary>
 public sealed record LocationInput(string Name, string? Address = null, string? Description = null, Guid? ParentId = null);
@@ -529,6 +562,17 @@ public interface IScenariosApi
 
     /// <summary>Раздатка для показа игрокам — без пометки и заметки Хранителя. Не видна — 404.</summary>
     Task<HandoutScreenDto> GetHandoutScreenAsync(Guid scenarioId, Guid handoutId, CancellationToken cancellationToken = default);
+
+    /// <summary>Иллюстрации локации целиком (порядок, подписи, убрать). Файла нет — 400.</summary>
+    Task<ScenarioLocationDto> SetLocationImagesAsync(Guid scenarioId, Guid locationId, LocationImagesInput input,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Добавить картинку к локации (в конец или обложкой); уже есть — не повторяется.</summary>
+    Task<ScenarioLocationDto> AddLocationImageAsync(Guid scenarioId, Guid locationId, LocationImageInput input,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Убрать картинку из локации; её нет в локации — 404.</summary>
+    Task RemoveLocationImageAsync(Guid scenarioId, Guid locationId, Guid fileId, CancellationToken cancellationToken = default);
 
     Task<ScenarioLocationDto> AddLocationAsync(Guid scenarioId, LocationInput input, CancellationToken cancellationToken = default);
 

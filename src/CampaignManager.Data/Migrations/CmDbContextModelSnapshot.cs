@@ -2435,6 +2435,33 @@ namespace CampaignManager.Data.Migrations
                     b.ToTable("scenario_locations", "cm");
                 });
 
+            modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioLocationImage", b =>
+                {
+                    b.Property<Guid>("LocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_id");
+
+                    b.Property<int>("Ord")
+                        .HasColumnType("integer")
+                        .HasColumnName("ord");
+
+                    b.Property<string>("Caption")
+                        .HasColumnType("text")
+                        .HasColumnName("caption");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("file_id");
+
+                    b.HasKey("LocationId", "Ord")
+                        .HasName("pk_scenario_location_images");
+
+                    b.HasIndex("FileId")
+                        .HasDatabaseName("ix_scenario_location_images_file_id");
+
+                    b.ToTable("scenario_location_images", "cm");
+                });
+
             modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioNpc", b =>
                 {
                     b.Property<Guid>("ScenarioId")
@@ -3098,6 +3125,23 @@ namespace CampaignManager.Data.Migrations
                         .HasConstraintName("fk_scenario_locations_scenarios_scenario_id");
                 });
 
+            modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioLocationImage", b =>
+                {
+                    b.HasOne("CampaignManager.Data.Files.StoredFile", null)
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_scenario_location_images_files_file_id");
+
+                    b.HasOne("CampaignManager.Data.Scenarios.ScenarioLocation", null)
+                        .WithMany("Images")
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scenario_location_images_scenario_locations_location_id");
+                });
+
             modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioNpc", b =>
                 {
                     b.HasOne("CampaignManager.Data.Characters.Character", null)
@@ -3175,6 +3219,8 @@ namespace CampaignManager.Data.Migrations
             modelBuilder.Entity("CampaignManager.Data.Scenarios.ScenarioLocation", b =>
                 {
                     b.Navigation("Checks");
+
+                    b.Navigation("Images");
                 });
 #pragma warning restore 612, 618
         }

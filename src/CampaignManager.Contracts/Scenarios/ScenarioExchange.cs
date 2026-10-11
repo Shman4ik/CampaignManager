@@ -115,6 +115,20 @@ public sealed class ScenarioFileLocation
 
     /// <summary>Прибитые треки фонотеки по названию (2.0).</summary>
     public List<string>? Tracks { get; set; }
+
+    /// <summary>
+    /// Иллюстрации локации по порядку, первая — обложка (2.0). Картинка — адрес файла этой базы, как у раздатки: из другой базы
+    /// пропускается с предупреждением.
+    /// </summary>
+    public List<ScenarioFileImage>? Images { get; set; }
+}
+
+/// <summary>Картинка в файле сценария: адрес файла этой базы (<c>/api/v1/files/{id}</c>) и подпись.</summary>
+public sealed class ScenarioFileImage
+{
+    public string Url { get; set; } = "";
+
+    public string? Caption { get; set; }
 }
 
 public sealed class ScenarioFileCheck

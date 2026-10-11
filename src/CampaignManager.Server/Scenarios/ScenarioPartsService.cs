@@ -1,3 +1,4 @@
+using CampaignManager.Contracts.Catalogs;
 using CampaignManager.Contracts.Scenarios;
 using CampaignManager.Core;
 using CampaignManager.Core.Music;
@@ -5,6 +6,7 @@ using CampaignManager.Core.Scenarios;
 using CampaignManager.Data;
 using CampaignManager.Data.Scenarios;
 using CampaignManager.Server.Access;
+using CampaignManager.Server.Catalogs.Stores;
 using CampaignManager.Server.Platform;
 using Microsoft.EntityFrameworkCore;
 
@@ -56,6 +58,108 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
     {
         await DemandEditAsync(scenarioId, cancellationToken);
         await DeleteOne(dbContext.ScenarioLocations.Where(l => l.ScenarioId == scenarioId && l.Id == locationId), cancellationToken);
+    }
+
+    // ── Иллюстрации локации ─────────────────────────────────────────
+
+    /// <summary>
+    /// Иллюстрации локации целиком: порядок — порядок списка, первая — обложка. Строки правятся на месте по порядку
+    /// (<see cref="CatalogImages.Apply{TImage}"/>, как у справочников): ключ (локация, порядок) не даст удалить и добавить строку
+    /// с тем же ключом в одном сохранении.
+    /// </summary>
+    public async Task<ScenarioLocationDto> SetLocationImagesAsync(Guid scenarioId, Guid locationId, LocationImagesInput input,
+        CancellationToken cancellationToken)
+    {
+        await DemandEditAsync(scenarioId, cancellationToken);
+        var location = await LocationWithImagesAsync(scenarioId, locationId, cancellationToken);
+        var images = LocationImages(input.Images);
+        await DemandFilesAsync(images.Select(i => i.FileId), cancellationToken);
+        CatalogImages.Apply(dbContext, location.Images, images, ord => new ScenarioLocationImage { LocationId = location.Id, Ord = ord });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await LocationDtoAsync(location.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Одна загруженная картинка — в конец, с <see cref="LocationImageInput.Cover"/> — первой (прежняя обложка сдвигается, а не
+    /// уходит, — в отличие от обложки справочника: картинок у локации несколько, и скрипт добавляет их по одной). Повтор того же
+    /// файла не заводит двойника: повторный прогон скрипта ничего не размножит.
+    /// </summary>
+    public async Task<ScenarioLocationDto> AddLocationImageAsync(Guid scenarioId, Guid locationId, LocationImageInput input,
+        CancellationToken cancellationToken)
+    {
+        await DemandEditAsync(scenarioId, cancellationToken);
+        var location = await LocationWithImagesAsync(scenarioId, locationId, cancellationToken);
+        await DemandFilesAsync([input.FileId], cancellationToken);
+        var caption = ScenarioService.Text(input.Caption, ScenarioLimits.ShortTextLength, "Подпись картинки");
+
+        var images = location.Images.OrderBy(i => i.Ord).Select(i => new CatalogImageDto(i.FileId, null, i.Caption)).ToList();
+        var index = images.FindIndex(i => i.FileId == input.FileId);
+        var image = index >= 0
+            ? images[index] with { Caption = caption ?? images[index].Caption }
+            : new CatalogImageDto(input.FileId, null, caption);
+        if (index >= 0)
+        {
+            images.RemoveAt(index);
+        }
+
+        images.Insert(input.Cover ? 0 : index >= 0 ? index : images.Count, image);
+        CatalogImages.Apply(dbContext, location.Images, LocationImages(images),
+            ord => new ScenarioLocationImage { LocationId = location.Id, Ord = ord });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return await LocationDtoAsync(location.Id, cancellationToken);
+    }
+
+    /// <summary>Убрать картинку из локации; файл остаётся в <c>files</c> (сироты — админке).</summary>
+    public async Task RemoveLocationImageAsync(Guid scenarioId, Guid locationId, Guid fileId, CancellationToken cancellationToken)
+    {
+        await DemandEditAsync(scenarioId, cancellationToken);
+        var location = await LocationWithImagesAsync(scenarioId, locationId, cancellationToken);
+        if (location.Images.All(i => i.FileId != fileId))
+        {
+            throw AccessDeniedException.NotFound();
+        }
+
+        var images = location.Images.OrderBy(i => i.Ord).Where(i => i.FileId != fileId)
+            .Select(i => new CatalogImageDto(i.FileId, null, i.Caption)).ToList();
+        CatalogImages.Apply(dbContext, location.Images, images, ord => new ScenarioLocationImage { LocationId = location.Id, Ord = ord });
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Список иллюстраций локации — одна проверка на правку и импорт (T2.5d): без повторов файла (остаётся первое место), подпись —
+    /// до <see cref="ScenarioLimits.ShortTextLength"/>, не больше <see cref="ScenarioLimits.MaxLocationImages"/>. Есть ли файлы,
+    /// проверяет вызывающий (импорт пропускает чужие с предупреждением, правка отказывает).
+    /// </summary>
+    internal static List<CatalogImageDto> LocationImages(IEnumerable<CatalogImageDto>? images)
+    {
+        var result = new List<CatalogImageDto>();
+        foreach (var image in images ?? [])
+        {
+            if (result.Any(i => i.FileId == image.FileId))
+            {
+                continue;
+            }
+
+            result.Add(new CatalogImageDto(image.FileId, null,
+                ScenarioService.Text(image.Caption, ScenarioLimits.ShortTextLength, "Подпись картинки")));
+        }
+
+        return result.Count > ScenarioLimits.MaxLocationImages
+            ? throw ApiProblemException.Invalid($"Картинок у локации — не больше {ScenarioLimits.MaxLocationImages}.")
+            : result;
+    }
+
+    private async Task<ScenarioLocation> LocationWithImagesAsync(Guid scenarioId, Guid locationId, CancellationToken cancellationToken) =>
+        await Find(dbContext.ScenarioLocations.Include(l => l.Images).Where(l => l.ScenarioId == scenarioId && l.Id == locationId),
+            cancellationToken);
+
+    private async Task DemandFilesAsync(IEnumerable<Guid> fileIds, CancellationToken cancellationToken)
+    {
+        var ids = fileIds.Distinct().ToList();
+        if (ids.Count > 0 && await dbContext.Files.CountAsync(f => ids.Contains(f.Id), cancellationToken) != ids.Count)
+        {
+            throw ApiProblemException.Invalid("Картинка не найдена — загрузите её заново.");
+        }
     }
 
     // ── Проверки ────────────────────────────────────────────────────
@@ -402,7 +506,8 @@ public sealed class ScenarioPartsService(CmDbContext dbContext, AccessPolicy acc
 
     private async Task<ScenarioLocationDto> LocationDtoAsync(Guid locationId, CancellationToken cancellationToken)
     {
-        var location = await dbContext.ScenarioLocations.AsNoTracking().Include(l => l.Checks)
+        var location = await dbContext.ScenarioLocations.AsNoTracking().Include(l => l.Checks).Include(l => l.Images)
+            .AsSplitQuery()
             .SingleAsync(l => l.Id == locationId, cancellationToken);
         var tracks = await dbContext.LocationTracks.AsNoTracking().Where(t => t.LocationId == locationId).ToListAsync(cancellationToken);
         return ScenarioParts.Location(location, tracks, await SkillNamesAsync(location.Checks, cancellationToken));
